@@ -27,3 +27,6 @@ samples/Solution50/
 # OS
 .DS_Store
 Thumbs.db
+
+# Rust spike build output
+spikes/gpui/target/
