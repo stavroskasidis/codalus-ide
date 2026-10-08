@@ -2,6 +2,9 @@
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Daedalus.Benchmarks.FixtureGen/Daedalus.Benchmarks.FixtureGen.csproj" />
   </Folder>
+  <Folder Name="/spikes/">
+    <Project Path="spikes/avalonia/Daedalus.Spike.Avalonia/Daedalus.Spike.Avalonia.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Daedalus.Diagnostics.BenchEvents/Daedalus.Diagnostics.BenchEvents.csproj" />
     <Project Path="src/Daedalus.LanguageServices.Client/Daedalus.LanguageServices.Client.csproj" />

@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:Daedalus.Spike.Avalonia"
+             x:Class="Daedalus.Spike.Avalonia.OutputView"
+             x:DataType="local:OutputTool">
+  <ListBox ItemsSource="{Binding Lines}"
+           FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace"
+           FontSize="12"
+           AutomationProperties.Name="Output">
+    <ListBox.Styles>
+      <Style Selector="ListBoxItem">
+        <Setter Property="Padding" Value="6,1" />
+        <Setter Property="MinHeight" Value="0" />
+      </Style>
+    </ListBox.Styles>
+  </ListBox>
+</UserControl>

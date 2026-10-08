@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>daedalus-spike-avalonia</AssemblyName>
+    <RootNamespace>Daedalus.Spike.Avalonia</RootNamespace>
+    <Description>M0 UI stack spike, prototype A: Avalonia + AvaloniaEdit + Dock, Native AOT.</Description>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <!-- Third-party trim/AOT warnings (Dock default templates, reflection bindings in library XAML) are
+         reported, not fatal. Our own code must stay warning-free; see docs/adr/0001-ui-stack.md. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL3050</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Daedalus.LanguageServices.Client\Daedalus.LanguageServices.Client.csproj" />
+    <ProjectReference Include="..\..\..\src\Daedalus.Diagnostics.BenchEvents\Daedalus.Diagnostics.BenchEvents.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" />
+    <PackageReference Include="Dock.Avalonia" />
+    <PackageReference Include="Dock.Model.Mvvm" />
+    <PackageReference Include="Dock.Avalonia.Themes.Fluent" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Daedalus.Spike.Avalonia.Tests" />
+  </ItemGroup>
+</Project>

@@ -18,6 +18,7 @@
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageVersion Include="Dock.Avalonia" Version="12.1.0.7" />
     <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.7" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.7" />
   </ItemGroup>
   <ItemGroup Label="Language services">
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="$(RoslynVersion)" />

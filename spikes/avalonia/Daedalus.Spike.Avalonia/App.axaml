@@ -1,0 +1,33 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:Daedalus.Spike.Avalonia"
+             xmlns:core="using:Dock.Model.Core"
+             x:Class="Daedalus.Spike.Avalonia.App"
+             Name="Daedalus Studio (spike A)"
+             RequestedThemeVariant="Dark">
+
+  <Application.DataTemplates>
+    <local:ViewLocator />
+  </Application.DataTemplates>
+
+  <Application.Styles>
+    <FluentTheme />
+    <DockFluentTheme />
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+
+    <Style Selector="DocumentControl">
+      <Setter Property="HeaderTemplate">
+        <DataTemplate DataType="core:IDockable">
+          <TextBlock Text="{Binding Title}" VerticalAlignment="Center" Padding="2" />
+        </DataTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="ToolControl">
+      <Setter Property="HeaderTemplate">
+        <DataTemplate DataType="core:IDockable">
+          <TextBlock Text="{Binding Title}" Padding="2" />
+        </DataTemplate>
+      </Setter>
+    </Style>
+  </Application.Styles>
+</Application>
