@@ -102,6 +102,19 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Written_values_stay_readable()
+    {
+        using var settings = new SettingsService(UserFile);
+        settings.Register([SettingDescriptor.Create("editor.fontFamily", "\"\"", SettingType.String, ContributionSource.Shell)]);
+
+        await settings.SetAsync("editor.fontFamily", "Fira Code+, <Mono> & \"Sans\"", SettingScope.User, TestContext.Current.CancellationToken);
+
+        var text = await File.ReadAllTextAsync(UserFile, TestContext.Current.CancellationToken);
+        Assert.Contains("\"Fira Code+, <Mono> & \\\"Sans\\\"\"", text, StringComparison.Ordinal);
+        Assert.Equal("Fira Code+, <Mono> & \"Sans\"", settings.GetString("editor.fontFamily"));
+    }
+
+    [Fact]
     public async Task Rejects_invalid_writes()
     {
         using var settings = new SettingsService(UserFile);

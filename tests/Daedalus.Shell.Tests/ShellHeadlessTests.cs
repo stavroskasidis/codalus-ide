@@ -25,8 +25,12 @@ public class ShellHeadlessTests
     {
         await using var f = ShellFixture.Create();
 
-        var menus = f.Window.MenuBar.Items.OfType<MenuItem>().Select(m => AutomationProperties.GetName(m)).ToList();
+        // macOS uses the global menu bar; elsewhere the menu is in the window.
+        var menus = PlatformInfo.Current == PlatformKind.MacOS
+            ? NativeMenu.GetMenu(f.Window)!.Items.OfType<NativeMenuItem>().Select(m => m.Header).ToList()
+            : f.Window.MenuBar.Items.OfType<MenuItem>().Select(m => AutomationProperties.GetName(m)).ToList();
         Assert.Equal(["File", "View", "Tools", "Help"], menus);
+        Assert.Equal(PlatformInfo.Current != PlatformKind.MacOS, f.Window.MenuBar.IsVisible);
         Assert.True(f.Shell.Layout.IsVisible(BuiltIns.OutputWindow));
         Assert.Contains(f.Shell.StatusBar.Right, i => i.Item.Id == "daedalus.notifications");
         Assert.Contains(f.Shell.Plugins.Plugins, p => p.Id == "daedalus.welcome" && p.State == PluginState.Ready);

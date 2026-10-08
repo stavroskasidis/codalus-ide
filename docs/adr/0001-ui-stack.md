@@ -53,7 +53,7 @@ Windows, reference hardware (i5-13600KF, RTX 4060, 165 Hz display), 2026-10-08. 
 **Measurement notes.**
 - Avalonia composites through DirectComposition, so per-process present tracing (PresentMon) cannot see its frames. Every latency here therefore comes from DXGI Desktop Duplication: frame timestamps and changed rectangles of the composed desktop.
 - GPUI's frame pacing (DwmFlush-based vsync) dropped to about 27 fps in some early runs when its window was occluded or in the background. Every published run had the target in the foreground, and the harness enforces this.
-- GPUI's first cold-start memory sample (1.2 GB, 41 processes) was a harness artifact: a recycled PID matched an unrelated process tree. It is excluded. `TODO(issue)`: filter descendants by process start time.
+- GPUI's first cold-start memory sample (1.2 GB, 41 processes) was a harness artifact: a recycled PID matched an unrelated process tree. It is excluded. Fixed in M1: the harness skips candidates that started before their parent.
 
 ## Qualitative assessment
 

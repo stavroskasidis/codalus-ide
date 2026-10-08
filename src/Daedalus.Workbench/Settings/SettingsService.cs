@@ -172,7 +172,7 @@ public sealed class SettingsService : IDisposable
         try
         {
             var text = File.Exists(file) ? await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false) : string.Empty;
-            var updated = JsoncEditor.SetProperty(text, key, value?.GetRawText());
+            var updated = JsoncEditor.SetProperty(text, key, value is { } written ? Readable(written) : null);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
             await File.WriteAllTextAsync(file, updated, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
         }
@@ -192,6 +192,18 @@ public sealed class SettingsService : IDisposable
 
     public Task SetAsync(string key, double value, SettingScope scope, CancellationToken cancellationToken) =>
         SetAsync(key, JsonSerializer.SerializeToElement(value, SettingsJsonContext.Default.Double), scope, cancellationToken);
+
+    /// <summary>JSON for a file people edit: "a+b" stays "a+b" rather than "a+b".</summary>
+    private static string Readable(JsonElement value)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+        {
+            value.WriteTo(writer);
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
 
     // ------------------------------------------------------------------ loading
 
