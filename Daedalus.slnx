@@ -25,6 +25,7 @@
     <Project Path="src/Daedalus.Workbench/Daedalus.Workbench.csproj" />
   </Folder>
   <Folder Name="/src/Plugins/">
+    <Project Path="src/Plugins/Daedalus.Plugins.Templates/Daedalus.Plugins.Templates.csproj" />
     <Project Path="src/Plugins/Daedalus.Plugins.Welcome/Daedalus.Plugins.Welcome.csproj" />
   </Folder>
   <Folder Name="/tests/">

@@ -9,7 +9,7 @@ public static class PluginApi
     /// The API version that a plugin's <c>engines.daedalus</c> range is checked against. During 0.x a minor
     /// version may contain breaking changes (see docs/plugins.md#changelog).
     /// </summary>
-    public const string Version = "0.1.0";
+    public const string Version = "0.1.1";
 }
 
 /// <summary>
@@ -111,6 +111,15 @@ public interface IWindow
 {
     /// <summary>Shows a notification. Completes with the chosen action, or null when the user dismissed it.</summary>
     Task<string?> ShowNotificationAsync(NotificationSeverity severity, string message, IReadOnlyList<string>? actions = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lets the user pick one of <paramref name="items"/> in the command palette (fuzzy filtering, keyboard).
+    /// Completes with the chosen item, or null when cancelled. Since API 0.1.1.
+    /// </summary>
+    Task<QuickPickItem?> ShowQuickPickAsync(IReadOnlyList<QuickPickItem> items, string? placeholder = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Asks the user for a line of text. Completes with the text, or null when cancelled. Since API 0.1.1.</summary>
+    Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken = default);
 
     /// <summary>A channel of the Output window, shown as "&lt;plugin&gt;: &lt;name&gt;".</summary>
     IOutputChannel CreateOutputChannel(string name);
@@ -283,4 +292,29 @@ public static class PluginLogExtensions
 
     /// <summary>Writes a <see cref="PluginLogLevel.Error"/> message.</summary>
     public static void Error(this IPluginLog log, string message) => log.Write(PluginLogLevel.Error, message);
+}
+
+/// <summary>An entry of <see cref="IWindow.ShowQuickPickAsync"/>. Since API 0.1.1.</summary>
+/// <param name="Label">The text that is filtered and shown.</param>
+public sealed record QuickPickItem(string Label)
+{
+    /// <summary>Muted text shown after the label.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>Muted text shown on the right (for example a key or a path).</summary>
+    public string? Detail { get; init; }
+
+    /// <summary>Your own data; not sent to the shell.</summary>
+    public object? Tag { get; init; }
+}
+
+/// <summary>What <see cref="IWindow.ShowInputBoxAsync"/> asks. Since API 0.1.1.</summary>
+/// <param name="Title">The question, for example "Project name".</param>
+public sealed record InputBoxOptions(string Title)
+{
+    /// <summary>Explanatory text under the title.</summary>
+    public string? Prompt { get; init; }
+
+    /// <summary>The initial text.</summary>
+    public string? Value { get; init; }
 }

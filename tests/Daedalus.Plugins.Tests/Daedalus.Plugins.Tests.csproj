@@ -5,5 +5,7 @@
     <!-- Built so the tests can launch them; not referenced as assemblies. -->
     <ProjectReference Include="..\..\src\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\samples\plugins\HelloWorld\HelloWorld.csproj" ReferenceOutputAssembly="false" />
+    <!-- Referenced for its internals (template parsing) and launched in the host by the integration test. -->
+    <ProjectReference Include="..\..\src\Plugins\Daedalus.Plugins.Templates\Daedalus.Plugins.Templates.csproj" />
   </ItemGroup>
 </Project>

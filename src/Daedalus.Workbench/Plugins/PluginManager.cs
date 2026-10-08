@@ -21,6 +21,16 @@ public sealed class TreeViewRefreshEventArgs(string viewId, string? handle) : Ev
     public string? Handle { get; } = handle;
 }
 
+/// <summary>UI prompts plugins can request; the shell implements them (quick pick, input box).</summary>
+public interface IPluginPrompts
+{
+    /// <summary>Returns the index of the chosen item, or null when cancelled.</summary>
+    Task<int?> PickAsync(IReadOnlyList<QuickPickItemDto> items, string? placeholder, string source, CancellationToken cancellationToken);
+
+    /// <summary>Returns the entered text, or null when cancelled.</summary>
+    Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken);
+}
+
 /// <summary>Locates <c>daedalus-pluginhost</c>: <c>DAEDALUS_PLUGINHOST</c>, then <c>pluginhost/</c> next to the shell.</summary>
 public static class PluginHostLocator
 {
@@ -84,6 +94,9 @@ public sealed class PluginManager : IAsyncDisposable
     }
 
     public event EventHandler? PluginsChanged;
+
+    /// <summary>The shell's prompt UI; without it, plugin prompts are cancelled.</summary>
+    public IPluginPrompts? Prompts { get; set; }
 
     public event EventHandler<TreeViewRefreshEventArgs>? TreeViewRefreshed;
 
@@ -604,6 +617,14 @@ public sealed class PluginManager : IAsyncDisposable
                 using var registration = ct.Register(() => workbench.Notifications.Dismiss(notification));
                 return new ShowNotificationResult(await notification.Result.ConfigureAwait(false));
             });
+            connection.OnRequest(PluginMethods.ShowQuickPick, json.ShowQuickPickParams, json.ShowQuickPickResult, async (p, ct) =>
+                new ShowQuickPickResult(_manager.Prompts is { } prompts
+                    ? await prompts.PickAsync(p.Items, p.Placeholder, _manager.Find(p.PluginId)?.DisplayName ?? p.PluginId, ct).ConfigureAwait(false)
+                    : null));
+            connection.OnRequest(PluginMethods.ShowInputBox, json.ShowInputBoxParams, json.ShowInputBoxResult, async (p, ct) =>
+                new ShowInputBoxResult(_manager.Prompts is { } prompts
+                    ? await prompts.InputAsync(p.Title, p.Prompt, p.Value, _manager.Find(p.PluginId)?.DisplayName ?? p.PluginId, ct).ConfigureAwait(false)
+                    : null));
             connection.OnNotification(PluginMethods.OutputAppend, json.OutputParams, p => Channel(p).Append(p.Text ?? string.Empty));
             connection.OnNotification(PluginMethods.OutputClear, json.OutputParams, p => Channel(p).Clear());
             connection.OnNotification(PluginMethods.OutputShow, json.OutputParams, p => workbench.Output.Show(Channel(p)));

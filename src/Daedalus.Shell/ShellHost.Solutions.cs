@@ -218,6 +218,43 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>Adds a project (created by a plugin) to the open solution, in the selected solution folder, and selects it.</summary>
+    public async Task AddProjectFileAsync(string project)
+    {
+        var folder = Explorer.Selected?.Node.SolutionFolderId;
+        try
+        {
+            Explorer.RevealWhenAvailable("p:" + Path.GetFullPath(project));
+            await Solutions.AddProjectAsync(project, folder, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (JsonRpcRemoteException ex)
+        {
+            Workbench.Notifications.Error(ex.Message);
+        }
+    }
+
+    /// <summary><c>solution.getInfo</c>: { path, format, trusted } of the open solution, or null.</summary>
+    internal JsonElement? SolutionInfoJsonForPlugins()
+    {
+        if (Solutions.Solution is not { } solution)
+        {
+            return null;
+        }
+
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("path", solution.Path);
+            writer.WriteString("format", solution.Format);
+            writer.WriteBoolean("trusted", solution.Trusted);
+            writer.WriteEndObject();
+        }
+
+        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        return document.RootElement.Clone();
+    }
+
     /// <summary><c>workbench.getRecentSolutions</c>: [{ path, name }], most recent first (the Start page uses it).</summary>
     internal JsonElement? RecentSolutionsJsonForPlugins()
     {

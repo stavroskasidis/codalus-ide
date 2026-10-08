@@ -76,6 +76,23 @@ internal static partial class BuiltIns
         Add("explorer.reveal", OperatingSystem.IsMacOS() ? "Reveal in Finder" : OperatingSystem.IsWindows() ? "Reveal in File Explorer" : "Reveal in File Manager", "Explorer", Ui(explorer.RevealInFileManager), Open, palette: false);
         Add("explorer.collapseAll", "Collapse All", "Explorer", Ui(explorer.CollapseAll), Open);
 
+        // For plugins (Templates): the open solution, and adding a project to it.
+        commands.Register(
+            new CommandDescriptor("solution.getInfo", "Solution Info", ContributionSource.Shell) { ShowInPalette = false },
+            async (_, _) => await Infrastructure.Ui.RunAsync(shell.SolutionInfoJsonForPlugins).ConfigureAwait(false));
+        commands.Register(
+            new CommandDescriptor("solution.addProjectFile", "Add Project to Solution", ContributionSource.Shell) { ShowInPalette = false },
+            async (args, _) =>
+            {
+                if (args.Count == 0 || args[0].ValueKind != JsonValueKind.String)
+                {
+                    throw new ArgumentException("solution.addProjectFile expects the project path.");
+                }
+
+                await Infrastructure.Ui.RunAsync(() => shell.AddProjectFileAsync(args[0].GetString()!)).ConfigureAwait(false);
+                return null;
+            });
+
         // For plugins (the Start page): [{ path, name }], most recent first.
         commands.Register(
             new CommandDescriptor("workbench.getRecentSolutions", "Recent Solutions", ContributionSource.Shell) { ShowInPalette = false },

@@ -99,6 +99,28 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
         return result.Action;
     }
 
+    public async Task<QuickPickItem?> ShowQuickPickAsync(IReadOnlyList<QuickPickItem> items, string? placeholder = null, CancellationToken cancellationToken = default)
+    {
+        var result = await _server.RequestAsync(
+            PluginMethods.ShowQuickPick,
+            new ShowQuickPickParams(Id, [.. items.Select(i => new QuickPickItemDto(i.Label, i.Description, i.Detail))], placeholder),
+            PluginJsonContext.Default.ShowQuickPickParams,
+            PluginJsonContext.Default.ShowQuickPickResult,
+            cancellationToken).ConfigureAwait(false);
+        return result.Index is int index && index >= 0 && index < items.Count ? items[index] : null;
+    }
+
+    public async Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken = default)
+    {
+        var result = await _server.RequestAsync(
+            PluginMethods.ShowInputBox,
+            new ShowInputBoxParams(Id, options.Title, options.Prompt, options.Value),
+            PluginJsonContext.Default.ShowInputBoxParams,
+            PluginJsonContext.Default.ShowInputBoxResult,
+            cancellationToken).ConfigureAwait(false);
+        return result.Value;
+    }
+
     public IOutputChannel CreateOutputChannel(string name) => new OutputChannel(_server, Id, name);
 
     public IStatusBarItem CreateStatusBarItem(string id, StatusBarAlignment alignment = StatusBarAlignment.Left, int priority = 0) =>

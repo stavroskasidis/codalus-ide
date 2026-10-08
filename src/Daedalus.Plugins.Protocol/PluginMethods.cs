@@ -7,7 +7,7 @@ public static class PluginMethods
     public const string ProtocolVersion = "0.1";
 
     /// <summary>The plugin API version that <c>engines.daedalus</c> ranges are checked against.</summary>
-    public const string ApiVersion = "0.1.0";
+    public const string ApiVersion = "0.1.1";
 
     // shell → host
     public const string Initialize = "initialize";
@@ -25,6 +25,12 @@ public static class PluginMethods
     public const string UnregisterCommand = "commands/unregister";
     public const string ExecuteCommandInShell = "commands/executeInShell";
     public const string ShowNotification = "window/showNotification";
+
+    /// <summary>Since API 0.1.1.</summary>
+    public const string ShowQuickPick = "window/showQuickPick";
+
+    /// <summary>Since API 0.1.1.</summary>
+    public const string ShowInputBox = "window/showInputBox";
     public const string OutputAppend = "output/append";
     public const string OutputClear = "output/clear";
     public const string OutputShow = "output/show";

@@ -42,6 +42,18 @@ public sealed record ShowNotificationParams(string PluginId, string Severity, st
 
 public sealed record ShowNotificationResult(string? Action);
 
+public sealed record QuickPickItemDto(string Label, string? Description, string? Detail);
+
+public sealed record ShowQuickPickParams(string PluginId, QuickPickItemDto[] Items, string? Placeholder);
+
+/// <summary>The index of the chosen item, or null when cancelled.</summary>
+public sealed record ShowQuickPickResult(int? Index);
+
+public sealed record ShowInputBoxParams(string PluginId, string Title, string? Prompt, string? Value);
+
+/// <summary>The entered text, or null when cancelled.</summary>
+public sealed record ShowInputBoxResult(string? Value);
+
 public sealed record OutputParams(string PluginId, string Channel, string? Text);
 
 public sealed record StatusBarUpdateParams(string PluginId, string ItemId, string Text, string? Tooltip, string? Command, string Alignment, int Priority, bool Visible);

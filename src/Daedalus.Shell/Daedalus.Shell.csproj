@@ -32,6 +32,7 @@
     <HelperProcess Include="..\Daedalus.Projects.Host\Daedalus.Projects.Host.csproj" Folder="buildhost" />
     <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <BuiltInPlugin Include="..\Plugins\Daedalus.Plugins.Welcome\Daedalus.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
+    <BuiltInPlugin Include="..\Plugins\Daedalus.Plugins.Templates\Daedalus.Plugins.Templates.csproj" PluginId="daedalus.templates" />
     <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
   </ItemGroup>
 

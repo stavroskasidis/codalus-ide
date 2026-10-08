@@ -2,7 +2,7 @@
   <PropertyGroup>
     <RootNamespace>Daedalus.Plugins</RootNamespace>
     <Description>The Daedalus Studio plugin API (ADR 0003). Plugins reference this package and implement IDaedalusPlugin.</Description>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <IsPackable>true</IsPackable>
     <PackageId>Daedalus.Plugins.Abstractions</PackageId>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

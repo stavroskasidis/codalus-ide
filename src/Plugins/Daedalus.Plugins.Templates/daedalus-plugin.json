@@ -1,0 +1,38 @@
+{
+  "id": "daedalus.templates",
+  "version": "0.1.0",
+  "displayName": "Templates",
+  "publisher": "daedalus",
+  "description": "New projects and solutions from dotnet new templates.",
+  "engines": { "daedalus": "^0.1.1" },
+  "entry": { "runtime": "dotnet", "assembly": "Daedalus.Plugins.Templates.dll" },
+  "contributes": {
+    "commands": [
+      { "id": "templates.newProject", "title": "New Project…", "category": "File" },
+      { "id": "templates.newSolution", "title": "New Solution…", "category": "File" }
+    ],
+    "menus": {
+      "menuBar/file": [
+        { "command": "templates.newProject", "group": "file", "order": -2 },
+        { "command": "templates.newSolution", "group": "file", "order": -1 }
+      ],
+      "solutionExplorer/context": [
+        { "command": "templates.newProject", "group": "1-new", "order": 5, "when": "explorerItemKind == solution || explorerItemKind == solutionFolder" }
+      ]
+    },
+    "keybindings": [
+      { "key": "primary+shift+n", "command": "templates.newProject" }
+    ],
+    "settings": {
+      "title": "Templates",
+      "properties": {
+        "templates.defaultLocation": {
+          "type": "string",
+          "default": "",
+          "scope": "user",
+          "description": "Folder for new solutions and projects when no solution is open. Empty: a 'source/repos' folder in your home folder."
+        }
+      }
+    }
+  }
+}

@@ -94,6 +94,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private ExplorerNode? _root;
     private ExplorerRowViewModel? _selected;
     private bool _refreshQueued;
+    private string? _pendingReveal;
     private (IReadOnlyList<string> Paths, bool Cut)? _clipboard;
 
     public SolutionExplorerViewModel(ShellHost shell)
@@ -157,6 +158,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         var solutions = _shell.Solutions;
         _root = solutions.Solution is { } solution ? SolutionTree.Build(solution, solutions.Projects) : null;
         OnPropertyChanged(nameof(HasSolution));
+        if (_pendingReveal is { } pending && _root is not null && Path(_root, pending) is not null)
+        {
+            Reveal(pending);
+            return;
+        }
         var rows = new List<(ExplorerNode Node, int Depth)>();
         if (_root is not null)
         {
@@ -241,12 +247,24 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         Refresh();
     }
 
+    /// <summary>Reveals <paramref name="id"/> as soon as the node exists (it may come with the next model update).</summary>
+    public void RevealWhenAvailable(string id)
+    {
+        _pendingReveal = id;
+        Reveal(id);
+    }
+
     /// <summary>Selects (and reveals) the node with <paramref name="id"/>.</summary>
     public void Reveal(string id)
     {
         if (_root is null || Path(_root, id) is not { } path)
         {
             return;
+        }
+
+        if (_pendingReveal == id)
+        {
+            _pendingReveal = null;
         }
 
         foreach (var ancestor in path.SkipLast(1))

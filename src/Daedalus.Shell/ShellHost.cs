@@ -63,6 +63,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         Plugins = new PluginManager(Workbench, _ => PluginHostLocator.Resolve(), ShellInfo.Version);
+        Plugins.Prompts = new PluginPrompts(this);
         EditorFont = new EditorFont(Workbench.Settings);
         Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
         Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));
