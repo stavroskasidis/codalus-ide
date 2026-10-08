@@ -81,6 +81,14 @@ public sealed class PluginHostIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Registering_a_plugins_settings_does_not_fire_its_setting_change_activation()
+    {
+        // HelloWorld activates on onSettingChanged:hello.announce; adding the plugin registers that setting.
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Assert.Equal(PluginState.Ready, Hello.State);
+    }
+
+    [Fact]
     public async Task Executing_a_command_activates_the_plugin_and_round_trips_arguments()
     {
         var result = await _workbench.Commands.ExecuteAsync("hello.echo", [Json("1"), Json("\"two\""), Json("""{"a":[3]}""")], Timeout());

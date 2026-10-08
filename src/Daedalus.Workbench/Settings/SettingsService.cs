@@ -5,9 +5,15 @@ using Daedalus.Workbench.Commands;
 
 namespace Daedalus.Workbench.Settings;
 
-public sealed class SettingsChangedEventArgs(IReadOnlySet<string> keys) : EventArgs
+public sealed class SettingsChangedEventArgs(IReadOnlySet<string> keys, IReadOnlySet<string>? registered = null) : EventArgs
 {
     public IReadOnlySet<string> Keys { get; } = keys;
+
+    /// <summary>
+    /// The subset of <see cref="Keys"/> that only appeared because their setting was registered (e.g. a plugin
+    /// was added). Their values did not change, so they must not trigger <c>onSettingChanged</c> activation.
+    /// </summary>
+    public IReadOnlySet<string> Registered { get; } = registered ?? new HashSet<string>();
 
     /// <summary>True if <paramref name="keyOrSection"/> or any key below it (<c>section.</c>) changed.</summary>
     public bool Affects(string keyOrSection) =>
@@ -205,6 +211,7 @@ public sealed class SettingsService : IDisposable
     private void Recompute(Action change, List<string>? fileDiagnostics = null)
     {
         HashSet<string> changed;
+        HashSet<string> registered;
         lock (_gate)
         {
             change();
@@ -237,13 +244,14 @@ public sealed class SettingsService : IDisposable
 
             changed = [.. effective.Keys.Where(k => !_effective.TryGetValue(k, out var old) || old.GetRawText() != effective[k].GetRawText())];
             changed.UnionWith(_effective.Keys.Where(k => !effective.ContainsKey(k)));
+            registered = [.. changed.Where(k => !_effective.ContainsKey(k))];
             _effective = effective;
             _diagnostics = diagnostics;
         }
 
         if (changed.Count > 0)
         {
-            Changed?.Invoke(this, new SettingsChangedEventArgs(changed));
+            Changed?.Invoke(this, new SettingsChangedEventArgs(changed, registered));
         }
     }
 

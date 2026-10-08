@@ -391,7 +391,7 @@ public sealed class PluginManager : IAsyncDisposable
             _ = host.NotifySafeAsync(PluginMethods.SettingsDidChange, new SettingsDidChangeParams(changes), PluginJsonContext.Default.SettingsDidChangeParams);
         }
 
-        foreach (var key in e.Keys)
+        foreach (var key in e.Keys.Except(e.Registered))
         {
             _ = ActivateByEventAsync("onSettingChanged:" + key, CancellationToken.None);
         }

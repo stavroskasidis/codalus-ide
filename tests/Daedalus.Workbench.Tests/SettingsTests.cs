@@ -86,6 +86,22 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Registering_settings_is_reported_apart_from_value_changes()
+    {
+        using var settings = new SettingsService(UserFile);
+        settings.Register([Schema()[0]]);
+        var events = new List<SettingsChangedEventArgs>();
+        settings.Changed += (_, e) => events.Add(e);
+
+        settings.Register([Schema()[1]]);
+        await settings.SetAsync("editor.fontSize", 20, SettingScope.User, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["editor.fontSize"], events[0].Registered);
+        Assert.Empty(events[1].Registered);
+        Assert.Equal(["editor.fontSize"], events[1].Keys);
+    }
+
+    [Fact]
     public async Task Rejects_invalid_writes()
     {
         using var settings = new SettingsService(UserFile);
