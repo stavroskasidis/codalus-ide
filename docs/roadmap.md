@@ -25,7 +25,7 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
 | Milestone | Title | Status |
 |---|---|---|
 | M0 | Scaffold and UI stack spike | done (ADR 0001, 0002) |
-| M1 | Shell and plugin foundation | in progress |
+| M1 | Shell and plugin foundation | at checkpoint, awaiting approval |
 | M2–M7 | MVP (`ide-prompt.md`) | planned |
 | M8 | Testing: Test Explorer and code coverage | planned (this document) |
 | M9 | Packages and project management | planned |
@@ -1183,3 +1183,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 ## Change log
 
 - 2026-10-08: first draft, written during M1.
+- 2026-10-08: M1 reached its checkpoint (shell, plugin host v0, Welcome plugin, budgets and regression gates).
