@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>UI-agnostic workbench services: commands, key bindings, menus, settings, notifications, output, status bar and the plugin manager.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Daedalus.Platform\Daedalus.Platform.csproj" />
+    <ProjectReference Include="..\Daedalus.Rpc\Daedalus.Rpc.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Daedalus.Workbench.Tests" />
+  </ItemGroup>
+</Project>

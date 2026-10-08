@@ -11,12 +11,15 @@
     <Project Path="src/Daedalus.LanguageServices.Client/Daedalus.LanguageServices.Client.csproj" />
     <Project Path="src/Daedalus.LanguageServices.Host/Daedalus.LanguageServices.Host.csproj" />
     <Project Path="src/Daedalus.LanguageServices.Protocol/Daedalus.LanguageServices.Protocol.csproj" />
+    <Project Path="src/Daedalus.Platform/Daedalus.Platform.csproj" />
     <Project Path="src/Daedalus.Rpc/Daedalus.Rpc.csproj" />
+    <Project Path="src/Daedalus.Workbench/Daedalus.Workbench.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Daedalus.Benchmarks.Harness.Tests/Daedalus.Benchmarks.Harness.Tests.csproj" />
     <Project Path="tests/Daedalus.LanguageServices.Host.Tests/Daedalus.LanguageServices.Host.Tests.csproj" />
     <Project Path="tests/Daedalus.Rpc.Tests/Daedalus.Rpc.Tests.csproj" />
     <Project Path="tests/Daedalus.Spike.Avalonia.Tests/Daedalus.Spike.Avalonia.Tests.csproj" />
+    <Project Path="tests/Daedalus.Workbench.Tests/Daedalus.Workbench.Tests.csproj" />
   </Folder>
 </Solution>

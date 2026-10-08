@@ -69,6 +69,8 @@ dotnet_diagnostic.CA1848.severity = none
 # Types in executables may be public (tests reference them).
 dotnet_diagnostic.CA1515.severity = none
 dotnet_diagnostic.CA1062.severity = none
+# Schema/type names such as SettingType.String mirror JSON Schema on purpose.
+dotnet_diagnostic.CA1720.severity = suggestion
 # JSON-RPC targets and view models are instance members by design.
 dotnet_diagnostic.CA1822.severity = suggestion
 
