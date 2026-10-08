@@ -157,7 +157,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 continue;
             }
 
-            var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(directory, item.EvaluatedInclude)));
+            var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(directory, FixSeparators(item.EvaluatedInclude))));
             if (!seen.Add(item.ItemType + "|" + full))
             {
                 continue;
@@ -193,7 +193,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
 
         foreach (var item in project.GetItems("ProjectReference"))
         {
-            var full = Path.GetFullPath(Path.Combine(directory, item.EvaluatedInclude));
+            var full = Path.GetFullPath(Path.Combine(directory, FixSeparators(item.EvaluatedInclude)));
             yield return new ReferenceInfo(ReferenceKinds.Project, Path.GetFileNameWithoutExtension(full), null, full, framework, File.Exists(full));
         }
 
@@ -206,4 +206,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
+
+    /// <summary>Project files use <c>\</c>; on macOS and Linux MSBuild keeps it in items that are not existing files (<c>Folder</c>).</summary>
+    private static string FixSeparators(string path) => Path.DirectorySeparatorChar == '\\' ? path : path.Replace('\\', '/');
 }

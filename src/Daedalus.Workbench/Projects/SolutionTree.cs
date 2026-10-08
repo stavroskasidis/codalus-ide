@@ -231,7 +231,7 @@ public static class SolutionTree
     {
         if (dependentUpon is { Length: > 0 })
         {
-            var parent = System.IO.Path.GetFileName(dependentUpon);
+            var parent = dependentUpon[(dependentUpon.LastIndexOfAny(['\\', '/']) + 1)..];
             return !s_names.Equals(parent, name) && siblings.Contains(parent) ? parent : null;
         }
 

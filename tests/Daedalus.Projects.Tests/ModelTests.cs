@@ -25,6 +25,7 @@ public class NestingTests
         var siblings = new HashSet<string>(["Strings.resx", "Strings.Designer.cs", "Other.cs"], StringComparer.OrdinalIgnoreCase);
         Assert.Equal("Strings.resx", SolutionTree.NestParent("Strings.Designer.cs", siblings, "Strings.resx"));
         Assert.Null(SolutionTree.NestParent("Strings.Designer.cs", siblings, "Missing.resx"));
+        Assert.Equal("Strings.resx", SolutionTree.NestParent("Strings.Designer.cs", siblings, @"Resources\Strings.resx")); // as written in project files, on every OS
     }
 
     [Fact]

@@ -584,7 +584,7 @@ internal sealed class SolutionSession : IAsyncDisposable
     public Task MoveInSolutionAsync(MoveInSolutionParams parameters, CancellationToken cancellationToken) =>
         EditSolutionAsync(model =>
         {
-            SolutionItemModel item = (parameters.Item.StartsWith('/') ? model.FindFolder(parameters.Item) : (SolutionItemModel?)FindProject(model, parameters.Item))
+            SolutionItemModel item = (IsFolderId(parameters.Item) ? model.FindFolder(parameters.Item) : (SolutionItemModel?)FindProject(model, parameters.Item))
                                      ?? throw new InvalidOperationException($"'{parameters.Item}' is not in the solution.");
             var target = parameters.TargetFolder is { } id ? model.FindFolder(id) ?? throw new InvalidOperationException($"No solution folder '{id}'.") : null;
             item.MoveToFolder(target);
@@ -595,6 +595,9 @@ internal sealed class SolutionSession : IAsyncDisposable
 
     public bool RemoveProjectReference(ProjectReferenceParams parameters) =>
         _editor.RemoveProjectReference(System.IO.Path.GetFullPath(parameters.ProjectPath), System.IO.Path.GetFullPath(parameters.ReferencePath));
+
+    /// <summary>Solution folder ids start and end with '/' (<c>/src/</c>); absolute Unix paths only start with one.</summary>
+    private static bool IsFolderId(string item) => item.Length > 1 && item[0] == '/' && item[^1] == '/';
 
     private SolutionProjectModel? FindProject(SolutionModel model, string path)
     {
