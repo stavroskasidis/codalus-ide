@@ -13,6 +13,8 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <!-- LibraryImport (AttachConsole) generates unsafe marshalling code. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The plugin host is referenced only for build order; it is published framework-dependent next to the shell. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <!-- Third-party trim/AOT warnings (Dock default templates, reflection bindings in library XAML) are
          reported, not fatal. Our own code must stay warning-free; see docs/adr/0001-ui-stack.md. -->

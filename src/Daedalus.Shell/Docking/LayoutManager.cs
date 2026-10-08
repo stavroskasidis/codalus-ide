@@ -143,7 +143,7 @@ public sealed class LayoutManager : ObservableObject
     {
         var (id, alignment, proportion) = location switch
         {
-            ToolWindowLocation.Left => (LeftId, Alignment.Left, 0.2),
+            ToolWindowLocation.Left => (LeftId, Alignment.Left, 0.22),
             ToolWindowLocation.Right => (RightId, Alignment.Right, 0.22),
             _ => (BottomId, Alignment.Bottom, 0.28),
         };
@@ -159,6 +159,7 @@ public sealed class LayoutManager : ObservableObject
             var center = EnsureContainer(CenterId, Orientation.Vertical, DocumentsDock());
             Factory.AddDockable(center, Factory.CreateProportionalDockSplitter());
             Factory.AddDockable(center, pane);
+            MakeRoomFor(center, pane);
         }
         else
         {
@@ -173,9 +174,23 @@ public sealed class LayoutManager : ObservableObject
                 Factory.AddDockable(main, Factory.CreateProportionalDockSplitter());
                 Factory.AddDockable(main, pane);
             }
+
+            MakeRoomFor(main, pane);
         }
 
         return pane;
+    }
+
+    /// <summary>Scales the other children of <paramref name="dock"/> so <paramref name="pane"/> gets its proportion.</summary>
+    private static void MakeRoomFor(IDock dock, IDockable pane)
+    {
+        var others = dock.VisibleDockables!.Where(d => d != pane && d is not IProportionalDockSplitter).ToList();
+        var known = others.Where(d => !double.IsNaN(d.Proportion)).Sum(d => d.Proportion);
+        var rest = 1 - pane.Proportion;
+        foreach (var other in others)
+        {
+            other.Proportion = double.IsNaN(other.Proportion) || known <= 0 ? rest / others.Count : other.Proportion / known * rest;
+        }
     }
 
     /// <summary>
@@ -494,7 +509,7 @@ public sealed class LayoutManager : ObservableObject
             Orientation = "horizontal",
             Children =
             [
-                Tools(LeftId, "left", 0.2, ToolWindowLocation.Left),
+                Tools(LeftId, "left", 0.22, ToolWindowLocation.Left),
                 new LayoutNode("splitter"),
                 new LayoutNode("proportional")
                 {
