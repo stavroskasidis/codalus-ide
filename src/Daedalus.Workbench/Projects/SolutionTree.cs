@@ -270,6 +270,10 @@ public static class SolutionTree
 
     // ------------------------------------------------------------------ dependencies
 
+    /// <summary>
+    /// The Dependencies node. TODO(issue): an Analyzers group and transitive packages need design-time build data
+    /// (M3, ADR 0004).
+    /// </summary>
     private static ExplorerNode? Dependencies(string projectPath, ProjectInfo info)
     {
         if (info.References.Length == 0 && info.TargetFrameworks.Length == 0)

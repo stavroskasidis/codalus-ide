@@ -167,6 +167,10 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>
+    /// Picks the solution configuration. TODO(issue): an active target framework per multi-targeted project, which
+    /// the language service (M3) will follow.
+    /// </summary>
     public async Task SelectConfigurationAsync()
     {
         if (Solutions.Solution is not { } solution)

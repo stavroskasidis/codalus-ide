@@ -83,6 +83,8 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 /// <summary>
 /// The Solution Explorer. The tree is rebuilt from the build host's model (<see cref="SolutionTree"/>) and shown as
 /// a flattened list; expansion and selection survive rebuilds by node id. Operations act on the selected row.
+/// TODO(issue): "Show All Files" (files on disk that aren't project items; the host's fs/list is ready for it),
+/// multi-selection, and flagging open documents whose files were deleted or renamed outside Daedalus.
 /// </summary>
 public sealed class SolutionExplorerViewModel : ObservableObject
 {
