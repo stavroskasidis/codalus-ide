@@ -22,16 +22,38 @@ Both prototypes have the same docked layout (Solution Explorer, editor tabs, Out
 | Semantic highlighting | `DocumentColorizingTransformer` fed with *range* requests for the viewport | GPUI Kit's `DocumentRangeSemanticTokensProvider`. The editor only requests **whole-document** tokens after edits and never on scroll, so the spike vendors `gpui-base` with a one-method patch (see `spikes/gpui/vendor/PATCHES.md`). Semantic tokens only render when a tree-sitter grammar is loaded, so B also runs tree-sitter C#. |
 | Incremental edits to the host | Exact edit offsets from AvaloniaEdit's change events | The editor's change event carries no delta. A worker thread diffs snapshots (prefix and suffix) into UTF-16 edits. |
 | Native packaging | Native AOT (`PublishAot`). Builds clean in our code. **13 trim/AOT warnings in third-party code** (Dock's default data templates and reflection bindings in library XAML). They are non-fatal, and the published app works. | A single native executable. A release build takes about 4 minutes cold and 1 minute incremental. |
-| Integration problems hit | Dock's `AppendTool` silently does nothing before `InitLayout` (populated directly instead). AOT linker discovery needs `vswhere` on PATH. | The toolset resolver picked an incomplete MSVC install. The editor drops semantic styles without a language. A console window appears unless the subsystem flag is set. API snapshots are pinned exactly (`=0.3.8`). |
+| Integration problems hit | Dock's `AppendTool` silently does nothing before `InitLayout` (populated directly instead). The editor did not take keyboard focus when a document opened (fixed). AOT linker discovery needs `vswhere` on PATH. | The toolset resolver picked an incomplete MSVC install. The editor drops semantic styles without a language. A console window appears unless the subsystem flag is set. API snapshots are pinned exactly (`=0.3.8`). |
 | Tests | Host integration tests run through the same client. A headless UI test (Avalonia.Headless) loads the solution and asserts that tokens are rendered. | Rust unit tests (edit diffing). GPUI has a `TestAppContext`, but no UI test was written in the spike. |
 
 ## Measurements
 
 The method and raw data are in `benchmarks/README.md` and `benchmarks/results/`. Reference hardware: see ADR 0002. **The macOS and Linux columns are pending:** the repository is local only, and they come from `.github/workflows/benchmarks.yml` once it is pushed (GPU-less runners, so indicative only).
 
-<!-- MEASUREMENTS:BEGIN -->
-_Filled in from the benchmark run._
-<!-- MEASUREMENTS:END -->
+Windows, reference hardware (i5-13600KF, RTX 4060, 165 Hz display), 2026-10-08. The values are p50 / p99, and black-box values use the same procedure for both prototypes and for the reference IDEs. Both prototypes include their out-of-process language host (.NET 10, ReadyToRun) in every memory figure.
+
+| Metric | A: Avalonia (AOT) | B: GPUI | Notes |
+|---|---|---|---|
+| Cold start → ready, empty window (black-box) | **346** / 404 ms | 373 / 400 ms | VS Code 1517 ms, VS 921 ms on the same probe |
+| Cold start → `interactive` (in-app) | **262** / 266 ms | 288 / 311 ms | |
+| Idle memory, empty window (process tree, private) | 194 MB | **185** MB | Shell alone: 96 vs 87 MB. The rest is the language host. |
+| 100k-line file → ready (black-box) | **1396** ms | 1570 ms | Semantic highlight at 1304 vs 1495 ms (host-bound) |
+| Memory with the 100k file open | 390 MB | **382** MB | Shell alone: 227 vs 220 MB |
+| **Typing, keystroke → displayed frame** (black-box, 600 keys) | 13.6 / 24.9 ms (max 31.7) | **11.3 / 18.8** ms (max 19.4) | VS Code 13.2 / 20.0, VS 17.0 / 201 |
+| Typing, input → rendered (in-app) | 6.4 / 18.0 ms | **3.2 / 5.6** ms | The clearest difference between the stacks |
+| Self-driven typing, mid-file (in-app, 900 keys) | 7.2 / 19.5 ms | **5.5 / 8.7** ms | |
+| **Scrolling, PageDown → displayed frame** (black-box, 450 presses) | 11.8 / 22.7 ms | 12.2 / **18.7** ms | VS Code 10.9 / 25.4, VS 25.2 / 53.4 |
+| Responses > 50 ms while scrolling | 0 | 0 | VS: 2–3 per run |
+| Self-driven scroll at 230 lines/s, frame time | 6.0 / 7.0 ms (max 8.3) | 6.1 / 7.0 ms (max 8.1) | Both locked to 165 Hz; no frame > 50 ms |
+| Go-to-line jump → rendered | 4.2 / 13.7 ms | 6.4 / 8.4 ms | |
+| Shell size on disk (zipped) | 45.5 MB (18.7 MB) | **27.5 MB (8.8 MB)** | Plus the shared host: 60.9 MB (needs the .NET runtime) |
+| 50-project solution → tree shown | 8.5 s | 8.1 s | **Host-bound** (MSBuildWorkspace), not UI-bound. M2 must fix this for both. |
+
+**Reading the numbers.** Both stacks clear the provisional startup, memory and scrolling targets by a wide margin, and both are within a frame or two of VS Code on black-box editor latency. GPUI is measurably better at **typing latency tails**: an in-app p99 of 5.6 ms against 18.0 ms, and 18.8 ms against 24.9 ms black-box. That is the only performance dimension where the stacks differ meaningfully. The AvaloniaEdit/Skia render path for a keystroke (visual-line rebuild, then our colorizer, then composition) has a long tail that M3 has to bring down. GPUI is also smaller on disk. Avalonia starts slightly faster.
+
+**Measurement notes.**
+- Avalonia composites through DirectComposition, so per-process present tracing (PresentMon) cannot see its frames. Every latency here therefore comes from DXGI Desktop Duplication: frame timestamps and changed rectangles of the composed desktop.
+- GPUI's frame pacing (DwmFlush-based vsync) dropped to about 27 fps in some early runs when its window was occluded or in the background. Every published run had the target in the foreground, and the harness enforces this.
+- GPUI's first cold-start memory sample (1.2 GB, 41 processes) was a harness artifact: a recycled PID matched an unrelated process tree. It is excluded. `TODO(issue)`: filter descendants by process start time.
 
 ## Qualitative assessment
 
@@ -70,18 +92,33 @@ Checked objectively by dumping each prototype's Windows UI Automation tree (what
 
 The weights are the ones proposed in the M0 plan, and the maintainer may adjust them. Scores run from 1 (poor) to 5 (excellent).
 
-<!-- MATRIX:BEGIN -->
-_Filled in from the benchmark run._
-<!-- MATRIX:END -->
+| Criterion | Weight | A: Avalonia | B: GPUI | Basis |
+|---|---|---|---|---|
+| Performance | 35% | **4** | **5** | Both beat the provisional budgets and track VS Code. B has clearly better typing tails (in-app p99 5.6 vs 18.0 ms) and a smaller binary. A starts slightly faster. |
+| Exposing rich Roslyn features (previews, designers, visualizers) | 20% | **5** | **2** | A: shared C# contracts, .NET-native designers, previewer and visualizers. B: contracts mirrored in Rust, and .NET-rendered surfaces would have to be composited across processes. |
+| Maturity and documentation | 15% | **4** | **2** | Avalonia 12 is stable with full docs, and AvaloniaEdit is mature. GPUI is pre-1.0 with weekly breaking snapshots and thin docs. Its best editor (Zed's) is GPL, and GPUI Kit's editor needed a patch. |
+| Contributor accessibility | 15% | **5** | **2** | Single-language C# codebase for .NET developers, versus a C#/Rust split with two toolchains and slower builds. |
+| Long-term maintenance risk | 15% | **4** | **2** | A: Dock's single maintainer and third-party AOT warnings (both manageable). B: unstable upstream with Zed-driven priorities, a vendored patch, and unresolved licence items. |
+| **Weighted score** | | **4.35** | **3.05** | |
+
+Accessibility is not weighted separately (see above): neither stack is complete, and both have a credible path. If the maintainer weights performance at 60% instead of 35%, with the other criteria scaled down proportionally, A still scores 4.22 against B's 3.80.
 
 ## Recommendation
 
-<!-- RECOMMENDATION:BEGIN -->
-_Filled in from the benchmark run._
-<!-- RECOMMENDATION:END -->
+**Adopt A: Avalonia 12 + AvaloniaEdit + Dock, with the shell published as Native AOT.** Delete prototype B after the maintainer approves.
+
+GPUI wins on raw typing latency, and that result is real. But both stacks already meet the user-visible budgets on this hardware. The latency gap is a tail-latency problem in one component (the editor render path) that can be engineered down. The other gaps are structural and would compound over the whole project: the language boundary for every rich Roslyn feature, a split contributor base, a pre-1.0 upstream that breaks weekly, and licensing items. For an IDE whose users and contributors are .NET developers, one C# codebase on a mature cross-platform toolkit is the better long-term bet.
+
+**Conditions attached to the recommendation**, to be tracked as M1/M3 work:
+1. **Typing latency.** Bring AvaloniaEdit's keystroke path to in-app p99 ≤ 16 ms and black-box p99 within the ADR 0002 budget. Profile visual-line reconstruction and colorizer cost, and render only invalidated lines. If AvaloniaEdit cannot get there, fork it (MIT). Replacing the editor is the fallback, not the toolkit.
+2. **Editor accessibility.** Add a UIA/AX `TextPattern` automation peer to the editor, and name all Solution Explorer and Dock elements.
+3. **AOT hygiene.** Remove the third-party trim warnings: provide our own Dock data templates with compiled bindings, or upstream fixes. Keep `PublishAot` warnings-as-errors for our code in CI.
+4. **Revisit trigger.** If M3 cannot meet the typing budget with AvaloniaEdit or a fork, or if Avalonia regresses on any OS, reopen this ADR. The harness keeps both measurement paths.
 
 ## Consequences
 
-<!-- CONSEQUENCES:BEGIN -->
-_Filled in from the benchmark run._
-<!-- CONSEQUENCES:END -->
+- M1 builds the real shell (`src/Daedalus.Shell`) on Avalonia 12, reusing from the spike the language-host client and supervisor, the AOT-safe protocol, and the bench-event instrumentation. The spike UI code is a reference, not a base.
+- `spikes/gpui`, its vendored `gpui-base` and `deny.toml` are deleted, together with the pending MPL-2.0 and `bzip2-1.0.6` licence questions, which only apply to B. The Rust CI job is removed.
+- The out-of-process protocol stays toolkit-neutral (LSP-shaped JSON-RPC), so a different UI front end remains possible later without touching the services.
+- Risks we accept: Dock's bus factor (we can fork it, or write our own docking on Avalonia primitives) and an editor component we may have to fork.
+- The macOS and Linux numbers (CI runners) must confirm the Windows picture after the first push. A large regression on either OS triggers a re-review.

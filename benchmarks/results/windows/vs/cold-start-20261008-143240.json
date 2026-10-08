@@ -1,0 +1,176 @@
+{
+  "target": "vs",
+  "scenario": "cold-start",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T14:32:40.4158928+00:00",
+  "method": "black-box",
+  "samples": {
+    "startup_ready_ms_first": [
+      1368.1033
+    ],
+    "memory_idle_private_mb_first": [
+      747.640625
+    ],
+    "memory_idle_ws_mb_first": [
+      845.82421875
+    ],
+    "memory_idle_shell_private_mb_first": [
+      693.40625
+    ],
+    "process_count_first": [
+      2
+    ],
+    "startup_ready_ms": [
+      848.3928,
+      877.3284,
+      1683.3633,
+      1102.1187,
+      920.7072
+    ],
+    "memory_idle_private_mb": [
+      740.40234375,
+      725.078125,
+      716.37109375,
+      661.33203125,
+      680.48046875
+    ],
+    "memory_idle_ws_mb": [
+      818.09375,
+      819.171875,
+      811.47265625,
+      756.4609375,
+      773.76171875
+    ],
+    "memory_idle_shell_private_mb": [
+      692.19140625,
+      671.578125,
+      662.9375,
+      607.03125,
+      626.109375
+    ],
+    "process_count": [
+      2,
+      2,
+      2,
+      2,
+      2
+    ]
+  },
+  "summary": {
+    "startup_ready_ms_first": {
+      "n": 1,
+      "min": 1368.1033,
+      "p50": 1368.1033,
+      "p95": 1368.1033,
+      "p99": 1368.1033,
+      "max": 1368.1033,
+      "mean": 1368.1033,
+      "stdDev": 0
+    },
+    "memory_idle_private_mb_first": {
+      "n": 1,
+      "min": 747.640625,
+      "p50": 747.640625,
+      "p95": 747.640625,
+      "p99": 747.640625,
+      "max": 747.640625,
+      "mean": 747.640625,
+      "stdDev": 0
+    },
+    "memory_idle_ws_mb_first": {
+      "n": 1,
+      "min": 845.82421875,
+      "p50": 845.82421875,
+      "p95": 845.82421875,
+      "p99": 845.82421875,
+      "max": 845.82421875,
+      "mean": 845.82421875,
+      "stdDev": 0
+    },
+    "memory_idle_shell_private_mb_first": {
+      "n": 1,
+      "min": 693.40625,
+      "p50": 693.40625,
+      "p95": 693.40625,
+      "p99": 693.40625,
+      "max": 693.40625,
+      "mean": 693.40625,
+      "stdDev": 0
+    },
+    "process_count_first": {
+      "n": 1,
+      "min": 2,
+      "p50": 2,
+      "p95": 2,
+      "p99": 2,
+      "max": 2,
+      "mean": 2,
+      "stdDev": 0
+    },
+    "startup_ready_ms": {
+      "n": 5,
+      "min": 848.3928,
+      "p50": 920.7072,
+      "p95": 1683.3633,
+      "p99": 1683.3633,
+      "max": 1683.3633,
+      "mean": 1086.3820799999999,
+      "stdDev": 348.0031331113227
+    },
+    "memory_idle_private_mb": {
+      "n": 5,
+      "min": 661.33203125,
+      "p50": 716.37109375,
+      "p95": 740.40234375,
+      "p99": 740.40234375,
+      "max": 740.40234375,
+      "mean": 704.7328125,
+      "stdDev": 32.762405212567955
+    },
+    "memory_idle_ws_mb": {
+      "n": 5,
+      "min": 756.4609375,
+      "p50": 811.47265625,
+      "p95": 819.171875,
+      "p99": 819.171875,
+      "max": 819.171875,
+      "mean": 795.7921875,
+      "stdDev": 28.818984010830498
+    },
+    "memory_idle_shell_private_mb": {
+      "n": 5,
+      "min": 607.03125,
+      "p50": 662.9375,
+      "p95": 692.19140625,
+      "p99": 692.19140625,
+      "max": 692.19140625,
+      "mean": 651.96953125,
+      "stdDev": 34.67992689888366
+    },
+    "process_count": {
+      "n": 5,
+      "min": 2,
+      "p50": 2,
+      "p95": 2,
+      "p99": 2,
+      "max": 2,
+      "mean": 2,
+      "stdDev": 0
+    }
+  },
+  "notes": [
+    "Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.",
+    "Run 0 is the first launch of the session (reported separately as *_first); distributions use runs 1..N-1. OS file caches are not flushed, so runs 1..N-1 are warm starts."
+  ],
+  "discardedRuns": 0
+}

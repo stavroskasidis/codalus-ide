@@ -50,7 +50,7 @@ Before running, publish the prototypes into `artifacts/spike-a` and `artifacts/s
 ## One-time setup for reference IDEs
 
 - **Visual Studio:** launch `devenv /rootsuffix DaedalusBench` once by hand and complete the first-run dialogs (sign-in, theme). Close it before benchmarking.
-- **Rider:** in *Settings → Appearance & Behavior → System Settings*, turn off *Reopen projects on startup*. Close all Rider instances before benchmarking, because a running instance would receive the launch instead.
+- **Rider:** in *Settings → Appearance & Behavior → System Settings*, turn off *Reopen projects on startup*. Close all Rider instances before benchmarking, because a running instance would receive the launch instead. **Run the Rider targets from a regular terminal:** a Rider launched from an automation process tree (for example, an agent's sandboxed shell) cannot take over the AF_UNIX `.port` socket left by a previous session, so every launch after the first fails with *Start Failed*.
 - **VS Code:** nothing to do. The harness uses a fresh profile with extensions disabled.
 
 ## CI

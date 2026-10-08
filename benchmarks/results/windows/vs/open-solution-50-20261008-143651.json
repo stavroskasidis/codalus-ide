@@ -1,0 +1,56 @@
+{
+  "target": "vs",
+  "scenario": "open-solution-50",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T14:36:51.9195723+00:00",
+  "method": "black-box",
+  "samples": {
+    "solution_ready_ms": [
+      1070.2747,
+      1022.356,
+      968.5633
+    ],
+    "memory_solution_private_mb": [
+      3264.9609375,
+      2458.46875,
+      2370.203125
+    ]
+  },
+  "summary": {
+    "solution_ready_ms": {
+      "n": 3,
+      "min": 968.5633,
+      "p50": 1022.356,
+      "p95": 1070.2747,
+      "p99": 1070.2747,
+      "max": 1070.2747,
+      "mean": 1020.398,
+      "stdDev": 50.88396157425241
+    },
+    "memory_solution_private_mb": {
+      "n": 3,
+      "min": 2370.203125,
+      "p50": 2458.46875,
+      "p95": 3264.9609375,
+      "p99": 3264.9609375,
+      "max": 3264.9609375,
+      "mean": 2697.8776041666665,
+      "stdDev": 493.0875534299091
+    }
+  },
+  "notes": [
+    "Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.",
+    "The fixture copy is restored (dotnet restore) before each launch; restore time is not measured."
+  ],
+  "discardedRuns": 0
+}

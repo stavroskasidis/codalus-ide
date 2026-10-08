@@ -1,0 +1,207 @@
+{
+  "target": "vscode",
+  "scenario": "cold-start",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T14:26:56.9110537+00:00",
+  "method": "black-box",
+  "samples": {
+    "startup_ready_ms_first": [
+      1547.5007
+    ],
+    "memory_idle_private_mb_first": [
+      1299.4609375
+    ],
+    "memory_idle_ws_mb_first": [
+      1491.54296875
+    ],
+    "memory_idle_shell_private_mb_first": [
+      146.09765625
+    ],
+    "process_count_first": [
+      8
+    ],
+    "startup_ready_ms": [
+      1532.0069,
+      1517.0498,
+      1449.0879,
+      1496.1333,
+      1573.4744
+    ],
+    "memory_idle_private_mb": [
+      1313.046875,
+      1100.6484375,
+      1309.94140625,
+      1138.23828125,
+      1292.98046875
+    ],
+    "memory_idle_ws_mb": [
+      1523.9296875,
+      1320.9609375,
+      1496.41015625,
+      1345.10546875,
+      1496.6171875
+    ],
+    "memory_idle_shell_private_mb": [
+      150.5390625,
+      144.21484375,
+      149.05859375,
+      148.328125,
+      147.6171875
+    ],
+    "process_count": [
+      8,
+      8,
+      8,
+      8,
+      8
+    ],
+    "startup_selfreported_ms_first": [
+      1095
+    ],
+    "startup_selfreported_ms": [
+      1072,
+      1060,
+      1078,
+      1061,
+      1126
+    ]
+  },
+  "summary": {
+    "startup_ready_ms_first": {
+      "n": 1,
+      "min": 1547.5007,
+      "p50": 1547.5007,
+      "p95": 1547.5007,
+      "p99": 1547.5007,
+      "max": 1547.5007,
+      "mean": 1547.5007,
+      "stdDev": 0
+    },
+    "memory_idle_private_mb_first": {
+      "n": 1,
+      "min": 1299.4609375,
+      "p50": 1299.4609375,
+      "p95": 1299.4609375,
+      "p99": 1299.4609375,
+      "max": 1299.4609375,
+      "mean": 1299.4609375,
+      "stdDev": 0
+    },
+    "memory_idle_ws_mb_first": {
+      "n": 1,
+      "min": 1491.54296875,
+      "p50": 1491.54296875,
+      "p95": 1491.54296875,
+      "p99": 1491.54296875,
+      "max": 1491.54296875,
+      "mean": 1491.54296875,
+      "stdDev": 0
+    },
+    "memory_idle_shell_private_mb_first": {
+      "n": 1,
+      "min": 146.09765625,
+      "p50": 146.09765625,
+      "p95": 146.09765625,
+      "p99": 146.09765625,
+      "max": 146.09765625,
+      "mean": 146.09765625,
+      "stdDev": 0
+    },
+    "process_count_first": {
+      "n": 1,
+      "min": 8,
+      "p50": 8,
+      "p95": 8,
+      "p99": 8,
+      "max": 8,
+      "mean": 8,
+      "stdDev": 0
+    },
+    "startup_ready_ms": {
+      "n": 5,
+      "min": 1449.0879,
+      "p50": 1517.0498,
+      "p95": 1573.4744,
+      "p99": 1573.4744,
+      "max": 1573.4744,
+      "mean": 1513.55046,
+      "stdDev": 45.83269370016346
+    },
+    "memory_idle_private_mb": {
+      "n": 5,
+      "min": 1100.6484375,
+      "p50": 1292.98046875,
+      "p95": 1313.046875,
+      "p99": 1313.046875,
+      "max": 1313.046875,
+      "mean": 1230.97109375,
+      "stdDev": 102.95785054847926
+    },
+    "memory_idle_ws_mb": {
+      "n": 5,
+      "min": 1320.9609375,
+      "p50": 1496.41015625,
+      "p95": 1523.9296875,
+      "p99": 1523.9296875,
+      "max": 1523.9296875,
+      "mean": 1436.6046875,
+      "stdDev": 95.5895310946498
+    },
+    "memory_idle_shell_private_mb": {
+      "n": 5,
+      "min": 144.21484375,
+      "p50": 148.328125,
+      "p95": 150.5390625,
+      "p99": 150.5390625,
+      "max": 150.5390625,
+      "mean": 147.9515625,
+      "stdDev": 2.3525171312930633
+    },
+    "process_count": {
+      "n": 5,
+      "min": 8,
+      "p50": 8,
+      "p95": 8,
+      "p99": 8,
+      "max": 8,
+      "mean": 8,
+      "stdDev": 0
+    },
+    "startup_selfreported_ms_first": {
+      "n": 1,
+      "min": 1095,
+      "p50": 1095,
+      "p95": 1095,
+      "p99": 1095,
+      "max": 1095,
+      "mean": 1095,
+      "stdDev": 0
+    },
+    "startup_selfreported_ms": {
+      "n": 5,
+      "min": 1060,
+      "p50": 1072,
+      "p95": 1126,
+      "p99": 1126,
+      "max": 1126,
+      "mean": 1079.4,
+      "stdDev": 27.12563363315224
+    }
+  },
+  "notes": [
+    "No extensions: TextMate highlighting only, no C# language service.",
+    "Run 0 is the first launch of the session (reported separately as *_first); distributions use runs 1..N-1. OS file caches are not flushed, so runs 1..N-1 are warm starts.",
+    "startup_selfreported_ms: VS Code\u0027s own --prof-append-timers measurement (process start to workbench restored)."
+  ],
+  "discardedRuns": 0
+}
