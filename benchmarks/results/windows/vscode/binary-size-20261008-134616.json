@@ -1,0 +1,39 @@
+{
+  "target": "vscode",
+  "scenario": "binary-size",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T13:46:16.2788045+00:00",
+  "method": "static",
+  "samples": {
+    "install_mb": [
+      1051.7112226486206
+    ]
+  },
+  "summary": {
+    "install_mb": {
+      "n": 1,
+      "min": 1051.7112226486206,
+      "p50": 1051.7112226486206,
+      "p95": 1051.7112226486206,
+      "p99": 1051.7112226486206,
+      "max": 1051.7112226486206,
+      "mean": 1051.7112226486206,
+      "stdDev": 0
+    }
+  },
+  "notes": [
+    "No extensions: TextMate highlighting only, no C# language service.",
+    "Informative: whole install directory, including bundled runtimes and plugins."
+  ],
+  "discardedRuns": 0
+}

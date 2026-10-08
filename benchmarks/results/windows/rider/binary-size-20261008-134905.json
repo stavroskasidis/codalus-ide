@@ -1,0 +1,39 @@
+{
+  "target": "rider",
+  "scenario": "binary-size",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T13:49:05.2639161+00:00",
+  "method": "static",
+  "samples": {
+    "install_mb": [
+      7313.308648109436
+    ]
+  },
+  "summary": {
+    "install_mb": {
+      "n": 1,
+      "min": 7313.308648109436,
+      "p50": 7313.308648109436,
+      "p95": 7313.308648109436,
+      "p99": 7313.308648109436,
+      "max": 7313.308648109436,
+      "mean": 7313.308648109436,
+      "stdDev": 0
+    }
+  },
+  "notes": [
+    "User\u0027s configuration; \u0027Reopen projects on startup\u0027 must be off (see benchmarks/README.md).",
+    "Informative: whole install directory, including bundled runtimes and plugins."
+  ],
+  "discardedRuns": 0
+}

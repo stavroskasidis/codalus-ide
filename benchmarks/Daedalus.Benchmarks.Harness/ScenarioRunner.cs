@@ -94,7 +94,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 }
             }
 
-            if (BlackBox && await WindowProbe.WaitUntilReadyAsync(session.Process.Id, session.LaunchTimestamp, s_readyTimeout, cancellationToken).ConfigureAwait(false) is { } ready)
+            if (BlackBox && await WindowProbe.WaitUntilReadyAsync(session.Process.Id, session.LaunchTimestamp, s_readyTimeout, target.IsMainWindow, cancellationToken).ConfigureAwait(false) is { } ready)
             {
                 result.Add("startup_ready_ms" + suffix, ready.Ready.TotalMilliseconds);
             }
@@ -166,7 +166,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             }
 
             nint window = 0;
-            if (BlackBox && await WindowProbe.WaitUntilReadyAsync(session.Process.Id, session.LaunchTimestamp, s_readyTimeout, cancellationToken).ConfigureAwait(false) is { } ready)
+            if (BlackBox && await WindowProbe.WaitUntilReadyAsync(session.Process.Id, session.LaunchTimestamp, s_readyTimeout, target.IsMainWindow, cancellationToken).ConfigureAwait(false) is { } ready)
             {
                 result.Add("file_ready_ms", ready.Ready.TotalMilliseconds);
                 window = ready.Window;
@@ -308,7 +308,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 result.Add("solution_loaded_ms", (loaded.WallMicros - session.LaunchWallMicros) / 1000.0);
             }
 
-            if (BlackBox && await WindowProbe.WaitUntilReadyAsync(session.Process.Id, session.LaunchTimestamp, s_readyTimeout, cancellationToken).ConfigureAwait(false) is { } ready)
+            if (BlackBox && await WindowProbe.WaitUntilReadyAsync(session.Process.Id, session.LaunchTimestamp, s_readyTimeout, target.IsMainWindow, cancellationToken).ConfigureAwait(false) is { } ready)
             {
                 result.Add("solution_ready_ms", ready.Ready.TotalMilliseconds);
             }
@@ -470,6 +470,11 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 
         public async ValueTask DisposeAsync()
         {
+            if (OperatingSystem.IsWindows() && !Process.HasExited && !WindowProbe.CloseGracefully(Process.Id, TimeSpan.FromSeconds(20)))
+            {
+                // A modal (e.g. 'save changes?') can block closing; only then fall back to killing.
+            }
+
             ProcessTree.Kill(Process.Id);
             Process.Dispose();
             await Task.Delay(1500).ConfigureAwait(false); // Let file handles close and caches settle between runs.

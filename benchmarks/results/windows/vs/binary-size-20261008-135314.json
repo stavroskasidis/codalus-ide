@@ -1,0 +1,39 @@
+{
+  "target": "vs",
+  "scenario": "binary-size",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T13:53:14.4081244+00:00",
+  "method": "static",
+  "samples": {
+    "install_mb": [
+      5217.584601402283
+    ]
+  },
+  "summary": {
+    "install_mb": {
+      "n": 1,
+      "min": 5217.584601402283,
+      "p50": 5217.584601402283,
+      "p95": 5217.584601402283,
+      "p99": 5217.584601402283,
+      "max": 5217.584601402283,
+      "mean": 5217.584601402283,
+      "stdDev": 0
+    }
+  },
+  "notes": [
+    "Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.",
+    "Informative: whole install directory, including bundled runtimes and plugins."
+  ],
+  "discardedRuns": 0
+}

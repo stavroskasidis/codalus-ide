@@ -24,11 +24,11 @@ The full description is in `benchmarks/README.md`. In short:
 - **Reference IDEs:** VS Code 1.140.0 (fresh profile, no extensions, so the editor runs on TextMate grammars without a C# language service), JetBrains Rider 2026.2.1 (user configuration, warm caches) and Visual Studio 2026 18.10 Enterprise (isolated experimental instance).
 - **Black-box metrics** use the same procedure for every target, including our prototypes:
   - *Ready:* the window is responsive and its own content has been visually stable for 1 s.
-  - *Input → present:* `SendInput` timestamps are paired with the next PresentMon present of the target.
+  - *Input → display:* `SendInput` timestamps are paired with the first composed desktop frame that changes the target window (DXGI Desktop Duplication).
   - *Memory:* private bytes of the whole process tree.
 - **In-app metrics** are emitted by the prototypes only. They are used for cross-checking, and on CI where window probes are unavailable.
 - **Limitations:**
-  - Input → present excludes compositor and display latency (about 1–2 refresh intervals for every target alike).
+  - Input → display includes DWM composition but not scan-out or panel response (about half a refresh interval on average, the same for every target).
   - The "ready" heuristic treats a still splash or welcome screen as ready.
   - Warm starts only: OS file caches are not flushed. Run 0 of each target is reported separately.
   - Rider and VS run with real-world configurations, while VS Code runs with no extensions at all.

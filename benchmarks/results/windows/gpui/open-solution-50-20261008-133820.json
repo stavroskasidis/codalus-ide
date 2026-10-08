@@ -1,0 +1,70 @@
+{
+  "target": "gpui",
+  "scenario": "open-solution-50",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T13:38:20.2953645+00:00",
+  "method": "instrumented\u002Bblack-box",
+  "samples": {
+    "solution_loaded_ms": [
+      8596.805,
+      8289.937,
+      8252.11
+    ],
+    "solution_ready_ms": [
+      8677.7904,
+      8352.0165,
+      8333.2348
+    ],
+    "memory_solution_private_mb": [
+      225.5625,
+      225.68359375,
+      226.1328125
+    ]
+  },
+  "summary": {
+    "solution_loaded_ms": {
+      "n": 3,
+      "min": 8252.11,
+      "p50": 8289.937,
+      "p95": 8596.805,
+      "p99": 8596.805,
+      "max": 8596.805,
+      "mean": 8379.617333333334,
+      "stdDev": 189.0385738317271
+    },
+    "solution_ready_ms": {
+      "n": 3,
+      "min": 8333.2348,
+      "p50": 8352.0165,
+      "p95": 8677.7904,
+      "p99": 8677.7904,
+      "max": 8677.7904,
+      "mean": 8454.347233333334,
+      "stdDev": 193.73519197926666
+    },
+    "memory_solution_private_mb": {
+      "n": 3,
+      "min": 225.5625,
+      "p50": 225.68359375,
+      "p95": 226.1328125,
+      "p99": 226.1328125,
+      "max": 226.1328125,
+      "mean": 225.79296875,
+      "stdDev": 0.3004767127130029
+    }
+  },
+  "notes": [
+    "The fixture copy is restored (dotnet restore) before each launch; restore time is not measured."
+  ],
+  "discardedRuns": 0
+}

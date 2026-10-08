@@ -19,6 +19,7 @@ Last verified: 2026-10-08 (M0).
 | SkiaSharp, HarfBuzzSharp (and native assets) | per Avalonia 12.1.3 | MIT (wrappers). Native Skia is BSD-3-Clause; HarfBuzz uses the "Old MIT" license | prototype A |
 | Avalonia.Angle.Windows.Natives (ANGLE) | 2.1.27548.20260419 | BSD-3-Clause (ANGLE Project) | prototype A, Windows |
 | System.Drawing.Common | 10.0.12 | MIT | benchmark harness (Windows probes) |
+| Vortice.DXGI, Vortice.Direct3D11, Vortice.DirectX, SharpGen.Runtime(.COM) | 3.8.3 / 2.4.2-beta | MIT | benchmark harness (Desktop Duplication) |
 
 All 91 resolved NuGet packages (direct and transitive) were checked: 82 are MIT, 8 are Apache-2.0 (test-only xUnit, see below) and 1 is BSD-3-Clause (ANGLE).
 
@@ -60,7 +61,7 @@ The crates below arrive transitively through GPUI. Each one needs a maintainer d
 
 | Tool | Version | License |
 |---|---|---|
-| Intel PresentMon | 2.6.0 | MIT |
+| Intel PresentMon (optional; evaluated, not used for the published metrics) | 2.6.0 | MIT |
 | Reference IDEs measured (VS Code, JetBrains Rider, Visual Studio) | installed versions | Proprietary. Only launched for measurement and never redistributed. |
 
 ## Fonts and assets

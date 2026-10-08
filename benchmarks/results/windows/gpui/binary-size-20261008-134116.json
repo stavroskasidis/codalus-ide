@@ -1,0 +1,64 @@
+{
+  "target": "gpui",
+  "scenario": "binary-size",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T13:41:16.606453+00:00",
+  "method": "static",
+  "samples": {
+    "shell_mb": [
+      27.53173828125
+    ],
+    "shell_zip_mb": [
+      8.78123664855957
+    ],
+    "lshost_mb": [
+      60.8767728805542
+    ]
+  },
+  "summary": {
+    "shell_mb": {
+      "n": 1,
+      "min": 27.53173828125,
+      "p50": 27.53173828125,
+      "p95": 27.53173828125,
+      "p99": 27.53173828125,
+      "max": 27.53173828125,
+      "mean": 27.53173828125,
+      "stdDev": 0
+    },
+    "shell_zip_mb": {
+      "n": 1,
+      "min": 8.78123664855957,
+      "p50": 8.78123664855957,
+      "p95": 8.78123664855957,
+      "p99": 8.78123664855957,
+      "max": 8.78123664855957,
+      "mean": 8.78123664855957,
+      "stdDev": 0
+    },
+    "lshost_mb": {
+      "n": 1,
+      "min": 60.8767728805542,
+      "p50": 60.8767728805542,
+      "p95": 60.8767728805542,
+      "p99": 60.8767728805542,
+      "max": 60.8767728805542,
+      "mean": 60.8767728805542,
+      "stdDev": 0
+    }
+  },
+  "notes": [
+    "Debug symbols (*.pdb) excluded. The language service host is shared by both prototypes and requires the .NET 10 runtime."
+  ],
+  "discardedRuns": 0
+}

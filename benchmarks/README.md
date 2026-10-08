@@ -20,14 +20,14 @@ dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --
 dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- report --out benchmarks/results/summary.md
 ```
 
-Before running, publish the prototypes into `artifacts/spike-a` and `artifacts/spike-b`, each with a published language service host in `lshost/`. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI. On Windows, download [PresentMon](https://github.com/GameTechDev/PresentMon/releases) (MIT) to `benchmarks/tools/presentmon/PresentMon.exe`. It is gitignored. It needs administrator rights or membership in *Performance Log Users*.
+Before running, publish the prototypes into `artifacts/spike-a` and `artifacts/spike-b`, each with a published language service host in `lshost/`. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
 
 ## Scenarios
 
 | Scenario | What happens | Metrics |
 |---|---|---|
 | `cold-start` | Launch with nothing open, N times. Run 0 is reported separately as `*_first`. | `startup_ready_ms` (black-box), `startup_interactive_ms` (prototypes, in-app), `startup_selfreported_ms` (VS Code's own `--prof-append-timers`), `memory_idle_*` after 5 s |
-| `editor-100k` | Open a copy of the 100k-line C# file, wait until ready plus 10 s, then (with `--allow-input`) type 200 characters at the end of the file every 60 ms and press PageDown 150 times every 50 ms. | `file_ready_ms`, `file_highlight_ms` (prototypes), `memory_file_*`, `typing_input_to_present_ms`, `scroll_input_to_present_ms`, `scroll_present_interval_ms`, `scroll_frames_over_50ms`, `typing_in_app_ms` (prototypes) |
+| `editor-100k` | Open a copy of the 100k-line C# file, wait until ready plus 10 s, then (with `--allow-input`) type 200 characters at the end of the file every 60 ms and press PageDown 150 times every 50 ms. | `file_ready_ms`, `file_highlight_ms` (prototypes), `memory_file_*`, `typing_input_to_display_ms`, `scroll_input_to_display_ms`, `scroll_responses_over_50ms`, `scroll_responses_missing`, `typing_in_app_ms` (prototypes) |
 | `open-solution-50` | Open a restored copy of the 50-project solution. VS Code is excluded: without the proprietary C# Dev Kit it has no solution explorer. | `solution_ready_ms` (black-box), `solution_loaded_ms` (prototypes, in-app), `memory_solution_private_mb` |
 | `self-driven` | Prototypes only, on any OS including CI. The app drives typing (300 keys, 40 ms apart, mid-file) and scrolling (230 lines/s for 10 s, then 5 go-to-line jumps) itself. | `selfdriven_typing_ms`, `selfdriven_scroll_frame_ms`, `selfdriven_jump_ms`, `startup_interactive_ms`, `file_highlight_ms` |
 | `binary-size` | Static measurement. | prototypes: `shell_mb`, `shell_zip_mb`, `lshost_mb`; IDEs: `install_mb` (informative) |
@@ -36,7 +36,7 @@ Before running, publish the prototypes into `artifacts/spike-a` and `artifacts/s
 
 - **Black-box (Windows):** the method is the same for every target.
   - *Ready:* the main window of the process tree is visible and answers `WM_NULL` within 100 ms. Its **own** rendered content (captured with `PrintWindow`, never a screen grab) must also have been visually stable for 1 s (fewer than 0.5% of thumbnail pixels changed). The reported time is when it *became* stable.
-  - *Input → present:* `SendInput` timestamps (QPC) are paired with the first PresentMon present of the target whose frame began after the input. This is input-to-present, not photon-to-photon: compositor and display latency (about 1–2 refresh intervals) are excluded for every target alike.
+  - *Input → display:* `SendInput` timestamps (QPC) are paired with the first **composed desktop frame** (DXGI Desktop Duplication, `LastPresentTime`) whose dirty or move rectangles touch the target window. Only rectangle metadata is read; pixels are never copied. This works identically for every rendering technology. It includes DWM composition but excludes scan-out (about half a refresh interval on average, the same for every target). PresentMon was evaluated first but rejected: Avalonia composes through DirectComposition and never presents a DXGI swap chain of its own, so per-process present pairing cannot measure it.
   - *Memory:* summed over the whole process tree (shell, language host, Electron helpers, JVM, ServiceHub…), as private and working-set bytes. `*_shell_*` is the root process alone.
 - **In-app (prototypes):** the prototypes write timestamped events (`DAEDALUS_BENCH_EVENTS`). These are comparable between the prototypes, but not with black-box numbers.
 - **Statistics:** p50/p95/p99 use nearest rank. Every sample is kept in the JSON.

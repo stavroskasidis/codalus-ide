@@ -13,7 +13,8 @@ internal sealed record Target(
     string ProcessName,
     Func<Target, LaunchRequest, ProcessStartInfo> CreateStartInfo,
     string? InstallDirectory,
-    string? Notes = null)
+    string? Notes = null,
+    Func<string, string, bool>? IsMainWindow = null)
 {
     /// <summary>Prototypes emit bench events, so they are measured both instrumented and black-box.</summary>
     public bool Instrumented => IsPrototype;
@@ -130,7 +131,9 @@ internal static class TargetCatalog
                 return psi;
             },
             exe.Length > 0 ? Path.GetDirectoryName(Path.GetDirectoryName(exe)) : null,
-            "User's configuration; 'Reopen projects on startup' must be off (see benchmarks/README.md).");
+            "User's configuration; 'Reopen projects on startup' must be off (see benchmarks/README.md).",
+            // The IDE frame (welcome screen or project), not the splash or a 'Start Failed' dialog.
+            static (title, className) => className == "SunAwtFrame" && !title.Contains("Start Failed", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Newest Visual Studio, in an isolated experimental instance (/rootsuffix) so user settings are untouched.</summary>
@@ -170,7 +173,8 @@ internal static class TargetCatalog
                 return psi;
             },
             exe.Length > 0 ? Path.GetDirectoryName(exe) : null,
-            "Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.");
+            "Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.",
+            static (_, className) => className != "VSSplash");
     }
 
     private static ProcessStartInfo Base(string exe, string workDir) => new(exe)

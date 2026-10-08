@@ -16,8 +16,11 @@ internal static partial class WindowProbe
     private const int ThumbWidth = 160;
     private const int ThumbHeight = 100;
 
-    /// <summary>Largest visible, titled top-level window owned by the process tree.</summary>
-    public static nint FindMainWindow(int rootPid)
+    /// <summary>
+    /// Largest visible, titled top-level window owned by the process tree that <paramref name="accept"/> (title, class)
+    /// accepts. Targets use it to exclude splash screens and error dialogs.
+    /// </summary>
+    public static nint FindMainWindow(int rootPid, Func<string, string, bool>? accept = null)
     {
         var pids = ProcessTree.Descendants(rootPid).Select(p => (uint)p).ToHashSet();
         nint best = 0;
@@ -26,7 +29,8 @@ internal static partial class WindowProbe
         {
             Win32.GetWindowThreadProcessId(hwnd, out var pid);
             if (pids.Contains(pid) && Win32.IsWindowVisible(hwnd) && !Win32.IsIconic(hwnd) && Win32.GetWindowTextLength(hwnd) > 0
-                && Win32.GetWindowRect(hwnd, out var rect) && rect.Width >= 400 && rect.Height >= 300)
+                && Win32.GetWindowRect(hwnd, out var rect) && rect.Width >= 400 && rect.Height >= 300
+                && (accept is null || accept(Text(hwnd), ClassName(hwnd))))
             {
                 var area = (long)rect.Width * rect.Height;
                 if (area > bestArea)
@@ -44,7 +48,7 @@ internal static partial class WindowProbe
     /// Polls until the window is ready; returns the elapsed time (from <paramref name="launch"/>) at which
     /// it became visually stable, or null on timeout.
     /// </summary>
-    public static async Task<(TimeSpan Ready, nint Window)?> WaitUntilReadyAsync(int rootPid, long launch, TimeSpan timeout, CancellationToken cancellationToken)
+    public static async Task<(TimeSpan Ready, nint Window)?> WaitUntilReadyAsync(int rootPid, long launch, TimeSpan timeout, Func<string, string, bool>? accept, CancellationToken cancellationToken)
     {
         byte[]? lastThumb = null;
         TimeSpan? stableSince = null;
@@ -53,8 +57,8 @@ internal static partial class WindowProbe
         {
             cancellationToken.ThrowIfCancellationRequested();
             var now = Stopwatch.GetElapsedTime(launch);
-            var hwnd = FindMainWindow(rootPid);
-            if (hwnd != 0 && Win32.IsResponsive(hwnd) && Capture(hwnd) is { } thumb)
+            var hwnd = FindMainWindow(rootPid, accept);
+            if (hwnd != 0 && Win32.IsResponsive(hwnd) && Capture(hwnd) is { } thumb && HasContent(thumb))
             {
                 if (lastThumb is not null && Similar(lastThumb, thumb))
                 {
@@ -122,6 +126,81 @@ internal static partial class WindowProbe
             thumb.UnlockBits(data);
         }
     }
+
+    /// <summary>
+    /// A window that has rendered real UI, not a uniform placeholder (Electron and many toolkits show an empty,
+    /// background-coloured window before their first real frame).
+    /// </summary>
+    public static bool HasContent(byte[] gray)
+    {
+        double mean = 0;
+        foreach (var g in gray)
+        {
+            mean += g;
+        }
+
+        mean /= gray.Length;
+        double variance = 0;
+        foreach (var g in gray)
+        {
+            variance += (g - mean) * (g - mean);
+        }
+
+        return Math.Sqrt(variance / gray.Length) > 6;
+    }
+
+    /// <summary>
+    /// Asks every visible top-level window of the tree to close (WM_CLOSE) and waits for the root to exit.
+    /// IDEs that are killed outright can leave stale locks (JetBrains' AF_UNIX .port socket), so this always comes first.
+    /// </summary>
+    public static bool CloseGracefully(int rootPid, TimeSpan timeout)
+    {
+        const uint WmClose = 0x0010;
+        var pids = ProcessTree.Descendants(rootPid).Select(p => (uint)p).ToHashSet();
+        Win32.EnumWindows((hwnd, _) =>
+        {
+            Win32.GetWindowThreadProcessId(hwnd, out var pid);
+            if (pids.Contains(pid) && Win32.IsWindowVisible(hwnd))
+            {
+                PostMessage(hwnd, WmClose, 0, 0);
+            }
+
+            return true;
+        }, 0);
+        try
+        {
+            using var root = Process.GetProcessById(rootPid);
+            return root.WaitForExit(timeout);
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+    }
+
+    private static unsafe string Text(nint hwnd)
+    {
+        var buffer = stackalloc char[256];
+        var length = GetWindowText(hwnd, buffer, 256);
+        return new string(buffer, 0, Math.Max(0, length));
+    }
+
+    private static unsafe string ClassName(nint hwnd)
+    {
+        var buffer = stackalloc char[256];
+        var length = GetClassName(hwnd, buffer, 256);
+        return new string(buffer, 0, Math.Max(0, length));
+    }
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW")]
+    private static unsafe partial int GetWindowText(nint hwnd, char* text, int max);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetClassNameW")]
+    private static unsafe partial int GetClassName(nint hwnd, char* text, int max);
+
+    [LibraryImport("user32.dll", EntryPoint = "PostMessageW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool PostMessage(nint hwnd, uint msg, nint wParam, nint lParam);
 
     /// <summary>Less than 0.5% of thumbnail pixels changed noticeably (ignores caret blink and spinners' anti-aliasing).</summary>
     public static bool Similar(byte[] a, byte[] b)
