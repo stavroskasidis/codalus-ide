@@ -27,7 +27,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 
     private static bool BlackBox => OperatingSystem.IsWindows();
 
-    public static bool Applies(Target target, string scenario) => scenario switch
+    public static bool Applies(Target target, string scenario) => target.SupportedScenarios?.Contains(scenario) != false && scenario switch
     {
         "self-driven" => target.IsPrototype,
         "open-solution-50" => target.Name != "vscode", // VS Code has no solution explorer without proprietary C# Dev Kit.
@@ -415,39 +415,40 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 
         if (target.IsPrototype)
         {
-            var hostDir = Path.Combine(dir, "lshost");
-            result.Add("shell_mb", DirectorySize(dir, exclude: hostDir) / 1048576.0);
-            result.Add("shell_zip_mb", ZipSize(dir, exclude: hostDir) / 1048576.0);
-            if (Directory.Exists(hostDir))
+            var helpers = (target.HelperDirectories ?? []).Select(h => Path.Combine(dir, h)).ToList();
+            result.Add("shell_mb", DirectorySize(dir, exclude: helpers) / 1048576.0);
+            result.Add("shell_zip_mb", ZipSize(dir, exclude: helpers) / 1048576.0);
+            foreach (var helper in helpers.Where(Directory.Exists))
             {
-                result.Add("lshost_mb", DirectorySize(hostDir, exclude: null) / 1048576.0);
+                result.Add($"{Path.GetFileName(helper)}_mb", DirectorySize(helper, exclude: []) / 1048576.0);
             }
 
-            result.Notes.Add("Debug symbols (*.pdb) excluded. The language service host is shared by both prototypes and requires the .NET 10 runtime.");
+            result.Notes.Add("Debug symbols (*.pdb) excluded. Helper processes (language service host, plugin host) need the .NET 10 runtime.");
         }
         else
         {
-            result.Add("install_mb", DirectorySize(dir, exclude: null) / 1048576.0);
+            result.Add("install_mb", DirectorySize(dir, exclude: []) / 1048576.0);
             result.Notes.Add("Informative: whole install directory, including bundled runtimes and plugins.");
         }
     }
 
-    private static long DirectorySize(string dir, string? exclude) =>
-        Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
-            .Where(f => !f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) && (exclude is null || !f.StartsWith(exclude, StringComparison.OrdinalIgnoreCase)))
-            .Sum(f => new FileInfo(f).Length);
+    private static long DirectorySize(string dir, IReadOnlyList<string> exclude) =>
+        Files(dir, exclude).Sum(f => new FileInfo(f).Length);
 
-    private long ZipSize(string dir, string? exclude)
+    /// <summary>Shipped files: everything but debug symbols and the <paramref name="exclude"/>d folders.</summary>
+    private static IEnumerable<string> Files(string dir, IReadOnlyList<string> exclude) =>
+        Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
+            .Where(f => !f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)
+                        && !exclude.Any(e => f.StartsWith(e + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)));
+
+    private long ZipSize(string dir, IReadOnlyList<string> exclude)
     {
         var zip = Path.Combine(NewWorkDir(), "shell.zip");
         using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create))
         {
-            foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            foreach (var file in Files(dir, exclude))
             {
-                if (!file.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) && (exclude is null || !file.StartsWith(exclude, StringComparison.OrdinalIgnoreCase)))
-                {
-                    archive.CreateEntryFromFile(file, Path.GetRelativePath(dir, file), CompressionLevel.Optimal);
-                }
+                archive.CreateEntryFromFile(file, Path.GetRelativePath(dir, file), CompressionLevel.Optimal);
             }
         }
 

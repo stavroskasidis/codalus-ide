@@ -5,6 +5,8 @@ using Daedalus.Benchmarks.Harness.Model;
 // daedalus-bench list
 // daedalus-bench run [--targets a,b] [--scenarios x,y] [--runs N] [--allow-input] [--results DIR]
 // daedalus-bench report [--results DIR] [--out FILE]
+// daedalus-bench check [--results DIR] [--budgets FILE]                  absolute budgets (reference hardware)
+// daedalus-bench compare --baseline DIR [--results DIR] [--confirm]      regression gate (CI)
 var repoRoot = FindRepoRoot();
 var command = args.FirstOrDefault() ?? "help";
 string? Option(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
@@ -85,8 +87,63 @@ switch (command)
         return 0;
     }
 
+    case "check":
+    {
+        var budgets = Gates.Load(Option("--budgets") ?? Path.Combine(repoRoot, "benchmarks", "budgets.json"));
+        var findings = Gates.Check(budgets, Report.LoadLatest(resultsDir));
+        Console.WriteLine(Gates.Format("Budgets (ADR 0002)", findings));
+        return findings.Any(f => f.Failed) ? 1 : 0;
+    }
+
+    case "compare":
+    {
+        if (Option("--baseline") is not { } baselineDir)
+        {
+            Console.Error.WriteLine("compare needs --baseline DIR (results of previous runs, e.g. downloaded nightly artifacts).");
+            return 2;
+        }
+
+        var policy = Gates.Load(Option("--budgets") ?? Path.Combine(repoRoot, "benchmarks", "budgets.json")).Regression;
+        var baseline = Gates.LoadAll(baselineDir);
+        var findings = Gates.Compare(policy, Report.LoadLatest(resultsDir), baseline);
+
+        // Runner noise: a regression only counts if a fresh run of the same scenario confirms it.
+        if (args.Contains("--confirm") && findings.Any(f => f.Failed))
+        {
+            var runner = new ScenarioRunner(repoRoot, new RunOptions(null, AllowInput: false, Console.Out, KeepWork: false));
+            foreach (var (targetName, scenario) in findings.Where(f => f.Failed && f.Os == Daedalus.Benchmarks.Harness.Platform.Machine.Describe().Os)
+                         .Select(f => (f.Target, f.Scenario)).Distinct())
+            {
+                if (TargetCatalog.All(repoRoot).FirstOrDefault(t => t.Name == targetName && t.Available) is not { } target)
+                {
+                    continue;
+                }
+
+                Console.WriteLine($"== confirming {targetName} / {scenario}");
+                var confirmation = await runner.RunAsync(target, scenario, CancellationToken.None);
+                var dir = Path.Combine(resultsDir, confirmation.Machine.Os, target.Name);
+                Directory.CreateDirectory(dir);
+                await File.WriteAllTextAsync(Path.Combine(dir, $"{scenario}-{confirmation.StartedAt:yyyyMMdd-HHmmss}-confirm.json"),
+                    JsonSerializer.Serialize(confirmation, ResultsJsonContext.Default.ScenarioResult));
+                var second = Gates.Compare(policy, [confirmation], baseline);
+                findings = [.. findings.Select(f => f.Target == targetName && f.Scenario == scenario && f.Failed
+                    ? f with { Failed = second.Any(s => s.Metric == f.Metric && s.Stat == f.Stat && s.Failed), Rule = f.Rule + " (confirmation run)" }
+                    : f)];
+            }
+        }
+
+        var report = Gates.Format("Regression gate", findings);
+        Console.WriteLine(report);
+        if (Option("--out") is { } output)
+        {
+            await File.WriteAllTextAsync(output, report);
+        }
+
+        return findings.Any(f => f.Failed) ? 1 : 0;
+    }
+
     default:
-        Console.WriteLine("usage: daedalus-bench (list | run [--targets a,b] [--scenarios x,y] [--runs N] [--allow-input] [--results DIR] | report [--results DIR] [--out FILE])");
+        Console.WriteLine("usage: daedalus-bench (list | run [--targets a,b] [--scenarios x,y] [--runs N] [--allow-input] [--results DIR] | report [--results DIR] [--out FILE] | check [--budgets FILE] | compare --baseline DIR [--confirm] [--out FILE])");
         return command == "help" ? 0 : 2;
 }
 

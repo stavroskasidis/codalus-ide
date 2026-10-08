@@ -8,16 +8,32 @@ public sealed record TreeMemory(long WorkingSetBytes, long PrivateBytes, int Pro
 
 internal static class ProcessTree
 {
-    /// <summary>The root and all of its descendants that are still alive.</summary>
+    /// <summary>
+    /// The root and all of its descendants that are still alive. Parent ids are recycled by the OS: a process
+    /// whose recorded parent id now belongs to a newer process would look like that process's child, so
+    /// a candidate that started before its supposed parent is skipped.
+    /// </summary>
     public static IReadOnlyList<int> Descendants(int rootPid)
     {
         var parents = ParentMap();
+        var startTimes = new Dictionary<int, DateTime?>();
+        DateTime? Started(int pid)
+        {
+            if (!startTimes.TryGetValue(pid, out var time))
+            {
+                startTimes[pid] = time = StartTime(pid);
+            }
+
+            return time;
+        }
+
         var result = new List<int> { rootPid };
         for (var i = 0; i < result.Count; i++)
         {
             foreach (var (pid, parent) in parents)
             {
-                if (parent == result[i] && pid != result[i] && !result.Contains(pid))
+                if (parent == result[i] && pid != result[i] && !result.Contains(pid)
+                    && !(Started(pid) is { } child && Started(parent) is { } parentStart && child < parentStart))
                 {
                     result.Add(pid);
                 }
@@ -25,6 +41,19 @@ internal static class ProcessTree
         }
 
         return result;
+    }
+
+    private static DateTime? StartTime(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return process.StartTime;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return null;
+        }
     }
 
     public static TreeMemory Memory(int rootPid)

@@ -8,7 +8,7 @@ namespace Daedalus.Benchmarks.Harness;
 /// <summary>Builds Markdown tables (used in the ADRs) from the latest result file per OS × target × scenario.</summary>
 internal static class Report
 {
-    private static readonly string[] s_targetOrder = ["avalonia", "gpui", "vscode", "rider", "vs"];
+    private static readonly string[] s_targetOrder = ["shell", "avalonia", "gpui", "vscode", "rider", "vs"];
 
     public static IReadOnlyList<ScenarioResult> LoadLatest(string resultsDir)
     {

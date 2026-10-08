@@ -1,0 +1,33 @@
+// ADR 0002 in machine-readable form. `daedalus-bench check` applies the absolute budgets (reference hardware);
+// `daedalus-bench compare --baseline DIR` applies the regression policy (CI runners). Editor budgets are measured on
+// the M0 spike ("avalonia") and enforced once the editor moves into the shell (M3).
+{
+  "budgets": [
+    { "target": "shell", "scenario": "cold-start", "metric": "startup_ready_ms", "stat": "p50", "max": 800, "os": "windows", "source": "ADR 0002 #1" },
+    { "target": "shell", "scenario": "cold-start", "metric": "startup_ready_ms", "stat": "max", "max": 1500, "os": "windows", "source": "ADR 0002 #1" },
+    { "target": "shell", "scenario": "cold-start", "metric": "startup_interactive_ms", "stat": "p50", "max": 800, "source": "ADR 0002 #1 (in-app)" },
+    { "target": "shell", "scenario": "cold-start", "metric": "startup_interactive_ms", "stat": "max", "max": 1500, "source": "ADR 0002 #1 (in-app)" },
+    { "target": "shell", "scenario": "cold-start", "metric": "memory_idle_private_mb", "stat": "p50", "max": 250, "source": "ADR 0002 #5" },
+
+    { "target": "avalonia", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p50", "max": 13, "os": "windows", "source": "ADR 0002 #2", "pending": "M3 moves the editor into the shell" },
+    { "target": "avalonia", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p99", "max": 20, "os": "windows", "source": "ADR 0002 #2", "pending": "M3 moves the editor into the shell" },
+    { "target": "avalonia", "scenario": "editor-100k", "metric": "typing_in_app_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b", "pending": "M3 moves the editor into the shell" },
+    { "target": "avalonia", "scenario": "editor-100k", "metric": "file_ready_ms", "stat": "p50", "max": 1800, "os": "windows", "source": "ADR 0002 #3a", "pending": "M3 moves the editor into the shell" },
+    { "target": "avalonia", "scenario": "editor-100k", "metric": "scroll_input_to_display_ms", "stat": "p99", "max": 25, "os": "windows", "source": "ADR 0002 #3b", "pending": "M3 moves the editor into the shell" },
+    { "target": "avalonia", "scenario": "editor-100k", "metric": "scroll_responses_over_50ms", "stat": "max", "max": 0, "os": "windows", "source": "ADR 0002 #3b", "pending": "M3 moves the editor into the shell" },
+    { "target": "avalonia", "scenario": "editor-100k", "metric": "memory_file_private_mb", "stat": "p50", "max": 500, "source": "ADR 0002 #5b", "pending": "M3 moves the editor into the shell" },
+    { "target": "avalonia", "scenario": "self-driven", "metric": "selfdriven_typing_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b", "pending": "M3 moves the editor into the shell" },
+    { "target": "avalonia", "scenario": "self-driven", "metric": "selfdriven_scroll_frames_over_50ms", "stat": "max", "max": 0, "source": "ADR 0002 #3b", "pending": "M3 moves the editor into the shell" }
+  ],
+  "regression": {
+    "latencyP50": 0.10,
+    "latencyP99": 0.20,
+    "memory": 0.10,
+    "size": 0.05,
+    "minSamplesForP99": 20,
+    "floorMs": 5,
+    "floorMb": 5,
+    "floorSizeMb": 0.1,
+    "baselineRuns": 10
+  }
+}

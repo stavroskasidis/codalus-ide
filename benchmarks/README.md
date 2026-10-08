@@ -1,6 +1,6 @@
 # Benchmarks
 
-`daedalus-bench` measures the UI prototypes and the reference IDEs (VS Code, JetBrains Rider and Visual Studio) on the same scenarios. Results are JSON files under `results/<os>/<target>/`, and `report` turns the latest result per target and scenario into the Markdown tables used in `docs/adr/0002-performance-budgets.md`.
+`daedalus-bench` measures the shell (`daedalus`), the M0 editor spike and the reference IDEs (VS Code, JetBrains Rider and Visual Studio) on the same scenarios. Results are JSON files under `results/<os>/<target>/`, and `report` turns the latest result per target and scenario into the Markdown tables used in `docs/adr/0002-performance-budgets.md`.
 
 ## Quick start
 
@@ -13,14 +13,22 @@ dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- list
 ```
 
 ```bash
-dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --targets avalonia --scenarios cold-start,self-driven,binary-size
+dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell
+```
+
+```bash
+dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --targets shell,avalonia --scenarios cold-start,self-driven,binary-size
+```
+
+```bash
+dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- check
 ```
 
 ```bash
 dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- report --out benchmarks/results/summary.md
 ```
 
-Before running, publish the shell into `artifacts/spike-a` with a published language service host in `lshost/`. Results of the retired GPUI prototype (M0) remain under `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
+The `shell` target is the published product shell in `artifacts/shell` (the publish puts the plugin host and built-in plugins next to it); until the editor moves into the shell (M3) it runs `cold-start` and `binary-size` only, and the editor scenarios use the spike: publish it into `artifacts/spike-a` with a published language service host in `lshost/`. Results of the retired GPUI prototype (M0) remain under `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
 
 ## Scenarios
 
@@ -30,7 +38,7 @@ Before running, publish the shell into `artifacts/spike-a` with a published lang
 | `editor-100k` | Open a copy of the 100k-line C# file, wait until ready plus 10 s, then (with `--allow-input`) type 200 characters at the end of the file every 60 ms and press PageDown 150 times every 50 ms. | `file_ready_ms`, `file_highlight_ms` (prototypes), `memory_file_*`, `typing_input_to_display_ms`, `scroll_input_to_display_ms`, `scroll_responses_over_50ms`, `scroll_responses_missing`, `typing_in_app_ms` (prototypes) |
 | `open-solution-50` | Open a restored copy of the 50-project solution. VS Code is excluded: without the proprietary C# Dev Kit it has no solution explorer. | `solution_ready_ms` (black-box), `solution_loaded_ms` (prototypes, in-app), `memory_solution_private_mb` |
 | `self-driven` | Prototypes only, on any OS including CI. The app drives typing (300 keys, 40 ms apart, mid-file) and scrolling (230 lines/s for 10 s, then 5 go-to-line jumps) itself. | `selfdriven_typing_ms`, `selfdriven_scroll_frame_ms`, `selfdriven_jump_ms`, `startup_interactive_ms`, `file_highlight_ms` |
-| `binary-size` | Static measurement. | prototypes: `shell_mb`, `shell_zip_mb`, `lshost_mb`; IDEs: `install_mb` (informative) |
+| `binary-size` | Static measurement. | `shell_mb`, `shell_zip_mb` and one `<helper>_mb` per helper folder (`pluginhost`, `plugins`, `lshost`); IDEs: `install_mb` (informative) |
 
 ## Methods
 
@@ -53,6 +61,13 @@ Before running, publish the shell into `artifacts/spike-a` with a published lang
 - **Rider:** in *Settings → Appearance & Behavior → System Settings*, turn off *Reopen projects on startup*. Close all Rider instances before benchmarking, because a running instance would receive the launch instead. **Run the Rider targets from a regular terminal:** a Rider launched from an automation process tree (for example, an agent's sandboxed shell) cannot take over the AF_UNIX `.port` socket left by a previous session, so every launch after the first fails with *Start Failed*.
 - **VS Code:** nothing to do. The harness uses a fresh profile with extensions disabled.
 
+## Budgets and regression gates
+
+`budgets.json` is ADR 0002 in machine-readable form.
+
+- `check` applies the absolute budgets to the latest results (reference hardware). Budgets marked `pending` are reported but don't fail.
+- `compare --baseline DIR [--confirm]` compares the latest results with the median of up to 10 earlier runs of the same OS (CI runners only with CI runners): latency p50 +10%, p99 +20% (from 20 samples), memory +10%, binary size +5%, ignoring changes below 5 ms / 5 MB / 0.1 MB. With `--confirm`, each regressed scenario is run again and only fails if the regression repeats.
+
 ## CI
 
-`.github/workflows/benchmarks.yml` runs `cold-start`, `editor-100k` (no input), `self-driven` and `binary-size` on GitHub-hosted Windows, macOS and Linux runners (Linux uses Xvfb and Mesa lavapipe). The runners are GPU-less VMs, so treat those numbers as indicative and comparable only with each other. The budgets in ADR 0002 are enforced on reference hardware.
+`.github/workflows/benchmarks.yml` runs `cold-start`, `editor-100k` (no input), `self-driven` and `binary-size` on GitHub-hosted Windows, macOS and Linux runners (Linux uses Xvfb and Mesa lavapipe). The runners are GPU-less VMs, so treat those numbers as indicative and comparable only with each other. The budgets in ADR 0002 are enforced on reference hardware. On `master`, the workflow downloads the results of the last 10 successful nightly runs and runs the regression gate against them; its table goes to the job summary.

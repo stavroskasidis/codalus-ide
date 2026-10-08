@@ -1,0 +1,78 @@
+{
+  "target": "shell",
+  "scenario": "binary-size",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T19:05:29.4467254+00:00",
+  "method": "static",
+  "samples": {
+    "shell_mb": [
+      47.957557678222656
+    ],
+    "shell_zip_mb": [
+      19.537850379943848
+    ],
+    "pluginhost_mb": [
+      0.9413318634033203
+    ],
+    "plugins_mb": [
+      0.02266979217529297
+    ]
+  },
+  "summary": {
+    "shell_mb": {
+      "n": 1,
+      "min": 47.957557678222656,
+      "p50": 47.957557678222656,
+      "p95": 47.957557678222656,
+      "p99": 47.957557678222656,
+      "max": 47.957557678222656,
+      "mean": 47.957557678222656,
+      "stdDev": 0
+    },
+    "shell_zip_mb": {
+      "n": 1,
+      "min": 19.537850379943848,
+      "p50": 19.537850379943848,
+      "p95": 19.537850379943848,
+      "p99": 19.537850379943848,
+      "max": 19.537850379943848,
+      "mean": 19.537850379943848,
+      "stdDev": 0
+    },
+    "pluginhost_mb": {
+      "n": 1,
+      "min": 0.9413318634033203,
+      "p50": 0.9413318634033203,
+      "p95": 0.9413318634033203,
+      "p99": 0.9413318634033203,
+      "max": 0.9413318634033203,
+      "mean": 0.9413318634033203,
+      "stdDev": 0
+    },
+    "plugins_mb": {
+      "n": 1,
+      "min": 0.02266979217529297,
+      "p50": 0.02266979217529297,
+      "p95": 0.02266979217529297,
+      "p99": 0.02266979217529297,
+      "max": 0.02266979217529297,
+      "mean": 0.02266979217529297,
+      "stdDev": 0
+    }
+  },
+  "notes": [
+    "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+    "Debug symbols (*.pdb) excluded. Helper processes (language service host, plugin host) need the .NET 10 runtime."
+  ],
+  "discardedRuns": 0
+}

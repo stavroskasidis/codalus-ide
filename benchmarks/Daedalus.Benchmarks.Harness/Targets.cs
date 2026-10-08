@@ -14,7 +14,9 @@ internal sealed record Target(
     Func<Target, LaunchRequest, ProcessStartInfo> CreateStartInfo,
     string? InstallDirectory,
     string? Notes = null,
-    Func<string, string, bool>? IsMainWindow = null)
+    Func<string, string, bool>? IsMainWindow = null,
+    IReadOnlyList<string>? HelperDirectories = null,
+    IReadOnlySet<string>? SupportedScenarios = null)
 {
     /// <summary>Prototypes emit bench events, so they are measured both instrumented and black-box.</summary>
     public bool Instrumented => IsPrototype;
@@ -26,6 +28,7 @@ internal static class TargetCatalog
 {
     public static IReadOnlyList<Target> All(string repoRoot) =>
     [
+        Shell(Path.Combine(repoRoot, "artifacts", "shell")),
         Prototype("avalonia", Path.Combine(repoRoot, "artifacts", "spike-a"), "daedalus-spike-avalonia"),
         VsCode(),
         Rider(),
@@ -54,7 +57,38 @@ internal static class TargetCatalog
             psi.Environment.Remove("DAEDALUS_LSHOST"); // Use the published host next to the shell.
             return psi;
         },
-        dir);
+        dir,
+        HelperDirectories: ["lshost"]);
+
+    /// <summary>
+    /// The product shell (<c>dotnet publish src/Daedalus.Shell -o artifacts/shell</c>), with a fresh user-data
+    /// directory per launch, so every start is a first start with default settings and layout. Until the editor
+    /// moves into the shell (M3), it is measured for startup, idle memory and size; the spike stays the editor
+    /// baseline.
+    /// </summary>
+    private static Target Shell(string dir) => new(
+        "shell",
+        IsPrototype: true,
+        Path.Combine(dir, Exe("daedalus")),
+        Exe("daedalus"),
+        static (target, request) =>
+        {
+            var psi = Base(target.Executable, request.WorkDir);
+            Add(psi, "--user-data-dir", Path.Combine(request.WorkDir, "user-data"));
+            Add(psi, "--exit-on", request.ExitOn);
+            if (request.EventsFile is not null)
+            {
+                psi.Environment["DAEDALUS_BENCH_EVENTS"] = request.EventsFile;
+            }
+
+            psi.Environment.Remove("DAEDALUS_PLUGINHOST"); // Use the published host next to the shell.
+            psi.Environment.Remove("DAEDALUS_USER_DATA_DIR");
+            return psi;
+        },
+        dir,
+        "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+        HelperDirectories: ["pluginhost", "plugins"],
+        SupportedScenarios: new HashSet<string>(StringComparer.Ordinal) { "cold-start", "binary-size" });
 
     /// <summary>
     /// VS Code with a throwaway profile: no extensions (C# tooling is not used; the editor runs on TextMate
