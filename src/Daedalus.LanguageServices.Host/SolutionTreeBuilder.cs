@@ -5,8 +5,8 @@ namespace Daedalus.LanguageServices.Host;
 
 /// <summary>
 /// Builds the tree shown in the solution explorer from a Roslyn solution.
-/// TODO(issue): M2 replaces this with the build host's MSBuild-evaluated project model
-/// (solution folders, dependencies node, file nesting, non-compile items, F#/VB projects).
+/// Used only by the M0 prototype; the shell's Solution Explorer uses the build host's model (ADR 0004).
+/// TODO(issue): remove with the prototype when M3 moves the language host onto the build host's project data.
 /// </summary>
 public static class SolutionTreeBuilder
 {

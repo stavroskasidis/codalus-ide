@@ -16,7 +16,7 @@ public sealed record ShellOptions
           --help                  Print this help and exit.
         """;
 
-    /// <summary>A solution, project or folder to open. TODO(issue): opening arrives in M2; it is ignored for now.</summary>
+    /// <summary>A solution, project or folder to open.</summary>
     public string? Path { get; init; }
 
     public string? UserDataDir { get; init; }
