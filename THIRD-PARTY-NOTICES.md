@@ -1,6 +1,6 @@
 # Third-party notices
 
-Daedalus Studio is MIT-licensed. This file lists the third-party components that the repository uses, with their licenses. The repository policy is that every dependency must use an **OSI-approved license compatible with MIT**. Licenses are read from each package's own metadata (nuspec or Cargo.toml) when it is added, and checked again at every milestone checkpoint. Full license texts ship inside each package; installers will bundle them in M7. `TODO(issue)`: generate the bundled notice file automatically (dotnet-project-licenses / cargo-about) in M7.
+Daedalus Studio is MIT-licensed. This file lists the third-party components that the repository uses, with their licenses. The repository policy is that every dependency must use an **OSI-approved license compatible with MIT**. Licenses are read from each package's own metadata (nuspec) when it is added, and checked again at every milestone checkpoint. Full license texts ship inside each package; installers will bundle them in M7. `TODO(issue)`: generate the bundled notice file automatically (e.g. dotnet-project-licenses) in M7.
 
 Last verified: 2026-10-08 (M0).
 
@@ -30,32 +30,10 @@ All 91 resolved NuGet packages (direct and transitive) were checked: 82 are MIT,
 | xunit.v3.mtp-v2 and its xunit.v3.* / xunit.analyzers dependencies | 3.2.2 / 1.27.0 | Apache-2.0 |
 | Microsoft.Testing.Platform (transitive) | 2.x | MIT |
 
-## Rust (crates.io): prototype B only
 
-There are 853 crates across all targets. The full per-crate list is in [docs/licenses/spike-gpui-crates.md](docs/licenses/spike-gpui-crates.md), and `cargo deny check licenses` enforces the policy (`spikes/gpui/deny.toml`). Key components:
+## Rust
 
-| Crate(s) | Version | License | Notes |
-|---|---|---|---|
-| gpui-pre-* (Zed's GPUI, published snapshot) | 0.3.8 | Apache-2.0 | Only the Apache-2.0 GPUI crates are used. **Zed's editor and most of Zed are GPL-3.0 and are not used.** |
-| gpui-kit, gpui-component, gpui-kit-assets | 0.7.1 | Apache-2.0 (code); docs CC-BY-4.0 (not redistributed) | |
-| gpui-base | 0.7.1 | Apache-2.0 | **Vendored and modified** (one added method). See `spikes/gpui/vendor/PATCHES.md`. |
-| wgpu, naga | 29.0.4 | MIT OR Apache-2.0 | |
-| accesskit, accesskit_windows / _macos / _unix | 0.24.x | MIT OR Apache-2.0 | |
-| tree-sitter, tree-sitter-c-sharp | 0.26.13 / 0.23.5 | MIT | |
-| lsp-types | 0.97.0 | MIT | |
-| ropey | 2.0.0-beta.1 | MIT OR Apache-2.0 | |
-| serde, serde_json, anyhow, futures | 1.x / 0.3 | MIT OR Apache-2.0 | |
-
-### Pending decision (raised at the M0 checkpoint)
-
-The crates below arrive transitively through GPUI. Each one needs a maintainer decision **only if prototype B is chosen**:
-
-| Crate | License | Path | Issue |
-|---|---|---|---|
-| option-ext 0.2.0 | MPL-2.0 | dirs-sys ← dirs ← shellexpand | OSI-approved, file-level weak copyleft. Compatible with distributing an MIT program if the MPL files stay MPL. |
-| dwrote 0.11.5 | MPL-2.0 | zed-font-kit | Same as above. |
-| cbindgen 0.28.0 | MPL-2.0 | build dependency (macOS) | Build tool only, not distributed. |
-| libbz2-rs-sys 0.2.5 | bzip2-1.0.6 | async-compression | Permissive BSD-style license, but **not OSI-approved**, so it conflicts with the fixed rule. |
+None. The GPUI prototype (M0) and its crates were removed when Avalonia was chosen (ADR 0001).
 
 ## Tools used by the benchmark harness (downloaded, not committed or redistributed)
 
@@ -66,4 +44,4 @@ The crates below arrive transitively through GPUI. Each one needs a maintainer d
 
 ## Fonts and assets
 
-None are bundled by the prototypes. They use platform fonts (Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono) by name. Prototype B embeds GPUI Kit's default icon set (`gpui-kit-assets`, Apache-2.0).
+None are bundled. The shell uses platform fonts (Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono) by name.

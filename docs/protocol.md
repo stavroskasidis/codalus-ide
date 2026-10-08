@@ -1,6 +1,6 @@
 # Shell ↔ language service host protocol (M0)
 
-The language service host (`daedalus-lshost`) runs out of process. The shell starts it and talks to it over **stdio** using **JSON-RPC 2.0 with LSP framing** (`Content-Length` headers). Contracts reuse LSP names and shapes where the semantics match. IDE-specific extensions use the `daedalus/` prefix. The C# contracts are in `src/Daedalus.LanguageServices.Protocol`. The AOT-safe client and supervisor are in `src/Daedalus.LanguageServices.Client`, and the Rust client is in `spikes/gpui/src/rpc.rs`.
+The language service host (`daedalus-lshost`) runs out of process. The shell starts it and talks to it over **stdio** using **JSON-RPC 2.0 with LSP framing** (`Content-Length` headers). Contracts reuse LSP names and shapes where the semantics match. IDE-specific extensions use the `daedalus/` prefix. The C# contracts are in `src/Daedalus.LanguageServices.Protocol`. The AOT-safe client and supervisor are in `src/Daedalus.LanguageServices.Client`.
 
 This document covers M0 only. M3 replaces it with the full language-service contract and a version policy.
 
@@ -26,7 +26,7 @@ This document covers M0 only. M3 replaces it with the full language-service cont
 
 ### Extension details
 
-- **Offset-based edits.** `didChange` edits are UTF-16 offsets into the document *before* that edit. Edits apply in order. AvaloniaEdit and rope-based editors produce offsets natively, which avoids line/column round-trips. Rust clients must convert to UTF-16 (C# string indices).
+- **Offset-based edits.** `didChange` edits are UTF-16 offsets into the document *before* that edit. Edits apply in order. AvaloniaEdit and rope-based editors produce offsets natively, which avoids line/column round-trips. Non-.NET clients must convert to UTF-16 (C# string indices).
 - **Versioned token responses.** Semantic-token responses carry the document `version` they were computed for, and clients discard stale responses.
 - **Token legend.** Indices 0–21 are the LSP standard token types. Indices 22 and up are Roslyn-specific (`delegate`, `record`, `recordStruct`, `field`, `constant`, `local`, `label`, `excludedCode`, `preprocessor`, `punctuation`, `stringEscape`, `xmlDocComment`, `controlKeyword`, `extensionMethod`, `stringVerbatim`). The legend is append-only. Modifiers: `static`.
 - **Single-line, non-overlapping tokens.** Roslyn spans that are multi-line or nested (an escape inside a string) are split, and the inner span wins.

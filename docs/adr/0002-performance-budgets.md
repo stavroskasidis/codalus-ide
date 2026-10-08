@@ -1,6 +1,6 @@
 # 0002. Performance budgets
 
-- **Status:** proposed (awaiting maintainer approval at the M0 checkpoint; once approved, CI enforces the budgets)
+- **Status:** accepted (2026-10-08). Budgets 1–3 and 5 are final; budget 4 (solution) stays provisional until Rider has been measured.
 - **Date:** 2026-10-08
 - **Deciders:** maintainer
 

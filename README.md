@@ -2,7 +2,7 @@
 
 Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs natively on Windows, macOS and Linux. It aims to be a Visual Studio alternative with a VS-class experience: a rich semantic editor, a real project system, and integrated build and debugging.
 
-> **Status: Milestone 0.** The UI stack is being chosen by measurement. Nothing here is usable as an IDE yet.
+> **Status: Milestone 1 in progress.** The UI stack is Avalonia (see [ADR 0001](docs/adr/0001-ui-stack.md)). Nothing here is usable as an IDE yet.
 
 ## Architecture in one paragraph
 
@@ -13,7 +13,7 @@ The UI shell is kept light and responsive. Heavy services run **out of process**
 | Path | Contents |
 |---|---|
 | `src/` | Product code (`Daedalus.*`). In M0 this is the shared language service host, its protocol and its client. |
-| `spikes/` | M0 UI-stack prototypes: `avalonia/` (A) and `gpui/` (B, Rust). The losing prototype is deleted after the M0 decision. |
+| `spikes/` | The M0 Avalonia prototype, kept as a benchmark baseline until the M1 shell replaces it. |
 | `tests/` | Unit, integration and headless UI tests. |
 | `benchmarks/` | The `daedalus-bench` harness, the fixture generator and committed results. |
 | `samples/` | Fixture solutions. Large fixtures are generated, not committed. |
@@ -21,7 +21,7 @@ The UI shell is kept light and responsive. Heavy services run **out of process**
 
 ## Building
 
-You need the .NET SDK pinned in `global.json` (10.0). Prototype B also needs Rust (pinned in `spikes/gpui/rust-toolchain.toml`).
+You need the .NET SDK pinned in `global.json` (10.0).
 
 ```bash
 dotnet build Daedalus.slnx

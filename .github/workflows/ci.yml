@@ -23,7 +23,6 @@ env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
-  CARGO_TERM_COLOR: always
 
 jobs:
   matrix:
@@ -64,45 +63,8 @@ jobs:
         run: dotnet build Daedalus.slnx -c Release --no-restore
       - name: Test (unit, integration, headless UI)
         run: dotnet test --solution Daedalus.slnx -c Release --no-build
-      - name: Native AOT publish (spike A) must stay warning-free in our code
+      - name: Native AOT publish must stay warning-free in our code
         shell: bash
         run: |
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
           dotnet publish spikes/avalonia/Daedalus.Spike.Avalonia -c Release -r "$rid" -o artifacts/spike-a
-
-  rust:
-    needs: matrix
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(needs.matrix.outputs.os) }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: spikes/gpui
-    steps:
-      - uses: actions/checkout@v4
-      - name: Linux build dependencies (GPUI)
-        if: runner.os == 'Linux'
-        working-directory: .
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libxkbcommon-x11-dev \
-            libwayland-dev libvulkan-dev libx11-xcb-dev libxcb1-dev libfontconfig-dev libfreetype-dev libssl-dev
-      - name: Toolchain (from rust-toolchain.toml)
-        run: rustup show active-toolchain || rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: spikes/gpui
-      - name: Test
-        run: cargo test --locked
-      - name: Clippy
-        run: cargo clippy --locked -- -D warnings
-      - uses: taiki-e/install-action@v2
-        if: runner.os == 'Linux'
-        with:
-          tool: cargo-deny
-      - name: License policy (cargo-deny)
-        if: runner.os == 'Linux'
-        run: cargo deny check licenses sources

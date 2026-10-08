@@ -1,6 +1,6 @@
 # 0001. UI stack for the Daedalus Studio shell
 
-- **Status:** proposed (awaiting maintainer decision at the M0 checkpoint)
+- **Status:** accepted (2026-10-08). Prototype B was removed from the repository; its measurements stay in `benchmarks/results/windows/gpui/`.
 - **Date:** 2026-10-08
 - **Deciders:** maintainer
 

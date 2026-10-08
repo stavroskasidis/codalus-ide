@@ -27,7 +27,6 @@ internal static class TargetCatalog
     public static IReadOnlyList<Target> All(string repoRoot) =>
     [
         Prototype("avalonia", Path.Combine(repoRoot, "artifacts", "spike-a"), "daedalus-spike-avalonia"),
-        Prototype("gpui", Path.Combine(repoRoot, "artifacts", "spike-b"), "daedalus-spike-gpui"),
         VsCode(),
         Rider(),
         VisualStudio(),

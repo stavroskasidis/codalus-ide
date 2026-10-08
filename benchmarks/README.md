@@ -13,14 +13,14 @@ dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- list
 ```
 
 ```bash
-dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --targets avalonia,gpui --scenarios cold-start,self-driven,binary-size
+dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --targets avalonia --scenarios cold-start,self-driven,binary-size
 ```
 
 ```bash
 dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- report --out benchmarks/results/summary.md
 ```
 
-Before running, publish the prototypes into `artifacts/spike-a` and `artifacts/spike-b`, each with a published language service host in `lshost/`. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
+Before running, publish the shell into `artifacts/spike-a` with a published language service host in `lshost/`. Results of the retired GPUI prototype (M0) remain under `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
 
 ## Scenarios
 
