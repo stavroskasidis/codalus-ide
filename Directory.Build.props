@@ -15,7 +15,7 @@
     <Product>Daedalus Studio</Product>
     <Copyright>Copyright (c) Daedalus Studio contributors</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/daedalus-studio/daedalus-studio</RepositoryUrl>
+    <RepositoryUrl>https://github.com/stavroskasidis/daedalus-studio</RepositoryUrl>
 
     <!-- Central place for repo-relative paths used by tests and benchmarks. -->
     <DaedalusRepoRoot>$(MSBuildThisFileDirectory)</DaedalusRepoRoot>
