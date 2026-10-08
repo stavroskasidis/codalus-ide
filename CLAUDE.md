@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for working in this repository. The mission and milestone plan live in `ide-prompt.md`, and decisions in `docs/adr/`.
+Guidance for working in this repository. The mission and milestone plan live in `ide-prompt.md`, the post-MVP plan (M8 onward) in `docs/roadmap.md`, and decisions in `docs/adr/`.
 
 ## Build and test
 

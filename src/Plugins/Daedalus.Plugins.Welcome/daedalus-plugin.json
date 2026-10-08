@@ -1,0 +1,34 @@
+{
+  "id": "daedalus.welcome",
+  "version": "0.1.0",
+  "displayName": "Welcome",
+  "publisher": "daedalus",
+  "description": "The Start page: common actions, recent solutions and links to the documentation.",
+  "engines": { "daedalus": "^0.1.0" },
+  "entry": { "runtime": "dotnet", "assembly": "Daedalus.Plugins.Welcome.dll" },
+  "activationEvents": [ "onStartup" ],
+  "contributes": {
+    "commands": [
+      { "id": "welcome.show", "title": "Show Start Page", "category": "Welcome" },
+      { "id": "welcome.toggleShowOnStartup", "title": "Toggle Start Page on Startup", "category": "Welcome" }
+    ],
+    "menus": {
+      "menuBar/help": [ { "command": "welcome.show", "group": "navigation", "order": 1 } ],
+      "toolWindow/title": [ { "command": "welcome.toggleShowOnStartup", "when": "view == welcome.view" } ]
+    },
+    "toolWindows": [
+      { "id": "welcome.view", "title": "Start", "location": "left", "kind": "tree", "icon": "home" }
+    ],
+    "settings": {
+      "title": "Welcome",
+      "properties": {
+        "welcome.showOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "scope": "user",
+          "description": "Show the Start page when Daedalus Studio starts."
+        }
+      }
+    }
+  }
+}

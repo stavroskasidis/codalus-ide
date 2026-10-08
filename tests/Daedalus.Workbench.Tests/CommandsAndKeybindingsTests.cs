@@ -22,6 +22,10 @@ public class CommandRegistryTests
         await registry.ExecuteAsync("a.one", TestContext.Current.CancellationToken);
         await registry.ExecuteAsync("a.two", TestContext.Current.CancellationToken);
         await registry.ExecuteAsync("a.one", TestContext.Current.CancellationToken);
+        Assert.Empty(registry.RecentCommandIds);
+        registry.MarkRecent("a.one");
+        registry.MarkRecent("a.two");
+        registry.MarkRecent("a.one");
 
         Assert.Equal(["one", "two", "one"], calls);
         Assert.Equal(["a.one", "a.two"], registry.RecentCommandIds);
@@ -135,6 +139,8 @@ public class KeybindingServiceTests
         service.SetDefaults([Rule("ctrl+shift+p", "palette")]);
 
         var json = service.RebindForUser("palette", Keys("f1"));
+        Assert.Contains("\"-palette\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"ctrl+shift+p\"", json, StringComparison.Ordinal);
         var reloaded = new KeybindingService(new ContextKeyService(), PlatformKind.Windows);
         reloaded.SetDefaults([Rule("ctrl+shift+p", "palette")]);
         reloaded.SetUserRules(KeybindingService.ParseRules(json, KeybindingSource.User, PlatformKind.Windows, null, null));
@@ -208,5 +214,19 @@ public class MenuRegistryTests
         Assert.Equal(["open", "save", "exit"], items.Select(i => i.Command));
         Assert.Equal("Ctrl+S", items[1].KeyLabel);
         Assert.Equal("exit", items[2].Group);
+    }
+
+    [Fact]
+    public void Palette_rules_only_restrict_the_commands_they_name()
+    {
+        var context = new ContextKeyService();
+        var commands = new CommandRegistry(context);
+        var menus = new MenuRegistry(commands, new KeybindingService(context, PlatformKind.Windows), context);
+        menus.Add([new MenuItemRule(MenuLocations.CommandPalette, "debugOnly", ContributionSource.Shell) { When = WhenClause.Parse("isDevelopment") }]);
+
+        Assert.True(menus.IsVisibleInPalette("anything", context));
+        Assert.False(menus.IsVisibleInPalette("debugOnly", context));
+        context.Set("isDevelopment", true);
+        Assert.True(menus.IsVisibleInPalette("debugOnly", context));
     }
 }

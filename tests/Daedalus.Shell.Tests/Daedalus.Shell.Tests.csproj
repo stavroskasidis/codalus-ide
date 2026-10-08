@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Daedalus.Shell\Daedalus.Shell.csproj" />
+    <!-- Built so the tests can launch them; not referenced as assemblies. -->
+    <ProjectReference Include="..\..\src\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Plugins\Daedalus.Plugins.Welcome\Daedalus.Plugins.Welcome.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+  </ItemGroup>
+</Project>

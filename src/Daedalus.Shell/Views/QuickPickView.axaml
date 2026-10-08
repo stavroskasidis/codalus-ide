@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Daedalus.Shell.ViewModels"
+             xmlns:controls="using:Daedalus.Shell.Controls"
+             x:Class="Daedalus.Shell.Views.QuickPickView"
+             x:DataType="vm:QuickPickViewModel">
+  <Border Classes="overlay" Padding="6" MaxHeight="480">
+    <DockPanel>
+      <TextBox x:Name="Input"
+               DockPanel.Dock="Top"
+               Text="{Binding Query}"
+               PlaceholderText="{Binding Placeholder}"
+               AutomationProperties.Name="{Binding Placeholder}" />
+      <TextBlock DockPanel.Dock="Top"
+                 Classes="muted"
+                 Text="No matching results"
+                 Margin="8"
+                 IsVisible="{Binding IsEmpty}" />
+      <ListBox x:Name="List"
+               Margin="0,6,0,0"
+               Background="Transparent"
+               ItemsSource="{Binding Rows}"
+               SelectedIndex="{Binding SelectedIndex}"
+               AutomationProperties.Name="Results">
+        <ListBox.Styles>
+          <Style Selector="ListBoxItem" x:DataType="vm:QuickPickRow">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          </Style>
+        </ListBox.Styles>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:QuickPickRow">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:HighlightedText Source="{Binding Label}" Highlights="{Binding Highlights}" VerticalAlignment="Center" />
+                <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Grid.Column="1"
+                         Classes="muted"
+                         FontSize="11"
+                         Margin="16,0,0,0"
+                         VerticalAlignment="Center"
+                         Text="{Binding KeyLabel}"
+                         IsVisible="{Binding HasKeyLabel}" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+  </Border>
+</UserControl>

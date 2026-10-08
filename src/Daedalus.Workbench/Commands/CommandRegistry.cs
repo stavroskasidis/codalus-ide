@@ -132,9 +132,7 @@ public sealed class CommandRegistry(ContextKeyService context)
         Exception? error = null;
         try
         {
-            var result = await handler(args, cancellationToken).ConfigureAwait(false);
-            RecordRecent(id);
-            return result;
+            return await handler(args, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -159,7 +157,11 @@ public sealed class CommandRegistry(ContextKeyService context)
         }
     }
 
-    private void RecordRecent(string id)
+    /// <summary>
+    /// Moves <paramref name="id"/> to the front of the most-recently-used list. Only user choices in the command
+    /// palette count, not commands run by key bindings, menus or plugins.
+    /// </summary>
+    public void MarkRecent(string id)
     {
         if (_descriptors.TryGetValue(id, out var d) && !d.ShowInPalette)
         {

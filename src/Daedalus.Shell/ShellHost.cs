@@ -1,0 +1,536 @@
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
+using System.Windows.Input;
+using Avalonia;
+using Daedalus.Platform;
+using Daedalus.Shell.Docking;
+using Daedalus.Shell.Infrastructure;
+using Daedalus.Shell.Theming;
+using Daedalus.Shell.ViewModels;
+using Daedalus.Workbench;
+using Daedalus.Workbench.Commands;
+using Daedalus.Workbench.Menus;
+using Daedalus.Workbench.Plugins;
+using Daedalus.Workbench.Settings;
+using Daedalus.Workbench.StatusBar;
+using Daedalus.Workbench.ToolWindows;
+
+namespace Daedalus.Shell;
+
+/// <summary>What the shell needs from its main window.</summary>
+public interface IShellWindow
+{
+    void FocusPane(bool backwards);
+
+    void RequestClose();
+}
+
+/// <summary>
+/// The running shell: the workbench services, the plugin manager, the layout and the view models of the
+/// window chrome. Everything that is not a view lives here, so headless tests can drive it directly.
+/// </summary>
+public sealed class ShellHost : IAsyncDisposable
+{
+#if DEBUG
+    private const bool IsDebugBuild = true;
+#else
+    private const bool IsDebugBuild = false;
+#endif
+
+    private readonly HashSet<string> _viewCommands = new(StringComparer.Ordinal);
+
+    public ShellHost(Application app, ShellOptions options)
+    {
+        Options = options;
+        Paths = AppPaths.Resolve(PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
+        Paths.EnsureCreated();
+        Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
+        Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
+        Workbench.Settings.Register(BuiltIns.Settings());
+        Theme = new ThemeService(app, Workbench);
+
+        foreach (var window in BuiltIns.ToolWindows())
+        {
+            Workbench.ToolWindows.Register(window);
+        }
+
+        Plugins = new PluginManager(Workbench, _ => PluginHostLocator.Resolve(), ShellInfo.Version);
+        EditorFont = new EditorFont(Workbench.Settings);
+        Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
+        Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));
+        PluginList = new PluginsViewModel(Plugins);
+        Palette = new QuickPickViewModel();
+        StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
+        Layout = new LayoutManager(Workbench.ToolWindows, CreateToolContent);
+
+        BuiltIns.RegisterCommands(this);
+        BuiltIns.RegisterMenus(Workbench.Menus);
+        Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
+        Workbench.LoadUserKeybindings();
+        SyncViewCommands();
+        LoadState();
+
+        Workbench.ToolWindows.Changed += (_, _) => Ui.Post(SyncViewCommands);
+        Workbench.ToolWindows.ShowRequested += (_, window) => Ui.Post(() => Layout.ShowToolWindow(window.Id));
+        Workbench.Output.ShowRequested += (_, channel) => Ui.Post(() =>
+        {
+            Output.Selected = channel;
+            Layout.ShowToolWindow(BuiltIns.OutputWindow, focus: false);
+        });
+        Workbench.Settings.Changed += (_, e) => Ui.Post(() => OnSettingsChanged(e));
+        Layout.ActiveDocumentChanged += (_, document) => Workbench.Context.Set("activeDocumentKind", document?.Kind);
+        Notifications.Changed += (_, _) => UpdateStatusItems();
+        Theme.Changed += (_, _) => UpdateStatusItems();
+        Palette.Closed += (_, _) => Workbench.Context.Set("inCommandPalette", false);
+
+        DiscoverPlugins();
+        RestoreLayout();
+        UpdateStatusItems();
+    }
+
+    public ShellOptions Options { get; }
+
+    public AppPaths Paths { get; }
+
+    public WorkbenchServices Workbench { get; }
+
+    public PluginManager Plugins { get; }
+
+    public ThemeService Theme { get; }
+
+    public LayoutManager Layout { get; }
+
+    public EditorFont EditorFont { get; }
+
+    public OutputViewModel Output { get; }
+
+    public NotificationsViewModel Notifications { get; }
+
+    public PluginsViewModel PluginList { get; }
+
+    public QuickPickViewModel Palette { get; }
+
+    public StatusBarViewModel StatusBar { get; }
+
+    public IShellWindow? Window { get; set; }
+
+    /// <summary>The window size and position saved with the layout, if any.</summary>
+    public WindowPlacement? InitialPlacement { get; private set; }
+
+    private string StateFile => Path.Combine(Paths.State, "state.json");
+
+    // ------------------------------------------------------------------ startup
+
+    /// <summary>Called once the window is interactive: deferred work that must not delay the first frame.</summary>
+    public void OnInteractive()
+    {
+        foreach (var error in Options.Errors)
+        {
+            Workbench.Notifications.Warning(error);
+        }
+
+        if (Options.Path is { } path)
+        {
+            // TODO(issue): open solutions, projects and folders (M2).
+            Workbench.Notifications.Info($"Opening solutions and folders arrives in a later release; '{path}' was not opened.");
+        }
+
+        _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
+    }
+
+    private void DiscoverPlugins()
+    {
+        var builtIn = Options.BuiltInPluginsDir ?? Path.Combine(AppContext.BaseDirectory, "plugins");
+        var roots = Options.PluginDirs.Select(d => (d, false))
+            .Append((Paths.PluginsDirectory, false))
+            .Append((builtIn, true));
+        Plugins.AddPlugins(PluginDiscovery.Scan(roots, Workbench.Platform, Options.EnableProposedApi));
+    }
+
+    private object? CreateToolContent(ToolWindowDescriptor window) => window.Kind switch
+    {
+        ToolWindowKind.Tree => new TreeToolViewModel(window.Id, Plugins, Run, () => TitleActions(window.Id)),
+        ToolWindowKind.Markdown => new MarkdownToolViewModel(window.Id, Plugins, Run),
+        _ => window.Id switch
+        {
+            BuiltIns.OutputWindow => Output,
+            BuiltIns.NotificationsWindow => Notifications,
+            BuiltIns.PluginsWindow => PluginList,
+            _ => null,
+        },
+    };
+
+    /// <summary>Commands contributed to a tool window's title bar (<c>toolWindow/title</c>).</summary>
+    private IReadOnlyList<ToolbarActionViewModel> TitleActions(string viewId)
+    {
+        var scope = Workbench.Context.With(new Dictionary<string, object?>(StringComparer.Ordinal) { ["view"] = viewId, ["focusedView"] = viewId });
+        return [.. Workbench.Menus.GetItems(MenuLocations.ToolWindowTitle, scope).Select(i => new ToolbarActionViewModel(i.Title, i.KeyLabel, CommandFor(i.Command)))];
+    }
+
+    /// <summary>One <c>workbench.view.&lt;id&gt;</c> command (and View menu entry) per tool window.</summary>
+    private void SyncViewCommands()
+    {
+        var added = new List<MenuItemRule>();
+        foreach (var window in Workbench.ToolWindows.All)
+        {
+            var id = BuiltIns.ViewCommandPrefix + window.Id;
+            if (!_viewCommands.Add(id))
+            {
+                continue;
+            }
+
+            var windowId = window.Id;
+            Workbench.Commands.Register(new CommandDescriptor(id, window.Title, ContributionSource.Shell) { Category = "View" }, async (args, _) =>
+            {
+                var preserveFocus = args.Count > 0 && args[0].ValueKind == JsonValueKind.Object
+                    && args[0].TryGetProperty("preserveFocus", out var p) && p.ValueKind == JsonValueKind.True;
+                await Ui.RunAsync(() => Layout.ShowToolWindow(windowId, focus: !preserveFocus)).ConfigureAwait(false);
+                return null;
+            });
+            added.Add(new MenuItemRule(MenuLocations.MenuBar("view"), id, ContributionSource.Shell) { Group = "view" });
+        }
+
+        if (added.Count > 0)
+        {
+            Workbench.Menus.Add(added);
+        }
+    }
+
+    // ------------------------------------------------------------------ running commands
+
+    /// <summary>Runs a command from the UI; failures become notifications, never exceptions.</summary>
+    public void Run(string commandId, IReadOnlyList<JsonElement> args) => _ = RunAsync(commandId, args);
+
+    public void Run(string commandId) => _ = RunAsync(commandId, []);
+
+    public async Task RunAsync(string commandId, IReadOnlyList<JsonElement> args)
+    {
+        try
+        {
+            await Workbench.Commands.ExecuteAsync(commandId, args, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (CommandNotEnabledException)
+        {
+            Ui.Post(() => StatusBar.ShowMessage($"“{Title(commandId)}” is not available right now.", TimeSpan.FromSeconds(4)));
+        }
+        catch (Exception ex)
+        {
+            Workbench.Log.AppendLine($"[command] {commandId} failed: {ex}");
+            ReportError($"“{Title(commandId)}” failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>An error notification whose "Show Logs" action opens the shell log.</summary>
+    public void ReportError(string message)
+    {
+        var notification = Workbench.Notifications.Error(message, "Show Logs");
+        _ = notification.Result.ContinueWith(
+            t =>
+            {
+                if (t.Result == "Show Logs")
+                {
+                    Ui.Post(ShowLogs);
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnRanToCompletion,
+            TaskScheduler.Default);
+    }
+
+    public ICommand CommandFor(string commandId, params JsonElement[] args) => new RelayCommand(() => Run(commandId, args));
+
+    private string Title(string commandId) => Workbench.Commands.Find(commandId)?.DisplayTitle ?? commandId;
+
+    // ------------------------------------------------------------------ built-in command implementations
+
+    public void ShowCommandPalette() => _ = ShowCommandPaletteAsync();
+
+    private async Task ShowCommandPaletteAsync()
+    {
+        var context = Workbench.Context;
+        var recent = Workbench.Commands.RecentCommandIds.Select((id, rank) => (id, rank)).ToDictionary(x => x.id, x => x.rank, StringComparer.Ordinal);
+        var items = Workbench.Commands.Descriptors
+            .Where(d => d.ShowInPalette && d.Enablement.Evaluate(context) && Workbench.Menus.IsVisibleInPalette(d.Id, context))
+            .Select(d => (Descriptor: d, Recent: recent.GetValueOrDefault(d.Id, -1)))
+            .OrderBy(x => x.Recent < 0 ? int.MaxValue : x.Recent)
+            .ThenBy(x => x.Descriptor.DisplayTitle, StringComparer.CurrentCultureIgnoreCase)
+            .Select(x => new QuickPickItem(x.Descriptor.DisplayTitle)
+            {
+                KeyLabel = Workbench.Keybindings.GetBinding(x.Descriptor.Id)?.ToLabel(Workbench.Platform),
+                Detail = x.Recent >= 0 ? "recently used" : null,
+                Tag = x.Descriptor.Id,
+            })
+            .ToList();
+
+        context.Set("inCommandPalette", true);
+        var picked = await Palette.ShowAsync(items, "Type the name of a command to run").ConfigureAwait(true);
+        if (picked?.Tag is string id)
+        {
+            Workbench.Commands.MarkRecent(id);
+            Run(id);
+        }
+    }
+
+    public async Task SelectThemeAsync()
+    {
+        var current = Theme.Setting;
+        var choices = ThemeService.Choices;
+        var items = choices.Select(c => new QuickPickItem(c.Title) { Tag = c.Id, Detail = c.Id == current ? "current" : null }).ToList();
+        var active = Math.Max(0, choices.ToList().FindIndex(c => c.Id == current));
+        Workbench.Context.Set("inCommandPalette", true);
+        var picked = await Palette.ShowAsync(items, "Select a color theme (Up/Down to preview)", active, item => Theme.Preview(item?.Tag as string)).ConfigureAwait(true);
+        if (picked?.Tag is string id && id != current)
+        {
+            await Workbench.Settings.SetAsync(ThemeService.SettingKey, id, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        Theme.Preview(null);
+    }
+
+    public void OpenSettings() =>
+        Layout.OpenDocument(Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId)
+            ?? new SettingsDocument(new SettingsViewModel(Workbench.Settings, () => Run("workbench.openSettingsJson"))));
+
+    public void OpenKeyboardShortcuts()
+    {
+        if (Layout.FindDocument<KeyboardShortcutsDocument>(KeyboardShortcutsDocument.DocumentId) is { } open)
+        {
+            Layout.OpenDocument(open);
+            return;
+        }
+
+        Layout.OpenDocument(new KeyboardShortcutsDocument(new KeyboardShortcutsViewModel(Workbench, () => Run("workbench.openKeybindingsJson"))));
+    }
+
+    public Task OpenSettingsJsonAsync() => OpenTextFileAsync(Paths.SettingsFile, "// Daedalus Studio user settings. See File > Settings for every option.\n{\n}\n");
+
+    public Task OpenKeybindingsJsonAsync() => OpenTextFileAsync(Paths.KeybindingsFile, KeybindingsTemplate);
+
+    private const string KeybindingsTemplate = "// Daedalus Studio key bindings. Entries override the defaults; \"-command\" removes a default binding.\n[\n]\n";
+
+    public async Task OpenTextFileAsync(string path, string initialContent)
+    {
+        if (Layout.FindDocument<TextFileDocument>("file:" + path) is { } open)
+        {
+            Layout.OpenDocument(open);
+            return;
+        }
+
+        var document = await TextFileDocument.OpenAsync(path, initialContent, EditorFont, CancellationToken.None).ConfigureAwait(true);
+        document.CloseRequested += (_, _) => _ = ConfirmCloseAsync(document);
+        Layout.OpenDocument(document);
+    }
+
+    private async Task ConfirmCloseAsync(TextFileDocument document)
+    {
+        var choice = await Workbench.Notifications.Warning($"Save changes to {Path.GetFileName(document.FilePath)} before closing?", "Save", "Don't Save").Result.ConfigureAwait(false);
+        await Ui.RunAsync(async () =>
+        {
+            if (choice == "Save")
+            {
+                await SaveAsync(document).ConfigureAwait(true);
+                document.CloseConfirmed();
+            }
+            else if (choice == "Don't Save")
+            {
+                document.CloseConfirmed();
+            }
+        }).ConfigureAwait(false);
+    }
+
+    public async Task SaveActiveDocumentAsync()
+    {
+        if (Layout.ActiveDocument is TextFileDocument document)
+        {
+            await SaveAsync(document).ConfigureAwait(true);
+        }
+    }
+
+    private async Task SaveAsync(TextFileDocument document)
+    {
+        try
+        {
+            await document.SaveAsync(CancellationToken.None).ConfigureAwait(true);
+            StatusBar.ShowMessage($"Saved {Path.GetFileName(document.FilePath)}", TimeSpan.FromSeconds(3));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Workbench.Notifications.Error($"Could not save {document.FilePath}: {ex.Message}");
+        }
+    }
+
+    public void CloseActiveDocument()
+    {
+        if (Layout.ActiveDocument is { } document)
+        {
+            Layout.CloseDocument(document);
+        }
+    }
+
+    public bool HasUnsavedDocuments => Layout.Documents.Any(d => d.IsModified);
+
+    /// <summary>Asks before quitting with unsaved changes; true when the window may close.</summary>
+    public async Task<bool> ConfirmQuitAsync()
+    {
+        var unsaved = Layout.Documents.OfType<TextFileDocument>().Where(d => d.IsModified).ToList();
+        if (unsaved.Count == 0)
+        {
+            return true;
+        }
+
+        var names = string.Join(", ", unsaved.Select(d => Path.GetFileName(d.FilePath)));
+        var choice = await Workbench.Notifications.Warning($"You have unsaved changes in {names}.", "Save All and Exit", "Exit Without Saving").Result.ConfigureAwait(true);
+        if (choice == "Save All and Exit")
+        {
+            foreach (var document in unsaved)
+            {
+                await SaveAsync(document).ConfigureAwait(true);
+            }
+
+            return unsaved.All(d => !d.IsModified);
+        }
+
+        return choice == "Exit Without Saving";
+    }
+
+    public void ShowLogs()
+    {
+        Output.Selected = Workbench.Log;
+        Layout.ShowToolWindow(BuiltIns.OutputWindow);
+    }
+
+    public void OpenPluginsFolder()
+    {
+        Directory.CreateDirectory(Paths.PluginsDirectory);
+        try
+        {
+            ShellIntegration.RevealInFileManager(Paths.PluginsDirectory);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Workbench.Notifications.Error($"Could not open {Paths.PluginsDirectory}: {ex.Message}");
+        }
+    }
+
+    public void OpenExternal(IReadOnlyList<JsonElement> args)
+    {
+        if (args.Count == 0 || args[0].ValueKind != JsonValueKind.String
+            || !Uri.TryCreate(args[0].GetString(), UriKind.Absolute, out var url) || url.Scheme is not ("https" or "http"))
+        {
+            throw new ArgumentException("workbench.openExternal expects an http(s) URL.");
+        }
+
+        ShellIntegration.OpenUrl(url);
+    }
+
+    /// <summary><c>workbench.setSetting [key, value]</c>: writes a user setting (null resets it).</summary>
+    public Task SetSettingAsync(IReadOnlyList<JsonElement> args, CancellationToken cancellationToken)
+    {
+        if (args.Count == 0 || args[0].ValueKind != JsonValueKind.String)
+        {
+            throw new ArgumentException("workbench.setSetting expects [key, value].");
+        }
+
+        JsonElement? value = args.Count > 1 && args[1].ValueKind != JsonValueKind.Null ? args[1] : null;
+        return Workbench.Settings.SetAsync(args[0].GetString()!, value, SettingScope.User, cancellationToken);
+    }
+
+    public void ShowAbout() => Workbench.Notifications.Info(ShellInfo.VersionText.Replace("\n", " · ", StringComparison.Ordinal));
+
+    // ------------------------------------------------------------------ status bar and settings
+
+    private void UpdateStatusItems()
+    {
+        var count = Notifications.Count;
+        Workbench.StatusBar.Set(new StatusBarItem("daedalus.notifications", count > 0 ? $"$(bell-dot) {count}" : "$(bell)", StatusBarAlignment.Right, int.MaxValue, ContributionSource.Shell.Id)
+        {
+            Tooltip = count == 0 ? "No notifications" : count == 1 ? "1 notification" : $"{count} notifications",
+            AccessibleName = count == 0 ? "No notifications" : $"Notifications: {count}",
+            Command = BuiltIns.ViewCommandPrefix + BuiltIns.NotificationsWindow,
+        });
+
+        var theme = ThemeService.Choices.FirstOrDefault(c => c.Id == Theme.ActiveTheme)?.Title ?? Theme.ActiveTheme;
+        Workbench.StatusBar.Set(new StatusBarItem("daedalus.theme", "$(color-mode) " + theme, StatusBarAlignment.Right, 1000, ContributionSource.Shell.Id)
+        {
+            Tooltip = $"Color theme: {theme}" + (Theme.Setting == ThemeService.FollowSystem ? " (following the system)" : string.Empty),
+            Command = "workbench.selectTheme",
+        });
+        Workbench.Context.Set("toastsVisible", Notifications.HasToasts);
+    }
+
+    private void OnSettingsChanged(SettingsChangedEventArgs e)
+    {
+        if (e.Affects("workbench.statusBar.visible"))
+        {
+            StatusBar.IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true);
+        }
+
+        if (e.Affects("output.wordWrap"))
+        {
+            Output.WordWrap = Workbench.Settings.GetBoolean("output.wordWrap");
+        }
+    }
+
+    // ------------------------------------------------------------------ persistence
+
+    private void RestoreLayout()
+    {
+        if (ReadJson(Paths.LayoutFile, ShellJsonContext.Default.LayoutSnapshot) is { } snapshot && Layout.Restore(snapshot))
+        {
+            InitialPlacement = snapshot.Window;
+        }
+    }
+
+    private void LoadState()
+    {
+        if (ReadJson(StateFile, ShellJsonContext.Default.ShellState)?.RecentCommands is { } recent)
+        {
+            Workbench.Commands.SetRecent(recent);
+        }
+    }
+
+    /// <summary>Saves the layout (with the window placement) and the small state file. Called when the window closes.</summary>
+    public void SaveState(WindowPlacement? placement)
+    {
+        WriteJson(Paths.LayoutFile, Layout.Capture(placement), ShellJsonContext.Default.LayoutSnapshot);
+        WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds }, ShellJsonContext.Default.ShellState);
+    }
+
+    private T? ReadJson<T>(string path, JsonTypeInfo<T> info)
+        where T : class
+    {
+        try
+        {
+            return File.Exists(path) ? JsonSerializer.Deserialize(File.ReadAllText(path), info) : null;
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            Workbench.Log.AppendLine($"[state] Ignoring {path}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private void WriteJson<T>(string path, T value, JsonTypeInfo<T> info)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(value, info));
+            File.Move(temp, path, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Workbench.Log.AppendLine($"[state] Could not write {path}: {ex.Message}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Plugins.DisposeAsync().ConfigureAwait(false);
+        Workbench.Dispose();
+    }
+}

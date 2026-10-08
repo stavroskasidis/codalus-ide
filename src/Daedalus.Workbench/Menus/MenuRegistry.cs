@@ -85,6 +85,19 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// True if <paramref name="command"/> may be listed in the command palette: it has no <c>commandPalette</c>
+    /// rule (every command is listed by default), or one whose when-clause holds.
+    /// </summary>
+    public bool IsVisibleInPalette(string command, IContextKeyReader scope)
+    {
+        lock (_gate)
+        {
+            var rules = _items.Where(i => i.Location == MenuLocations.CommandPalette && i.Command == command).ToList();
+            return rules.Count == 0 || rules.Any(r => r.When.Evaluate(scope));
+        }
+    }
+
     /// <summary>The visible items of a location, ordered by group then order; <see cref="MenuItem.Group"/> marks separators.</summary>
     public IReadOnlyList<MenuItem> GetItems(string location) => GetItems(location, context);
 

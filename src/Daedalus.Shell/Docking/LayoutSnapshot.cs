@@ -1,0 +1,63 @@
+using System.Text.Json.Serialization;
+
+namespace Daedalus.Shell.Docking;
+
+/// <summary>
+/// The persisted dock layout (<c>layout.json</c> in the state directory). Tool windows are stored by id and
+/// resolved through the tool-window registry on restore, so windows of uninstalled plugins simply drop out.
+/// </summary>
+public sealed record LayoutSnapshot(int Version, LayoutNode Root)
+{
+    public const int CurrentVersion = 1;
+
+    public IReadOnlyList<string>? LeftPinned { get; init; }
+
+    public IReadOnlyList<string>? RightPinned { get; init; }
+
+    public IReadOnlyList<string>? TopPinned { get; init; }
+
+    public IReadOnlyList<string>? BottomPinned { get; init; }
+
+    public WindowPlacement? Window { get; init; }
+}
+
+/// <summary>A node of the layout tree. <see cref="Kind"/> is <c>proportional</c>, <c>splitter</c>, <c>tools</c> or <c>documents</c>.</summary>
+public sealed record LayoutNode(string Kind)
+{
+    public string? Id { get; init; }
+
+    /// <summary><c>horizontal</c> or <c>vertical</c> (proportional docks).</summary>
+    public string? Orientation { get; init; }
+
+    /// <summary><c>left</c>, <c>right</c>, <c>top</c> or <c>bottom</c> (tool docks).</summary>
+    public string? Alignment { get; init; }
+
+    /// <summary>Share of the parent; null means automatic.</summary>
+    public double? Proportion { get; init; }
+
+    public string? Active { get; init; }
+
+    public IReadOnlyList<string>? Tools { get; init; }
+
+    public IReadOnlyList<LayoutNode>? Children { get; init; }
+}
+
+public sealed record WindowPlacement(double Width, double Height, int? X, int? Y, bool Maximized);
+
+[JsonSourceGenerationOptions(
+    WriteIndented = true,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip,
+    AllowTrailingCommas = true)]
+[JsonSerializable(typeof(LayoutSnapshot))]
+[JsonSerializable(typeof(ShellState))]
+[JsonSerializable(typeof(string))]
+[JsonSerializable(typeof(string[]))]
+internal sealed partial class ShellJsonContext : JsonSerializerContext;
+
+/// <summary>Small bits of per-user state that survive restarts (<c>state.json</c>).</summary>
+public sealed record ShellState
+{
+    public IReadOnlyList<string>? RecentCommands { get; init; }
+}

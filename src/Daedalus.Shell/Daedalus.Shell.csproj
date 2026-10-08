@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>daedalus</AssemblyName>
+    <RootNamespace>Daedalus.Shell</RootNamespace>
+    <Description>Daedalus Studio: the Avalonia shell (Native AOT).</Description>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>dev</VersionSuffix>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- LibraryImport (AttachConsole) generates unsafe marshalling code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <!-- Third-party trim/AOT warnings (Dock default templates, reflection bindings in library XAML) are
+         reported, not fatal. Our own code must stay warning-free; see docs/adr/0001-ui-stack.md. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL3050</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Daedalus.Workbench\Daedalus.Workbench.csproj" />
+    <ProjectReference Include="..\Daedalus.Diagnostics.BenchEvents\Daedalus.Diagnostics.BenchEvents.csproj" />
+  </ItemGroup>
+
+  <!-- Shipped next to the shell but not referenced: the plugin host process and the built-in plugins. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
+    <BuiltInPlugin Include="..\Plugins\Daedalus.Plugins.Welcome\Daedalus.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
+    <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" />
+    <PackageReference Include="Dock.Avalonia" />
+    <PackageReference Include="Dock.Model.Mvvm" />
+    <PackageReference Include="Dock.Avalonia.Themes.Fluent" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Daedalus.Shell.Tests" />
+  </ItemGroup>
+
+  <!--
+    Layout next to the shell executable:
+      pluginhost/                 daedalus-pluginhost (framework-dependent, ReadyToRun when published)
+      plugins/<plugin id>/        built-in plugins
+  -->
+  <Target Name="DaedalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_DaedalusHostFiles Include="$(MSBuildThisFileDirectory)..\Daedalus.Plugins.Host\bin\$(Configuration)\net10.0\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_DaedalusHostFiles)" DestinationFiles="@(_DaedalusHostFiles->'$(OutDir)pluginhost\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="DaedalusCopyBuiltInPlugins" Properties="DaedalusPluginTarget=$(OutDir)plugins\" />
+  </Target>
+
+  <Target Name="DaedalusBundleForPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_DaedalusPublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))</_DaedalusPublishDir>
+    </PropertyGroup>
+    <MSBuild Projects="..\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" Targets="Restore;Publish"
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=false;PublishReadyToRun=true;PublishDir=$(_DaedalusPublishDir)pluginhost\"
+             RemoveProperties="PublishAot;_IsPublishing" />
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="DaedalusCopyBuiltInPlugins" Properties="DaedalusPluginTarget=$(_DaedalusPublishDir)plugins\" />
+  </Target>
+
+  <Target Name="DaedalusCopyBuiltInPlugins">
+    <ItemGroup>
+      <_DaedalusPluginFiles Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.dll;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.pdb;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\daedalus-plugin.json">
+        <PluginId>%(BuiltInPlugin.PluginId)</PluginId>
+      </_DaedalusPluginFiles>
+    </ItemGroup>
+    <Copy SourceFiles="@(_DaedalusPluginFiles)" DestinationFiles="@(_DaedalusPluginFiles->'$(DaedalusPluginTarget)%(PluginId)\%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

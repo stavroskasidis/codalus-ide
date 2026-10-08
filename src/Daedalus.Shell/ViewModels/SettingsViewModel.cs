@@ -1,0 +1,436 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Text.Json;
+using System.Windows.Input;
+using Daedalus.Shell.Docking;
+using Daedalus.Shell.Infrastructure;
+using Daedalus.Workbench.Settings;
+
+namespace Daedalus.Shell.ViewModels;
+
+public sealed class SettingsDocument : ShellDocument
+{
+    public const string DocumentId = "settings";
+
+    public SettingsDocument(SettingsViewModel viewModel)
+    {
+        Id = DocumentId;
+        Title = "Settings";
+        ViewModel = viewModel;
+    }
+
+    public override string Kind => "settings";
+
+    public SettingsViewModel ViewModel { get; }
+}
+
+public sealed record SettingCategoryViewModel(string Name, int Count, bool IsAll = false)
+{
+    public string Label => $"{Name} ({Count})";
+}
+
+/// <summary>
+/// The Settings UI: every registered setting (shell and plugin contributions), searchable and grouped by
+/// category, with typed editors. Edits write the user's settings.json (comments and formatting are kept).
+/// Search matches key, title, description and category; <c>@modified</c> shows only changed settings.
+/// TODO(issue): a Workspace tab once M2 can open solutions.
+/// </summary>
+public sealed class SettingsViewModel : ObservableObject
+{
+    private readonly SettingsService _settings;
+    private readonly List<SettingItemViewModel> _all = [];
+    private string _search = string.Empty;
+    private SettingCategoryViewModel? _selectedCategory;
+    private string? _diagnostics;
+
+    public SettingsViewModel(SettingsService settings, Action openJson)
+    {
+        _settings = settings;
+        OpenJsonCommand = new RelayCommand(openJson);
+        ClearSearchCommand = new RelayCommand(() => Search = string.Empty);
+        settings.Changed += (_, e) => Ui.Post(() => OnSettingsChanged(e));
+        Rebuild();
+    }
+
+    public string FilePath => _settings.UserFile;
+
+    public ObservableCollection<SettingCategoryViewModel> Categories { get; } = [];
+
+    public ObservableCollection<SettingItemViewModel> Items { get; } = [];
+
+    public ICommand OpenJsonCommand { get; }
+
+    public ICommand ClearSearchCommand { get; }
+
+    public string Search
+    {
+        get => _search;
+        set
+        {
+            if (SetField(ref _search, value ?? string.Empty))
+            {
+                Filter();
+            }
+        }
+    }
+
+    /// <summary>The first entry, "All Settings", shows every category.</summary>
+    public SettingCategoryViewModel? SelectedCategory
+    {
+        get => _selectedCategory;
+        set
+        {
+            if (SetField(ref _selectedCategory, value))
+            {
+                Filter();
+            }
+        }
+    }
+
+    public string? Diagnostics
+    {
+        get => _diagnostics;
+        private set
+        {
+            if (SetField(ref _diagnostics, value))
+            {
+                OnPropertyChanged(nameof(HasDiagnostics));
+            }
+        }
+    }
+
+    public bool HasDiagnostics => _diagnostics is not null;
+
+    public bool IsEmpty => Items.Count == 0;
+
+    private void OnSettingsChanged(SettingsChangedEventArgs e)
+    {
+        var known = _all.Select(i => i.Key).ToHashSet(StringComparer.Ordinal);
+        if (!_settings.Descriptors.Select(d => d.Key).ToHashSet(StringComparer.Ordinal).SetEquals(known))
+        {
+            Rebuild();
+            return;
+        }
+
+        foreach (var item in _all.Where(i => e.Keys.Contains(i.Key)))
+        {
+            item.Refresh();
+        }
+
+        UpdateDiagnostics();
+        if (_search.Contains("@modified", StringComparison.OrdinalIgnoreCase))
+        {
+            Filter();
+        }
+    }
+
+    private void Rebuild()
+    {
+        _all.Clear();
+        foreach (var descriptor in _settings.Descriptors)
+        {
+            _all.Add(SettingItemViewModel.Create(descriptor, _settings));
+        }
+
+        var selected = _selectedCategory?.Name;
+        Categories.Clear();
+        Categories.Add(new SettingCategoryViewModel("All Settings", _all.Count, IsAll: true));
+        foreach (var group in _all.GroupBy(i => i.Category, StringComparer.OrdinalIgnoreCase))
+        {
+            Categories.Add(new SettingCategoryViewModel(group.Key, group.Count()));
+        }
+
+        _selectedCategory = Categories.FirstOrDefault(c => c.Name == selected) ?? Categories[0];
+        OnPropertyChanged(nameof(SelectedCategory));
+        UpdateDiagnostics();
+        Filter();
+    }
+
+    private void UpdateDiagnostics()
+    {
+        var problems = _settings.Diagnostics;
+        Diagnostics = problems.Count == 0 ? null : string.Join(Environment.NewLine, problems);
+    }
+
+    private void Filter()
+    {
+        var terms = _search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var modifiedOnly = terms.Any(t => t.Equals("@modified", StringComparison.OrdinalIgnoreCase));
+        var words = terms.Where(t => !t.StartsWith('@')).ToList();
+        Items.Clear();
+        foreach (var item in _all)
+        {
+            if ((_selectedCategory is null or { IsAll: true } || item.Category == _selectedCategory.Name)
+                && (!modifiedOnly || item.IsModified)
+                && words.All(item.Matches))
+            {
+                Items.Add(item);
+            }
+        }
+
+        OnPropertyChanged(nameof(IsEmpty));
+    }
+}
+
+public abstract class SettingItemViewModel : ObservableObject
+{
+    private bool _isModified;
+    private string? _error;
+
+    protected SettingItemViewModel(SettingDescriptor descriptor, SettingsService settings)
+    {
+        Descriptor = descriptor;
+        Settings = settings;
+        ResetCommand = new RelayCommand(() => _ = WriteAsync(null));
+        _isModified = settings.IsModified(descriptor.Key);
+    }
+
+    public SettingDescriptor Descriptor { get; }
+
+    protected SettingsService Settings { get; }
+
+    public string Key => Descriptor.Key;
+
+    public string Title => Descriptor.DisplayTitle;
+
+    public string Category => Descriptor.DisplayCategory;
+
+    public string? Description => Descriptor.Description;
+
+    public bool HasDescription => !string.IsNullOrEmpty(Descriptor.Description);
+
+    public string Heading => $"{Category}: {Title}";
+
+    public string AccessibleName => IsModified ? $"{Heading} (modified)" : Heading;
+
+    public bool IsModified
+    {
+        get => _isModified;
+        private set
+        {
+            if (SetField(ref _isModified, value))
+            {
+                OnPropertyChanged(nameof(AccessibleName));
+            }
+        }
+    }
+
+    public string? Error
+    {
+        get => _error;
+        protected set
+        {
+            if (SetField(ref _error, value))
+            {
+                OnPropertyChanged(nameof(HasError));
+            }
+        }
+    }
+
+    public bool HasError => _error is not null;
+
+    public ICommand ResetCommand { get; }
+
+    /// <summary>True while values are being re-read, so editors don't write them back.</summary>
+    protected bool Refreshing { get; private set; }
+
+    public static SettingItemViewModel Create(SettingDescriptor descriptor, SettingsService settings) => descriptor.Type switch
+    {
+        SettingType.Boolean => new BoolSettingViewModel(descriptor, settings),
+        SettingType.String when descriptor.Enum is { Count: > 0 } => new EnumSettingViewModel(descriptor, settings),
+        _ => new TextSettingViewModel(descriptor, settings),
+    };
+
+    public bool Matches(string word) =>
+        Key.Contains(word, StringComparison.OrdinalIgnoreCase)
+        || Title.Contains(word, StringComparison.OrdinalIgnoreCase)
+        || Category.Contains(word, StringComparison.OrdinalIgnoreCase)
+        || (Description?.Contains(word, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    public void Refresh()
+    {
+        Refreshing = true;
+        try
+        {
+            IsModified = Settings.IsModified(Key);
+            Load(Settings.GetValue(Key));
+        }
+        finally
+        {
+            Refreshing = false;
+        }
+    }
+
+    protected abstract void Load(JsonElement value);
+
+    /// <summary>Writes the user value (null resets it to the default).</summary>
+    protected async Task WriteAsync(JsonElement? value)
+    {
+        try
+        {
+            Error = null;
+            await Settings.SetAsync(Key, value, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (ArgumentException ex)
+        {
+            Error = ex.Message.Replace(Key + ": ", string.Empty, StringComparison.Ordinal);
+        }
+        catch (IOException ex)
+        {
+            Error = $"Could not write settings.json: {ex.Message}";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Error = $"Could not write settings.json: {ex.Message}";
+        }
+    }
+
+    protected static JsonElement Json(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+}
+
+public sealed class BoolSettingViewModel : SettingItemViewModel
+{
+    private bool _value;
+
+    public BoolSettingViewModel(SettingDescriptor descriptor, SettingsService settings)
+        : base(descriptor, settings) => Refresh();
+
+    public bool Value
+    {
+        get => _value;
+        set
+        {
+            if (SetField(ref _value, value) && !Refreshing)
+            {
+                _ = WriteAsync(Json(value ? "true" : "false"));
+            }
+        }
+    }
+
+    protected override void Load(JsonElement value) => Value = value.ValueKind == JsonValueKind.True;
+}
+
+public sealed record EnumOption(string Value, string Label, string? Description);
+
+public sealed class EnumSettingViewModel : SettingItemViewModel
+{
+    private EnumOption? _selected;
+
+    public EnumSettingViewModel(SettingDescriptor descriptor, SettingsService settings)
+        : base(descriptor, settings)
+    {
+        Options = [.. descriptor.Enum!.Select((value, i) => new EnumOption(value, value, descriptor.EnumDescriptions?.ElementAtOrDefault(i)))];
+        Refresh();
+    }
+
+    public IReadOnlyList<EnumOption> Options { get; }
+
+    public EnumOption? Selected
+    {
+        get => _selected;
+        set
+        {
+            if (SetField(ref _selected, value))
+            {
+                OnPropertyChanged(nameof(SelectedDescription));
+                if (!Refreshing && value is not null)
+                {
+                    _ = WriteAsync(JsonSerializer.SerializeToElement(value.Value, ShellJsonContext.Default.String));
+                }
+            }
+        }
+    }
+
+    public string? SelectedDescription => _selected?.Description;
+
+    protected override void Load(JsonElement value) =>
+        Selected = Options.FirstOrDefault(o => value.ValueKind == JsonValueKind.String && o.Value == value.GetString());
+}
+
+/// <summary>Strings, numbers and string arrays (one value per line); validated when committed.</summary>
+public sealed class TextSettingViewModel : SettingItemViewModel
+{
+    private string _text = string.Empty;
+    private string _committed = string.Empty;
+
+    public TextSettingViewModel(SettingDescriptor descriptor, SettingsService settings)
+        : base(descriptor, settings) => Refresh();
+
+    public string Text
+    {
+        get => _text;
+        set => SetField(ref _text, value ?? string.Empty);
+    }
+
+    public bool IsMultiline => Descriptor.Type == SettingType.StringArray;
+
+    public string? Watermark => Descriptor.Type switch
+    {
+        SettingType.StringArray => "One value per line",
+        SettingType.Integer => "An integer" + Range(),
+        SettingType.Number => "A number" + Range(),
+        _ => null,
+    };
+
+    /// <summary>Writes the edited text (Enter or leaving the field).</summary>
+    public void Commit()
+    {
+        if (_text == _committed)
+        {
+            return;
+        }
+
+        var text = _text.Trim();
+        JsonElement value;
+        switch (Descriptor.Type)
+        {
+            case SettingType.Integer when long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var integer):
+                value = Json(integer.ToString(CultureInfo.InvariantCulture));
+                break;
+            case SettingType.Number when double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && double.IsFinite(number):
+                value = Json(number.ToString("R", CultureInfo.InvariantCulture));
+                break;
+            case SettingType.Integer:
+                Error = "Expected an integer.";
+                return;
+            case SettingType.Number:
+                Error = "Expected a number.";
+                return;
+            case SettingType.StringArray:
+                value = JsonSerializer.SerializeToElement(
+                    _text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), ShellJsonContext.Default.StringArray);
+                break;
+            default:
+                value = JsonSerializer.SerializeToElement(_text, ShellJsonContext.Default.String);
+                break;
+        }
+
+        _committed = _text;
+        _ = WriteAsync(value);
+    }
+
+    protected override void Load(JsonElement value)
+    {
+        Text = value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString()!,
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.Array => string.Join('\n', value.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText())),
+            _ => string.Empty,
+        };
+        _committed = _text;
+        Error = null;
+    }
+
+    private string Range() => (Descriptor.Minimum, Descriptor.Maximum) switch
+    {
+        ({ } min, { } max) => string.Create(CultureInfo.InvariantCulture, $" from {min} to {max}"),
+        ({ } min, null) => string.Create(CultureInfo.InvariantCulture, $" ≥ {min}"),
+        (null, { } max) => string.Create(CultureInfo.InvariantCulture, $" ≤ {max}"),
+        _ => string.Empty,
+    };
+}

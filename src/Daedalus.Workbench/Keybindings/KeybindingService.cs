@@ -322,7 +322,13 @@ public sealed class KeybindingService(IContextKeyReader context, PlatformKind pl
     public static string Serialize(IEnumerable<KeybindingRule> rules)
     {
         var buffer = new System.Buffers.ArrayBufferWriter<byte>();
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
+        {
+            Indented = true,
+
+            // A file people edit: keep "ctrl+k" readable instead of "ctrl+k".
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        }))
         {
             writer.WriteStartArray();
             foreach (var rule in rules)
