@@ -89,8 +89,9 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#FFFFFF" />
-      <!-- Fluent colors (palettes cannot target custom variants). -->
-      <Color x:Key="SystemAccentColor">#1AEBFF</Color>
+      <!-- Fluent colors (palettes cannot target custom variants). The accent fills selected tabs and checkboxes
+           under white text, so it is a blue with about 5:1 contrast against white rather than cyan. -->
+      <Color x:Key="SystemAccentColor">#0F6CBD</Color>
       <Color x:Key="SystemRegionColor">#000000</Color>
       <Color x:Key="SystemAltHighColor">#000000</Color>
       <Color x:Key="SystemBaseHighColor">#FFFFFF</Color>
@@ -103,7 +104,7 @@
       <SolidColorBrush x:Key="SystemRegionBrush" Color="#000000" />
       <SolidColorBrush x:Key="SystemControlBackgroundAltHighBrush" Color="#000000" />
       <SolidColorBrush x:Key="SystemControlForegroundBaseHighBrush" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#0F6CBD" />
       <!-- Fluent focus rectangles. -->
       <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#F38518" />
       <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#000000" />
