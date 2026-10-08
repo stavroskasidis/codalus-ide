@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Threading;
 using AvaloniaEdit;
 
 namespace Daedalus.Spike.Avalonia;
@@ -26,7 +27,8 @@ public sealed class EditorView : UserControl
         Editor.TextArea.Caret.CaretBrush = Brushes.White;
         Content = Editor;
         document.Controller.Attach(Editor.TextArea.TextView);
-        AttachedToVisualTree += (_, _) => Editor.Focus();
+        // Opening a document puts the caret in it, as in every IDE (Dock may otherwise keep focus on the tab strip).
+        Loaded += (_, _) => Dispatcher.UIThread.Post(() => Editor.TextArea.Focus(), DispatcherPriority.Background);
     }
 
     internal EditorDocument Document { get; }

@@ -33,7 +33,7 @@ switch (command)
         }
 
         var runs = Option("--runs") is { } r ? int.Parse(r, System.Globalization.CultureInfo.InvariantCulture) : (int?)null;
-        var runner = new ScenarioRunner(repoRoot, new RunOptions(runs, allowInput, Console.Out));
+        var runner = new ScenarioRunner(repoRoot, new RunOptions(runs, allowInput, Console.Out, args.Contains("--keep-work")));
         var targets = TargetCatalog.All(repoRoot).Where(t => targetNames.Contains("all") || targetNames.Contains(t.Name)).ToList();
         var scenarios = ScenarioRunner.Scenarios.Where(s => scenarioNames.Contains("all") || scenarioNames.Contains(s)).ToList();
         var failures = 0;

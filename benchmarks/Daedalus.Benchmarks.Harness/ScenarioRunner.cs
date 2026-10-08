@@ -6,7 +6,7 @@ using Daedalus.Diagnostics.BenchEvents;
 
 namespace Daedalus.Benchmarks.Harness;
 
-internal sealed record RunOptions(int? Runs, bool AllowInput, TextWriter Log);
+internal sealed record RunOptions(int? Runs, bool AllowInput, TextWriter Log, bool KeepWork = false);
 
 /// <summary>
 /// Runs one scenario against one target. Scenario definitions are documented in benchmarks/README.md;
@@ -147,12 +147,10 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
     {
         var source = Path.Combine(repoRoot, "samples", "Large100k");
         RequireFixture(source);
-        var inject = BlackBox && options.AllowInput && _presentMon is not null;
+        var inject = BlackBox && options.AllowInput;
         if (!inject)
         {
-            result.Notes.Add(_presentMon is null && BlackBox
-                ? "PresentMon not found (benchmarks/tools/presentmon): typing/scrolling not measured."
-                : "Input injection not allowed (--allow-input) or not supported on this OS: typing/scrolling not measured.");
+            result.Notes.Add("Input injection not allowed (--allow-input) or not supported on this OS: typing/scrolling not measured.");
         }
 
         for (var run = 0; run < runs; run++)
@@ -190,18 +188,25 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 }
             }
 
-            Log($"  {target.Name} editor-100k run {run}: ready {Last(result, "file_ready_ms")} ms, typing p50 {P50(result, "typing_input_to_present_ms")} ms, {memory.PrivateBytes / 1048576.0:F0} MB");
+            Log($"  {target.Name} editor-100k run {run}: ready {Last(result, "file_ready_ms")} ms, typing p50 {P50(result, "typing_input_to_display_ms")} ms, {memory.PrivateBytes / 1048576.0:F0} MB");
         }
     }
 
     private async Task<bool> TypeAndScrollAsync(Target target, Session session, nint window, ScenarioResult result, CancellationToken cancellationToken)
     {
-        if (!WindowProbe.BringToForeground(window))
+        var foreground = false;
+        for (var attempt = 0; attempt < 5 && !foreground; attempt++)
+        {
+            foreground = WindowProbe.BringToForeground(window);
+        }
+
+        if (!foreground)
         {
             return false;
         }
 
-        await using var presentMon = await PresentMonSession.StartAsync(_presentMon!, target.ProcessName, session.WorkDir).ConfigureAwait(false);
+        await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+        using var frames = DesktopFrameMonitor.Start(window);
         var driver = new InputDriver(window);
         var eventsBefore = target.Instrumented ? BenchEventLog.Read(session.EventsFile).Count : 0;
 
@@ -219,8 +224,13 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             await Task.Delay(s_typingInterval, cancellationToken).ConfigureAwait(false);
         }
 
-        var typingInputs = driver.SentAtQpc.Skip(typingStart).Select(QpcToMs).ToList();
+        var typingInputs = driver.SentAtQpc.Skip(typingStart).ToList();
         await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+        if (options.KeepWork)
+        {
+            SaveWindowCapture(window, Path.Combine(session.WorkDir, "after-typing.png"));
+        }
+
         driver.Chord(InputDriver.VkControl, InputDriver.VkHome);
         await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
 
@@ -231,25 +241,25 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             await Task.Delay(s_scrollInterval, cancellationToken).ConfigureAwait(false);
         }
 
-        var scrollInputs = driver.SentAtQpc.Skip(scrollStart).Select(QpcToMs).ToList();
+        var scrollInputs = driver.SentAtQpc.Skip(scrollStart).ToList();
         await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-        var presents = await presentMon.StopAsync().ConfigureAwait(false);
+        var displayed = frames.Stop();
+        Log($"    keys sent {driver.SentAtQpc.Count}, frames touching the window {displayed.Count}, aborted: {driver.Aborted}");
+        if (driver.FocusThieves.Count > 0)
+        {
+            result.Notes.Add($"focus was taken by {string.Join(", ", driver.FocusThieves.Distinct())} and regained during a run");
+        }
+
         if (driver.Aborted)
         {
             return false;
         }
 
-        result.AddRange("typing_input_to_present_ms", PresentMonSession.InputToPresent(typingInputs, presents));
-        result.AddRange("scroll_input_to_present_ms", PresentMonSession.InputToPresent(scrollInputs, presents));
-        if (scrollInputs.Count > 0)
-        {
-            var window0 = scrollInputs[0];
-            var window1 = scrollInputs[^1] + 500;
-            var times = presents.Where(p => p.PresentMs >= window0 && p.PresentMs <= window1).Select(p => p.PresentMs).Order().ToArray();
-            var intervals = times.Zip(times.Skip(1), (a, b) => b - a).ToArray();
-            result.AddRange("scroll_present_interval_ms", intervals);
-            result.Add("scroll_frames_over_50ms", intervals.Count(i => i > 50));
-        }
+        result.AddRange("typing_input_to_display_ms", DesktopFrameMonitor.InputToDisplay(typingInputs, displayed));
+        var scroll = DesktopFrameMonitor.InputToDisplay(scrollInputs, displayed);
+        result.AddRange("scroll_input_to_display_ms", scroll);
+        result.Add("scroll_responses_over_50ms", scroll.Count(ms => ms > 50));
+        result.Add("scroll_responses_missing", scrollInputs.Count - scroll.Count);
 
         if (target.Instrumented)
         {
@@ -261,6 +271,23 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
         return true;
     }
 
+    private static void SaveWindowCapture(nint window, string path)
+    {
+        if (!Win32.GetWindowRect(window, out var rect))
+        {
+            return;
+        }
+
+        using var bitmap = new System.Drawing.Bitmap(rect.Width, rect.Height);
+        using (var g = System.Drawing.Graphics.FromImage(bitmap))
+        {
+            var hdc = g.GetHdc();
+            Win32.PrintWindowFull(window, hdc);
+            g.ReleaseHdc(hdc);
+        }
+
+        bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+    }
     // ------------------------------------------------------------------ 50-project solution
 
     private async Task OpenSolutionAsync(Target target, ScenarioResult result, int runs, CancellationToken cancellationToken)
@@ -429,7 +456,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 
     // ------------------------------------------------------------------ helpers
 
-    private sealed class Session(Process process, long launchTimestamp, long launchWallMicros, string workDir, string eventsFile) : IAsyncDisposable
+    private sealed class Session(Process process, long launchTimestamp, long launchWallMicros, string workDir, string eventsFile, bool keepWork) : IAsyncDisposable
     {
         public Process Process { get; } = process;
 
@@ -446,6 +473,11 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             ProcessTree.Kill(Process.Id);
             Process.Dispose();
             await Task.Delay(1500).ConfigureAwait(false); // Let file handles close and caches settle between runs.
+            if (keepWork)
+            {
+                return;
+            }
+
             try
             {
                 Directory.Delete(WorkDir, recursive: true);
@@ -468,7 +500,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
         var wall = BenchEventLog.UnixMicrosNow();
         var timestamp = Stopwatch.GetTimestamp();
         var process = Process.Start(psi) ?? throw new InvalidOperationException($"Failed to start {target.Executable}.");
-        return new Session(process, timestamp, wall, request.WorkDir, events);
+        return new Session(process, timestamp, wall, request.WorkDir, events, options.KeepWork);
     }
 
     private string NewWorkDir()

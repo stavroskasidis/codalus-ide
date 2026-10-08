@@ -20,11 +20,19 @@ internal sealed class PresentMonSession : IAsyncDisposable
     private readonly Process _process;
     private readonly string _csv;
 
-    private PresentMonSession(Process process, string csv)
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _output;
+
+    private PresentMonSession(Process process, string csv, System.Collections.Concurrent.ConcurrentQueue<string> output)
     {
         _process = process;
         _csv = csv;
+        _output = output;
     }
+
+    /// <summary>PresentMon's console output (for diagnostics).</summary>
+    public string Output => string.Join(Environment.NewLine, _output);
+
+    public bool Exited => _process.HasExited;
 
     public static string? Locate(string repoRoot)
     {
@@ -52,12 +60,13 @@ internal sealed class PresentMonSession : IAsyncDisposable
         }
 
         var process = Process.Start(psi) ?? throw new InvalidOperationException("PresentMon failed to start.");
-        process.OutputDataReceived += (_, _) => { };
-        process.ErrorDataReceived += (_, _) => { };
+        var output = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null) { output.Enqueue(e.Data); } };
+        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { output.Enqueue(e.Data); } };
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         await Task.Delay(1500).ConfigureAwait(false); // ETW session start-up.
-        return new PresentMonSession(process, csv);
+        return new PresentMonSession(process, csv, output);
     }
 
     public async Task<IReadOnlyList<PresentEvent>> StopAsync()
