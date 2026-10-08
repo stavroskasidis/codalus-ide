@@ -2,7 +2,7 @@
 
 Plugins extend Daedalus Studio with commands, menus, key bindings, settings, tool windows, notifications, output channels and status bar items. This guide walks through the sample in [`samples/plugins/HelloWorld`](../samples/plugins/HelloWorld). The design and its reasons are in [ADR 0003](adr/0003-plugin-api.md), and the wire protocol is in [plugin-protocol.md](plugin-protocol.md).
 
-**API version 0.1.0.** The API is pre-1.0: a minor release may break plugins. See the [changelog](#changelog).
+**API version 0.1.1.** The API is pre-1.0: a minor release (0.2) may break plugins, while patch releases (0.1.x) only add. Ask for what you use: `^0.1.1` for the pickers below, `^0.1.0` otherwise. See the [changelog](#changelog).
 
 ## How plugins run
 
@@ -76,14 +76,14 @@ The `Daedalus.Plugins.Abstractions` package is not published yet (the repository
 ### Contribution points
 
 - **commands:** `id`, `title`, `category` (shown as "Category: Title"), `enablement` (a when-clause; disabled commands are hidden from the palette and greyed in menus).
-- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|view|tools|help`, and `toolWindow/title` (buttons above a tool window). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
+- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|view|project|tools|help`, `toolWindow/title` (buttons above a tool window) and `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
 - **keybindings:** `key` plus optional `mac`, `linux` and `win` overrides, `command`, `when` and `args`. Chords are space-separated (`ctrl+k ctrl+h`). `primary` means ⌘ on macOS and Ctrl elsewhere. Users override bindings in the Keyboard Shortcuts editor; user bindings win over plugin bindings, which win over defaults.
 - **toolWindows:** `id`, `title`, `location` (`left`, `right`, `bottom`), `kind` (`tree` or `markdown`) and `icon`.
 - **settings:** `title` (the Settings UI category) and `properties`, each with `type` (`string`, `boolean`, `integer`, `number`, `string[]`), `default`, `description`, `enum` and `enumDescriptions`, `minimum`/`maximum`, `scope` (`user`, or `workspace` to allow per-workspace overrides) and `order`. Invalid values in settings.json fall back to the default and are reported in the Settings UI.
 
 ### When-clauses
 
-`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`. In `toolWindow/title`, `view` is the tool window's id.
+`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`) and `explorerItemIsProjectReference`. In `toolWindow/title`, `view` is the tool window's id.
 
 ## The code
 
@@ -108,7 +108,7 @@ public sealed class HelloPlugin : IDaedalusPlugin
 
 - `IPluginContext` gives you `Commands`, `Window`, `Settings`, `Log` and `Subscriptions`. Add every registration to `Subscriptions`; they are disposed on deactivation.
 - **Commands** take and return JSON-serializable values (`CommandInvocation.Arg<T>(i)` reads arguments). `Commands.ExecuteAsync` runs any command, including the shell's built-ins below.
-- **Window:** notifications with actions (the task completes with the chosen action, or null), output channels, status bar items, tree data providers and `SetMarkdown` for Markdown views.
+- **Window:** notifications with actions (the task completes with the chosen action, or null), `ShowQuickPickAsync` (pick from a list in the command palette) and `ShowInputBoxAsync` (ask for a line of text) since 0.1.1, output channels, status bar items, tree data providers and `SetMarkdown` for Markdown views.
 - **Settings:** `GetValue<T>(key, fallback)` and a `Changed` event (`e.Affects("section")`).
 - **Log** goes to Output → Plugins.
 
@@ -122,7 +122,7 @@ Implement `ITreeDataProvider<T>`: `GetChildrenAsync(element)` (null means the ro
 
 ### Icons and status bar text
 
-Icons are names from the shell's set, so they follow the theme, including high contrast: `search`, `gear`, `keyboard`, `color-mode`, `history`, `extensions`, `folder`, `file`, `book`, `check`, `circle`, `home`, `info`, `warning`, `error`, `bell`, `bell-dot`, `close`, `chevron-right`, `chevron-down`, `refresh`, `output`, `list`, `play`, `link-external`, `clear-all`, `lock`, `arrow-down`, `star`, `question`, `edit`, `discard`, `trash`, `layout`, `dot`. Status bar text may start with `$(icon)`, for example `"$(home) Start"`.
+Icons are names from the shell's set, so they follow the theme, including high contrast: `search`, `gear`, `keyboard`, `color-mode`, `history`, `extensions`, `folder`, `file`, `book`, `check`, `circle`, `home`, `info`, `warning`, `error`, `bell`, `bell-dot`, `close`, `chevron-right`, `chevron-down`, `refresh`, `output`, `list`, `play`, `link-external`, `clear-all`, `lock`, `arrow-down`, `star`, `question`, `edit`, `discard`, `trash`, `layout`, `dot`, `solution`, `project`, `package`, `link`, `file-code`, `file-data`. Status bar text may start with `$(icon)`, for example `"$(home) Start"`.
 
 ### Shell commands for plugins
 
@@ -131,9 +131,13 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `workbench.view.<toolWindowId>` | optional `{ "preserveFocus": true }` |
 | `workbench.openExternal` | an `http(s)` URL |
 | `workbench.setSetting` | `key`, `value` (null resets) — writes the user's settings.json |
+| `workbench.openSolution` | optional path of a solution, project or folder (none: ask) |
+| `workbench.getRecentSolutions` | none; returns `[{ path, name }]`, most recent first |
+| `solution.getInfo` | none; returns `{ path, format, trusted }` of the open solution, or null |
+| `solution.addProjectFile` | project path; adds it to the open solution (in the selected solution folder) |
 | `workbench.showCommandPalette`, `workbench.openSettings`, `workbench.openKeyboardShortcuts`, `workbench.selectTheme`, `workbench.showLogs`, `workbench.view.plugins` | none |
 
-The built-in Welcome plugin (`src/Plugins/Daedalus.Plugins.Welcome`) is a complete example that reaches the shell only through these commands.
+The built-in Welcome plugin (`src/Plugins/Daedalus.Plugins.Welcome`) and Templates plugin (`src/Plugins/Daedalus.Plugins.Templates`: New Project and New Solution with quick picks, input boxes and `dotnet new`) are complete examples that reach the shell only through these commands.
 
 ## Running and debugging
 
@@ -145,6 +149,10 @@ The built-in Welcome plugin (`src/Plugins/Daedalus.Plugins.Welcome`) is a comple
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 0.1.1 (M2)
+
+Additive: `IWindow.ShowQuickPickAsync`, `IWindow.ShowInputBoxAsync`, `QuickPickItem`, `InputBoxOptions`; protocol methods `window/showQuickPick` and `window/showInputBox` (protocol version stays 0.1). New menu location `solutionExplorer/context` and solution context keys. Plugins built for 0.1.0 keep working.
 
 ### 0.1.0 (M1)
 

@@ -74,8 +74,21 @@ internal static class TargetCatalog
         static (target, request) =>
         {
             var psi = Base(target.Executable, request.WorkDir);
-            Add(psi, "--user-data-dir", Path.Combine(request.WorkDir, "user-data"));
+            var userData = Path.Combine(request.WorkDir, "user-data");
+            Add(psi, "--user-data-dir", userData);
             Add(psi, "--exit-on", request.ExitOn);
+            if (request.Solution is { } solution)
+            {
+                // The harness copied and restored the fixture: trust its folder (as the user would once) and
+                // skip restore-on-open, which would only repeat the harness's restore.
+                Directory.CreateDirectory(Path.Combine(userData, "state"));
+                Directory.CreateDirectory(Path.Combine(userData, "config"));
+                File.WriteAllText(Path.Combine(userData, "state", "trusted-folders.json"),
+                    "{ \"folders\": [" + System.Text.Json.JsonSerializer.Serialize(request.WorkDir, Model.ResultsJsonContext.Default.String) + "] }");
+                File.WriteAllText(Path.Combine(userData, "config", "settings.json"), "{ \"projects.restoreOnOpen\": false }");
+                psi.ArgumentList.Add(solution);
+            }
+
             if (request.EventsFile is not null)
             {
                 psi.Environment["DAEDALUS_BENCH_EVENTS"] = request.EventsFile;
@@ -87,8 +100,8 @@ internal static class TargetCatalog
         },
         dir,
         "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
-        HelperDirectories: ["pluginhost", "plugins"],
-        SupportedScenarios: new HashSet<string>(StringComparer.Ordinal) { "cold-start", "binary-size" });
+        HelperDirectories: ["pluginhost", "buildhost", "plugins"],
+        SupportedScenarios: new HashSet<string>(StringComparer.Ordinal) { "cold-start", "binary-size", "open-solution-50" });
 
     /// <summary>
     /// VS Code with a throwaway profile: no extensions (C# tooling is not used; the editor runs on TextMate

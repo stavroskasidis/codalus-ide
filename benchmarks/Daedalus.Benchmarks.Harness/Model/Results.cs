@@ -79,4 +79,5 @@ public sealed record MachineInfo(
     NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals)]
 [JsonSerializable(typeof(ScenarioResult))]
 [JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(string))]
 internal sealed partial class ResultsJsonContext : JsonSerializerContext;

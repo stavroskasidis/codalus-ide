@@ -303,6 +303,11 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             Machine.Run("dotnet", $"restore \"{solution}\" -v q");
             await using var session = await LaunchAsync(target, new LaunchRequest(work, Solution: solution), cancellationToken).ConfigureAwait(false);
 
+            if (target.Name == "shell" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.SolutionStructure, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } structure)
+            {
+                result.Add("solution_structure_ms", (structure.WallMicros - session.LaunchWallMicros) / 1000.0);
+            }
+
             if (target.Instrumented && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.SolutionLoaded, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } loaded)
             {
                 result.Add("solution_loaded_ms", (loaded.WallMicros - session.LaunchWallMicros) / 1000.0);

@@ -2,7 +2,7 @@
 
 Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs natively on Windows, macOS and Linux. It aims to be a Visual Studio alternative with a VS-class experience: a rich semantic editor, a real project system, and integrated build and debugging.
 
-> **Status: Milestone 1 (shell and plugin foundation).** The shell runs: docking, command palette, key bindings, settings, themes and plugins. It can't open solutions or edit code yet (M2 and M3). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
+> **Status: Milestone 2 (solution and project system).** The shell opens `.sln`/`.slnx` solutions and SDK-style projects, with a Solution Explorer, file operations, configurations, restore and new projects from templates. It can't edit code with language services yet (M3). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
 
 ## Architecture in one paragraph
 
@@ -15,6 +15,7 @@ The UI shell (`daedalus`, Native AOT) is kept light and responsive. Heavy servic
 | `src/Daedalus.Shell` | The IDE shell (`daedalus`): Avalonia views on top of the workbench services. |
 | `src/Daedalus.Workbench`, `src/Daedalus.Platform` | UI-independent services: commands, key bindings, menus, settings, notifications, output, the plugin manager; OS conventions. |
 | `src/Daedalus.Plugins.*`, `src/Plugins/` | The plugin SDK, protocol and host process, and the built-in plugins. |
+| `src/Daedalus.Projects.*` | The build host (`daedalus-buildhost`): solutions, MSBuild evaluation, restore and project-file edits. |
 | `src/Daedalus.Rpc`, `src/Daedalus.LanguageServices.*` | JSON-RPC and process supervision; the Roslyn language service host. |
 | `spikes/` | The M0 Avalonia editor prototype, kept as the editor benchmark baseline until M3. |
 | `tests/` | Unit, integration and headless UI tests. |

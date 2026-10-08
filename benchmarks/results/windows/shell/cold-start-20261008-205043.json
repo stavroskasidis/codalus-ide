@@ -1,0 +1,206 @@
+{
+  "target": "shell",
+  "scenario": "cold-start",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T20:50:43.6795042+00:00",
+  "method": "instrumented\u002Bblack-box",
+  "samples": {
+    "startup_interactive_ms_first": [
+      303.791
+    ],
+    "startup_ready_ms_first": [
+      531.1599
+    ],
+    "memory_idle_private_mb_first": [
+      121.9453125
+    ],
+    "memory_idle_ws_mb_first": [
+      143.40234375
+    ],
+    "memory_idle_shell_private_mb_first": [
+      111.94140625
+    ],
+    "process_count_first": [
+      3
+    ],
+    "startup_interactive_ms": [
+      324.553,
+      320.195,
+      321.409,
+      308.983,
+      307.157
+    ],
+    "startup_ready_ms": [
+      603.3628,
+      544.4068,
+      545.1766,
+      526.527,
+      527.9483
+    ],
+    "memory_idle_private_mb": [
+      122.65625,
+      121.9453125,
+      121.265625,
+      123.046875,
+      122.2109375
+    ],
+    "memory_idle_ws_mb": [
+      142.546875,
+      143.3359375,
+      143.12109375,
+      144.51953125,
+      143.5546875
+    ],
+    "memory_idle_shell_private_mb": [
+      112.27734375,
+      111.671875,
+      111.359375,
+      112.765625,
+      111.87890625
+    ],
+    "process_count": [
+      3,
+      3,
+      3,
+      3,
+      3
+    ]
+  },
+  "summary": {
+    "startup_interactive_ms_first": {
+      "n": 1,
+      "min": 303.791,
+      "p50": 303.791,
+      "p95": 303.791,
+      "p99": 303.791,
+      "max": 303.791,
+      "mean": 303.791,
+      "stdDev": 0
+    },
+    "startup_ready_ms_first": {
+      "n": 1,
+      "min": 531.1599,
+      "p50": 531.1599,
+      "p95": 531.1599,
+      "p99": 531.1599,
+      "max": 531.1599,
+      "mean": 531.1599,
+      "stdDev": 0
+    },
+    "memory_idle_private_mb_first": {
+      "n": 1,
+      "min": 121.9453125,
+      "p50": 121.9453125,
+      "p95": 121.9453125,
+      "p99": 121.9453125,
+      "max": 121.9453125,
+      "mean": 121.9453125,
+      "stdDev": 0
+    },
+    "memory_idle_ws_mb_first": {
+      "n": 1,
+      "min": 143.40234375,
+      "p50": 143.40234375,
+      "p95": 143.40234375,
+      "p99": 143.40234375,
+      "max": 143.40234375,
+      "mean": 143.40234375,
+      "stdDev": 0
+    },
+    "memory_idle_shell_private_mb_first": {
+      "n": 1,
+      "min": 111.94140625,
+      "p50": 111.94140625,
+      "p95": 111.94140625,
+      "p99": 111.94140625,
+      "max": 111.94140625,
+      "mean": 111.94140625,
+      "stdDev": 0
+    },
+    "process_count_first": {
+      "n": 1,
+      "min": 3,
+      "p50": 3,
+      "p95": 3,
+      "p99": 3,
+      "max": 3,
+      "mean": 3,
+      "stdDev": 0
+    },
+    "startup_interactive_ms": {
+      "n": 5,
+      "min": 307.157,
+      "p50": 320.195,
+      "p95": 324.553,
+      "p99": 324.553,
+      "max": 324.553,
+      "mean": 316.4594,
+      "stdDev": 7.848420401584004
+    },
+    "startup_ready_ms": {
+      "n": 5,
+      "min": 526.527,
+      "p50": 544.4068,
+      "p95": 603.3628,
+      "p99": 603.3628,
+      "max": 603.3628,
+      "mean": 549.4843,
+      "stdDev": 31.377009764634984
+    },
+    "memory_idle_private_mb": {
+      "n": 5,
+      "min": 121.265625,
+      "p50": 122.2109375,
+      "p95": 123.046875,
+      "p99": 123.046875,
+      "max": 123.046875,
+      "mean": 122.225,
+      "stdDev": 0.6819601015294994
+    },
+    "memory_idle_ws_mb": {
+      "n": 5,
+      "min": 142.546875,
+      "p50": 143.3359375,
+      "p95": 144.51953125,
+      "p99": 144.51953125,
+      "max": 144.51953125,
+      "mean": 143.415625,
+      "stdDev": 0.7221102244599029
+    },
+    "memory_idle_shell_private_mb": {
+      "n": 5,
+      "min": 111.359375,
+      "p50": 111.87890625,
+      "p95": 112.765625,
+      "p99": 112.765625,
+      "max": 112.765625,
+      "mean": 111.990625,
+      "stdDev": 0.5466698834084253
+    },
+    "process_count": {
+      "n": 5,
+      "min": 3,
+      "p50": 3,
+      "p95": 3,
+      "p99": 3,
+      "max": 3,
+      "mean": 3,
+      "stdDev": 0
+    }
+  },
+  "notes": [
+    "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+    "Run 0 is the first launch of the session (reported separately as *_first); distributions use runs 1..N-1. OS file caches are not flushed, so runs 1..N-1 are warm starts."
+  ],
+  "discardedRuns": 0
+}

@@ -1,0 +1,90 @@
+{
+  "target": "shell",
+  "scenario": "open-solution-50",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-08T20:49:09.7505504+00:00",
+  "method": "instrumented\u002Bblack-box",
+  "samples": {
+    "solution_structure_ms": [
+      655.461,
+      466.445,
+      488.754,
+      467.818
+    ],
+    "solution_loaded_ms": [
+      1396.764,
+      1171.606,
+      1192.529,
+      1201.118
+    ],
+    "solution_ready_ms": [
+      1545.6081,
+      1241.0688,
+      1281.3691,
+      1285.181
+    ],
+    "memory_solution_private_mb": [
+      208.0625,
+      206.83984375,
+      211.9765625,
+      215.3984375
+    ]
+  },
+  "summary": {
+    "solution_structure_ms": {
+      "n": 4,
+      "min": 466.445,
+      "p50": 467.818,
+      "p95": 655.461,
+      "p99": 655.461,
+      "max": 655.461,
+      "mean": 519.6195,
+      "stdDev": 91.1345435148861
+    },
+    "solution_loaded_ms": {
+      "n": 4,
+      "min": 1171.606,
+      "p50": 1192.529,
+      "p95": 1396.764,
+      "p99": 1396.764,
+      "max": 1396.764,
+      "mean": 1240.50425,
+      "stdDev": 104.90786374203155
+    },
+    "solution_ready_ms": {
+      "n": 4,
+      "min": 1241.0688,
+      "p50": 1281.3691,
+      "p95": 1545.6081,
+      "p99": 1545.6081,
+      "max": 1545.6081,
+      "mean": 1338.30675,
+      "stdDev": 139.6344154481146
+    },
+    "memory_solution_private_mb": {
+      "n": 4,
+      "min": 206.83984375,
+      "p50": 208.0625,
+      "p95": 215.3984375,
+      "p99": 215.3984375,
+      "max": 215.3984375,
+      "mean": 210.5693359375,
+      "stdDev": 3.894177144289088
+    }
+  },
+  "notes": [
+    "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+    "The fixture copy is restored (dotnet restore) before each launch; restore time is not measured."
+  ],
+  "discardedRuns": 0
+}

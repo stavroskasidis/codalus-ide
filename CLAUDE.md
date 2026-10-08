@@ -19,7 +19,7 @@ dotnet run --project src/Daedalus.Shell -- --user-data-dir .work/user-data      
 dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell           # Native AOT, with pluginhost/ and plugins/ next to daedalus.exe
 ```
 
-Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--exit-on interactive`, `--screenshot <png>`. `DAEDALUS_PLUGINHOST` points at a plugin host `.exe` or `.dll`. Plugin authoring: `docs/plugins.md`.
+Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--exit-on interactive`, `--screenshot <png>`. `DAEDALUS_PLUGINHOST` and `DAEDALUS_BUILDHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
 
 ## Running the prototypes
 
@@ -44,7 +44,8 @@ See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.
 
 - Root namespace `Daedalus.*`. The product name is "Daedalus Studio", and the CLI is `daedalus`. Never use "Visual Studio" branding in the product.
 - Central package management (`Directory.Packages.props`). Check and record the license of every new dependency in `THIRD-PARTY-NOTICES.md`.
-- Heavy work runs out of process (language service host, build host, debug adapter, plugin hosts). The shell supervises hosts and restarts them on crashes (`LanguageHostClient`).
+- Heavy work runs out of process (language service host, build host, debug adapter, plugin hosts). The shell supervises hosts with `Daedalus.Rpc.SupervisedProcess` and restarts them on crashes. MSBuild only ever runs in the build host (ADR 0004), and only for trusted folders.
+- Project-system fixtures: `samples/ProjectSystem` (`.sln` and `.slnx`); tests copy it to a temp folder before changing anything.
 - Wire contracts follow LSP where it fits. Extensions use the `daedalus/` prefix and are documented in `docs/protocol.md`; the plugin host protocol is in `docs/plugin-protocol.md`.
 - The plugin API (`Daedalus.Plugins.Abstractions`) is a public contract: changes follow ADR 0003's versioning policy and go into the changelog in `docs/plugins.md`.
 - Shell views talk to `Daedalus.Workbench` services; workbench events arrive on any thread, so views marshal through `Ui.Post`. Built-in features register through the same registries as plugins (`BuiltIns.cs`).

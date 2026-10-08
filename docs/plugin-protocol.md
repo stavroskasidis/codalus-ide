@@ -29,6 +29,8 @@ A protocol major mismatch in `initialize` is an error. On a minor mismatch, both
 | Method | Direction | Kind | Params → Result |
 |---|---|---|---|
 | `window/showNotification` | host → shell | request | `{pluginId, severity: info\|warning\|error, message, actions: string[]}` → `{action?: string}`, resolved when the user picks an action or dismisses |
+| `window/showQuickPick` | host → shell | request | `{pluginId, items: [{label, description?, detail?}], placeholder?}` → `{index?: number}` (null when cancelled). Since API 0.1.1. |
+| `window/showInputBox` | host → shell | request | `{pluginId, title, prompt?, value?}` → `{value?: string}` (null when cancelled). Since API 0.1.1. |
 | `output/append` | host → shell | notification | `{pluginId, channel, text}` (channels are created on first use) |
 | `output/clear` | host → shell | notification | `{pluginId, channel}` |
 | `output/show` | host → shell | notification | `{pluginId, channel}` |

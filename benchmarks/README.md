@@ -28,7 +28,7 @@ dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- check
 dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- report --out benchmarks/results/summary.md
 ```
 
-The `shell` target is the published product shell in `artifacts/shell` (the publish puts the plugin host and built-in plugins next to it); until the editor moves into the shell (M3) it runs `cold-start` and `binary-size` only, and the editor scenarios use the spike: publish it into `artifacts/spike-a` with a published language service host in `lshost/`. Results of the retired GPUI prototype (M0) remain under `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
+The `shell` target is the published product shell in `artifacts/shell` (the publish puts the plugin host and built-in plugins next to it); until the editor moves into the shell (M3) it runs `cold-start`, `binary-size` and `open-solution-50` (with the fixture's folder trusted and restore-on-open off in its fresh user data, since the harness restores the copy itself), and the editor scenarios use the spike: publish it into `artifacts/spike-a` with a published language service host in `lshost/`. Results of the retired GPUI prototype (M0) remain under `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
 
 ## Scenarios
 
@@ -36,9 +36,9 @@ The `shell` target is the published product shell in `artifacts/shell` (the publ
 |---|---|---|
 | `cold-start` | Launch with nothing open, N times. Run 0 is reported separately as `*_first`. | `startup_ready_ms` (black-box), `startup_interactive_ms` (prototypes, in-app), `startup_selfreported_ms` (VS Code's own `--prof-append-timers`), `memory_idle_*` after 5 s |
 | `editor-100k` | Open a copy of the 100k-line C# file, wait until ready plus 10 s, then (with `--allow-input`) type 200 characters at the end of the file every 60 ms and press PageDown 150 times every 50 ms. | `file_ready_ms`, `file_highlight_ms` (prototypes), `memory_file_*`, `typing_input_to_display_ms`, `scroll_input_to_display_ms`, `scroll_responses_over_50ms`, `scroll_responses_missing`, `typing_in_app_ms` (prototypes) |
-| `open-solution-50` | Open a restored copy of the 50-project solution. VS Code is excluded: without the proprietary C# Dev Kit it has no solution explorer. | `solution_ready_ms` (black-box), `solution_loaded_ms` (prototypes, in-app), `memory_solution_private_mb` |
+| `open-solution-50` | Open a restored copy of the 50-project solution. VS Code is excluded: without the proprietary C# Dev Kit it has no solution explorer. | `solution_ready_ms` (black-box), `solution_structure_ms` (shell: tree from the solution file), `solution_loaded_ms` (in-app: every project evaluated), `memory_solution_private_mb` |
 | `self-driven` | Prototypes only, on any OS including CI. The app drives typing (300 keys, 40 ms apart, mid-file) and scrolling (230 lines/s for 10 s, then 5 go-to-line jumps) itself. | `selfdriven_typing_ms`, `selfdriven_scroll_frame_ms`, `selfdriven_jump_ms`, `startup_interactive_ms`, `file_highlight_ms` |
-| `binary-size` | Static measurement. | `shell_mb`, `shell_zip_mb` and one `<helper>_mb` per helper folder (`pluginhost`, `plugins`, `lshost`); IDEs: `install_mb` (informative) |
+| `binary-size` | Static measurement. | `shell_mb`, `shell_zip_mb` and one `<helper>_mb` per helper folder (`pluginhost`, `buildhost`, `plugins`, `lshost`); IDEs: `install_mb` (informative) |
 
 ## Methods
 
