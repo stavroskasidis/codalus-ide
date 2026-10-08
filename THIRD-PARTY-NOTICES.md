@@ -2,14 +2,16 @@
 
 Daedalus Studio is MIT-licensed. This file lists the third-party components that the repository uses, with their licenses. The repository policy is that every dependency must use an **OSI-approved license compatible with MIT**. Licenses are read from each package's own metadata (nuspec) when it is added, and checked again at every milestone checkpoint. Full license texts ship inside each package; installers will bundle them in M7. `TODO(issue)`: generate the bundled notice file automatically (e.g. dotnet-project-licenses) in M7.
 
-Last verified: 2026-10-08 (M1). M1 added no packages: the shell (`daedalus`) resolves the same 39 packages as prototype A, and the plugin host, plugin SDK and Welcome plugin use none.
+Last verified: 2026-10-08 (M2). M1 added no packages: the shell (`daedalus`) resolves the same 39 packages as prototype A, and the plugin host, plugin SDK and Welcome plugin use none. M2 adds `Microsoft.Build` (compile-time) and `Microsoft.VisualStudio.SolutionPersistence` for the build host, both MIT per their nuspec.
 
 ## .NET (NuGet): product code
 
 | Package | Version | License | Used by |
 |---|---|---|---|
 | Microsoft.CodeAnalysis.CSharp.Workspaces, .Workspaces.MSBuild, .Common, .CSharp, .Workspaces.Common, .Analyzers (Roslyn) | 5.9.0 | MIT | language service host |
-| Microsoft.Build.Locator | 1.11.2 | MIT | language service host |
+| Microsoft.Build.Locator | 1.11.2 | MIT | language service host, build host |
+| Microsoft.Build (compile-time only; MSBuild comes from the installed SDK) | 17.11.48 | MIT | build host |
+| Microsoft.VisualStudio.SolutionPersistence | 1.0.52 | MIT | build host (reads and writes .sln/.slnx); language host (transitive via Roslyn) |
 | Microsoft.Build.Framework, Microsoft.NET.StringTools (compile-time only; MSBuild comes from the installed SDK) | 17.11.48 / 18.4.0 | MIT | language service host |
 | StreamJsonRpc, Microsoft.VisualStudio.Threading, Microsoft.VisualStudio.Validation, Nerdbank.Streams, MessagePack (transitive) | 2.25.29 and transitive | MIT | language service host |
 | Avalonia, Avalonia.Desktop, Avalonia.Themes.Fluent, Avalonia.Skia, Avalonia.Win32 / .X11 / .Native, Avalonia.Headless(.XUnit) | 12.1.3 | MIT | shell, prototype A, UI tests |

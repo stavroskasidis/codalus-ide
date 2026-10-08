@@ -1,0 +1,7 @@
+<Project>
+  <!-- Imported by every project here; editing it re-evaluates them (file watching test). -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>

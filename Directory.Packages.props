@@ -19,10 +19,12 @@
     <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.7" />
     <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.7" />
   </ItemGroup>
-  <ItemGroup Label="Language services">
+  <ItemGroup Label="Language services and build host">
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="$(RoslynVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="$(RoslynVersion)" />
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
+    <PackageVersion Include="Microsoft.Build" Version="17.11.48" />
+    <PackageVersion Include="Microsoft.VisualStudio.SolutionPersistence" Version="1.0.52" />
     <PackageVersion Include="Microsoft.Build.Framework" Version="17.11.48" />
     <PackageVersion Include="Microsoft.NET.StringTools" Version="18.4.0" />
     <PackageVersion Include="StreamJsonRpc" Version="2.25.29" />

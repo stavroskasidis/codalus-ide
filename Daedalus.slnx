@@ -18,6 +18,8 @@
     <Project Path="src/Daedalus.Plugins.Abstractions/Daedalus.Plugins.Abstractions.csproj" />
     <Project Path="src/Daedalus.Plugins.Host/Daedalus.Plugins.Host.csproj" />
     <Project Path="src/Daedalus.Plugins.Protocol/Daedalus.Plugins.Protocol.csproj" />
+    <Project Path="src/Daedalus.Projects.Host/Daedalus.Projects.Host.csproj" />
+    <Project Path="src/Daedalus.Projects.Protocol/Daedalus.Projects.Protocol.csproj" />
     <Project Path="src/Daedalus.Rpc/Daedalus.Rpc.csproj" />
     <Project Path="src/Daedalus.Shell/Daedalus.Shell.csproj" />
     <Project Path="src/Daedalus.Workbench/Daedalus.Workbench.csproj" />
@@ -29,6 +31,7 @@
     <Project Path="tests/Daedalus.Benchmarks.Harness.Tests/Daedalus.Benchmarks.Harness.Tests.csproj" />
     <Project Path="tests/Daedalus.LanguageServices.Host.Tests/Daedalus.LanguageServices.Host.Tests.csproj" />
     <Project Path="tests/Daedalus.Plugins.Tests/Daedalus.Plugins.Tests.csproj" />
+    <Project Path="tests/Daedalus.Projects.Tests/Daedalus.Projects.Tests.csproj" />
     <Project Path="tests/Daedalus.Rpc.Tests/Daedalus.Rpc.Tests.csproj" />
     <Project Path="tests/Daedalus.Shell.Tests/Daedalus.Shell.Tests.csproj" />
     <Project Path="tests/Daedalus.Spike.Avalonia.Tests/Daedalus.Spike.Avalonia.Tests.csproj" />
