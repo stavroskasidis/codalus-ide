@@ -13,6 +13,20 @@ public enum SettingType
     StringArray,
 }
 
+public static class SettingTypes
+{
+    /// <summary>Maps a manifest type name (JSON Schema subset) to <see cref="SettingType"/>.</summary>
+    public static SettingType? Parse(string? name) => name switch
+    {
+        "string" => SettingType.String,
+        "boolean" => SettingType.Boolean,
+        "integer" => SettingType.Integer,
+        "number" => SettingType.Number,
+        "string[]" or "array" => SettingType.StringArray,
+        _ => null,
+    };
+}
+
 public enum SettingScope
 {
     /// <summary>Only in the user's settings.json.</summary>

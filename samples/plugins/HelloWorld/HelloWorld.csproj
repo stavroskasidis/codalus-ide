@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A sample third-party Daedalus Studio plugin (see docs/plugins.md). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>HelloWorld</AssemblyName>
+    <RootNamespace>HelloWorld</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The host provides the API at runtime, so it is not copied next to the plugin. -->
+    <ProjectReference Include="..\..\..\src\Daedalus.Plugins.Abstractions\Daedalus.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="daedalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

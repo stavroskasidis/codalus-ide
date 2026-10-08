@@ -218,6 +218,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             await _writer.WriteAsync(body.WrittenMemory, cancellationToken).ConfigureAwait(false);
             await _writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // The peer is gone (e.g. a crashed host's stdin pipe closed): one exception type for callers.
+            throw new JsonRpcConnectionLostException("The connection was lost.", ex);
+        }
         finally
         {
             _writeLock.Release();
@@ -390,7 +395,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 }
             }, CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or JsonRpcConnectionLostException)
         {
             // The connection went away while answering; Disconnected reports it.
         }

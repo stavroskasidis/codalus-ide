@@ -106,8 +106,8 @@ public interface IPluginContext
     ICommands Commands { get; }           // Register(id, handler) -> IDisposable; ExecuteAsync(id, args)
     IWindow Window { get; }               // ShowNotificationAsync, CreateOutputChannel, CreateStatusBarItem,
                                           // RegisterTreeDataProvider<T>, SetMarkdown(viewId, markdown)
-    ISettings Settings { get; }           // Get<T>(key), Changed event (AffectsKey)
-    IPluginLog Log { get; }               // goes to the plugin's Output channel
+    ISettings Settings { get; }           // GetValue<T>(key, fallback), Changed event (Affects)
+    IPluginLog Log { get; }               // Write(level, message) + Debug/Info/Warning/Error extensions
     IList<IDisposable> Subscriptions { get; } // disposed on deactivation
 }
 ```

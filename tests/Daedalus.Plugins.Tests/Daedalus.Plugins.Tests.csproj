@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Daedalus.Workbench\Daedalus.Workbench.csproj" />
+    <ProjectReference Include="..\..\src\Daedalus.Plugins.Abstractions\Daedalus.Plugins.Abstractions.csproj" />
+    <!-- Built so the tests can launch them; not referenced as assemblies. -->
+    <ProjectReference Include="..\..\src\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\samples\plugins\HelloWorld\HelloWorld.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

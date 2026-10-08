@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Daedalus.Platform\Daedalus.Platform.csproj" />
     <ProjectReference Include="..\Daedalus.Rpc\Daedalus.Rpc.csproj" />
+    <ProjectReference Include="..\Daedalus.Plugins.Protocol\Daedalus.Plugins.Protocol.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Daedalus.Workbench.Tests" />

@@ -78,3 +78,8 @@ dotnet_diagnostic.CA1822.severity = suggestion
 [samples/**.cs]
 generated_code = true
 dotnet_analyzer_diagnostic.severity = none
+
+# Sample plugins are real code, not generated fixtures.
+[samples/plugins/**.cs]
+generated_code = false
+
