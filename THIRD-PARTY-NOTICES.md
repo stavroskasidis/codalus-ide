@@ -2,9 +2,9 @@
 
 Daedalus Studio is MIT-licensed. This file lists the third-party components that the repository uses, with their licenses. The repository policy is that every dependency must use an **OSI-approved license compatible with MIT**. Licenses are read from each package's own metadata (nuspec) when it is added, and checked again at every milestone checkpoint. Full license texts ship inside each package; installers will bundle them in M7. `TODO(issue)`: generate the bundled notice file automatically (e.g. dotnet-project-licenses) in M7.
 
-Last verified: 2026-10-08 (M0).
+Last verified: 2026-10-08 (M1). M1 added no packages: the shell (`daedalus`) resolves the same 39 packages as prototype A, and the plugin host, plugin SDK and Welcome plugin use none.
 
-## .NET (NuGet): product code and prototype A
+## .NET (NuGet): product code
 
 | Package | Version | License | Used by |
 |---|---|---|---|
@@ -12,12 +12,12 @@ Last verified: 2026-10-08 (M0).
 | Microsoft.Build.Locator | 1.11.2 | MIT | language service host |
 | Microsoft.Build.Framework, Microsoft.NET.StringTools (compile-time only; MSBuild comes from the installed SDK) | 17.11.48 / 18.4.0 | MIT | language service host |
 | StreamJsonRpc, Microsoft.VisualStudio.Threading, Microsoft.VisualStudio.Validation, Nerdbank.Streams, MessagePack (transitive) | 2.25.29 and transitive | MIT | language service host |
-| Avalonia, Avalonia.Desktop, Avalonia.Themes.Fluent, Avalonia.Skia, Avalonia.Win32 / .X11 / .Native, Avalonia.Headless(.XUnit) | 12.1.3 | MIT | prototype A, UI tests |
-| Avalonia.AvaloniaEdit | 12.0.0 | MIT | prototype A |
-| Dock.Avalonia, Dock.Model, Dock.Model.Mvvm, Dock.Avalonia.Themes.Fluent (and Dock's transitive helpers) | 12.1.0.7 | MIT | prototype A |
-| CommunityToolkit.Mvvm (transitive via Dock.Model.Mvvm) | 8.x | MIT | prototype A |
-| SkiaSharp, HarfBuzzSharp (and native assets) | per Avalonia 12.1.3 | MIT (wrappers). Native Skia is BSD-3-Clause; HarfBuzz uses the "Old MIT" license | prototype A |
-| Avalonia.Angle.Windows.Natives (ANGLE) | 2.1.27548.20260419 | BSD-3-Clause (ANGLE Project) | prototype A, Windows |
+| Avalonia, Avalonia.Desktop, Avalonia.Themes.Fluent, Avalonia.Skia, Avalonia.Win32 / .X11 / .Native, Avalonia.Headless(.XUnit) | 12.1.3 | MIT | shell, prototype A, UI tests |
+| Avalonia.AvaloniaEdit | 12.0.0 | MIT | shell (Output, text documents), prototype A |
+| Dock.Avalonia, Dock.Model, Dock.Model.Mvvm, Dock.Avalonia.Themes.Fluent (and Dock's transitive helpers) | 12.1.0.7 | MIT | shell, prototype A |
+| CommunityToolkit.Mvvm (transitive via Dock.Model.Mvvm) | 8.4.2 | MIT | shell, prototype A |
+| SkiaSharp, HarfBuzzSharp (and native assets) | per Avalonia 12.1.3 | MIT (wrappers). Native Skia is BSD-3-Clause; HarfBuzz uses the "Old MIT" license | shell, prototype A |
+| Avalonia.Angle.Windows.Natives (ANGLE) | 2.1.27548.20260419 | BSD-3-Clause (ANGLE Project) | shell and prototype A, Windows |
 | System.Drawing.Common | 10.0.12 | MIT | benchmark harness (Windows probes) |
 | Vortice.DXGI, Vortice.Direct3D11, Vortice.DirectX, SharpGen.Runtime(.COM) | 3.8.3 / 2.4.2-beta | MIT | benchmark harness (Desktop Duplication) |
 

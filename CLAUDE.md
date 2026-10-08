@@ -12,6 +12,15 @@ dotnet run --project benchmarks/Daedalus.Benchmarks.FixtureGen -- all samples   
 
 NativeAOT publish on Windows needs `vswhere.exe` on `PATH` (`%ProgramFiles(x86)%\Microsoft Visual Studio\Installer`).
 
+## Running the shell
+
+```bash
+dotnet run --project src/Daedalus.Shell -- --user-data-dir .work/user-data          # Debug; plugin host and built-in plugins are copied next to the build
+dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell           # Native AOT, with pluginhost/ and plugins/ next to daedalus.exe
+```
+
+Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--exit-on interactive`, `--screenshot <png>`. `DAEDALUS_PLUGINHOST` points at a plugin host `.exe` or `.dll`. Plugin authoring: `docs/plugins.md`.
+
 ## Running the prototypes
 
 ```bash
@@ -23,7 +32,7 @@ Copy `artifacts/lshost` to `artifacts/spike-a/lshost`. Alternatively, set `DAEDA
 
 ## Benchmarks
 
-See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -- list | run ... | report`. Scenarios that inject keystrokes require `--allow-input` and a machine that nobody is using at the time.
+See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -- list | run ... | report | check | compare --baseline DIR`. Budgets live in `benchmarks/budgets.json`. Scenarios that inject keystrokes require `--allow-input` and a machine that nobody is using at the time.
 
 ## Git
 
@@ -36,7 +45,9 @@ See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.
 - Root namespace `Daedalus.*`. The product name is "Daedalus Studio", and the CLI is `daedalus`. Never use "Visual Studio" branding in the product.
 - Central package management (`Directory.Packages.props`). Check and record the license of every new dependency in `THIRD-PARTY-NOTICES.md`.
 - Heavy work runs out of process (language service host, build host, debug adapter, plugin hosts). The shell supervises hosts and restarts them on crashes (`LanguageHostClient`).
-- Wire contracts follow LSP where it fits. Extensions use the `daedalus/` prefix and are documented in `docs/protocol.md`.
+- Wire contracts follow LSP where it fits. Extensions use the `daedalus/` prefix and are documented in `docs/protocol.md`; the plugin host protocol is in `docs/plugin-protocol.md`.
+- The plugin API (`Daedalus.Plugins.Abstractions`) is a public contract: changes follow ADR 0003's versioning policy and go into the changelog in `docs/plugins.md`.
+- Shell views talk to `Daedalus.Workbench` services; workbench events arrive on any thread, so views marshal through `Ui.Post`. Built-in features register through the same registries as plugins (`BuiltIns.cs`).
 - Never block the UI thread, and make everything cancellable.
 - The shell must stay Native-AOT clean: use compiled bindings, keep reflection-free view location, and use source-generated JSON.
 - Fixtures under `samples/` are standalone. They do not inherit the repo's build settings.
