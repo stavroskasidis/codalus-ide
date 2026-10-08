@@ -1,12 +1,9 @@
 name: Benchmarks
 
-# Runs the M0 UI-stack benchmarks on GitHub-hosted runners. These are VMs without GPUs (Linux uses
-# Mesa lavapipe for Vulkan under Xvfb), so the numbers are indicative only; authoritative numbers come
-# from reference hardware (docs/adr/0002-performance-budgets.md). Same cost policy as CI: PRs to main,
-# nightly and manual runs.
+# Runs the benchmarks on GitHub-hosted runners. These are GPU-less VMs (Linux runs under Xvfb), so the
+# numbers are indicative only; authoritative numbers come from reference hardware
+# (docs/adr/0002-performance-budgets.md). Nightly on master and on manual dispatch.
 on:
-  pull_request:
-    branches: [main]
   schedule:
     - cron: "41 3 * * *"
   workflow_dispatch:

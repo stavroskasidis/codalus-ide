@@ -25,6 +25,12 @@ Copy `artifacts/lshost` to `artifacts/spike-a/lshost`. Alternatively, set `DAEDA
 
 See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -- list | run ... | report`. Scenarios that inject keystrokes require `--allow-input` and a machine that nobody is using at the time.
 
+## Git
+
+- Commit directly to `master`; no pull requests and no feature branches for now (the repo is private and pre-public).
+- Commit messages carry **no** AI co-author or "Generated with" trailers.
+- CI: every push to `master` builds and tests on Linux; the full Windows/macOS/Linux matrix and the benchmarks run nightly and on manual dispatch.
+
 ## Conventions
 
 - Root namespace `Daedalus.*`. The product name is "Daedalus Studio", and the CLI is `daedalus`. Never use "Visual Studio" branding in the product.

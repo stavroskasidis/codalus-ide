@@ -1,13 +1,11 @@
 name: CI
 
-# Cost policy for the private repo: pushes to feature branches run Linux only; pull requests to main,
-# the nightly schedule and manual runs use the full Windows/macOS/Linux matrix (macOS minutes are the
-# most expensive on private repos).
+# Cost policy for the private repo: work is committed directly to master (no pull requests for now).
+# Pushes run Linux only; the nightly schedule and manual runs use the full Windows/macOS/Linux matrix
+# (macOS minutes are the most expensive on private repos).
 on:
   push:
-    branches-ignore: [main]
-  pull_request:
-    branches: [main]
+    branches: [master]
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
