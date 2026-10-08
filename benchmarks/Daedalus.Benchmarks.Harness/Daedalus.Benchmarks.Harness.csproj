@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>daedalus-bench</AssemblyName>
+    <RootNamespace>Daedalus.Benchmarks.Harness</RootNamespace>
+    <Description>Benchmark harness: measures the UI prototypes and reference IDEs on the same scenarios.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Windows probes use System.Drawing for window captures; guarded by OperatingSystem.IsWindows(). -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Daedalus.Diagnostics.BenchEvents\Daedalus.Diagnostics.BenchEvents.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Daedalus.Benchmarks.Harness.Tests" />
+  </ItemGroup>
+</Project>

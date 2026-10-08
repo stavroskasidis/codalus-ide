@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\spikes\avalonia\Daedalus.Spike.Avalonia\Daedalus.Spike.Avalonia.csproj" />
+    <!-- Built so that the test can launch it; not referenced as an assembly. -->
+    <ProjectReference Include="..\..\src\Daedalus.LanguageServices.Host\Daedalus.LanguageServices.Host.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+  </ItemGroup>
+</Project>

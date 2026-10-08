@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Daedalus.Benchmarks.FixtureGen/Daedalus.Benchmarks.FixtureGen.csproj" />
+    <Project Path="benchmarks/Daedalus.Benchmarks.Harness/Daedalus.Benchmarks.Harness.csproj" />
   </Folder>
   <Folder Name="/spikes/">
     <Project Path="spikes/avalonia/Daedalus.Spike.Avalonia/Daedalus.Spike.Avalonia.csproj" />
@@ -12,6 +13,8 @@
     <Project Path="src/Daedalus.LanguageServices.Protocol/Daedalus.LanguageServices.Protocol.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Daedalus.Benchmarks.Harness.Tests/Daedalus.Benchmarks.Harness.Tests.csproj" />
     <Project Path="tests/Daedalus.LanguageServices.Host.Tests/Daedalus.LanguageServices.Host.Tests.csproj" />
+    <Project Path="tests/Daedalus.Spike.Avalonia.Tests/Daedalus.Spike.Avalonia.Tests.csproj" />
   </Folder>
 </Solution>
