@@ -37,18 +37,28 @@ impl HostLaunch {
         if let Ok(path) = std::env::var("DAEDALUS_LSHOST") {
             candidates.push(PathBuf::from(path));
         }
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(dir) = exe.parent() {
-                let name = if cfg!(windows) { "daedalus-lshost.exe" } else { "daedalus-lshost" };
-                candidates.push(dir.join("lshost").join(name));
-                candidates.push(dir.join("lshost").join("daedalus-lshost.dll"));
-            }
+        if let Ok(exe) = std::env::current_exe()
+            && let Some(dir) = exe.parent()
+        {
+            let name = if cfg!(windows) {
+                "daedalus-lshost.exe"
+            } else {
+                "daedalus-lshost"
+            };
+            candidates.push(dir.join("lshost").join(name));
+            candidates.push(dir.join("lshost").join("daedalus-lshost.dll"));
         }
         candidates.into_iter().find(|p| p.exists()).map(|path| {
             if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dll")) {
-                HostLaunch { program: "dotnet".into(), args: vec![path.to_string_lossy().into_owned()] }
+                HostLaunch {
+                    program: "dotnet".into(),
+                    args: vec![path.to_string_lossy().into_owned()],
+                }
             } else {
-                HostLaunch { program: path, args: vec![] }
+                HostLaunch {
+                    program: path,
+                    args: vec![],
+                }
             }
         })
     }
@@ -108,24 +118,33 @@ impl HostClient {
         let stdout = child.stdout.take().ok_or_else(|| anyhow!("no stdout"))?;
         let stderr = child.stderr.take().ok_or_else(|| anyhow!("no stderr"))?;
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
-        std::thread::Builder::new().name("lshost-writer".into()).spawn(move || writer_loop(stdin, rx))?;
+        std::thread::Builder::new()
+            .name("lshost-writer".into())
+            .spawn(move || writer_loop(stdin, rx))?;
 
         let pending = self.pending.clone();
         let events = self.events.clone();
-        std::thread::Builder::new().name("lshost-reader".into()).spawn(move || {
-            reader_loop(stdout, &pending);
-            // The stream ended: fail everything in flight and report the crash.
-            for (_, sender) in pending.lock().unwrap().drain() {
-                let _ = sender.send(Err(anyhow!("language service host connection lost")));
-            }
-            let _ = events.send(HostEvent::Crashed { generation, exit_code: None });
-        })?;
+        std::thread::Builder::new()
+            .name("lshost-reader".into())
+            .spawn(move || {
+                reader_loop(stdout, &pending);
+                // The stream ended: fail everything in flight and report the crash.
+                for (_, sender) in pending.lock().unwrap().drain() {
+                    let _ = sender.send(Err(anyhow!("language service host connection lost")));
+                }
+                let _ = events.send(HostEvent::Crashed {
+                    generation,
+                    exit_code: None,
+                });
+            })?;
         let events = self.events.clone();
-        std::thread::Builder::new().name("lshost-stderr".into()).spawn(move || {
-            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                let _ = events.send(HostEvent::Log(line));
-            }
-        })?;
+        std::thread::Builder::new()
+            .name("lshost-stderr".into())
+            .spawn(move || {
+                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                    let _ = events.send(HostEvent::Log(line));
+                }
+            })?;
 
         let mut connection = self.connection.lock().unwrap();
         if let Some(mut old) = connection.take() {
@@ -157,8 +176,13 @@ impl HostClient {
     fn send(&self, message: Value) -> Result<()> {
         let body = serde_json::to_vec(&message)?;
         let connection = self.connection.lock().unwrap();
-        let connection = connection.as_ref().ok_or_else(|| anyhow!("language service host is not running"))?;
-        connection.writer.send(body).map_err(|_| anyhow!("language service host connection lost"))
+        let connection = connection
+            .as_ref()
+            .ok_or_else(|| anyhow!("language service host is not running"))?;
+        connection
+            .writer
+            .send(body)
+            .map_err(|_| anyhow!("language service host connection lost"))
     }
 
     pub fn shutdown(&self) {
@@ -173,7 +197,12 @@ impl HostClient {
 fn writer_loop(mut stdin: ChildStdin, rx: mpsc::Receiver<Vec<u8>>) {
     for body in rx {
         let header = format!("Content-Length: {}\r\n\r\n", body.len());
-        if stdin.write_all(header.as_bytes()).and_then(|_| stdin.write_all(&body)).and_then(|_| stdin.flush()).is_err() {
+        if stdin
+            .write_all(header.as_bytes())
+            .and_then(|_| stdin.write_all(&body))
+            .and_then(|_| stdin.flush())
+            .is_err()
+        {
             break;
         }
     }
@@ -202,12 +231,18 @@ fn reader_loop(stdout: impl Read, pending: &Mutex<Pending>) {
         if reader.read_exact(&mut body).is_err() {
             return;
         }
-        let Ok(message) = serde_json::from_slice::<Value>(&body) else { continue };
+        let Ok(message) = serde_json::from_slice::<Value>(&body) else {
+            continue;
+        };
         if message.get("method").is_some() {
             continue; // Server-to-client requests are not used by the M0 protocol.
         }
-        let Some(id) = message.get("id").and_then(Value::as_u64) else { continue };
-        let Some(sender) = pending.lock().unwrap().remove(&id) else { continue };
+        let Some(id) = message.get("id").and_then(Value::as_u64) else {
+            continue;
+        };
+        let Some(sender) = pending.lock().unwrap().remove(&id) else {
+            continue;
+        };
         let result = match message.get("error") {
             Some(error) => Err(anyhow!(
                 "host error {}: {}",

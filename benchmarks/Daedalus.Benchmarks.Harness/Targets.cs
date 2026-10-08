@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace Daedalus.Benchmarks.Harness;
 
 /// <summary>What to open in a launched target.</summary>
-internal sealed record LaunchRequest(string WorkDir, string? File = null, string? Solution = null, string? Bench = null, string? ExitOn = null, string? EventsFile = null);
+internal sealed record LaunchRequest(string WorkDir, string? File = null, string? Solution = null, string? Bench = null, string? ExitOn = null, string? EventsFile = null, IReadOnlyList<string>? ExtraArgs = null);
 
 /// <summary>A program under measurement: one of the prototypes or a reference IDE.</summary>
 internal sealed record Target(
@@ -95,6 +95,11 @@ internal static class TargetCatalog
                          })
                 {
                     psi.ArgumentList.Add(arg);
+                }
+
+                foreach (var extra in request.ExtraArgs ?? [])
+                {
+                    psi.ArgumentList.Add(extra);
                 }
 
                 Add(psi, null, request.File ?? request.Solution);

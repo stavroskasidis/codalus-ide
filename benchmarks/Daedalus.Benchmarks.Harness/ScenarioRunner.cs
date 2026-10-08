@@ -107,6 +107,38 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             result.Add("process_count" + suffix, memory.ProcessCount);
             Log($"  {target.Name} cold-start run {run}: {Last(result, "startup_interactive_ms" + suffix)} / {Last(result, "startup_ready_ms" + suffix)} ms, {memory.PrivateBytes / 1048576.0:F0} MB private");
         }
+
+        if (target.Name == "vscode")
+        {
+            await VsCodeSelfReportedAsync(target, result, runs, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// VS Code's own startup measurement (--prof-append-timers): main-process start to workbench ready.
+    /// Available on every OS, so CI gets a VS Code number without window probes.
+    /// </summary>
+    private async Task VsCodeSelfReportedAsync(Target target, ScenarioResult result, int runs, CancellationToken cancellationToken)
+    {
+        result.Notes.Add("startup_selfreported_ms: VS Code's own --prof-append-timers measurement (process start to workbench restored).");
+        for (var run = 0; run < runs; run++)
+        {
+            var work = NewWorkDir();
+            var timers = Path.Combine(work, "timers.txt");
+            await using var session = await LaunchAsync(target, new LaunchRequest(work, ExtraArgs: ["--prof-append-timers", timers]), cancellationToken).ConfigureAwait(false);
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(90);
+            while (DateTime.UtcNow < deadline && !File.Exists(timers))
+            {
+                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            }
+
+            await Task.Delay(300, cancellationToken).ConfigureAwait(false);
+            var line = File.Exists(timers) ? File.ReadLines(timers).LastOrDefault() : null;
+            if (line is not null && double.TryParse(line.Split('\t')[0], System.Globalization.CultureInfo.InvariantCulture, out var ms))
+            {
+                result.Add(run == 0 ? "startup_selfreported_ms_first" : "startup_selfreported_ms", ms);
+            }
+        }
     }
 
     // ------------------------------------------------------------------ 100k-line file: open, memory, typing, scrolling

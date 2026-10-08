@@ -44,7 +44,9 @@ pub async fn scroll(panel: WeakEntity<EditorPanel>, cx: &mut AsyncWindowContext)
     let line_count = panel
         .update(cx, |panel, cx| panel.state().read(cx).text().lines_len())
         .unwrap_or(1);
-    let Ok(state) = panel.update(cx, |panel, _| panel.state().clone()) else { return };
+    let Ok(state) = panel.update(cx, |panel, _| panel.state().clone()) else {
+        return;
+    };
 
     // A synchronous next-frame chain (GPUI's requestAnimationFrame), like prototype A's loop:
     // every frame records its interval and advances the viewport for the following frame.
@@ -59,7 +61,9 @@ pub async fn scroll(panel: WeakEntity<EditorPanel>, cx: &mut AsyncWindowContext)
     for fraction in [0.25, 0.5, 0.75, 1.0, 0.0] {
         let t0 = bench::mono_us();
         let line = ((line_count - 1) as f64 * fraction) as usize;
-        let _ = panel.update_in(cx, |panel, window, cx| set_cursor_line(&panel.state().clone(), line, window, cx));
+        let _ = panel.update_in(cx, |panel, window, cx| {
+            set_cursor_line(&panel.state().clone(), line, window, cx)
+        });
         next_frame(cx).await;
         // Yield once more so the frame has been presented.
         cx.background_executor().timer(Duration::from_millis(0)).await;

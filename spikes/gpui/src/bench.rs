@@ -28,9 +28,17 @@ fn sink() -> &'static Sink {
             if let Some(parent) = std::path::Path::new(&path).parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            OpenOptions::new().create(true).append(true).open(path).ok().map(Mutex::new)
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .ok()
+                .map(Mutex::new)
         });
-        Sink { file, origin: Instant::now() }
+        Sink {
+            file,
+            origin: Instant::now(),
+        }
     })
 }
 
@@ -46,7 +54,10 @@ pub fn mono_us() -> i64 {
 pub fn emit(name: &str, fields: &[(&str, i64)]) {
     let sink = sink();
     let Some(file) = &sink.file else { return };
-    let wall = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_micros() as i64).unwrap_or(0);
+    let wall = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_micros() as i64)
+        .unwrap_or(0);
     let mut line = format!(r#"{{"ev":"{name}","wall_us":{wall},"mono_us":{}"#, mono_us());
     for (key, value) in fields {
         line.push_str(&format!(r#","{key}":{value}"#));

@@ -14,10 +14,10 @@ use gpui_kit::component::{ActiveTheme, h_flex, v_flex};
 use gpui_kit::*;
 use serde_json::{Value, json};
 
+use crate::Options;
 use crate::bench;
 use crate::doc_sync::{DocSync, WindowedTokensProvider};
 use crate::rpc::{HostClient, HostEvent, HostLaunch};
-use crate::Options;
 
 const MAX_OUTPUT_LINES: usize = 500;
 
@@ -37,8 +37,11 @@ pub struct Workspace {
 impl Workspace {
     pub fn new(options: Options, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (dock_area, _skin) = DockSkin::dock_area("daedalus", Some(1), window, cx);
-        let explorer = cx.new(|cx| ExplorerPanel::new(cx));
-        let output = cx.new(|cx| OutputPanel { lines: Vec::new(), focus: cx.focus_handle() });
+        let explorer = cx.new(ExplorerPanel::new);
+        let output = cx.new(|cx| OutputPanel {
+            lines: Vec::new(),
+            focus: cx.focus_handle(),
+        });
         let open_subscription = cx.subscribe_in(&explorer, window, |this, _, event: &OpenDocument, window, cx| {
             if !this.editors.iter().any(|e| e.read(cx).path == event.0) {
                 this.open_document(event.0.clone(), window, cx);
@@ -100,7 +103,7 @@ impl Workspace {
             // Wait for the interactive event itself (emitted from a frame callback).
             cx.spawn(async move |_, cx| {
                 cx.background_executor().timer(Duration::from_millis(50)).await;
-                let _ = cx.update(|cx| cx.quit());
+                cx.update(|cx| cx.quit());
             })
             .detach();
         } else if matches {
@@ -147,7 +150,10 @@ impl Workspace {
                     .spawn(async move { rx.lock().unwrap().recv().ok() })
                     .await;
                 let Some(event) = event else { break };
-                if this.update_in(cx, |this, window, cx| this.on_host_event(event, window, cx)).is_err() {
+                if this
+                    .update_in(cx, |this, window, cx| this.on_host_event(event, window, cx))
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -161,9 +167,16 @@ impl Workspace {
         let open = self.options.open.clone();
         let restarting = !self.editors.is_empty();
         let task = cx.spawn_in(window, async move |this, cx| {
-            let init = host.request("initialize", json!({ "processId": std::process::id(), "clientName": "daedalus-gpui" })).await;
+            let init = host
+                .request(
+                    "initialize",
+                    json!({ "processId": std::process::id(), "clientName": "daedalus-gpui" }),
+                )
+                .await;
             if let Err(error) = init {
-                let _ = this.update(cx, |this, cx| this.set_status(format!("Language service failed: {error}"), cx));
+                let _ = this.update(cx, |this, cx| {
+                    this.set_status(format!("Language service failed: {error}"), cx)
+                });
                 return;
             }
             let _ = this.update(cx, |this, cx| this.set_status("Language service ready", cx));
@@ -176,7 +189,12 @@ impl Workspace {
                             if let Some(root) = result.get("root") {
                                 this.explorer.update(cx, |explorer, cx| explorer.set_root(root, cx));
                             }
-                            for diagnostic in result.get("diagnostics").and_then(Value::as_array).into_iter().flatten() {
+                            for diagnostic in result
+                                .get("diagnostics")
+                                .and_then(Value::as_array)
+                                .into_iter()
+                                .flatten()
+                            {
                                 this.log(format!("[workspace] {}", diagnostic.as_str().unwrap_or_default()), cx);
                             }
                             bench::emit(bench::SOLUTION_LOADED, &[]);
@@ -212,15 +230,22 @@ impl Workspace {
                     return; // A previous generation that was replaced deliberately.
                 }
                 let now = std::time::Instant::now();
-                self.restarts.retain(|t| now.duration_since(*t) < Duration::from_secs(60));
+                self.restarts
+                    .retain(|t| now.duration_since(*t) < Duration::from_secs(60));
                 if self.restarts.len() >= 5 {
                     self.set_status("Language service crashed repeatedly and was stopped.", cx);
-                    self.log("[notification] Language service crashed repeatedly and was stopped.", cx);
+                    self.log(
+                        "[notification] Language service crashed repeatedly and was stopped.",
+                        cx,
+                    );
                     return;
                 }
                 self.restarts.push(now);
                 self.set_status("Language service crashed — restarting…", cx);
-                self.log(format!("[notification] Language service crashed (exit code {exit_code:?}); restarting."), cx);
+                self.log(
+                    format!("[notification] Language service crashed (exit code {exit_code:?}); restarting."),
+                    cx,
+                );
                 let delay = Duration::from_millis(250 << (self.restarts.len() - 1).min(4));
                 let task = cx.spawn_in(window, async move |this, cx| {
                     cx.background_executor().timer(delay).await;
@@ -299,7 +324,10 @@ pub struct ExplorerPanel {
 
 impl ExplorerPanel {
     fn new(cx: &mut Context<Self>) -> Self {
-        Self { tree: cx.new(|cx| TreeState::new(cx)), focus: cx.focus_handle() }
+        Self {
+            tree: cx.new(|cx| TreeState::new(cx)),
+            focus: cx.focus_handle(),
+        }
     }
 
     fn set_root(&mut self, root: &Value, cx: &mut Context<Self>) {
@@ -311,7 +339,11 @@ impl ExplorerPanel {
 
 fn to_tree_item(node: &Value, depth: usize) -> TreeItem {
     let name = node.get("name").and_then(Value::as_str).unwrap_or("?").to_string();
-    let kind = node.get("kind").and_then(Value::as_str).unwrap_or("document").to_ascii_lowercase();
+    let kind = node
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or("document")
+        .to_ascii_lowercase();
     let id = node
         .get("path")
         .and_then(Value::as_str)
@@ -326,12 +358,15 @@ fn to_tree_item(node: &Value, depth: usize) -> TreeItem {
     if kind == "document" {
         item
     } else {
-        item.children(children).expanded(kind == "solution" || kind == "project")
+        item.children(children)
+            .expanded(kind == "solution" || kind == "project")
     }
 }
 
 fn uuid_like(name: &str) -> u64 {
-    name.bytes().fold(1469598103934665603u64, |h, b| (h ^ b as u64).wrapping_mul(1099511628211))
+    name.bytes().fold(1469598103934665603u64, |h, b| {
+        (h ^ b as u64).wrapping_mul(1099511628211)
+    })
 }
 
 impl EventEmitter<PanelEvent> for ExplorerPanel {}
@@ -354,27 +389,31 @@ impl Panel for ExplorerPanel {
 impl Render for ExplorerPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = cx.entity();
-        div().size_full().child(tree(&self.tree, move |ix, entry, _selected, _window, cx| {
-            let item = entry.item().clone();
-            let glyph = if entry.is_folder() { if entry.is_expanded() { "▾" } else { "▸" } } else { "·" };
-            let view = view.clone();
-            ListItem::new(ix)
-                .w_full()
-                .py_0p5()
-                .px_2()
-                .pl(px(14.) * entry.depth() + px(8.))
-                .child(h_flex().gap_2().child(glyph).child(item.label.clone()))
-                .on_click(move |_, window, cx| {
-                    if item.is_folder() {
-                        return;
-                    }
-                    let path = item.id.to_string();
-                    let _ = view.update(cx, |_, cx| {
-                        cx.emit(OpenDocument(path));
-                    });
-                    window.refresh();
-                })
-        }))
+        div()
+            .size_full()
+            .child(tree(&self.tree, move |ix, entry, _selected, _window, _cx| {
+                let item = entry.item().clone();
+                let glyph = if entry.is_folder() {
+                    if entry.is_expanded() { "▾" } else { "▸" }
+                } else {
+                    "·"
+                };
+                let view = view.clone();
+                ListItem::new(ix)
+                    .w_full()
+                    .py_0p5()
+                    .px_2()
+                    .pl(px(14.) * entry.depth() + px(8.))
+                    .child(h_flex().gap_2().child(glyph).child(item.label.clone()))
+                    .on_click(move |_, window, cx| {
+                        if item.is_folder() {
+                            return;
+                        }
+                        let path = item.id.to_string();
+                        view.update(cx, |_, cx| cx.emit(OpenDocument(path)));
+                        window.refresh();
+                    })
+            }))
     }
 }
 
@@ -477,7 +516,8 @@ impl EditorPanel {
             }
         })];
         // Real keyboard input is always probed (in-app input→present).
-        subscriptions.push(cx.observe_keystrokes(|_, _, window, _| probe_input_to_present(bench::mono_us(), false, window)));
+        subscriptions
+            .push(cx.observe_keystrokes(|_, _, window, _| probe_input_to_present(bench::mono_us(), false, window)));
 
         let mut this = Self {
             title,
@@ -499,16 +539,23 @@ impl EditorPanel {
     }
 
     fn refresh_tokens(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.state.update(cx, |state, cx| state.refresh_semantic_tokens(window, cx));
+        self.state
+            .update(cx, |state, cx| state.refresh_semantic_tokens(window, cx));
     }
 
     /// Waits until the first token response has been applied, then runs the bench scenario.
-    fn watch_first_highlight(&mut self, received: Rc<Cell<bool>>, options: Options, window: &mut Window, cx: &mut Context<Self>) {
+    fn watch_first_highlight(
+        &mut self,
+        received: Rc<Cell<bool>>,
+        options: Options,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         cx.spawn_in(window, async move |this, cx| {
             while !received.get() {
                 cx.background_executor().timer(Duration::from_millis(5)).await;
             }
-            let _ = this.update_in(cx, |this, window, cx| {
+            let _ = this.update_in(cx, |this, window, _cx| {
                 window.on_next_frame({
                     let workspace = this.workspace.clone();
                     move |_, cx| {
@@ -523,7 +570,9 @@ impl EditorPanel {
                 _ => return,
             }
             let _ = this.update(cx, |this, cx| {
-                let _ = this.workspace.update(cx, |workspace, cx| workspace.on_scenario_done(cx));
+                let _ = this
+                    .workspace
+                    .update(cx, |workspace, cx| workspace.on_scenario_done(cx));
             });
         })
         .detach();
@@ -539,7 +588,13 @@ impl EditorPanel {
 pub fn probe_input_to_present(t0_us: i64, synthetic: bool, window: &mut Window) {
     window.on_next_frame(move |_, cx| {
         cx.spawn(async move |_| {
-            bench::emit(bench::KEY_LATENCY, &[("latency_us", bench::mono_us() - t0_us), ("synthetic", synthetic as i64)]);
+            bench::emit(
+                bench::KEY_LATENCY,
+                &[
+                    ("latency_us", bench::mono_us() - t0_us),
+                    ("synthetic", synthetic as i64),
+                ],
+            );
         })
         .detach();
     });
@@ -595,5 +650,7 @@ impl Render for EditorPanel {
 }
 
 pub fn set_cursor_line(state: &Entity<EditorState>, line: usize, window: &mut Window, cx: &mut App) {
-    state.update(cx, |state, cx| state.set_cursor_position(Position::new(line as u32, 0), window, cx));
+    state.update(cx, |state, cx| {
+        state.set_cursor_position(Position::new(line as u32, 0), window, cx)
+    });
 }

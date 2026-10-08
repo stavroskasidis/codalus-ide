@@ -15,7 +15,7 @@ use anyhow::{Result, anyhow};
 use futures::channel::oneshot;
 use gpui_kit::component::input::{DocumentRangeSemanticTokensProvider, Rope, RopeExt as _};
 use gpui_kit::{App, Task, Window};
-use lsp_types::{SemanticToken, SemanticTokens, SemanticTokensLegend, SemanticTokenType};
+use lsp_types::{SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensLegend};
 use serde_json::{Value, json};
 
 use crate::rpc::HostClient;
@@ -27,7 +27,11 @@ type TokenReply = oneshot::Sender<std::pin::Pin<Box<dyn Future<Output = Result<V
 
 enum Job {
     Sync(Rope),
-    Tokens { text: Rope, lines: Range<usize>, reply: TokenReply },
+    Tokens {
+        text: Rope,
+        lines: Range<usize>,
+        reply: TokenReply,
+    },
     Close,
 }
 
@@ -42,7 +46,16 @@ impl DocSync {
         let (tx, rx) = mpsc::channel();
         std::thread::Builder::new()
             .name("doc-sync".into())
-            .spawn(move || Worker { host, path, mirror: text, version: 1, opened_generation: 0 }.run(rx))
+            .spawn(move || {
+                Worker {
+                    host,
+                    path,
+                    mirror: text,
+                    version: 1,
+                    opened_generation: 0,
+                }
+                .run(rx)
+            })
             .expect("spawn doc-sync worker");
         Self { jobs: tx }
     }
@@ -110,7 +123,9 @@ impl Worker {
         }
 
         let new_text = rope_to_string(text);
-        let Some(edit) = diff(&self.mirror, &new_text) else { return };
+        let Some(edit) = diff(&self.mirror, &new_text) else {
+            return;
+        };
         self.version += 1;
         self.mirror = new_text;
         let _ = self.host.notify(
@@ -139,7 +154,13 @@ fn diff(old: &str, new: &str) -> Option<Value> {
         prefix -= 1;
     }
     let max_suffix = a.len().min(b.len()) - prefix;
-    let mut suffix = a.iter().rev().zip(b.iter().rev()).take(max_suffix).take_while(|(x, y)| x == y).count();
+    let mut suffix = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take(max_suffix)
+        .take_while(|(x, y)| x == y)
+        .count();
     while !old.is_char_boundary(a.len() - suffix) || !new.is_char_boundary(b.len() - suffix) {
         suffix -= 1;
     }
@@ -151,12 +172,43 @@ fn diff(old: &str, new: &str) -> Option<Value> {
 /// Host legend mapped onto the GPUI Kit highlight-theme vocabulary (index-aligned with
 /// `Daedalus.LanguageServices.Protocol.TokenTypes.All`).
 const LEGEND: &[&str] = &[
-    "variable", "type", "type", "enum", "type", "type", "type", // namespace..typeParameter
-    "variable", "variable", "property", "constant", "property", "function", "function", // parameter..method
-    "preproc", "keyword", "keyword", "comment", "string", "number", "string.regex", "operator", // macro..operator
-    "type", "type", "type", "property", "constant", "variable", "label", // delegate..label
-    "comment", "preproc", "punctuation", "string.escape", "comment.doc", // excludedCode..xmlDocComment
-    "keyword", "function", "string", // controlKeyword, extensionMethod, stringVerbatim
+    "variable",
+    "type",
+    "type",
+    "enum",
+    "type",
+    "type",
+    "type", // namespace..typeParameter
+    "variable",
+    "variable",
+    "property",
+    "constant",
+    "property",
+    "function",
+    "function", // parameter..method
+    "preproc",
+    "keyword",
+    "keyword",
+    "comment",
+    "string",
+    "number",
+    "string.regex",
+    "operator", // macro..operator
+    "type",
+    "type",
+    "type",
+    "property",
+    "constant",
+    "variable",
+    "label", // delegate..label
+    "comment",
+    "preproc",
+    "punctuation",
+    "string.escape",
+    "comment.doc", // excludedCode..xmlDocComment
+    "keyword",
+    "function",
+    "string", // controlKeyword, extensionMethod, stringVerbatim
 ];
 
 /// Semantic tokens for a window of lines around the viewport, fetched from the host.
@@ -189,7 +241,8 @@ impl DocumentRangeSemanticTokensProvider for WindowedTokensProvider {
         // so only the viewport ± a margin is requested (see vendor/PATCHES.md).
         let (first, last) = self.visible.get();
         let line_count = text.lines_len().max(1);
-        let lines = first.saturating_sub(TOKEN_WINDOW_MARGIN)..(last.max(first + 1) + TOKEN_WINDOW_MARGIN).min(line_count);
+        let lines =
+            first.saturating_sub(TOKEN_WINDOW_MARGIN)..(last.max(first + 1) + TOKEN_WINDOW_MARGIN).min(line_count);
         self.covered.set((lines.start, lines.end));
         let request = self.sync.tokens(text.clone(), lines);
         let received = self.received.clone();
@@ -198,7 +251,9 @@ impl DocumentRangeSemanticTokensProvider for WindowedTokensProvider {
             let data = value.get("data").and_then(Value::as_array).cloned().unwrap_or_default();
             let ints: Vec<u32> = data.iter().filter_map(Value::as_u64).map(|v| v as u32).collect();
             let tokens = ints
-                .chunks_exact(5)
+                .as_chunks::<5>()
+                .0
+                .iter()
                 .map(|t| SemanticToken {
                     delta_line: t[0],
                     delta_start: t[1],
@@ -207,8 +262,11 @@ impl DocumentRangeSemanticTokensProvider for WindowedTokensProvider {
                     token_modifiers_bitset: t[4],
                 })
                 .collect();
-            let _ = cx.update(|_| received.set(true));
-            Ok(SemanticTokens { result_id: None, data: tokens })
+            cx.update(|_| received.set(true));
+            Ok(SemanticTokens {
+                result_id: None,
+                data: tokens,
+            })
         })
     }
 }
@@ -220,19 +278,28 @@ mod tests {
 
     #[test]
     fn diff_insert_in_middle() {
-        assert_eq!(diff("class A {}", "class AB {}"), Some(json!({"offset": 7, "length": 0, "text": "B"})));
+        assert_eq!(
+            diff("class A {}", "class AB {}"),
+            Some(json!({"offset": 7, "length": 0, "text": "B"}))
+        );
     }
 
     #[test]
     fn diff_delete_and_replace() {
-        assert_eq!(diff("abcdef", "abXf"), Some(json!({"offset": 2, "length": 3, "text": "X"})));
+        assert_eq!(
+            diff("abcdef", "abXf"),
+            Some(json!({"offset": 2, "length": 3, "text": "X"}))
+        );
         assert_eq!(diff("aaa", "aa"), Some(json!({"offset": 2, "length": 1, "text": ""})));
     }
 
     #[test]
     fn diff_uses_utf16_offsets() {
         // '😀' is 4 UTF-8 bytes but 2 UTF-16 code units.
-        assert_eq!(diff("😀x", "😀yx"), Some(json!({"offset": 2, "length": 0, "text": "y"})));
+        assert_eq!(
+            diff("😀x", "😀yx"),
+            Some(json!({"offset": 2, "length": 0, "text": "y"}))
+        );
         assert_eq!(diff("é", "è"), Some(json!({"offset": 0, "length": 1, "text": "è"})));
     }
 
