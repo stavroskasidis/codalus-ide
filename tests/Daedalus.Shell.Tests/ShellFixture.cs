@@ -24,6 +24,8 @@ internal sealed class ShellFixture : IAsyncDisposable
     {
         UserData = userData;
         Environment.SetEnvironmentVariable("DAEDALUS_PLUGINHOST", Path.Combine(RepoRoot, "src", "Daedalus.Plugins.Host", "bin", Configuration, "net10.0", "daedalus-pluginhost.dll"));
+        Environment.SetEnvironmentVariable("DAEDALUS_BUILDHOST", Path.Combine(RepoRoot, "src", "Daedalus.Projects.Host", "bin", Configuration, "net10.0", "daedalus-buildhost.dll"));
+        Environment.SetEnvironmentVariable("DAEDALUS_TRASH_DIR", Path.Combine(userData, "trash"));
         Shell = new ShellHost(Application.Current!, new ShellOptions
         {
             UserDataDir = userData,
@@ -44,6 +46,30 @@ internal sealed class ShellFixture : IAsyncDisposable
     internal static string RepoRoot => Metadata("DaedalusRepoRoot");
 
     private static string Configuration => Metadata("DaedalusConfiguration");
+
+    /// <summary>Copies samples/ProjectSystem into the user-data folder (so tests can change it) and returns the .slnx path.</summary>
+    public string CopyFixture()
+    {
+        var target = Path.Combine(UserData, "fixture");
+        Copy(Path.Combine(RepoRoot, "samples", "ProjectSystem"), Path.Combine(target, "ProjectSystem"));
+        File.WriteAllText(Path.Combine(target, "Directory.Build.props"), "<Project />");
+        File.WriteAllText(Path.Combine(target, "Directory.Packages.props"), "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
+        return Path.Combine(target, "ProjectSystem", "ProjectSystem.slnx");
+    }
+
+    private static void Copy(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.EnumerateFiles(source))
+        {
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)));
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(source).Where(d => Path.GetFileName(d) is not ("bin" or "obj")))
+        {
+            Copy(directory, Path.Combine(target, Path.GetFileName(directory)));
+        }
+    }
 
     public static ShellFixture Create(string? userData = null) =>
         new(userData ?? Path.Combine(Path.GetTempPath(), "daedalus-shell-" + Guid.NewGuid().ToString("N")));

@@ -87,6 +87,9 @@ public static class BenchEventNames
     /// <summary>First frame rendered and the UI thread is idle: the window accepts input.</summary>
     public const string Interactive = "interactive";
 
+    /// <summary>The solution's structure (from the solution file) is shown.</summary>
+    public const string SolutionStructure = "solution_structure";
+
     public const string SolutionLoaded = "solution_loaded";
 
     /// <summary>The open document shows semantic highlighting for the visible range.</summary>

@@ -29,6 +29,7 @@ public sealed class ViewLocator : IDataTemplate
         PluginsViewModel vm => new PluginsView { DataContext = vm },
         TreeToolViewModel vm => new TreeToolView { DataContext = vm },
         MarkdownToolViewModel vm => new MarkdownToolView { DataContext = vm },
+        SolutionExplorerViewModel vm => new SolutionExplorerView { DataContext = vm },
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },
     };
 }

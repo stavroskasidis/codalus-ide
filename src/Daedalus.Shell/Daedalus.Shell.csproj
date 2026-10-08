@@ -26,9 +26,11 @@
     <ProjectReference Include="..\Daedalus.Diagnostics.BenchEvents\Daedalus.Diagnostics.BenchEvents.csproj" />
   </ItemGroup>
 
-  <!-- Shipped next to the shell but not referenced: the plugin host process and the built-in plugins. -->
+  <!-- Shipped next to the shell but not referenced: helper processes and the built-in plugins. -->
   <ItemGroup>
-    <ProjectReference Include="..\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
+    <HelperProcess Include="..\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" Folder="pluginhost" />
+    <HelperProcess Include="..\Daedalus.Projects.Host\Daedalus.Projects.Host.csproj" Folder="buildhost" />
+    <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <BuiltInPlugin Include="..\Plugins\Daedalus.Plugins.Welcome\Daedalus.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
     <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
   </ItemGroup>
@@ -50,13 +52,16 @@
   <!--
     Layout next to the shell executable:
       pluginhost/                 daedalus-pluginhost (framework-dependent, ReadyToRun when published)
+      buildhost/                  daedalus-buildhost (likewise; MSBuild comes from the installed SDK)
       plugins/<plugin id>/        built-in plugins
   -->
   <Target Name="DaedalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
-      <_DaedalusHostFiles Include="$(MSBuildThisFileDirectory)..\Daedalus.Plugins.Host\bin\$(Configuration)\net10.0\**\*" />
+      <_DaedalusHostFiles Include="%(HelperProcess.RootDir)%(HelperProcess.Directory)bin\$(Configuration)\net10.0\**\*">
+        <Folder>%(HelperProcess.Folder)</Folder>
+      </_DaedalusHostFiles>
     </ItemGroup>
-    <Copy SourceFiles="@(_DaedalusHostFiles)" DestinationFiles="@(_DaedalusHostFiles->'$(OutDir)pluginhost\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_DaedalusHostFiles)" DestinationFiles="@(_DaedalusHostFiles->'$(OutDir)%(Folder)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="DaedalusCopyBuiltInPlugins" Properties="DaedalusPluginTarget=$(OutDir)plugins\" />
   </Target>
 
@@ -64,8 +69,8 @@
     <PropertyGroup>
       <_DaedalusPublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))</_DaedalusPublishDir>
     </PropertyGroup>
-    <MSBuild Projects="..\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" Targets="Restore;Publish"
-             Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=false;PublishReadyToRun=true;PublishDir=$(_DaedalusPublishDir)pluginhost\"
+    <MSBuild Projects="%(HelperProcess.FullPath)" Targets="Restore;Publish"
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=false;PublishReadyToRun=true;PublishDir=$(_DaedalusPublishDir)%(HelperProcess.Folder)\"
              RemoveProperties="PublishAot;_IsPublishing" />
     <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="DaedalusCopyBuiltInPlugins" Properties="DaedalusPluginTarget=$(_DaedalusPublishDir)plugins\" />
   </Target>

@@ -10,11 +10,15 @@
   "contributes": {
     "commands": [
       { "id": "welcome.show", "title": "Show Start Page", "category": "Welcome" },
-      { "id": "welcome.toggleShowOnStartup", "title": "Toggle Start Page on Startup", "category": "Welcome" }
+      { "id": "welcome.toggleShowOnStartup", "title": "Toggle Start Page on Startup", "category": "Welcome" },
+      { "id": "welcome.refresh", "title": "Refresh", "category": "Welcome" }
     ],
     "menus": {
       "menuBar/help": [ { "command": "welcome.show", "group": "navigation", "order": 1 } ],
-      "toolWindow/title": [ { "command": "welcome.toggleShowOnStartup", "when": "view == welcome.view" } ]
+      "toolWindow/title": [
+        { "command": "welcome.refresh", "when": "view == welcome.view" },
+        { "command": "welcome.toggleShowOnStartup", "when": "view == welcome.view" }
+      ]
     },
     "toolWindows": [
       { "id": "welcome.view", "title": "Start", "location": "left", "kind": "tree", "icon": "home" }

@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Daedalus.Diagnostics.BenchEvents;
 using Daedalus.Shell.Controls;
@@ -63,6 +64,15 @@ public sealed partial class MainWindow : Window, IShellWindow
         Resized += (_, _) => RememberNormalBounds();
         Opened += OnOpened;
         Closing += OnClosing;
+        DragDrop.SetAllowDrop(this, true);
+        DragDrop.AddDragOverHandler(this, (_, e) =>
+        {
+            if (!e.Handled && e.DataTransfer.Contains(DataFormat.File))
+            {
+                e.DragEffects = DragDropEffects.Copy;
+            }
+        });
+        DragDrop.AddDropHandler(this, OnFileDrop);
     }
 
     // ------------------------------------------------------------------ startup and shutdown
@@ -116,6 +126,33 @@ public sealed partial class MainWindow : Window, IShellWindow
     }
 
     public void RequestClose() => Close();
+
+    public Task<string?> PickSolutionAsync() => PickAsync("Open Solution or Project", "Solutions and projects", ["*.slnx", "*.sln", "*.csproj", "*.fsproj", "*.vbproj"]);
+
+    public Task<string?> PickProjectAsync() => PickAsync("Add Existing Project", "Projects", ["*.csproj", "*.fsproj", "*.vbproj"]);
+
+    private async Task<string?> PickAsync(string title, string filterName, string[] patterns)
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+            FileTypeFilter = [new Avalonia.Platform.Storage.FilePickerFileType(filterName) { Patterns = patterns }],
+        }).ConfigureAwait(true);
+        return files.Count > 0 ? files[0].TryGetLocalPath() : null;
+    }
+
+    /// <summary>Dropping a solution, project or folder from the file manager opens it.</summary>
+    private void OnFileDrop(object? sender, DragEventArgs e)
+    {
+        if (e.Handled || e.DataTransfer.TryGetFiles() is not [{ } item, ..] || item.TryGetLocalPath() is not { } path)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        _ = Directory.Exists(path) ? _shell.OpenFolderAsync(path) : _shell.OpenSolutionAsync(path);
+    }
 
     private void SaveScreenshot(string path)
     {
@@ -177,7 +214,8 @@ public sealed partial class MainWindow : Window, IShellWindow
             return;
         }
 
-        if (e.Handled || KeyMapper.ToChord(e.Key, e.KeyModifiers) is not { } chord)
+        // A modal dialog owns the keyboard.
+        if (e.Handled || _shell.Dialogs.IsOpen || KeyMapper.ToChord(e.Key, e.KeyModifiers) is not { } chord)
         {
             return;
         }

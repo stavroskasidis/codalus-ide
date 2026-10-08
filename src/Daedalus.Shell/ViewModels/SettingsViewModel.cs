@@ -33,7 +33,8 @@ public sealed record SettingCategoryViewModel(string Name, int Count, bool IsAll
 /// The Settings UI: every registered setting (shell and plugin contributions), searchable and grouped by
 /// category, with typed editors. Edits write the user's settings.json (comments and formatting are kept).
 /// Search matches key, title, description and category; <c>@modified</c> shows only changed settings.
-/// TODO(issue): a Workspace tab once M2 can open solutions.
+/// The Workspace tab (while a solution is open) edits <c>.daedalus/settings.json</c> next to the solution; settings
+/// that only make sense per user are read-only there.
 /// </summary>
 public sealed class SettingsViewModel : ObservableObject
 {
@@ -43,16 +44,71 @@ public sealed class SettingsViewModel : ObservableObject
     private SettingCategoryViewModel? _selectedCategory;
     private string? _diagnostics;
 
+    private bool _workspaceScope;
+
     public SettingsViewModel(SettingsService settings, Action openJson)
     {
         _settings = settings;
+        settings.WorkspaceChanged += (_, _) => Ui.Post(() =>
+        {
+            if (!HasWorkspace)
+            {
+                _workspaceScope = false;
+                OnPropertyChanged(nameof(IsWorkspaceScope));
+            }
+
+            OnPropertyChanged(nameof(HasWorkspace));
+            OnScopeChanged();
+        });
         OpenJsonCommand = new RelayCommand(openJson);
         ClearSearchCommand = new RelayCommand(() => Search = string.Empty);
         settings.Changed += (_, e) => Ui.Post(() => OnSettingsChanged(e));
         Rebuild();
     }
 
-    public string FilePath => _settings.UserFile;
+    public string FilePath => Scope == SettingScope.Workspace ? _settings.WorkspaceFile! : _settings.UserFile;
+
+    public string FileLabel => Scope == SettingScope.Workspace ? $"Workspace settings: {FilePath}" : $"User settings: {FilePath}";
+
+    public bool HasWorkspace => _settings.WorkspaceFile is not null;
+
+    /// <summary>The layer edits go to: the user's settings.json, or the open solution's workspace settings.</summary>
+    public SettingScope Scope => _workspaceScope && HasWorkspace ? SettingScope.Workspace : SettingScope.User;
+
+    public bool IsWorkspaceScope
+    {
+        get => _workspaceScope;
+        set
+        {
+            if (SetField(ref _workspaceScope, value && HasWorkspace))
+            {
+                OnScopeChanged();
+            }
+        }
+    }
+
+    public bool IsUserScope
+    {
+        get => !_workspaceScope;
+        set => IsWorkspaceScope = !value;
+    }
+
+    private void OnScopeChanged()
+    {
+        OnPropertyChanged(nameof(Scope));
+        OnPropertyChanged(nameof(IsUserScope));
+        OnPropertyChanged(nameof(FilePath));
+        OnPropertyChanged(nameof(FileLabel));
+        foreach (var item in _all)
+        {
+            item.Refresh();
+        }
+
+        if (_search.Contains("@modified", StringComparison.OrdinalIgnoreCase))
+        {
+            Filter();
+        }
+    }
 
     public ObservableCollection<SettingCategoryViewModel> Categories { get; } = [];
 
@@ -129,7 +185,7 @@ public sealed class SettingsViewModel : ObservableObject
         _all.Clear();
         foreach (var descriptor in _settings.Descriptors)
         {
-            _all.Add(SettingItemViewModel.Create(descriptor, _settings));
+            _all.Add(SettingItemViewModel.Create(descriptor, _settings, () => Scope));
         }
 
         var selected = _selectedCategory?.Name;
@@ -174,16 +230,23 @@ public sealed class SettingsViewModel : ObservableObject
 
 public abstract class SettingItemViewModel : ObservableObject
 {
+    private readonly Func<SettingScope> _scope;
     private bool _isModified;
     private string? _error;
 
-    protected SettingItemViewModel(SettingDescriptor descriptor, SettingsService settings)
+    protected SettingItemViewModel(SettingDescriptor descriptor, SettingsService settings, Func<SettingScope> scope)
     {
         Descriptor = descriptor;
         Settings = settings;
+        _scope = scope;
         ResetCommand = new RelayCommand(() => _ = WriteAsync(null));
-        _isModified = settings.IsModified(descriptor.Key);
+        _isModified = settings.GetLayerValue(descriptor.Key, scope()) is not null;
     }
+
+    /// <summary>User-only settings can't be changed on the Workspace tab.</summary>
+    public bool CanEdit => _scope() == SettingScope.User || Descriptor.Scope == SettingScope.Workspace;
+
+    public bool IsUserOnlyHere => !CanEdit;
 
     public SettingDescriptor Descriptor { get; }
 
@@ -234,11 +297,11 @@ public abstract class SettingItemViewModel : ObservableObject
     /// <summary>True while values are being re-read, so editors don't write them back.</summary>
     protected bool Refreshing { get; private set; }
 
-    public static SettingItemViewModel Create(SettingDescriptor descriptor, SettingsService settings) => descriptor.Type switch
+    public static SettingItemViewModel Create(SettingDescriptor descriptor, SettingsService settings, Func<SettingScope> scope) => descriptor.Type switch
     {
-        SettingType.Boolean => new BoolSettingViewModel(descriptor, settings),
-        SettingType.String when descriptor.Enum is { Count: > 0 } => new EnumSettingViewModel(descriptor, settings),
-        _ => new TextSettingViewModel(descriptor, settings),
+        SettingType.Boolean => new BoolSettingViewModel(descriptor, settings, scope),
+        SettingType.String when descriptor.Enum is { Count: > 0 } => new EnumSettingViewModel(descriptor, settings, scope),
+        _ => new TextSettingViewModel(descriptor, settings, scope),
     };
 
     public bool Matches(string word) =>
@@ -252,7 +315,9 @@ public abstract class SettingItemViewModel : ObservableObject
         Refreshing = true;
         try
         {
-            IsModified = Settings.IsModified(Key);
+            IsModified = Settings.GetLayerValue(Key, _scope()) is not null;
+            OnPropertyChanged(nameof(CanEdit));
+            OnPropertyChanged(nameof(IsUserOnlyHere));
             Load(Settings.GetValue(Key));
         }
         finally
@@ -263,13 +328,18 @@ public abstract class SettingItemViewModel : ObservableObject
 
     protected abstract void Load(JsonElement value);
 
-    /// <summary>Writes the user value (null resets it to the default).</summary>
+    /// <summary>Writes the value in the selected layer (null removes it there).</summary>
     protected async Task WriteAsync(JsonElement? value)
     {
+        if (!CanEdit)
+        {
+            return;
+        }
+
         try
         {
             Error = null;
-            await Settings.SetAsync(Key, value, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await Settings.SetAsync(Key, value, _scope(), CancellationToken.None).ConfigureAwait(true);
         }
         catch (ArgumentException ex)
         {
@@ -296,8 +366,8 @@ public sealed class BoolSettingViewModel : SettingItemViewModel
 {
     private bool _value;
 
-    public BoolSettingViewModel(SettingDescriptor descriptor, SettingsService settings)
-        : base(descriptor, settings) => Refresh();
+    public BoolSettingViewModel(SettingDescriptor descriptor, SettingsService settings, Func<SettingScope> scope)
+        : base(descriptor, settings, scope) => Refresh();
 
     public bool Value
     {
@@ -320,8 +390,8 @@ public sealed class EnumSettingViewModel : SettingItemViewModel
 {
     private EnumOption? _selected;
 
-    public EnumSettingViewModel(SettingDescriptor descriptor, SettingsService settings)
-        : base(descriptor, settings)
+    public EnumSettingViewModel(SettingDescriptor descriptor, SettingsService settings, Func<SettingScope> scope)
+        : base(descriptor, settings, scope)
     {
         Options = [.. descriptor.Enum!.Select((value, i) => new EnumOption(value, value, descriptor.EnumDescriptions?.ElementAtOrDefault(i)))];
         Refresh();
@@ -357,8 +427,8 @@ public sealed class TextSettingViewModel : SettingItemViewModel
     private string _text = string.Empty;
     private string _committed = string.Empty;
 
-    public TextSettingViewModel(SettingDescriptor descriptor, SettingsService settings)
-        : base(descriptor, settings) => Refresh();
+    public TextSettingViewModel(SettingDescriptor descriptor, SettingsService settings, Func<SettingScope> scope)
+        : base(descriptor, settings, scope) => Refresh();
 
     public string Text
     {

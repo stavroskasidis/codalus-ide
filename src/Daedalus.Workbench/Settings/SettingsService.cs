@@ -33,7 +33,9 @@ public sealed class SettingsService : IDisposable
     private readonly Lock _gate = new();
     private readonly Dictionary<string, SettingDescriptor> _descriptors = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _writeLock = new(1, 1);
-    private readonly List<FileWatcher> _watchers = [];
+    private readonly bool _watch;
+    private readonly FileWatcher? _userWatcher;
+    private FileWatcher? _workspaceWatcher;
     private Dictionary<string, JsonElement> _user = new(StringComparer.Ordinal);
     private Dictionary<string, JsonElement> _workspace = new(StringComparer.Ordinal);
     private Dictionary<string, JsonElement> _effective = new(StringComparer.Ordinal);
@@ -43,21 +45,46 @@ public sealed class SettingsService : IDisposable
     {
         UserFile = userFile;
         WorkspaceFile = workspaceFile;
+        _watch = watch;
         Reload();
         if (watch)
         {
-            foreach (var file in new[] { userFile, workspaceFile }.OfType<string>())
-            {
-                var watcher = new FileWatcher(file);
-                watcher.Changed += (_, _) => Reload();
-                _watchers.Add(watcher);
-            }
+            _userWatcher = new FileWatcher(userFile);
+            _userWatcher.Changed += (_, _) => Reload();
+            _workspaceWatcher = Watch(workspaceFile);
         }
     }
 
     public string UserFile { get; }
 
-    public string? WorkspaceFile { get; }
+    /// <summary>The workspace layer (<c>.daedalus/settings.json</c> of the open solution), or null.</summary>
+    public string? WorkspaceFile { get; private set; }
+
+    /// <summary>Switches the workspace layer when a solution opens or closes; raises <see cref="Changed"/> for affected keys.</summary>
+    public void SetWorkspaceFile(string? file)
+    {
+        _workspaceWatcher?.Dispose();
+        WorkspaceFile = file;
+        _workspaceWatcher = _watch ? Watch(file) : null;
+        Reload();
+        WorkspaceChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The workspace layer appeared, disappeared or moved (a solution opened or closed).</summary>
+    public event EventHandler? WorkspaceChanged;
+
+    /// <summary>Watches <paramref name="file"/> if its folder exists (opening a solution must not create <c>.daedalus/</c>).</summary>
+    private FileWatcher? Watch(string? file)
+    {
+        if (file is null || !Directory.Exists(Path.GetDirectoryName(Path.GetFullPath(file))))
+        {
+            return null;
+        }
+
+        var watcher = new FileWatcher(file);
+        watcher.Changed += (_, _) => Reload();
+        return watcher;
+    }
 
     public event EventHandler<SettingsChangedEventArgs>? Changed;
 
@@ -179,6 +206,11 @@ public sealed class SettingsService : IDisposable
         finally
         {
             _writeLock.Release();
+        }
+
+        if (_watch && scope == SettingScope.Workspace)
+        {
+            _workspaceWatcher ??= Watch(WorkspaceFile);
         }
 
         Reload();
@@ -309,11 +341,8 @@ public sealed class SettingsService : IDisposable
 
     public void Dispose()
     {
-        foreach (var watcher in _watchers)
-        {
-            watcher.Dispose();
-        }
-
+        _userWatcher?.Dispose();
+        _workspaceWatcher?.Dispose();
         _writeLock.Dispose();
     }
 }

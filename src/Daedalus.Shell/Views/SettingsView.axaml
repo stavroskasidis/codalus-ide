@@ -18,11 +18,11 @@
   <!-- Editors by setting type. -->
   <UserControl.DataTemplates>
     <DataTemplate DataType="vm:BoolSettingViewModel">
-      <CheckBox IsChecked="{Binding Value}" Content="{Binding Title}" AutomationProperties.Name="{Binding Heading}" />
+      <CheckBox IsChecked="{Binding Value}" Content="{Binding Title}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Heading}" />
     </DataTemplate>
     <DataTemplate DataType="vm:EnumSettingViewModel">
       <StackPanel Spacing="4" HorizontalAlignment="Left">
-        <ComboBox MinWidth="260" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{Binding Heading}">
+        <ComboBox MinWidth="260" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Heading}">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="vm:EnumOption">
               <TextBlock Text="{Binding Label}" />
@@ -38,6 +38,7 @@
                Text="{Binding Text}"
                PlaceholderText="{Binding Watermark}"
                AcceptsReturn="{Binding IsMultiline}"
+               IsEnabled="{Binding CanEdit}"
                AutomationProperties.Name="{Binding Heading}" />
     </DataTemplate>
   </UserControl.DataTemplates>
@@ -57,7 +58,11 @@
                   Content="Edit in settings.json"
                   Command="{Binding OpenJsonCommand}" />
         </Grid>
-        <TextBlock Classes="muted" FontSize="11" Text="{Binding FilePath, StringFormat='User settings: {0}'}" />
+        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasWorkspace}">
+          <ToggleButton Content="User" IsChecked="{Binding IsUserScope}" AutomationProperties.Name="User settings" />
+          <ToggleButton Content="Workspace" IsChecked="{Binding IsWorkspaceScope}" AutomationProperties.Name="Workspace settings" />
+        </StackPanel>
+        <TextBlock Classes="muted" FontSize="11" Text="{Binding FileLabel}" />
         <TextBlock Foreground="{DynamicResource Shell.Warning}" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
       </StackPanel>
     </Border>
@@ -93,6 +98,7 @@
                               AutomationProperties.Name="{Binding Title, StringFormat='Reset {0}'}" />
                     </StackPanel>
                     <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+                    <TextBlock Classes="muted" FontSize="11" FontStyle="Italic" Text="This setting can only be changed in user settings." IsVisible="{Binding IsUserOnlyHere}" />
                     <ContentControl Content="{Binding}" Margin="0,4,0,0" />
                     <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
                     <TextBlock Classes="muted" FontSize="10" Text="{Binding Key}" />

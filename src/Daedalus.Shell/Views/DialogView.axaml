@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Daedalus.Shell.ViewModels"
+             x:Class="Daedalus.Shell.Views.DialogView"
+             x:DataType="vm:DialogViewModel">
+  <Border Classes="overlay" Padding="20,16" MinWidth="420" MaxWidth="560" KeyboardNavigation.TabNavigation="Cycle"
+          AutomationProperties.Name="{Binding Title}">
+    <StackPanel Spacing="10">
+      <TextBlock Classes="heading" FontSize="16" Text="{Binding Title}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Message}" TextWrapping="Wrap" IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      <TextBox x:Name="Input"
+               Text="{Binding InputText}"
+               IsVisible="{Binding HasInput}"
+               AutomationProperties.Name="{Binding Title}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
+                 AutomationProperties.LiveSetting="Assertive" />
+      <ItemsControl ItemsSource="{Binding Buttons}" HorizontalAlignment="Right" Margin="0,6,0,0">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Orientation="Horizontal" Spacing="8" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DialogButtonViewModel">
+            <Button Content="{Binding Label}" Command="{Binding Command}" MinWidth="84" HorizontalContentAlignment="Center"
+                    Classes.accent="{Binding IsDefault}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </Border>
+</UserControl>

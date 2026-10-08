@@ -80,6 +80,10 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
+      <Panel x:Name="DialogLayer" Background="#60000000" IsVisible="{Binding Dialogs.IsOpen}" ZIndex="2">
+        <views:DialogView DataContext="{Binding Dialogs}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Panel>
+
       <Panel x:Name="PaletteLayer" Background="Transparent" IsVisible="{Binding Palette.IsOpen}">
         <views:QuickPickView x:Name="Palette"
                              DataContext="{Binding Palette}"

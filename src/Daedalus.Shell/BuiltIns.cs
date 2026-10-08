@@ -11,7 +11,7 @@ using Daedalus.Workbench.ToolWindows;
 namespace Daedalus.Shell;
 
 /// <summary>The shell's own contributions, registered through the same registries plugins use.</summary>
-internal static class BuiltIns
+internal static partial class BuiltIns
 {
     public const string OutputWindow = "output";
     public const string NotificationsWindow = "notifications";
@@ -103,6 +103,7 @@ internal static class BuiltIns
         yield return new ToolWindowDescriptor(OutputWindow, "Output", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "output", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(NotificationsWindow, "Notifications", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "bell" };
         yield return new ToolWindowDescriptor(PluginsWindow, "Plugins", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "extensions" };
+        yield return new ToolWindowDescriptor(ViewModels.SolutionExplorerViewModel.ToolWindowId, "Solution Explorer", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "solution", VisibleByDefault = true };
     }
 
     public static void RegisterCommands(ShellHost shell)
@@ -179,7 +180,10 @@ internal static class BuiltIns
     }
 
     public static IReadOnlyList<KeybindingRule> ParseDefaultKeybindings(PlatformKind platform) =>
-        KeybindingService.ParseRules(DefaultKeybindings, KeybindingSource.Default, platform, null, diagnostics: null);
+        [
+            .. KeybindingService.ParseRules(DefaultKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+            .. KeybindingService.ParseRules(SolutionKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+        ];
 
     private static CommandHandler Ui(Action action) => async (_, _) =>
     {

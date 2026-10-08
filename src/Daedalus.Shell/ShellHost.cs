@@ -23,13 +23,21 @@ public interface IShellWindow
     void FocusPane(bool backwards);
 
     void RequestClose();
+
+    Avalonia.Input.Platform.IClipboard? Clipboard { get; }
+
+    /// <summary>Asks for a solution or project file to open (null: cancelled).</summary>
+    Task<string?> PickSolutionAsync();
+
+    /// <summary>Asks for a project file to add to the solution (null: cancelled).</summary>
+    Task<string?> PickProjectAsync();
 }
 
 /// <summary>
 /// The running shell: the workbench services, the plugin manager, the layout and the view models of the
 /// window chrome. Everything that is not a view lives here, so headless tests can drive it directly.
 /// </summary>
-public sealed class ShellHost : IAsyncDisposable
+public sealed partial class ShellHost : IAsyncDisposable
 {
 #if DEBUG
     private const bool IsDebugBuild = true;
@@ -46,7 +54,7 @@ public sealed class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register(BuiltIns.Settings());
+        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting()]);
         Theme = new ThemeService(app, Workbench);
 
         foreach (var window in BuiltIns.ToolWindows())
@@ -60,11 +68,15 @@ public sealed class ShellHost : IAsyncDisposable
         Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));
         PluginList = new PluginsViewModel(Plugins);
         Palette = new QuickPickViewModel();
+        Dialogs = new DialogViewModel();
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
+        InitializeSolutions();
         Layout = new LayoutManager(Workbench.ToolWindows, CreateToolContent);
 
         BuiltIns.RegisterCommands(this);
+        BuiltIns.RegisterSolutionCommands(this);
         BuiltIns.RegisterMenus(Workbench.Menus);
+        BuiltIns.RegisterSolutionMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
         Workbench.LoadUserKeybindings();
         SyncViewCommands();
@@ -110,6 +122,8 @@ public sealed class ShellHost : IAsyncDisposable
 
     public QuickPickViewModel Palette { get; }
 
+    public DialogViewModel Dialogs { get; }
+
     public StatusBarViewModel StatusBar { get; }
 
     public IShellWindow? Window { get; set; }
@@ -131,8 +145,8 @@ public sealed class ShellHost : IAsyncDisposable
 
         if (Options.Path is { } path)
         {
-            // TODO(issue): open solutions, projects and folders (M2).
-            Workbench.Notifications.Info($"Opening solutions and folders arrives in a later release; '{path}' was not opened.");
+            // TODO(issue): open a folder without a solution or project file (post-MVP).
+            _ = Directory.Exists(path) ? OpenFolderAsync(path) : OpenSolutionAsync(path);
         }
 
         _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
@@ -156,6 +170,7 @@ public sealed class ShellHost : IAsyncDisposable
             BuiltIns.OutputWindow => Output,
             BuiltIns.NotificationsWindow => Notifications,
             BuiltIns.PluginsWindow => PluginList,
+            SolutionExplorerViewModel.ToolWindowId => Explorer,
             _ => null,
         },
     };
@@ -530,6 +545,7 @@ public sealed class ShellHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await Solutions.DisposeAsync().ConfigureAwait(false);
         await Plugins.DisposeAsync().ConfigureAwait(false);
         Workbench.Dispose();
     }

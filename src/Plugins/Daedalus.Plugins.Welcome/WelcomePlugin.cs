@@ -9,12 +9,13 @@ public sealed class WelcomePlugin : IDaedalusPlugin
     internal const string ViewId = "welcome.view";
     internal const string ShowOnStartupSetting = "welcome.showOnStartup";
 
-    private readonly StartTree _tree = new();
+    private StartTree _tree = new(null);
     private IPluginContext? _context;
 
     public Task ActivateAsync(IPluginContext context, CancellationToken cancellationToken)
     {
         _context = context;
+        _tree = new StartTree(context.Commands);
         _tree.ShowOnStartup = context.Settings.GetValue(ShowOnStartupSetting, true);
         context.Subscriptions.Add(context.Window.RegisterTreeDataProvider(ViewId, _tree));
         context.Subscriptions.Add(context.Commands.Register("welcome.show", async (_, ct) =>
@@ -22,6 +23,7 @@ public sealed class WelcomePlugin : IDaedalusPlugin
             await ShowAsync(preserveFocus: false, ct).ConfigureAwait(false);
             return null;
         }));
+        context.Subscriptions.Add(context.Commands.Register("welcome.refresh", _tree.Refresh));
         context.Subscriptions.Add(context.Commands.Register("welcome.toggleShowOnStartup", async (_, ct) =>
         {
             await context.Commands.ExecuteAsync("workbench.setSetting", ct, ShowOnStartupSetting, !_tree.ShowOnStartup).ConfigureAwait(false);
@@ -91,8 +93,8 @@ internal sealed record StartNode(string Label)
     public IReadOnlyList<StartNode> Children { get; init; } = [];
 }
 
-/// <summary>The Start tree: static groups of actions; the Recent group fills in once solutions can be opened.</summary>
-internal sealed class StartTree : ITreeDataProvider<StartNode>
+/// <summary>The Start tree: groups of actions, and the recent solutions (from the shell's <c>workbench.getRecentSolutions</c>).</summary>
+internal sealed class StartTree(ICommands? commands) : ITreeDataProvider<StartNode>
 {
     private const string Repository = "https://github.com/stavroskasidis/daedalus-studio";
 
@@ -102,8 +104,30 @@ internal sealed class StartTree : ITreeDataProvider<StartNode>
 
     public void Refresh() => Changed?.Invoke(this, new TreeDataChangedEventArgs<StartNode>(null));
 
-    public Task<IReadOnlyList<StartNode>> GetChildrenAsync(StartNode? element, CancellationToken cancellationToken) =>
-        Task.FromResult(element is null ? BuildRoots() : element.Children);
+    public async Task<IReadOnlyList<StartNode>> GetChildrenAsync(StartNode? element, CancellationToken cancellationToken) =>
+        element is null ? BuildRoots(await RecentAsync(cancellationToken).ConfigureAwait(false)) : element.Children;
+
+    private async Task<IReadOnlyList<StartNode>> RecentAsync(CancellationToken cancellationToken)
+    {
+        if (commands is null)
+        {
+            return [];
+        }
+
+        var result = await commands.ExecuteAsync("workbench.getRecentSolutions", cancellationToken).ConfigureAwait(false);
+        if (result is not { ValueKind: System.Text.Json.JsonValueKind.Array } list)
+        {
+            return [];
+        }
+
+        return [.. list.EnumerateArray().Take(8).Select(entry => new StartNode(entry.GetProperty("name").GetString() ?? "?")
+        {
+            Icon = "solution",
+            Description = Path.GetDirectoryName(entry.GetProperty("path").GetString()),
+            Tooltip = entry.GetProperty("path").GetString(),
+            Command = new TreeItemCommand("workbench.openSolution", entry.GetProperty("path").GetString()),
+        })];
+    }
 
     public TreeItem GetTreeItem(StartNode element) => new(element.Label)
     {
@@ -114,17 +138,18 @@ internal sealed class StartTree : ITreeDataProvider<StartNode>
         Collapsible = element.Children.Count > 0 ? TreeItemCollapsibleState.Expanded : TreeItemCollapsibleState.None,
     };
 
-    private IReadOnlyList<StartNode> BuildRoots() =>
+    private IReadOnlyList<StartNode> BuildRoots(IReadOnlyList<StartNode> recent) =>
     [
         Group("Start",
+            Action("Open Solution or Project…", "folder", "workbench.openSolution"),
             Action("Show All Commands", "search", "workbench.showCommandPalette"),
             Action("Open Settings", "gear", "workbench.openSettings"),
             Action("Keyboard Shortcuts", "keyboard", "workbench.openKeyboardShortcuts"),
             Action("Select Color Theme", "color-mode", "workbench.selectTheme")),
 
-        // TODO(issue): list recent solutions once M2 adds opening solutions and folders.
-        Group("Recent",
-            new StartNode("No recent solutions yet") { Icon = "history", Tooltip = "Solutions you open will be listed here." }),
+        Group("Recent", recent.Count > 0
+            ? [.. recent]
+            : [new StartNode("No recent solutions yet") { Icon = "history", Tooltip = "Solutions you open will be listed here." }]),
 
         Group("Plugins",
             Action("Installed Plugins", "extensions", "workbench.view.plugins"),
