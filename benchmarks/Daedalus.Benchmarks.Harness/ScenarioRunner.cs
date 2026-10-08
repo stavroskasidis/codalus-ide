@@ -326,6 +326,21 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 var work = NewWorkDir();
                 var file = Path.Combine(CopyDirectory(source, Path.Combine(work, "Large100k")), "Large.cs");
                 await using var session = await LaunchAsync(target, new LaunchRequest(work, File: file, Bench: bench, ExitOn: "done"), cancellationToken).ConfigureAwait(false);
+                if (BlackBox && options.AllowInput)
+                {
+                    // Unattended machine: keep the prototype in the foreground (an occluded or background window
+                    // may be frame-throttled by the compositor). No input is sent.
+                    for (var i = 0; i < 200 && WindowProbe.FindMainWindow(session.Process.Id) == 0; i++)
+                    {
+                        await Task.Delay(25, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    if (WindowProbe.FindMainWindow(session.Process.Id) is var hwnd and not 0 && !WindowProbe.BringToForeground(hwnd))
+                    {
+                        result.Notes.Add($"run {run} {bench}: could not bring the window to the foreground");
+                    }
+                }
+
                 if (bench == "typing" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.HighlightReady, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } highlight)
                 {
                     result.Add("file_highlight_ms", (highlight.WallMicros - session.LaunchWallMicros) / 1000.0);
