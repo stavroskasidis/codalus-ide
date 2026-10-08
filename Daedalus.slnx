@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Daedalus.Benchmarks.FixtureGen/Daedalus.Benchmarks.FixtureGen.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Daedalus.Diagnostics.BenchEvents/Daedalus.Diagnostics.BenchEvents.csproj" />
+    <Project Path="src/Daedalus.LanguageServices.Client/Daedalus.LanguageServices.Client.csproj" />
+    <Project Path="src/Daedalus.LanguageServices.Host/Daedalus.LanguageServices.Host.csproj" />
+    <Project Path="src/Daedalus.LanguageServices.Protocol/Daedalus.LanguageServices.Protocol.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Daedalus.LanguageServices.Host.Tests/Daedalus.LanguageServices.Host.Tests.csproj" />
+  </Folder>
+</Solution>

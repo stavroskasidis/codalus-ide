@@ -1,0 +1,29 @@
+# .NET
+bin/
+obj/
+artifacts/
+*.user
+*.suo
+.vs/
+TestResults/
+*.binlog
+
+# Rust
+spikes/gpui/target/
+
+# IDEs
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Benchmarks: third-party tools are downloaded, never committed
+benchmarks/tools/
+benchmarks/.work/
+
+# Generated fixtures (deterministic; regenerate with FixtureGen)
+samples/Large100k/
+samples/Solution50/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>AOT-safe JSON-RPC client and supervisor for the out-of-process language service host.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Daedalus.LanguageServices.Protocol\Daedalus.LanguageServices.Protocol.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Daedalus.LanguageServices.Host.Tests" />
+  </ItemGroup>
+</Project>

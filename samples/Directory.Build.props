@@ -1,0 +1,3 @@
+<Project>
+  <!-- Fixture solutions are standalone: they deliberately do not inherit the repo's build settings. -->
+</Project>

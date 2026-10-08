@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Spike.App/Spike.App.csproj" />
+    <Project Path="src/Spike.Core/Spike.Core.csproj" />
+    <Project Path="src/Spike.Utilities/Spike.Utilities.csproj" />
+  </Folder>
+</Solution>
