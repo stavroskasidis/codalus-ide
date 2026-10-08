@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Daedalus.LanguageServices.Protocol\Daedalus.LanguageServices.Protocol.csproj" />
+    <ProjectReference Include="..\Daedalus.Rpc\Daedalus.Rpc.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Daedalus.LanguageServices.Host.Tests" />

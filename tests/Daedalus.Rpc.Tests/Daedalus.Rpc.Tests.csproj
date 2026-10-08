@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Daedalus.Rpc\Daedalus.Rpc.csproj" />
+  </ItemGroup>
+</Project>

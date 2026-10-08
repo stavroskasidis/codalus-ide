@@ -1,5 +1,6 @@
 using Daedalus.LanguageServices.Client;
 using Daedalus.LanguageServices.Protocol;
+using Daedalus.Rpc;
 using TextEdit = Daedalus.LanguageServices.Protocol.TextEdit;
 
 namespace Daedalus.LanguageServices.Host.Tests;
@@ -102,7 +103,7 @@ public sealed class HostIntegrationTests : IAsyncLifetime
         _client.DocumentTextProvider = p => p == path ? (Text, 7) : null;
         await _client.DidOpenAsync(path, Text, version: 7, Timeout());
 
-        var crashed = new TaskCompletionSource<HostCrashedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var crashed = new TaskCompletionSource<ProcessCrashedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
         var restarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _client.HostCrashed += (_, e) => crashed.TrySetResult(e);
         _client.HostRestarted += (_, _) => restarted.TrySetResult();

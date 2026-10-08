@@ -2,7 +2,7 @@ using Avalonia.Threading;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 using Daedalus.Diagnostics.BenchEvents;
-using Daedalus.LanguageServices.Client;
+using Daedalus.Rpc;
 using Dock.Model.Mvvm.Controls;
 using TextEdit = Daedalus.LanguageServices.Protocol.TextEdit;
 

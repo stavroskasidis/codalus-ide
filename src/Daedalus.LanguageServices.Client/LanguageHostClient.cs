@@ -1,17 +1,17 @@
-using System.Diagnostics;
 using Daedalus.LanguageServices.Protocol;
+using Daedalus.Rpc;
 
 namespace Daedalus.LanguageServices.Client;
 
-/// <summary>How to start the language service host process.</summary>
-public sealed record HostLaunchInfo(string FileName, IReadOnlyList<string> Arguments)
+/// <summary>Locates the language service host.</summary>
+public static class HostLaunchInfo
 {
     public const string EnvironmentVariable = "DAEDALUS_LSHOST";
 
     /// <summary>
     /// Resolution order: <c>DAEDALUS_LSHOST</c> (an apphost or a .dll), then <c>lshost/</c> next to the shell.
     /// </summary>
-    public static HostLaunchInfo? Resolve()
+    public static ProcessLaunchInfo? Resolve()
     {
         var candidates = new List<string>();
         if (Environment.GetEnvironmentVariable(EnvironmentVariable) is { Length: > 0 } fromEnv)
@@ -22,101 +22,49 @@ public sealed record HostLaunchInfo(string FileName, IReadOnlyList<string> Argum
         var exe = OperatingSystem.IsWindows() ? "daedalus-lshost.exe" : "daedalus-lshost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "lshost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "lshost", "daedalus-lshost.dll"));
-
-        foreach (var candidate in candidates)
-        {
-            if (File.Exists(candidate))
-            {
-                return FromPath(candidate);
-            }
-        }
-
-        return null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
     }
 
-    public static HostLaunchInfo FromPath(string path) =>
-        path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-            ? new HostLaunchInfo("dotnet", [path])
-            : new HostLaunchInfo(path, []);
-}
-
-public sealed class HostCrashedEventArgs(int? exitCode, bool willRestart, Exception? error) : EventArgs
-{
-    public int? ExitCode { get; } = exitCode;
-
-    public bool WillRestart { get; } = willRestart;
-
-    public Exception? Error { get; } = error;
+    public static ProcessLaunchInfo FromPath(string path) => ProcessLaunchInfo.FromPath(path);
 }
 
 /// <summary>
-/// Typed, supervised connection to <c>daedalus-lshost</c>. If the host dies it is restarted (with backoff and a
-/// crash-loop limit), the solution is reopened and open documents are replayed from <see cref="DocumentTextProvider"/>.
-/// A host failure never propagates beyond failed in-flight requests (<see cref="JsonRpcConnectionLostException"/>).
+/// Typed, supervised connection to <c>daedalus-lshost</c>. When the host restarts, the solution is reopened and
+/// open documents are replayed from <see cref="DocumentTextProvider"/>.
 /// </summary>
 public sealed class LanguageHostClient : IAsyncDisposable
 {
-    private const int MaxRestartsPerWindow = 5;
-    private static readonly TimeSpan s_restartWindow = TimeSpan.FromMinutes(1);
-
-    private readonly HostLaunchInfo _launch;
+    private readonly SupervisedProcess _process;
     private readonly Lock _gate = new();
     private readonly Dictionary<string, int> _openDocuments = new(StringComparer.Ordinal);
-    private readonly Queue<DateTime> _restarts = new();
-    private Process? _process;
-    private JsonRpcConnection? _connection;
     private string? _solutionPath;
-    private bool _disposed;
 
-    public LanguageHostClient(HostLaunchInfo launch) => _launch = launch;
+    public LanguageHostClient(ProcessLaunchInfo launch)
+    {
+        _process = new SupervisedProcess("daedalus-lshost", launch) { Initialize = InitializeAsync };
+        _process.Crashed += (_, e) => HostCrashed?.Invoke(this, e);
+        _process.Restarted += (_, _) => HostRestarted?.Invoke(this, EventArgs.Empty);
+        _process.Log += (_, line) => HostLog?.Invoke(this, line);
+    }
 
     /// <summary>Returns the current text and version of an open document, used to replay state after a restart.</summary>
     public Func<string, (string Text, int Version)?>? DocumentTextProvider { get; set; }
 
     public SemanticTokensLegend? Legend { get; private set; }
 
-    public int? HostProcessId => _process?.Id;
+    public int? HostProcessId => _process.ProcessId;
 
-    public event EventHandler<HostCrashedEventArgs>? HostCrashed;
+    public event EventHandler<ProcessCrashedEventArgs>? HostCrashed;
 
+    /// <summary>Raised after a restart once the solution and documents have been replayed.</summary>
     public event EventHandler? HostRestarted;
 
     public event EventHandler<string>? HostLog;
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken) => _process.StartAsync(cancellationToken);
+
+    private async Task InitializeAsync(JsonRpcConnection connection, bool isRestart, CancellationToken cancellationToken)
     {
-        var psi = new ProcessStartInfo(_launch.FileName)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        foreach (var argument in _launch.Arguments)
-        {
-            psi.ArgumentList.Add(argument);
-        }
-
-        var process = Process.Start(psi) ?? throw new InvalidOperationException($"Failed to start {_launch.FileName}.");
-        process.EnableRaisingEvents = true;
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-            {
-                HostLog?.Invoke(this, e.Data);
-            }
-        };
-        process.BeginErrorReadLine();
-
-        var connection = new JsonRpcConnection(process.StandardOutput.BaseStream, process.StandardInput.BaseStream);
-        connection.Disconnected += OnDisconnected;
-        lock (_gate)
-        {
-            _process = process;
-            _connection = connection;
-        }
-
         var result = await connection.InvokeAsync(
             Methods.Initialize,
             new InitializeParams(Environment.ProcessId, "daedalus"),
@@ -124,12 +72,38 @@ public sealed class LanguageHostClient : IAsyncDisposable
             ProtocolJsonContext.Default.InitializeResult,
             cancellationToken).ConfigureAwait(false);
         Legend = result.Legend;
+        if (!isRestart)
+        {
+            return;
+        }
+
+        if (_solutionPath is { } solution)
+        {
+            await connection.InvokeAsync(
+                Methods.OpenSolution, new OpenSolutionParams(solution),
+                ProtocolJsonContext.Default.OpenSolutionParams, ProtocolJsonContext.Default.OpenSolutionResult,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        string[] paths;
+        lock (_gate)
+        {
+            paths = [.. _openDocuments.Keys];
+        }
+
+        foreach (var path in paths)
+        {
+            if (DocumentTextProvider?.Invoke(path) is { } document)
+            {
+                await connection.NotifyAsync(Methods.DidOpen, new DidOpenParams(path, document.Text, document.Version), ProtocolJsonContext.Default.DidOpenParams, cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     public async Task<OpenSolutionResult> OpenSolutionAsync(string path, CancellationToken cancellationToken)
     {
         _solutionPath = path;
-        return await Connection.InvokeAsync(
+        return await _process.Connection.InvokeAsync(
             Methods.OpenSolution, new OpenSolutionParams(path),
             ProtocolJsonContext.Default.OpenSolutionParams, ProtocolJsonContext.Default.OpenSolutionResult,
             cancellationToken).ConfigureAwait(false);
@@ -142,7 +116,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
             _openDocuments[path] = version;
         }
 
-        return Connection.NotifyAsync(Methods.DidOpen, new DidOpenParams(path, text, version), ProtocolJsonContext.Default.DidOpenParams, cancellationToken);
+        return _process.Connection.NotifyAsync(Methods.DidOpen, new DidOpenParams(path, text, version), ProtocolJsonContext.Default.DidOpenParams, cancellationToken);
     }
 
     public Task DidChangeAsync(string path, int version, TextEdit[] changes, CancellationToken cancellationToken)
@@ -152,7 +126,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
             _openDocuments[path] = version;
         }
 
-        return Connection.NotifyAsync(Methods.DidChange, new DidChangeParams(path, version, changes), ProtocolJsonContext.Default.DidChangeParams, cancellationToken);
+        return _process.Connection.NotifyAsync(Methods.DidChange, new DidChangeParams(path, version, changes), ProtocolJsonContext.Default.DidChangeParams, cancellationToken);
     }
 
     public Task DidCloseAsync(string path, CancellationToken cancellationToken)
@@ -162,128 +136,18 @@ public sealed class LanguageHostClient : IAsyncDisposable
             _openDocuments.Remove(path);
         }
 
-        return Connection.NotifyAsync(Methods.DidClose, new DidCloseParams(path), ProtocolJsonContext.Default.DidCloseParams, cancellationToken);
+        return _process.Connection.NotifyAsync(Methods.DidClose, new DidCloseParams(path), ProtocolJsonContext.Default.DidCloseParams, cancellationToken);
     }
 
     public Task<SemanticTokens> GetSemanticTokensAsync(string path, CancellationToken cancellationToken) =>
-        Connection.InvokeAsync(
+        _process.Connection.InvokeAsync(
             Methods.SemanticTokensFull, new SemanticTokensParams(path),
             ProtocolJsonContext.Default.SemanticTokensParams, ProtocolJsonContext.Default.SemanticTokens, cancellationToken);
 
     public Task<SemanticTokens> GetSemanticTokensRangeAsync(string path, int startLine, int endLine, CancellationToken cancellationToken) =>
-        Connection.InvokeAsync(
+        _process.Connection.InvokeAsync(
             Methods.SemanticTokensRange, new SemanticTokensRangeParams(path, startLine, endLine),
             ProtocolJsonContext.Default.SemanticTokensRangeParams, ProtocolJsonContext.Default.SemanticTokens, cancellationToken);
 
-    private JsonRpcConnection Connection =>
-        _connection ?? throw new JsonRpcConnectionLostException("The language service host is not running.", null);
-
-    private void OnDisconnected(object? sender, Exception? error)
-    {
-        int? exitCode = null;
-        bool restart;
-        lock (_gate)
-        {
-            if (_disposed || !ReferenceEquals(sender, _connection))
-            {
-                return;
-            }
-
-            if (_process is { } process && process.WaitForExit(2000))
-            {
-                exitCode = process.ExitCode;
-            }
-
-            _connection = null;
-            var now = DateTime.UtcNow;
-            while (_restarts.Count > 0 && now - _restarts.Peek() > s_restartWindow)
-            {
-                _restarts.Dequeue();
-            }
-
-            restart = _restarts.Count < MaxRestartsPerWindow;
-            if (restart)
-            {
-                _restarts.Enqueue(now);
-            }
-        }
-
-        HostCrashed?.Invoke(this, new HostCrashedEventArgs(exitCode, restart, error));
-        if (restart)
-        {
-            _ = RestartAsync(_restarts.Count);
-        }
-    }
-
-    private async Task RestartAsync(int attempt)
-    {
-        try
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(250 * (1 << Math.Min(attempt - 1, 4)))).ConfigureAwait(false);
-            await StartAsync(CancellationToken.None).ConfigureAwait(false);
-            if (_solutionPath is { } solution)
-            {
-                await OpenSolutionAsync(solution, CancellationToken.None).ConfigureAwait(false);
-            }
-
-            string[] paths;
-            lock (_gate)
-            {
-                paths = [.. _openDocuments.Keys];
-            }
-
-            foreach (var path in paths)
-            {
-                if (DocumentTextProvider?.Invoke(path) is { } document)
-                {
-                    await DidOpenAsync(path, document.Text, document.Version, CancellationToken.None).ConfigureAwait(false);
-                }
-            }
-
-            HostRestarted?.Invoke(this, EventArgs.Empty);
-        }
-        catch (Exception ex) when (ex is JsonRpcConnectionLostException or InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
-        {
-            // The disconnect handler of the new connection decides about further restarts.
-            HostLog?.Invoke(this, $"Language service host restart failed: {ex.Message}");
-        }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        JsonRpcConnection? connection;
-        Process? process;
-        lock (_gate)
-        {
-            _disposed = true;
-            connection = _connection;
-            process = _process;
-            _connection = null;
-        }
-
-        if (connection is not null)
-        {
-            try
-            {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                await connection.InvokeAsync(Methods.Shutdown, timeout.Token).ConfigureAwait(false);
-                await connection.NotifyAsync(Methods.Exit, timeout.Token).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is OperationCanceledException or JsonRpcConnectionLostException or IOException or JsonRpcRemoteException)
-            {
-            }
-
-            await connection.DisposeAsync().ConfigureAwait(false);
-        }
-
-        if (process is not null)
-        {
-            if (!process.WaitForExit(2000))
-            {
-                process.Kill(entireProcessTree: true);
-            }
-
-            process.Dispose();
-        }
-    }
+    public ValueTask DisposeAsync() => _process.DisposeAsync();
 }
