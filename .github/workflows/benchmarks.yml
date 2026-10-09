@@ -2,15 +2,14 @@ name: Benchmarks
 
 # Runs the benchmarks on GitHub-hosted runners. These are GPU-less VMs (Linux runs under Xvfb), so the
 # numbers are indicative only; authoritative numbers come from reference hardware
-# (docs/adr/0002-performance-budgets.md). Nightly on master and on manual dispatch.
+# (docs/adr/0002-performance-budgets.md). Manual dispatch only (at milestone checkpoints): CI minutes are
+# limited while the repo is private.
 on:
-  schedule:
-    - cron: "41 3 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read # download earlier nightly results as the regression baseline
+  actions: read # download earlier results as the regression baseline
 
 concurrency:
   group: bench-${{ github.ref }}
@@ -72,7 +71,7 @@ jobs:
       - name: Report
         if: always()
         run: dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- report --results ci-results --out ci-results/summary-${{ runner.os }}.md
-      - name: Download the baseline (last 10 successful nightly runs)
+      - name: Download the baseline (last 10 successful runs)
         if: github.ref == 'refs/heads/master'
         shell: bash
         env:

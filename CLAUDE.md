@@ -38,7 +38,7 @@ See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.
 
 - Commit directly to `master`; no pull requests and no feature branches for now (the repo is private and pre-public).
 - Commit messages carry **no** AI co-author or "Generated with" trailers.
-- CI: every push to `master` builds and tests on Linux; the full Windows/macOS/Linux matrix and the benchmarks run nightly and on manual dispatch.
+- CI minutes are limited (private repo, free plan). Every push to `master` builds and tests on Linux (documentation-only pushes are skipped); the full Windows/macOS/Linux matrix and the benchmarks run only on manual dispatch, once per milestone checkpoint. Test locally first, push in batches, and don't push while a matrix run is in progress (it gets cancelled).
 
 ## Conventions
 

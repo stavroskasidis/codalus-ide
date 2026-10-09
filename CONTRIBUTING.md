@@ -16,7 +16,7 @@ Thanks for your interest in Daedalus Studio. The project is pre-alpha (Milestone
 3. Keep changes covered by tests: unit, integration against `samples/` fixtures, and headless UI tests where the UI stack allows them.
 4. Never block the UI thread. All I/O and analysis is asynchronous and cancellable, and long operations report progress.
 5. No silent stubs. If you defer something, leave a `TODO(issue)` that names the tracking issue.
-6. Push to `master`. CI builds and tests on Linux for every push, and runs the full Windows/macOS/Linux matrix and the benchmarks nightly (or on manual dispatch).
+6. Push to `master`. CI builds and tests on Linux for every push, and runs the full Windows/macOS/Linux matrix and the benchmarks on manual dispatch (once per milestone while the repo is private, to save CI minutes).
 
 ## Code style
 

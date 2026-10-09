@@ -1,13 +1,15 @@
 name: CI
 
-# Cost policy for the private repo: work is committed directly to master (no pull requests for now).
-# Pushes run Linux only; the nightly schedule and manual runs use the full Windows/macOS/Linux matrix
-# (macOS minutes are the most expensive on private repos).
+# Cost policy for the private repo on the free plan (2,000 minutes a month; Windows bills 2x, macOS 10x):
+# work is committed directly to master (no pull requests for now). Pushes run Linux only and skip
+# documentation-only changes; the full Windows/macOS/Linux matrix runs on manual dispatch, once per milestone
+# checkpoint. There is no nightly schedule.
 on:
   push:
     branches: [master]
-  schedule:
-    - cron: "17 2 * * *"
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   workflow_dispatch:
 
 permissions:
