@@ -36,6 +36,8 @@ public sealed partial class ShellHost
 
     public TestExplorerViewModel TestExplorer { get; private set; } = null!;
 
+    public CoverageResultsViewModel CoverageResults { get; private set; } = null!;
+
     TestService IEditorServices.Tests => Tests;
 
     private void InitializeTesting()
@@ -45,6 +47,9 @@ public sealed partial class ShellHost
         Plugins.ProposedApi = _proposedApi;
         Plugins.TestSink = Tests;
         TestExplorer = new TestExplorerViewModel(this);
+        CoverageResults = new CoverageResultsViewModel(this);
+        Tests.CoverageReported += (_, _) => Ui.Post(() => Layout.ShowToolWindow(CoverageResultsViewModel.ToolWindowId, focus: false));
+        Tests.Coverage.Changed += (_, _) => Ui.Post(() => Workbench.Context.Set("coverageAvailable", Tests.Coverage.HasCoverage));
         Solutions.ProjectChanged += (_, project) =>
         {
             if (project.IsTestProject)
@@ -54,6 +59,12 @@ public sealed partial class ShellHost
         };
         Solutions.SolutionChanged += (_, _) => Ui.Post(OnTestSolutionChanged);
         Tests.RunningChanged += (_, _) => Ui.Post(UpdateTestStatus);
+        if (Diagnostics.BenchEvents.BenchEvents.Enabled)
+        {
+            Tests.Changed += (_, _) => Diagnostics.BenchEvents.BenchEvents.Emit(
+                Diagnostics.BenchEvents.BenchEventNames.TestTree,
+                [("tests", Tests.Read(roots => roots.Sum(r => r.Leaves().Count()))), ("controllers", Tests.Controllers.Count)]);
+        }
         Tests.RunFinished += (_, run) => Ui.Post(() => OnTestRunFinished(run));
         Workbench.Settings.Changed += (_, e) =>
         {
@@ -88,6 +99,7 @@ public sealed partial class ShellHost
         }
 
         _testsActivated = true;
+        Diagnostics.BenchEvents.BenchEvents.Emit("test_providers");
         _ = Plugins.ActivateByEventAsync("onTestProjects", CancellationToken.None);
     }
 
@@ -131,11 +143,18 @@ public sealed partial class ShellHost
             Tooltip = run.Name + " finished. Click to open the Test Explorer.",
             Command = BuiltIns.ViewCommandPrefix + TestExplorerViewModel.ToolWindowId,
         });
-        if (run.Output.Length > 0)
+        var attachments = run.Attachments;
+        if (run.Output.Length > 0 || attachments.Count > 0)
         {
             var channel = Workbench.Output.GetOrCreate("daedalus.tests", "Tests");
             channel.Clear();
             channel.Append(run.Output);
+            foreach (var attachment in attachments)
+            {
+                // Files the run produced (coverage reports, logs): where to find them.
+                var where = DocumentUris.ToPath(attachment.Uri) ?? attachment.Uri;
+                channel.Append($"Attachment: {attachment.DisplayName ?? Path.GetFileName(where)}: {where}\n");
+            }
         }
     }
 
@@ -469,6 +488,38 @@ public sealed partial class ShellHost
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Workbench.Notifications.Error("The results could not be exported: " + ex.Message);
+        }
+    }
+
+    /// <summary>Saves the latest coverage as a Cobertura report (ADR 0011), for ReportGenerator or CI tools.</summary>
+    public async Task ExportCoverageAsync()
+    {
+        if (Window is null)
+        {
+            return;
+        }
+
+        if (!Tests.Coverage.HasCoverage)
+        {
+            StatusBar.ShowMessage("There is no coverage to export.", TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        if (await Window.SaveFileAsync("Export Coverage", "coverage.cobertura.xml", "Cobertura coverage", ["*.xml"]).ConfigureAwait(true) is not { } file)
+        {
+            return;
+        }
+
+        try
+        {
+            var document = Tests.Coverage.ToCobertura();
+            await using var stream = File.Create(file);
+            await document.SaveAsync(stream, SaveOptions.None, CancellationToken.None).ConfigureAwait(true);
+            StatusBar.ShowMessage($"Exported coverage to {Path.GetFileName(file)}.", TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Workbench.Notifications.Error("The coverage could not be exported: " + ex.Message);
         }
     }
 

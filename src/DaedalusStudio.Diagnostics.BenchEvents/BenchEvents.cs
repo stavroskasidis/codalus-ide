@@ -105,4 +105,13 @@ public static class BenchEventNames
     public const string ScrollFrame = "scroll_frame";
 
     public const string ScenarioDone = "scenario_done";
+
+    /// <summary>The Test Explorer's tree changed: <c>tests</c> is the number of tests in it.</summary>
+    public const string TestTree = "test_tree";
+
+    /// <summary>One filter applied in the Test Explorer: <c>frame_us</c> until the next frame was rendered.</summary>
+    public const string TestFilterFrame = "test_filter_frame";
+
+    /// <summary>The first result of a test run: <c>elapsed_us</c> since the run was requested.</summary>
+    public const string TestFirstResult = "test_first_result";
 }

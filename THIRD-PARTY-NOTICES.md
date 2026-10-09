@@ -2,7 +2,7 @@
 
 Daedalus Studio is MIT-licensed. This file lists the third-party components that the repository uses, with their licenses. The repository policy is that every dependency must use an **OSI-approved license compatible with MIT**. Licenses are read from each package's own metadata (nuspec) when it is added, and checked again at every milestone checkpoint. Release packages (ADR 0009) ship this file and `LICENSE` next to the binaries. `TODO(issue)`: also ship the full license texts of the bundled components (and the NOTICE required by Apache-2.0 for the Roslyn assemblies inside netcoredbg), generated automatically (e.g. with dotnet-project-licenses), before the first public release.
 
-Last verified: 2026-10-09 (M7; M4–M7 added no NuGet packages, only the downloaded debugger below). M1 added no packages: the shell (`daedalus`) resolves the same 39 packages as prototype A, and the plugin host, plugin SDK and Welcome plugin use none. M2 adds `Microsoft.Build` (compile-time) and `Microsoft.VisualStudio.SolutionPersistence` for the build host, both MIT per their nuspec. M3 adds Roslyn's Features packages (`Microsoft.CodeAnalysis.Features`, `.CSharp.Features`) and their dependencies to the language service host, all MIT per their nuspec; it removes `StreamJsonRpc` and its dependencies (the host now uses `DaedalusStudio.Rpc`, like the other hosts), `Microsoft.CodeAnalysis.Workspaces.MSBuild` (the host gets its projects from the build host, ADR 0005), and prototype A (the M0 spike, retired).
+Last verified: 2026-10-09 (M8: adds `Microsoft.TestPlatform.TranslationLayer` to the .NET test plugin and bundles Coverlet with it, both listed below; the test fixture `samples/Testing` is standalone and not shipped. M7; M4–M7 added no NuGet packages, only the downloaded debugger below). M1 added no packages: the shell (`daedalus`) resolves the same 39 packages as prototype A, and the plugin host, plugin SDK and Welcome plugin use none. M2 adds `Microsoft.Build` (compile-time) and `Microsoft.VisualStudio.SolutionPersistence` for the build host, both MIT per their nuspec. M3 adds Roslyn's Features packages (`Microsoft.CodeAnalysis.Features`, `.CSharp.Features`) and their dependencies to the language service host, all MIT per their nuspec; it removes `StreamJsonRpc` and its dependencies (the host now uses `DaedalusStudio.Rpc`, like the other hosts), `Microsoft.CodeAnalysis.Workspaces.MSBuild` (the host gets its projects from the build host, ADR 0005), and prototype A (the M0 spike, retired).
 
 ## .NET (NuGet): product code
 
@@ -14,6 +14,7 @@ Last verified: 2026-10-09 (M7; M4–M7 added no NuGet packages, only the downloa
 | System.Data.DataSetExtensions (transitive via Roslyn Features; the nuspec links the .NET (corefx) license) | 4.5.0 | MIT | language service host |
 | ICSharpCode.Decompiler | 11.1.0.9782 | MIT | language service host (Go to Definition into referenced assemblies) |
 | Microsoft.Build.Locator | 1.11.2 | MIT | build host |
+| Microsoft.TestPlatform.TranslationLayer, Microsoft.TestPlatform.ObjectModel (transitive) | 18.10.1 | MIT | .NET test plugin (VSTest through the SDK's vstest.console) |
 | Microsoft.Build (compile-time only; MSBuild comes from the installed SDK) | 17.11.48 | MIT | build host |
 | Microsoft.VisualStudio.SolutionPersistence | 1.0.52 | MIT | build host (reads and writes .sln/.slnx) |
 | Microsoft.Build.Framework, Microsoft.NET.StringTools (compile-time only; MSBuild comes from the installed SDK) | 17.11.48 / 18.4.0 | MIT | build host |
@@ -27,6 +28,20 @@ Last verified: 2026-10-09 (M7; M4–M7 added no NuGet packages, only the downloa
 | Vortice.DXGI, Vortice.Direct3D11, Vortice.DirectX, SharpGen.Runtime(.COM) | 3.8.3 / 2.4.2-beta | MIT | benchmark harness (Desktop Duplication) |
 
 All 97 resolved NuGet packages (direct and transitive) were checked: 88 are MIT, 8 are Apache-2.0 (test-only xUnit, see below) and 1 is BSD-3-Clause (ANGLE).
+
+## Coverlet (bundled with the .NET test plugin, ADR 0011)
+
+The plugin ships Coverlet's VSTest data collector (`coverage/collector`, from `coverlet.collector`) and console tool (`coverage/console`, from `coverlet.console`) with the assemblies their packages carry. They are downloaded at build time (`PackageDownload`), not referenced.
+
+| Component | Version | License |
+|---|---|---|
+| coverlet.collector, coverlet.console (with coverlet.core) | 10.1.0 | MIT |
+| Mono.Cecil (and .Mdb, .Pdb, .Rocks) | 0.11.6 | MIT |
+| Microsoft.Extensions.DependencyInjection(.Abstractions), .DependencyModel, .FileSystemGlobbing | 10.0.12 (DependencyModel 8.0.2 in the collector) | MIT |
+| Microsoft.Bcl.AsyncInterfaces, Microsoft.Bcl.Cryptography, System.Formats.Asn1, System.Security.Cryptography.Pkcs | 10.0.12 | MIT |
+| Microsoft.TestPlatform.ObjectModel (with CoreUtilities, PlatformAbstractions; collector) | 18.10.1 | MIT |
+| System.CommandLine (console) | 2.0.12 | MIT |
+| NuGet.Frameworks (collector), NuGet.Versioning | 7.6.0 | Apache-2.0 |
 
 ## .NET (NuGet): tests only (not shipped)
 

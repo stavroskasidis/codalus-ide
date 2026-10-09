@@ -3,10 +3,11 @@ using DaedalusStudio.Benchmarks.FixtureGen;
 // Usage:
 //   daedalus-fixturegen large-file <out-dir> [lines=100000]
 //   daedalus-fixturegen solution   <out-dir> [projects=50]
+//   daedalus-fixturegen tests      <out-dir> [projects=20]   (250 xUnit tests per project)
 //   daedalus-fixturegen all        <samples-dir>
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("usage: daedalus-fixturegen (large-file|solution|all) <out-dir> [count]");
+    Console.Error.WriteLine("usage: daedalus-fixturegen (large-file|solution|tests|all) <out-dir> [count]");
     return 2;
 }
 
@@ -20,9 +21,13 @@ switch (args[0])
     case "solution":
         SolutionGenerator.Write(outDir, count > 0 ? count : SolutionGenerator.DefaultProjects);
         break;
+    case "tests":
+        TestsGenerator.Write(outDir, count > 0 ? count : TestsGenerator.DefaultProjects);
+        break;
     case "all":
         LargeFileGenerator.WriteProject(Path.Combine(outDir, "Large100k"), LargeFileGenerator.DefaultLines);
         SolutionGenerator.Write(Path.Combine(outDir, "Solution50"), SolutionGenerator.DefaultProjects);
+        TestsGenerator.Write(Path.Combine(outDir, "Tests5k"), TestsGenerator.DefaultProjects);
         break;
     default:
         Console.Error.WriteLine($"unknown command '{args[0]}'");

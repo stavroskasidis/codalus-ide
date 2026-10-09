@@ -25,8 +25,17 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
     public static bool IsRequested(ShellOptions options) =>
         options.OpenFile is not null || options.Bench is not null || options.ExitOn is "language";
 
+    /// <summary>Filters the Test Explorer applies in <c>--bench test-filter</c>: names, fields, negation, back to none.</summary>
+    private static readonly string[] s_filters = ["Case0", "Feature03", "outcome:notrun", "Area1 Case1", "-Area2", "project:Tests07", "zzz", string.Empty, "Case", string.Empty];
+
     public async Task RunAsync()
     {
+        if (shell.Options.Bench == "test-filter")
+        {
+            await TestFilterAsync().ConfigureAwait(true);
+            return;
+        }
+
         if (shell.Options.ExitOn == "language")
         {
             shell.Languages.StatusChanged += (_, e) =>
@@ -85,6 +94,67 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
                 break;
             default:
                 return;
+        }
+
+        BenchEvents.Emit(BenchEventNames.ScenarioDone);
+        if (shell.Options.ExitOn == "done")
+        {
+            Exit();
+        }
+    }
+
+    /// <summary>
+    /// <c>--bench test-filter</c> (with a solution): waits until the Test Explorer lists every test of the solution from
+    /// source, applies filters and reports how long each took to render, then runs one class and reports when its first
+    /// result arrived (that includes its build).
+    /// </summary>
+    private async Task TestFilterAsync()
+    {
+        shell.Layout.ShowToolWindow(ViewModels.TestExplorerViewModel.ToolWindowId);
+        var explorer = shell.TestExplorer;
+        var stable = 0;
+        var last = -1;
+        for (var i = 0; i < 2400 && stable < 20; i++)
+        {
+            await Task.Delay(50).ConfigureAwait(true);
+            var count = shell.Tests.Read(roots => roots.Sum(r => r.Leaves().Count()));
+            stable = count > 0 && count == last ? stable + 1 : 0;
+            last = count;
+        }
+
+        explorer.Grouping = Workbench.Testing.TestGrouping.Hierarchy;
+        foreach (var filter in s_filters)
+        {
+            var started = Stopwatch.GetTimestamp();
+            explorer.FilterText = filter;
+            explorer.ApplyFilter();
+            await RenderedAsync(window).ConfigureAwait(true);
+            BenchEvents.Emit(BenchEventNames.TestFilterFrame, "frame_us", (long)Stopwatch.GetElapsedTime(started).TotalMicroseconds);
+            await Task.Delay(100).ConfigureAwait(true);
+        }
+
+        var target = shell.Tests.Read(roots => roots.SelectMany(r => r.SelfAndDescendants()).FirstOrDefault(n => n.Children.Count > 0 && n.Children.All(c => c.Range is not null && c.Children.Count == 0)));
+        if (target is not null)
+        {
+            var requested = Stopwatch.GetTimestamp();
+            var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnChanged(object? sender, EventArgs e)
+            {
+                if (shell.Tests.Read(_ => target.Children.Any(c => c.Result is not null)))
+                {
+                    first.TrySetResult();
+                }
+            }
+
+            shell.Tests.Changed += OnChanged;
+            var run = shell.RunTestsAsync(Workbench.Testing.TestRunKind.Run, [target.Key]);
+            if (await Task.WhenAny(first.Task, Task.Delay(TimeSpan.FromMinutes(5))).ConfigureAwait(true) == first.Task)
+            {
+                BenchEvents.Emit(BenchEventNames.TestFirstResult, "elapsed_us", (long)Stopwatch.GetElapsedTime(requested).TotalMicroseconds);
+            }
+
+            shell.Tests.Changed -= OnChanged;
+            await run.ConfigureAwait(true);
         }
 
         BenchEvents.Emit(BenchEventNames.ScenarioDone);

@@ -14,7 +14,7 @@ namespace DaedalusStudio.Workbench.Plugins;
 /// </summary>
 public sealed class WorkbenchProposedApi : IProposedApiHost, IDisposable
 {
-    public static readonly TimeSpan SolutionDebounce = TimeSpan.FromMilliseconds(150);
+    public static readonly TimeSpan SolutionDebounce = TimeSpan.FromMilliseconds(50);
     public static readonly TimeSpan DocumentDebounce = TimeSpan.FromMilliseconds(500);
 
     private readonly SolutionService _solutions;

@@ -309,6 +309,12 @@ public sealed partial class ShellHost
         {
             Workbench.Settings.SetWorkspaceFile(null);
         }
+        else if (solution.Trusted && solution.Projects.Any(p => p.Path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)))
+        {
+            // The C# language host would start after the design-time builds anyway; starting it with the solution
+            // overlaps its cold start with evaluation (test discovery from source needs it first).
+            _ = Languages.ClientAsync(CSharpLanguageId);
+        }
 
         UpdateSolutionStatus();
     }

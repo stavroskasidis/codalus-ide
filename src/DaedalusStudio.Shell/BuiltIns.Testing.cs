@@ -27,6 +27,9 @@ internal static partial class BuiltIns
     public static ToolWindowDescriptor TestToolWindow() =>
         new(TestExplorerViewModel.ToolWindowId, "Test Explorer", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "beaker" };
 
+    public static ToolWindowDescriptor CoverageToolWindow() =>
+        new(CoverageResultsViewModel.ToolWindowId, "Coverage Results", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "coverage" };
+
     public static IReadOnlyList<SettingDescriptor> TestingSettings()
     {
         var shell = ContributionSource.Shell;
@@ -82,6 +85,17 @@ internal static partial class BuiltIns
         Add("testing.newPlaylist", "New Playlist…", () => shell.AddToPlaylistAsync(shell.TestExplorer.SelectedKeys), "solutionOpen");
         Add("testing.importPlaylist", "Import Visual Studio Playlist…", shell.ImportVisualStudioPlaylistAsync, "solutionOpen");
         Add("testing.deletePlaylist", "Delete Playlist…", shell.DeletePlaylistAsync, "solutionOpen");
+        Add("testing.toggleCoverageColoring", "Toggle Coverage Coloring", () =>
+        {
+            shell.Tests.Coverage.IsVisible = !shell.Tests.Coverage.IsVisible;
+            return Task.CompletedTask;
+        }, "coverageAvailable");
+        Add("testing.exportCoverage", "Export Coverage (Cobertura)…", shell.ExportCoverageAsync, "coverageAvailable");
+        Add("testing.clearCoverage", "Clear Coverage", () =>
+        {
+            shell.Tests.Coverage.Clear();
+            return Task.CompletedTask;
+        }, "coverageAvailable");
     }
 
     public static void RegisterTestingMenus(MenuRegistry menus)
@@ -111,6 +125,10 @@ internal static partial class BuiltIns
             Item("testing.deletePlaylist", "3-playlists", 3),
             Item("testing.exportTrx", "4-results", 1),
             Item("testing.importTrx", "4-results", 2),
+            Item(ViewCommandPrefix + CoverageResultsViewModel.ToolWindowId, "5-coverage", 1, "Coverage Results"),
+            Item("testing.toggleCoverageColoring", "5-coverage", 2),
+            Item("testing.exportCoverage", "5-coverage", 3),
+            Item("testing.clearCoverage", "5-coverage", 4),
 
             // The editor's context menu: navigation and refactoring first, then tests.
             Context("editor.action.revealDefinition", "1-navigate", 1),

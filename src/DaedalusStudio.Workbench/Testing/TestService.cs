@@ -68,6 +68,9 @@ public sealed class TestService : ITestSink, IDisposable
     /// <summary>A run finished (results are in <see cref="TestRunRecord.Results"/>).</summary>
     public event EventHandler<TestRunRecord>? RunFinished;
 
+    /// <summary>The latest coverage (ADR 0011), fed by <see cref="RunCoverage"/>.</summary>
+    public CoverageStore Coverage { get; } = new();
+
     /// <summary>Results kept per test (current plus earlier runs).</summary>
     public int HistoryLength { get; set; } = 10;
 
@@ -367,7 +370,11 @@ public sealed class TestService : ITestSink, IDisposable
         }
     }
 
-    public void RunCoverage(TestRunCoverageParams coverage) => CoverageReported?.Invoke(this, coverage);
+    public void RunCoverage(TestRunCoverageParams coverage)
+    {
+        Coverage.Add(coverage);
+        CoverageReported?.Invoke(this, coverage);
+    }
 
     public void RunEnded(string runId)
     {

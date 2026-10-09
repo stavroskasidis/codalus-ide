@@ -32,9 +32,13 @@ internal static class CoverageTools
     /// Runs the test application under <c>coverlet.console</c>: it instruments the assemblies next to the tests, starts the
     /// application, and writes a Cobertura report when it exits.
     /// </summary>
+    /// <summary>Where the Cobertura report of one project and framework goes.</summary>
+    public static string OutputFile(TestTarget target, CoverageOptions coverage) =>
+        Path.Combine(coverage.OutputDirectory, target.ProjectName + "." + (target.TargetFramework ?? "default") + ".cobertura.xml");
+
     public static (string Program, List<string> Arguments) WrapWithConsole(TestTarget target, string program, IReadOnlyList<string> arguments, CoverageOptions coverage)
     {
-        var output = Path.Combine(coverage.OutputDirectory, target.ProjectName + "." + (target.TargetFramework ?? "default") + ".cobertura.xml");
+        var output = OutputFile(target, coverage);
         var wrapped = new List<string>
         {
             ConsolePath,

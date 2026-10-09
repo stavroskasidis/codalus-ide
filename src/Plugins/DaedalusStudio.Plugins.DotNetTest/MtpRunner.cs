@@ -46,12 +46,31 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
         var known = tests?.ToDictionary(t => t.Key, StringComparer.Ordinal) ?? [];
         var extra = new List<string>();
         string? coverageFile = null;
-        if (options.Mode == RunMode.Coverage && options.Coverage is { } coverage && CoverageTools.ProjectHasCoverletMtp(target))
+        if (options.Mode == RunMode.Coverage && options.Coverage is { } coverage)
         {
-            coverageFile = Path.Combine(coverage.OutputDirectory, target.ProjectName + "." + (target.TargetFramework ?? "default") + ".cobertura.xml");
-            extra.AddRange(["--coverlet", "--coverlet-output-format", "cobertura", "--coverlet-output", coverageFile]);
+            // coverlet.mtp writes the report from inside the app; otherwise coverlet.console (StartAsync) writes it after the app exits.
+            coverageFile = CoverageTools.OutputFile(target, coverage);
+            if (CoverageTools.ProjectHasCoverletMtp(target))
+            {
+                extra.AddRange(["--coverlet", "--coverlet-output-format", "cobertura", "--coverlet-output", coverageFile]);
+            }
         }
 
+        await RunSessionAsync(target, tests, known, options, extra, reporter, cancellationToken).ConfigureAwait(false);
+
+        // The session has ended, so the process (and the console wrapping it) has exited and written its report.
+        if (coverageFile is not null && File.Exists(coverageFile))
+        {
+            reporter.CoverageFile(coverageFile);
+        }
+        else if (coverageFile is not null)
+        {
+            log($"Coverage: no report at {coverageFile}.");
+        }
+    }
+
+    private async Task RunSessionAsync(TestTarget target, IReadOnlyList<RunnerTest>? tests, Dictionary<string, RunnerTest> known, RunOptions options, List<string> extra, IRunReporter reporter, CancellationToken cancellationToken)
+    {
         await using var session = await StartAsync(target, options, extra, cancellationToken).ConfigureAwait(false);
         session.Output += (_, text) => reporter.Output(text);
         await session.RequestAsync("testing/runTests", runId => Params(runId, tests?.Select(t => (JsonElement)t.Payload)), (node, _) =>
@@ -98,11 +117,6 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
                     break;
             }
         }, cancellationToken).ConfigureAwait(false);
-
-        if (coverageFile is not null && File.Exists(coverageFile))
-        {
-            reporter.CoverageFile(coverageFile);
-        }
     }
 
     private static JsonElement Params(string runId, IEnumerable<JsonElement>? tests)

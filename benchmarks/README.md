@@ -5,7 +5,7 @@
 ## Quick start
 
 ```bash
-dotnet run --project benchmarks/DaedalusStudio.Benchmarks.FixtureGen -- all samples
+dotnet run --project benchmarks/DaedalusStudio.Benchmarks.FixtureGen -- all samples   # Large100k, Solution50, Tests5k
 ```
 
 ```bash
@@ -38,6 +38,7 @@ The `shell` target is the published product shell in `artifacts/shell` (the publ
 | `editor-100k` | Open a copy of the 100k-line C# file, wait until ready plus 10 s, then (with `--allow-input`) type 200 characters at the end of the file every 60 ms and press PageDown 150 times every 50 ms. | `file_ready_ms`, `file_highlight_ms` (prototypes), `memory_file_*`, `typing_input_to_display_ms`, `scroll_input_to_display_ms`, `scroll_responses_over_50ms`, `scroll_responses_missing`, `typing_in_app_ms` (prototypes) |
 | `open-solution-50` | Open a restored copy of the 50-project solution. VS Code is excluded: without the proprietary C# Dev Kit it has no solution explorer. | `solution_ready_ms` (black-box), `solution_structure_ms` (shell: tree from the solution file), `solution_loaded_ms` (in-app: every project evaluated), `language_ready_ms` (shell: the C# language service compiled every project once; informational), `memory_solution_private_mb` |
 | `self-driven` | Instrumented targets (the shell), on any OS including CI. The app drives typing (300 keys, 40 ms apart, mid-file) and scrolling (230 lines/s for 10 s, then 5 go-to-line jumps) itself. | `selfdriven_typing_ms`, `selfdriven_scroll_frame_ms`, `selfdriven_jump_ms`, `startup_interactive_ms`, `file_highlight_ms` |
+| `test-explorer` | The shell only (in-app events): open a restored copy of `samples/Tests5k` (FixtureGen `tests`: 20 xUnit projects, 5,000 tests), wait until the Test Explorer lists every test from source, apply filters, then run one class. Rider and Visual Studio are compared by hand. | `test_tree_ms` (solution structure → every test listed, before any build), `test_filter_frame_ms` (filter → rendered frame), `test_first_result_ms` (Run → first result, build included; informational) |
 | `binary-size` | Static measurement. | `shell_mb`, `shell_zip_mb` and one `<helper>_mb` per helper folder (`pluginhost`, `buildhost`, `plugins`, `lshost`); IDEs: `install_mb` (informative) |
 
 ## Methods

@@ -14,7 +14,10 @@ internal sealed record RunOptions(int? Runs, bool AllowInput, TextWriter Log, bo
 /// </summary>
 internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 {
-    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "self-driven", "binary-size"];
+    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "self-driven", "test-explorer", "binary-size"];
+
+    /// <summary>The tests in samples/Tests5k (FixtureGen <c>tests</c>) as found in source: 20 projects × 250 (a theory is one test until a runner lists its cases).</summary>
+    private const int Tests5kLeaves = 20 * 10 * 25;
 
     private const int TypingKeystrokes = 200;
     private static readonly TimeSpan s_typingInterval = TimeSpan.FromMilliseconds(60);
@@ -30,6 +33,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
     public static bool Applies(Target target, string scenario) => target.SupportedScenarios?.Contains(scenario) != false && scenario switch
     {
         "self-driven" => target.IsPrototype,
+        "test-explorer" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
         "open-solution-50" => target.Name != "vscode", // VS Code has no solution explorer without proprietary C# Dev Kit.
         "cold-start" or "editor-100k" => target.IsPrototype || OperatingSystem.IsWindows() || target.Name == "vscode",
         _ => true,
@@ -63,6 +67,9 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 break;
             case "self-driven":
                 await SelfDrivenAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
+                break;
+            case "test-explorer":
+                await TestExplorerAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
                 break;
             case "binary-size":
                 BinarySize(target, result);
@@ -328,6 +335,49 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             var memory = ProcessTree.Memory(session.Process.Id);
             result.Add("memory_solution_private_mb", memory.PrivateBytes / 1048576.0);
             Log($"  {target.Name} open-solution-50 run {run}: loaded {Last(result, "solution_loaded_ms")} / ready {Last(result, "solution_ready_ms")} / language {Last(result, "language_ready_ms")} ms");
+        }
+    }
+
+    // ------------------------------------------------------------------ Test Explorer (M8)
+
+    private async Task TestExplorerAsync(Target target, ScenarioResult result, int runs, CancellationToken cancellationToken)
+    {
+        var source = Path.Combine(repoRoot, "samples", "Tests5k");
+        RequireFixture(source);
+        result.Notes.Add("In-app: test_tree_ms is from the solution's structure to the Test Explorer listing every test from source "
+                         + "(before design-time builds and builds); filter frames are self-driven; test_first_result_ms includes the build.");
+        for (var run = 0; run < runs; run++)
+        {
+            var work = NewWorkDir();
+            var copy = CopyDirectory(source, Path.Combine(work, "Tests5k"));
+            var solution = Path.Combine(copy, "Tests5k.slnx");
+            Machine.Run("dotnet", $"restore \"{solution}\" -v q");
+            await using var session = await LaunchAsync(target, new LaunchRequest(work, Solution: solution, Bench: "test-filter", ExitOn: "done"), cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await session.Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromMinutes(8), cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                result.Notes.Add($"run {run}: the scenario did not finish within 8 minutes");
+            }
+
+            var events = BenchEventLog.Read(session.EventsFile);
+            var structure = events.FirstOrDefault(e => e.Name == BenchEventNames.SolutionStructure);
+            var tree = events.FirstOrDefault(e => e.Name == BenchEventNames.TestTree && e.Field("tests") >= Tests5kLeaves);
+            if (structure is not null && tree is not null)
+            {
+                result.Add("test_tree_ms", (tree.WallMicros - structure.WallMicros) / 1000.0);
+            }
+
+            var frames = events.Where(e => e.Name == BenchEventNames.TestFilterFrame).Select(e => e.Field("frame_us") / 1000.0).ToList();
+            result.AddRange("test_filter_frame_ms", frames);
+            if (events.FirstOrDefault(e => e.Name == BenchEventNames.TestFirstResult) is { } first)
+            {
+                result.Add("test_first_result_ms", first.Field("elapsed_us") / 1000.0);
+            }
+
+            Log($"  {target.Name} test-explorer run {run}: tree {Last(result, "test_tree_ms")} ms, filter max {Max(result, "test_filter_frame_ms")} ms, first result {Last(result, "test_first_result_ms")} ms");
         }
     }
 

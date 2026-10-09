@@ -9,7 +9,7 @@ namespace DaedalusStudio.Plugins.DotNetTest;
 /// </summary>
 public sealed class DotNetTestPlugin : IDaedalusPlugin, IDisposable
 {
-    private static readonly TimeSpan s_rescanDelay = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan s_rescanDelay = TimeSpan.FromMilliseconds(50);
 
     private readonly SemaphoreSlim _scanGate = new(1, 1);
     private readonly Lock _gate = new();
@@ -123,6 +123,7 @@ public sealed class DotNetTestPlugin : IDaedalusPlugin, IDisposable
     internal async Task ScanAsync(CancellationToken cancellationToken)
     {
         await _scanGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             var solution = await _api.Workspace.GetSolutionAsync(cancellationToken).ConfigureAwait(false);
@@ -164,7 +165,8 @@ public sealed class DotNetTestPlugin : IDaedalusPlugin, IDisposable
                         tests.Candidates.Remove(removed);
                     }
 
-                    foreach (var uri in files)
+                    // Documents already scanned are kept (edits arrive through DocumentsChanged).
+                    foreach (var uri in files.Where(f => !tests.Candidates.ContainsKey(f)))
                     {
                         if (!uris.TryGetValue(uri, out var owners))
                         {
@@ -176,6 +178,7 @@ public sealed class DotNetTestPlugin : IDaedalusPlugin, IDisposable
                 }
             }
 
+            var listed = System.Diagnostics.Stopwatch.GetTimestamp();
             if (uris.Count > 0)
             {
                 var found = await _api.Workspace.FindTestCandidatesAsync([.. uris.Keys], cancellationToken).ConfigureAwait(false);
@@ -191,9 +194,16 @@ public sealed class DotNetTestPlugin : IDaedalusPlugin, IDisposable
                 }
             }
 
+            var parsed = System.Diagnostics.Stopwatch.GetTimestamp();
             lock (_gate)
             {
                 _tree.Update(_projects.Values.ToList());
+            }
+
+            if (uris.Count > 0)
+            {
+                Log($"Scanned {testProjects.Count} test projects ({uris.Count} new documents) in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms: "
+                    + $"solution {System.Diagnostics.Stopwatch.GetElapsedTime(started, listed).TotalMilliseconds:0} ms, sources {System.Diagnostics.Stopwatch.GetElapsedTime(listed, parsed).TotalMilliseconds:0} ms, tree {System.Diagnostics.Stopwatch.GetElapsedTime(parsed).TotalMilliseconds:0} ms.");
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

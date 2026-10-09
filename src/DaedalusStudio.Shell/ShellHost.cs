@@ -71,7 +71,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -283,6 +283,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             BuiltIns.PluginsWindow => PluginList,
             SolutionExplorerViewModel.ToolWindowId => Explorer,
             TestExplorerViewModel.ToolWindowId => OpenTestExplorer(),
+            CoverageResultsViewModel.ToolWindowId => CoverageResults,
             ErrorListViewModel.ToolWindowId => ErrorList,
             FindResultsViewModel.ToolWindowId => FindResults,
             VariablesViewModel.LocalsWindowId => Locals,

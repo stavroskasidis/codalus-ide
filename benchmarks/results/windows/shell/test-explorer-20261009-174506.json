@@ -1,0 +1,122 @@
+{
+  "target": "shell",
+  "scenario": "test-explorer",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-09T17:45:06.1272161+00:00",
+  "method": "instrumented\u002Bblack-box",
+  "samples": {
+    "test_tree_ms": [
+      990.917,
+      962.864,
+      1032.757,
+      933.222,
+      948.931
+    ],
+    "test_filter_frame_ms": [
+      8.791,
+      2.754,
+      4.566,
+      4.006,
+      3.043,
+      3.844,
+      2.683,
+      1.323,
+      5.752,
+      1.367,
+      4.511,
+      19.838,
+      6.318,
+      9.999,
+      6.789,
+      16.746,
+      4.545,
+      2.373,
+      8.42,
+      1.682,
+      5.851,
+      2.57,
+      4.167,
+      3.79,
+      5.853,
+      1.562,
+      5.538,
+      1.364,
+      3.11,
+      5.224,
+      3.197,
+      4.339,
+      2.888,
+      6.425,
+      3.663,
+      1.877,
+      3.846,
+      1.754,
+      3.678,
+      4.929,
+      7.149,
+      2.755,
+      4.287,
+      3.871,
+      2.928,
+      2.883,
+      2.692,
+      1.309,
+      6.489,
+      1.707
+    ],
+    "test_first_result_ms": [
+      3460.345,
+      3528.884,
+      2886.469,
+      2927.027,
+      3074.645
+    ]
+  },
+  "summary": {
+    "test_tree_ms": {
+      "n": 5,
+      "min": 933.222,
+      "p50": 962.864,
+      "p95": 1032.757,
+      "p99": 1032.757,
+      "max": 1032.757,
+      "mean": 973.7382,
+      "stdDev": 39.222244271586526
+    },
+    "test_filter_frame_ms": {
+      "n": 50,
+      "min": 1.309,
+      "p50": 3.844,
+      "p95": 9.999,
+      "p99": 19.838,
+      "max": 19.838,
+      "mean": 4.620900000000001,
+      "stdDev": 3.48576079155159
+    },
+    "test_first_result_ms": {
+      "n": 5,
+      "min": 2886.469,
+      "p50": 3074.645,
+      "p95": 3528.884,
+      "p99": 3528.884,
+      "max": 3528.884,
+      "mean": 3175.4739999999997,
+      "stdDev": 300.61038064910525
+    }
+  },
+  "notes": [
+    "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+    "In-app: test_tree_ms is from the solution\u0027s structure to the Test Explorer listing every test from source (before design-time builds and builds); filter frames are self-driven; test_first_result_ms includes the build."
+  ],
+  "discardedRuns": 0
+}

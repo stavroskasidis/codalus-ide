@@ -20,6 +20,7 @@ benchmarks/.work/
 # Generated fixtures (deterministic; regenerate with FixtureGen)
 samples/Large100k/
 samples/Solution50/
+samples/Tests5k/
 
 # OS
 .DS_Store

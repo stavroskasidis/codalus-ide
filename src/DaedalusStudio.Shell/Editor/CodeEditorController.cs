@@ -52,6 +52,7 @@ public sealed class CodeEditorController : IDisposable
     private readonly DebugLineRenderer _debugLines;
     private readonly GitChangeMargin _gitMargin = new();
     private readonly TestMargin _testMargin;
+    private readonly CoverageMargin _coverageMargin;
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private BlameMargin? _blameMargin;
     private string? _indexText;
@@ -98,6 +99,8 @@ public sealed class CodeEditorController : IDisposable
         services.Debugger.FrameChanged += OnDebuggerChanged;
         services.Debugger.Stopped += OnDebuggerStopped;
         editor.TextArea.LeftMargins.Add(_gitMargin);
+        _coverageMargin = new CoverageMargin(() => Model.Path, services.Tests.Coverage);
+        editor.TextArea.LeftMargins.Add(_coverageMargin);
         _gitTimer.Tick += OnGitTimer;
         services.Git.IndexChanged += OnGitIndexChanged;
         document.TextChanged += OnGitTextChanged;
@@ -143,6 +146,9 @@ public sealed class CodeEditorController : IDisposable
 
     /// <summary>The test margin (tests and the headless UI test).</summary>
     public TestMargin TestMargin => _testMargin;
+
+    /// <summary>The coverage coloring (tests and the headless UI test).</summary>
+    public CoverageMargin CoverageMargin => _coverageMargin;
 
     private void OnContextRequested(object? sender, ContextRequestedEventArgs e)
     {
@@ -254,6 +260,7 @@ public sealed class CodeEditorController : IDisposable
         ScheduleFolding(TimeSpan.FromMilliseconds(500));
         _highlights.Set(HighlightRenderer.Kind.Read, []);
         _highlights.Set(HighlightRenderer.Kind.Write, []);
+        _coverageMargin.MarkEdited();
         if (_dockable.IsPreview)
         {
             _dockable.IsPreview = false; // editing keeps a preview tab open
@@ -1227,6 +1234,8 @@ public sealed class CodeEditorController : IDisposable
         _breakpointMargin.Detach();
         Editor.TextArea.LeftMargins.Remove(_testMargin);
         _testMargin.Detach();
+        Editor.TextArea.LeftMargins.Remove(_coverageMargin);
+        _coverageMargin.Detach();
         Editor.TextArea.ContextRequested -= OnContextRequested;
         _services.Debugger.StateChanged -= OnDebuggerChanged;
         _services.Debugger.FrameChanged -= OnDebuggerChanged;

@@ -58,6 +58,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          # samples/Testing has a multi-targeted test project (net9.0;net10.0).
+          dotnet-version: 9.0.x
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages

@@ -21,8 +21,8 @@ namespace DaedalusStudio.Shell.Infrastructure;
 
 /// <summary>
 /// The end-to-end smoke test (<c>--smoke-test samples</c>): drives the real, windowed app through one feature of each
-/// MVP milestone (M1–M6) on a copy of <c>samples/BuildAndRun</c>, with the hosts, plugins and debugger it was installed
-/// with. It is what CI runs on the published Native AOT build and on the release packages of every OS, so it catches what
+/// milestone (M1–M6 on a copy of <c>samples/BuildAndRun</c>, M8 on part of <c>samples/Testing</c>), with the hosts,
+/// plugins and debugger it was installed with. It is what CI runs on the published Native AOT build and on the release packages of every OS, so it catches what
 /// the in-process headless tests cannot: trimming and AOT breaks, the installed folder layout, and the real windowing
 /// platform. Results go to <c>smoke-test.json</c>, <c>smoke-test.md</c> and screenshots in the logs folder, and to
 /// standard output; the process exits with 0 when every step passed.
@@ -38,6 +38,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private string _work = string.Empty;
     private string _folder = string.Empty;
+    private string _testing = string.Empty;
 
     private sealed record StepResult(string Id, string Milestone, string Title, string Outcome, double Seconds, string? Error);
 
@@ -368,7 +369,46 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await shell.Git.CreateBranchAsync("smoke/branch", switchTo: true).ConfigureAwait(true);
             await WaitAsync(() => shell.Git.Status is { Branch: "smoke/branch" }, "the new branch is checked out").ConfigureAwait(true);
         }, "projects.open").ConfigureAwait(true);
+
+        // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
+        await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
+        {
+            var solution = PrepareTestingFixture();
+            await shell.OpenSolutionAsync(solution).ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId);
+            await WaitAsync(() => TestClass("XunitV2Tests") is not null && TestClass("XunitV3Tests") is not null, "both test projects' CalculatorTests are listed", 300).ConfigureAwait(true);
+            await WaitAsync(() => shell.TestExplorer.Rows.Any(r => r.Label == "XunitV3Tests"), "the Test Explorer shows them").ConfigureAwait(true);
+        }, "projects.open").ConfigureAwait(true);
+
+        await StepAsync("testing.run", "M8", "Running tests on VSTest and MTP shows outcomes in the explorer and the editor", async () =>
+        {
+            var classes = new[] { TestClass("XunitV2Tests")!, TestClass("XunitV3Tests")! };
+            await shell.RunTestsAsync(Workbench.Testing.TestRunKind.Run, [.. classes.Select(c => c.Key)]).ConfigureAwait(true);
+            await WaitAsync(() => !shell.Tests.IsRunning && classes.All(c => Outcome(c, "Adds") == Workbench.Testing.TestOutcome.Passed && Outcome(c, "Fails") == Workbench.Testing.TestOutcome.Failed), "Adds passes and Fails fails in both projects", 300).ConfigureAwait(true);
+
+            var tests = await OpenAsync(Path.Combine(_testing, "tests", "XunitV3Tests", "CalculatorTests.cs")).ConfigureAwait(true);
+            await WaitAsync(() => tests.TestMargin.Glyphs.Values.Any(n => n.Label == "Fails"), "the test margin marks the tests").ConfigureAwait(true);
+        }, "testing.discover").ConfigureAwait(true);
+
+        await StepAsync("testing.coverage", "M8", "Run with Coverage colors the code under test and fills Coverage Results", async () =>
+        {
+            var classes = new[] { TestClass("XunitV2Tests")!, TestClass("XunitV3Tests")! };
+            await shell.RunTestsAsync(Workbench.Testing.TestRunKind.Coverage, [.. classes.Select(c => c.Key)]).ConfigureAwait(true);
+            var calculator = Path.Combine(_testing, "src", "Calculator", "Calculator.cs");
+            var uri = LanguageServices.Protocol.DocumentUris.FromPath(calculator);
+            await WaitAsync(() => !shell.Tests.IsRunning && shell.Tests.Coverage.LinesOf(uri) is { Count: > 0 } lines && lines.Any(l => l.Hits == 0) && lines.Any(l => l.Hits > 0), "Calculator.cs has covered and uncovered lines", 300).ConfigureAwait(true);
+
+            var editor = await OpenAsync(calculator).ConfigureAwait(true);
+            await WaitAsync(() => editor.CoverageMargin.Lines.Count > 0, "the editor colors the lines").ConfigureAwait(true);
+            await WaitAsync(() => shell.Layout.IsVisible(CoverageResultsViewModel.ToolWindowId) && shell.CoverageResults.Rows.Any(r => r.Label == "Arithmetic"), "Coverage Results lists the class").ConfigureAwait(true);
+        }, "testing.run").ConfigureAwait(true);
     }
+
+    private Workbench.Testing.TestNode? TestClass(string project) =>
+        shell.Tests.Read(roots => roots.FirstOrDefault(r => r.Label == project)?.SelfAndDescendants().FirstOrDefault(n => n.Label == "CalculatorTests"));
+
+    private Workbench.Testing.TestOutcome Outcome(Workbench.Testing.TestNode cls, string method) =>
+        shell.Tests.Read(_ => cls.Children.FirstOrDefault(c => c.Label == method)?.Outcome ?? Workbench.Testing.TestOutcome.None);
 
     // ------------------------------------------------------------------ steps
 
@@ -446,6 +486,26 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         Git("config", "core.autocrlf", "false");
         Git("add", ".");
         Git("commit", "-q", "-m", "initial");
+    }
+
+    /// <summary>
+    /// Copies samples/Testing next to BuildAndRun and returns a solution with the code under test and the two xUnit
+    /// projects (one per test platform), so the step builds three projects rather than eight.
+    /// </summary>
+    private string PrepareTestingFixture()
+    {
+        Check(File.Exists(Path.Combine(samples, "Testing", "Testing.slnx")), $"the samples folder {samples} has Testing");
+        _testing = Path.Combine(_work, "Testing");
+        Copy(Path.Combine(samples, "Testing"), _testing);
+        var solution = Path.Combine(_testing, "Smoke.slnx");
+        File.WriteAllText(solution, """
+            <Solution>
+              <Project Path="src/Calculator/Calculator.csproj" />
+              <Project Path="tests/XunitV2Tests/XunitV2Tests.csproj" />
+              <Project Path="tests/XunitV3Tests/XunitV3Tests.csproj" />
+            </Solution>
+            """);
+        return solution;
     }
 
     private static void Copy(string source, string target)
