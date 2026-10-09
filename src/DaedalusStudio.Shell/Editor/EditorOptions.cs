@@ -115,4 +115,13 @@ public interface IEditorServices
 
     /// <summary>Gutter change markers and blame (ADR 0008).</summary>
     DaedalusStudio.Workbench.Git.GitService Git { get; }
+
+    /// <summary>Tests and their outcomes, for the test margin (ADR 0010).</summary>
+    DaedalusStudio.Workbench.Testing.TestService Tests { get; }
+
+    /// <summary>The test margin's menu for a test (Run, Debug, Run with Coverage, Show in Test Explorer).</summary>
+    void ShowTestMenu(DaedalusStudio.Workbench.Testing.TestNode test, Avalonia.Controls.Control anchor);
+
+    /// <summary>The editor's context menu (the <c>editor/context</c> menu location) at the caret.</summary>
+    void ShowEditorContextMenu(CodeEditorController editor, Avalonia.Controls.Control anchor);
 }

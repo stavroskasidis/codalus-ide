@@ -4,6 +4,7 @@
     <!-- Built so the tests can launch them; not referenced as assemblies. -->
     <ProjectReference Include="..\..\src\DaedalusStudio.Plugins.Host\DaedalusStudio.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.Welcome\DaedalusStudio.Plugins.Welcome.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.DotNetTest\DaedalusStudio.Plugins.DotNetTest.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\DaedalusStudio.Projects.Host\DaedalusStudio.Projects.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\DaedalusStudio.LanguageServices.Host\DaedalusStudio.LanguageServices.Host.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>

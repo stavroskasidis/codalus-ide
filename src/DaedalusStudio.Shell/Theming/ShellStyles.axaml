@@ -109,6 +109,22 @@
   <Style Selector="controls|Icon.error">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Error}" />
   </Style>
+  <!-- Test outcomes: color and shape both carry the outcome (accessibility). -->
+  <Style Selector="controls|Icon.passed">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Diff.Added}" />
+  </Style>
+  <Style Selector="controls|Icon.failed">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Error}" />
+  </Style>
+  <Style Selector="controls|Icon.skipped">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Warning}" />
+  </Style>
+  <Style Selector="controls|Icon.running">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Info}" />
+  </Style>
+  <Style Selector="controls|Icon.none">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
   <!-- Quick Info and diagnostics popup in the editor. -->
   <Style Selector="Border.editorHover">
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />

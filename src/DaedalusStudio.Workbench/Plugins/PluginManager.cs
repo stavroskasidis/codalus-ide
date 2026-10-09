@@ -634,6 +634,7 @@ public sealed class PluginManager : IAsyncDisposable
         {
             var json = PluginJsonContext.Default;
             var workbench = _manager._workbench;
+            connection.HandlerFailed += (_, ex) => _manager.PluginLog.AppendLine($"[{_group}] a message from the plugin host failed in the shell: {ex}");
 
             connection.OnNotification(PluginMethods.RegisterCommand, json.CommandRegistrationParams, p =>
             {

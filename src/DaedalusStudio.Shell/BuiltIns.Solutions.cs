@@ -15,7 +15,7 @@ internal static partial class BuiltIns
     public const string SolutionKeybindings = """
         [
           { "key": "primary+shift+o", "command": "workbench.openSolution" },
-          { "key": "primary+r", "command": "workbench.openRecent" },
+          { "key": "primary+k primary+r", "command": "workbench.openRecent" },
           { "key": "f2", "command": "explorer.rename", "when": "focusedView == solutionExplorer" },
           { "key": "delete", "command": "explorer.delete", "when": "focusedView == solutionExplorer" },
           { "mac": "cmd+backspace", "command": "explorer.delete", "when": "focusedView == solutionExplorer" },

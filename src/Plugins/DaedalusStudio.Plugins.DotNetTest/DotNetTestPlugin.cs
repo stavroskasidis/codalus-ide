@@ -494,6 +494,12 @@ public sealed class DotNetTestPlugin : IDaedalusPlugin, IDisposable
                 }
             }
 
+            Log($"{mode}: {string.Join(", ", selection.Select(s => $"{s.Key.ProjectName}{(s.Key.TargetFramework is { } tfm ? " (" + tfm + ")" : string.Empty)}: {(s.Value is null ? "all tests" : s.Value.Count + " tests")}"))}");
+            if (selection.Count == 0)
+            {
+                run.AppendOutput("No tests matched the selection. Build the solution so the runners can list its tests.\n");
+            }
+
             var vstest = selection.Where(s => s.Key.Platform != "mtp").ToList();
             if (vstest.Count > 0)
             {

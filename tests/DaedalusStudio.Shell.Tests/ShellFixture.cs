@@ -20,7 +20,7 @@ public static class TestAppBuilder
 /// <summary>A shell and its main window on a fresh user-data directory, running headless.</summary>
 internal sealed class ShellFixture : IAsyncDisposable
 {
-    private ShellFixture(string userData)
+    private ShellFixture(string userData, string? builtInPlugins)
     {
         UserData = userData;
         Environment.SetEnvironmentVariable("DAEDALUS_PLUGINHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.Plugins.Host", "bin", Configuration, "net10.0", "daedalus-pluginhost.dll"));
@@ -31,7 +31,7 @@ internal sealed class ShellFixture : IAsyncDisposable
         {
             UserDataDir = userData,
             WatchFiles = false,
-            BuiltInPluginsDir = Path.Combine(RepoRoot, "src", "Plugins", "DaedalusStudio.Plugins.Welcome", "bin", Configuration, "net10.0"),
+            BuiltInPluginsDir = builtInPlugins ?? PluginBin("DaedalusStudio.Plugins.Welcome"),
         });
         Window = new MainWindow(Shell);
         Window.Show();
@@ -45,6 +45,9 @@ internal sealed class ShellFixture : IAsyncDisposable
     public MainWindow Window { get; }
 
     internal static string RepoRoot => Metadata("DaedalusRepoRoot");
+
+    /// <summary>A built-in plugin's build output (a folder with its manifest).</summary>
+    public static string PluginBin(string project) => Path.Combine(RepoRoot, "src", "Plugins", project, "bin", Configuration, "net10.0");
 
     private static string Configuration => Metadata("DaedalusConfiguration");
 
@@ -93,8 +96,8 @@ internal sealed class ShellFixture : IAsyncDisposable
         }
     }
 
-    public static ShellFixture Create(string? userData = null) =>
-        new(userData ?? Path.Combine(DaedalusStudio.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-shell-" + Guid.NewGuid().ToString("N")));
+    public static ShellFixture Create(string? userData = null, string? builtInPlugins = null) =>
+        new(userData ?? Path.Combine(DaedalusStudio.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-shell-" + Guid.NewGuid().ToString("N")), builtInPlugins);
 
     private static string Metadata(string key) =>
         typeof(ShellFixture).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;

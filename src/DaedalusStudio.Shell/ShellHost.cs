@@ -31,6 +31,12 @@ public interface IShellWindow
 
     /// <summary>Asks for a project file to add to the solution (null: cancelled).</summary>
     Task<string?> PickProjectAsync();
+
+    /// <summary>Asks for an existing file (null: cancelled).</summary>
+    Task<string?> PickFileAsync(string title, string filterName, string[] patterns);
+
+    /// <summary>Asks where to save a file (null: cancelled).</summary>
+    Task<string?> SaveFileAsync(string title, string suggestedName, string filterName, string[] patterns);
 }
 
 /// <summary>
@@ -54,7 +60,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings()]);
+        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings()]);
         Theme = new ThemeService(app, Workbench);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
         {
@@ -62,7 +68,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -82,6 +88,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeGit();
         InitializeEditor();
         InitializeRefactoring();
+        InitializeTesting();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -98,12 +105,14 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterBuildCommands(this);
         BuiltIns.RegisterDebugCommands(this);
         BuiltIns.RegisterGitCommands(this);
+        BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterMenus(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
         BuiltIns.RegisterEditorMenus(Workbench.Menus);
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
         BuiltIns.RegisterDebugMenus(Workbench.Menus);
         BuiltIns.RegisterGitMenus(Workbench.Menus);
+        BuiltIns.RegisterTestingMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
         Workbench.LoadUserKeybindings();
         SyncViewCommands();
@@ -251,6 +260,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             BuiltIns.NotificationsWindow => Notifications,
             BuiltIns.PluginsWindow => PluginList,
             SolutionExplorerViewModel.ToolWindowId => Explorer,
+            TestExplorerViewModel.ToolWindowId => OpenTestExplorer(),
             ErrorListViewModel.ToolWindowId => ErrorList,
             FindResultsViewModel.ToolWindowId => FindResults,
             VariablesViewModel.LocalsWindowId => Locals,

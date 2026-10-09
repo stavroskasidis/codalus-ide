@@ -46,6 +46,7 @@ public sealed class ViewLocator : IDataTemplate
         TreeToolViewModel vm => new TreeToolView { DataContext = vm },
         MarkdownToolViewModel vm => new MarkdownToolView { DataContext = vm },
         SolutionExplorerViewModel vm => new SolutionExplorerView { DataContext = vm },
+        TestExplorerViewModel vm => new TestExplorerView { DataContext = vm },
         ErrorListViewModel vm => new ErrorListView { DataContext = vm },
         FindResultsViewModel vm => new FindResultsView { DataContext = vm },
         VariablesViewModel vm => new VariablesView { DataContext = vm },

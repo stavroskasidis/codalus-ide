@@ -146,6 +146,19 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     public Task<string?> PickProjectAsync() => PickAsync("Add Existing Project", "Projects", ["*.csproj", "*.fsproj", "*.vbproj"]);
 
+    public Task<string?> PickFileAsync(string title, string filterName, string[] patterns) => PickAsync(title, filterName, patterns);
+
+    public async Task<string?> SaveFileAsync(string title, string suggestedName, string filterName, string[] patterns)
+    {
+        var file = await StorageProvider.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
+        {
+            Title = title,
+            SuggestedFileName = suggestedName,
+            FileTypeChoices = [new Avalonia.Platform.Storage.FilePickerFileType(filterName) { Patterns = patterns }],
+        }).ConfigureAwait(true);
+        return file?.TryGetLocalPath();
+    }
+
     private async Task<string?> PickAsync(string title, string filterName, string[] patterns)
     {
         var files = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions

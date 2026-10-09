@@ -290,7 +290,18 @@ public sealed class TestService : ITestSink, IDisposable
                 if (output.ItemId is { } itemId)
                 {
                     var key = TestNode.KeyOf(controller.Id, itemId);
-                    _pendingOutput[key] = _pendingOutput.GetValueOrDefault(key) + output.Text;
+                    if (run.Results.TryGetValue(key, out var finished) && controller.Index.TryGetValue(itemId, out var finishedNode))
+                    {
+                        // Output reported after the test's result belongs to that result.
+                        var updated = finished with { Output = finished.Output + output.Text };
+                        run.Results[key] = updated;
+                        finishedNode.Result = updated;
+                        ReplaceHistory(key, finished, updated);
+                    }
+                    else
+                    {
+                        _pendingOutput[key] = _pendingOutput.GetValueOrDefault(key) + output.Text;
+                    }
                 }
             }
 
@@ -333,6 +344,14 @@ public sealed class TestService : ITestSink, IDisposable
     }
 
     private readonly Dictionary<string, string> _pendingOutput = new(StringComparer.Ordinal);
+
+    private void ReplaceHistory(string key, TestResult old, TestResult updated)
+    {
+        if (_history.TryGetValue(key, out var list) && list.IndexOf(old) is var index and >= 0)
+        {
+            list[index] = updated;
+        }
+    }
 
     private void AddHistory(string key, TestResult result)
     {

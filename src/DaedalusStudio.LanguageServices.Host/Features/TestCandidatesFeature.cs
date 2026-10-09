@@ -99,7 +99,7 @@ internal static class TestCandidatesFeature
                     method.Identifier.ValueText,
                     typeName,
                     ns,
-                    Positions.ToRange(text, method.Span),
+                    Positions.ToRange(text, WithoutAttributes(method)),
                     Positions.ToRange(text, method.Identifier.Span),
                     parameterized));
             }
@@ -111,7 +111,7 @@ internal static class TestCandidatesFeature
                     type.Identifier.ValueText,
                     typeName,
                     ns,
-                    Positions.ToRange(text, type.Span),
+                    Positions.ToRange(text, WithoutAttributes(type)),
                     Positions.ToRange(text, type.Identifier.Span),
                     Parameterized: false));
                 results.AddRange(methods);
@@ -119,6 +119,15 @@ internal static class TestCandidatesFeature
         }
 
         return [.. results];
+    }
+
+    /// <summary>The declaration from its modifiers (or keyword) on: editor glyphs go on the declaration's line, not an attribute's.</summary>
+    private static TextSpan WithoutAttributes(MemberDeclarationSyntax member)
+    {
+        var start = member.AttributeLists.Count > 0
+            ? member.AttributeLists[^1].GetLastToken().GetNextToken().SpanStart
+            : member.SpanStart;
+        return TextSpan.FromBounds(Math.Min(start, member.Span.End), member.Span.End);
     }
 
     private static string? TestAttribute(SyntaxList<AttributeListSyntax> lists)

@@ -35,6 +35,7 @@
     <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Welcome\DaedalusStudio.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Templates\DaedalusStudio.Plugins.Templates.csproj" PluginId="daedalus.templates" />
+    <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.DotNetTest\DaedalusStudio.Plugins.DotNetTest.csproj" PluginId="daedalus.dotnettest" />
     <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
   </ItemGroup>
 

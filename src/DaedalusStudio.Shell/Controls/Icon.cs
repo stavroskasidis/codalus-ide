@@ -96,6 +96,18 @@ public static class IconSet
         ["trash"] = "M2.5,4 H13.5 M6,4 V2.5 H10 V4 M4,4 L4.75,14 H11.25 L12,4 M6.75,6.5 V11.5 M9.25,6.5 V11.5",
         ["layout"] = "M1.5,2.5 H14.5 V13.5 H1.5 Z M5.5,2.5 V13.5 M5.5,10 H14.5",
         ["dot"] = Circle(8, 8, 2),
+
+        // Test outcomes (Test Explorer, editor margin): colored by the test-* icon classes.
+        ["test-passed"] = Circle(8, 8, 6) + "M5,8.25 L7.25,10.5 L11,6",
+        ["test-failed"] = Circle(8, 8, 6) + "M5.75,5.75 L10.25,10.25 M10.25,5.75 L5.75,10.25",
+        ["test-skipped"] = Circle(8, 8, 6) + "M5,8 H11",
+        ["test-running"] = Circle(8, 8, 6) + "M8,4.5 V8 L10.5,9.5",
+        ["test-none"] = Circle(8, 8, 6),
+        ["beaker"] = "M6,1.5 H10 M6.75,1.5 V6 L2.75,13 C2.4,13.7 2.9,14.5 3.7,14.5 H12.3 C13.1,14.5 13.6,13.7 13.25,13 L9.25,6 V1.5 M4.5,10 H11.5",
+        ["run-all"] = "M2.5,2.5 L8.5,6.5 L2.5,10.5 Z M7.5,5.5 L13.5,9.5 L7.5,13.5",
+        ["filter"] = "M1.5,2.5 H14.5 L9.5,8.5 V13.5 L6.5,12 V8.5 Z",
+        ["collapse-all"] = "M3.5,5.5 L8,10 L12.5,5.5 M2,2.5 H14",
+        ["coverage"] = "M2.5,13.5 V2.5 M2.5,13.5 H13.5 M5,11 V8 M8,11 V5 M11,11 V9.5",
         ["solution"] = "M8,1.5 L14.5,8 L8,14.5 L1.5,8 Z M8,5 L11,8 L8,11 L5,8 Z",
         ["project"] = "M2.5,4.5 L8,1.75 L13.5,4.5 V11.5 L8,14.25 L2.5,11.5 Z M2.5,4.5 L8,7.25 L13.5,4.5 M8,7.25 V14.25",
         ["package"] = "M2.5,5 L8,2.25 L13.5,5 V11 L8,13.75 L2.5,11 Z M2.5,5 L8,7.75 L13.5,5 M8,7.75 V13.75 M5.25,3.6 L10.75,6.4",

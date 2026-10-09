@@ -119,6 +119,7 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
             }
 
             await handler.Completed.WaitAsync(cancellationToken.IsCancellationRequested ? CancellationToken.None : cancellationToken).ConfigureAwait(false);
+            log($"VSTest run finished: {handler.Reported} results.");
         }
         finally
         {
@@ -351,8 +352,11 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
         private readonly TaskCompletionSource _completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Dictionary<Guid, RunnerTest> _known = selected?.ToDictionary(t => ((TestCase)t.Payload).Id) ?? [];
         private readonly HashSet<Guid> _started = [];
+        private int _reported;
 
         public Task Completed => _completed.Task;
+
+        public int Reported => Volatile.Read(ref _reported);
 
         public void HandleTestRunStatsChange(TestRunChangedEventArgs? testRunChangedArgs)
         {
@@ -443,6 +447,7 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
 
         private void Report(VsTestResult result)
         {
+            Interlocked.Increment(ref _reported);
             if (Resolve(result.TestCase) is not { } test || Reporter(test) is not { } reporter)
             {
                 return;

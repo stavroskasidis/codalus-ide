@@ -51,6 +51,7 @@ public sealed class CodeEditorController : IDisposable
     private readonly BreakpointMargin _breakpointMargin;
     private readonly DebugLineRenderer _debugLines;
     private readonly GitChangeMargin _gitMargin = new();
+    private readonly TestMargin _testMargin;
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private BlameMargin? _blameMargin;
     private string? _indexText;
@@ -88,6 +89,9 @@ public sealed class CodeEditorController : IDisposable
         view.BackgroundRenderers.Add(_markers);
         _breakpointMargin = new BreakpointMargin(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine, relocate: attach);
         editor.TextArea.LeftMargins.Insert(0, _breakpointMargin);
+        _testMargin = new TestMargin(() => Model.Path, services.Tests, services.ShowTestMenu);
+        editor.TextArea.LeftMargins.Insert(1, _testMargin);
+        editor.TextArea.ContextRequested += OnContextRequested;
         _debugLines = new DebugLineRenderer(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine);
         view.BackgroundRenderers.Insert(0, _debugLines);
         services.Debugger.StateChanged += OnDebuggerChanged;
@@ -136,6 +140,26 @@ public sealed class CodeEditorController : IDisposable
     }
 
     public TextEditor Editor { get; }
+
+    /// <summary>The test margin (tests and the headless UI test).</summary>
+    public TestMargin TestMargin => _testMargin;
+
+    private void OnContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        // Right-clicking outside the selection moves the caret there first, as in other editors.
+        if (e.TryGetPosition(Editor.TextArea.TextView, out var point)
+            && Editor.TextArea.TextView.GetPosition(point + Editor.TextArea.TextView.ScrollOffset) is { } position)
+        {
+            var offset = Model.Text.GetOffset(position.Location);
+            if (Editor.SelectionLength == 0 || offset < Editor.SelectionStart || offset > Editor.SelectionStart + Editor.SelectionLength)
+            {
+                Editor.TextArea.Caret.Offset = offset;
+            }
+        }
+
+        _services.ShowEditorContextMenu(this, Editor.TextArea);
+        e.Handled = true;
+    }
 
     public CodeDocument Model => _dockable.Model;
 
@@ -1201,6 +1225,9 @@ public sealed class CodeEditorController : IDisposable
         view.BackgroundRenderers.Remove(_debugLines);
         Editor.TextArea.LeftMargins.Remove(_breakpointMargin);
         _breakpointMargin.Detach();
+        Editor.TextArea.LeftMargins.Remove(_testMargin);
+        _testMargin.Detach();
+        Editor.TextArea.ContextRequested -= OnContextRequested;
         _services.Debugger.StateChanged -= OnDebuggerChanged;
         _services.Debugger.FrameChanged -= OnDebuggerChanged;
         _services.Debugger.Stopped -= OnDebuggerStopped;

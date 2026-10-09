@@ -96,7 +96,8 @@ public class TestCandidatesTests
 
         var method = Assert.Single(candidates, c => c.Kind == TestCandidateKinds.Method);
         Assert.Null(method.Namespace);
-        Assert.Equal(new Position(2, 4), method.Range.Start);
+        Assert.Equal(new Position(3, 4), method.Range.Start); // after the attributes
+        Assert.Equal(new Position(3, 26), method.Range.End);
         Assert.Equal(new Position(3, 16), method.SelectionRange.Start);
         Assert.Equal(new Position(3, 20), method.SelectionRange.End);
     }

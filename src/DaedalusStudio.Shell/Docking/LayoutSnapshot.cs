@@ -55,6 +55,7 @@ public sealed record WindowPlacement(double Width, double Height, int? X, int? Y
 [JsonSerializable(typeof(EditorSession))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(string[]))]
+[JsonSerializable(typeof(int))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 internal sealed partial class ShellJsonContext : JsonSerializerContext;
 
