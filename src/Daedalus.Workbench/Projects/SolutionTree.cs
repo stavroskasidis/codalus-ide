@@ -53,7 +53,10 @@ public static class SolutionTree
 {
     private static readonly StringComparer s_names = StringComparer.OrdinalIgnoreCase;
 
-    public static ExplorerNode Build(SolutionInfo solution, IReadOnlyDictionary<string, ProjectInfo> projects)
+    public static ExplorerNode Build(
+        SolutionInfo solution,
+        IReadOnlyDictionary<string, ProjectInfo> projects,
+        IReadOnlyDictionary<string, CompilerInputsInfo>? compilerInputs = null)
     {
         var folders = solution.Folders.ToDictionary(f => f.Id, StringComparer.Ordinal);
         IReadOnlyList<ExplorerNode> ChildrenOf(string? parent)
@@ -76,7 +79,7 @@ public static class SolutionTree
 
             foreach (var project in solution.Projects.Where(p => p.Parent == parent && (p.Parent is null || folders.ContainsKey(p.Parent))).OrderBy(p => p.Name, s_names))
             {
-                nodes.Add(Project(project, projects.GetValueOrDefault(project.Path), solution.Trusted));
+                nodes.Add(Project(project, projects.GetValueOrDefault(project.Path), solution.Trusted, compilerInputs?.GetValueOrDefault(project.Path)));
             }
 
             return nodes;
@@ -92,7 +95,7 @@ public static class SolutionTree
         };
     }
 
-    public static ExplorerNode Project(SolutionProjectInfo entry, ProjectInfo? info, bool trusted)
+    public static ExplorerNode Project(SolutionProjectInfo entry, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs = null)
     {
         var node = new ExplorerNode("p:" + entry.Path, ExplorerNodeKind.Project, entry.Name)
         {
@@ -123,7 +126,7 @@ public static class SolutionTree
             };
         }
 
-        var dependencies = Dependencies(entry.Path, info);
+        var dependencies = Dependencies(entry.Path, info, inputs);
         return node with
         {
             Detail = info.TargetFrameworks.Length > 1 ? string.Join(", ", info.TargetFrameworks) : null,
@@ -264,6 +267,14 @@ public static class SolutionTree
         _ => "file",
     };
 
+    /// <summary>The <c>/analyzer:</c> arguments of a compiler command line (paths may be quoted, several per argument).</summary>
+    public static IReadOnlyList<string> AnalyzerPaths(IEnumerable<string> arguments) =>
+        [.. arguments
+            .Where(a => a.StartsWith("/analyzer:", StringComparison.OrdinalIgnoreCase) || a.StartsWith("-analyzer:", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(a => a["/analyzer:".Length..].Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
+            .Select(a => a.Trim('"'))
+            .Distinct(SolutionService.PathComparer)];
+
     private static bool IsUnder(string path, string directory) =>
         path.StartsWith(System.IO.Path.TrimEndingDirectorySeparator(directory) + System.IO.Path.DirectorySeparatorChar,
             SolutionService.PathComparer == StringComparer.OrdinalIgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
@@ -271,10 +282,10 @@ public static class SolutionTree
     // ------------------------------------------------------------------ dependencies
 
     /// <summary>
-    /// The Dependencies node. TODO(issue): an Analyzers group and transitive packages need design-time build data
-    /// (M3, ADR 0004).
+    /// The Dependencies node. Analyzers come from the design-time build of the active target framework.
+    /// TODO(issue): transitive packages (from the assets file).
     /// </summary>
-    private static ExplorerNode? Dependencies(string projectPath, ProjectInfo info)
+    private static ExplorerNode? Dependencies(string projectPath, ProjectInfo info, CompilerInputsInfo? inputs)
     {
         if (info.References.Length == 0 && info.TargetFrameworks.Length == 0)
         {
@@ -282,9 +293,15 @@ public static class SolutionTree
         }
 
         var id = "deps:" + projectPath;
-        IReadOnlyList<ExplorerNode> Groups(string prefix, IEnumerable<ReferenceInfo> references)
+        var analyzers = inputs is { State: CompilerInputStates.Ok } ? AnalyzerPaths(inputs.Arguments) : [];
+        IReadOnlyList<ExplorerNode> Groups(string prefix, IEnumerable<ReferenceInfo> references, bool withAnalyzers)
         {
             var list = references.ToList();
+            if (withAnalyzers)
+            {
+                list.AddRange(analyzers.Select(a => new ReferenceInfo(ReferenceKinds.Analyzer, System.IO.Path.GetFileNameWithoutExtension(a), null, a, inputs!.TargetFramework, File.Exists(a))));
+            }
+
             var groups = new List<ExplorerNode>();
             foreach (var (kind, title, icon) in new[]
                      {
@@ -292,6 +309,7 @@ public static class SolutionTree
                          (ReferenceKinds.Package, "Packages", "package"),
                          (ReferenceKinds.Project, "Projects", "project"),
                          (ReferenceKinds.Assembly, "Assemblies", "link"),
+                         (ReferenceKinds.Analyzer, "Analyzers", "file-code"),
                      })
             {
                 var members = list.Where(r => r.Kind == kind).OrderBy(r => r.Name, s_names).ToList();
@@ -326,9 +344,9 @@ public static class SolutionTree
             {
                 ProjectPath = projectPath,
                 Icon = "layout",
-                Children = Groups($"{id}|{tfm}", info.References.Where(r => r.TargetFramework == tfm)),
+                Children = Groups($"{id}|{tfm}", info.References.Where(r => r.TargetFramework == tfm), string.Equals(inputs?.TargetFramework, tfm, StringComparison.OrdinalIgnoreCase)),
             })]
-            : Groups(id, info.References);
+            : Groups(id, info.References, withAnalyzers: true);
         return new ExplorerNode(id, ExplorerNodeKind.Dependencies, "Dependencies")
         {
             ProjectPath = projectPath,

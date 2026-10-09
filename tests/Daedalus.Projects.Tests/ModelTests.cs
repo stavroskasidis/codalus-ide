@@ -52,6 +52,24 @@ public class NestingTests
         Assert.Equal("Main.xaml.cs", Assert.Single(main.Children).Name);
         Assert.True(Assert.Single(contents.Single(n => n.Name == "Linked").Children).IsLinked);
     }
+
+    [Fact]
+    public void Analyzers_come_from_the_design_time_build_of_the_active_framework()
+    {
+        Assert.Equal([@"C:\a\One.dll", "/b/Two.dll", "/c/Three.dll"], SolutionTree.AnalyzerPaths(["/reference:x.dll", @"/analyzer:""C:\a\One.dll""", "/analyzer:/b/Two.dll,/c/Three.dll", "Program.cs"]));
+
+        var project = Path.Combine(Path.GetTempPath(), "proj", "P.csproj");
+        var info = new ProjectInfo(project, "P", ProjectStates.Loaded, null, ["net10.0", "netstandard2.0"], "Library", [], [], [], Restored: true);
+        var inputs = new CompilerInputsInfo(project, "netstandard2.0", "C#", CompilerInputStates.Ok, null, ["/analyzer:/sdk/Gen.dll"], [], null, null);
+        var solution = new SolutionInfo(project, "project", [], [new SolutionProjectInfo(project, "P", null, null)], [], null, Trusted: true);
+
+        var dependencies = SolutionTree.Build(solution, new Dictionary<string, ProjectInfo> { [project] = info }, new Dictionary<string, CompilerInputsInfo> { [project] = inputs })
+            .Children.Single().Children.Single(n => n.Kind == ExplorerNodeKind.Dependencies);
+
+        Assert.Empty(dependencies.Children.Single(n => n.Name == "net10.0").Children);
+        var analyzers = dependencies.Children.Single(n => n.Name == "netstandard2.0").Children.Single(n => n.Name == "Analyzers");
+        Assert.Equal("Gen", Assert.Single(analyzers.Children).Name);
+    }
 }
 
 public sealed class TrustAndRecentsTests : IDisposable

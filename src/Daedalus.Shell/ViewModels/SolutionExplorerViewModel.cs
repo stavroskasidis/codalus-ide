@@ -105,6 +105,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         var solutions = shell.Solutions;
         solutions.SolutionChanged += (_, _) => QueueRefresh();
         solutions.ProjectChanged += (_, _) => QueueRefresh();
+        solutions.CompilerInputsChanged += (_, _) => QueueRefresh();
         OpenSolutionCommand = new RelayCommand(() => shell.Run("workbench.openSolution"));
         Refresh();
     }
@@ -158,7 +159,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     public void Refresh()
     {
         var solutions = _shell.Solutions;
-        _root = solutions.Solution is { } solution ? SolutionTree.Build(solution, solutions.Projects) : null;
+        _root = solutions.Solution is { } solution ? SolutionTree.Build(solution, solutions.Projects, solutions.CompilerInputs) : null;
         OnPropertyChanged(nameof(HasSolution));
         if (_pendingReveal is { } pending && _root is not null && Path(_root, pending) is not null)
         {

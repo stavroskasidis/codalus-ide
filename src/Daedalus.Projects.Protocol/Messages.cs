@@ -138,6 +138,9 @@ public static class ReferenceKinds
     public const string Package = "package";
     public const string Project = "project";
     public const string Assembly = "assembly";
+
+    /// <summary>Analyzers and source generators; only in the shell's tree (from design-time builds).</summary>
+    public const string Analyzer = "analyzer";
 }
 
 /// <summary>
