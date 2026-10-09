@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
-          eng/package.sh "${{ inputs.version }}"
+          bash eng/package.sh "${{ inputs.version }}"
       - uses: actions/upload-artifact@v4
         with:
           name: packages-${{ runner.os }}
