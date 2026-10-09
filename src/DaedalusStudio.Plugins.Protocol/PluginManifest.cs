@@ -152,6 +152,8 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(ProjectOutputDto))]
 [JsonSerializable(typeof(DocumentUrisParams))]
 [JsonSerializable(typeof(TestCandidatesResultDto))]
+[JsonSerializable(typeof(TypeOutlineParamsDto))]
+[JsonSerializable(typeof(TypeOutlineResult))]
 [JsonSerializable(typeof(BuildStartParams))]
 [JsonSerializable(typeof(BuildResultDto))]
 [JsonSerializable(typeof(BuildFinishedParams))]

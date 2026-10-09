@@ -11,6 +11,7 @@ public static class ProposedMethods
     public const string WorkspaceGetSolution = "workspace/getSolution";
     public const string WorkspaceProjectOutput = "workspace/projectOutput";
     public const string WorkspaceTestCandidates = "workspace/testCandidates";
+    public const string WorkspaceTypeOutline = "workspace/typeOutline";
     public const string BuildStart = "build/start";
     public const string DebugLaunch = "debug/launch";
     public const string DebugAttach = "debug/attach";
@@ -68,6 +69,17 @@ public sealed record TestCandidateDto(string Kind, string Name, string Type, str
 public sealed record DocumentTestCandidatesDto(string Uri, TestCandidateDto[] Candidates);
 
 public sealed record TestCandidatesResultDto(DocumentTestCandidatesDto[] Documents);
+
+public sealed record TypeOutlineParamsDto(string Uri, int Line, int Character);
+
+public sealed record ParameterOutlineDto(string Name, string Type);
+
+public sealed record MethodOutlineDto(string Name, string ReturnType, ParameterOutlineDto[] Parameters, bool IsStatic, bool IsAsync, int Line);
+
+public sealed record TypeOutlineDto(string Name, string? Namespace, string NestedName, bool IsStatic, bool HasParameterlessConstructor, MethodOutlineDto[] Methods, string? SelectedMethod);
+
+/// <summary>Wraps the outline: null when there is no type at the position.</summary>
+public sealed record TypeOutlineResult(TypeOutlineDto? Outline);
 
 // ------------------------------------------------------------------ build and debug
 

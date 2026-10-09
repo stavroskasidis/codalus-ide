@@ -7,6 +7,7 @@ public sealed record ShellOptions
 {
     public const string HelpText = """
         Usage: daedalus [path] [options]
+               daedalus diff <left> <right> [options]   Compare two files (in the running window, if there is one).
 
           --user-data-dir <dir>   Keep settings, state and plugins under <dir> instead of the OS defaults.
           --plugin-dir <dir>      Load plugins from <dir> (a plugin folder or a folder of plugins). Repeatable.
@@ -38,6 +39,9 @@ public sealed record ShellOptions
     /// </summary>
     public string? ExitOn { get; init; }
 
+    /// <summary><c>daedalus diff left right</c>: two files to compare side by side.</summary>
+    public (string Left, string Right)? Diff { get; init; }
+
     /// <summary>A file to open in the editor (<c>--open</c>).</summary>
     public string? OpenFile { get; init; }
 
@@ -67,7 +71,22 @@ public sealed record ShellOptions
         var options = new ShellOptions();
         var pluginDirs = new List<string>();
         var errors = new List<string>();
-        for (var i = 0; i < args.Count; i++)
+        var start = 0;
+        if (args.Count > 0 && args[0] == "diff")
+        {
+            if (args.Count >= 3 && !args[1].StartsWith("--", StringComparison.Ordinal) && !args[2].StartsWith("--", StringComparison.Ordinal))
+            {
+                options = options with { Diff = (System.IO.Path.GetFullPath(args[1]), System.IO.Path.GetFullPath(args[2])) };
+                start = 3;
+            }
+            else
+            {
+                errors.Add("'diff' needs two files: daedalus diff <left> <right>.");
+                start = args.Count;
+            }
+        }
+
+        for (var i = start; i < args.Count; i++)
         {
             var arg = args[i];
             string? Value()

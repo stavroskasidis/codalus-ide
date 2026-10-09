@@ -142,6 +142,16 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     public void RequestClose() => Close();
 
+    public void BringToFront()
+    {
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+    }
+
     public Task<string?> PickSolutionAsync() => PickAsync("Open Solution or Project", "Solutions and projects", ["*.slnx", "*.sln", "*.csproj", "*.fsproj", "*.vbproj"]);
 
     public Task<string?> PickProjectAsync() => PickAsync("Add Existing Project", "Projects", ["*.csproj", "*.fsproj", "*.vbproj"]);

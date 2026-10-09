@@ -81,3 +81,24 @@ public sealed record TestCandidate(
 public sealed record DocumentTestCandidates(string Uri, TestCandidate[] Candidates);
 
 public sealed record TestCandidatesResult(DocumentTestCandidates[] Documents);
+
+/// <summary>The type around a position (<c>daedalus/typeOutline</c>), for Create Unit Tests.</summary>
+public sealed record TypeOutlineParams(TextDocumentIdentifier TextDocument, Position Position);
+
+public sealed record ParameterOutline(string Name, string Type);
+
+/// <summary>A public or internal method; <see cref="Line"/> is its name's zero-based line.</summary>
+public sealed record MethodOutline(string Name, string ReturnType, ParameterOutline[] Parameters, bool IsStatic, bool IsAsync, int Line);
+
+/// <summary>
+/// A class, record or struct: <see cref="NestedName"/> is <c>Outer.Inner</c> within <see cref="Namespace"/>;
+/// <see cref="SelectedMethod"/> is the method the position is in.
+/// </summary>
+public sealed record TypeOutline(
+    string Name,
+    string? Namespace,
+    string NestedName,
+    bool IsStatic,
+    bool HasParameterlessConstructor,
+    MethodOutline[] Methods,
+    string? SelectedMethod);

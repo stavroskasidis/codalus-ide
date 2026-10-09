@@ -224,6 +224,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<TestCandidatesResult> TestCandidatesAsync(IReadOnlyList<string> uris, CancellationToken cancellationToken) =>
         Invoke(Methods.TestCandidates, new TestCandidatesParams([.. uris.Select(u => new TextDocumentIdentifier(u))]), ProtocolJsonContext.Default.TestCandidatesParams, ProtocolJsonContext.Default.TestCandidatesResult, cancellationToken);
 
+    /// <summary>The type around a position and its methods (Create Unit Tests), or null.</summary>
+    public Task<TypeOutline?> TypeOutlineAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.TypeOutline, new TypeOutlineParams(new TextDocumentIdentifier(uri), position), ProtocolJsonContext.Default.TypeOutlineParams, ProtocolJsonContext.Default.TypeOutline, cancellationToken);
+
     private static TextDocumentPositionParams At(string uri, Position position) => new(new TextDocumentIdentifier(uri), position);
 
     private Task<TResult> Invoke<TParams, TResult>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken) =>

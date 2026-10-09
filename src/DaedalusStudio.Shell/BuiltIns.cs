@@ -158,6 +158,17 @@ internal static partial class BuiltIns
             await shell.SetSettingAsync(args, ct).ConfigureAwait(false);
             return null;
         }, palette: false);
+        Add("editor.activePosition", "Active Editor Position", "Developer", (_, _) => Infrastructure.Ui.RunAsync(shell.ActiveEditorPosition), palette: false);
+        Add("workbench.openFile", "Open File", "Developer", async (args, _) =>
+        {
+            await Infrastructure.Ui.RunAsync(() => shell.OpenFileCommandAsync(args)).ConfigureAwait(false);
+            return null;
+        }, palette: false);
+        Add("project.addReferenceTo", "Add a Project Reference", "Developer", async (args, ct) =>
+        {
+            await shell.AddProjectReferenceCommandAsync(args, ct).ConfigureAwait(false);
+            return null;
+        }, palette: false);
     }
 
     public static void RegisterMenus(MenuRegistry menus)

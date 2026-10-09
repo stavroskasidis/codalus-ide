@@ -166,6 +166,8 @@ internal sealed class LanguageServer : IAsyncDisposable
             (document, _, ct) => GeneratedTextAsync(document, ct), null);
         _connection.OnRequest(Methods.TestCandidates, json.TestCandidatesParams, json.TestCandidatesResult, (p, ct) =>
             TestCandidatesFeature.FindAsync(_workspace.CurrentSolution, p.TextDocuments, ct));
+        _connection.OnRequest(Methods.TypeOutline, json.TypeOutlineParams, json.TypeOutline, async (p, ct) =>
+            (await TypeOutlineFeature.OutlineAsync(_workspace.CurrentSolution, p.TextDocument.Uri, p.Position, ct).ConfigureAwait(false))!);
     }
 
     private void ApplySettings(JsonElement settings)

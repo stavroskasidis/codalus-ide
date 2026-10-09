@@ -123,6 +123,19 @@ public sealed partial class ShellHost
     // ------------------------------------------------------------------ diffs and files
 
     /// <summary>Opens a file's diff: work tree against the index, or (<paramref name="staged"/>) the index against HEAD.</summary>
+    /// <summary>Compares two files side by side (<c>daedalus diff</c>, diff tools such as Verify's).</summary>
+    public async Task<DiffDocument> OpenFileDiffAsync(string left, string right)
+    {
+        if (Layout.FindDocument<DiffDocument>(DiffDocument.IdFor(left, right)) is not { } document)
+        {
+            document = new DiffDocument(new DiffViewModel(left, right), EditorFont);
+        }
+
+        await document.ViewModel.LoadAsync().ConfigureAwait(true);
+        Layout.OpenDocument(document, focus: true);
+        return document;
+    }
+
     public async Task<DiffDocument?> OpenDiffAsync(string path, bool staged)
     {
         if (Layout.FindDocument<DiffDocument>(DiffDocument.IdFor(path, staged)) is { } open)

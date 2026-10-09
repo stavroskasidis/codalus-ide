@@ -713,6 +713,8 @@ public sealed class PluginManager : IAsyncDisposable
                 Proposed.GetProjectOutputAsync(p.Path, p.TargetFramework, ct));
             connection.OnRequest(ProposedMethods.WorkspaceTestCandidates, json.DocumentUrisParams, json.TestCandidatesResultDto, (p, ct) =>
                 Proposed.FindTestCandidatesAsync(p.Uris, ct));
+            connection.OnRequest(ProposedMethods.WorkspaceTypeOutline, json.TypeOutlineParamsDto, json.TypeOutlineResult, async (p, ct) =>
+                new TypeOutlineResult(await Proposed.GetTypeOutlineAsync(p.Uri, p.Line, p.Character, ct).ConfigureAwait(false)));
             connection.OnRequest(ProposedMethods.BuildStart, json.BuildStartParams, json.BuildResultDto, (p, ct) =>
                 Proposed.BuildAsync(p.Projects, ct));
             connection.OnRequest(ProposedMethods.DebugLaunch, json.DebugLaunchParams, json.DebugSessionDto, (p, ct) =>

@@ -186,7 +186,7 @@ public sealed record DiffRow(int? OldLine, int? NewLine, char Kind);
 /// <summary>A file's diff (work tree against the index, or the index against HEAD), inline or side by side.</summary>
 public sealed class DiffViewModel : ObservableObject
 {
-    private readonly GitService _git;
+    private readonly GitService? _git;
     private bool _sideBySide = true;
     private string _summary = string.Empty;
 
@@ -197,7 +197,19 @@ public sealed class DiffViewModel : ObservableObject
         Staged = staged;
     }
 
+    /// <summary>Two files, side by side (<c>daedalus diff left right</c>): no Git, no staging.</summary>
+    public DiffViewModel(string leftPath, string rightPath)
+    {
+        LeftPath = leftPath;
+        Path = rightPath;
+    }
+
     public string Path { get; }
+
+    /// <summary>The left file of a file comparison; null for Git diffs.</summary>
+    public string? LeftPath { get; }
+
+    public bool IsFileComparison => LeftPath is not null;
 
     public bool Staged { get; }
 
@@ -239,11 +251,11 @@ public sealed class DiffViewModel : ObservableObject
         private set => SetField(ref _summary, value);
     }
 
-    public string OldTitle => Staged ? "HEAD" : "Index";
+    public string OldTitle => LeftPath ?? (Staged ? "HEAD" : "Index");
 
-    public string NewTitle => Staged ? "Index (staged)" : "Working tree";
+    public string NewTitle => IsFileComparison ? Path : Staged ? "Index (staged)" : "Working tree";
 
-    public bool CanStage => !Staged;
+    public bool CanStage => !Staged && !IsFileComparison;
 
     public bool CanUnstage => Staged;
 
@@ -252,6 +264,12 @@ public sealed class DiffViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
+        if (_git is null)
+        {
+            await LoadFilesAsync().ConfigureAwait(true);
+            return;
+        }
+
         var oldText = await _git.ShowAsync(Path, Staged ? "HEAD" : ":").ConfigureAwait(true) ?? string.Empty;
         string newText;
         if (Staged)
@@ -279,6 +297,32 @@ public sealed class DiffViewModel : ObservableObject
         Rows = Align(ops);
         var hunks = Diff?.Hunks.Count ?? 0;
         Summary = Diff is null ? "No changes." : Diff.IsBinary ? "Binary file." : $"{hunks} change{(hunks == 1 ? string.Empty : "s")}: +{Diff.Hunks.Sum(h => h.Added)} −{Diff.Hunks.Sum(h => h.Removed)}";
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task LoadFilesAsync()
+    {
+        static async Task<string> ReadAsync(string path)
+        {
+            try
+            {
+                return File.Exists(path) ? await File.ReadAllTextAsync(path).ConfigureAwait(false) : string.Empty;
+            }
+            catch (IOException)
+            {
+                return string.Empty;
+            }
+        }
+
+        OldText = await ReadAsync(LeftPath!).ConfigureAwait(true);
+        NewText = await ReadAsync(Path).ConfigureAwait(true);
+        OldLines = LineDiff.Lines(OldText);
+        NewLines = LineDiff.Lines(NewText);
+        var ops = await Task.Run(() => LineDiff.Diff(OldLines, NewLines)).ConfigureAwait(true);
+        Rows = Align(ops);
+        var added = ops.Count(o => o.Kind == '+');
+        var removed = ops.Count(o => o.Kind == '-');
+        Summary = added + removed == 0 ? "The files are identical." : $"+{added} −{removed}";
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -393,7 +437,7 @@ public sealed class DiffViewModel : ObservableObject
 
     public async Task ApplyToHunkAsync(DiffHunk hunk, string action)
     {
-        if (Diff is null)
+        if (Diff is null || _git is null)
         {
             return;
         }
@@ -422,11 +466,15 @@ public sealed class DiffDocument : ShellDocument
     {
         ViewModel = viewModel;
         Font = font;
-        Id = IdFor(viewModel.Path, viewModel.Staged);
-        Title = $"{System.IO.Path.GetFileName(viewModel.Path)} ({(viewModel.Staged ? "Staged" : "Working Tree")})";
+        Id = viewModel.LeftPath is { } left ? IdFor(left, viewModel.Path) : IdFor(viewModel.Path, viewModel.Staged);
+        Title = viewModel.LeftPath is { } leftPath
+            ? $"{System.IO.Path.GetFileName(leftPath)} ↔ {System.IO.Path.GetFileName(viewModel.Path)}"
+            : $"{System.IO.Path.GetFileName(viewModel.Path)} ({(viewModel.Staged ? "Staged" : "Working Tree")})";
     }
 
     public static string IdFor(string path, bool staged) => $"diff:{(staged ? "staged" : "worktree")}:{path}";
+
+    public static string IdFor(string left, string right) => $"diff:files:{left}|{right}";
 
     public override string Kind => "diff";
 

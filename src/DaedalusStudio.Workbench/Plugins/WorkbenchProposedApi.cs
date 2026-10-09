@@ -137,6 +137,25 @@ public sealed class WorkbenchProposedApi : IProposedApiHost, IDisposable
         return new TestCandidatesResultDto([.. uris.Select(u => results.GetValueOrDefault(u) ?? new DocumentTestCandidatesDto(u, []))]);
     }
 
+    public async Task<TypeOutlineDto?> GetTypeOutlineAsync(string uri, int line, int character, CancellationToken cancellationToken)
+    {
+        if (DocumentUris.ToPath(uri) is not { } path || _languages.LanguageIdOf(path) is not { } languageId
+            || await _languages.ClientAsync(languageId).ConfigureAwait(false) is not { } client
+            || await client.TypeOutlineAsync(uri, new Position(line, character), cancellationToken).ConfigureAwait(false) is not { } outline)
+        {
+            return null;
+        }
+
+        return new TypeOutlineDto(
+            outline.Name,
+            outline.Namespace,
+            outline.NestedName,
+            outline.IsStatic,
+            outline.HasParameterlessConstructor,
+            [.. outline.Methods.Select(m => new MethodOutlineDto(m.Name, m.ReturnType, [.. m.Parameters.Select(p => new ParameterOutlineDto(p.Name, p.Type))], m.IsStatic, m.IsAsync, m.Line))],
+            outline.SelectedMethod);
+    }
+
     private static RangeDto ToDto(LanguageServices.Protocol.Range range) => new(range.Start.Line, range.Start.Character, range.End.Line, range.End.Character);
 
     // ------------------------------------------------------------------ build

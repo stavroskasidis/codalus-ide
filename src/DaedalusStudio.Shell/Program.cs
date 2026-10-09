@@ -18,6 +18,16 @@ internal static partial class Program
             return 0;
         }
 
+        // daedalus diff: hand it to the running shell of this user-data folder, if there is one.
+        if (options.Diff is { } diff)
+        {
+            var paths = DaedalusStudio.Platform.AppPaths.Resolve(DaedalusStudio.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
+            if (Infrastructure.SingleInstance.TrySend(Infrastructure.SingleInstance.PipeName(paths.State), new Infrastructure.InstanceRequest("diff", [diff.Left, diff.Right])))
+            {
+                return 0;
+            }
+        }
+
         App.Options = options;
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

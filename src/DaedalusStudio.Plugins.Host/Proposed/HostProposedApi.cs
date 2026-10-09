@@ -155,6 +155,16 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
             new TestCandidate(c.Kind, c.Name, c.Type, c.Namespace, HostTestRegistry.ToRange(c.Range), HostTestRegistry.ToRange(c.SelectionRange), c.Parameterized))]))];
     }
 
+    public async Task<TypeOutline?> GetTypeOutlineAsync(string documentUri, int line, int character, CancellationToken cancellationToken)
+    {
+        var result = await _host.RequestAsync(ProposedMethods.WorkspaceTypeOutline, new TypeOutlineParamsDto(documentUri, line, character), PluginJsonContext.Default.TypeOutlineParamsDto, PluginJsonContext.Default.TypeOutlineResult, cancellationToken).ConfigureAwait(false);
+        return result.Outline is not { } o
+            ? null
+            : new TypeOutline(o.Name, o.Namespace, o.NestedName, o.IsStatic, o.HasParameterlessConstructor,
+                [.. o.Methods.Select(m => new MethodOutline(m.Name, m.ReturnType, [.. m.Parameters.Select(p => new ParameterOutline(p.Name, p.Type))], m.IsStatic, m.IsAsync, m.Line))],
+                o.SelectedMethod);
+    }
+
     // ------------------------------------------------------------------ build and debug
 
     public async Task<BuildResult> BuildAsync(IReadOnlyList<string>? projects, CancellationToken cancellationToken)

@@ -42,25 +42,7 @@ internal static class TestCandidatesFeature
 
     private static async Task<TestCandidate[]> FindInDocumentAsync(Solution solution, string uri, CancellationToken cancellationToken)
     {
-        SyntaxTree tree;
-        if (await WorkspaceManager.FindDocumentAsync(solution, uri, cancellationToken).ConfigureAwait(false) is { } document
-            && await document.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false) is { } documentTree)
-        {
-            tree = documentTree;
-        }
-        else if (DocumentUris.ToPath(uri) is { } path && path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                var text = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-                tree = CSharpSyntaxTree.ParseText(SourceText.From(text), CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview), path, cancellationToken);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                return [];
-            }
-        }
-        else
+        if (await SyntaxTrees.GetAsync(solution, uri, cancellationToken).ConfigureAwait(false) is not { } tree)
         {
             return [];
         }

@@ -14,6 +14,8 @@ public interface IProposedApiHost
 
     Task<TestCandidatesResultDto> FindTestCandidatesAsync(IReadOnlyList<string> uris, CancellationToken cancellationToken);
 
+    Task<TypeOutlineDto?> GetTypeOutlineAsync(string uri, int line, int character, CancellationToken cancellationToken);
+
     /// <summary>Builds the projects (null: the solution), after a build in progress.</summary>
     Task<BuildResultDto> BuildAsync(IReadOnlyList<string>? projects, CancellationToken cancellationToken);
 

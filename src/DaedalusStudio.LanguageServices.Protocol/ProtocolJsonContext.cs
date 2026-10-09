@@ -54,6 +54,8 @@ namespace DaedalusStudio.LanguageServices.Protocol;
 [JsonSerializable(typeof(MetadataText))]
 [JsonSerializable(typeof(TestCandidatesParams))]
 [JsonSerializable(typeof(TestCandidatesResult))]
+[JsonSerializable(typeof(TypeOutlineParams))]
+[JsonSerializable(typeof(TypeOutline))]
 [JsonSerializable(typeof(EmptyObject))]
 [JsonSerializable(typeof(JsonElement))]
 public sealed partial class ProtocolJsonContext : JsonSerializerContext;

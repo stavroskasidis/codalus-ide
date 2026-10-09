@@ -32,6 +32,9 @@ public interface IShellWindow
     /// <summary>Asks for a project file to add to the solution (null: cancelled).</summary>
     Task<string?> PickProjectAsync();
 
+    /// <summary>Shows and activates the window (another process asked this one to open something).</summary>
+    void BringToFront();
+
     /// <summary>Asks for an existing file (null: cancelled).</summary>
     Task<string?> PickFileAsync(string title, string filterName, string[] patterns);
 
@@ -238,7 +241,26 @@ public sealed partial class ShellHost : IAsyncDisposable
             _ = Directory.Exists(path) ? OpenFolderAsync(path) : OpenSolutionAsync(path);
         }
 
+        if (Options.Diff is { } diff)
+        {
+            _ = OpenFileDiffAsync(diff.Left, diff.Right);
+        }
+
+        // Later 'daedalus diff' invocations open here.
+        _instance = Infrastructure.SingleInstance.Listen(Infrastructure.SingleInstance.PipeName(Paths.State), request => Ui.Post(() => OnInstanceRequest(request)));
+
         _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
+    }
+
+    private Infrastructure.SingleInstance? _instance;
+
+    private void OnInstanceRequest(Infrastructure.InstanceRequest request)
+    {
+        if (request is { Command: "diff", Arguments: [var left, var right] })
+        {
+            _ = OpenFileDiffAsync(left, right);
+            Window?.BringToFront();
+        }
     }
 
     private void DiscoverPlugins()
@@ -455,6 +477,57 @@ public sealed partial class ShellHost : IAsyncDisposable
         ShellIntegration.OpenUrl(url);
     }
 
+    /// <summary>
+    /// <c>editor.activePosition</c>: <c>[documentUri, line, character]</c> (zero-based) of the active editor's caret, or
+    /// null. Plugins use it for commands run from the palette or a menu (the editor context menu passes the same values).
+    /// </summary>
+    public JsonElement? ActiveEditorPosition()
+    {
+        if (ActiveEditor is not { Controller: { } controller } editor)
+        {
+            return null;
+        }
+
+        var caret = controller.Editor.TextArea.Caret;
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartArray();
+            writer.WriteStringValue(LanguageServices.Protocol.DocumentUris.FromPath(editor.Model.Path));
+            writer.WriteNumberValue(caret.Line - 1);
+            writer.WriteNumberValue(caret.Column - 1);
+            writer.WriteEndArray();
+        }
+
+        using var document = JsonDocument.Parse(buffer.ToArray());
+        return document.RootElement.Clone();
+    }
+
+    /// <summary><c>workbench.openFile [pathOrUri, line?]</c>: opens a file in an editor, optionally at a zero-based line.</summary>
+    public async Task OpenFileCommandAsync(IReadOnlyList<JsonElement> args)
+    {
+        var target = args.Count > 0 && args[0].ValueKind == JsonValueKind.String ? args[0].GetString() : null;
+        var path = target is null ? null : LanguageServices.Protocol.DocumentUris.ToPath(target) ?? (Path.IsPathRooted(target) ? target : null);
+        if (path is null)
+        {
+            throw new ArgumentException("workbench.openFile expects a file path or file: URI.");
+        }
+
+        var line = args.Count > 1 && args[1].ValueKind == JsonValueKind.Number ? args[1].GetInt32() : (int?)null;
+        await OpenFileAsync(path, preview: false, line is { } l ? new LanguageServices.Protocol.Position(l, 0) : null).ConfigureAwait(true);
+    }
+
+    /// <summary><c>project.addReferenceTo [projectPath, referencedProjectPath]</c>: adds a project reference.</summary>
+    public Task AddProjectReferenceCommandAsync(IReadOnlyList<JsonElement> args, CancellationToken cancellationToken)
+    {
+        if (args.Count < 2 || args[0].GetString() is not { } project || args[1].GetString() is not { } reference)
+        {
+            throw new ArgumentException("project.addReferenceTo expects a project path and the referenced project's path.");
+        }
+
+        return Solutions.AddProjectReferenceAsync(project, reference, cancellationToken);
+    }
+
     /// <summary><c>workbench.setSetting [key, value]</c>: writes a user setting (null resets it).</summary>
     public Task SetSettingAsync(IReadOnlyList<JsonElement> args, CancellationToken cancellationToken)
     {
@@ -565,6 +638,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _instance?.Dispose();
         await Debugger.DisposeAsync().ConfigureAwait(false);
         Git.Dispose();
         await Languages.DisposeAsync().ConfigureAwait(false);

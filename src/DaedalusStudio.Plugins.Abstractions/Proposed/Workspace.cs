@@ -20,7 +20,41 @@ public interface IWorkspace
     /// design-time builds and builds.
     /// </summary>
     Task<IReadOnlyList<DocumentTestCandidates>> FindTestCandidatesAsync(IReadOnlyList<string> documentUris, CancellationToken cancellationToken);
+
+    /// <summary>The class, record or struct at a zero-based position of a document, with its methods; null when there is none.</summary>
+    Task<TypeOutline?> GetTypeOutlineAsync(string documentUri, int line, int character, CancellationToken cancellationToken);
 }
+
+/// <summary>A method's parameter, its type as written in source.</summary>
+/// <param name="Name">The parameter's name.</param>
+/// <param name="Type">Its type as written.</param>
+public sealed record ParameterOutline(string Name, string Type);
+
+/// <summary>A public or internal method of a <see cref="TypeOutline"/>.</summary>
+/// <param name="Name">The method's name.</param>
+/// <param name="ReturnType">Its return type as written.</param>
+/// <param name="Parameters">Its parameters.</param>
+/// <param name="IsStatic">Whether it is static.</param>
+/// <param name="IsAsync">Whether it is async or returns a task.</param>
+/// <param name="Line">The zero-based line of its name.</param>
+public sealed record MethodOutline(string Name, string ReturnType, IReadOnlyList<ParameterOutline> Parameters, bool IsStatic, bool IsAsync, int Line);
+
+/// <summary>A type of a document, from syntax.</summary>
+/// <param name="Name">The type's name.</param>
+/// <param name="Namespace">Its namespace, or null.</param>
+/// <param name="NestedName"><c>Outer.Inner</c> for nested types; the name otherwise.</param>
+/// <param name="IsStatic">Whether it is a static class.</param>
+/// <param name="HasParameterlessConstructor">Whether <c>new T()</c> compiles.</param>
+/// <param name="Methods">Its public and internal methods.</param>
+/// <param name="SelectedMethod">The method at the position, if any.</param>
+public sealed record TypeOutline(
+    string Name,
+    string? Namespace,
+    string NestedName,
+    bool IsStatic,
+    bool HasParameterlessConstructor,
+    IReadOnlyList<MethodOutline> Methods,
+    string? SelectedMethod);
 
 /// <summary>Arguments of <see cref="IWorkspace.DocumentsChanged"/>.</summary>
 public sealed class DocumentsChangedEventArgs(IReadOnlyList<string> uris) : EventArgs
