@@ -70,6 +70,11 @@
   <Style Selector="Button.statusbar:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.StatusBar.Hover}" />
   </Style>
+  <!-- Items without a command are plain text, not disabled buttons. -->
+  <Style Selector="Button.statusbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Foreground}" />
+  </Style>
 
   <!-- Links (Settings UI, Markdown views). -->
   <Style Selector="Button.link">

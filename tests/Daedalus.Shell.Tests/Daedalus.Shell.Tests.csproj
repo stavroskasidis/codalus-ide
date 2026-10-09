@@ -5,6 +5,7 @@
     <ProjectReference Include="..\..\src\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Plugins\Daedalus.Plugins.Welcome\Daedalus.Plugins.Welcome.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Daedalus.Projects.Host\Daedalus.Projects.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Daedalus.LanguageServices.Host\Daedalus.LanguageServices.Host.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Headless.XUnit" />

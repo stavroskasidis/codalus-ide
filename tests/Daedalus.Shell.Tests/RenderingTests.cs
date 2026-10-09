@@ -21,10 +21,18 @@ public class RenderingTests
         f.Window.Height = 800;
         var snapshots = Environment.GetEnvironmentVariable("DAEDALUS_UI_SNAPSHOTS");
 
+        // A C# file outside any project: the language service still colors it (Miscellaneous Files).
+        var folder = f.CopySample("LanguageFeatures");
+        var editor = await f.Shell.OpenFileAsync(Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        await ShellFixture.PumpUntil(() => editor!.Controller?.Colorizer.HasTokens == true, seconds: 120);
+
         foreach (var theme in new[] { "light", "dark", "highContrast" })
         {
             await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None);
             await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == theme);
+
+            f.Shell.Layout.OpenDocument(editor!);
+            Capture(f, snapshots, $"{theme}-editor");
 
             f.Shell.OpenSettings();
             Capture(f, snapshots, $"{theme}-settings");

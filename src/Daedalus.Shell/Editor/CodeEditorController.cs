@@ -97,7 +97,8 @@ public sealed class CodeEditorController : IDisposable
         editor.TextArea.SelectionChanged += OnCaretChanged;
         editor.TextArea.TextEntering += OnTextEntering;
         editor.TextArea.TextEntered += OnTextEntered;
-        editor.TextArea.KeyDown += OnKeyDown;
+        // Tunnel: with extra carets, Backspace/Delete/Enter must be seen before AvaloniaEdit handles them.
+        editor.TextArea.AddHandler(InputElement.KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         view.PointerMoved += OnPointerMoved;
         view.PointerExited += OnPointerExited;
         view.PointerPressed += OnPointerPressed;
@@ -129,6 +130,10 @@ public sealed class CodeEditorController : IDisposable
     public SearchPanel Search => _search;
 
     public bool IsCompletionOpen => _completion is not null;
+
+    internal CompletionWindow? CompletionWindow => _completion;
+
+    internal OverloadInsightWindow? SignatureWindow => _signature;
 
     public bool IsSignatureHelpOpen => _signature is not null;
 
@@ -189,7 +194,7 @@ public sealed class CodeEditorController : IDisposable
         _highlights.Theme = theme;
         Editor.TextArea.SelectionBrush = theme.Selection;
         Editor.TextArea.TextView.CurrentLineBackground = theme.CurrentLine;
-        Editor.TextArea.TextView.CurrentLineBorder = null;
+        Editor.TextArea.TextView.CurrentLineBorder = new Avalonia.Media.Pen(Avalonia.Media.Brushes.Transparent, 0);
         Editor.TextArea.TextView.Redraw();
     }
 
@@ -864,6 +869,21 @@ public sealed class CodeEditorController : IDisposable
         FoldingManager.Uninstall(_folding);
         _search.Uninstall();
         _multiCaret.Dispose();
+        var view = Editor.TextArea.TextView;
+        view.LineTransformers.Remove(_colorizer);
+        view.LineTransformers.Remove(_markers);
+        view.BackgroundRenderers.Remove(_highlights);
+        view.BackgroundRenderers.Remove(_markers);
+        view.ScrollOffsetChanged -= OnViewChanged;
+        view.VisualLinesChanged -= OnViewChanged;
+        view.PointerMoved -= OnPointerMoved;
+        view.PointerExited -= OnPointerExited;
+        view.PointerPressed -= OnPointerPressed;
+        Editor.TextArea.Caret.PositionChanged -= OnCaretChanged;
+        Editor.TextArea.SelectionChanged -= OnCaretChanged;
+        Editor.TextArea.TextEntering -= OnTextEntering;
+        Editor.TextArea.TextEntered -= OnTextEntered;
+        Editor.TextArea.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
     }
 }
 

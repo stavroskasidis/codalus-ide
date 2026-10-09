@@ -14,8 +14,8 @@ namespace Daedalus.Shell.Editor;
 /// <summary>
 /// The view of a <see cref="CodeEditorDocument"/>: a project-context bar (multi-targeted projects only), the editor
 /// with its minimap, and optionally a second editor on the same text above it (Window → Split). Built in code so the
-/// editor controls can be wired directly; colors come from theme resources. The editors exist while the view is in
-/// the visual tree (Dock may detach and re-attach views when tabs move).
+/// editor controls can be wired directly; colors come from theme resources. The view lives as long as its tab: Dock
+/// detaches the views of inactive tabs and the document keeps them for reuse; closing the tab disposes it.
 /// </summary>
 public sealed class CodeEditorView : UserControl, IPaneView
 {
@@ -67,17 +67,8 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
     public bool IsSplit => _split is not null;
 
-    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        base.OnAttachedToVisualTree(e);
-        Build();
-    }
-
-    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
-    {
-        base.OnDetachedFromVisualTree(e);
-        TearDown();
-    }
+    /// <summary>The tab closed: releases the editors and their language-service work.</summary>
+    public void Close() => TearDown();
 
     private void Build()
     {
@@ -87,7 +78,6 @@ public sealed class CodeEditorView : UserControl, IPaneView
         }
 
         _primary = CreateEditor(primary: true);
-        _document.View = this;
         _editors.Children.Clear();
         _editors.RowDefinitions = new RowDefinitions("0,0,*");
         _editors.Children.Add(Row(_primary.Value.Editor, _primary.Value.Minimap, 2));
@@ -107,11 +97,6 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _services.ProjectContextsChanged -= OnProjectContextsChanged;
         primary.Controller.Dispose();
         _split?.Controller.Dispose();
-        if (_document.View == this)
-        {
-            _document.View = null;
-        }
-
         _primary = null;
         _split = null;
         _editors.Children.Clear();

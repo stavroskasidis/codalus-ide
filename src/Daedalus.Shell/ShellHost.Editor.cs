@@ -57,7 +57,12 @@ public sealed partial class ShellHost : IEditorServices
         var registry = new LanguageServiceRegistry();
         registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve));
         Languages = new LanguageService(registry, Solutions);
-        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Solutions, () => ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position));
+        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position));
+    }
+
+    /// <summary>The editor's reactions to the layout (after <see cref="InitializeEditor"/> and the layout exist).</summary>
+    private void WireEditorToLayout()
+    {
         Languages.Log += (_, line) => LanguageLog.AppendLine(line);
         Languages.HostCrashed += (_, e) => Ui.Post(() =>
         {
@@ -183,6 +188,13 @@ public sealed partial class ShellHost : IEditorServices
         var id = primary && !Layout.Documents.Any(d => d.Id == "file:" + model.Uri) ? "file:" + model.Uri : $"file:{model.Uri}#{_nextViewId++}";
         var view = new CodeEditorDocument(model, id, m => Editors.Count(e => e.Model == m), this, EditorFont);
         view.CloseRequested += (_, _) => _ = ConfirmCloseAsync(view);
+        view.ControllerAttached += (_, _) =>
+        {
+            if (Layout.ActiveDocument == view)
+            {
+                OnActiveEditorChanged();
+            }
+        };
         return view;
     }
 
@@ -601,11 +613,18 @@ public sealed partial class ShellHost : IEditorServices
             var all = Languages.Diagnostics.All.SelectMany(f => f.Items).ToList();
             var errors = all.Count(d => d.Severity == DiagnosticSeverity.Error);
             var warnings = all.Count(d => d.Severity == DiagnosticSeverity.Warning);
-            Workbench.StatusBar.Set(new StatusBarItem("daedalus.problems", $"$(error) {errors}  $(warning) {warnings}", StatusBarAlignment.Left, 100, StatusSource)
+            var command = BuiltIns.ViewCommandPrefix + ErrorListViewModel.ToolWindowId;
+            Workbench.StatusBar.Set(new StatusBarItem("daedalus.problems.errors", $"$(error) {errors}", StatusBarAlignment.Left, 100, StatusSource)
             {
-                Tooltip = $"{errors} error(s), {warnings} warning(s): open the Error List",
-                AccessibleName = $"{errors} errors, {warnings} warnings",
-                Command = BuiltIns.ViewCommandPrefix + ErrorListViewModel.ToolWindowId,
+                Tooltip = $"{errors} error(s): open the Error List",
+                AccessibleName = $"{errors} errors",
+                Command = command,
+            });
+            Workbench.StatusBar.Set(new StatusBarItem("daedalus.problems.warnings", $"$(warning) {warnings}", StatusBarAlignment.Left, 99, StatusSource)
+            {
+                Tooltip = $"{warnings} warning(s): open the Error List",
+                AccessibleName = $"{warnings} warnings",
+                Command = command,
             });
         }, Avalonia.Threading.DispatcherPriority.Background);
     }

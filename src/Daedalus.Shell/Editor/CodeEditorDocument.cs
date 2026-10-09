@@ -35,8 +35,14 @@ public sealed class CodeEditorDocument : ShellDocument
 
     public Infrastructure.EditorFont Font { get; }
 
-    /// <summary>The view while it is attached.</summary>
+    /// <summary>The tab's view. It lives as long as the tab (Dock detaches inactive tabs' views and reuses them).</summary>
     public CodeEditorView? View { get; internal set; }
+
+    /// <summary>The pane wrapping <see cref="View"/>, reused when Dock asks for the view again.</summary>
+    internal Avalonia.Controls.Control? Host { get; set; }
+
+    /// <summary>Raised when the view's editor controller is created.</summary>
+    public event EventHandler? ControllerAttached;
 
     /// <summary>The view's editor controller while the tab is shown (Dock may recreate views).</summary>
     public CodeEditorController? Controller { get; private set; }
@@ -59,6 +65,7 @@ public sealed class CodeEditorDocument : ShellDocument
     internal void Attach(CodeEditorController controller)
     {
         Controller = controller;
+        ControllerAttached?.Invoke(this, EventArgs.Empty);
         if (_pendingCaret is { } caret)
         {
             _pendingCaret = null;
@@ -94,6 +101,9 @@ public sealed class CodeEditorDocument : ShellDocument
         if (close)
         {
             Model.PropertyChanged -= OnModelChanged;
+            View?.Close();
+            View = null;
+            Host = null;
         }
 
         return close;

@@ -25,6 +25,7 @@ internal sealed class ShellFixture : IAsyncDisposable
         UserData = userData;
         Environment.SetEnvironmentVariable("DAEDALUS_PLUGINHOST", Path.Combine(RepoRoot, "src", "Daedalus.Plugins.Host", "bin", Configuration, "net10.0", "daedalus-pluginhost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_BUILDHOST", Path.Combine(RepoRoot, "src", "Daedalus.Projects.Host", "bin", Configuration, "net10.0", "daedalus-buildhost.dll"));
+        Environment.SetEnvironmentVariable("DAEDALUS_LSHOST", Path.Combine(RepoRoot, "src", "Daedalus.LanguageServices.Host", "bin", Configuration, "net10.0", "daedalus-lshost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_TRASH_DIR", Path.Combine(userData, "trash"));
         Shell = new ShellHost(Application.Current!, new ShellOptions
         {
@@ -55,6 +56,27 @@ internal sealed class ShellFixture : IAsyncDisposable
         File.WriteAllText(Path.Combine(target, "Directory.Build.props"), "<Project />");
         File.WriteAllText(Path.Combine(target, "Directory.Packages.props"), "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
         return Path.Combine(target, "ProjectSystem", "ProjectSystem.slnx");
+    }
+
+    /// <summary>Copies samples/<paramref name="name"/> (standalone, like under samples/) and returns its folder.</summary>
+    public string CopySample(string name)
+    {
+        var target = Path.Combine(UserData, "samples");
+        Directory.CreateDirectory(target);
+        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Build.props"), Path.Combine(target, "Directory.Build.props"), overwrite: true);
+        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(target, "Directory.Packages.props"), overwrite: true);
+        Copy(Path.Combine(RepoRoot, "samples", name), Path.Combine(target, name));
+        return Path.Combine(target, name);
+    }
+
+    /// <summary>Opens samples/LanguageFeatures trusted and waits until the C# language service has loaded both projects.</summary>
+    public async Task<string> OpenLanguageFeaturesAsync()
+    {
+        var folder = CopySample("LanguageFeatures");
+        Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await Shell.OpenSolutionAsync(Path.Combine(folder, "LanguageFeatures.slnx"));
+        await PumpUntil(() => Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 2 }, seconds: 180);
+        return folder;
     }
 
     private static void Copy(string source, string target)

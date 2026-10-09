@@ -17,9 +17,23 @@ public sealed class ViewLocator : IDataTemplate
         ToolWindowDockable tool => new PaneHost(tool, BuildToolContent(tool.Content)),
         SettingsDocument document => new PaneHost(document, new SettingsView { DataContext = document.ViewModel }),
         KeyboardShortcutsDocument document => new PaneHost(document, new KeyboardShortcutsView { DataContext = document.ViewModel }),
-        CodeEditorDocument document => new PaneHost(document, new CodeEditorView(document, document.Services, document.Font)),
+        CodeEditorDocument document => EditorHost(document),
         _ => null,
     };
+
+    /// <summary>Editor views are kept by their document: rebuilding them on every tab switch would lose state.</summary>
+    private static Control EditorHost(CodeEditorDocument document)
+    {
+        if (document.Host is { Parent: null } host)
+        {
+            return host;
+        }
+
+        document.View?.Close();
+        document.View = new CodeEditorView(document, document.Services, document.Font);
+        document.Host = new PaneHost(document, document.View);
+        return document.Host;
+    }
 
     public bool Match(object? data) => data is ToolWindowDockable or ShellDocument;
 
