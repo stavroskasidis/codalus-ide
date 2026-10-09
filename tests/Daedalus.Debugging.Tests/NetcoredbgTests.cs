@@ -75,7 +75,7 @@ public sealed class NetcoredbgTests(DebuggeeFixture debuggee) : IClassFixture<De
             await adapter.SetBreakpointsAsync(debuggee.Program, [], Timeout());
             await adapter.ContinueAsync(thread, Timeout());
             var exited = DebugAdapter.Read((await events.NextAsync(DapEvents.Exited)).Body, DapJsonContext.Default.ExitedEvent)!;
-            Assert.Equal(15, exited.ExitCode);
+            DebuggeeFixture.AssertExitCode(15, exited.ExitCode);
             Assert.Contains("total=15 Ada is 36", events.Output, StringComparison.Ordinal);
         }
     }

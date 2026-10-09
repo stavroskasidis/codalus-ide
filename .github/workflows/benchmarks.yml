@@ -2,10 +2,17 @@ name: Benchmarks
 
 # Runs the benchmarks on GitHub-hosted runners. These are GPU-less VMs (Linux runs under Xvfb), so the
 # numbers are indicative only; authoritative numbers come from reference hardware
-# (docs/adr/0002-performance-budgets.md). Manual dispatch only (at milestone checkpoints): CI minutes are
-# limited while the repo is private.
+# (docs/adr/0002-performance-budgets.md). The regression gate is `compare`: it fails when a scenario regresses
+# against the median of earlier runs on the same runner OS.
+# While the repo is private: manual dispatch only (at milestone checkpoints), because CI minutes are limited.
+# Once it is public: also on every push to master (code changes only).
 on:
   workflow_dispatch:
+  push:
+    branches: [master]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
 
 permissions:
   contents: read
@@ -21,6 +28,7 @@ env:
 
 jobs:
   bench:
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false
     strategy:
       fail-fast: false
       matrix:

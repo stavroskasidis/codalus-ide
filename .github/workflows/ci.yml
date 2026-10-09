@@ -1,11 +1,17 @@
 name: CI
 
-# Cost policy for the private repo on the free plan (2,000 minutes a month; Windows bills 2x, macOS 10x):
-# work is committed directly to master (no pull requests for now). Pushes run Linux only and skip
-# documentation-only changes; the full Windows/macOS/Linux matrix runs on manual dispatch, once per milestone
-# checkpoint. There is no nightly schedule.
+# Cost policy while the repo is private on the free plan (2,000 minutes a month; Windows bills 2x, macOS 10x):
+# pushes run Linux only and skip documentation-only changes; the full Windows/macOS/Linux matrix runs on manual
+# dispatch, once per milestone checkpoint. There is no nightly schedule.
+# Public-repo configuration (automatic once the repository is public; GitHub-hosted minutes are free there):
+# every push and every pull request runs the full matrix.
 on:
   push:
+    branches: [master]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  pull_request:
     branches: [master]
     paths-ignore:
       - "docs/**"
@@ -33,7 +39,7 @@ jobs:
       - id: pick
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.event.repository.private }}" == "true" ]]; then
             echo 'os=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
           else
             echo 'os=["ubuntu-latest","windows-latest","macos-latest"]' >> "$GITHUB_OUTPUT"

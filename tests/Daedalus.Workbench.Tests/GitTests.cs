@@ -199,6 +199,21 @@ public sealed class GitServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Paths_through_a_symbolic_link_reach_the_same_files()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Symbolic links need extra privileges on Windows.");
+        var link = Path.Combine(_root, "link");
+        Directory.CreateSymbolicLink(link, Repo);
+        await Edit((4, "FOUR"));
+        await _git.RefreshAsync(Ct);
+
+        var viaLink = Path.Combine(link, "a.txt");
+        Assert.Single((await _git.DiffAsync(viaLink, staged: false, Ct))!.Hunks);
+        await _git.StageAsync([viaLink], Ct);
+        Assert.Contains(_git.Status!.Staged, f => f.RelativePath == "a.txt");
+    }
+
+    [Fact]
     public async Task Folders_outside_a_repository_have_no_status()
     {
         var plain = Path.Combine(_root, "plain");

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Daedalus.Platform;
+using Daedalus.Shell.Infrastructure;
 using Daedalus.Shell.Theming;
 using Daedalus.Workbench.Commands;
 using Daedalus.Workbench.Context;
@@ -45,6 +46,12 @@ internal static partial class BuiltIns
         var shell = ContributionSource.Shell;
         return
         [
+            SettingDescriptor.Create(CrashReporter.SettingKey, "false", SettingType.Boolean, shell) with
+            {
+                Title = "Save Crash Reports",
+                Category = "Privacy",
+                Description = "When Daedalus Studio crashes, save a report (version, OS, the error and recent log lines) in the logs folder on this computer. Nothing is sent anywhere.",
+            },
             SettingDescriptor.Create(ThemeService.SettingKey, "\"followSystem\"", SettingType.String, shell) with
             {
                 Title = "Color Theme",
@@ -138,6 +145,7 @@ internal static partial class BuiltIns
         Add("workbench.closeActiveDocument", "Close Document", "File", Ui(shell.CloseActiveDocument), enablement: "activeDocumentKind");
         Add("workbench.quit", PlatformInfo.Current == PlatformKind.Windows ? "Exit" : "Quit", "File", Ui(() => shell.Window?.RequestClose()));
         Add("help.about", "About Daedalus Studio", "Help", Ui(shell.ShowAbout));
+        Add("help.openCrashReports", "Open Crash Reports Folder", "Help", Ui(shell.OpenCrashReports));
 
         // Helpers for plugins (not in the palette): plugins reach shell features through commands.
         Add("workbench.openExternal", "Open URL", "Developer", async (args, _) =>
@@ -177,7 +185,8 @@ internal static partial class BuiltIns
             Item("view", "workbench.focusPreviousPane", "layout", 3),
             Item("tools", "workbench.openPluginsFolder", "plugins", 100),
             Item("help", "workbench.showLogs", "help", 1),
-            Item("help", "help.about", "help", 2),
+            Item("help", "help.openCrashReports", "help", 2),
+            Item("help", "help.about", "help", 3),
         ]);
     }
 

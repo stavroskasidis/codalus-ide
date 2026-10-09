@@ -46,6 +46,7 @@ public sealed partial class ShellHost
         Solutions.SolutionChanged += (_, _) => Ui.Post(OnSolutionChanged);
         Solutions.ProgressChanged += (_, progress) => Ui.Post(() => OnProgress(progress));
         Solutions.RestoreStateChanged += (_, e) => Ui.Post(() => OnRestoreState(e));
+        Solutions.HostCrashed += (_, e) => CrashReporter.Write("host", $"The build host exited unexpectedly (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}); restart: {e.WillRestart}.");
         Solutions.HostCrashed += (_, e) => Workbench.Notifications.Show(
             e.WillRestart ? NotificationSeverity.Warning : NotificationSeverity.Error,
             e.WillRestart ? $"The build host stopped unexpectedly (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}). Reopening the solution…"

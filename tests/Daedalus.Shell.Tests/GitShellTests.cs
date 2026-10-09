@@ -42,7 +42,7 @@ public sealed class GitShellTests
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "main" });
-        Assert.Contains(f.Shell.StatusBar.Left, i => i.Item.Id == "daedalus.git.branch" && i.Text.Contains("main", StringComparison.Ordinal));
+        await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Left.Any(i => i.Item.Id == "daedalus.git.branch" && i.Text.Contains("main", StringComparison.Ordinal)));
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("gitRepository"));
 
         // Typing adds a gutter marker before anything is saved.

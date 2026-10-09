@@ -1,0 +1,46 @@
+name: Release packages
+
+# Builds the per-OS packages with eng/package.sh (ADR 0009) and uploads them as workflow artifacts. Manual only: on the
+# private repo's free plan this costs about as much as a full CI matrix run. Creating a GitHub release from the
+# artifacts is a manual step (see docs/release/go-public-checklist.md).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to stamp (e.g. 0.1.0)
+        required: true
+        default: 0.1.0-preview.1
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Native AOT prerequisites (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+      - name: Package
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
+          eng/package.sh "${{ inputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ runner.os }}
+          path: artifacts/packages/
+          if-no-files-found: error

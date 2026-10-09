@@ -21,6 +21,10 @@ dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell      
 
 Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--open <file>`, `--screenshot <png>`; for benchmarks `--bench typing|scroll` (on the `--open` file) and `--exit-on interactive|highlight|done|language`. With `DAEDALUS_BENCH_EVENTS=<file>` the shell writes timestamped bench events. `DAEDALUS_PLUGINHOST`, `DAEDALUS_BUILDHOST` and `DAEDALUS_LSHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
 
+## Packaging
+
+`eng/package.sh <version>` builds the release package for the current OS into `artifacts/packages` (ADR 0009): a zip and winget manifests on Windows, a `.app` in a `.dmg` on macOS (signed with `DAEDALUS_CODESIGN_IDENTITY`), and a tar.gz, `.deb` and AppImage on Linux. `release.yml` runs it on all three (manual dispatch).
+
 ## Language services
 
 The C# language service host (`daedalus-lshost`, ADR 0005) speaks LSP over stdio (`docs/protocol.md`). It gets its projects from the build host's design-time builds, relayed by the shell (`LanguageService` in `src/Daedalus.Workbench/Languages`). `DAEDALUS_LSHOST` points at a host `.exe` or `.dll`; otherwise the shell uses `lshost/` next to it. Fixture: `samples/LanguageFeatures`.

@@ -24,6 +24,15 @@ public sealed class DebuggeeFixture : IAsyncLifetime
     /// <summary>netcoredbg, or null (tests are skipped locally; CI fetches it with eng/get-netcoredbg.sh and fails without it).</summary>
     public static string? Adapter => DebugAdapterLocator.Resolve() ?? (Environment.GetEnvironmentVariable("CI") == "true" ? throw new InvalidOperationException("netcoredbg was not found (run eng/get-netcoredbg.sh).") : null);
 
+    /// <summary>netcoredbg on macOS reports every exit code as 0 (a known gap, ADR 0007); elsewhere it is exact.</summary>
+    public static void AssertExitCode(int expected, int? actual)
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            Assert.Equal(expected, actual);
+        }
+    }
+
     /// <summary>The 1-based line of the <c>// [name]</c> marker in <paramref name="file"/>.</summary>
     public static int Line(string file, string marker) =>
         Array.FindIndex(File.ReadAllLines(file), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1 is > 0 and var line

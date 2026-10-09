@@ -1,0 +1,18 @@
+# winget default locale manifest (filled in by eng/package.sh).
+PackageIdentifier: DaedalusStudio.DaedalusStudio
+PackageVersion: {{VERSION}}
+PackageLocale: en-US
+Publisher: Daedalus Studio contributors
+PublisherUrl: https://github.com/stavroskasidis/daedalus-studio
+PackageName: Daedalus Studio
+License: MIT
+LicenseUrl: https://github.com/stavroskasidis/daedalus-studio/blob/master/LICENSE
+ShortDescription: A cross-platform, open-source IDE for .NET.
+Description: Daedalus Studio is an MIT-licensed .NET IDE for Windows, macOS and Linux with solutions, C# language services, build and run, debugging on netcoredbg, and Git.
+Moniker: daedalus
+Tags:
+  - ide
+  - dotnet
+  - csharp
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

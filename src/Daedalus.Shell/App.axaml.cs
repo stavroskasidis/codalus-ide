@@ -33,6 +33,7 @@ public sealed class App : Application
         if (Shell is { } shell)
         {
             shell.Workbench.Log.AppendLine($"[unhandled] {e.Exception}");
+            Infrastructure.CrashReporter.Write("error", e.Exception.ToString());
             shell.ReportError($"An unexpected error occurred: {e.Exception.Message}");
             e.Handled = true;
         }

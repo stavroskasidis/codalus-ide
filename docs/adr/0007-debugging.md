@@ -105,3 +105,4 @@ The workbench's `DebugService` owns sessions and breakpoints, and the shell draw
   - no input for console programs while debugging
 - Hit counts and logpoints cost a round trip per hit (the program stops briefly), unlike in an adapter that supports them.
 - macOS x64 has no netcoredbg build: debugging there is unavailable until there is one.
+- On macOS (arm64), netcoredbg reports every exit code as 0 (found by the M5 CI run); the tests skip that assertion there.

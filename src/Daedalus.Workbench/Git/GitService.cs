@@ -265,7 +265,10 @@ public sealed class GitService : IDisposable
         }
     }
 
-    private string Relative(string path) => Path.GetRelativePath(Root!, path).Replace('\\', '/');
+    private string Relative(string path) => Path.GetRelativePath(Root!, Real(path)).Replace('\\', '/');
+
+    /// <summary>Git reports real paths (symbolic links resolved); callers may pass another spelling of the same file.</summary>
+    private static string Real(string path) => Daedalus.Platform.RealPath.Resolve(path);
 
     // ------------------------------------------------------------------ staging
 
@@ -282,7 +285,7 @@ public sealed class GitService : IDisposable
     public async Task DiscardAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
     {
         var files = Status?.Files ?? [];
-        var untracked = paths.Where(p => files.Any(f => f.IsUntracked && Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, p))).ToList();
+        var untracked = paths.Where(p => files.Any(f => f.IsUntracked && Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, Real(p)))).ToList();
         var tracked = paths.Except(untracked).ToList();
         if (tracked.Count > 0)
         {
@@ -300,7 +303,7 @@ public sealed class GitService : IDisposable
     /// <summary>The diff of a file: work tree against the index, or (<paramref name="staged"/>) the index against HEAD.</summary>
     public async Task<FileDiff?> DiffAsync(string path, bool staged, CancellationToken cancellationToken = default)
     {
-        var status = Status?.Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, path));
+        var status = Status?.Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, Real(path)));
         if (status is { IsUntracked: true })
         {
             // Untracked: everything is new.

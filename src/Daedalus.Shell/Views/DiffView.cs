@@ -48,6 +48,51 @@ internal sealed class DiffLineRenderer(Func<IReadOnlyList<char>> kinds) : IBackg
     }
 }
 
+/// <summary>A "+" or "−" beside added and removed lines, so a diff doesn't rely on color alone.</summary>
+internal sealed class DiffSignMargin(Func<IReadOnlyList<char>> kinds) : AvaloniaEdit.Editing.AbstractMargin
+{
+    protected override void OnTextViewChanged(TextView? oldTextView, TextView? newTextView)
+    {
+        if (oldTextView is not null)
+        {
+            oldTextView.VisualLinesChanged -= OnVisualLinesChanged;
+        }
+
+        base.OnTextViewChanged(oldTextView, newTextView);
+        if (newTextView is not null)
+        {
+            newTextView.VisualLinesChanged += OnVisualLinesChanged;
+        }
+    }
+
+    private void OnVisualLinesChanged(object? sender, EventArgs e) => InvalidateVisual();
+
+    protected override Size MeasureOverride(Size availableSize) => new(14, 0);
+
+    public override void Render(DrawingContext context)
+    {
+        var lineKinds = kinds();
+        if (TextView is not { VisualLinesValid: true } view)
+        {
+            return;
+        }
+
+        var foreground = GetValue(Avalonia.Controls.Documents.TextElement.ForegroundProperty) ?? Brushes.Gray;
+        var typeface = new Typeface(GetValue(Avalonia.Controls.Documents.TextElement.FontFamilyProperty));
+        var size = GetValue(Avalonia.Controls.Documents.TextElement.FontSizeProperty);
+        foreach (var line in view.VisualLines)
+        {
+            var index = line.FirstDocumentLine.LineNumber - 1;
+            var sign = index < lineKinds.Count ? lineKinds[index] switch { '+' => "+", '-' => "−", _ => null } : null;
+            if (sign is not null)
+            {
+                var text = new FormattedText(sign, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, size, foreground);
+                context.DrawText(text, new Point(2, line.VisualTop - view.VerticalOffset));
+            }
+        }
+    }
+}
+
 /// <summary>
 /// A diff document: side by side (aligned rows, synchronized scrolling) or inline, with next/previous change and
 /// Stage/Unstage/Discard for the hunk at the caret (ADR 0008).
@@ -170,6 +215,7 @@ public sealed class DiffView : UserControl, IPaneView
         editor.Bind(BackgroundProperty, editor.GetResourceObservable("Shell.Editor.Background"));
         editor.Bind(ForegroundProperty, editor.GetResourceObservable("Shell.Editor.Foreground"));
         editor.TextArea.TextView.BackgroundRenderers.Add(new DiffLineRenderer(kinds));
+        editor.TextArea.LeftMargins.Add(new DiffSignMargin(kinds));
         AutomationProperties(editor, name);
         return editor;
     }

@@ -610,14 +610,21 @@ public sealed class CodeEditorController : IDisposable
         {
             if (Client is not { } client || Model.IsReadOnly)
             {
+                _services.Log($"{Model.Name}: completion not requested ({(Model.IsReadOnly ? "read-only" : "no language service client yet")})");
                 return;
             }
 
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
             var requestedAt = Editor.CaretOffset;
             var context = triggerCharacter is null
                 ? new CompletionContext(CompletionTriggerKind.Invoked, null)
                 : new CompletionContext(CompletionTriggerKind.TriggerCharacter, triggerCharacter);
             var list = await client.CompletionAsync(Model.Uri, Model.PositionAt(requestedAt), context, cancellationToken).ConfigureAwait(true);
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalSeconds: > 2 } slow)
+            {
+                _services.Log($"{Model.Name}: completion took {slow.TotalSeconds:0.0} s");
+            }
+
             if (cancellationToken.IsCancellationRequested || _disposed || list.Items.Length == 0 || _completion is not null)
             {
                 _services.Log($"{Model.Name}: completion not shown ({list.Items.Length} items, cancelled {cancellationToken.IsCancellationRequested}, open {_completion is not null})");

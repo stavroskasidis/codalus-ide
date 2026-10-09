@@ -56,6 +56,11 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings()]);
         Theme = new ThemeService(app, Workbench);
+        CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
+        {
+            var log = Workbench.Log.GetText();
+            return log.Length > 8000 ? log[^8000..] : log;
+        });
 
         foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()))
         {
@@ -120,6 +125,59 @@ public sealed partial class ShellHost : IAsyncDisposable
         DiscoverPlugins();
         RestoreLayout();
         UpdateStatusItems();
+        ReportPreviousCrashes();
+    }
+
+    /// <summary>Crash reports written since the last start: say so once, with a way to open them.</summary>
+    private void ReportPreviousCrashes()
+    {
+        if (CrashReporter.Folder is not { } folder)
+        {
+            return;
+        }
+
+        var marker = Path.Combine(folder, ".seen");
+        var since = File.Exists(marker) ? File.GetLastWriteTimeUtc(marker) : DateTime.MinValue;
+        var reports = CrashReporter.ReportsSince(since);
+        if (reports.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(marker, string.Empty);
+            File.SetLastWriteTimeUtc(marker, DateTime.UtcNow);
+        }
+        catch (IOException)
+        {
+        }
+
+        var notification = Workbench.Notifications.Warning(
+            "Daedalus Studio crashed last time. A crash report was saved on this computer; attach it to an issue if you report the problem.",
+            "Open Folder");
+        _ = notification.Result.ContinueWith(
+            t =>
+            {
+                if (t.Result == "Open Folder")
+                {
+                    OpenCrashReports();
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnRanToCompletion,
+            TaskScheduler.Default);
+    }
+
+    public void OpenCrashReports()
+    {
+        if (CrashReporter.Folder is not { } folder)
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(folder);
+        ShellIntegration.OpenUrl(new Uri(folder + Path.DirectorySeparatorChar));
     }
 
     public ShellOptions Options { get; }

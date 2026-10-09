@@ -249,8 +249,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 }
             }
         }
-        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        catch (Exception ex) when (_shutdown.IsCancellationRequested && ex is OperationCanceledException or InvalidOperationException)
         {
+            // Disposed while reading (a completed pipe reader throws InvalidOperationException).
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException or JsonException or InvalidDataException)
         {

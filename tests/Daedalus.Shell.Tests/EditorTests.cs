@@ -73,7 +73,17 @@ public class EditorTests
         program.Editor.TextArea.PerformTextInput(".");
         try
         {
-            await ShellFixture.PumpUntil(() => program.CompletionWindow is { } w && w.CompletionList.CompletionData.Count > 0, seconds: 60); // the first request loads Roslyn's completion providers
+            // The first request loads Roslyn's completion providers, which takes long on a busy machine (the whole suite
+            // runs in parallel). Asking again would cancel it, so wait for it; ask once more only if it came back empty.
+            try
+            {
+                await ShellFixture.PumpUntil(() => program.CompletionWindow is { } w && w.CompletionList.CompletionData.Count > 0, seconds: 90);
+            }
+            catch (Exception) when (f.Shell.Workbench.Output.GetOrCreate("daedalus.languages", "Language Services").GetText().Contains("completion not shown", StringComparison.Ordinal))
+            {
+                f.Shell.Run("editor.action.triggerSuggest");
+                await ShellFixture.PumpUntil(() => program.CompletionWindow is { } w && w.CompletionList.CompletionData.Count > 0, seconds: 60);
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
