@@ -190,6 +190,36 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<SourceGeneratedText?> SourceGeneratedTextAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.SourceGeneratedText, new SourceGeneratedTextParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.SourceGeneratedTextParams, ProtocolJsonContext.Default.SourceGeneratedText, cancellationToken);
 
+    public async Task<Location[]> ReferencesAsync(string uri, Position position, bool includeDeclaration, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.References, new ReferenceParams(new TextDocumentIdentifier(uri), position, new ReferenceContext(includeDeclaration)), ProtocolJsonContext.Default.ReferenceParams, ProtocolJsonContext.Default.LocationArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public Task<PrepareRenameResult?> PrepareRenameAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.PrepareRename, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.PrepareRenameResult, cancellationToken);
+
+    public Task<WorkspaceEdit?> RenameAsync(string uri, Position position, string newName, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.Rename, new RenameParams(new TextDocumentIdentifier(uri), position, newName), ProtocolJsonContext.Default.RenameParams, ProtocolJsonContext.Default.WorkspaceEdit, cancellationToken);
+
+    public async Task<CodeAction[]> CodeActionsAsync(string uri, Protocol.Range range, Diagnostic[] diagnostics, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.CodeAction, new CodeActionParams(new TextDocumentIdentifier(uri), range, new CodeActionContext(diagnostics, null)), ProtocolJsonContext.Default.CodeActionParams, ProtocolJsonContext.Default.CodeActionArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public Task<CodeAction> ResolveCodeActionAsync(CodeAction action, CancellationToken cancellationToken) =>
+        Invoke(Methods.CodeActionResolve, action, ProtocolJsonContext.Default.CodeAction, ProtocolJsonContext.Default.CodeAction, cancellationToken);
+
+    public async Task<TextEdit[]> FormatAsync(string uri, Protocol.Range? range, FormattingOptions options, CancellationToken cancellationToken) =>
+        (range is null
+            ? await InvokeNullable(Methods.Formatting, new DocumentFormattingParams(new TextDocumentIdentifier(uri), options), ProtocolJsonContext.Default.DocumentFormattingParams, ProtocolJsonContext.Default.TextEditArray, cancellationToken).ConfigureAwait(false)
+            : await InvokeNullable(Methods.RangeFormatting, new DocumentRangeFormattingParams(new TextDocumentIdentifier(uri), range, options), ProtocolJsonContext.Default.DocumentRangeFormattingParams, ProtocolJsonContext.Default.TextEditArray, cancellationToken).ConfigureAwait(false))
+        ?? [];
+
+    public async Task<TextEdit[]> FormatOnTypeAsync(string uri, Position position, string ch, FormattingOptions options, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.OnTypeFormatting, new DocumentOnTypeFormattingParams(new TextDocumentIdentifier(uri), position, ch, options), ProtocolJsonContext.Default.DocumentOnTypeFormattingParams, ProtocolJsonContext.Default.TextEditArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<SymbolInformation[]> WorkspaceSymbolsAsync(string query, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.WorkspaceSymbol, new WorkspaceSymbolParams(query), ProtocolJsonContext.Default.WorkspaceSymbolParams, ProtocolJsonContext.Default.SymbolInformationArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public Task<MetadataText?> MetadataTextAsync(string uri, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.MetadataText, new MetadataTextParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.MetadataTextParams, ProtocolJsonContext.Default.MetadataText, cancellationToken);
+
     private static TextDocumentPositionParams At(string uri, Position position) => new(new TextDocumentIdentifier(uri), position);
 
     private Task<TResult> Invoke<TParams, TResult>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken) =>

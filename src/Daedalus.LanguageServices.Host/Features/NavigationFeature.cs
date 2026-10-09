@@ -10,8 +10,8 @@ namespace Daedalus.LanguageServices.Host.Features;
 internal static class NavigationFeature
 {
     /// <summary>
-    /// Source locations of the symbol at <paramref name="position"/>, including source-generated files. Symbols
-    /// defined only in metadata have none. TODO(issue): decompiled metadata view (M3b, ICSharpCode.Decompiler).
+    /// Source locations of the symbol at <paramref name="position"/>, including source-generated files; for symbols
+    /// defined only in referenced assemblies, the decompiled declaration.
     /// </summary>
     public static async Task<Location[]> DefinitionAsync(Document document, int position, CancellationToken cancellationToken)
     {
@@ -20,7 +20,8 @@ internal static class NavigationFeature
             return [];
         }
 
-        return await LocationsAsync(document.Project.Solution, symbol.Locations, cancellationToken).ConfigureAwait(false);
+        var locations = await LocationsAsync(document.Project.Solution, symbol.Locations, cancellationToken).ConfigureAwait(false);
+        return locations.Length > 0 ? locations : await MetadataFeature.DefinitionAsync(document, symbol, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -114,7 +115,7 @@ internal static class NavigationFeature
         return [.. highlights.DistinctBy(h => h.Range)];
     }
 
-    private static async Task<ISymbol?> SymbolAtAsync(Document document, int position, CancellationToken cancellationToken)
+    internal static async Task<ISymbol?> SymbolAtAsync(Document document, int position, CancellationToken cancellationToken)
     {
         var symbol = await SymbolFinder.FindSymbolAtPositionAsync(document, position, cancellationToken).ConfigureAwait(false);
         if (symbol is null && position > 0)
@@ -131,7 +132,7 @@ internal static class NavigationFeature
         };
     }
 
-    private static async Task<Location[]> LocationsAsync(Solution solution, IEnumerable<Microsoft.CodeAnalysis.Location> locations, CancellationToken cancellationToken)
+    internal static async Task<Location[]> LocationsAsync(Solution solution, IEnumerable<Microsoft.CodeAnalysis.Location> locations, CancellationToken cancellationToken)
     {
         var result = new List<Location>();
         foreach (var location in locations.Where(l => l.IsInSource && l.SourceTree is not null))

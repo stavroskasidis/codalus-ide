@@ -34,6 +34,11 @@ public sealed record SourceGeneratedTextParams(TextDocumentIdentifier TextDocume
 
 public sealed record SourceGeneratedText(string Text, string HintName, string GeneratorName);
 
+/// <summary>The text of a decompiled type from a referenced assembly (URIs with the <c>daedalus-metadata</c> scheme).</summary>
+public sealed record MetadataTextParams(TextDocumentIdentifier TextDocument);
+
+public sealed record MetadataText(string Text, string AssemblyName, string TypeName);
+
 public static class WorkspaceStates
 {
     /// <summary>Projects are being loaded or the first compilation pass is running.</summary>

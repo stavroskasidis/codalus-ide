@@ -8,11 +8,31 @@ public static class DocumentUris
 {
     public const string GeneratedScheme = "daedalus-generated";
 
+    public const string MetadataScheme = "daedalus-metadata";
+
     public static string FromPath(string path) => new Uri(Path.GetFullPath(path)).AbsoluteUri;
 
     /// <summary>The file path of a <c>file://</c> URI, or null for other schemes.</summary>
     public static string? ToPath(string uri) =>
         Uri.TryCreate(uri, UriKind.Absolute, out var parsed) && parsed.IsFile ? parsed.LocalPath : null;
+
+    public static bool IsMetadata(string uri) => uri.StartsWith(MetadataScheme + ":", StringComparison.Ordinal);
+
+    /// <summary>The URI of a decompiled type: its assembly file and metadata name.</summary>
+    public static string FromMetadata(string assemblyPath, string typeMetadataName) =>
+        MetadataScheme + ":///" + Uri.EscapeDataString(assemblyPath) + "?type=" + Uri.EscapeDataString(typeMetadataName);
+
+    /// <summary>The assembly file and type of a <c>daedalus-metadata</c> URI, or null.</summary>
+    public static (string AssemblyPath, string TypeMetadataName)? MetadataTarget(string uri)
+    {
+        var query = uri.IndexOf("?type=", StringComparison.Ordinal);
+        if (!IsMetadata(uri) || query < 0)
+        {
+            return null;
+        }
+
+        return (Uri.UnescapeDataString(uri[(MetadataScheme.Length + 4)..query]), Uri.UnescapeDataString(uri[(query + 6)..]));
+    }
 
     public static bool IsGenerated(string uri) => uri.StartsWith(GeneratedScheme + ":", StringComparison.Ordinal);
 

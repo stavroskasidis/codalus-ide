@@ -165,6 +165,101 @@ public sealed class LanguageServiceTests(LanguageFixture fixture) : IClassFixtur
     }
 
     [Fact]
+    public async Task References_cross_projects()
+    {
+        await fixture.OpenAsync(Program);
+        var references = await fixture.Client.ReferencesAsync(Uri(Program), fixture.At(Program, "new Circle", "new C".Length), includeDeclaration: true, Ct);
+
+        Assert.Contains(references, r => r.Uri == Uri(Shapes)); // the declaration
+        Assert.Contains(references, r => r.Uri == Uri(Program));
+    }
+
+    [Fact]
+    public async Task Rename_returns_edits_for_every_reference()
+    {
+        await fixture.OpenAsync(Shapes);
+        var at = fixture.At(Shapes, "Radius { get; }", 1);
+        var prepared = await fixture.Client.PrepareRenameAsync(Uri(Shapes), at, Ct);
+        Assert.Equal("Radius", prepared?.Placeholder);
+
+        var edit = await fixture.Client.RenameAsync(Uri(Shapes), at, "Size", Ct);
+        var shapes = Assert.Single(edit!.DocumentChanges, c => c.TextDocument.Uri == Uri(Shapes));
+        Assert.Equal(3, shapes.Edits.Length); // the declaration and two uses
+        Assert.All(shapes.Edits, e => Assert.Equal("Size", e.NewText));
+        Assert.Null(await fixture.Client.PrepareRenameAsync(Uri(Shapes), fixture.At(Shapes, "namespace Lib", 2), Ct)); // a keyword
+    }
+
+    [Fact]
+    public async Task Code_actions_fix_errors_and_offer_refactorings()
+    {
+        var path = fixture.File("src", "App", "Builder.cs");
+        await File.WriteAllTextAsync(path, "internal static class Builder\n{\n    public static string Make() => new StringBuilder().ToString();\n}\n", Ct);
+        await fixture.OpenAsync(path);
+        var at = fixture.At(path, "StringBuilder", 3);
+        var diagnostics = await WaitForDiagnosticsAsync(path, d => d.Any(x => x.Code == "CS0246"));
+
+        var actions = await fixture.Client.CodeActionsAsync(Uri(path), new Protocol.Range(at, at), [.. diagnostics], Ct);
+        var addUsing = actions.First(a => a.Title.Contains("using System.Text", StringComparison.Ordinal));
+        Assert.Equal(CodeActionKind.QuickFix, addUsing.Kind);
+        var resolved = await fixture.Client.ResolveCodeActionAsync(addUsing, Ct);
+        var change = Assert.Single(resolved.Edit!.DocumentChanges);
+        Assert.Equal(Uri(path), change.TextDocument.Uri);
+        Assert.StartsWith("using System.Text;", Apply(fixture.Text(path).Text, change.Edits), StringComparison.Ordinal);
+
+        // Refactorings at the method name ("Use block body", among others).
+        var name = fixture.At(path, "Make()", 1);
+        var refactorings = await fixture.Client.CodeActionsAsync(Uri(path), new Protocol.Range(name, name), [], Ct);
+        Assert.True(refactorings.Any(a => a.Kind == CodeActionKind.Refactor), string.Join(", ", refactorings.Select(a => a.Title)));
+        await fixture.Languages.CloseAsync(path);
+    }
+
+    [Fact]
+    public async Task Formatting_follows_the_editorconfig()
+    {
+        var path = fixture.File("src", "App", "Messy.cs");
+        await File.WriteAllTextAsync(path, "internal static class Messy\n{\n  public static int  Two( ) {return 1+1;}\n}\n", Ct);
+        await fixture.OpenAsync(path);
+
+        var edits = await fixture.Client.FormatAsync(Uri(path), null, new FormattingOptions(4, true), Ct);
+        var text = Apply(fixture.Text(path).Text, edits);
+        Assert.Contains("    public static int Two()", text, StringComparison.Ordinal);
+        Assert.Contains("return 1 + 1;", text, StringComparison.Ordinal);
+        await fixture.Languages.CloseAsync(path);
+    }
+
+    [Fact]
+    public async Task Workspace_symbols_and_metadata_definitions()
+    {
+        var symbols = await fixture.Client.WorkspaceSymbolsAsync("Circ", Ct);
+        Assert.Contains(symbols, s => s.Name == "Circle" && s.Kind == SymbolKind.Class && s.Location.Uri == Uri(Shapes));
+
+        await fixture.OpenAsync(Program);
+        var console = await fixture.Client.DefinitionAsync(Uri(Program), fixture.At(Program, "Console.WriteLine", 2), Ct);
+        var location = Assert.Single(console);
+        Assert.True(DocumentUris.IsMetadata(location.Uri), location.Uri);
+        var text = await fixture.Client.MetadataTextAsync(location.Uri, Ct);
+        Assert.Contains("class Console", text?.Text, StringComparison.Ordinal);
+        Assert.True(location.Range.Start.Line > 0);
+    }
+
+    private static string Apply(string text, IEnumerable<Protocol.TextEdit> edits)
+    {
+        int Offset(Position p)
+        {
+            var lines = text.Split('\n');
+            return lines.Take(p.Line).Sum(l => l.Length + 1) + p.Character;
+        }
+
+        foreach (var edit in edits.OrderByDescending(e => e.Range.Start.Line).ThenByDescending(e => e.Range.Start.Character))
+        {
+            var start = Offset(edit.Range.Start);
+            text = text[..start] + edit.NewText + text[Offset(edit.Range.End)..];
+        }
+
+        return text;
+    }
+
+    [Fact]
     public async Task A_crashed_host_restarts_with_projects_and_documents()
     {
         await fixture.OpenAsync(Program);

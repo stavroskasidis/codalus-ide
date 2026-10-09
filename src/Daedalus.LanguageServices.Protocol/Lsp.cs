@@ -64,6 +64,21 @@ public sealed record ServerCapabilities
     public bool FoldingRangeProvider { get; init; }
 
     public SemanticTokensOptions? SemanticTokensProvider { get; init; }
+
+    public bool ReferencesProvider { get; init; }
+
+    /// <summary>True here means rename with <c>prepareRename</c> (LSP's <c>{ prepareProvider: true }</c>).</summary>
+    public bool RenameProvider { get; init; }
+
+    public bool CodeActionProvider { get; init; }
+
+    public bool DocumentFormattingProvider { get; init; }
+
+    public bool DocumentRangeFormattingProvider { get; init; }
+
+    public DocumentOnTypeFormattingOptions? DocumentOnTypeFormattingProvider { get; init; }
+
+    public bool WorkspaceSymbolProvider { get; init; }
 }
 
 public sealed record CompletionOptions(string[] TriggerCharacters, string[]? AllCommitCharacters, bool ResolveProvider);
@@ -265,3 +280,88 @@ public static class MessageType
 }
 
 public sealed record LogMessageParams(int Type, string Message);
+
+// ------------------------------------------------------------------ references, rename
+
+public sealed record ReferenceContext(bool IncludeDeclaration);
+
+public sealed record ReferenceParams(TextDocumentIdentifier TextDocument, Position Position, ReferenceContext Context);
+
+/// <summary>The range of the symbol to rename and its current name; null (JSON) when renaming isn't possible there.</summary>
+public sealed record PrepareRenameResult(Range Range, string Placeholder);
+
+public sealed record RenameParams(TextDocumentIdentifier TextDocument, Position Position, string NewName);
+
+public sealed record OptionalVersionedTextDocumentIdentifier(string Uri, int? Version);
+
+/// <summary>Edits of one document. The version is null for files that aren't open.</summary>
+public sealed record TextDocumentEdit(OptionalVersionedTextDocumentIdentifier TextDocument, TextEdit[] Edits);
+
+/// <summary>Only <see cref="DocumentChanges"/> (text edits per document) is used here.</summary>
+public sealed record WorkspaceEdit(TextDocumentEdit[] DocumentChanges);
+
+// ------------------------------------------------------------------ code actions
+
+public static class CodeActionKind
+{
+    public const string QuickFix = "quickfix";
+    public const string Refactor = "refactor";
+}
+
+public sealed record CodeActionContext(Diagnostic[] Diagnostics, string[]? Only);
+
+public sealed record CodeActionParams(TextDocumentIdentifier TextDocument, Range Range, CodeActionContext Context);
+
+/// <summary>Listed without <see cref="Edit"/>; <c>codeAction/resolve</c> computes it.</summary>
+public sealed record CodeAction(string Title)
+{
+    public string? Kind { get; init; }
+
+    public bool? IsPreferred { get; init; }
+
+    public WorkspaceEdit? Edit { get; init; }
+
+    public JsonElement? Data { get; init; }
+}
+
+// ------------------------------------------------------------------ formatting
+
+public sealed record FormattingOptions(int TabSize, bool InsertSpaces);
+
+public sealed record DocumentFormattingParams(TextDocumentIdentifier TextDocument, FormattingOptions Options);
+
+public sealed record DocumentRangeFormattingParams(TextDocumentIdentifier TextDocument, Range Range, FormattingOptions Options);
+
+public sealed record DocumentOnTypeFormattingParams(TextDocumentIdentifier TextDocument, Position Position, string Ch, FormattingOptions Options);
+
+public sealed record DocumentOnTypeFormattingOptions(string FirstTriggerCharacter, string[]? MoreTriggerCharacter);
+
+// ------------------------------------------------------------------ workspace symbols
+
+public static class SymbolKind
+{
+    public const int File = 1;
+    public const int Namespace = 3;
+    public const int Class = 5;
+    public const int Method = 6;
+    public const int Property = 7;
+    public const int Field = 8;
+    public const int Constructor = 9;
+    public const int Enum = 10;
+    public const int Interface = 11;
+    public const int Function = 12;
+    public const int Variable = 13;
+    public const int Constant = 14;
+    public const int EnumMember = 22;
+    public const int Struct = 23;
+    public const int Event = 24;
+    public const int Operator = 25;
+    public const int TypeParameter = 26;
+}
+
+public sealed record WorkspaceSymbolParams(string Query);
+
+public sealed record SymbolInformation(string Name, int Kind, Location Location)
+{
+    public string? ContainerName { get; init; }
+}

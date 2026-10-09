@@ -17,6 +17,7 @@ internal sealed class LanguageServer : IAsyncDisposable
     private readonly JsonRpcConnection _connection;
     private readonly WorkspaceManager _workspace = new();
     private readonly CompletionFeature _completion = new();
+    private readonly CodeActionsFeature _codeActions;
     private readonly DiagnosticsService _diagnostics;
     private readonly TaskCompletionSource _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -24,6 +25,7 @@ internal sealed class LanguageServer : IAsyncDisposable
     {
         _connection = connection;
         _diagnostics = new DiagnosticsService(_workspace, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
+        _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _diagnostics.BackgroundPassCompleted += (projects, documents) =>
             _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(WorkspaceStates.Ready, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
         _workspace.Log += (_, message) => Log(MessageType.Warning, message);
@@ -54,6 +56,13 @@ internal sealed class LanguageServer : IAsyncDisposable
                     DocumentHighlightProvider = true,
                     FoldingRangeProvider = true,
                     SemanticTokensProvider = SemanticTokensFeature.Options,
+                    ReferencesProvider = true,
+                    RenameProvider = true,
+                    CodeActionProvider = true,
+                    DocumentFormattingProvider = true,
+                    DocumentRangeFormattingProvider = true,
+                    DocumentOnTypeFormattingProvider = FormattingFeature.OnTypeOptions,
+                    WorkspaceSymbolProvider = true,
                 },
                 new ServerInfo("daedalus-lshost", version)));
         });
@@ -129,6 +138,30 @@ internal sealed class LanguageServer : IAsyncDisposable
             async (document, p, ct) => await SemanticTokensFeature.TokensAsync(document, p.Range, ct).ConfigureAwait(false), new SemanticTokens([]));
         OnDocument(Methods.DocumentOptions, json.DocumentOptionsParams, json.DocumentOptions, p => p.TextDocument,
             DocumentOptionsAsync, new DocumentOptions(true, 4, 4, null));
+        OnPosition(Methods.References, json.ReferenceParams, json.LocationArray, p => (p.TextDocument, p.Position),
+            async (document, offset, p, ct) => await ReferencesFeature.ReferencesAsync(document, offset, p.Context.IncludeDeclaration, ct).ConfigureAwait(false), []);
+        OnPosition(Methods.PrepareRename, json.TextDocumentPositionParams, json.PrepareRenameResult, p => (p.TextDocument, p.Position),
+            (document, offset, _, ct) => RenameFeature.PrepareAsync(document, offset, ct), null);
+        OnPosition(Methods.Rename, json.RenameParams, json.WorkspaceEdit, p => (p.TextDocument, p.Position),
+            (document, offset, p, ct) => RenameFeature.RenameAsync(document, offset, p.NewName, _workspace.Version, ct), null);
+        OnDocument(Methods.CodeAction, json.CodeActionParams, json.CodeActionArray, p => p.TextDocument, async (document, p, ct) =>
+        {
+            var text = await document.GetTextAsync(ct).ConfigureAwait(false);
+            return await _codeActions.ActionsAsync(document, Positions.ToSpan(text, p.Range), ct).ConfigureAwait(false);
+        }, []);
+        _connection.OnRequest(Methods.CodeActionResolve, json.CodeAction, json.CodeAction, (action, ct) => _codeActions.ResolveAsync(action, _workspace.Version, ct));
+        OnDocument(Methods.Formatting, json.DocumentFormattingParams, json.TextEditArray, p => p.TextDocument,
+            async (document, _, ct) => await FormattingFeature.FormatAsync(document, null, ct).ConfigureAwait(false), []);
+        OnDocument(Methods.RangeFormatting, json.DocumentRangeFormattingParams, json.TextEditArray, p => p.TextDocument, async (document, p, ct) =>
+        {
+            var text = await document.GetTextAsync(ct).ConfigureAwait(false);
+            return await FormattingFeature.FormatAsync(document, Positions.ToSpan(text, p.Range), ct).ConfigureAwait(false);
+        }, []);
+        OnPosition(Methods.OnTypeFormatting, json.DocumentOnTypeFormattingParams, json.TextEditArray, p => (p.TextDocument, p.Position),
+            async (document, offset, p, ct) => await FormattingFeature.OnTypeAsync(document, offset, p.Ch, ct).ConfigureAwait(false), []);
+        _connection.OnRequest(Methods.WorkspaceSymbol, json.WorkspaceSymbolParams, json.SymbolInformationArray, (p, ct) =>
+            WorkspaceSymbolsFeature.SearchAsync(_workspace.CurrentSolution, _workspace.MiscellaneousProjectId, p.Query, ct));
+        _connection.OnRequest(Methods.MetadataText, json.MetadataTextParams, json.MetadataText, (p, _) => Task.FromResult(MetadataFeature.Text(p.TextDocument.Uri)!));
         OnDocument(Methods.SourceGeneratedText, json.SourceGeneratedTextParams, json.SourceGeneratedText, p => p.TextDocument,
             (document, _, ct) => GeneratedTextAsync(document, ct), null);
     }

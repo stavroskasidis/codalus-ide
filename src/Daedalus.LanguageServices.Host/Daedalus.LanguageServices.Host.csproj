@@ -20,6 +20,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" />
+    <PackageReference Include="ICSharpCode.Decompiler" />
   </ItemGroup>
 
   <ItemGroup>

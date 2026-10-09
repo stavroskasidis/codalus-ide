@@ -34,6 +34,8 @@ internal sealed class DiagnosticsService : IDisposable
     private readonly Dictionary<string, CancellationTokenSource> _documentPasses = new(Paths.Comparer);
     private readonly Dictionary<string, Diagnostic[]> _background = new(Paths.Comparer);
     private readonly ConditionalWeakTable<Compilation, CompilationWithAnalyzers> _analyzers = new();
+    private readonly ConditionalWeakTable<Compilation, CompilationWithAnalyzers> _projectAnalyzers = new();
+    private readonly ConditionalWeakTable<Compilation, CompilationWithAnalyzers> _ideAnalyzers = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly MemoryTrimmer _trimmer = new();
     private CancellationTokenSource? _backgroundPass;
@@ -130,17 +132,41 @@ internal sealed class DiagnosticsService : IDisposable
             return;
         }
 
-        var diagnostics = model.GetDiagnostics(cancellationToken: cancellationToken).ToList();
-        if (document.Project.Id != _workspace.MiscellaneousProjectId && Analyzers(document.Project, model.Compilation) is { } analyzers)
-        {
-            diagnostics.AddRange(await analyzers.GetAnalyzerSyntaxDiagnosticsAsync(tree, cancellationToken).ConfigureAwait(false));
-            diagnostics.AddRange(await analyzers.GetAnalyzerSemanticDiagnosticsAsync(model, filterSpan: null, cancellationToken).ConfigureAwait(false));
-        }
-
+        var diagnostics = await DiagnosticsInSpanAsync(document, null, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), version, Convert(diagnostics, tree))).ConfigureAwait(false);
         _trimmer.WorkDone();
     }
+
+    /// <summary>
+    /// Compiler, project analyzer and (for documents up to <see cref="IdeAnalyzerLineLimit"/> lines) IDE analyzer
+    /// diagnostics of a document, optionally only those in <paramref name="span"/> (code fixes).
+    /// </summary>
+    public async Task<IReadOnlyList<RoslynDiagnostic>> DiagnosticsInSpanAsync(Document document, Microsoft.CodeAnalysis.Text.TextSpan? span, CancellationToken cancellationToken)
+    {
+        var tree = await document.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false);
+        var model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+        if (tree is null || model is null)
+        {
+            return [];
+        }
+
+        var diagnostics = model.GetDiagnostics(span, cancellationToken).ToList();
+        var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+        var withIde = text.Lines.Count <= IdeAnalyzerLineLimit;
+        var isMisc = document.Project.Id == _workspace.MiscellaneousProjectId;
+        if (Analyzers(document.Project, model.Compilation, includeProject: !isMisc, includeIde: withIde) is { } analyzers)
+        {
+            diagnostics.AddRange((await analyzers.GetAnalyzerSyntaxDiagnosticsAsync(tree, cancellationToken).ConfigureAwait(false))
+                .Where(d => span is null || d.Location.SourceSpan.IntersectsWith(span.Value)));
+            diagnostics.AddRange(await analyzers.GetAnalyzerSemanticDiagnosticsAsync(model, span, cancellationToken).ConfigureAwait(false));
+        }
+
+        return diagnostics;
+    }
+
+    /// <summary>Roslyn's IDE analyzers are skipped for very large files, which they would slow down a lot.</summary>
+    public const int IdeAnalyzerLineLimit = 10_000;
 
     // ------------------------------------------------------------------ the whole solution
 
@@ -191,7 +217,7 @@ internal sealed class DiagnosticsService : IDisposable
             projects++;
             documents += project.DocumentIds.Count;
             var diagnostics = compilation.GetDiagnostics(cancellationToken).ToList();
-            if (AnalysisScope == ScopeSolution && Analyzers(project, compilation) is { } analyzers)
+            if (AnalysisScope == ScopeSolution && Analyzers(project, compilation, includeProject: true, includeIde: false) is { } analyzers)
             {
                 diagnostics.AddRange(await analyzers.GetAnalyzerDiagnosticsAsync(cancellationToken).ConfigureAwait(false));
             }
@@ -228,15 +254,23 @@ internal sealed class DiagnosticsService : IDisposable
 
     // ------------------------------------------------------------------ helpers
 
-    private CompilationWithAnalyzers? Analyzers(Project project, Compilation compilation)
+    private CompilationWithAnalyzers? Analyzers(Project project, Compilation compilation, bool includeProject, bool includeIde)
     {
-        var analyzers = project.AnalyzerReferences.SelectMany(r => r.GetAnalyzers(project.Language)).ToImmutableArray();
+        var analyzers = (includeProject ? project.AnalyzerReferences.SelectMany(r => r.GetAnalyzers(project.Language)) : [])
+            .Concat(includeIde ? Features.ProviderCatalog.IdeAnalyzers : [])
+            .ToImmutableArray();
         if (analyzers.IsEmpty)
         {
             return null;
         }
 
-        return _analyzers.GetValue(compilation, c => c.WithAnalyzers(analyzers, new CompilationWithAnalyzersOptions(
+        var table = (includeProject, includeIde) switch
+        {
+            (true, true) => _analyzers,
+            (true, false) => _projectAnalyzers,
+            _ => _ideAnalyzers,
+        };
+        return table.GetValue(compilation, c => c.WithAnalyzers(analyzers, new CompilationWithAnalyzersOptions(
             project.AnalyzerOptions,
             onAnalyzerException: (ex, analyzer, _) => _log($"Analyzer {analyzer.GetType().Name} failed: {ex.Message}"),
             concurrentAnalysis: true,
