@@ -54,10 +54,10 @@ public sealed partial class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings()]);
+        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings()]);
         Theme = new ThemeService(app, Workbench);
 
-        foreach (var window in BuiltIns.ToolWindows())
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -73,6 +73,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
         InitializeSolutions();
         InitializeBuild();
+        InitializeDebugging();
         InitializeEditor();
         InitializeRefactoring();
 
@@ -89,10 +90,12 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterSolutionCommands(this);
         BuiltIns.RegisterEditorCommands(this);
         BuiltIns.RegisterBuildCommands(this);
+        BuiltIns.RegisterDebugCommands(this);
         BuiltIns.RegisterMenus(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
         BuiltIns.RegisterEditorMenus(Workbench.Menus);
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
+        BuiltIns.RegisterDebugMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
         Workbench.LoadUserKeybindings();
         SyncViewCommands();
@@ -189,6 +192,12 @@ public sealed partial class ShellHost : IAsyncDisposable
             SolutionExplorerViewModel.ToolWindowId => Explorer,
             ErrorListViewModel.ToolWindowId => ErrorList,
             FindResultsViewModel.ToolWindowId => FindResults,
+            VariablesViewModel.LocalsWindowId => Locals,
+            VariablesViewModel.AutosWindowId => Autos,
+            WatchViewModel.ToolWindowId => Watch,
+            CallStackViewModel.ToolWindowId => CallStack,
+            BreakpointsViewModel.ToolWindowId => BreakpointList,
+            DebugConsoleViewModel.ToolWindowId => DebugConsole,
             _ => null,
         },
     };
@@ -484,6 +493,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await Debugger.DisposeAsync().ConfigureAwait(false);
         await Languages.DisposeAsync().ConfigureAwait(false);
         await Solutions.DisposeAsync().ConfigureAwait(false);
         await Plugins.DisposeAsync().ConfigureAwait(false);

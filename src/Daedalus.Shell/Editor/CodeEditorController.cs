@@ -16,6 +16,7 @@ using Daedalus.LanguageServices.Protocol;
 using Daedalus.Rpc;
 using Daedalus.Shell.Controls;
 using Daedalus.Shell.Infrastructure;
+using Daedalus.Workbench.Debugging;
 
 namespace Daedalus.Shell.Editor;
 
@@ -46,6 +47,8 @@ public sealed class CodeEditorController : IDisposable
     private readonly SearchPanel _search;
     private readonly MultiCaretController _multiCaret;
     private readonly DispatcherTimer _hoverTimer;
+    private readonly BreakpointMargin _breakpointMargin;
+    private readonly DebugLineRenderer _debugLines;
     private CancellationTokenSource? _tokensCts;
     private CancellationTokenSource? _foldingCts;
     private CancellationTokenSource? _highlightCts;
@@ -76,6 +79,13 @@ public sealed class CodeEditorController : IDisposable
         view.LineTransformers.Add(_markers);
         view.BackgroundRenderers.Add(_highlights);
         view.BackgroundRenderers.Add(_markers);
+        _breakpointMargin = new BreakpointMargin(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine, relocate: attach);
+        editor.TextArea.LeftMargins.Insert(0, _breakpointMargin);
+        _debugLines = new DebugLineRenderer(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine);
+        view.BackgroundRenderers.Insert(0, _debugLines);
+        services.Debugger.StateChanged += OnDebuggerChanged;
+        services.Debugger.FrameChanged += OnDebuggerChanged;
+        services.Debugger.Stopped += OnDebuggerStopped;
         _folding = FoldingManager.Install(editor.TextArea);
         _search = SearchPanel.Install(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
@@ -797,7 +807,11 @@ public sealed class CodeEditorController : IDisposable
                 parts.Add($"**{diagnostic.Code}**: {Escape(diagnostic.Message)}");
             }
 
-            if (Client is { } client)
+            if (await DataTipAsync(offset, cancellationToken).ConfigureAwait(true) is { } dataTip)
+            {
+                parts.Add(dataTip);
+            }
+            else if (Client is { } client)
             {
                 var hover = await client.HoverAsync(Model.Uri, Model.PositionAt(offset), cancellationToken).ConfigureAwait(true);
                 if (hover?.Contents.Value is { Length: > 0 } markdown)
@@ -827,6 +841,107 @@ public sealed class CodeEditorController : IDisposable
         catch (Exception ex) when (IsTransient(ex))
         {
             Report(ex);
+        }
+    }
+
+    // ------------------------------------------------------------------ debugging
+
+    /// <summary>The current statement's line in this document while the debugger is stopped here.</summary>
+    public int? CurrentDebugLine()
+    {
+        var debugger = _services.Debugger;
+        return debugger.State == DebugState.Stopped && debugger.SelectedFrame is { Source.Path: { } path } frame
+               && Workbench.Projects.SolutionService.PathComparer.Equals(path, Model.Path)
+            ? frame.Line
+            : null;
+    }
+
+    public BreakpointMargin BreakpointMargin => _breakpointMargin;
+
+    private void OnDebuggerStopped(object? sender, StopInfo e) => OnDebuggerChanged(sender, EventArgs.Empty);
+
+    private void OnDebuggerChanged(object? sender, EventArgs e) => Ui.Post(() =>
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _breakpointMargin.InvalidateVisual();
+        Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
+    });
+
+    /// <summary>The expression a data tip evaluates: the identifier at <paramref name="offset"/> with the member accesses before it.</summary>
+    public string? ExpressionAt(int offset)
+    {
+        var text = Model.Text;
+        static bool IsIdentifier(char c) => char.IsLetterOrDigit(c) || c == '_';
+        if (offset >= text.TextLength || !IsIdentifier(text.GetCharAt(offset)))
+        {
+            if (offset == 0 || !IsIdentifier(text.GetCharAt(offset - 1)))
+            {
+                return null;
+            }
+
+            offset--;
+        }
+
+        var end = offset;
+        while (end < text.TextLength && IsIdentifier(text.GetCharAt(end)))
+        {
+            end++;
+        }
+
+        var start = offset;
+        while (true)
+        {
+            while (start > 0 && IsIdentifier(text.GetCharAt(start - 1)))
+            {
+                start--;
+            }
+
+            if (start > 1 && text.GetCharAt(start - 1) == '.' && IsIdentifier(text.GetCharAt(start - 2)))
+            {
+                start--;
+                continue;
+            }
+
+            break;
+        }
+
+        var expression = text.GetText(start, end - start);
+        return expression.Length == 0 || char.IsDigit(expression[0]) ? null : expression;
+    }
+
+    /// <summary>A data tip's Markdown: the value and, for objects, their first members.</summary>
+    private async Task<string?> DataTipAsync(int offset, CancellationToken cancellationToken)
+    {
+        var debugger = _services.Debugger;
+        if (debugger.State != DebugState.Stopped || ExpressionAt(offset) is not { } expression)
+        {
+            return null;
+        }
+
+        static string Code(string text) => "`" + text.Replace("`", "'", StringComparison.Ordinal) + "`";
+        try
+        {
+            var result = await debugger.EvaluateAsync(expression, "hover", cancellationToken).ConfigureAwait(true);
+            var lines = new List<string> { $"{Code(expression)} = {Code(result.Result)}" + (string.IsNullOrEmpty(result.Type) ? string.Empty : $" ({result.Type})") };
+            if (result.VariablesReference > 0)
+            {
+                var children = await debugger.VariablesAsync(result.VariablesReference).ConfigureAwait(true);
+                lines.AddRange(children.Take(25).Select(c => $"- {Code(c.Name)} = {Code(c.Value)}"));
+                if (children.Count > 25)
+                {
+                    lines.Add($"- … {children.Count - 25} more (see Locals or add a watch)");
+                }
+            }
+
+            return string.Join("\n", lines);
+        }
+        catch (Exception ex) when (ex is Daedalus.Debugging.DapException or Daedalus.Debugging.DapConnectionLostException or InvalidOperationException)
+        {
+            return null;
         }
     }
 
@@ -953,6 +1068,12 @@ public sealed class CodeEditorController : IDisposable
         view.LineTransformers.Remove(_markers);
         view.BackgroundRenderers.Remove(_highlights);
         view.BackgroundRenderers.Remove(_markers);
+        view.BackgroundRenderers.Remove(_debugLines);
+        Editor.TextArea.LeftMargins.Remove(_breakpointMargin);
+        _breakpointMargin.Detach();
+        _services.Debugger.StateChanged -= OnDebuggerChanged;
+        _services.Debugger.FrameChanged -= OnDebuggerChanged;
+        _services.Debugger.Stopped -= OnDebuggerStopped;
         view.ScrollOffsetChanged -= OnViewChanged;
         view.VisualLinesChanged -= OnViewChanged;
         view.PointerMoved -= OnPointerMoved;

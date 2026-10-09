@@ -83,7 +83,7 @@ The `Daedalus.Plugins.Abstractions` package is not published yet (the repository
 
 ### When-clauses
 
-`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`), `explorerItemIsProjectReference`, `editorTextFocus` (an editor has keyboard focus), `editorLanguageId` (`csharp`, or absent for plain text), `editorHasSelection`, `editorHasMultipleSelections`, `buildRunning`, `programRunning` (a program started with Run Without Debugging is still running) and `hasStartupProject`. Every text document, editor tabs included, has `activeDocumentKind == textFile`. In `toolWindow/title`, `view` is the tool window's id.
+`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`), `explorerItemIsProjectReference`, `editorTextFocus` (an editor has keyboard focus), `editorLanguageId` (`csharp`, or absent for plain text), `editorHasSelection`, `editorHasMultipleSelections`, `buildRunning`, `programRunning` (a program started with Run Without Debugging is still running), `hasStartupProject`, `debugActive`, `debugRunning`, `debugStopped` and `hasBreakpoints`. Every text document, editor tabs included, has `activeDocumentKind == textFile`. In `toolWindow/title`, `view` is the tool window's id.
 
 ## The code
 
@@ -139,6 +139,9 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `editor.action.referenceSearch`, `editor.action.rename`, `editor.action.quickFix`, `editor.action.formatDocument`, `editor.action.formatSelection`, `workbench.action.gotoAll`, `workbench.action.findInFiles` | none; act on the active editor (Go To All and Find in Files on the solution) |
 | `build.buildSolution`, `build.rebuildSolution`, `build.cleanSolution`, `build.cancel`, `run.stop`, `run.selectStartupProject` | none |
 | `build.buildProject`, `build.rebuildProject`, `build.cleanProject`, `run.startWithoutDebugging`, `run.setStartupProject`, `run.selectLaunchProfile` | optional project path (default: the selected or active document's project; for run commands, the startup project) |
+| `debug.start`, `debug.continue`, `debug.stop`, `debug.restart`, `debug.stepOver`, `debug.stepInto`, `debug.stepOut`, `debug.pause`, `debug.toggleBreakpoint`, `debug.toggleBreakpointEnabled`, `debug.editBreakpoint`, `debug.deleteAllBreakpoints`, `debug.exceptionSettings` | none (`debug.start` takes an optional project path) |
+| `debug.attach` | optional process id |
+| `debug.addWatch` | optional expression (default: the selection or the expression at the caret) |
 | `file.saveAll`, `workbench.navigateBack`, `workbench.navigateForward`, `workbench.splitEditorRight`, `workbench.splitEditorDown`, `workbench.view.errorList` | none |
 | `workbench.showCommandPalette`, `workbench.openSettings`, `workbench.openKeyboardShortcuts`, `workbench.selectTheme`, `workbench.showLogs`, `workbench.view.plugins` | none |
 
@@ -157,7 +160,7 @@ Installed plugins live in the user plugins folder (**Tools → Open User Plugins
 
 ### Unreleased (M4)
 
-Additive: menu locations `menuBar/build` and `menuBar/debug` (Tools moved after them), build and run commands, and the context keys `buildRunning`, `programRunning` and `hasStartupProject`. The plugin API is unchanged.
+Additive: menu locations `menuBar/build` and `menuBar/debug` (Tools moved after them), build, run and debug commands, and the context keys `buildRunning`, `programRunning`, `hasStartupProject`, `debugActive`, `debugRunning`, `debugStopped` and `hasBreakpoints` (M4 and M5). The plugin API is unchanged.
 
 ### 0.1.1 (M2)
 

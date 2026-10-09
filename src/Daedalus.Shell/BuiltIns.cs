@@ -187,6 +187,7 @@ internal static partial class BuiltIns
             .. KeybindingService.ParseRules(SolutionKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(EditorKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(BuildKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+            .. KeybindingService.ParseRules(DebugKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         ];
 
     private static CommandHandler Ui(Action action) => async (_, _) =>

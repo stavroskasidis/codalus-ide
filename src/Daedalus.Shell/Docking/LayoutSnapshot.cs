@@ -66,7 +66,15 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
 
     /// <summary>The launch profile chosen per project path.</summary>
     public Dictionary<string, string>? LaunchProfiles { get; init; }
+
+    public IReadOnlyList<SessionBreakpoint>? Breakpoints { get; init; }
+
+    /// <summary>Watch window expressions.</summary>
+    public IReadOnlyList<string>? Watches { get; init; }
 }
+
+/// <summary>A breakpoint (1-based line), kept with the solution.</summary>
+public sealed record SessionBreakpoint(string Path, int Line, string? Condition = null, string? HitCondition = null, string? LogMessage = null, bool Enabled = true);
 
 /// <summary>An open file and its caret (zero-based line and character).</summary>
 public sealed record SessionDocument(string Path, int Line, int Character);

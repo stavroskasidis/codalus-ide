@@ -7,6 +7,7 @@
     <Project Path="samples/plugins/HelloWorld/HelloWorld.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Daedalus.Debugging/Daedalus.Debugging.csproj" />
     <Project Path="src/Daedalus.Diagnostics.BenchEvents/Daedalus.Diagnostics.BenchEvents.csproj" />
     <Project Path="src/Daedalus.LanguageServices.Client/Daedalus.LanguageServices.Client.csproj" />
     <Project Path="src/Daedalus.LanguageServices.Host/Daedalus.LanguageServices.Host.csproj" />
@@ -27,6 +28,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Daedalus.Benchmarks.Harness.Tests/Daedalus.Benchmarks.Harness.Tests.csproj" />
+    <Project Path="tests/Daedalus.Debugging.Tests/Daedalus.Debugging.Tests.csproj" />
     <Project Path="tests/Daedalus.LanguageServices.Host.Tests/Daedalus.LanguageServices.Host.Tests.csproj" />
     <Project Path="tests/Daedalus.Plugins.Tests/Daedalus.Plugins.Tests.csproj" />
     <Project Path="tests/Daedalus.Projects.Tests/Daedalus.Projects.Tests.csproj" />

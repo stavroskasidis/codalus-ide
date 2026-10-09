@@ -27,8 +27,6 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     public const int InternalError = -32603;
     public const int RequestCancelled = -32800;
 
-    private static readonly byte[] s_headerTerminator = "\r\n\r\n"u8.ToArray();
-
     private readonly Stream _reader;
     private readonly Stream _writer;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -210,7 +208,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             writer.WriteEndObject();
         }
 
-        var header = Encoding.ASCII.GetBytes(string.Create(CultureInfo.InvariantCulture, $"Content-Length: {body.WrittenCount}\r\n\r\n"));
+        var header = FramedMessageWriter.Header(body.WrittenCount);
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -236,7 +234,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         Exception? failure = null;
         try
         {
-            var reader = new MessageReader(_reader);
+            var reader = new FramedMessageReader(_reader);
             while (!_shutdown.IsCancellationRequested)
             {
                 var payload = await reader.ReadMessageAsync(_shutdown.Token).ConfigureAwait(false);
@@ -432,79 +430,6 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
         _shutdown.Dispose();
         _writeLock.Dispose();
-    }
-
-    /// <summary>Reads <c>Content-Length</c>-framed messages.</summary>
-    private sealed class MessageReader(Stream stream)
-    {
-        private byte[] _buffer = new byte[64 * 1024];
-        private int _start;
-        private int _end;
-
-        public async Task<byte[]?> ReadMessageAsync(CancellationToken cancellationToken)
-        {
-            int contentLength;
-            while (true)
-            {
-                var headerEnd = _buffer.AsSpan(_start, _end - _start).IndexOf(s_headerTerminator);
-                if (headerEnd >= 0)
-                {
-                    contentLength = ParseContentLength(_buffer.AsSpan(_start, headerEnd));
-                    _start += headerEnd + s_headerTerminator.Length;
-                    break;
-                }
-
-                if (!await FillAsync(cancellationToken).ConfigureAwait(false))
-                {
-                    return null;
-                }
-            }
-
-            while (_end - _start < contentLength)
-            {
-                if (!await FillAsync(cancellationToken).ConfigureAwait(false))
-                {
-                    throw new InvalidDataException("Stream ended in the middle of a message.");
-                }
-            }
-
-            var message = _buffer.AsSpan(_start, contentLength).ToArray();
-            _start += contentLength;
-            return message;
-        }
-
-        private async Task<bool> FillAsync(CancellationToken cancellationToken)
-        {
-            if (_start > 0)
-            {
-                Buffer.BlockCopy(_buffer, _start, _buffer, 0, _end - _start);
-                _end -= _start;
-                _start = 0;
-            }
-
-            if (_end == _buffer.Length)
-            {
-                Array.Resize(ref _buffer, _buffer.Length * 2);
-            }
-
-            var read = await stream.ReadAsync(_buffer.AsMemory(_end), cancellationToken).ConfigureAwait(false);
-            _end += read;
-            return read > 0;
-        }
-
-        private static int ParseContentLength(ReadOnlySpan<byte> headers)
-        {
-            foreach (var line in Encoding.ASCII.GetString(headers).Split("\r\n"))
-            {
-                var separator = line.IndexOf(':', StringComparison.Ordinal);
-                if (separator > 0 && line.AsSpan(0, separator).Trim().Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
-                {
-                    return int.Parse(line.AsSpan(separator + 1).Trim(), CultureInfo.InvariantCulture);
-                }
-            }
-
-            throw new InvalidDataException("Message header has no Content-Length.");
-        }
     }
 }
 

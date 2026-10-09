@@ -16,7 +16,7 @@ internal static partial class BuiltIns
           { "key": "primary+shift+b", "command": "build.buildSolution" },
           { "key": "ctrl+pause", "command": "build.cancel", "when": "buildRunning" },
           { "key": "ctrl+f5", "mac": "cmd+f5", "command": "run.startWithoutDebugging" },
-          { "key": "shift+f5", "command": "run.stop", "when": "programRunning" }
+          { "key": "shift+f5", "command": "run.stop", "when": "programRunning && !debugActive" }
         ]
         """;
 

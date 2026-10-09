@@ -109,4 +109,7 @@ public interface IEditorServices
 
     /// <summary>The lightbulb: code fixes and refactorings at the active editor's caret.</summary>
     Task ShowCodeActionsAsync();
+
+    /// <summary>Breakpoints, the current statement and data tips (ADR 0007).</summary>
+    Daedalus.Workbench.Debugging.DebugService Debugger { get; }
 }

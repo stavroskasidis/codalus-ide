@@ -47,6 +47,11 @@ public sealed class ViewLocator : IDataTemplate
         SolutionExplorerViewModel vm => new SolutionExplorerView { DataContext = vm },
         ErrorListViewModel vm => new ErrorListView { DataContext = vm },
         FindResultsViewModel vm => new FindResultsView { DataContext = vm },
+        VariablesViewModel vm => new VariablesView { DataContext = vm },
+        WatchViewModel vm => new WatchView { DataContext = vm },
+        CallStackViewModel vm => new CallStackView { DataContext = vm },
+        BreakpointsViewModel vm => new BreakpointsView { DataContext = vm },
+        DebugConsoleViewModel vm => new DebugConsoleView { DataContext = vm },
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },
     };
 }

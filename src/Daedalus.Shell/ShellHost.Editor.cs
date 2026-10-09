@@ -5,6 +5,7 @@ using Daedalus.LanguageServices.Protocol;
 using Daedalus.Platform;
 using Daedalus.Shell.Editor;
 using Daedalus.Shell.Infrastructure;
+using Daedalus.Workbench.Debugging;
 using Daedalus.Shell.Theming;
 using Daedalus.Shell.ViewModels;
 using Daedalus.Workbench.Commands;
@@ -571,6 +572,8 @@ public sealed partial class ShellHost : IEditorServices
         WriteJson(file, new Docking.EditorSession(documents, ActiveEditor?.Model.Path)
         {
             StartupProject = Runs.ChosenStartupProject,
+            Breakpoints = Debugger.Breakpoints.All.Count == 0 ? null : [.. Debugger.Breakpoints.All.Select(b => new Docking.SessionBreakpoint(b.Path, b.Line, b.Condition, b.HitCondition, b.LogMessage, b.Enabled))],
+            Watches = Watch.Expressions.Count == 0 ? null : Watch.Expressions,
             LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
         }, Docking.ShellJsonContext.Default.EditorSession);
     }
@@ -581,10 +584,14 @@ public sealed partial class ShellHost : IEditorServices
         if (SessionFile(solutionPath) is not { } file || ReadJson(file, Docking.ShellJsonContext.Default.EditorSession) is not { } session)
         {
             Runs.Load(null, null);
+            Debugger.Breakpoints.Clear();
+            Watch.Load(null);
             return;
         }
 
         Runs.Load(session.StartupProject, session.LaunchProfiles);
+        Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(b => new BreakpointSpec(b.Path, b.Line, b.Condition, b.HitCondition, b.LogMessage, b.Enabled)));
+        Watch.Load(session.Watches);
 
         foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))
         {

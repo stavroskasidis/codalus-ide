@@ -36,6 +36,14 @@ All 97 resolved NuGet packages (direct and transitive) were checked: 88 are MIT,
 | Microsoft.Testing.Platform (transitive) | 2.x | MIT |
 
 
+## Debugger (downloaded by `eng/get-netcoredbg.sh`; not committed; bundled by installers from M7)
+
+| Component | Version | License | Notes |
+|---|---|---|---|
+| netcoredbg (Samsung) | 3.2.0-1092 | MIT | The debug adapter (ADR 0007). Pinned by SHA-256. |
+| dbgshim (inside the netcoredbg archive; .NET diagnostics) | per netcoredbg 3.2.0-1092 | MIT | Debugging shim of the .NET runtime. |
+| Microsoft.CodeAnalysis, .CSharp, .Scripting, .CSharp.Scripting (inside the netcoredbg archive) | 2.x (2017 builds) | Apache-2.0 | netcoredbg's expression evaluator. Apache-2.0 is OSI-approved and compatible with MIT redistribution; installers must include its license and NOTICE. |
+
 ## Rust
 
 None. The GPUI prototype (M0) and its crates were removed when Avalonia was chosen (ADR 0001).

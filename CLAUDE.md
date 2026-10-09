@@ -25,6 +25,10 @@ Arguments: an optional solution, project or folder to open. Options: `--user-dat
 
 The C# language service host (`daedalus-lshost`, ADR 0005) speaks LSP over stdio (`docs/protocol.md`). It gets its projects from the build host's design-time builds, relayed by the shell (`LanguageService` in `src/Daedalus.Workbench/Languages`). `DAEDALUS_LSHOST` points at a host `.exe` or `.dll`; otherwise the shell uses `lshost/` next to it. Fixture: `samples/LanguageFeatures`.
 
+## Debugging
+
+The shell debugs through netcoredbg (Samsung, MIT) over DAP (ADR 0007; client in `src/Daedalus.Debugging`, sessions in `DebugService` in `src/Daedalus.Workbench/Debugging`). Get it with `eng/get-netcoredbg.sh` (pinned, checksummed, into `.work/netcoredbg`); `DAEDALUS_NETCOREDBG` points at another one, and installed builds look in `debugger/` next to the shell. Debugger tests skip without it locally and fail without it in CI. Fixture: `samples/Debugging`.
+
 ## Benchmarks
 
 See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -- list | run ... | report | check | compare --baseline DIR`. Budgets live in `benchmarks/budgets.json`. Scenarios that inject keystrokes require `--allow-input` and a machine that nobody is using at the time.
