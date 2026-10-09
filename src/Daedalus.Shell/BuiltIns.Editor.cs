@@ -38,7 +38,17 @@ internal static partial class BuiltIns
           { "key": "ctrl+shift+tab", "command": "workbench.previousDocument", "when": "activeDocumentKind" },
           { "key": "primary+\\", "command": "workbench.splitEditorRight", "when": "activeDocumentKind == textFile" },
           { "key": "primary+k primary+\\", "command": "workbench.splitEditorDown", "when": "activeDocumentKind == textFile" },
-          { "key": "primary+\\ primary+e", "command": "workbench.view.errorList" }
+          { "key": "primary+\\ primary+e", "command": "workbench.view.errorList" },
+          { "key": "shift+f12", "command": "editor.action.referenceSearch", "when": "editorTextFocus" },
+          { "key": "f2", "command": "editor.action.rename", "when": "editorTextFocus" },
+          { "key": "primary+r primary+r", "command": "editor.action.rename", "when": "editorTextFocus" },
+          { "key": "primary+.", "command": "editor.action.quickFix", "when": "editorTextFocus" },
+          { "key": "alt+enter", "command": "editor.action.quickFix", "when": "editorTextFocus" },
+          { "key": "primary+k primary+d", "command": "editor.action.formatDocument", "when": "editorTextFocus" },
+          { "key": "shift+alt+f", "command": "editor.action.formatDocument", "when": "editorTextFocus" },
+          { "key": "primary+k primary+f", "command": "editor.action.formatSelection", "when": "editorTextFocus" },
+          { "key": "primary+t", "command": "workbench.action.gotoAll" },
+          { "key": "primary+shift+f", "command": "workbench.action.findInFiles" }
         ]
         """;
 
@@ -57,6 +67,7 @@ internal static partial class BuiltIns
             Setting(EditorOptions.RenderWhitespaceKey, "\"none\"", SettingType.String, "Render Whitespace", "Show spaces and tabs.", 8) with { Enum = ["none", "all"], EnumDescriptions = ["Hidden", "Visible"] },
             Setting(EditorOptions.RulersKey, "[]", SettingType.StringArray, "Rulers", "Columns at which to draw vertical rulers, e.g. 120.", 9),
             Setting(EditorOptions.HighlightCurrentLineKey, "true", SettingType.Boolean, "Highlight Current Line", "Highlight the line with the caret.", 10),
+            Setting(EditorOptions.FormatOnTypeKey, "true", SettingType.Boolean, "Format on Type", "Format the statement or block after typing ; or }.", 11),
             SettingDescriptor.Create("languageServices.analysisScope", "\"openDocuments\"", SettingType.String, shell) with
             {
                 Title = "Background Analysis Scope",
@@ -110,6 +121,13 @@ internal static partial class BuiltIns
         Add("editor.action.insertCursorBelow", "Add Caret Below", "Edit", OnEditor(c => c.MultiCaret.AddCaretVertically(+1)), Editor);
         Add("editor.action.addSelectionToNextFindMatch", "Insert Next Matching Caret", "Edit", OnEditor(c => c.MultiCaret.SelectNextOccurrence()), Editor);
         Add("editor.action.selectHighlights", "Insert Carets at All Matches", "Edit", OnEditor(c => c.MultiCaret.SelectNextOccurrence(all: true)), Editor);
+        Add("editor.action.referenceSearch", "Find All References", "Editor", Ui(shell.FindReferencesAsync), Editor);
+        Add("editor.action.rename", "Rename…", "Editor", Ui(shell.RenameSymbolAsync), Editor);
+        Add("editor.action.quickFix", "Quick Actions and Refactorings…", "Editor", Ui(shell.ShowCodeActionsAsync), Editor);
+        Add("editor.action.formatDocument", "Format Document", "Editor", Ui(() => shell.FormatAsync(selectionOnly: false)), Editor);
+        Add("editor.action.formatSelection", "Format Selection", "Editor", Ui(() => shell.FormatAsync(selectionOnly: true)), Editor);
+        Add("workbench.action.gotoAll", "Go To All…", "Edit", Ui(shell.GoToAllAsync));
+        Add("workbench.action.findInFiles", "Find in Files", "Edit", Ui(shell.FindInFiles));
         Add("editor.action.changeEndOfLine", "Change Line Endings…", "Edit", Ui(shell.ChangeEndOfLineAsync), Editor);
 
         Add("file.saveAll", "Save All", "File", Ui(shell.SaveAllAsync));
@@ -178,6 +196,9 @@ internal static partial class BuiltIns
             Item(Edit, "editor.action.replace", "1-find", 2),
             Item(Edit, "editor.action.findNext", "1-find", 3),
             Item(Edit, "editor.action.findPrevious", "1-find", 4),
+            Item(Edit, "workbench.action.findInFiles", "1-find", 5),
+            Item(Edit, "workbench.action.gotoAll", "2-go", 0),
+            Item(Edit, "editor.action.referenceSearch", "2-go", 6),
             Item(Edit, "editor.action.gotoLine", "2-go", 1),
             Item(Edit, "editor.action.revealDefinition", "2-go", 2),
             Item(Edit, "editor.action.goToImplementation", "2-go", 3),
@@ -186,6 +207,10 @@ internal static partial class BuiltIns
             Item(Edit, "editor.action.triggerSuggest", "3-intellisense", 1),
             Item(Edit, "editor.action.triggerParameterHints", "3-intellisense", 2),
             Item(Edit, "editor.action.showHover", "3-intellisense", 3),
+            Item(Edit, "editor.action.quickFix", "3-intellisense", 4),
+            Item(Edit, "editor.action.rename", "3-intellisense", 5),
+            Item(Edit, "editor.action.formatDocument", "3-intellisense", 6),
+            Item(Edit, "editor.action.formatSelection", "3-intellisense", 7),
             Item(Edit, "editor.action.insertCursorAbove", "4-carets", 1),
             Item(Edit, "editor.action.insertCursorBelow", "4-carets", 2),
             Item(Edit, "editor.action.addSelectionToNextFindMatch", "4-carets", 3),

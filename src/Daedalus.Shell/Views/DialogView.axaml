@@ -3,7 +3,19 @@
              xmlns:vm="using:Daedalus.Shell.ViewModels"
              x:Class="Daedalus.Shell.Views.DialogView"
              x:DataType="vm:DialogViewModel">
-  <Border Classes="overlay" Padding="20,16" MinWidth="420" MaxWidth="560" KeyboardNavigation.TabNavigation="Cycle"
+  <UserControl.Styles>
+    <Style Selector="TextBlock.added">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Diff.Added}" />
+    </Style>
+    <Style Selector="TextBlock.removed">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Diff.Removed}" />
+    </Style>
+    <Style Selector="TextBlock.header">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,6,0,2" />
+    </Style>
+  </UserControl.Styles>
+  <Border Classes="overlay" Padding="20,16" MinWidth="420" MaxWidth="{Binding HasDetails, Converter={x:Static vm:DialogWidth.Converter}}" KeyboardNavigation.TabNavigation="Cycle"
           AutomationProperties.Name="{Binding Title}">
     <StackPanel Spacing="10">
       <TextBlock Classes="heading" FontSize="16" Text="{Binding Title}" TextWrapping="Wrap" />
@@ -12,6 +24,18 @@
                Text="{Binding InputText}"
                IsVisible="{Binding HasInput}"
                AutomationProperties.Name="{Binding Title}" />
+      <Border IsVisible="{Binding HasDetails}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="420">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Preview">
+          <ItemsControl ItemsSource="{Binding Details}" Margin="6,4">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DetailLine">
+                <TextBlock Text="{Binding Text}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
+                           Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.header="{Binding IsHeader}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Border>
       <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
                  AutomationProperties.LiveSetting="Assertive" />
       <ItemsControl ItemsSource="{Binding Buttons}" HorizontalAlignment="Right" Margin="0,6,0,0">

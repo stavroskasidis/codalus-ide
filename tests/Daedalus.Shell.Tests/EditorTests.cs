@@ -71,7 +71,14 @@ public class EditorTests
         MoveCaret(program, "circle.Describe(2)", "circle".Length);
         program.Model.Text.Remove(program.Editor.CaretOffset, ".Describe".Length);
         program.Editor.TextArea.PerformTextInput(".");
-        await ShellFixture.PumpUntil(() => program.CompletionWindow is { } w && w.CompletionList.CompletionData.Count > 0, seconds: 60); // the first request loads Roslyn's completion providers
+        try
+        {
+            await ShellFixture.PumpUntil(() => program.CompletionWindow is { } w && w.CompletionList.CompletionData.Count > 0, seconds: 60); // the first request loads Roslyn's completion providers
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Assert.Fail($"No completion window. Client: {f.Shell.Languages.RunningClient("csharp") is not null}. Text near caret: '{program.Model.Text.GetText(Math.Max(0, program.Editor.CaretOffset - 20), 20)}'. Log:\n{f.Shell.Workbench.Output.GetOrCreate("daedalus.languages", "Language Services").GetText()}");
+        }
         Assert.Contains(program.CompletionWindow!.CompletionList.CompletionData, d => d.Text == "Radius");
         program.Editor.TextArea.PerformTextInput("Desc");
         ShellFixture.Pump();
@@ -122,6 +129,76 @@ public class EditorTests
         f.Shell.Layout.OpenDocument(reopened);
         await ShellFixture.PumpUntil(() => reopened.Controller is not null);
         Assert.Equal(shapes.Caret.Line, reopened.Controller!.Caret.Line);
+    }
+
+    [AvaloniaFact]
+    public async Task Rename_code_actions_formatting_search_and_navigation()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapesPath = Path.Combine(folder, "src", "Lib", "Shapes.cs");
+        var programPath = Path.Combine(folder, "src", "App", "Program.cs");
+
+        // Rename with preview: Radius → Size, previewed, applied in the editor (the closed Program.cs is untouched: no uses).
+        var shapes = await OpenAsync(f, shapesPath);
+        MoveCaret(shapes, "Radius { get; }", 1);
+        var renaming = f.Shell.RenameSymbolAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.HasInput);
+        f.Shell.Dialogs.InputText = "Size";
+        f.Shell.Dialogs.Accept();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.HasDetails, seconds: 60);
+        Assert.Contains(f.Shell.Dialogs.Details, l => l.IsAdded && l.Text.Contains("Size * Size", StringComparison.Ordinal));
+        f.Shell.Dialogs.Accept();
+        await renaming;
+        Assert.Contains("public double Size { get; }", shapes.Model.Text.Text, StringComparison.Ordinal);
+        Assert.True(shapes.Model.IsModified);
+
+        // Find All References into the Find Results.
+        MoveCaret(shapes, "class Circle", "class C".Length);
+        await f.Shell.FindReferencesAsync();
+        Assert.Contains(f.Shell.FindResults.Rows, r => r.IsHeader && r.Path == programPath);
+        Assert.Contains("References to 'Circle'", f.Shell.FindResults.Summary, StringComparison.Ordinal);
+
+        // Find in Files.
+        f.Shell.FindInFiles();
+        f.Shell.FindResults.Query = "JsonSerializer";
+        await f.Shell.FindResults.SearchAsync();
+        Assert.Contains(f.Shell.FindResults.Rows, r => !r.IsHeader && r.Path == programPath);
+
+        // The lightbulb: an unknown type gets "using System.Text;" after a preview.
+        var program = await OpenAsync(f, programPath);
+        program.Model.Text.Insert(program.Model.Text.TextLength, "\nvar sb = new StringBuilder();\n");
+        await ShellFixture.PumpUntil(() => f.Shell.Languages.Diagnostics.For(programPath).Any(d => d.Code == "CS0246"), seconds: 60);
+        MoveCaret(program, "new StringBuilder", "new S".Length);
+        var fixing = f.Shell.ShowCodeActionsAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen, seconds: 60);
+        f.Shell.Palette.Accept(f.Shell.Palette.Rows.First(r => r.Label.Contains("using System.Text", StringComparison.Ordinal)));
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.HasDetails, seconds: 60);
+        f.Shell.Dialogs.Accept();
+        await fixing;
+        Assert.StartsWith("using System.Text;", program.Model.Text.Text, StringComparison.Ordinal);
+
+        // Format Document.
+        program.Model.Text.Insert(program.Model.Text.TextLength, "int  x=1 ;\n");
+        await f.Shell.FormatAsync(selectionOnly: false);
+        Assert.Contains("int x = 1;", program.Model.Text.Text, StringComparison.Ordinal);
+
+        // Go To All finds a type and opens it.
+        var going = f.Shell.GoToAllAsync();
+        f.Shell.Palette.Query = "Squar";
+        await ShellFixture.PumpUntil(() => f.Shell.Palette.Rows.Any(r => r.Label == "Square"), seconds: 30);
+        f.Shell.Palette.Accept(f.Shell.Palette.Rows.First(r => r.Label == "Square"));
+        await going;
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Name is "Shapes.cs" or "Square.Part.cs");
+
+        // Go to Definition into a referenced assembly opens decompiled, read-only code.
+        program = (await f.Shell.OpenFileAsync(programPath))!.Controller ?? await OpenAsync(f, programPath);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null);
+        program = f.Shell.ActiveEditor!.Controller!;
+        MoveCaret(program, "Console.WriteLine", 2);
+        await program.GoToDefinitionAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.ReadOnlyLabel == "decompiled", seconds: 60);
+        Assert.Contains("class Console", f.Shell.ActiveEditor!.Model.Text.Text, StringComparison.Ordinal);
     }
 
     [AvaloniaFact]

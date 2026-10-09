@@ -27,6 +27,13 @@ public sealed class CodeEditorView : UserControl, IPaneView
     private readonly Popup _hover = new() { IsLightDismissEnabled = true };
     private (TextEditor Editor, CodeEditorController Controller, Minimap Minimap)? _primary;
     private (TextEditor Editor, CodeEditorController Controller, Minimap Minimap)? _split;
+    private readonly Button _lightbulb = new()
+    {
+        Classes = { "toolbar" },
+        Padding = new Thickness(1),
+        IsVisible = false,
+        Content = new Icon { Kind = "lightbulb", Width = 14, Height = 14 },
+    };
     private bool _updatingContext;
 
     public CodeEditorView(CodeEditorDocument document, IEditorServices services, EditorFont font)
@@ -46,6 +53,9 @@ public sealed class CodeEditorView : UserControl, IPaneView
             IsVisible = false,
         };
         _contextBar.Bind(Border.BorderBrushProperty, this.GetResourceObservable("Shell.Border"));
+        _lightbulb.Click += (_, _) => _ = _services.ShowCodeActionsAsync();
+        AutomationProperties.SetName(_lightbulb, "Show quick actions (Ctrl+.)");
+        ToolTip.SetTip(_lightbulb, "Quick actions (Ctrl+.)");
         _context.SelectionChanged += OnContextSelected;
         AutomationProperties.SetName(_context, "Project context");
 
@@ -66,6 +76,29 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
     public bool IsSplit => _split is not null;
 
+    /// <summary>The lightbulb next to the caret's line when it has diagnostics: click for code fixes (or Ctrl+.).</summary>
+    private void OnLightbulbChanged(object? sender, EventArgs e)
+    {
+        if (_primary is not { } primary || primary.Controller.LightbulbLine is not { } line || _document.Model.IsReadOnly)
+        {
+            _lightbulb.IsVisible = false;
+            return;
+        }
+
+        var view = primary.Editor.TextArea.TextView;
+        var top = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(line, 1), AvaloniaEdit.Rendering.VisualYPosition.LineTop) - view.ScrollOffset;
+        var origin = view.TranslatePoint(new Point(0, top.Y), primary.Editor);
+        if (origin is not { } point || point.Y < 0 || point.Y > primary.Editor.Bounds.Height - 8)
+        {
+            _lightbulb.IsVisible = false;
+            return;
+        }
+
+        Canvas.SetLeft(_lightbulb, Math.Max(0, point.X - 18));
+        Canvas.SetTop(_lightbulb, point.Y);
+        _lightbulb.IsVisible = true;
+    }
+
     /// <summary>The tab closed: releases the editors and their language-service work.</summary>
     public void Close() => TearDown();
 
@@ -79,7 +112,8 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _primary = CreateEditor(primary: true);
         _editors.Children.Clear();
         _editors.RowDefinitions = new RowDefinitions("0,0,*");
-        _editors.Children.Add(Row(_primary.Value.Editor, _primary.Value.Minimap, 2));
+        _editors.Children.Add(Row(_primary.Value.Editor, _primary.Value.Minimap, 2, _lightbulb));
+        _primary.Value.Controller.LightbulbChanged += OnLightbulbChanged;
         _services.Options.PropertyChanged += OnOptionsChanged;
         _services.ProjectContextsChanged += OnProjectContextsChanged;
         _font.PropertyChanged += OnFontChanged;
@@ -105,6 +139,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _services.Options.PropertyChanged -= OnOptionsChanged;
         _services.ProjectContextsChanged -= OnProjectContextsChanged;
         _font.PropertyChanged -= OnFontChanged;
+        primary.Controller.LightbulbChanged -= OnLightbulbChanged;
         primary.Controller.Dispose();
         _split?.Controller.Dispose();
         _primary = null;
@@ -133,11 +168,16 @@ public sealed class CodeEditorView : UserControl, IPaneView
         return (editor, controller, minimap);
     }
 
-    private static Grid Row(TextEditor editor, Minimap minimap, int row)
+    private static Grid Row(TextEditor editor, Minimap minimap, int row, Control? overlay = null)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         Grid.SetRow(grid, row);
         grid.Children.Add(editor);
+        if (overlay is not null)
+        {
+            grid.Children.Add(new Canvas { Children = { overlay }, IsHitTestVisible = true, ClipToBounds = true, Background = null });
+        }
+
         Grid.SetColumn(minimap, 1);
         grid.Children.Add(minimap);
         return grid;

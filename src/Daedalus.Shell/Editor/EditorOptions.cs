@@ -18,6 +18,7 @@ public sealed class EditorOptions : ObservableObject
     public const string RenderWhitespaceKey = "editor.renderWhitespace";
     public const string RulersKey = "editor.rulers";
     public const string HighlightCurrentLineKey = "editor.highlightCurrentLine";
+    public const string FormatOnTypeKey = "editor.formatOnType";
 
     private readonly SettingsService _settings;
 
@@ -54,6 +55,8 @@ public sealed class EditorOptions : ObservableObject
 
     public IReadOnlyList<int> Rulers { get; private set; } = [];
 
+    public bool FormatOnType { get; private set; }
+
     private void Read()
     {
         TabSize = Math.Clamp(_settings.GetInt32(TabSizeKey, 4), 1, 16);
@@ -63,6 +66,7 @@ public sealed class EditorOptions : ObservableObject
         LineNumbers = _settings.GetBoolean(LineNumbersKey, true);
         RenderWhitespace = _settings.GetString(RenderWhitespaceKey, "none") == "all";
         HighlightCurrentLine = _settings.GetBoolean(HighlightCurrentLineKey, true);
+        FormatOnType = _settings.GetBoolean(FormatOnTypeKey, true);
         Rulers = [.. _settings.GetStrings(RulersKey).Select(r => int.TryParse(r, NumberStyles.Integer, CultureInfo.InvariantCulture, out var column) ? column : 0).Where(c => c > 0)];
     }
 }
@@ -99,4 +103,10 @@ public interface IEditorServices
     void ShowMessage(string message);
 
     void OpenLink(string target);
+
+    /// <summary>Writes to the Language Services log.</summary>
+    void Log(string message);
+
+    /// <summary>The lightbulb: code fixes and refactorings at the active editor's caret.</summary>
+    Task ShowCodeActionsAsync();
 }

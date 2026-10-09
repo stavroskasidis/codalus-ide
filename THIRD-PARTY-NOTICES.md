@@ -12,6 +12,7 @@ Last verified: 2026-10-09 (M3). M1 added no packages: the shell (`daedalus`) res
 | Microsoft.CodeAnalysis.Elfie, Microsoft.DiaSymReader, Humanizer.Core (transitive via Roslyn Features) | 1.0.0 / 2.0.0 / 2.14.1 | MIT | language service host |
 | System.Composition (and .AttributedModel, .Convention, .Hosting, .Runtime, .TypedParts), System.Configuration.ConfigurationManager, System.Diagnostics.EventLog, System.Security.Cryptography.ProtectedData (transitive via Roslyn) | 10.0.1 | MIT | language service host |
 | System.Data.DataSetExtensions (transitive via Roslyn Features; the nuspec links the .NET (corefx) license) | 4.5.0 | MIT | language service host |
+| ICSharpCode.Decompiler | 11.1.0.9782 | MIT | language service host (Go to Definition into referenced assemblies) |
 | Microsoft.Build.Locator | 1.11.2 | MIT | build host |
 | Microsoft.Build (compile-time only; MSBuild comes from the installed SDK) | 17.11.48 | MIT | build host |
 | Microsoft.VisualStudio.SolutionPersistence | 1.0.52 | MIT | build host (reads and writes .sln/.slnx) |
@@ -25,7 +26,7 @@ Last verified: 2026-10-09 (M3). M1 added no packages: the shell (`daedalus`) res
 | System.Drawing.Common | 10.0.12 | MIT | benchmark harness (Windows probes) |
 | Vortice.DXGI, Vortice.Direct3D11, Vortice.DirectX, SharpGen.Runtime(.COM) | 3.8.3 / 2.4.2-beta | MIT | benchmark harness (Desktop Duplication) |
 
-All 96 resolved NuGet packages (direct and transitive) were checked: 87 are MIT, 8 are Apache-2.0 (test-only xUnit, see below) and 1 is BSD-3-Clause (ANGLE).
+All 97 resolved NuGet packages (direct and transitive) were checked: 88 are MIT, 8 are Apache-2.0 (test-only xUnit, see below) and 1 is BSD-3-Clause (ANGLE).
 
 ## .NET (NuGet): tests only (not shipped)
 

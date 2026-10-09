@@ -261,6 +261,16 @@ public sealed class CodeEditorController : IDisposable
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            Report(ex);
+        }
+    }
+
+    /// <summary>Failed language requests go to the Language Services log (cancellations are expected and dropped).</summary>
+    private void Report(Exception ex)
+    {
+        if (ex is not OperationCanceledException)
+        {
+            _services.Log($"{Model.Name}: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -271,6 +281,7 @@ public sealed class CodeEditorController : IDisposable
 
     private void OnViewChanged(object? sender, EventArgs e)
     {
+        LightbulbChanged?.Invoke(this, EventArgs.Empty);
         if (!_colorizer.Covers(VisibleLines()))
         {
             ScheduleTokens(s_scrollDelay);
@@ -359,6 +370,7 @@ public sealed class CodeEditorController : IDisposable
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            Report(ex);
         }
     }
 
@@ -430,6 +442,7 @@ public sealed class CodeEditorController : IDisposable
 
         _markers.Set(_services.Diagnostics.For(Model.Path), Model.OffsetAt);
         Editor.TextArea.TextView.Redraw();
+        LightbulbChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // ------------------------------------------------------------------ caret: brackets, references, signature help
@@ -437,6 +450,7 @@ public sealed class CodeEditorController : IDisposable
     private void OnCaretChanged(object? sender, EventArgs e)
     {
         CaretChanged?.Invoke(this, EventArgs.Empty);
+        LightbulbChanged?.Invoke(this, EventArgs.Empty);
         var brackets = HighlightRenderer.MatchBracket(Model.Text, Editor.CaretOffset);
         _highlights.Set(HighlightRenderer.Kind.Bracket, brackets is { } b ? [(b.Open, b.Open + 1), (b.Close, b.Close + 1)] : []);
         Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
@@ -471,6 +485,7 @@ public sealed class CodeEditorController : IDisposable
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            Report(ex);
         }
     }
 
@@ -506,6 +521,13 @@ public sealed class CodeEditorController : IDisposable
             }
         }
 
+        if (_services.Options.FormatOnType && !Model.IsReadOnly && _multiCaret.ExtraCarets.Count == 0
+            && capabilities.DocumentOnTypeFormattingProvider is { } onType
+            && (onType.FirstTriggerCharacter == text || onType.MoreTriggerCharacter?.Contains(text) == true))
+        {
+            _ = FormatOnTypeAsync(text);
+        }
+
         if (capabilities.CompletionProvider is { } completion)
         {
             var isTrigger = completion.TriggerCharacters.Contains(text);
@@ -520,6 +542,42 @@ public sealed class CodeEditorController : IDisposable
             }
         }
     }
+
+    private async Task FormatOnTypeAsync(string ch)
+    {
+        try
+        {
+            if (Client is not { } client)
+            {
+                return;
+            }
+
+            var version = Model.Version;
+            var options = new FormattingOptions(Editor.Options.IndentationSize, Editor.Options.ConvertTabsToSpaces);
+            var edits = await client.FormatOnTypeAsync(Model.Uri, Model.PositionAt(Editor.CaretOffset), ch, options, CancellationToken.None).ConfigureAwait(true);
+            if (edits.Length > 0 && version == Model.Version && !_disposed && _completion is null)
+            {
+                Model.ApplyEdits(edits);
+            }
+        }
+        catch (Exception ex) when (IsTransient(ex))
+        {
+            Report(ex);
+        }
+    }
+
+    /// <summary>The line (1-based) where the lightbulb shows: the caret's, when it has a diagnostic; else null.</summary>
+    public int? LightbulbLine
+    {
+        get
+        {
+            var line = Model.Text.GetLineByOffset(Editor.CaretOffset);
+            return _markers.Segments.Any(s => s.StartOffset <= line.EndOffset && s.EndOffset >= line.Offset) ? line.LineNumber : null;
+        }
+    }
+
+    /// <summary>The lightbulb may have moved (caret, diagnostics, scrolling).</summary>
+    public event EventHandler? LightbulbChanged;
 
     /// <summary>Opens completion at the caret (Ctrl+Space, or a typed trigger character).</summary>
     public void ShowCompletion(string? triggerCharacter = null) => _ = CompletionAsync(triggerCharacter, Restart(ref _completionCts).Token);
@@ -540,6 +598,7 @@ public sealed class CodeEditorController : IDisposable
             var list = await client.CompletionAsync(Model.Uri, Model.PositionAt(requestedAt), context, cancellationToken).ConfigureAwait(true);
             if (cancellationToken.IsCancellationRequested || _disposed || list.Items.Length == 0 || _completion is not null)
             {
+                _services.Log($"{Model.Name}: completion not shown ({list.Items.Length} items, cancelled {cancellationToken.IsCancellationRequested}, open {_completion is not null})");
                 return;
             }
 
@@ -585,6 +644,7 @@ public sealed class CodeEditorController : IDisposable
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            Report(ex);
         }
     }
 
@@ -662,6 +722,7 @@ public sealed class CodeEditorController : IDisposable
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            Report(ex);
         }
     }
 
@@ -765,6 +826,7 @@ public sealed class CodeEditorController : IDisposable
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            Report(ex);
         }
     }
 
@@ -829,8 +891,7 @@ public sealed class CodeEditorController : IDisposable
                 : await client.DefinitionAsync(Model.Uri, position, CancellationToken.None).ConfigureAwait(true);
             if (locations.Length == 0)
             {
-                // TODO(issue): decompiled metadata view for symbols defined only in referenced assemblies (M3b).
-                _services.ShowMessage(implementation ? "No implementations found." : "Cannot navigate to the symbol under the caret (defined in a referenced assembly, or not a symbol).");
+                _services.ShowMessage(implementation ? "No implementations found." : "Cannot navigate to the symbol under the caret.");
                 return;
             }
 
@@ -838,6 +899,7 @@ public sealed class CodeEditorController : IDisposable
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            Report(ex);
         }
     }
 

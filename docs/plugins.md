@@ -136,6 +136,7 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `solution.getInfo` | none; returns `{ path, format, trusted }` of the open solution, or null |
 | `solution.addProjectFile` | project path; adds it to the open solution (in the selected solution folder) |
 | `editor.action.revealDefinition`, `editor.action.goToImplementation`, `editor.action.triggerSuggest`, `editor.action.showHover`, `editor.action.find`, `editor.action.gotoLine` | none; act on the active editor |
+| `editor.action.referenceSearch`, `editor.action.rename`, `editor.action.quickFix`, `editor.action.formatDocument`, `editor.action.formatSelection`, `workbench.action.gotoAll`, `workbench.action.findInFiles` | none; act on the active editor (Go To All and Find in Files on the solution) |
 | `file.saveAll`, `workbench.navigateBack`, `workbench.navigateForward`, `workbench.splitEditorRight`, `workbench.splitEditorDown`, `workbench.view.errorList` | none |
 | `workbench.showCommandPalette`, `workbench.openSettings`, `workbench.openKeyboardShortcuts`, `workbench.selectTheme`, `workbench.showLogs`, `workbench.view.plugins` | none |
 

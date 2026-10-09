@@ -102,8 +102,41 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     /// <summary>A file that doesn't exist yet (e.g. settings.json), saved on first save.</summary>
     public static CodeDocument Create(string path, string text) => new(path, null, text, TextFileFormat.Default, isReadOnly: false);
 
-    /// <summary>A read-only document with text from somewhere else (a source generator).</summary>
-    public static CodeDocument ReadOnly(string path, string uri, string text) => new(path, uri, text, TextFileFormat.Default, isReadOnly: true);
+    /// <summary>A read-only document with text from somewhere else (a source generator, a decompiled assembly).</summary>
+    public static CodeDocument ReadOnly(string path, string uri, string text, string label) =>
+        new(path, uri, text, TextFileFormat.Default, isReadOnly: true) { ReadOnlyLabel = label };
+
+    /// <summary>Why a read-only document is read-only, shown in its tab (<c>generated</c>, <c>decompiled</c>).</summary>
+    public string? ReadOnlyLabel { get; private init; }
+
+    /// <summary>
+    /// Applies LSP edits (positions in the current text) as one undoable change. Returns false when they overlap.
+    /// </summary>
+    public bool ApplyEdits(IEnumerable<LanguageServices.Protocol.TextEdit> edits)
+    {
+        var spans = edits
+            .Select(e => (Start: OffsetAt(e.Range.Start), End: OffsetAt(e.Range.End), e.NewText))
+            .OrderByDescending(e => e.Start)
+            .ThenByDescending(e => e.End)
+            .ToList();
+        for (var i = 1; i < spans.Count; i++)
+        {
+            if (spans[i].End > spans[i - 1].Start)
+            {
+                return false;
+            }
+        }
+
+        using (Text.RunUpdate())
+        {
+            foreach (var (start, end, text) in spans)
+            {
+                Text.Replace(start, end - start, text);
+            }
+        }
+
+        return true;
+    }
 
     // ------------------------------------------------------------------ edits → LSP changes
 

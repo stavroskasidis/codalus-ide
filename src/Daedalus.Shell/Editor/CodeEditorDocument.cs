@@ -92,7 +92,7 @@ public sealed class CodeEditorDocument : ShellDocument
     private void UpdateTitle()
     {
         IsModified = Model.IsModified;
-        Title = Model.Name + (Model.IsReadOnly ? " [generated]" : string.Empty) + (Model.IsDeletedOnDisk ? " (deleted)" : string.Empty) + (Model.IsModified ? " ●" : string.Empty);
+        Title = Model.Name + (Model.ReadOnlyLabel is { } label ? $" [{label}]" : string.Empty) + (Model.IsDeletedOnDisk ? " (deleted)" : string.Empty) + (Model.IsModified ? " ●" : string.Empty);
     }
 
     public override bool OnClose()

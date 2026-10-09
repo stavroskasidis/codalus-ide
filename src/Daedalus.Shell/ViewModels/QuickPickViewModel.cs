@@ -40,9 +40,11 @@ public sealed class QuickPickRow(QuickPickItem item, IReadOnlyList<int> highligh
 /// The command palette overlay, also used as a generic picker (<see cref="ShowAsync"/>). Filtering is fuzzy;
 /// with an empty query the items keep the order they were given in (most recently used first for commands).
 /// </summary>
-public sealed class QuickPickViewModel : ObservableObject
+public sealed class QuickPickViewModel : ObservableObject, IDisposable
 {
     private IReadOnlyList<QuickPickItem> _items = [];
+    private Func<string, CancellationToken, Task<IReadOnlyList<QuickPickItem>>>? _provider;
+    private CancellationTokenSource? _providerCts;
     private TaskCompletionSource<QuickPickItem?>? _pending;
     private Action<QuickPickItem?>? _onHighlight;
     private string _query = string.Empty;
@@ -59,7 +61,14 @@ public sealed class QuickPickViewModel : ObservableObject
         {
             if (SetField(ref _query, value ?? string.Empty))
             {
-                Filter();
+                if (_provider is null)
+                {
+                    Filter();
+                }
+                else
+                {
+                    _ = QueryProviderAsync();
+                }
             }
         }
     }
@@ -112,6 +121,54 @@ public sealed class QuickPickViewModel : ObservableObject
         return _pending.Task;
     }
 
+    /// <summary>
+    /// Opens the picker with items that <paramref name="provider"/> computes for each query (Go To All); they are shown
+    /// in the given order, the first selected. Queries are debounced and the outdated ones cancelled.
+    /// </summary>
+    public Task<QuickPickItem?> ShowAsync(Func<string, CancellationToken, Task<IReadOnlyList<QuickPickItem>>> provider, string placeholder)
+    {
+        var task = ShowAsync([], placeholder);
+        _provider = provider;
+        return task;
+    }
+
+    private async Task QueryProviderAsync()
+    {
+        _providerCts?.Cancel();
+        _providerCts?.Dispose();
+        var cts = _providerCts = new CancellationTokenSource();
+        var provider = _provider;
+        try
+        {
+            await Task.Delay(80, cts.Token).ConfigureAwait(true);
+            var items = await provider!(_query, cts.Token).ConfigureAwait(true);
+            if (cts.IsCancellationRequested || _provider != provider)
+            {
+                return;
+            }
+
+            _items = items;
+            Rows.Clear();
+            foreach (var item in items)
+            {
+                Rows.Add(new QuickPickRow(item, FuzzyMatcher.Match(_query.Trim(), item.Label)?.Positions ?? []));
+            }
+
+            OnPropertyChanged(nameof(IsEmpty));
+            _selectedIndex = -1;
+            SelectedIndex = Rows.Count == 0 ? -1 : 0;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _providerCts?.Cancel();
+        _providerCts?.Dispose();
+    }
+
     public void Accept() => Close(Selected?.Item);
 
     public void Accept(QuickPickRow row) => Close(row.Item);
@@ -140,6 +197,8 @@ public sealed class QuickPickViewModel : ObservableObject
 
         _pending = null;
         _onHighlight = null;
+        _provider = null;
+        _providerCts?.Cancel();
         IsOpen = false;
         pending.TrySetResult(result);
         Closed?.Invoke(this, EventArgs.Empty);

@@ -46,6 +46,7 @@ public sealed class ViewLocator : IDataTemplate
         MarkdownToolViewModel vm => new MarkdownToolView { DataContext = vm },
         SolutionExplorerViewModel vm => new SolutionExplorerView { DataContext = vm },
         ErrorListViewModel vm => new ErrorListView { DataContext = vm },
+        FindResultsViewModel vm => new FindResultsView { DataContext = vm },
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },
     };
 }

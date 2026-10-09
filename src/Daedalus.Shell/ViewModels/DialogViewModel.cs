@@ -20,6 +20,19 @@ public sealed record DialogRequest(string Title, string Message, IReadOnlyList<s
     public Func<string, string?>? Validate { get; init; }
 
     public bool IsDanger { get; init; }
+
+    /// <summary>Monospace lines shown in a scrollable box (previews of changes, colored by <see cref="DetailLine.Kind"/>).</summary>
+    public IReadOnlyList<DetailLine>? Details { get; init; }
+}
+
+/// <summary>A line of a dialog's details. <see cref="Kind"/> is <c>added</c>, <c>removed</c>, <c>header</c> or null.</summary>
+public sealed record DetailLine(string Text, string? Kind = null)
+{
+    public bool IsAdded => Kind == "added";
+
+    public bool IsRemoved => Kind == "removed";
+
+    public bool IsHeader => Kind == "header";
 }
 
 /// <summary>The choice (null: cancelled) and the entered text.</summary>
@@ -57,6 +70,8 @@ public sealed class DialogViewModel : ObservableObject
                 OnPropertyChanged(nameof(Title));
                 OnPropertyChanged(nameof(Message));
                 OnPropertyChanged(nameof(HasInput));
+                OnPropertyChanged(nameof(Details));
+                OnPropertyChanged(nameof(HasDetails));
             }
         }
     }
@@ -68,6 +83,10 @@ public sealed class DialogViewModel : ObservableObject
     public string Message => _request?.Message ?? string.Empty;
 
     public bool HasInput => _request?.Input is not null;
+
+    public IReadOnlyList<DetailLine> Details => _request?.Details ?? [];
+
+    public bool HasDetails => _request?.Details is { Count: > 0 };
 
     public ObservableCollection<DialogButtonViewModel> Buttons { get; } = [];
 
@@ -175,4 +194,11 @@ public sealed class DialogViewModel : ObservableObject
         var result = await ShowAsync(new DialogRequest(title, message, ["OK", "Cancel"]) { Input = initial, Validate = validate, InputSelection = selection }).ConfigureAwait(true);
         return result.Button == "OK" ? result.Input : null;
     }
+}
+
+/// <summary>Dialogs with details (previews) are wider.</summary>
+public static class DialogWidth
+{
+    public static Avalonia.Data.Converters.IValueConverter Converter { get; } =
+        new Avalonia.Data.Converters.FuncValueConverter<bool, double>(details => details ? 960 : 560);
 }

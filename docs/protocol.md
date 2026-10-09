@@ -18,10 +18,15 @@ Language services run out of process and speak **LSP 3.17** over **stdio** (JSON
 | `textDocument/completion`, `completionItem/resolve` | The list sets `itemDefaults.editRange` (the span being completed). Items carry no edit; `resolve` fills `textEdit`, `additionalTextEdits` (e.g. an added `using`) and `documentation`. Items in a list in suggestion mode have empty `commitCharacters`. |
 | `textDocument/hover` | Markdown: the signature in a `csharp` code block, then documentation. |
 | `textDocument/signatureHelp` | Parameter labels are substrings of the signature label. |
-| `textDocument/definition`, `textDocument/implementation` | `Location[]`. Definitions in source-generated files use `daedalus-generated:` URIs. Symbols only in metadata return nothing yet (M3b decompiles them). |
+| `textDocument/definition`, `textDocument/implementation` | `Location[]`. Definitions in source-generated files use `daedalus-generated:` URIs; symbols defined in referenced assemblies point into a decompiled document (`daedalus-metadata:` URI). |
 | `textDocument/documentHighlight` | Definitions are `Write`, references `Read`. |
 | `textDocument/foldingRange` | `startCharacter` is the end of the first line (the fold hides the rest); `kind` is `region`, `imports`, `comment` or absent; `collapsedText` labels regions and comments. |
 | `textDocument/semanticTokens/full`, `/range` | See the token legend below. Clients should ask for the visible range. |
+| `textDocument/references` | `Location[]`, ordered by file and position. |
+| `textDocument/prepareRename`, `textDocument/rename` | `prepareRename` returns the identifier's range and name, or null where renaming isn't possible (keywords, symbols outside the solution). `rename` returns a `WorkspaceEdit`. |
+| `textDocument/codeAction`, `codeAction/resolve` | Code fixes (`quickfix`) for the diagnostics on the range's line and refactorings (`refactor`) at the range: Roslyn's built-in providers and the projects' analyzer packages' fixes. Actions are listed without edits; `resolve` returns the `WorkspaceEdit`. Nested actions are flattened ("Parent: Child"). |
+| `textDocument/formatting`, `/rangeFormatting`, `/onTypeFormatting` | Roslyn's formatter with the project's `.editorconfig`. On type: after `}` (the block) and `;` (the statement or member). |
+| `workspace/symbol` | Source declarations (types and members) matching the query (camel case or substring), at most 200. |
 | `textDocument/publishDiagnostics` (server → client) | Open documents: compiler and analyzer diagnostics shortly after each edit, with the document `version`. Closed files: compiler diagnostics of the whole solution from a background pass (analyzers too with `analysisScope: solution`). `code` is the diagnostic id; `codeDescription.href` its help link; `tags` mark unnecessary (faded) and deprecated code. Hidden diagnostics are sent only when they mark unnecessary code, as hints. |
 | `window/logMessage` (server → client) | Analyzer load failures, analyzer exceptions, project problems. |
 
@@ -35,6 +40,7 @@ Shapes narrowed from LSP's unions (documented on the C# types): `documentation` 
 | `daedalus/projects/remove` | notification | `{paths}` | |
 | `daedalus/documentOptions` | request | `{textDocument}` → `{insertSpaces, tabSize, indentSize, newLine?}` | Editor indentation and line endings from `.editorconfig`. |
 | `daedalus/sourceGeneratedText` | request | `{textDocument}` → `{text, hintName, generatorName}` | The content of a `daedalus-generated:` document (opened read-only). |
+| `daedalus/metadataText` | request | `{textDocument}` → `{text, assemblyName, typeName}` | The decompiled C# of a `daedalus-metadata:` document (ICSharpCode.Decompiler; reference assemblies decompile to stubs). |
 | `daedalus/workspaceStatus` | notification (server → client) | `{state: loading \| ready, projects, documents}` | `ready` after a background pass has compiled every project; status bar and the `language_ready_ms` benchmark. |
 
 **`ProjectData`** `{path, name, language, targetFramework, arguments, outputPath?, outputRefPath?, projectReferences?}` is a design-time build's result (the build host's `project/compilerInputs`, [project-protocol.md](project-protocol.md)): the compiler command line, with sources relative to the project directory. The server parses it like the compiler does. A reference to another project's output (or reference assembly), or to the assembly of a referenced project built for another target framework, becomes a project reference. Only one target framework per project is loaded: the active one, chosen in the editor's project-context picker.

@@ -33,6 +33,8 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1E1E1E" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="Dark">
@@ -61,6 +63,8 @@
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1F1F1F" />
       <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#CCCCCC" />
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="{x:Static theming:ThemeService.HighContrast}">
@@ -108,6 +112,8 @@
       <!-- Fluent focus rectangles. -->
       <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#F38518" />
       <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

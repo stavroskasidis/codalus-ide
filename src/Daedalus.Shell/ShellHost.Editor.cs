@@ -148,10 +148,12 @@ public sealed partial class ShellHost : IEditorServices
     /// <summary>Kept for callers that open settings files: a file that may not exist yet, never as a preview.</summary>
     public async Task OpenTextFileAsync(string path, string initialContent) => await OpenFileAsync(path, preview: false, at: null, initialContent).ConfigureAwait(true);
 
-    /// <summary>Opens a source-generated document (read-only) from the language service.</summary>
-    public async Task<CodeEditorDocument?> OpenGeneratedAsync(string uri, Position? at)
+    /// <summary>
+    /// Opens a read-only document whose text comes from the language service: a source-generated file, or a type
+    /// decompiled from a referenced assembly.
+    /// </summary>
+    public async Task<CodeEditorDocument?> OpenVirtualAsync(string uri, Position? at)
     {
-        var path = DocumentUris.GeneratedPath(uri)!;
         if (Editors.FirstOrDefault(e => e.Model.Uri == uri) is { } open)
         {
             Layout.OpenDocument(open);
@@ -163,14 +165,33 @@ public sealed partial class ShellHost : IEditorServices
             return open;
         }
 
-        if (Languages.RunningClient(CSharpLanguageId) is not { } client
-            || await client.SourceGeneratedTextAsync(uri, CancellationToken.None).ConfigureAwait(true) is not { } generated)
+        if (Languages.RunningClient(CSharpLanguageId) is not { } client)
+        {
+            return null;
+        }
+
+        CodeDocument model;
+        if (DocumentUris.IsMetadata(uri))
+        {
+            if (await client.MetadataTextAsync(uri, CancellationToken.None).ConfigureAwait(true) is not { } metadata)
+            {
+                ShowMessage("The type could not be decompiled.");
+                return null;
+            }
+
+            var name = metadata.TypeName[(metadata.TypeName.LastIndexOf('.') + 1)..].Split('`')[0];
+            model = CodeDocument.ReadOnly(Path.Combine(metadata.AssemblyName, name + ".cs"), uri, metadata.Text, "decompiled");
+        }
+        else if (await client.SourceGeneratedTextAsync(uri, CancellationToken.None).ConfigureAwait(true) is { } generated)
+        {
+            model = CodeDocument.ReadOnly(DocumentUris.GeneratedPath(uri)!, uri, generated.Text, "generated");
+        }
+        else
         {
             ShowMessage("The generated file is no longer available.");
             return null;
         }
 
-        var model = CodeDocument.ReadOnly(path, uri, generated.Text);
         model.LanguageId = CSharpLanguageId;
         _models[uri] = model;
         var view = CreateView(model, primary: true);
@@ -313,9 +334,9 @@ public sealed partial class ShellHost : IEditorServices
 
     public async Task OpenLocationAsync(Location location)
     {
-        if (DocumentUris.IsGenerated(location.Uri))
+        if (DocumentUris.IsGenerated(location.Uri) || DocumentUris.IsMetadata(location.Uri))
         {
-            await OpenGeneratedAsync(location.Uri, location.Range.Start).ConfigureAwait(true);
+            await OpenVirtualAsync(location.Uri, location.Range.Start).ConfigureAwait(true);
         }
         else if (DocumentUris.ToPath(location.Uri) is { } path)
         {
@@ -350,6 +371,8 @@ public sealed partial class ShellHost : IEditorServices
     }
 
     public void ShowMessage(string message) => StatusBar.ShowMessage(message, TimeSpan.FromSeconds(5));
+
+    void IEditorServices.Log(string message) => LanguageLog.AppendLine("[editor] " + message);
 
     public void OpenLink(string target)
     {
