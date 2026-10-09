@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="src/App/App.csproj" />
+  <Project Path="src/Lib/Lib.csproj" />
+</Solution>

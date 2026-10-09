@@ -8,6 +8,7 @@
     <VersionSuffix>dev</VersionSuffix>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\logo\daedalus.ico</ApplicationIcon>
     <PublishAot>true</PublishAot>
     <IsAotCompatible>true</IsAotCompatible>
     <InvariantGlobalization>true</InvariantGlobalization>
@@ -48,6 +49,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Daedalus.Shell.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="..\..\assets\logo\daedalus.ico" Link="Assets\daedalus.ico" />
   </ItemGroup>
 
   <!--

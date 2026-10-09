@@ -1,4 +1,9 @@
-# Daedalus Studio
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/daedalus-wordmark-dark.svg">
+    <img src="assets/logo/daedalus-wordmark-light.svg" alt="Daedalus Studio" width="420">
+  </picture>
+</h1>
 
 Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs natively on Windows, macOS and Linux. It aims to be a Visual Studio alternative with a VS-class experience: a rich semantic editor, a real project system, and integrated build and debugging.
 
@@ -16,8 +21,7 @@ The UI shell (`daedalus`, Native AOT) is kept light and responsive. Heavy servic
 | `src/Daedalus.Workbench`, `src/Daedalus.Platform` | UI-independent services: commands, key bindings, menus, settings, notifications, output, the plugin manager; OS conventions. |
 | `src/Daedalus.Plugins.*`, `src/Plugins/` | The plugin SDK, protocol and host process, and the built-in plugins. |
 | `src/Daedalus.Projects.*` | The build host (`daedalus-buildhost`): solutions, MSBuild evaluation, restore and project-file edits. |
-| `src/Daedalus.Rpc`, `src/Daedalus.LanguageServices.*` | JSON-RPC and process supervision; the Roslyn language service host. |
-| `spikes/` | The M0 Avalonia editor prototype, kept as the editor benchmark baseline until M3. |
+| `src/Daedalus.Rpc`, `src/Daedalus.LanguageServices.*` | JSON-RPC and process supervision; the C# language service host (`daedalus-lshost`, Roslyn over LSP) and its client. |
 | `tests/` | Unit, integration and headless UI tests. |
 | `benchmarks/` | The `daedalus-bench` harness, the fixture generator and committed results. |
 | `samples/` | Fixture solutions and the HelloWorld sample plugin. Large fixtures are generated, not committed. |

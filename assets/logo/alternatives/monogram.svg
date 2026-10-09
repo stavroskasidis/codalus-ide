@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Daedalus Studio">
+  <!-- A "D" whose counter is a delta. -->
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9B6BFF"/><stop offset="1" stop-color="#4A2399"/></linearGradient></defs>
+  <path fill="url(#g)" fill-rule="evenodd" d="M36 28 H128 A100 100 0 0 1 128 228 H36 Z M124 70 L64 174 H184 Z"/>
+</svg>

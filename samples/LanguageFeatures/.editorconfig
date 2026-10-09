@@ -1,0 +1,9 @@
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+
+# Mark members as static: a warning here, so the fixture shows an .editorconfig-configured analyzer.
+dotnet_diagnostic.CA1822.severity = warning

@@ -21,14 +21,9 @@ dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell      
 
 Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--exit-on interactive`, `--screenshot <png>`. `DAEDALUS_PLUGINHOST` and `DAEDALUS_BUILDHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
 
-## Running the prototypes
+## Language services
 
-```bash
-dotnet publish src/Daedalus.LanguageServices.Host -c Release -r win-x64 --self-contained false -p:PublishReadyToRun=true -o artifacts/lshost
-dotnet publish spikes/avalonia/Daedalus.Spike.Avalonia -c Release -r win-x64 -o artifacts/spike-a   # Native AOT
-```
-
-Copy `artifacts/lshost` to `artifacts/spike-a/lshost`. Alternatively, set `DAEDALUS_LSHOST` to a host `.exe` or `.dll`. The prototype accepts `--solution <sln|slnx>`, `--open <file>`, `--bench typing|scroll` and `--exit-on interactive|highlight|done`. It also accepts `--screenshot <png>`. With `DAEDALUS_BENCH_EVENTS=<file>`, it writes timestamped bench events, and `DAEDALUS_TRACE=1` makes the host log JSON-RPC errors to stderr.
+The C# language service host (`daedalus-lshost`, ADR 0005) speaks LSP over stdio (`docs/protocol.md`). It gets its projects from the build host's design-time builds, relayed by the shell (`LanguageService` in `src/Daedalus.Workbench/Languages`). `DAEDALUS_LSHOST` points at a host `.exe` or `.dll`; otherwise the shell uses `lshost/` next to it. Fixture: `samples/LanguageFeatures`.
 
 ## Benchmarks
 

@@ -1,12 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\..\src\Daedalus.LanguageServices.Host\Daedalus.LanguageServices.Host.csproj" />
-    <ProjectReference Include="..\..\src\Daedalus.LanguageServices.Protocol\Daedalus.LanguageServices.Protocol.csproj" />
-    <ProjectReference Include="..\..\src\Daedalus.LanguageServices.Client\Daedalus.LanguageServices.Client.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="StreamJsonRpc" />
-    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Daedalus.Workbench\Daedalus.Workbench.csproj" />
+    <!-- Built so the tests can launch it; not referenced as an assembly. -->
+    <ProjectReference Include="..\..\src\Daedalus.Projects.Host\Daedalus.Projects.Host.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

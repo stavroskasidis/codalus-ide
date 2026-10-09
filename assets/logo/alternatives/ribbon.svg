@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Daedalus Studio">
+  <!-- A delta folded from one ribbon: each band runs from a tucked (shadowed) end to the corner it wraps. -->
+  <defs>
+    <linearGradient id="left" gradientUnits="userSpaceOnUse" x1="42" y1="190" x2="128" y2="40">
+      <stop offset="0" stop-color="#4A2399"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="right" gradientUnits="userSpaceOnUse" x1="140" y1="64" x2="226" y2="212">
+      <stop offset="0" stop-color="#2E1470"/>
+      <stop offset="1" stop-color="#6A3DD8"/>
+    </linearGradient>
+    <linearGradient id="base" gradientUnits="userSpaceOnUse" x1="200" y1="196" x2="28" y2="196">
+      <stop offset="0" stop-color="#6B3FE0"/>
+      <stop offset="1" stop-color="#B9A0FF"/>
+    </linearGradient>
+  </defs>
+  <polygon fill="url(#left)" points="42.5,180 128,32 146.5,64 128,96 79.5,180"/>
+  <polygon fill="url(#right)" points="146.5,64 232,212 195,212 176.5,180 128,96"/>
+  <polygon fill="url(#base)" points="195,212 24,212 42.5,180 79.5,180 176.5,180"/>
+</svg>

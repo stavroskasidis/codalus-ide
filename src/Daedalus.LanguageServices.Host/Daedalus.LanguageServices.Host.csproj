@@ -3,25 +3,21 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>daedalus-lshost</AssemblyName>
     <RootNamespace>Daedalus.LanguageServices.Host</RootNamespace>
-    <Description>Out-of-process language service host (Roslyn + MSBuild) speaking JSON-RPC over stdio.</Description>
-    <!-- Roslyn and MSBuild rely on reflection; the host runs on the regular JIT runtime. -->
+    <Description>Out-of-process C# language service host (Roslyn, ADR 0005) speaking LSP over stdio.</Description>
+    <!-- Roslyn relies on reflection (MEF, analyzers); the host runs on the regular JIT runtime. -->
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Daedalus.Rpc\Daedalus.Rpc.csproj" />
     <ProjectReference Include="..\Daedalus.LanguageServices.Protocol\Daedalus.LanguageServices.Protocol.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
-    <!-- MSBuild assemblies come from the installed SDK at runtime via Microsoft.Build.Locator. -->
-    <PackageReference Include="Microsoft.Build.Locator" />
-    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
-    <PackageReference Include="StreamJsonRpc" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" />
   </ItemGroup>
 
   <ItemGroup>

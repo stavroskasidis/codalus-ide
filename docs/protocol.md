@@ -1,36 +1,48 @@
-# Shell ↔ language service host protocol (M0)
+# Shell ↔ language service protocol
 
-The language service host (`daedalus-lshost`) runs out of process. The shell starts it and talks to it over **stdio** using **JSON-RPC 2.0 with LSP framing** (`Content-Length` headers). Contracts reuse LSP names and shapes where the semantics match. IDE-specific extensions use the `daedalus/` prefix. The C# contracts are in `src/Daedalus.LanguageServices.Protocol`. The AOT-safe client and supervisor are in `src/Daedalus.LanguageServices.Client`.
-
-This document covers M0 only. M3 replaces it with the full language-service contract and a version policy.
+Language services run out of process and speak **LSP 3.17** over **stdio** (JSON-RPC 2.0, `Content-Length` framing), with a few `daedalus/` extensions where LSP has no message ([ADR 0005](adr/0005-editor-and-language-services.md)). The shell's client is generic (`LanguageHostClient` in `src/Daedalus.LanguageServices.Client`, AOT-safe), so any LSP server can serve a language; the C# service is `daedalus-lshost` (`src/Daedalus.LanguageServices.Host`, Roslyn). Contracts are in `src/Daedalus.LanguageServices.Protocol`.
 
 ## Process model
 
-- The shell owns the host process and supervises it (`LanguageHostClient`). If the connection drops, in-flight requests fail with `JsonRpcConnectionLostException`, the shell is notified (`HostCrashed`), and the host is restarted with exponential backoff, at most 5 times per minute. The solution is then reopened and open documents are replayed (`HostRestarted`). The UI never goes down with the host.
-- Parameters are a single object (LSP style), and names are camelCase.
-- Requests are dispatched in arrival order, so a request always observes every edit sent before it (`NonConcurrentSynchronizationContext` on the host).
-- Cancellation uses LSP's `$/cancelRequest`.
+- The workbench's `LanguageService` starts a language's host when the first file of that language opens, or when the first design-time build of one of its projects arrives. It never starts at shell startup.
+- The host is supervised (`SupervisedProcess`): on a crash it restarts with backoff (at most 5 times a minute), and the client sends `initialize`, the projects (`daedalus/projects/update`) and every open document (`didOpen` with the editor's current text) again. Diagnostics of a host that gives up are cleared.
+- Notifications are handled in arrival order, and a request reads the server's state when it arrives, so it observes every earlier edit. Cancelled requests send `$/cancelRequest`.
 
-## Methods
+## LSP subset
 
-| Method | Kind | Standard? | Notes |
+| Method | Notes |
+|---|---|
+| `initialize` / `initialized` / `shutdown` / `exit` | `initializationOptions` take the same settings as `workspace/didChangeConfiguration`. |
+| `textDocument/didOpen`, `didChange`, `didClose`, `didSave` | Incremental sync (`textDocumentSync: 2`). URIs are `file://` URIs. |
+| `workspace/didChangeConfiguration` | `{settings: {analysisScope: "openDocuments" \| "solution"}}`. |
+| `textDocument/completion`, `completionItem/resolve` | The list sets `itemDefaults.editRange` (the span being completed). Items carry no edit; `resolve` fills `textEdit`, `additionalTextEdits` (e.g. an added `using`) and `documentation`. Items in a list in suggestion mode have empty `commitCharacters`. |
+| `textDocument/hover` | Markdown: the signature in a `csharp` code block, then documentation. |
+| `textDocument/signatureHelp` | Parameter labels are substrings of the signature label. |
+| `textDocument/definition`, `textDocument/implementation` | `Location[]`. Definitions in source-generated files use `daedalus-generated:` URIs. Symbols only in metadata return nothing yet (M3b decompiles them). |
+| `textDocument/documentHighlight` | Definitions are `Write`, references `Read`. |
+| `textDocument/foldingRange` | `startCharacter` is the end of the first line (the fold hides the rest); `kind` is `region`, `imports`, `comment` or absent; `collapsedText` labels regions and comments. |
+| `textDocument/semanticTokens/full`, `/range` | See the token legend below. Clients should ask for the visible range. |
+| `textDocument/publishDiagnostics` (server → client) | Open documents: compiler and analyzer diagnostics shortly after each edit, with the document `version`. Closed files: compiler diagnostics of the whole solution from a background pass (analyzers too with `analysisScope: solution`). `code` is the diagnostic id; `codeDescription.href` its help link; `tags` mark unnecessary (faded) and deprecated code. Hidden diagnostics are sent only when they mark unnecessary code, as hints. |
+| `window/logMessage` (server → client) | Analyzer load failures, analyzer exceptions, project problems. |
+
+Shapes narrowed from LSP's unions (documented on the C# types): `documentation` is always `MarkupContent`, parameter labels are strings, diagnostic codes are strings.
+
+## Extensions
+
+| Method | Kind | Params → result | Why |
 |---|---|---|---|
-| `initialize` | request | LSP name, simplified shape | Returns `{serverName, serverVersion, legend}`. |
-| `shutdown`, `exit` | request / notification | LSP | |
-| `daedalus/openSolution` | request | **extension** | `{path}` (`.sln`, `.slnx` or `.csproj`). Returns `{root: SolutionNode, diagnostics: string[]}`. LSP has no solution model. |
-| `textDocument/didOpen` | notification | LSP name, simplified | `{path, text, version}`. Documents are identified by file path instead of URI. |
-| `textDocument/didChange` | notification | LSP name, **extended edits** | `{path, version, changes: [{offset, length, text}]}`. |
-| `textDocument/didClose` | notification | LSP name | `{path}` |
-| `textDocument/semanticTokens/full` | request | LSP | `{path}` → `{version, data}` |
-| `textDocument/semanticTokens/range` | request | LSP, **line range** | `{path, startLine, endLine}` (zero-based, end-exclusive) → `{version, data}` |
+| `daedalus/projects/update` | notification | `{projects: ProjectData[]}` | LSP has no project model. Adds or replaces projects by path. |
+| `daedalus/projects/remove` | notification | `{paths}` | |
+| `daedalus/documentOptions` | request | `{textDocument}` → `{insertSpaces, tabSize, indentSize, newLine?}` | Editor indentation and line endings from `.editorconfig`. |
+| `daedalus/sourceGeneratedText` | request | `{textDocument}` → `{text, hintName, generatorName}` | The content of a `daedalus-generated:` document (opened read-only). |
+| `daedalus/workspaceStatus` | notification (server → client) | `{state: loading \| ready, projects, documents}` | `ready` after a background pass has compiled every project; status bar and the `language_ready_ms` benchmark. |
 
-### Extension details
+**`ProjectData`** `{path, name, language, targetFramework, arguments, outputPath?, outputRefPath?, projectReferences?}` is a design-time build's result (the build host's `project/compilerInputs`, [project-protocol.md](project-protocol.md)): the compiler command line, with sources relative to the project directory. The server parses it like the compiler does. A reference to another project's output (or reference assembly), or to the assembly of a referenced project built for another target framework, becomes a project reference. Only one target framework per project is loaded: the active one, chosen in the editor's project-context picker.
 
-- **Offset-based edits.** `didChange` edits are UTF-16 offsets into the document *before* that edit. Edits apply in order. AvaloniaEdit and rope-based editors produce offsets natively, which avoids line/column round-trips. Non-.NET clients must convert to UTF-16 (C# string indices).
-- **Versioned token responses.** Semantic-token responses carry the document `version` they were computed for, and clients discard stale responses.
-- **Token legend.** Indices 0–21 are the LSP standard token types. Indices 22 and up are Roslyn-specific (`delegate`, `record`, `recordStruct`, `field`, `constant`, `local`, `label`, `excludedCode`, `preprocessor`, `punctuation`, `stringEscape`, `xmlDocComment`, `controlKeyword`, `extensionMethod`, `stringVerbatim`). The legend is append-only. Modifiers: `static`.
-- **Single-line, non-overlapping tokens.** Roslyn spans that are multi-line or nested (an escape inside a string) are split, and the inner span wins.
+**Projects and files.** Files of loaded projects get full semantics. Files outside any loaded project, and every file of an untrusted folder, go to a "Miscellaneous Files" project with framework references only. Open documents move between the two as projects arrive. Closed files are reloaded when they change on disk.
 
-### Why range requests matter
+## Semantic token legend
 
-On the 100k-line fixture, full-document classification took 15 s cold and 1.6–5.6 s warm, returning 549k tokens. A 150-line range took 5–50 ms. Clients must request the viewport plus a margin. M3 will add result caching and delta responses.
+Indices 0–21 are the LSP standard token types. Indices 22 and up are Roslyn classifications LSP has no name for: `delegate`, `record`, `recordStruct`, `field`, `constant`, `local`, `label`, `excludedCode`, `preprocessor`, `punctuation`, `stringEscape`, `xmlDocComment`, `controlKeyword`, `extensionMethod`, `stringVerbatim`. The legend is append-only. Modifiers: `static`. Tokens are single-line and don't overlap: multi-line Roslyn spans are split, and nested spans (an escape inside a string) win over their container.
+
+Range requests matter: on the 100k-line fixture, classifying the whole document took 1.6–15 s and returned 549k tokens; a 150-line range takes 5–50 ms (ADR 0002).

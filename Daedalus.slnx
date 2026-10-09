@@ -6,9 +6,6 @@
   <Folder Name="/samples/">
     <Project Path="samples/plugins/HelloWorld/HelloWorld.csproj" />
   </Folder>
-  <Folder Name="/spikes/">
-    <Project Path="spikes/avalonia/Daedalus.Spike.Avalonia/Daedalus.Spike.Avalonia.csproj" />
-  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Daedalus.Diagnostics.BenchEvents/Daedalus.Diagnostics.BenchEvents.csproj" />
     <Project Path="src/Daedalus.LanguageServices.Client/Daedalus.LanguageServices.Client.csproj" />
@@ -35,7 +32,6 @@
     <Project Path="tests/Daedalus.Projects.Tests/Daedalus.Projects.Tests.csproj" />
     <Project Path="tests/Daedalus.Rpc.Tests/Daedalus.Rpc.Tests.csproj" />
     <Project Path="tests/Daedalus.Shell.Tests/Daedalus.Shell.Tests.csproj" />
-    <Project Path="tests/Daedalus.Spike.Avalonia.Tests/Daedalus.Spike.Avalonia.Tests.csproj" />
     <Project Path="tests/Daedalus.Workbench.Tests/Daedalus.Workbench.Tests.csproj" />
   </Folder>
 </Solution>

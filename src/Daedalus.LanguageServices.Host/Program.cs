@@ -1,33 +1,16 @@
-using System.Runtime.CompilerServices;
-using Microsoft.Build.Locator;
+using Daedalus.LanguageServices.Host;
+using Daedalus.Rpc;
 
-namespace Daedalus.LanguageServices.Host;
+// Usage: daedalus-lshost. Speaks LSP (plus daedalus/ extensions) on stdio; see docs/protocol.md.
+var stdin = Console.OpenStandardInput();
+var stdout = Console.OpenStandardOutput();
 
-public static class Program
-{
-    public static async Task<int> Main(string[] args)
-    {
-        // MSBuild must be located before any type from Microsoft.Build is loaded,
-        // so everything that touches MSBuild lives behind a non-inlined call.
-        if (!MSBuildLocator.IsRegistered)
-        {
-            MSBuildLocator.RegisterDefaults();
-        }
+// stdout carries the protocol; anything else (analyzers, generators) writing to Console goes to stderr.
+Console.SetOut(Console.Error);
 
-        return await RunAsync(args).ConfigureAwait(false);
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static async Task<int> RunAsync(string[] args)
-    {
-        _ = args;
-        using var stdin = Console.OpenStandardInput();
-        using var stdout = Console.OpenStandardOutput();
-        // stdout carries the protocol; diagnostics go to stderr only.
-        Console.SetOut(Console.Error);
-
-        await using var server = new HostServer(stdout, stdin);
-        await server.RunAsync().ConfigureAwait(false);
-        return 0;
-    }
-}
+await using var connection = new JsonRpcConnection(stdin, stdout);
+await using var server = new LanguageServer(connection);
+server.Register();
+connection.Start();
+await Task.WhenAny(connection.Completion, server.ExitRequested).ConfigureAwait(false);
+return 0;

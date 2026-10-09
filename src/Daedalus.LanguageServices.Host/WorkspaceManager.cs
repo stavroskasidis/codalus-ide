@@ -1,187 +1,591 @@
-using System.Collections.Concurrent;
+using System.Collections.Immutable;
+using System.Reflection;
 using Daedalus.LanguageServices.Protocol;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.Classification;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.MSBuild;
+using Microsoft.CodeAnalysis.Host;
+using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Text;
-using TextEdit = Daedalus.LanguageServices.Protocol.TextEdit;
 
 namespace Daedalus.LanguageServices.Host;
 
-/// <summary>
-/// Owns the Roslyn solution snapshots. Edits are applied to in-memory snapshots only:
-/// <see cref="Workspace.TryApplyChanges(Solution)"/> on an MSBuildWorkspace writes to disk, which the
-/// editor must control explicitly.
-/// Files that do not belong to the loaded solution are placed in a "miscellaneous files" project.
-/// </summary>
-public sealed class WorkspaceManager : IDisposable
+/// <summary>A Roslyn workspace whose solution is replaced wholesale by <see cref="WorkspaceManager"/>.</summary>
+internal sealed class DaedalusWorkspace(HostServices host) : Workspace(host, "Daedalus")
 {
-    private static readonly StringComparer s_pathComparer =
-        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    public void Replace(Solution solution) => SetCurrentSolution(solution);
+}
+
+/// <summary>
+/// Owns the Roslyn solution (ADR 0005). Projects come from design-time builds (<see cref="ProjectData"/>) and are
+/// updated as deltas, so unchanged projects keep their compilations. Open documents are authoritative: their text
+/// comes from the editor. Files that belong to no loaded project go to a "Miscellaneous Files" project with
+/// framework references only. Closed files are reloaded when they change on disk.
+/// </summary>
+internal sealed class WorkspaceManager : IDisposable
+{
+    private static readonly Lazy<HostServices> s_host = new(() => MefHostServices.Create(
+        MefHostServices.DefaultAssemblies
+            .Concat([typeof(Microsoft.CodeAnalysis.Completion.CompletionService).Assembly, Assembly.Load("Microsoft.CodeAnalysis.CSharp.Features")])
+            .Distinct()));
 
     private static readonly Lazy<MetadataReference[]> s_frameworkReferences = new(() =>
-    {
-        var tpa = (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? string.Empty;
-        return tpa.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Where(p => Path.GetFileName(p).StartsWith("System.", StringComparison.Ordinal)
-                        || Path.GetFileName(p) is "mscorlib.dll" or "netstandard.dll")
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray();
-    });
+        [.. ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? string.Empty)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => Path.GetFileName(p).StartsWith("System.", StringComparison.Ordinal) || Path.GetFileName(p) is "mscorlib.dll" or "netstandard.dll")
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))]);
 
     private readonly Lock _gate = new();
-    private readonly ConcurrentDictionary<string, OpenDocumentState> _open = new(s_pathComparer);
-    private readonly ProjectId _miscProjectId;
-    private MSBuildWorkspace? _msbuild;
-    private Solution? _solution;
-    private Solution _misc;
+    private readonly DaedalusWorkspace _workspace = new(s_host.Value);
+    private readonly ProjectLoader _loader = new();
+    private readonly Dictionary<string, ProjectEntry> _projects = new(Paths.Comparer);
+    private readonly Dictionary<string, OpenDocument> _open = new(Paths.Comparer);
+    private readonly Dictionary<string, FileSystemWatcher> _watchers = new(Paths.Comparer);
+    private readonly HashSet<string> _changedFiles = new(Paths.Comparer);
+    private readonly Timer _reloadTimer;
+    private readonly ProjectId _miscId = ProjectId.CreateNewId("Miscellaneous Files");
 
     public WorkspaceManager()
     {
-        var adhoc = new AdhocWorkspace();
-        _miscProjectId = ProjectId.CreateNewId("Miscellaneous Files");
-        var info = ProjectInfo.Create(
-            _miscProjectId,
+        _loader.Log += (_, message) => Log?.Invoke(this, message);
+        _reloadTimer = new Timer(_ => ReloadChangedFiles());
+        _workspace.Replace(_workspace.CurrentSolution.AddProject(ProjectInfo.Create(
+            _miscId,
             VersionStamp.Create(),
             name: "Miscellaneous Files",
             assemblyName: "MiscellaneousFiles",
             language: LanguageNames.CSharp,
             compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable),
             parseOptions: new CSharpParseOptions(LanguageVersion.Preview),
-            metadataReferences: s_frameworkReferences.Value);
-        _misc = adhoc.CurrentSolution.AddProject(info);
+            metadataReferences: s_frameworkReferences.Value)));
     }
 
-    public async Task<OpenSolutionResult> OpenSolutionAsync(string path, CancellationToken cancellationToken)
+    public Solution CurrentSolution => _workspace.CurrentSolution;
+
+    public ProjectId MiscellaneousProjectId => _miscId;
+
+    public int ProjectCount
     {
-        var fullPath = Path.GetFullPath(path);
-        var workspace = MSBuildWorkspace.Create();
-        var diagnostics = new List<string>();
-        workspace.RegisterWorkspaceFailedHandler(e => { lock (diagnostics) { diagnostics.Add(e.Diagnostic.Message); } });
+        get
+        {
+            lock (_gate)
+            {
+                return _projects.Count;
+            }
+        }
+    }
 
-        var solution = fullPath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
-            ? (await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken).ConfigureAwait(false)).Solution
-            : await workspace.OpenSolutionAsync(fullPath, cancellationToken: cancellationToken).ConfigureAwait(false);
+    /// <summary>The solution changed: projects were added, updated or removed (not raised for document edits).</summary>
+    public event EventHandler? ProjectsChanged;
 
+    /// <summary>A closed document changed on disk.</summary>
+    public event EventHandler<string>? FileReloaded;
+
+    public event EventHandler<string>? Log;
+
+    private sealed class ProjectEntry(ProjectId id)
+    {
+        public ProjectId Id { get; } = id;
+
+        public ProjectLoader.Parsed? Parsed { get; set; }
+
+        public IReadOnlyList<MetadataReference> AppliedMetadata { get; set; } = [];
+
+        public IReadOnlyList<ProjectReference> AppliedProjects { get; set; } = [];
+    }
+
+    private sealed record OpenDocument(int Version, SourceText Text, DocumentId? MiscId);
+
+    // ------------------------------------------------------------------ projects
+
+    public void UpdateProjects(IReadOnlyList<ProjectData> projects)
+    {
         lock (_gate)
         {
-            _msbuild?.Dispose();
-            _msbuild = workspace;
-            _solution = solution;
+            var solution = _workspace.CurrentSolution;
+            foreach (var data in projects)
+            {
+                var path = Path.GetFullPath(data.Path);
+                var parsed = _loader.Parse(data with { Path = path });
+                if (parsed is null)
+                {
+                    continue;
+                }
+
+                if (!_projects.TryGetValue(path, out var entry))
+                {
+                    entry = new ProjectEntry(ProjectId.CreateNewId(data.Name));
+                    _projects[path] = entry;
+                }
+
+                solution = Apply(solution, entry, parsed);
+                entry.Parsed = parsed;
+                Watch(Path.GetDirectoryName(path)!);
+            }
+
+            solution = ApplyReferences(solution);
+            solution = ReconcileOpenDocuments(solution);
+            _workspace.Replace(solution);
         }
 
-        string[] diagnosticsSnapshot;
-        lock (diagnostics)
-        {
-            diagnosticsSnapshot = [.. diagnostics];
-        }
-
-        return new OpenSolutionResult(SolutionTreeBuilder.Build(fullPath, solution), diagnosticsSnapshot);
+        ProjectsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void OpenDocument(string path, string text, int version)
+    public void RemoveProjects(IReadOnlyList<string> paths)
     {
-        var fullPath = Path.GetFullPath(path);
+        lock (_gate)
+        {
+            var solution = _workspace.CurrentSolution;
+            foreach (var path in paths.Select(Path.GetFullPath))
+            {
+                if (_projects.Remove(path, out var entry))
+                {
+                    // Other projects drop their references to it first.
+                    foreach (var dependent in solution.Projects.Where(p => p.ProjectReferences.Any(r => r.ProjectId == entry.Id)).ToList())
+                    {
+                        solution = solution.WithProjectReferences(dependent.Id, dependent.ProjectReferences.Where(r => r.ProjectId != entry.Id));
+                    }
+
+                    solution = solution.RemoveProject(entry.Id);
+                }
+            }
+
+            foreach (var entry in _projects.Values)
+            {
+                entry.AppliedProjects = [.. entry.AppliedProjects.Where(r => solution.ContainsProject(r.ProjectId))];
+            }
+
+            solution = ApplyReferences(solution);
+            solution = ReconcileOpenDocuments(solution);
+            _workspace.Replace(solution);
+        }
+
+        ProjectsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private Solution Apply(Solution solution, ProjectEntry entry, ProjectLoader.Parsed parsed)
+    {
+        var id = entry.Id;
+        var data = parsed.Data;
+        if (solution.GetProject(id) is not { } project)
+        {
+            return solution.AddProject(ProjectInfo.Create(
+                    id,
+                    VersionStamp.Create(),
+                    data.Name,
+                    parsed.AssemblyName,
+                    LanguageNames.CSharp,
+                    filePath: data.Path,
+                    outputFilePath: data.OutputPath,
+                    compilationOptions: parsed.CompilationOptions,
+                    parseOptions: parsed.ParseOptions,
+                    documents: parsed.Sources.Select(s => SourceDocument(id, s.Path, s.Folders)),
+                    analyzerReferences: parsed.Analyzers,
+                    additionalDocuments: parsed.AdditionalFiles.Select(f => FileDocument(id, f)),
+                    outputRefFilePath: data.OutputRefPath)
+                .WithAnalyzerConfigDocuments(parsed.AnalyzerConfigFiles.Select(f => FileDocument(id, f))));
+        }
+
+        if (!Equals(project.CompilationOptions, parsed.CompilationOptions))
+        {
+            solution = solution.WithProjectCompilationOptions(id, parsed.CompilationOptions);
+        }
+
+        if (!Equals(project.ParseOptions, parsed.ParseOptions))
+        {
+            solution = solution.WithProjectParseOptions(id, parsed.ParseOptions);
+        }
+
+        if (project.AssemblyName != parsed.AssemblyName)
+        {
+            solution = solution.WithProjectAssemblyName(id, parsed.AssemblyName);
+        }
+
+        if (project.Name != data.Name)
+        {
+            solution = solution.WithProjectName(id, data.Name);
+        }
+
+        if (project.OutputFilePath != data.OutputPath)
+        {
+            solution = solution.WithProjectOutputFilePath(id, data.OutputPath);
+        }
+
+        if (project.OutputRefFilePath != data.OutputRefPath)
+        {
+            solution = solution.WithProjectOutputRefFilePath(id, data.OutputRefPath);
+        }
+
+        if (!project.AnalyzerReferences.SequenceEqual(parsed.Analyzers))
+        {
+            solution = solution.WithProjectAnalyzerReferences(id, parsed.Analyzers);
+        }
+
+        // Documents, additional files and .editorconfig files: add and remove by path.
+        var sources = parsed.Sources.ToDictionary(s => s.Path, Paths.Comparer);
+        solution = solution.RemoveDocuments([.. project.Documents.Where(d => d.FilePath is null || !sources.ContainsKey(d.FilePath)).Select(d => d.Id)]);
+        var existing = project.Documents.Select(d => d.FilePath).OfType<string>().ToHashSet(Paths.Comparer);
+        solution = solution.AddDocuments([.. parsed.Sources.Where(s => !existing.Contains(s.Path)).Select(s => SourceDocument(id, s.Path, s.Folders))]);
+
+        var additional = parsed.AdditionalFiles.ToHashSet(Paths.Comparer);
+        solution = solution.RemoveAdditionalDocuments([.. project.AdditionalDocuments.Where(d => d.FilePath is null || !additional.Contains(d.FilePath)).Select(d => d.Id)]);
+        var existingAdditional = project.AdditionalDocuments.Select(d => d.FilePath).OfType<string>().ToHashSet(Paths.Comparer);
+        solution = solution.AddAdditionalDocuments([.. parsed.AdditionalFiles.Where(f => !existingAdditional.Contains(f)).Select(f => FileDocument(id, f))]);
+
+        var configs = parsed.AnalyzerConfigFiles.ToHashSet(Paths.Comparer);
+        solution = solution.RemoveAnalyzerConfigDocuments([.. project.AnalyzerConfigDocuments.Where(d => d.FilePath is null || !configs.Contains(d.FilePath)).Select(d => d.Id)]);
+        var existingConfigs = project.AnalyzerConfigDocuments.Select(d => d.FilePath).OfType<string>().ToHashSet(Paths.Comparer);
+        return solution.AddAnalyzerConfigDocuments([.. parsed.AnalyzerConfigFiles.Where(f => !existingConfigs.Contains(f)).Select(f => FileDocument(id, f))]);
+    }
+
+    /// <summary>
+    /// Metadata and project references of every project. A reference to another loaded project's output (or reference
+    /// assembly) becomes a project reference; everything else is a file reference. Applied only where it changed.
+    /// </summary>
+    private Solution ApplyReferences(Solution solution)
+    {
+        var outputs = new Dictionary<string, ProjectId>(Paths.Comparer);
+        foreach (var entry in _projects.Values.Where(e => e.Parsed is not null))
+        {
+            if (entry.Parsed!.Data.OutputPath is { } output)
+            {
+                outputs[output] = entry.Id;
+            }
+
+            if (entry.Parsed.Data.OutputRefPath is { } refOutput)
+            {
+                outputs[refOutput] = entry.Id;
+            }
+        }
+
+        foreach (var entry in _projects.Values.Where(e => e.Parsed is not null))
+        {
+            var metadata = new List<MetadataReference>();
+            var projects = new List<ProjectReference>();
+
+            // Referenced projects by assembly name: the reference may be the output of a target framework other than
+            // the one loaded for that project (only the active framework is loaded, ADR 0005).
+            var referencedAssemblies = new Dictionary<string, ProjectId>(StringComparer.OrdinalIgnoreCase);
+            foreach (var referenced in entry.Parsed!.Data.ProjectReferences ?? [])
+            {
+                if (_projects.TryGetValue(referenced, out var target) && target.Parsed is { } parsed)
+                {
+                    referencedAssemblies.TryAdd(parsed.AssemblyName, target.Id);
+                }
+            }
+
+            foreach (var (path, properties) in entry.Parsed.References)
+            {
+                if ((outputs.TryGetValue(path, out var target) || referencedAssemblies.TryGetValue(Path.GetFileNameWithoutExtension(path), out target))
+                    && target != entry.Id)
+                {
+                    if (projects.All(p => p.ProjectId != target))
+                    {
+                        projects.Add(new ProjectReference(target, properties.Aliases, properties.EmbedInteropTypes));
+                    }
+                }
+                else if (_loader.Metadata(path, properties) is { } reference)
+                {
+                    metadata.Add(reference);
+                }
+            }
+
+            if (!metadata.SequenceEqual(entry.AppliedMetadata))
+            {
+                solution = solution.WithProjectMetadataReferences(entry.Id, metadata);
+                entry.AppliedMetadata = metadata;
+            }
+
+            if (!projects.SequenceEqual(entry.AppliedProjects))
+            {
+                solution = solution.WithProjectReferences(entry.Id, projects);
+                entry.AppliedProjects = projects;
+            }
+        }
+
+        return solution;
+    }
+
+    private DocumentInfo SourceDocument(ProjectId project, string path, IReadOnlyList<string> folders) =>
+        DocumentInfo.Create(DocumentId.CreateNewId(project, path), Path.GetFileName(path), folders, SourceCodeKind.Regular, Loader(path), path);
+
+    private DocumentInfo FileDocument(ProjectId project, string path) =>
+        DocumentInfo.Create(DocumentId.CreateNewId(project, path), Path.GetFileName(path), loader: Loader(path), filePath: path);
+
+    private TextLoader Loader(string path) =>
+        _open.TryGetValue(path, out var open)
+            ? TextLoader.From(TextAndVersion.Create(open.Text, VersionStamp.Create(), path))
+            : new FileTextLoader(path, defaultEncoding: null);
+
+    /// <summary>Open documents move between their projects and Miscellaneous Files as projects come and go.</summary>
+    private Solution ReconcileOpenDocuments(Solution solution)
+    {
+        foreach (var (path, open) in _open.ToList())
+        {
+            var ids = ProjectDocumentIds(solution, path);
+            if (ids.Length > 0 && open.MiscId is { } miscId)
+            {
+                solution = solution.RemoveDocument(miscId).WithDocumentText(ids, open.Text, PreservationMode.PreserveIdentity);
+                _open[path] = open with { MiscId = null };
+            }
+            else if (ids.Length == 0 && open.MiscId is null)
+            {
+                var id = DocumentId.CreateNewId(_miscId, path);
+                solution = solution.AddDocument(id, Path.GetFileName(path), open.Text, filePath: path);
+                _open[path] = open with { MiscId = id };
+            }
+        }
+
+        return solution;
+    }
+
+    private ImmutableArray<DocumentId> ProjectDocumentIds(Solution solution, string path) =>
+        [.. solution.GetDocumentIdsWithFilePath(path).Where(id => id.ProjectId != _miscId)];
+
+    // ------------------------------------------------------------------ open documents
+
+    public void Open(string path, string text, int version)
+    {
+        path = Path.GetFullPath(path);
         var sourceText = SourceText.From(text);
         lock (_gate)
         {
-            var id = _solution?.GetDocumentIdsWithFilePath(fullPath).FirstOrDefault();
-            if (id is not null)
+            var solution = _workspace.CurrentSolution;
+            var ids = ProjectDocumentIds(solution, path);
+            DocumentId? miscId = null;
+            if (ids.Length > 0)
             {
-                _solution = _solution!.WithDocumentText(id, sourceText, PreservationMode.PreserveIdentity);
-                _open[fullPath] = new OpenDocumentState(id, IsMisc: false, version, sourceText);
-                return;
-            }
-
-            var miscId = DocumentId.CreateNewId(_miscProjectId, fullPath);
-            _misc = _misc.AddDocument(miscId, Path.GetFileName(fullPath), sourceText, filePath: fullPath);
-            _open[fullPath] = new OpenDocumentState(miscId, IsMisc: true, version, sourceText);
-        }
-    }
-
-    public void ChangeDocument(string path, int version, TextEdit[] changes)
-    {
-        var fullPath = Path.GetFullPath(path);
-        lock (_gate)
-        {
-            if (!_open.TryGetValue(fullPath, out var doc))
-            {
-                throw new InvalidOperationException($"Document is not open: {fullPath}");
-            }
-
-            var solution = doc.IsMisc ? _misc : _solution!;
-            var text = doc.Text;
-foreach (var change in changes)
-            {
-                text = text.WithChanges(new TextChange(new TextSpan(change.Offset, change.Length), change.Text));
-            }
-
-            solution = solution.WithDocumentText(doc.Id, text, PreservationMode.PreserveIdentity);
-            if (doc.IsMisc)
-            {
-                _misc = solution;
+                solution = solution.WithDocumentText(ids, sourceText, PreservationMode.PreserveIdentity);
             }
             else
             {
-                _solution = solution;
+                miscId = DocumentId.CreateNewId(_miscId, path);
+                solution = solution.AddDocument(miscId, Path.GetFileName(path), sourceText, filePath: path);
             }
 
-            _open[fullPath] = doc with { Version = version, Text = text };
+            _open[path] = new OpenDocument(version, sourceText, miscId);
+            _workspace.Replace(solution);
         }
     }
 
-    public void CloseDocument(string path)
+    /// <summary>Applies LSP content changes in order. Returns false when the document is not open.</summary>
+    public bool Change(string path, int version, IReadOnlyList<TextDocumentContentChangeEvent> changes)
     {
-        var fullPath = Path.GetFullPath(path);
+        path = Path.GetFullPath(path);
         lock (_gate)
         {
-            if (_open.TryRemove(fullPath, out var doc) && doc.IsMisc)
+            if (!_open.TryGetValue(path, out var open))
             {
-                _misc = _misc.RemoveDocument(doc.Id);
+                return false;
+            }
+
+            var text = open.Text;
+            foreach (var change in changes)
+            {
+                text = change.Range is { } range
+                    ? text.WithChanges(new TextChange(Positions.ToSpan(text, range), change.Text))
+                    : SourceText.From(change.Text);
+            }
+
+            var solution = _workspace.CurrentSolution;
+            var ids = open.MiscId is { } miscId ? [miscId] : ProjectDocumentIds(solution, path);
+            _workspace.Replace(solution.WithDocumentText(ids, text, PreservationMode.PreserveIdentity));
+            _open[path] = open with { Version = version, Text = text };
+            return true;
+        }
+    }
+
+    public void Close(string path)
+    {
+        path = Path.GetFullPath(path);
+        lock (_gate)
+        {
+            if (!_open.Remove(path, out var open))
+            {
+                return;
+            }
+
+            var solution = _workspace.CurrentSolution;
+            if (open.MiscId is { } miscId)
+            {
+                solution = solution.RemoveDocument(miscId);
+            }
+            else
+            {
+                // Back to the file on disk (the editor may close without saving).
+                foreach (var id in ProjectDocumentIds(solution, path))
+                {
+                    solution = solution.WithDocumentTextLoader(id, new FileTextLoader(path, defaultEncoding: null), PreservationMode.PreserveValue);
+                }
+            }
+
+            _workspace.Replace(solution);
+        }
+    }
+
+    public bool IsOpen(string path)
+    {
+        lock (_gate)
+        {
+            return _open.ContainsKey(Path.GetFullPath(path));
+        }
+    }
+
+    public int? Version(string path)
+    {
+        lock (_gate)
+        {
+            return _open.TryGetValue(Path.GetFullPath(path), out var open) ? open.Version : null;
+        }
+    }
+
+    public IReadOnlyList<string> OpenPaths
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _open.Keys];
             }
         }
     }
 
-    public async Task<SemanticTokens> GetSemanticTokensAsync(string path, (int Start, int End)? lineRange, CancellationToken cancellationToken)
+    // ------------------------------------------------------------------ lookup
+
+    /// <summary>The document for a URI in <paramref name="solution"/>: a file (in a project or Miscellaneous Files) or a source-generated document.</summary>
+    public static async ValueTask<Document?> FindDocumentAsync(Solution solution, string uri, CancellationToken cancellationToken)
     {
-        var fullPath = Path.GetFullPath(path);
-        Document document;
-        int version;
+        if (DocumentUris.ToPath(uri) is { } path)
+        {
+            var ids = solution.GetDocumentIdsWithFilePath(Path.GetFullPath(path));
+            return ids.IsEmpty ? null : solution.GetDocument(ids.FirstOrDefault(id => !IsMisc(solution, id)) ?? ids[0]);
+        }
+
+        if (DocumentUris.GeneratedPath(uri) is { } generatedPath)
+        {
+            foreach (var project in solution.Projects)
+            {
+                foreach (var generated in await project.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    if (Paths.Comparer.Equals(generated.FilePath, generatedPath))
+                    {
+                        return generated;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The source-generated document of a syntax tree (its virtual path identifies it).</summary>
+    public static async ValueTask<Document?> FindGeneratedAsync(Solution solution, SyntaxTree tree, CancellationToken cancellationToken)
+    {
+        foreach (var project in solution.Projects)
+        {
+            foreach (var generated in await project.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false))
+            {
+                if (generated.FilePath == tree.FilePath)
+                {
+                    return generated;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsMisc(Solution solution, DocumentId id) => solution.GetProject(id.ProjectId)?.Name == "Miscellaneous Files";
+
+    /// <summary>The LSP URI of a document (source-generated documents get a <c>daedalus-generated</c> URI).</summary>
+    public static string UriOf(Document document) =>
+        document is SourceGeneratedDocument ? DocumentUris.FromGeneratedPath(document.FilePath ?? document.Name) : DocumentUris.FromPath(document.FilePath!);
+
+    // ------------------------------------------------------------------ files changed on disk
+
+    private void Watch(string directory)
+    {
+        if (_watchers.ContainsKey(directory) || _watchers.Keys.Any(w => directory.StartsWith(w + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        var watcher = new FileSystemWatcher(directory)
+        {
+            IncludeSubdirectories = true,
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+        };
+        watcher.Changed += (_, e) => OnFileChanged(e.FullPath);
+        watcher.Created += (_, e) => OnFileChanged(e.FullPath);
+        watcher.Renamed += (_, e) => OnFileChanged(e.FullPath);
+        watcher.EnableRaisingEvents = true;
+        _watchers[directory] = watcher;
+    }
+
+    private void OnFileChanged(string path)
+    {
+        lock (_changedFiles)
+        {
+            _changedFiles.Add(path);
+        }
+
+        _reloadTimer.Change(200, Timeout.Infinite);
+    }
+
+    private void ReloadChangedFiles()
+    {
+        string[] changed;
+        lock (_changedFiles)
+        {
+            changed = [.. _changedFiles];
+            _changedFiles.Clear();
+        }
+
+        var reloaded = new List<string>();
         lock (_gate)
         {
-            if (!_open.TryGetValue(fullPath, out var doc))
+            var solution = _workspace.CurrentSolution;
+            foreach (var path in changed.Where(p => !_open.ContainsKey(p)))
             {
-                throw new InvalidOperationException($"Document is not open: {fullPath}");
+                var ids = solution.GetDocumentIdsWithFilePath(path);
+                if (ids.IsEmpty)
+                {
+                    continue;
+                }
+
+                var loader = new FileTextLoader(path, defaultEncoding: null);
+                foreach (var id in ids)
+                {
+                    solution = solution.ContainsDocument(id) ? solution.WithDocumentTextLoader(id, loader, PreservationMode.PreserveValue)
+                        : solution.ContainsAdditionalDocument(id) ? solution.WithAdditionalDocumentTextLoader(id, loader, PreservationMode.PreserveValue)
+                        : solution.ContainsAnalyzerConfigDocument(id) ? solution.WithAnalyzerConfigDocumentTextLoader(id, loader, PreservationMode.PreserveValue)
+                        : solution;
+                }
+
+                reloaded.Add(path);
             }
 
-            document = (doc.IsMisc ? _misc : _solution!).GetDocument(doc.Id)!;
-            version = doc.Version;
+            _workspace.Replace(solution);
         }
 
-        var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
-        var span = new TextSpan(0, text.Length);
-        if (lineRange is { } range && text.Lines.Count > 0)
+        foreach (var path in reloaded)
         {
-            var startLine = Math.Clamp(range.Start, 0, text.Lines.Count - 1);
-            var endLine = Math.Clamp(range.End, startLine + 1, text.Lines.Count);
-            span = TextSpan.FromBounds(text.Lines[startLine].Start, text.Lines[endLine - 1].EndIncludingLineBreak);
+            FileReloaded?.Invoke(this, path);
         }
-
-        var classified = await Classifier.GetClassifiedSpansAsync(document, span, cancellationToken).ConfigureAwait(false);
-        var tokens = ClassificationMapper.Map(classified);
-        return new SemanticTokens(version, SemanticTokenEncoder.Encode(text, tokens));
     }
 
     public void Dispose()
     {
+        _reloadTimer.Dispose();
         lock (_gate)
         {
-            _msbuild?.Dispose();
-            _msbuild = null;
-        }
-    }
+            foreach (var watcher in _watchers.Values)
+            {
+                watcher.Dispose();
+            }
 
-    /// <summary>The editor owns open-document text; <see cref="Text"/> is the authoritative copy.</summary>
-    private sealed record OpenDocumentState(DocumentId Id, bool IsMisc, int Version, SourceText Text);
+            _watchers.Clear();
+        }
+
+        _workspace.Dispose();
+    }
 }

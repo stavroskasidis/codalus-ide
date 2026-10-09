@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Daedalus Studio">
+  <!-- App icon: the wings in white on a violet squircle. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#3B1A8F"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#tile)"/>
+  <g fill="#FFFFFF" transform="translate(128 134) scale(0.68) translate(-128 -125)">
+    <polygon points="24,212 124,38.8 124,82.8 54,204"/>
+    <polygon opacity="0.86" points="65.6,200 124,98.8 124,142.8 95.6,192"/>
+    <polygon opacity="0.72" points="107.1,188 124,158.8 124,178"/>
+    <polygon opacity="0.74" points="232,212 132,38.8 132,82.8 202,204"/>
+    <polygon opacity="0.6" points="190.4,200 132,98.8 132,142.8 160.4,192"/>
+    <polygon opacity="0.48" points="148.9,188 132,158.8 132,178"/>
+  </g>
+</svg>

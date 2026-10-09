@@ -1,9 +1,11 @@
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Daedalus.LanguageServices.Protocol;
 using Daedalus.Rpc;
 
 namespace Daedalus.LanguageServices.Client;
 
-/// <summary>Locates the language service host.</summary>
+/// <summary>Locates the C# language service host.</summary>
 public static class HostLaunchInfo
 {
     public const string EnvironmentVariable = "DAEDALUS_LSHOST";
@@ -24,130 +26,182 @@ public static class HostLaunchInfo
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "lshost", "daedalus-lshost.dll"));
         return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
     }
-
-    public static ProcessLaunchInfo FromPath(string path) => ProcessLaunchInfo.FromPath(path);
 }
 
+/// <summary>An open document as the client knows it, for replay after a server restart.</summary>
+public sealed record OpenDocumentState(string Uri, string LanguageId, int Version, string Text);
+
 /// <summary>
-/// Typed, supervised connection to <c>daedalus-lshost</c>. When the host restarts, the solution is reopened and
-/// open documents are replayed from <see cref="DocumentTextProvider"/>.
+/// A supervised LSP client (ADR 0005), AOT-safe. It speaks standard LSP plus the <c>daedalus/</c> extensions that a
+/// server announces support for by handling them. When the server restarts, the client re-sends the configuration,
+/// the projects (<see cref="ProjectsProvider"/>) and the open documents (<see cref="OpenDocumentsProvider"/>).
+/// Notifications and requests are written in call order, so a request always follows the edits made before it.
 /// </summary>
 public sealed class LanguageHostClient : IAsyncDisposable
 {
     private readonly SupervisedProcess _process;
-    private readonly Lock _gate = new();
-    private readonly Dictionary<string, int> _openDocuments = new(StringComparer.Ordinal);
-    private string? _solutionPath;
+    private readonly string _clientName;
+    private JsonElement? _settings;
 
-    public LanguageHostClient(ProcessLaunchInfo launch)
+    public LanguageHostClient(string name, ProcessLaunchInfo launch, string clientName = "daedalus", SupervisionPolicy? policy = null)
     {
-        _process = new SupervisedProcess("daedalus-lshost", launch) { Initialize = InitializeAsync };
-        _process.Crashed += (_, e) => HostCrashed?.Invoke(this, e);
-        _process.Restarted += (_, _) => HostRestarted?.Invoke(this, EventArgs.Empty);
-        _process.Log += (_, line) => HostLog?.Invoke(this, line);
+        _clientName = clientName;
+        _process = new SupervisedProcess(name, launch, policy)
+        {
+            ConfigureConnection = Configure,
+            Initialize = InitializeAsync,
+        };
+        _process.Crashed += (_, e) => Crashed?.Invoke(this, e);
+        _process.Restarted += (_, _) => Restarted?.Invoke(this, EventArgs.Empty);
+        _process.Log += (_, line) => Log?.Invoke(this, line);
     }
 
-    /// <summary>Returns the current text and version of an open document, used to replay state after a restart.</summary>
-    public Func<string, (string Text, int Version)?>? DocumentTextProvider { get; set; }
+    public ServerCapabilities? Capabilities { get; private set; }
 
-    public SemanticTokensLegend? Legend { get; private set; }
+    public SemanticTokensLegend? Legend => Capabilities?.SemanticTokensProvider?.Legend;
 
-    public int? HostProcessId => _process.ProcessId;
+    public int? ProcessId => _process.ProcessId;
 
-    public event EventHandler<ProcessCrashedEventArgs>? HostCrashed;
+    public bool IsRunning => _process.IsRunning;
 
-    /// <summary>Raised after a restart once the solution and documents have been replayed.</summary>
-    public event EventHandler? HostRestarted;
+    /// <summary>Open documents with their current text, replayed after a restart.</summary>
+    public Func<IReadOnlyList<OpenDocumentState>>? OpenDocumentsProvider { get; set; }
 
-    public event EventHandler<string>? HostLog;
+    /// <summary>The current project data, replayed after a restart.</summary>
+    public Func<IReadOnlyList<ProjectData>>? ProjectsProvider { get; set; }
+
+    public event EventHandler<PublishDiagnosticsParams>? Diagnostics;
+
+    public event EventHandler<WorkspaceStatusParams>? WorkspaceStatus;
+
+    /// <summary>Server log messages and process output.</summary>
+    public event EventHandler<string>? Log;
+
+    public event EventHandler<ProcessCrashedEventArgs>? Crashed;
+
+    /// <summary>Raised after a restart, once projects and documents have been replayed.</summary>
+    public event EventHandler? Restarted;
 
     public Task StartAsync(CancellationToken cancellationToken) => _process.StartAsync(cancellationToken);
 
+    private void Configure(JsonRpcConnection connection)
+    {
+        var json = ProtocolJsonContext.Default;
+        connection.OnNotification(Methods.PublishDiagnostics, json.PublishDiagnosticsParams, p => Diagnostics?.Invoke(this, p));
+        connection.OnNotification(Methods.WorkspaceStatus, json.WorkspaceStatusParams, p => WorkspaceStatus?.Invoke(this, p));
+        connection.OnNotification(Methods.LogMessage, json.LogMessageParams, p => Log?.Invoke(this, p.Message));
+    }
+
     private async Task InitializeAsync(JsonRpcConnection connection, bool isRestart, CancellationToken cancellationToken)
     {
+        var json = ProtocolJsonContext.Default;
         var result = await connection.InvokeAsync(
             Methods.Initialize,
-            new InitializeParams(Environment.ProcessId, "daedalus"),
-            ProtocolJsonContext.Default.InitializeParams,
-            ProtocolJsonContext.Default.InitializeResult,
+            new InitializeParams(Environment.ProcessId, new ClientInfo(_clientName, null), null, null, _settings),
+            json.InitializeParams,
+            json.InitializeResult,
             cancellationToken).ConfigureAwait(false);
-        Legend = result.Legend;
+        Capabilities = result.Capabilities;
+        await connection.NotifyAsync(Methods.Initialized, new EmptyObject(), json.EmptyObject, cancellationToken).ConfigureAwait(false);
         if (!isRestart)
         {
             return;
         }
 
-        if (_solutionPath is { } solution)
+        if (ProjectsProvider?.Invoke() is { Count: > 0 } projects)
         {
-            await connection.InvokeAsync(
-                Methods.OpenSolution, new OpenSolutionParams(solution),
-                ProtocolJsonContext.Default.OpenSolutionParams, ProtocolJsonContext.Default.OpenSolutionResult,
+            await connection.NotifyAsync(Methods.ProjectsUpdate, new ProjectsUpdateParams([.. projects]), json.ProjectsUpdateParams, cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var document in OpenDocumentsProvider?.Invoke() ?? [])
+        {
+            await connection.NotifyAsync(
+                Methods.DidOpen,
+                new DidOpenTextDocumentParams(new TextDocumentItem(document.Uri, document.LanguageId, document.Version, document.Text)),
+                json.DidOpenTextDocumentParams,
                 cancellationToken).ConfigureAwait(false);
         }
-
-        string[] paths;
-        lock (_gate)
-        {
-            paths = [.. _openDocuments.Keys];
-        }
-
-        foreach (var path in paths)
-        {
-            if (DocumentTextProvider?.Invoke(path) is { } document)
-            {
-                await connection.NotifyAsync(Methods.DidOpen, new DidOpenParams(path, document.Text, document.Version), ProtocolJsonContext.Default.DidOpenParams, cancellationToken).ConfigureAwait(false);
-            }
-        }
     }
 
-    public async Task<OpenSolutionResult> OpenSolutionAsync(string path, CancellationToken cancellationToken)
+    // ------------------------------------------------------------------ notifications
+
+    /// <summary>Server settings (<c>workspace/didChangeConfiguration</c>); also sent as initialization options after a restart.</summary>
+    public Task ConfigureAsync(JsonElement settings, CancellationToken cancellationToken)
     {
-        _solutionPath = path;
-        return await _process.Connection.InvokeAsync(
-            Methods.OpenSolution, new OpenSolutionParams(path),
-            ProtocolJsonContext.Default.OpenSolutionParams, ProtocolJsonContext.Default.OpenSolutionResult,
-            cancellationToken).ConfigureAwait(false);
+        _settings = settings;
+        return Notify(Methods.DidChangeConfiguration, new DidChangeConfigurationParams(settings), ProtocolJsonContext.Default.DidChangeConfigurationParams, cancellationToken);
     }
 
-    public Task DidOpenAsync(string path, string text, int version, CancellationToken cancellationToken)
+    public Task DidOpenAsync(OpenDocumentState document, CancellationToken cancellationToken) =>
+        Notify(Methods.DidOpen, new DidOpenTextDocumentParams(new TextDocumentItem(document.Uri, document.LanguageId, document.Version, document.Text)), ProtocolJsonContext.Default.DidOpenTextDocumentParams, cancellationToken);
+
+    public Task DidChangeAsync(string uri, int version, TextDocumentContentChangeEvent[] changes, CancellationToken cancellationToken) =>
+        Notify(Methods.DidChange, new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri, version), changes), ProtocolJsonContext.Default.DidChangeTextDocumentParams, cancellationToken);
+
+    public Task DidCloseAsync(string uri, CancellationToken cancellationToken) =>
+        Notify(Methods.DidClose, new DidCloseTextDocumentParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.DidCloseTextDocumentParams, cancellationToken);
+
+    public Task DidSaveAsync(string uri, CancellationToken cancellationToken) =>
+        Notify(Methods.DidSave, new DidSaveTextDocumentParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.DidSaveTextDocumentParams, cancellationToken);
+
+    public Task UpdateProjectsAsync(IReadOnlyList<ProjectData> projects, CancellationToken cancellationToken) =>
+        Notify(Methods.ProjectsUpdate, new ProjectsUpdateParams([.. projects]), ProtocolJsonContext.Default.ProjectsUpdateParams, cancellationToken);
+
+    public Task RemoveProjectsAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken) =>
+        Notify(Methods.ProjectsRemove, new ProjectsRemoveParams([.. paths]), ProtocolJsonContext.Default.ProjectsRemoveParams, cancellationToken);
+
+    private Task Notify<T>(string method, T parameters, JsonTypeInfo<T> info, CancellationToken cancellationToken) =>
+        _process.IsRunning ? _process.Connection.NotifyAsync(method, parameters, info, cancellationToken) : Task.CompletedTask;
+
+    // ------------------------------------------------------------------ requests
+
+    public Task<CompletionList> CompletionAsync(string uri, Position position, CompletionContext? context, CancellationToken cancellationToken) =>
+        Invoke(Methods.Completion, new CompletionParams(new TextDocumentIdentifier(uri), position, context), ProtocolJsonContext.Default.CompletionParams, ProtocolJsonContext.Default.CompletionList, cancellationToken);
+
+    public Task<CompletionItem> ResolveCompletionAsync(CompletionItem item, CancellationToken cancellationToken) =>
+        Invoke(Methods.CompletionResolve, item, ProtocolJsonContext.Default.CompletionItem, ProtocolJsonContext.Default.CompletionItem, cancellationToken);
+
+    public Task<Hover?> HoverAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.Hover, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.Hover, cancellationToken);
+
+    public Task<SignatureHelp?> SignatureHelpAsync(string uri, Position position, SignatureHelpContext? context, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.SignatureHelp, new SignatureHelpParams(new TextDocumentIdentifier(uri), position, context), ProtocolJsonContext.Default.SignatureHelpParams, ProtocolJsonContext.Default.SignatureHelp, cancellationToken);
+
+    public async Task<Location[]> DefinitionAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.Definition, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.LocationArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<Location[]> ImplementationAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.Implementation, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.LocationArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<DocumentHighlight[]> DocumentHighlightsAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.DocumentHighlight, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.DocumentHighlightArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<FoldingRange[]> FoldingRangesAsync(string uri, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.FoldingRange, new FoldingRangeParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.FoldingRangeParams, ProtocolJsonContext.Default.FoldingRangeArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public Task<SemanticTokens> SemanticTokensAsync(string uri, Protocol.Range? range, CancellationToken cancellationToken) =>
+        range is null
+            ? Invoke(Methods.SemanticTokensFull, new SemanticTokensParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.SemanticTokensParams, ProtocolJsonContext.Default.SemanticTokens, cancellationToken)
+            : Invoke(Methods.SemanticTokensRange, new SemanticTokensRangeParams(new TextDocumentIdentifier(uri), range), ProtocolJsonContext.Default.SemanticTokensRangeParams, ProtocolJsonContext.Default.SemanticTokens, cancellationToken);
+
+    public Task<DocumentOptions?> DocumentOptionsAsync(string uri, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.DocumentOptions, new DocumentOptionsParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.DocumentOptionsParams, ProtocolJsonContext.Default.DocumentOptions, cancellationToken);
+
+    public Task<SourceGeneratedText?> SourceGeneratedTextAsync(string uri, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.SourceGeneratedText, new SourceGeneratedTextParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.SourceGeneratedTextParams, ProtocolJsonContext.Default.SourceGeneratedText, cancellationToken);
+
+    private static TextDocumentPositionParams At(string uri, Position position) => new(new TextDocumentIdentifier(uri), position);
+
+    private Task<TResult> Invoke<TParams, TResult>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken) =>
+        _process.Connection.InvokeAsync(method, parameters, paramsInfo, resultInfo, cancellationToken);
+
+    /// <summary>A request whose result may be JSON <c>null</c> (LSP's "nothing here").</summary>
+    private async Task<TResult?> InvokeNullable<TParams, TResult>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken)
+        where TResult : class
     {
-        lock (_gate)
-        {
-            _openDocuments[path] = version;
-        }
-
-        return _process.Connection.NotifyAsync(Methods.DidOpen, new DidOpenParams(path, text, version), ProtocolJsonContext.Default.DidOpenParams, cancellationToken);
+        var raw = await _process.Connection.InvokeRawAsync(method, JsonSerializer.SerializeToElement(parameters, paramsInfo), cancellationToken).ConfigureAwait(false);
+        return raw.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? null : raw.Deserialize(resultInfo);
     }
-
-    public Task DidChangeAsync(string path, int version, TextEdit[] changes, CancellationToken cancellationToken)
-    {
-        lock (_gate)
-        {
-            _openDocuments[path] = version;
-        }
-
-        return _process.Connection.NotifyAsync(Methods.DidChange, new DidChangeParams(path, version, changes), ProtocolJsonContext.Default.DidChangeParams, cancellationToken);
-    }
-
-    public Task DidCloseAsync(string path, CancellationToken cancellationToken)
-    {
-        lock (_gate)
-        {
-            _openDocuments.Remove(path);
-        }
-
-        return _process.Connection.NotifyAsync(Methods.DidClose, new DidCloseParams(path), ProtocolJsonContext.Default.DidCloseParams, cancellationToken);
-    }
-
-    public Task<SemanticTokens> GetSemanticTokensAsync(string path, CancellationToken cancellationToken) =>
-        _process.Connection.InvokeAsync(
-            Methods.SemanticTokensFull, new SemanticTokensParams(path),
-            ProtocolJsonContext.Default.SemanticTokensParams, ProtocolJsonContext.Default.SemanticTokens, cancellationToken);
-
-    public Task<SemanticTokens> GetSemanticTokensRangeAsync(string path, int startLine, int endLine, CancellationToken cancellationToken) =>
-        _process.Connection.InvokeAsync(
-            Methods.SemanticTokensRange, new SemanticTokensRangeParams(path, startLine, endLine),
-            ProtocolJsonContext.Default.SemanticTokensRangeParams, ProtocolJsonContext.Default.SemanticTokens, cancellationToken);
 
     public ValueTask DisposeAsync() => _process.DisposeAsync();
 }

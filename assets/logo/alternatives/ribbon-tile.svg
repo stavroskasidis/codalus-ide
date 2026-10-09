@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Daedalus Studio">
+  <!-- App-tile version: the folded-ribbon delta knocked out in white on a violet squircle. -->
+  <defs>
+    <linearGradient id="t" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#3B1A8F"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#t)"/>
+  <g fill="#FFFFFF" transform="translate(128 132) scale(0.66) translate(-128 -140)">
+    <polygon opacity="0.85" points="42.5,180 128,32 146.5,64 128,96 79.5,180"/>
+    <polygon opacity="0.6" points="146.5,64 232,212 195,212 176.5,180 128,96"/>
+    <polygon points="195,212 24,212 42.5,180 79.5,180 176.5,180"/>
+  </g>
+</svg>
