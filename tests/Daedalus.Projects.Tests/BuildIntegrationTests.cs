@@ -156,8 +156,11 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
         Assert.Contains("args: one two words", text, StringComparison.Ordinal);
         Assert.Contains("GREETING: from the launch profile", text, StringComparison.Ordinal);
         Assert.Contains("to stderr", text, StringComparison.Ordinal);
-        Assert.Contains("cwd: " + Path.GetDirectoryName(HelloProject), text, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(runs.Running);
+
+        // The project folder (macOS reports /private/var for the temp folder's /var, so compare the end).
+        var cwd = text.Split('\n').Single(l => l.StartsWith("cwd: ", StringComparison.Ordinal)).TrimEnd('\r');
+        Assert.EndsWith(Path.Combine("BuildAndRun", "src", "Hello"), cwd, StringComparison.OrdinalIgnoreCase);
+        await WaitUntilAsync(() => runs.Running.Count == 0);
 
         runs.SetProfile(HelloProject, "Fails");
         program = await runs.StartAsync(HelloProject, externalConsole: false, Timeout());
