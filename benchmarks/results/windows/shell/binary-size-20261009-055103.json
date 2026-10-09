@@ -1,0 +1,104 @@
+{
+  "target": "shell",
+  "scenario": "binary-size",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-09T05:51:03.3031228+00:00",
+  "method": "static",
+  "samples": {
+    "shell_mb": [
+      51.446327209472656
+    ],
+    "shell_zip_mb": [
+      20.69944477081299
+    ],
+    "pluginhost_mb": [
+      1.0109567642211914
+    ],
+    "buildhost_mb": [
+      1.494272232055664
+    ],
+    "lshost_mb": [
+      63.64577674865723
+    ],
+    "plugins_mb": [
+      0.0661458969116211
+    ]
+  },
+  "summary": {
+    "shell_mb": {
+      "n": 1,
+      "min": 51.446327209472656,
+      "p50": 51.446327209472656,
+      "p95": 51.446327209472656,
+      "p99": 51.446327209472656,
+      "max": 51.446327209472656,
+      "mean": 51.446327209472656,
+      "stdDev": 0
+    },
+    "shell_zip_mb": {
+      "n": 1,
+      "min": 20.69944477081299,
+      "p50": 20.69944477081299,
+      "p95": 20.69944477081299,
+      "p99": 20.69944477081299,
+      "max": 20.69944477081299,
+      "mean": 20.69944477081299,
+      "stdDev": 0
+    },
+    "pluginhost_mb": {
+      "n": 1,
+      "min": 1.0109567642211914,
+      "p50": 1.0109567642211914,
+      "p95": 1.0109567642211914,
+      "p99": 1.0109567642211914,
+      "max": 1.0109567642211914,
+      "mean": 1.0109567642211914,
+      "stdDev": 0
+    },
+    "buildhost_mb": {
+      "n": 1,
+      "min": 1.494272232055664,
+      "p50": 1.494272232055664,
+      "p95": 1.494272232055664,
+      "p99": 1.494272232055664,
+      "max": 1.494272232055664,
+      "mean": 1.494272232055664,
+      "stdDev": 0
+    },
+    "lshost_mb": {
+      "n": 1,
+      "min": 63.64577674865723,
+      "p50": 63.64577674865723,
+      "p95": 63.64577674865723,
+      "p99": 63.64577674865723,
+      "max": 63.64577674865723,
+      "mean": 63.64577674865723,
+      "stdDev": 0
+    },
+    "plugins_mb": {
+      "n": 1,
+      "min": 0.0661458969116211,
+      "p50": 0.0661458969116211,
+      "p95": 0.0661458969116211,
+      "p99": 0.0661458969116211,
+      "max": 0.0661458969116211,
+      "mean": 0.0661458969116211,
+      "stdDev": 0
+    }
+  },
+  "notes": [
+    "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+    "Debug symbols (*.pdb) excluded. Helper processes (language service host, plugin host) need the .NET 10 runtime."
+  ],
+  "discardedRuns": 0
+}
