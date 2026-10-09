@@ -45,6 +45,18 @@ Source control uses the git CLI (ADR 0008), not a library: `GitService` in `src/
 
 See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -- list | run ... | report | check | compare --baseline DIR`. Budgets live in `benchmarks/budgets.json`. Scenarios that inject keystrokes require `--allow-input` and a machine that nobody is using at the time.
 
+## Linux and macOS validation
+
+The development machine is Windows. Validate on Linux and macOS locally, and leave the hosted 3-OS matrix for the milestone dispatch (macOS minutes bill 10×).
+
+- **When**: before every push that touches platform-sensitive code: process launching and paths, the hosts (`pluginhost/`, `buildhost/`, `lshost/`), the debugger, git, packaging (`eng/`), file watching, fonts and rendering, keyboard shortcuts, or `#if`/`OperatingSystem.Is*` branches. Run Linux (WSL) for every such change. Run macOS when the change is UI-, packaging- or debugger-related, or before a milestone checkpoint. Report each platform's result separately, with failing output. Never call a change cross-platform when a platform was skipped.
+- **Linux (WSL 2, Ubuntu 24.04)**: `wsl -d Ubuntu -- bash eng/wsl-test.sh [--smoke] [dotnet test args]`. It mirrors the working tree, uncommitted changes included, into `~/daedalus-studio` inside WSL so Linux and Windows never share `bin/`/`obj/`, then runs `eng/validate.sh` there. The SDK pinned by `global.json` installs into `~/.dotnet` (the distro's `/usr/lib/dotnet` is too old). `--smoke` adds the Native AOT publish and `eng/smoke-test.sh` on the WSLg display; it needs `clang` and `zlib1g-dev` (`sudo apt install clang zlib1g-dev`, which the user must run because sudo asks for a password). Run it in the background; a full run takes several minutes. Don't build the Linux side straight from `/mnt/d`.
+- **macOS (the user's Mac, Apple silicon, a Remote Control session)**: the user's clone is `/Volumes/M2/Projects/daedalus-studio`; leave its checkout alone. A Claude session started with `--name daedalus-mac --remote-control` runs there. With Remote Control on in this session, it shows up in `ListAgents` as `daedalus-mac`.
+  1. Push the working tree with `bash eng/push-snapshot.sh`. This force-pushes a snapshot commit to the scratch branch `validate`, the one exception to "no feature branches". It leaves HEAD and the index alone, and costs no CI minutes because workflows only trigger on `master`.
+  2. `SendMessage` to `daedalus-mac` with the snapshot commit. Ask it to `git fetch origin validate`, create or reuse a git worktree at `FETCH_HEAD` outside the user's checkout, run `bash eng/validate.sh [--smoke]` there, and reply with: the environment, the counts, the failing tests with their messages and our stack frames, the smoke-test steps that failed, and the artifact paths. The first run installs the SDK (10–20 min with `--smoke`).
+  3. If `daedalus-mac` is missing or `offline`, say so and ask the user to start it. Don't fall back to the hosted macOS runner without asking. Nothing reports back when the Mac holds a message for approval, so silence isn't a result.
+- `eng/validate.sh` is the shared entry point on Linux and macOS: SDK check, netcoredbg, restore, build, test (Release, as CI), and with `--smoke`, publish plus smoke test.
+
 ## Git
 
 - Commit directly to `master`; no pull requests and no feature branches for now (the repo is private and pre-public).

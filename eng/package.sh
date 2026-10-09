@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds a release package for this machine's OS (ADR 0009):
 #   Windows: a portable .zip (and a winget manifest for it)
-#   macOS:   Daedalus Studio.app in a .dmg (signed when DAEDALUS_CODESIGN_IDENTITY is set)
+#   macOS:   Daedalus Studio.app in a .dmg (signed with DAEDALUS_CODESIGN_IDENTITY when it is set, ad-hoc otherwise)
 #   Linux:   a .tar.gz, a .deb (when dpkg-deb is available) and an AppImage (appimagetool from the PATH, or the pinned
 #            one from eng/get-appimagetool.sh on x64)
 # Usage: eng/package.sh [version]   (default: 0.1.0-dev)
@@ -67,7 +67,10 @@ case "$rid" in
     if [ -n "${DAEDALUS_CODESIGN_IDENTITY:-}" ]; then
       codesign --force --deep --options runtime --timestamp --sign "$DAEDALUS_CODESIGN_IDENTITY" "$bundle"
     else
-      echo "DAEDALUS_CODESIGN_IDENTITY is not set: the app is not signed (Gatekeeper will warn)." >&2
+      # Without a bundle signature, a quarantined (downloaded) app is reported as "damaged" with no way to open it.
+      # An ad-hoc signature turns that into the "unidentified developer" prompt, which Privacy & Security can override.
+      echo "DAEDALUS_CODESIGN_IDENTITY is not set: the app is ad-hoc signed (Gatekeeper will warn)." >&2
+      codesign --force --deep --sign - "$bundle"
     fi
     rm -f "$out/$name.dmg"
     hdiutil create -volname "Daedalus Studio" -srcfolder "$bundle" -ov -format UDZO "$out/$name.dmg"
