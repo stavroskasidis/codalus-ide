@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for working in this repository. The mission and milestone plan live in `ide-prompt.md`, the post-MVP plan (M8 onward) in `docs/roadmap.md`, and decisions in `docs/adr/`.
+Guidance for working in this repository. The MVP (milestones M0–M7) is done; the milestone notes are in `docs/checkpoints/`, the post-MVP plan (M8 onward) in `docs/roadmap.md`, and decisions in `docs/adr/`.
 
 ## Build and test
 

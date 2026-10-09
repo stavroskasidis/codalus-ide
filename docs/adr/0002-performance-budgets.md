@@ -6,7 +6,7 @@
 
 ## Context
 
-`ide-prompt.md` (principle 5) gives provisional targets and asks M0 to measure the reference IDEs on the same scenarios. It then asks for final budgets that are **at least as good as VS Code for the editor** and **at least as good as Rider for solution and language features**.
+The project brief (principle 5) gave provisional targets and asks M0 to measure the reference IDEs on the same scenarios. It then asks for final budgets that are **at least as good as VS Code for the editor** and **at least as good as Rider for solution and language features**.
 
 | Provisional target | Value |
 |---|---|

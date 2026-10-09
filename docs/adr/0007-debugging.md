@@ -6,7 +6,7 @@
 
 ## Context
 
-`ide-prompt.md` M5 asks for a DAP client in the shell plus netcoredbg, with:
+The project brief's M5 asks for a DAP client in the shell plus netcoredbg, with:
 - launch and attach
 - breakpoints: line, conditional, hit count and logpoints
 - stepping

@@ -8,7 +8,7 @@ The history audit (section 6) found no secrets. A few tracked files are working 
 
 | File | What it is | Options |
 |---|---|---|
-| `ide-prompt.md` | The original mission and milestone brief for the AI-assisted build. It compares the product to Visual Studio throughout (the product itself carries no Visual Studio branding) and contains instructions like "do not change the repo's visibility yourself". | Keep (it explains the project's origin), move it to `docs/history/`, or delete it. Deleting it leaves it in history; purging it would need a history rewrite (`git filter-repo`) and a force-push. |
+| ~~`ide-prompt.md`~~ | The original mission and milestone brief. **Deleted** from the tree (after M7); it remains in git history. | Done. To purge it from history too, rewrite history (`git filter-repo --path ide-prompt.md --invert-paths`) and force-push before going public. |
 | `CLAUDE.md` | Instructions for the AI coding assistant: build commands and conventions. | Harmless and useful to contributors who use assistants; keep, or fold the build commands into `CONTRIBUTING.md`. |
 | `docs/roadmap.md` | Your local, uncommitted roadmap edits (117 KB). It isn't in git; commit it when you are happy with it, because `CLAUDE.md` and the user guide link to it. | Review and commit. |
 | `docs/checkpoints/*.md` | Per-milestone engineering notes: deviations, gaps, `TODO(issue)` lists. | Keep (they double as a changelog), or turn the `TODO(issue)`s into GitHub issues first (item 4). |
@@ -46,7 +46,7 @@ No workflow edit is needed: `ci.yml` runs the full Windows/macOS/Linux matrix on
 - [ ] Dispatch `release.yml` with it and download the packages:
   - Windows: zip and winget manifests
   - macOS: dmg
-  - Linux: tar.gz and deb (AppImage when `appimagetool` is available)
+  - Linux: tar.gz, deb and AppImage
 - [ ] Smoke-test each package on a clean machine: open a solution, build, Ctrl+F5, F5 with a breakpoint, commit.
 - [ ] Run `benchmarks check` on the reference machine (ADR 0002) and attach the summary.
 - [ ] Create the GitHub release `v<version>` with the packages and release notes (from the checkpoint summaries).

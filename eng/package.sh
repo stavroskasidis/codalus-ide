@@ -2,7 +2,8 @@
 # Builds a release package for this machine's OS (ADR 0009):
 #   Windows: a portable .zip (and a winget manifest for it)
 #   macOS:   Daedalus Studio.app in a .dmg (signed when DAEDALUS_CODESIGN_IDENTITY is set)
-#   Linux:   a .tar.gz, a .deb (when dpkg-deb is available) and an AppImage (when appimagetool is on the PATH)
+#   Linux:   a .tar.gz, a .deb (when dpkg-deb is available) and an AppImage (appimagetool from the PATH, or the pinned
+#            one from eng/get-appimagetool.sh on x64)
 # Usage: eng/package.sh [version]   (default: 0.1.0-dev)
 # Output: artifacts/packages/
 # Prerequisites: the .NET SDK (Native AOT toolchain), curl, zip/unzip; vswhere on PATH on Windows.
@@ -86,7 +87,18 @@ case "$rid" in
       sed -e "s/{{VERSION}}/${version//-/\~}/g" -e "s/{{ARCH}}/$debarch/g" "$repo/eng/packaging/linux/control" > "$deb/DEBIAN/control"
       dpkg-deb --root-owner-group --build "$deb" "$out/$name.deb"
     fi
+    # appimagetool: the one on the PATH, else the pinned one (with its pinned runtime) from eng/get-appimagetool.sh.
+    appimagetool=""
+    runtime_args=()
     if command -v appimagetool > /dev/null; then
+      appimagetool="appimagetool"
+    elif tools="$("$repo/eng/get-appimagetool.sh" "$repo/.work/appimagetool")"; then
+      appimagetool="$tools/appimagetool"
+      runtime_args=(--runtime-file "$tools/runtime-$(uname -m)")
+    fi
+    # Runs without FUSE (CI runners and containers don't have it).
+    export APPIMAGE_EXTRACT_AND_RUN=1
+    if [ -n "$appimagetool" ]; then
       echo "== Linux: AppImage"
       appdir="$stage/DaedalusStudio.AppDir"
       mkdir -p "$appdir/usr"
@@ -95,9 +107,9 @@ case "$rid" in
       cp "$repo/assets/logo/png/daedalus-256.png" "$appdir/daedalus-studio.png"
       printf '#!/bin/sh\nexec "$(dirname "$(readlink -f "$0")")/usr/daedalus-studio/daedalus" "$@"\n' > "$appdir/AppRun"
       chmod +x "$appdir/AppRun"
-      ARCH="$(uname -m)" appimagetool "$appdir" "$out/$name.AppImage"
+      ARCH="$(uname -m)" "$appimagetool" "${runtime_args[@]}" "$appdir" "$out/$name.AppImage"
     else
-      echo "appimagetool is not on the PATH: no AppImage." >&2
+      echo "No appimagetool for this machine: no AppImage." >&2
     fi
     ;;
 esac

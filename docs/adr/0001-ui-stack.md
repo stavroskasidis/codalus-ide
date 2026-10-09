@@ -6,7 +6,7 @@
 
 ## Context
 
-The shell has to be light and responsive, run natively on Windows, macOS and Linux, host a VS-class editor, and expose rich Roslyn-driven features (refactoring previews, designers, debugger visualizers). Heavy services run out of process over JSON-RPC (`ide-prompt.md`, architecture principles 1–6). The mission required the stack to be chosen **by measurement**, comparing two prototypes:
+The shell has to be light and responsive, run natively on Windows, macOS and Linux, host a VS-class editor, and expose rich Roslyn-driven features (refactoring previews, designers, debugger visualizers). Heavy services run out of process over JSON-RPC (the project brief, architecture principles 1–6). The mission required the stack to be chosen **by measurement**, comparing two prototypes:
 
 - **A: Avalonia 12** with AvaloniaEdit and Dock, shell published with **Native AOT** (`spikes/avalonia`).
 - **B: a Rust shell on Zed's GPUI** (through GPUI Kit's dock, tree and editor components) (`spikes/gpui`).

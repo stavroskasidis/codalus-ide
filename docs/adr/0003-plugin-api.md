@@ -6,7 +6,7 @@
 
 ## Context
 
-`ide-prompt.md` asks for a **versioned, out-of-process plugin API, designed from the start**. Built-in features (language services, Git, debugger UI) should be implemented on top of it where practical, which proves the API works. M1 delivers plugin host v0 with these pieces:
+The project brief asks for a **versioned, out-of-process plugin API, designed from the start**. Built-in features (language services, Git, debugger UI) should be implemented on top of it where practical, which proves the API works. M1 delivers plugin host v0 with these pieces:
 - a manifest
 - activation events
 - contribution points for commands, menus, tool windows and settings

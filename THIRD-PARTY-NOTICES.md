@@ -44,6 +44,13 @@ All 97 resolved NuGet packages (direct and transitive) were checked: 88 are MIT,
 | dbgshim (inside the netcoredbg archive; .NET diagnostics) | per netcoredbg 3.2.0-1092 | MIT | Debugging shim of the .NET runtime. |
 | Microsoft.CodeAnalysis, .CSharp, .Scripting, .CSharp.Scripting (inside the netcoredbg archive) | 2.x (2017 builds) | Apache-2.0 | netcoredbg's expression evaluator. Apache-2.0 is OSI-approved and compatible with MIT redistribution; installers must include its license and NOTICE. |
 
+## AppImage packaging (downloaded by `eng/get-appimagetool.sh`; not committed)
+
+| Component | Version | License | Notes |
+|---|---|---|---|
+| appimagetool | 1.9.1 | MIT | Build tool only; not redistributed. Pinned by SHA-256. |
+| AppImage type2 runtime | 20251108 | MIT | **Redistributed**: it is the executable header of the Linux `.AppImage` (ADR 0009). Pinned by SHA-256. It is linked statically with squashfuse (BSD-2-Clause), zstd (BSD-3-Clause), zlib (Zlib), mimalloc (MIT), musl (MIT) and **libfuse3 (LGPL-2.1)**. The runtime is a separate program inside the AppImage, not linked with Daedalus Studio's code. LGPL-2.1 is OSI-approved; its source is published by the AppImage and libfuse projects. Only the AppImage carries it; the other packages don't. |
+
 ## Rust
 
 None. The GPUI prototype (M0) and its crates were removed when Avalonia was chosen (ADR 0001).

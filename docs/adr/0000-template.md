@@ -6,7 +6,7 @@
 
 ## Context
 
-What forces are at play, and what constraints apply? Link the relevant parts of `ide-prompt.md`.
+What forces are at play, and what constraints apply? Link the relevant milestone, issue or earlier ADR.
 
 ## Options
 

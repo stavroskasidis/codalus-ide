@@ -6,7 +6,7 @@
 
 ## Context
 
-`ide-prompt.md` M7 asks for installers or packages per OS: MSI or winget, a signed-ready .dmg, and AppImage, .deb or Flatpak. It also asks for performance regression gates in CI, local opt-in crash reporting, an accessibility pass, user documentation, and the preparation for going public.
+The project brief's M7 asks for installers or packages per OS: MSI or winget, a signed-ready .dmg, and AppImage, .deb or Flatpak. It also asks for performance regression gates in CI, local opt-in crash reporting, an accessibility pass, user documentation, and the preparation for going public.
 
 The application itself is:
 - the shell (`daedalus`, Native AOT)
@@ -25,7 +25,7 @@ The application itself is:
 |---|---|---|
 | Windows | A portable `.zip` and **winget** manifests (`eng/packaging/winget`) for that zip | A zip/portable winget package needs no MSI tooling and no admin rights. `TODO(issue)`: an MSI, if users ask for one (WiX is MS-RL, OSI-approved). |
 | macOS | `Daedalus Studio.app` (generated `Info.plist` and `.icns`) inside a `.dmg` made with `hdiutil` | Signed when `DAEDALUS_CODESIGN_IDENTITY` is set (hardened runtime). Notarization needs an Apple Developer account: `TODO(issue)`. |
-| Linux | A `.tar.gz`, a **.deb** (when `dpkg-deb` is available: `/opt/daedalus-studio`, `/usr/bin/daedalus`, a desktop entry and an icon) and an **AppImage** (when `appimagetool` is on the `PATH`) | A **Flatpak** manifest is provided (`eng/packaging/flatpak`) but not built: an IDE in a sandbox has to reach the host's SDK and git, which needs testing first. `TODO(issue)`. |
+| Linux | A `.tar.gz`, a **.deb** (when `dpkg-deb` is available: `/opt/daedalus-studio`, `/usr/bin/daedalus`, a desktop entry and an icon) and an **AppImage** (with `appimagetool` from the `PATH`, or the pinned, checksummed appimagetool 1.9.1 and type2 runtime that `eng/get-appimagetool.sh` downloads on x64) | A **Flatpak** manifest is provided (`eng/packaging/flatpak`) but not built: an IDE in a sandbox has to reach the host's SDK and git, which needs testing first. `TODO(issue)`. |
 
 **`release.yml`** (manual) runs the script on Windows, macOS and Linux and uploads the packages as artifacts. Publishing a GitHub release from them is a manual step in the release checklist.
 

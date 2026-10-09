@@ -6,7 +6,7 @@
 
 ## Context
 
-`ide-prompt.md` M2 asks for `.sln`/`.slnx` and SDK-style projects opened **through MSBuild evaluation in a build host**, a Solution Explorer (nested projects, solution folders, a Dependencies node, file nesting, add/rename/delete/move with project-file updates, file watching), new projects from `dotnet new` templates, configurations and platforms, and multi-targeting. ADR 0002 sets a provisional budget: the tree from the solution file within 1.5 s and projects evaluated within 5 s on the 50-project fixture.
+The project brief's M2 asks for `.sln`/`.slnx` and SDK-style projects opened **through MSBuild evaluation in a build host**, a Solution Explorer (nested projects, solution folders, a Dependencies node, file nesting, add/rename/delete/move with project-file updates, file watching), new projects from `dotnet new` templates, configurations and platforms, and multi-targeting. ADR 0002 sets a provisional budget: the tree from the solution file within 1.5 s and projects evaluated within 5 s on the 50-project fixture.
 
 Constraints:
 - The shell is Native AOT. MSBuild needs the JIT, reflection and the installed SDK, so it can't run in the shell.

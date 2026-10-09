@@ -6,7 +6,7 @@
 
 ## Context
 
-`ide-prompt.md` M4: build, rebuild and clean at solution and project level with incremental builds; structured output in the Output window; errors and warnings in the Error List with navigation; cancelling a build; startup project selection; Run Without Debugging; launch profiles from `launchSettings.json`.
+The project brief's M4: build, rebuild and clean at solution and project level with incremental builds; structured output in the Output window; errors and warnings in the Error List with navigation; cancelling a build; startup project selection; Run Without Debugging; launch profiles from `launchSettings.json`.
 
 ADR 0004 put MSBuild in the build host (evaluation, restore, design-time builds since M3), and only for trusted folders.
 
