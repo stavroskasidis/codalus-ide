@@ -33,7 +33,7 @@ public class ShellHeadlessTests
         Assert.Equal(PlatformInfo.Current != PlatformKind.MacOS, f.Window.MenuBar.IsVisible);
         Assert.True(f.Shell.Layout.IsVisible(BuiltIns.OutputWindow));
         Assert.Contains(f.Shell.StatusBar.Right, i => i.Item.Id == "daedalus.notifications");
-        Assert.Contains(f.Shell.Plugins.Plugins, p => p.Id == "daedalus.welcome" && p.State == PluginState.Ready);
+        Assert.Contains(f.Shell.Plugins.Plugins, p => p.Id == "daedalus.welcome" && p.State is PluginState.Ready or PluginState.Active); // it may already have activated (the Start page)
 
         // Every button in the window chrome has an accessible name.
         var unnamed = f.Window.GetVisualDescendants().OfType<Button>()
