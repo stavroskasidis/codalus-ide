@@ -36,12 +36,12 @@ Constraints:
 
 **Trust.** Trust is stored per folder in the user's state (not in the repository). An untrusted solution shows only the structure from the solution file: no evaluation, no restore, no builds, until the user trusts it. The decision can be changed later (Trust command, or revoking in settings).
 
-**Templates.** New Project and New Solution run `dotnet new` from a built-in plugin, using quick-pick and input-box APIs added to the plugin API as 0.2.0 (additive; 0.1 plugins keep working).
+**Templates.** New Project and New Solution run `dotnet new` from a built-in plugin, using quick-pick and input-box APIs added to the plugin API. They shipped as 0.1.1, not 0.2.0: they are additive, and under the caret rules a 0.2.0 would have locked out `^0.1.0` plugins.
 
 ## Consequences
 
 - The tree appears from the solution file alone, so budget 4's first step doesn't depend on MSBuild's speed.
 - MSBuild is loaded once, in one process, and a crash in it never touches the UI or Roslyn.
-- M3 must feed Roslyn from the build host's evaluation (design-time builds for references and compiler options) instead of `MSBuildWorkspace`. `TODO(issue)`: design-time build API and the language host's switch to it (M3).
+- M3 must feed Roslyn from the build host's evaluation (design-time builds for references and compiler options) instead of `MSBuildWorkspace`. Decided in ADR 0005.
 - Two .NET helper processes run while a solution is open (build host, and from M3 the language host), which costs memory. ADR 0002 sets no budget for an open solution yet; M3 records one.
 - Non-SDK (legacy) projects are shown from the solution file with an "unsupported project" state. `TODO(issue)`: decide on legacy project support after the MVP.
