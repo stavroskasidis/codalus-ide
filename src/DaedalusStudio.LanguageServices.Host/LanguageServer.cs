@@ -164,6 +164,8 @@ internal sealed class LanguageServer : IAsyncDisposable
         _connection.OnRequest(Methods.MetadataText, json.MetadataTextParams, json.MetadataText, (p, _) => Task.FromResult(MetadataFeature.Text(p.TextDocument.Uri)!));
         OnDocument(Methods.SourceGeneratedText, json.SourceGeneratedTextParams, json.SourceGeneratedText, p => p.TextDocument,
             (document, _, ct) => GeneratedTextAsync(document, ct), null);
+        _connection.OnRequest(Methods.TestCandidates, json.TestCandidatesParams, json.TestCandidatesResult, (p, ct) =>
+            TestCandidatesFeature.FindAsync(_workspace.CurrentSolution, p.TextDocuments, ct));
     }
 
     private void ApplySettings(JsonElement settings)

@@ -4,8 +4,11 @@
     <ProjectReference Include="..\..\src\DaedalusStudio.Plugins.Abstractions\DaedalusStudio.Plugins.Abstractions.csproj" />
     <!-- Built so the tests can launch them; not referenced as assemblies. -->
     <ProjectReference Include="..\..\src\DaedalusStudio.Plugins.Host\DaedalusStudio.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\DaedalusStudio.Projects.Host\DaedalusStudio.Projects.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\DaedalusStudio.LanguageServices.Host\DaedalusStudio.LanguageServices.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\samples\plugins\HelloWorld\HelloWorld.csproj" ReferenceOutputAssembly="false" />
-    <!-- Referenced for its internals (template parsing) and launched in the host by the integration test. -->
+    <!-- Referenced for their internals and launched in the host by the integration tests. -->
     <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.Templates\DaedalusStudio.Plugins.Templates.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.DotNetTest\DaedalusStudio.Plugins.DotNetTest.csproj" />
   </ItemGroup>
 </Project>

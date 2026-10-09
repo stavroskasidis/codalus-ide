@@ -4,10 +4,10 @@ namespace DaedalusStudio.Plugins.Protocol;
 public static class PluginMethods
 {
     /// <summary>Protocol version (major.minor), negotiated in <see cref="Initialize"/>.</summary>
-    public const string ProtocolVersion = "0.1";
+    public const string ProtocolVersion = "0.2";
 
     /// <summary>The plugin API version that <c>engines.daedalus</c> ranges are checked against.</summary>
-    public const string ApiVersion = "0.2.0";
+    public const string ApiVersion = "0.2.1";
 
     // shell → host
     public const string Initialize = "initialize";
@@ -49,4 +49,7 @@ public static class PluginErrorCodes
     public const int ActivationFailed = -33002;
     public const int CommandFailed = -33003;
     public const int ViewNotFound = -33004;
+
+    /// <summary>A proposed API the shell doesn't offer (here), or a plugin that didn't enable proposed APIs.</summary>
+    public const int ProposedApiUnavailable = -33005;
 }

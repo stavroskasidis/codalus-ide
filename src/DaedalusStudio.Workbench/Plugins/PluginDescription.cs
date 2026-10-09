@@ -126,7 +126,8 @@ public sealed partial class PluginDescription
             return;
         }
 
-        if (m.EnableProposedApi && !allowProposedApi)
+        // Built-ins may use proposed APIs in every build (ADR 0010).
+        if (m.EnableProposedApi && !allowProposedApi && !IsBuiltIn)
         {
             Fail("Uses proposed APIs, which are only available in development builds (--enable-proposed-api).");
             return;
@@ -148,7 +149,7 @@ public sealed partial class PluginDescription
         var events = new HashSet<string>(StringComparer.Ordinal);
         foreach (var e in m.ActivationEvents ?? [])
         {
-            if (e == "onStartup" || ActivationEventPattern().IsMatch(e))
+            if (e is "onStartup" or "onSolutionOpened" or "onTestProjects" || ActivationEventPattern().IsMatch(e))
             {
                 events.Add(e);
             }
@@ -219,8 +220,9 @@ public sealed partial class PluginDescription
     }
 
     private static bool IsKnownMenuLocation(string location) =>
-        location is MenuLocations.CommandPalette or MenuLocations.ToolWindowTitle
-        || (location.StartsWith(MenuLocations.MenuBarPrefix, StringComparison.Ordinal) && location[MenuLocations.MenuBarPrefix.Length..] is "file" or "edit" or "view" or "tools" or "help");
+        location is MenuLocations.CommandPalette or MenuLocations.ToolWindowTitle or MenuLocations.EditorContext or MenuLocations.SolutionExplorerContext
+        || (location.StartsWith(MenuLocations.MenuBarPrefix, StringComparison.Ordinal)
+            && location[MenuLocations.MenuBarPrefix.Length..] is "file" or "edit" or "view" or "git" or "project" or "build" or "debug" or "test" or "tools" or "window" or "help");
 
     [GeneratedRegex("^[a-z0-9][a-z0-9-]*\\.[a-z0-9][a-z0-9.-]*$")]
     private static partial Regex IdPattern();

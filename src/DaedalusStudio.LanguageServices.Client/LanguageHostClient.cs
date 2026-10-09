@@ -220,6 +220,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<MetadataText?> MetadataTextAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.MetadataText, new MetadataTextParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.MetadataTextParams, ProtocolJsonContext.Default.MetadataText, cancellationToken);
 
+    /// <summary>Test methods and classes in the given documents, from syntax (ADR 0010).</summary>
+    public Task<TestCandidatesResult> TestCandidatesAsync(IReadOnlyList<string> uris, CancellationToken cancellationToken) =>
+        Invoke(Methods.TestCandidates, new TestCandidatesParams([.. uris.Select(u => new TextDocumentIdentifier(u))]), ProtocolJsonContext.Default.TestCandidatesParams, ProtocolJsonContext.Default.TestCandidatesResult, cancellationToken);
+
     private static TextDocumentPositionParams At(string uri, Position position) => new(new TextDocumentIdentifier(uri), position);
 
     private Task<TResult> Invoke<TParams, TResult>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken) =>

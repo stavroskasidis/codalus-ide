@@ -117,7 +117,11 @@ public static class ProjectStates
     public const string Missing = "missing";
 }
 
-/// <summary>An evaluated project. The shell derives the Solution Explorer tree from it.</summary>
+/// <summary>
+/// An evaluated project. The shell derives the Solution Explorer tree from it. <see cref="IsTestProject"/> is the
+/// <c>IsTestProject</c> property; <see cref="TestPlatform"/> is <c>mtp</c> when <c>IsTestingPlatformApplication</c> is
+/// true, <c>vstest</c> for other test projects, and null otherwise (ADR 0010).
+/// </summary>
 public sealed record ProjectInfo(
     string Path,
     string Name,
@@ -128,7 +132,17 @@ public sealed record ProjectInfo(
     ProjectItemInfo[] Items,
     ReferenceInfo[] References,
     string[] Diagnostics,
-    bool Restored);
+    bool Restored,
+    bool IsTestProject = false,
+    string? TestPlatform = null);
+
+public static class TestPlatforms
+{
+    public const string VSTest = "vstest";
+
+    /// <summary>Microsoft.Testing.Platform.</summary>
+    public const string Mtp = "mtp";
+}
 
 /// <summary>
 /// An item of the project. <see cref="Kind"/> is the MSBuild item type (<c>Compile</c>, <c>None</c>,
@@ -155,6 +169,9 @@ public static class ReferenceKinds
 public sealed record ReferenceInfo(string Kind, string Name, string? Version, string? Path, string TargetFramework, bool Resolved);
 
 public sealed record ProjectPathParams(string Path);
+
+/// <summary><c>project/runInfo</c>: <see cref="TargetFramework"/> picks a framework of a multi-targeted project (default: the active one).</summary>
+public sealed record RunInfoParams(string Path, string? TargetFramework = null);
 
 // ------------------------------------------------------------------ restore
 
@@ -339,4 +356,5 @@ public sealed record LogParams(string Level, string Message);
 [JsonSerializable(typeof(BuildOutputParams))]
 [JsonSerializable(typeof(BuildDiagnosticInfo))]
 [JsonSerializable(typeof(RunInfo))]
+[JsonSerializable(typeof(RunInfoParams))]
 public sealed partial class ProjectJsonContext : JsonSerializerContext;

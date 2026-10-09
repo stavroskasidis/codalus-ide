@@ -150,6 +150,9 @@ public sealed record BreakpointEvent(string Reason, Breakpoint Breakpoint);
 
 public sealed record ModuleEvent(string Reason, JsonElement Module);
 
+/// <summary>The debuggee started (launch) or was attached to; <see cref="SystemProcessId"/> is its process id.</summary>
+public sealed record ProcessEvent(string Name, int? SystemProcessId = null, bool? IsLocalProcess = null, string? StartMethod = null);
+
 public static class DapEvents
 {
     public const string Initialized = "initialized";
@@ -161,6 +164,7 @@ public static class DapEvents
     public const string Thread = "thread";
     public const string Breakpoint = "breakpoint";
     public const string Module = "module";
+    public const string Process = "process";
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
@@ -195,4 +199,5 @@ public static class DapEvents
 [JsonSerializable(typeof(ThreadEvent))]
 [JsonSerializable(typeof(BreakpointEvent))]
 [JsonSerializable(typeof(ModuleEvent))]
+[JsonSerializable(typeof(ProcessEvent))]
 public sealed partial class DapJsonContext : JsonSerializerContext;

@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Calculator/Calculator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/XunitV2Tests/XunitV2Tests.csproj" />
+    <Project Path="tests/XunitV3Tests/XunitV3Tests.csproj" />
+    <Project Path="tests/NUnitTests/NUnitTests.csproj" />
+    <Project Path="tests/MSTestVSTestTests/MSTestVSTestTests.csproj" />
+    <Project Path="tests/MSTestMtpTests/MSTestMtpTests.csproj" />
+    <Project Path="tests/TUnitTests/TUnitTests.csproj" />
+    <Project Path="tests/MultiTargetTests/MultiTargetTests.csproj" />
+  </Folder>
+</Solution>

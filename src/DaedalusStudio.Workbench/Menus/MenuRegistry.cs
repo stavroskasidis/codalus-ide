@@ -11,6 +11,11 @@ public static class MenuLocations
     public const string ToolWindowTitle = "toolWindow/title";
     public const string MenuBarPrefix = "menuBar/";
 
+    /// <summary>The code editor's context menu. Commands get the document URI and the zero-based caret line and column.</summary>
+    public const string EditorContext = "editor/context";
+
+    public const string SolutionExplorerContext = "solutionExplorer/context";
+
     public static string MenuBar(string menu) => MenuBarPrefix + menu;
 }
 

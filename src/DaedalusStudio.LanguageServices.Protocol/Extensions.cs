@@ -50,3 +50,34 @@ public static class WorkspaceStates
 
 /// <summary>Server → client: progress of loading projects (status bar, benchmarks).</summary>
 public sealed record WorkspaceStatusParams(string State, int Projects, int Documents);
+
+/// <summary>
+/// Finds tests in source (ADR 0010): methods and classes with known test attributes, from syntax only, so it works
+/// before design-time builds. Documents the host knows use their current text (unsaved edits); others are read from disk.
+/// </summary>
+public sealed record TestCandidatesParams(TextDocumentIdentifier[] TextDocuments);
+
+public static class TestCandidateKinds
+{
+    public const string Class = "class";
+    public const string Method = "method";
+}
+
+/// <summary>
+/// A test class or method found in source. <see cref="Type"/> is the managed type name the runners report
+/// (<c>Namespace.Outer+Inner</c>, with <c>`1</c> for generic types); <see cref="Name"/> is the method name (for
+/// classes, the type's simple name). <see cref="Range"/> covers the declaration, <see cref="SelectionRange"/> its name.
+/// <see cref="Parameterized"/> marks theories and data-driven tests, whose cases only a runner can list.
+/// </summary>
+public sealed record TestCandidate(
+    string Kind,
+    string Name,
+    string Type,
+    string? Namespace,
+    Range Range,
+    Range SelectionRange,
+    bool Parameterized);
+
+public sealed record DocumentTestCandidates(string Uri, TestCandidate[] Candidates);
+
+public sealed record TestCandidatesResult(DocumentTestCandidates[] Documents);

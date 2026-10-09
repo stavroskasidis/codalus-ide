@@ -48,4 +48,5 @@ public static class Methods
     public const string SourceGeneratedText = "daedalus/sourceGeneratedText";
     public const string MetadataText = "daedalus/metadataText";
     public const string WorkspaceStatus = "daedalus/workspaceStatus";
+    public const string TestCandidates = "daedalus/testCandidates";
 }

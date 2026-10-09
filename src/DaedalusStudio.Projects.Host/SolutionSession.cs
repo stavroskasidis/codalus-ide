@@ -501,7 +501,7 @@ internal sealed class SolutionSession : IAsyncDisposable
     }
 
     /// <summary>How to start a project: the SDK's run properties for the active configuration and target framework.</summary>
-    public RunInfo GetRunInfo(string projectPath)
+    public RunInfo GetRunInfo(string projectPath, string? targetFramework = null)
     {
         if (!Trusted)
         {
@@ -515,7 +515,9 @@ internal sealed class SolutionSession : IAsyncDisposable
         if (_evaluated.TryGetValue(path, out var evaluated) && evaluated.Info.TargetFrameworks.Length > 1)
         {
             var frameworks = evaluated.Info.TargetFrameworks;
-            framework = _activeFrameworks.TryGetValue(path, out var active) && frameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active : frameworks[0];
+            framework = targetFramework is not null && frameworks.Contains(targetFramework, StringComparer.OrdinalIgnoreCase) ? targetFramework
+                : _activeFrameworks.TryGetValue(path, out var active) && frameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active
+                : frameworks[0];
             properties["TargetFramework"] = framework;
         }
 

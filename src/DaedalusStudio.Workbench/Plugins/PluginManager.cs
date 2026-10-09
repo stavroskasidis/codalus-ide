@@ -71,6 +71,7 @@ public sealed class PluginManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _activationLocks = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _markdown = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
+    private IProposedApiHost? _proposedApi;
 
     public PluginManager(WorkbenchServices workbench, Func<string, ProcessLaunchInfo?> resolveHost, string shellVersion, SupervisionPolicy? hostPolicy = null)
     {
@@ -97,6 +98,28 @@ public sealed class PluginManager : IAsyncDisposable
 
     /// <summary>The shell's prompt UI; without it, plugin prompts are cancelled.</summary>
     public IPluginPrompts? Prompts { get; set; }
+
+    /// <summary>The workspace, build and debug services behind the proposed APIs (ADR 0010).</summary>
+    public IProposedApiHost? ProposedApi
+    {
+        get => _proposedApi;
+        set
+        {
+            if (_proposedApi is not null)
+            {
+                _proposedApi.Notification -= OnProposedNotification;
+            }
+
+            _proposedApi = value;
+            if (value is not null)
+            {
+                value.Notification += OnProposedNotification;
+            }
+        }
+    }
+
+    /// <summary>Receives test controllers (the Test Explorer's model).</summary>
+    public ITestSink? TestSink { get; set; }
 
     public event EventHandler<TreeViewRefreshEventArgs>? TreeViewRefreshed;
 
@@ -419,6 +442,23 @@ public sealed class PluginManager : IAsyncDisposable
         }
     }
 
+    // ------------------------------------------------------------------ proposed APIs
+
+    private void OnProposedNotification(object? sender, ProposedNotification notification)
+    {
+        var json = PluginJsonContext.Default;
+        foreach (var host in _hosts.Values.Where(h => h.IsRunning && h.UsesProposedApi))
+        {
+            _ = notification switch
+            {
+                ProposedNotification.SolutionChanged => host.NotifySafeAsync(ProposedMethods.WorkspaceSolutionChanged, new EmptyParams(), json.EmptyParams),
+                ProposedNotification.DocumentsChanged d => host.NotifySafeAsync(ProposedMethods.WorkspaceDocumentsChanged, new DocumentUrisParams(d.Uris), json.DocumentUrisParams),
+                ProposedNotification.BuildFinished b => host.NotifySafeAsync(ProposedMethods.BuildFinished, b.Build, json.BuildFinishedParams),
+                _ => Task.CompletedTask,
+            };
+        }
+    }
+
     // ------------------------------------------------------------------ hosts
 
     private HostConnection? GetHost(string group)
@@ -460,6 +500,9 @@ public sealed class PluginManager : IAsyncDisposable
         private readonly string _group;
         private readonly SupervisedProcess _process;
 
+        // Test controllers created by this host's plugins (disposed when the host crashes).
+        private readonly ConcurrentDictionary<string, byte> _controllers = new(StringComparer.Ordinal);
+
         public HostConnection(PluginManager manager, string group, ProcessLaunchInfo launch)
         {
             _manager = manager;
@@ -478,6 +521,9 @@ public sealed class PluginManager : IAsyncDisposable
         public ConcurrentBag<string> Active { get; private set; } = [];
 
         public bool IsRunning => _process.IsRunning;
+
+        /// <summary>Whether a plugin of this host may use proposed APIs (and so wants workspace notifications).</summary>
+        public bool UsesProposedApi => Members.Any(p => p.Manifest?.EnableProposedApi == true);
 
         public JsonRpcConnection Connection => _process.Connection;
 
@@ -511,7 +557,7 @@ public sealed class PluginManager : IAsyncDisposable
             var members = Members.Where(p => p.IsUsable).ToList();
             var load = await connection.InvokeAsync(
                 PluginMethods.LoadPlugins,
-                new LoadPluginsParams([.. members.Select(p => new PluginLoadEntry(p.Id, p.Manifest!.Version, p.InstallPath, p.Manifest.Entry.Assembly, p.Manifest.Entry.Type))]),
+                new LoadPluginsParams([.. members.Select(p => new PluginLoadEntry(p.Id, p.Manifest!.Version, p.InstallPath, p.Manifest.Entry.Assembly, p.Manifest.Entry.Type, p.Manifest.EnableProposedApi))]),
                 json.LoadPluginsParams, json.LoadPluginsResult, cancellationToken).ConfigureAwait(false);
             foreach (var result in load.Results.Where(r => !r.Loaded))
             {
@@ -553,6 +599,12 @@ public sealed class PluginManager : IAsyncDisposable
 
         private void OnCrashed(object? sender, ProcessCrashedEventArgs e)
         {
+            foreach (var controller in _controllers.Keys)
+            {
+                _controllers.TryRemove(controller, out _);
+                _manager.TestSink?.ControllerDisposed(controller);
+            }
+
             foreach (var plugin in Members.Where(p => p.State == PluginState.Active))
             {
                 plugin.State = PluginState.Ready;
@@ -646,6 +698,60 @@ public sealed class PluginManager : IAsyncDisposable
             });
             connection.OnNotification(PluginMethods.Log, json.LogParams, p =>
                 _manager.PluginLog.AppendLine($"[{p.PluginId ?? _group}] {p.Level}: {p.Message}"));
+            ConfigureProposed(connection);
+        }
+
+        private IProposedApiHost Proposed => _manager.ProposedApi ?? throw new JsonRpcHandlerException(PluginErrorCodes.ProposedApiUnavailable, "This shell doesn't offer the proposed workspace APIs.");
+
+        private void ConfigureProposed(JsonRpcConnection connection)
+        {
+            var json = PluginJsonContext.Default;
+            connection.OnRequest(ProposedMethods.WorkspaceGetSolution, json.EmptyParams, json.GetSolutionResult, async (_, ct) =>
+                new GetSolutionResult(await Proposed.GetSolutionAsync(ct).ConfigureAwait(false)));
+            connection.OnRequest(ProposedMethods.WorkspaceProjectOutput, json.ProjectOutputParams, json.ProjectOutputDto, (p, ct) =>
+                Proposed.GetProjectOutputAsync(p.Path, p.TargetFramework, ct));
+            connection.OnRequest(ProposedMethods.WorkspaceTestCandidates, json.DocumentUrisParams, json.TestCandidatesResultDto, (p, ct) =>
+                Proposed.FindTestCandidatesAsync(p.Uris, ct));
+            connection.OnRequest(ProposedMethods.BuildStart, json.BuildStartParams, json.BuildResultDto, (p, ct) =>
+                Proposed.BuildAsync(p.Projects, ct));
+            connection.OnRequest(ProposedMethods.DebugLaunch, json.DebugLaunchParams, json.DebugSessionDto, (p, ct) =>
+                Proposed.DebugLaunchAsync(p, DebugEnded, ct));
+            connection.OnRequest(ProposedMethods.DebugAttach, json.DebugAttachParams, json.DebugSessionDto, (p, ct) =>
+                Proposed.DebugAttachAsync(p.ProcessId, DebugEnded, ct));
+            connection.OnRequest(ProposedMethods.DebugStop, json.DebugSessionParams, json.EmptyResult, async (p, ct) =>
+            {
+                await Proposed.DebugStopAsync(p.SessionId, ct).ConfigureAwait(false);
+                return new EmptyResult();
+            });
+
+            connection.OnNotification(ProposedMethods.TestsCreateController, json.TestControllerParams, p =>
+            {
+                _controllers[p.ControllerId] = 0;
+                _manager.TestSink?.ControllerCreated(p, new ControllerConnection(this, p.ControllerId));
+            });
+            connection.OnNotification(ProposedMethods.TestsDisposeController, json.TestControllerIdParams, p =>
+            {
+                _controllers.TryRemove(p.ControllerId, out _);
+                _manager.TestSink?.ControllerDisposed(p.ControllerId);
+            });
+            connection.OnNotification(ProposedMethods.TestsUpdateItems, json.TestItemsUpdateParams, p => _manager.TestSink?.ItemsUpdated(p));
+            connection.OnNotification(ProposedMethods.TestsUpdateProfiles, json.TestProfilesParams, p => _manager.TestSink?.ProfilesUpdated(p));
+            connection.OnNotification(ProposedMethods.TestsRunStarted, json.TestRunStartedParams, p => _manager.TestSink?.RunStarted(p));
+            connection.OnNotification(ProposedMethods.TestsRunUpdate, json.TestRunUpdateParams, p => _manager.TestSink?.RunUpdated(p));
+            connection.OnNotification(ProposedMethods.TestsRunCoverage, json.TestRunCoverageParams, p => _manager.TestSink?.RunCoverage(p));
+            connection.OnNotification(ProposedMethods.TestsRunEnded, json.TestRunIdParams, p => _manager.TestSink?.RunEnded(p.RunId));
+        }
+
+        private void DebugEnded(DebugEndedParams ended) =>
+            _ = NotifySafeAsync(ProposedMethods.DebugEnded, ended, PluginJsonContext.Default.DebugEndedParams);
+
+        private sealed class ControllerConnection(HostConnection host, string controllerId) : ITestControllerConnection
+        {
+            public async Task<IReadOnlyList<string>> RunAsync(TestRunParams request, CancellationToken cancellationToken) =>
+                (await host.Connection.InvokeAsync(ProposedMethods.TestsRun, request, PluginJsonContext.Default.TestRunParams, PluginJsonContext.Default.TestRunResultDto, cancellationToken).ConfigureAwait(false))?.RunIds ?? [];
+
+            public Task RefreshAsync(CancellationToken cancellationToken) =>
+                host.Connection.InvokeAsync(ProposedMethods.TestsRefresh, new TestControllerIdParams(controllerId), PluginJsonContext.Default.TestControllerIdParams, PluginJsonContext.Default.EmptyResult, cancellationToken);
         }
 
         private Output.OutputChannel Channel(OutputParams p)

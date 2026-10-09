@@ -1,20 +1,26 @@
 using System.Text.Json;
+using DaedalusStudio.Plugins.Host.Proposed;
+using DaedalusStudio.Plugins.Proposed;
 using DaedalusStudio.Plugins.Protocol;
 
 namespace DaedalusStudio.Plugins.Host;
 
 /// <summary>The <see cref="IPluginContext"/> handed to one plugin; tracks everything it registers.</summary>
-internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPluginLog
+internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPluginLog, IProposedApiProvider
 {
     private readonly PluginHostServer _server;
     private readonly List<IDisposable> _owned = [];
+    private readonly PluginProposedApi? _proposed;
 
     public PluginContext(PluginHostServer server, PluginHostServer.LoadedPlugin plugin)
     {
         _server = server;
         Plugin = plugin.Info;
         Settings = new PluginSettings(server.Settings);
+        _proposed = plugin.EnableProposedApi ? new PluginProposedApi(server.Proposed, plugin.Info.Id) : null;
     }
+
+    public IProposedApi? Proposed => _proposed;
 
     public PluginInfo Plugin { get; }
 
@@ -61,6 +67,7 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
         }
 
         ((PluginSettings)Settings).Detach();
+        _proposed?.Dispose();
     }
 
     // ------------------------------------------------------------------ commands

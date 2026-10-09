@@ -10,7 +10,8 @@ public sealed record HostInitializeParams(string ProtocolVersion, string ShellVe
 
 public sealed record HostInitializeResult(string ProtocolVersion, string HostVersion);
 
-public sealed record PluginLoadEntry(string Id, string Version, string InstallPath, string Assembly, string? EntryType);
+/// <summary><see cref="EnableProposedApi"/>: the plugin may use the proposed APIs (since protocol 0.2).</summary>
+public sealed record PluginLoadEntry(string Id, string Version, string InstallPath, string Assembly, string? EntryType, bool EnableProposedApi = false);
 
 public sealed record LoadPluginsParams(PluginLoadEntry[] Plugins);
 

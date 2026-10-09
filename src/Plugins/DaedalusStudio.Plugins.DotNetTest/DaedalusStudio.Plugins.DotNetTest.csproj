@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Built-in .NET test plugin (ADR 0010, 0011): discovers, runs and debugs VSTest and Microsoft.Testing.Platform tests and collects coverage with Coverlet, on the proposed test controller API.</Description>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The plugin host provides the API at runtime, so it is not copied next to the plugin. -->
+    <ProjectReference Include="..\..\DaedalusStudio.Plugins.Abstractions\DaedalusStudio.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+    <!-- JSON-RPC for Microsoft.Testing.Platform's server mode; the plugin loads its own copy. -->
+    <ProjectReference Include="..\..\DaedalusStudio.Rpc\DaedalusStudio.Rpc.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.TestPlatform.TranslationLayer" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="daedalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DaedalusStudio.Plugins.Tests" />
+  </ItemGroup>
+</Project>

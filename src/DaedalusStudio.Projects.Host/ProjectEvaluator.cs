@@ -64,11 +64,13 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             var references = new List<ReferenceInfo>();
             var imports = outer.Imports.Select(i => i.ImportedProject.FullPath).ToList();
             var items = new List<ProjectItemInfo>();
+            var test = TestProperties.None;
 
             if (frameworks.Length <= 1)
             {
                 references.AddRange(References(outer, frameworks.FirstOrDefault() ?? string.Empty, assets));
                 items.AddRange(Items(outer));
+                test = TestProperties.Of(outer);
             }
             else
             {
@@ -82,6 +84,9 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
 
                         // The SDK adds default items (Compile globs…) in the per-framework evaluations only.
                         items.AddRange(Items(inner).Where(i => !items.Any(e => e.Kind == i.Kind && e.Path == i.Path)));
+
+                        // Package props (Microsoft.NET.Test.Sdk, the testing platform) are imported per framework.
+                        test = test.Or(TestProperties.Of(inner));
                     }
                     finally
                     {
@@ -100,7 +105,9 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 [.. items],
                 [.. references],
                 [.. diagnostics],
-                assets is not null);
+                assets is not null,
+                test.IsTestProject || test.IsTestingPlatformApplication,
+                test.Platform);
             return new EvaluatedProject(info, imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList(), NullIfEmpty(outer.GetPropertyValue("ProjectAssetsFile")));
         }
         catch (InvalidProjectFileException ex)
@@ -111,6 +118,25 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
         {
             collection.UnloadProject(outer);
         }
+    }
+
+    /// <summary>
+    /// Whether a project is a test project, and on which platform (ADR 0010). xUnit v3 and MSTest.Sdk projects set only
+    /// <c>IsTestingPlatformApplication</c>.
+    /// </summary>
+    private readonly record struct TestProperties(bool IsTestProject, bool IsTestingPlatformApplication)
+    {
+        public static TestProperties None => default;
+
+        public string? Platform => IsTestingPlatformApplication ? TestPlatforms.Mtp : IsTestProject ? TestPlatforms.VSTest : null;
+
+        public static TestProperties Of(Project project) => new(
+            IsTrue(project.GetPropertyValue("IsTestProject")),
+            IsTrue(project.GetPropertyValue("IsTestingPlatformApplication")));
+
+        public TestProperties Or(TestProperties other) => new(IsTestProject || other.IsTestProject, IsTestingPlatformApplication || other.IsTestingPlatformApplication);
+
+        private static bool IsTrue(string value) => string.Equals(value.Trim(), "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private Project Load(string path, Dictionary<string, string> global, EvaluationContext context) =>

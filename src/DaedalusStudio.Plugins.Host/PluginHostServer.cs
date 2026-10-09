@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Channels;
+using DaedalusStudio.Plugins.Host.Proposed;
 using DaedalusStudio.Plugins.Protocol;
 using DaedalusStudio.Rpc;
 
@@ -29,6 +30,7 @@ internal sealed class PluginHostServer : IAsyncDisposable
     {
         _connection = connection;
         _outgoingLoop = Task.Run(PumpOutgoingAsync);
+        Proposed = new ProposedHost(this);
     }
 
     public Task ExitRequested => _exit.Task;
@@ -36,6 +38,9 @@ internal sealed class PluginHostServer : IAsyncDisposable
     internal SettingsCache Settings { get; } = new();
 
     internal JsonRpcConnection Connection => _connection;
+
+    /// <summary>The proposed APIs (tests, workspace, build, debug) shared by this host's plugins.</summary>
+    internal ProposedHost Proposed { get; }
 
     public void RegisterHandlers()
     {
@@ -79,6 +84,7 @@ internal sealed class PluginHostServer : IAsyncDisposable
             return new EmptyResult();
         });
         _connection.OnNotification(PluginMethods.Exit, json.EmptyParams, _ => _exit.TrySetResult());
+        Proposed.RegisterHandlers();
     }
 
     // ------------------------------------------------------------------ loading and activation
@@ -97,7 +103,7 @@ internal sealed class PluginHostServer : IAsyncDisposable
             var assembly = context.LoadFromAssemblyPath(assemblyPath);
             var type = FindEntryType(assembly, entry.EntryType);
             var instance = (IDaedalusPlugin)Activator.CreateInstance(type)!;
-            _plugins[entry.Id] = new LoadedPlugin(new PluginInfo(entry.Id, entry.Version, entry.InstallPath), instance, context);
+            _plugins[entry.Id] = new LoadedPlugin(new PluginInfo(entry.Id, entry.Version, entry.InstallPath), instance, context) { EnableProposedApi = entry.EnableProposedApi };
             return new PluginLoadResult(entry.Id, true, null);
         }
         catch (Exception ex) when (ex is IOException or BadImageFormatException or TargetInvocationException or InvalidOperationException
@@ -269,6 +275,7 @@ internal sealed class PluginHostServer : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        Proposed.Dispose();
         _outgoing.Writer.TryComplete();
         await _outgoingLoop.ConfigureAwait(false);
         foreach (var plugin in _plugins.Values)
@@ -288,6 +295,9 @@ internal sealed class PluginHostServer : IAsyncDisposable
         public SemaphoreSlim Gate { get; } = new(1, 1);
 
         public bool Active { get; set; }
+
+        /// <summary>The manifest's <c>enableProposedApi</c>, allowed by the shell.</summary>
+        public bool EnableProposedApi { get; init; }
 
         public PluginContext? Context { get; set; }
     }

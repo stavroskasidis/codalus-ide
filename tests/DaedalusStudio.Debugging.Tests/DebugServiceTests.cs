@@ -77,6 +77,22 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
     private int Line(string marker) => DebuggeeFixture.Line(debuggee.Program, marker);
 
     [Fact]
+    public async Task Launching_split_arguments_reports_the_debuggee_process_id()
+    {
+        _debug.Breakpoints.Toggle(debuggee.Program, Line("loop"));
+        await _debug.LaunchAsync(DotnetHost, ["exec", debuggee.Dll], debuggee.Folder, new Dictionary<string, string>(), TestContext.Current.CancellationToken);
+
+        var pid = await _debug.WaitForProcessIdAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        await NextStopAsync();
+
+        Assert.Equal(pid, _debug.ProcessId);
+        using var process = Process.GetProcessById(pid);
+        Assert.False(process.HasExited);
+        await _debug.StopAsync();
+        await EndedAsync();
+    }
+
+    [Fact]
     public async Task Hit_counts_are_emulated_and_the_program_runs_to_its_exit_code()
     {
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, Line("loop"), HitCondition: "3"));

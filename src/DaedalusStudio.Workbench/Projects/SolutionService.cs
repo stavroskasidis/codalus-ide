@@ -79,6 +79,9 @@ public sealed class SolutionService : IAsyncDisposable
     /// <summary>The build host's process id while it runs (diagnostics and tests).</summary>
     public int? HostProcessId => _host?.ProcessId;
 
+    /// <summary>The .NET SDK folder the build host's MSBuild comes from, once it started.</summary>
+    public string? SdkPath { get; private set; }
+
     /// <summary>A solution was opened, closed (null) or its structure changed.</summary>
     public event EventHandler? SolutionChanged;
 
@@ -228,9 +231,10 @@ public sealed class SolutionService : IAsyncDisposable
     private async Task InitializeAsync(JsonRpcConnection connection, bool isRestart, CancellationToken cancellationToken)
     {
         var json = ProjectJsonContext.Default;
-        await connection.InvokeAsync(
+        var host = await connection.InvokeAsync(
             ProjectMethods.Initialize, new InitializeParams(Environment.ProcessId, "daedalus", ProjectMethods.ProtocolVersion),
             json.InitializeParams, json.InitializeResult, cancellationToken).ConfigureAwait(false);
+        SdkPath = host.SdkPath;
         if (_openParams is not { } open)
         {
             return;
@@ -309,12 +313,15 @@ public sealed class SolutionService : IAsyncDisposable
         }
     }
 
-    /// <summary>How to start a project (the SDK's run properties and its launch settings file).</summary>
-    public async Task<RunInfo> GetRunInfoAsync(string projectPath, CancellationToken cancellationToken)
+    /// <summary>
+    /// How to start a project (the SDK's run properties and its launch settings file), for <paramref name="targetFramework"/>
+    /// or the active framework.
+    /// </summary>
+    public async Task<RunInfo> GetRunInfoAsync(string projectPath, CancellationToken cancellationToken, string? targetFramework = null)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(s_operationTimeout);
-        return await Connection.InvokeAsync(ProjectMethods.RunInfo, new ProjectPathParams(projectPath), ProjectJsonContext.Default.ProjectPathParams, ProjectJsonContext.Default.RunInfo, timeout.Token).ConfigureAwait(false);
+        return await Connection.InvokeAsync(ProjectMethods.RunInfo, new RunInfoParams(projectPath, targetFramework), ProjectJsonContext.Default.RunInfoParams, ProjectJsonContext.Default.RunInfo, timeout.Token).ConfigureAwait(false);
     }
 
     public Task ReevaluateAsync(string projectPath, CancellationToken cancellationToken) =>

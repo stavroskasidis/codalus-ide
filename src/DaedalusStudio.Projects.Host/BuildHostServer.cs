@@ -100,7 +100,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
             return result;
         });
         _connection.OnRequest(ProjectMethods.CancelBuild, json.EmptyParams, json.EmptyResult, (_, _) => Sync(() => _session?.CancelBuild()));
-        _connection.OnRequest(ProjectMethods.RunInfo, json.ProjectPathParams, json.RunInfo, (p, _) => Guard(() => Task.Run(() => Session.GetRunInfo(p.Path))));
+        _connection.OnRequest(ProjectMethods.RunInfo, json.RunInfoParams, json.RunInfo, (p, _) => Guard(() => Task.Run(() => Session.GetRunInfo(p.Path, p.TargetFramework))));
         _connection.OnRequest(ProjectMethods.Shutdown, json.EmptyParams, json.EmptyResult, async (_, _) =>
         {
             if (_session is { } session)

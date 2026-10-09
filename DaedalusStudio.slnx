@@ -23,6 +23,7 @@
     <Project Path="src/DaedalusStudio.Workbench/DaedalusStudio.Workbench.csproj" />
   </Folder>
   <Folder Name="/src/Plugins/">
+    <Project Path="src/Plugins/DaedalusStudio.Plugins.DotNetTest/DaedalusStudio.Plugins.DotNetTest.csproj" />
     <Project Path="src/Plugins/DaedalusStudio.Plugins.Templates/DaedalusStudio.Plugins.Templates.csproj" />
     <Project Path="src/Plugins/DaedalusStudio.Plugins.Welcome/DaedalusStudio.Plugins.Welcome.csproj" />
   </Folder>

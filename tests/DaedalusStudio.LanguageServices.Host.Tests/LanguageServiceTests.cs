@@ -40,6 +40,31 @@ public sealed class LanguageServiceTests(LanguageFixture fixture) : IClassFixtur
     }
 
     [Fact]
+    public async Task Test_candidates_use_unsaved_text_and_files_on_disk()
+    {
+        var path = fixture.File("src", "Lib", "Square.Part.cs");
+        var onDisk = Path.Combine(Path.GetDirectoryName(path)!, "OnDiskTests.cs");
+        await File.WriteAllTextAsync(onDisk, "namespace Lib.Tests; public class OnDisk { [Fact] public void Works() { } }", Ct);
+        try
+        {
+            await fixture.OpenAsync(path);
+            await fixture.EditAsync(path, "public double Side { get; }", "public double Side { get; }" + Environment.NewLine + "    [Fact] public void Unsaved() { }");
+
+            var result = await fixture.Client.TestCandidatesAsync([Uri(path), Uri(onDisk), Uri(Path.Combine(Path.GetDirectoryName(path)!, "Missing.cs"))], Ct);
+
+            Assert.Equal(["Unsaved"], result.Documents[0].Candidates.Where(c => c.Kind == TestCandidateKinds.Method).Select(c => c.Name));
+            Assert.Equal(["Lib.Tests.OnDisk.Works"], result.Documents[1].Candidates.Where(c => c.Kind == TestCandidateKinds.Method).Select(c => c.Type + "." + c.Name));
+            Assert.Empty(result.Documents[2].Candidates);
+        }
+        finally
+        {
+            await fixture.EditAsync(path, Environment.NewLine + "    [Fact] public void Unsaved() { }", string.Empty);
+            await fixture.Languages.CloseAsync(path);
+            File.Delete(onDisk);
+        }
+    }
+
+    [Fact]
     public async Task Editorconfig_severities_apply()
     {
         var path = fixture.File("src", "Lib", "Square.Part.cs");

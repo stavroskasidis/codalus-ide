@@ -162,15 +162,24 @@ public sealed class LanguageService : IAsyncDisposable
         return true;
     }
 
-    public Task ChangeAsync(string path, int version, TextDocumentContentChangeEvent[] changes) =>
-        _documents.TryGetValue(path, out var document) && RunningClient(document.LanguageId) is { } client
+    /// <summary>An open document was edited or saved (for consumers that follow source, like test discovery).</summary>
+    public event EventHandler<string>? DocumentChanged;
+
+    public Task ChangeAsync(string path, int version, TextDocumentContentChangeEvent[] changes)
+    {
+        DocumentChanged?.Invoke(this, path);
+        return _documents.TryGetValue(path, out var document) && RunningClient(document.LanguageId) is { } client
             ? client.DidChangeAsync(DocumentUris.FromPath(path), version, changes, _lifetime.Token)
             : Task.CompletedTask;
+    }
 
-    public Task SavedAsync(string path) =>
-        _documents.TryGetValue(path, out var document) && RunningClient(document.LanguageId) is { } client
+    public Task SavedAsync(string path)
+    {
+        DocumentChanged?.Invoke(this, path);
+        return _documents.TryGetValue(path, out var document) && RunningClient(document.LanguageId) is { } client
             ? client.DidSaveAsync(DocumentUris.FromPath(path), _lifetime.Token)
             : Task.CompletedTask;
+    }
 
     public Task CloseAsync(string path) =>
         _documents.TryRemove(path, out var document) && RunningClient(document.LanguageId) is { } client

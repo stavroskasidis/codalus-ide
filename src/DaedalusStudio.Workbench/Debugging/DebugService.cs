@@ -43,6 +43,7 @@ public sealed class DebugService : IAsyncDisposable
     private bool _attached;
     private int _exitCode;
     private CancellationTokenSource _session = new();
+    private TaskCompletionSource<int> _process = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public DebugService(Func<string?> resolveAdapter)
     {
@@ -65,6 +66,9 @@ public sealed class DebugService : IAsyncDisposable
     public bool IsAttached => _attached;
 
     public StopInfo? CurrentStop { get; private set; }
+
+    /// <summary>The debuggee's process id, once the adapter reported it (DAP <c>process</c> event) or after an attach.</summary>
+    public int? ProcessId { get; private set; }
 
     public IReadOnlyList<DapThread> Threads { get; private set; } = [];
 
@@ -96,8 +100,26 @@ public sealed class DebugService : IAsyncDisposable
             new LaunchArguments(plan.FileName, [.. CommandLine.Split(plan.Arguments)], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: JustMyCode),
             cancellationToken), attached: false, cancellationToken);
 
-    public Task AttachAsync(int processId, CancellationToken cancellationToken) =>
-        StartAsync(adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode), cancellationToken), attached: true, cancellationToken);
+    /// <summary>Starts <paramref name="program"/> with arguments that are already split (no command-line parsing).</summary>
+    public Task LaunchAsync(string program, IReadOnlyList<string> arguments, string workingDirectory, IReadOnlyDictionary<string, string> environment, CancellationToken cancellationToken) =>
+        StartAsync(adapter => adapter.LaunchAsync(
+            new LaunchArguments(program, [.. arguments], workingDirectory, new Dictionary<string, string>(environment), JustMyCode: JustMyCode, EnableStepFiltering: JustMyCode),
+            cancellationToken), attached: false, cancellationToken);
+
+    public async Task AttachAsync(int processId, CancellationToken cancellationToken)
+    {
+        await StartAsync(adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode), cancellationToken), attached: true, cancellationToken).ConfigureAwait(false);
+        OnProcess(processId);
+    }
+
+    /// <summary>The debuggee's process id: completes when the adapter reports it; cancelled when the session ends first.</summary>
+    public Task<int> WaitForProcessIdAsync(CancellationToken cancellationToken) => _process.Task.WaitAsync(cancellationToken);
+
+    private void OnProcess(int processId)
+    {
+        ProcessId = processId;
+        _process.TrySetResult(processId);
+    }
 
     private async Task StartAsync(Func<DebugAdapter, Task> start, bool attached, CancellationToken cancellationToken)
     {
@@ -112,6 +134,8 @@ public sealed class DebugService : IAsyncDisposable
         _session = new CancellationTokenSource();
         _attached = attached;
         _exitCode = 0;
+        ProcessId = null;
+        _process = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_gate)
         {
             _hits.Clear();
@@ -193,6 +217,7 @@ public sealed class DebugService : IAsyncDisposable
         Frames = [];
         SelectedFrame = null;
         SelectedThreadId = null;
+        _process.TrySetCanceled();
         Breakpoints.ClearStates();
         SetState(DebugState.Idle);
         Ended?.Invoke(this, _exitCode);
@@ -372,6 +397,9 @@ public sealed class DebugService : IAsyncDisposable
                 break;
             case DapEvents.Terminated:
                 _ = Task.Run(EndAsync);
+                break;
+            case DapEvents.Process when DebugAdapter.Read(e.Body, DapJsonContext.Default.ProcessEvent) is { SystemProcessId: { } pid }:
+                OnProcess(pid);
                 break;
             case DapEvents.Breakpoint when DebugAdapter.Read(e.Body, DapJsonContext.Default.BreakpointEvent) is { Breakpoint.Id: { } id } changed:
                 BreakpointSpec? spec;
