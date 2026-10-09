@@ -102,6 +102,29 @@ public class EditorTests
     }
 
     [AvaloniaFact]
+    public async Task Documents_reopen_with_their_solution()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        MoveCaret(shapes, "class Circle");
+        await OpenAsync(f, Path.Combine(folder, "src", "App", "Program.cs"));
+
+        await f.Shell.CloseSolutionAsync();
+        Assert.Empty(f.Shell.Editors);
+
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "LanguageFeatures.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Editors.Count() == 2);
+        Assert.Equal("Program.cs", f.Shell.ActiveEditor?.Model.Name);
+
+        // Background tabs get their view (and the remembered caret) when shown.
+        var reopened = f.Shell.Editors.Single(e => e.Model.Name == "Shapes.cs");
+        f.Shell.Layout.OpenDocument(reopened);
+        await ShellFixture.PumpUntil(() => reopened.Controller is not null);
+        Assert.Equal(shapes.Caret.Line, reopened.Controller!.Caret.Line);
+    }
+
+    [AvaloniaFact]
     public async Task Preview_tabs_splits_and_external_changes()
     {
         await using var f = ShellFixture.Create();

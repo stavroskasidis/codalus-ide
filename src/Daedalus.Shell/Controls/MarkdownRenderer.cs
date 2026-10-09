@@ -144,7 +144,12 @@ public static partial class MarkdownRenderer
         for (var i = 0; i < source.Length; i++)
         {
             var c = source[i];
-            if (c == '`' && source.IndexOf('`', i + 1) is var end and > 0)
+            if (c == '\\' && i + 1 < source.Length && IsEscapable(source[i + 1]))
+            {
+                // A backslash escape: the next character is literal.
+                run.Append(source[++i]);
+            }
+            else if (c == '`' && source.IndexOf('`', i + 1) is var end and > 0)
             {
                 Flush();
                 inlines.Add(new Run(source[(i + 1)..end]) { FontFamily = s_monospace });
@@ -177,6 +182,9 @@ public static partial class MarkdownRenderer
         block.Inlines = inlines;
         return block;
     }
+
+    /// <summary>CommonMark's escapable characters: ASCII punctuation.</summary>
+    private static bool IsEscapable(char c) => c is >= '!' and <= '/' or >= ':' and <= '@' or >= '[' and <= '`' or >= '{' and <= '~';
 
     /// <summary>An emphasis marker opens only before a non-space and closes only after one.</summary>
     private static bool Toggles(string source, int i, bool open) =>

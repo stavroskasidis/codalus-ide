@@ -99,6 +99,11 @@ public sealed partial class ShellHost
 
         _structureReported = false;
         _evaluationReported = false;
+        if (Solutions.IsOpen)
+        {
+            await CloseSolutionAsync().ConfigureAwait(true);
+        }
+
         try
         {
             StatusBar.ShowMessage($"Opening {Path.GetFileName(path)}…");
@@ -107,6 +112,7 @@ public sealed partial class ShellHost
             Recent.Add(path);
             Workbench.Settings.SetWorkspaceFile(Path.Combine(folder, ".daedalus", "settings.json"));
             Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
+            await RestoreEditorSessionAsync(path).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException or System.ComponentModel.Win32Exception)
         {
@@ -133,6 +139,8 @@ public sealed partial class ShellHost
 
     public async Task CloseSolutionAsync()
     {
+        SaveEditorSession();
+        CloseSolutionDocuments();
         await Solutions.CloseAsync().ConfigureAwait(true);
         Workbench.Settings.SetWorkspaceFile(null);
     }

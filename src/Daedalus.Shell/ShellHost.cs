@@ -438,6 +438,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         WriteJson(Paths.LayoutFile, Layout.Capture(placement), ShellJsonContext.Default.LayoutSnapshot);
         WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds }, ShellJsonContext.Default.ShellState);
+        SaveEditorSession();
     }
 
     private T? ReadJson<T>(string path, JsonTypeInfo<T> info)

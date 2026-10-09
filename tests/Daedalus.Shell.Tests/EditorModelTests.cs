@@ -72,3 +72,17 @@ public class CaretEditsTests
     public void Duplicate_carets_collapse() =>
         Assert.Single(CaretEdits.Normalize([CaretSelection.At(4), CaretSelection.At(4)]));
 }
+
+public class MarkdownRendererTests
+{
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public void Backslash_escapes_are_literal()
+    {
+        var control = Daedalus.Shell.Controls.MarkdownRenderer.Render(@"a \*b\* \_c\_ **d**", _ => { });
+        var block = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(control).OfType<Avalonia.Controls.TextBlock>().FirstOrDefault()
+                    ?? control as Avalonia.Controls.TextBlock
+                    ?? ((Avalonia.Controls.Panel)control).Children.OfType<Avalonia.Controls.TextBlock>().First();
+        var text = string.Concat(block.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(r => r.Text));
+        Assert.Equal("a *b* _c_ d", text);
+    }
+}

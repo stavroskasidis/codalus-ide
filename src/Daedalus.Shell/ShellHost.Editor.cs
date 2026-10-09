@@ -515,6 +515,67 @@ public sealed partial class ShellHost : IEditorServices
         return choice == "Exit Without Saving";
     }
 
+    // ------------------------------------------------------------------ session (open documents per solution)
+
+    private string? SessionFile(string? solutionPath)
+    {
+        if (solutionPath is null)
+        {
+            return null;
+        }
+
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(solutionPath.ToUpperInvariant())))[..16];
+        return Path.Combine(Paths.State, "sessions", hash + ".json");
+    }
+
+    /// <summary>Remembers the open solution's documents and carets (files on disk only).</summary>
+    public void SaveEditorSession()
+    {
+        if (SessionFile(Solutions.Solution?.Path) is not { } file)
+        {
+            return;
+        }
+
+        var documents = Editors
+            .Where(e => !e.Model.IsReadOnly && File.Exists(e.Model.Path))
+            .DistinctBy(e => e.Model)
+            .Select(e =>
+            {
+                var caret = e.Controller is { } controller ? e.Model.PositionAt(controller.Editor.CaretOffset) : new Position(0, 0);
+                return new Docking.SessionDocument(e.Model.Path, caret.Line, caret.Character);
+            })
+            .ToList();
+        WriteJson(file, new Docking.EditorSession(documents, ActiveEditor?.Model.Path), Docking.ShellJsonContext.Default.EditorSession);
+    }
+
+    /// <summary>Reopens the documents that were open the last time this solution was closed.</summary>
+    private async Task RestoreEditorSessionAsync(string solutionPath)
+    {
+        if (SessionFile(solutionPath) is not { } file || ReadJson(file, Docking.ShellJsonContext.Default.EditorSession) is not { } session)
+        {
+            return;
+        }
+
+        foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))
+        {
+            await OpenFileAsync(document.Path, preview: false, new Position(document.Line, document.Character)).ConfigureAwait(true);
+        }
+
+        if (session.Active is { } active && Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, active)) is { } editor)
+        {
+            Layout.OpenDocument(editor);
+        }
+    }
+
+    /// <summary>Closing a solution closes its documents (unsaved ones stay open, as the user has to decide).</summary>
+    private void CloseSolutionDocuments()
+    {
+        foreach (var editor in Editors.Where(e => !e.Model.IsModified).ToList())
+        {
+            Layout.CloseDocument(editor);
+        }
+    }
+
     // ------------------------------------------------------------------ split views
 
     /// <summary>Opens the active document in a new group to the right (or below).</summary>

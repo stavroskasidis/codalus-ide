@@ -52,10 +52,17 @@ public sealed record WindowPlacement(double Width, double Height, int? X, int? Y
     AllowTrailingCommas = true)]
 [JsonSerializable(typeof(LayoutSnapshot))]
 [JsonSerializable(typeof(ShellState))]
+[JsonSerializable(typeof(EditorSession))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 internal sealed partial class ShellJsonContext : JsonSerializerContext;
+
+/// <summary>The documents open in a solution, reopened with it (<c>sessions/&lt;hash&gt;.json</c> in the state folder).</summary>
+public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, string? Active);
+
+/// <summary>An open file and its caret (zero-based line and character).</summary>
+public sealed record SessionDocument(string Path, int Line, int Character);
 
 /// <summary>Small bits of per-user state that survive restarts (<c>state.json</c>).</summary>
 public sealed record ShellState
