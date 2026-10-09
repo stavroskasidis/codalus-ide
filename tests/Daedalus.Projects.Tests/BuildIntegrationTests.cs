@@ -10,7 +10,7 @@ namespace Daedalus.Projects.Tests;
 public sealed class BuildIntegrationTests : IAsyncLifetime
 {
     private static readonly TimeSpan s_timeout = TimeSpan.FromMinutes(2);
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "daedalus-build-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(RealTempPath(), "daedalus-build-" + Guid.NewGuid().ToString("N"));
     private readonly OutputService _output = new();
     private SolutionService _solutions = null!;
     private BuildService _builds = null!;
@@ -22,6 +22,16 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
     private string HelloProject => Path.Combine(Fixture, "src", "Hello", "Hello.csproj");
 
     private string GreetingsProject => Path.Combine(Fixture, "src", "Greetings", "Greetings.csproj");
+
+    /// <summary>
+    /// The temp folder without symbolic links: on macOS /var is a link to /private/var, and a solution opened through
+    /// the link gets its projects restored twice (once per spelling of the path), racing on project.assets.json.
+    /// </summary>
+    private static string RealTempPath()
+    {
+        var temp = Path.GetTempPath();
+        return OperatingSystem.IsMacOS() && temp.StartsWith("/var/", StringComparison.Ordinal) && Directory.Exists("/private" + temp) ? "/private" + temp : temp;
+    }
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(s_timeout).Token).Token;

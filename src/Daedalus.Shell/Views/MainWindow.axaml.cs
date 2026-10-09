@@ -320,6 +320,19 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         pane.FocusContent();
+        if (!pane.IsKeyboardFocusWithin)
+        {
+            // Selecting the pane's tab can rebuild its content; focus it again once that is laid out.
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (pane.IsEffectivelyVisible && !pane.IsKeyboardFocusWithin)
+                    {
+                        pane.FocusContent();
+                    }
+                },
+                DispatcherPriority.Loaded);
+        }
     }
 
     /// <summary>Focuses a dockable's view once it has been created (Dock creates views lazily).</summary>
