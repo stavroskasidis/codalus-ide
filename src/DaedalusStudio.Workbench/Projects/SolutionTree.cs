@@ -27,6 +27,9 @@ public sealed record ExplorerNode(string Id, ExplorerNodeKind Kind, string Name)
     /// <summary>The project the node belongs to (for project, folder, file and dependency nodes).</summary>
     public string? ProjectPath { get; init; }
 
+    /// <summary>A project the user unloaded (or a solution filter left out): shown dimmed, with Reload Project.</summary>
+    public bool IsUnloaded { get; init; }
+
     /// <summary>The solution folder id, for solution folders.</summary>
     public string? SolutionFolderId { get; init; }
 
@@ -107,6 +110,11 @@ public static class SolutionTree
         if (info is null)
         {
             return node with { Detail = trusted ? "(loading…)" : "(not loaded: untrusted folder)" };
+        }
+
+        if (info.State == ProjectStates.Unloaded)
+        {
+            return node with { Detail = "(unloaded)", IsUnloaded = true };
         }
 
         if (info.State != ProjectStates.Loaded)

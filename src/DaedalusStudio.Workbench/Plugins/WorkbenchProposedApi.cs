@@ -27,6 +27,7 @@ public sealed class WorkbenchProposedApi : IProposedApiHost, IDisposable
     private readonly Timer _solutionTimer;
     private readonly Timer _documentTimer;
     private (string Id, Action<DebugEndedParams> Ended)? _session;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Terminal.TerminalSession> _terminals = new(StringComparer.Ordinal);
 
     /// <param name="beforeBuild">Runs before plugin-requested builds (the shell saves open documents).</param>
     public WorkbenchProposedApi(SolutionService solutions, BuildService builds, DebugService debug, LanguageService languages, Func<CancellationToken, Task>? beforeBuild = null)
@@ -46,6 +47,15 @@ public sealed class WorkbenchProposedApi : IProposedApiHost, IDisposable
     }
 
     public event EventHandler<ProposedNotification>? Notification;
+
+    /// <summary>The shell's terminals; null when the shell has none (plugin terminal requests then fail).</summary>
+    public Terminal.TerminalService? Terminals { get; set; }
+
+    /// <summary>Shows a terminal a plugin opened (the shell's Terminal window).</summary>
+    public Action<Terminal.TerminalSession>? ShowTerminal { get; set; }
+
+    /// <summary>Where plugin terminals start by default.</summary>
+    public Func<string>? DefaultTerminalDirectory { get; set; }
 
     private void OnSolutionChanged(object? sender, EventArgs e) => _solutionTimer.Change(SolutionDebounce, Timeout.InfiniteTimeSpan);
 
@@ -116,6 +126,24 @@ public sealed class WorkbenchProposedApi : IProposedApiHost, IDisposable
     {
         var info = await _solutions.GetRunInfoAsync(projectPath, cancellationToken, targetFramework).ConfigureAwait(false);
         return new ProjectOutputDto(info.Path, info.TargetFramework, info.TargetPath, info.RunCommand, info.RunArguments, info.RunWorkingDirectory);
+    }
+
+    public async Task<WorkspacePackagesResult> GetPackagesAsync(string projectPath, CancellationToken cancellationToken)
+    {
+        var projects = await new Packages.PackageService(_solutions).InstalledAsync(projectPath, cancellationToken).ConfigureAwait(false);
+        var project = projects.Count > 0 ? projects[0] : null;
+        return new WorkspacePackagesResult(project is null
+            ? []
+            : [
+                .. project.Packages.Select(p => new WorkspacePackageDto(p.Id, p.Requested, p.Resolved, false, p.Frameworks)),
+                .. project.Transitive.Select(p => new WorkspacePackageDto(p.Id, null, p.Resolved, true, p.Frameworks)),
+            ]);
+    }
+
+    public async Task<WorkspacePropertiesResult> GetPropertiesAsync(string projectPath, IReadOnlyList<string> names, CancellationToken cancellationToken)
+    {
+        var result = await new ProjectManagementService(_solutions).GetPropertiesAsync(projectPath, names, null, cancellationToken).ConfigureAwait(false);
+        return new WorkspacePropertiesResult(result.Properties.ToDictionary(p => p.Name, p => p.Value, StringComparer.OrdinalIgnoreCase));
     }
 
     public async Task<TestCandidatesResultDto> FindTestCandidatesAsync(IReadOnlyList<string> uris, CancellationToken cancellationToken)
@@ -245,6 +273,99 @@ public sealed class WorkbenchProposedApi : IProposedApiHost, IDisposable
             await _debug.StopAsync().ConfigureAwait(false);
         }
     }
+
+    public Task<TerminalDto> TerminalCreateAsync(TerminalCreateParams create, Action<TerminalOutputParams> output, Action<TerminalExitedParams> exited, CancellationToken cancellationToken)
+    {
+        var terminals = Terminals ?? throw new InvalidOperationException("This shell has no terminals.");
+        var directory = create.WorkingDirectory is { Length: > 0 } wd && Directory.Exists(wd)
+            ? wd
+            : DefaultTerminalDirectory?.Invoke() ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        // The id is known only once the session exists, but output must be captured from the start: hold it until then.
+        string? id = null;
+        var early = new System.Text.StringBuilder();
+        var gate = new Lock();
+        Action<string>? report = null;
+        if (create.ReportOutput)
+        {
+            report = text =>
+            {
+                lock (gate)
+                {
+                    if (id is null)
+                    {
+                        early.Append(text);
+                        return;
+                    }
+                }
+
+                output(new TerminalOutputParams(id, text));
+            };
+        }
+
+        Terminal.TerminalSession session;
+        if (create.Program is { Length: > 0 } program)
+        {
+            session = terminals.Run(create.Name ?? Path.GetFileNameWithoutExtension(program), program, create.Arguments ?? [], directory, create.Environment, outputText: report);
+        }
+        else
+        {
+            var profile = terminals.FindProfile(create.Profile) ?? throw new InvalidOperationException("No shell was found for the terminal.");
+            session = terminals.Start(profile, directory, outputText: report);
+        }
+
+        var terminalId = "terminal-" + session.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _terminals[terminalId] = session;
+        lock (gate)
+        {
+            id = terminalId;
+            if (early.Length > 0)
+            {
+                output(new TerminalOutputParams(terminalId, early.ToString()));
+            }
+        }
+
+        var reported = 0;
+        void Exit(int? code)
+        {
+            if (Interlocked.Exchange(ref reported, 1) == 0)
+            {
+                _terminals.TryRemove(terminalId, out _);
+                exited(new TerminalExitedParams(terminalId, code));
+            }
+        }
+
+        session.Exited += (_, code) => Exit(code);
+        if (session.ExitCode is { } already)
+        {
+            Exit(already);
+        }
+
+        if (create.Show)
+        {
+            ShowTerminal?.Invoke(session);
+        }
+
+        return Task.FromResult(new TerminalDto(terminalId, session.ProcessId));
+    }
+
+    public Task TerminalSendTextAsync(string terminalId, string text, CancellationToken cancellationToken)
+    {
+        Terminal(terminalId).Write(text);
+        return Task.CompletedTask;
+    }
+
+    public Task TerminalKillAsync(string terminalId, CancellationToken cancellationToken)
+    {
+        if (_terminals.TryGetValue(terminalId, out var session))
+        {
+            Terminals?.Close(session);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Terminal.TerminalSession Terminal(string terminalId) =>
+        _terminals.TryGetValue(terminalId, out var session) ? session : throw new InvalidOperationException($"No terminal '{terminalId}' (it exited or was closed).");
 
     private void SetSession(string id, Action<DebugEndedParams> ended)
     {

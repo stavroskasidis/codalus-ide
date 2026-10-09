@@ -15,12 +15,15 @@ Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs n
   - `.sln` and `.slnx` solutions and SDK-style projects.
   - A Solution Explorer with file operations, references, dependencies and analyzers.
   - Configurations, multi-targeting, restore, and templates for new projects.
+  - Project property pages that show where each value comes from, launch profiles, the Reference Manager, Configuration Manager, build dependencies, unloading projects, solution filters and SDK selection.
   - Folder trust: untrusted code doesn't run.
+- **NuGet**: a package manager for projects and the solution (browse, installed with transitive packages, updates, consolidate), Central Package Management, package sources with source mapping, Pack, and .NET tools.
 - **Editor**:
   - Tabs with preview and split views, multiple carets, folding, a minimap and find/replace.
   - C# on Roslyn with your analyzers and source generators: semantic highlighting, completion, signature help, Quick Info, live diagnostics with an Error List.
   - Navigation: Go to Definition and Implementation (into generated and decompiled code), Find All References, Go To All, Find in Files.
   - Refactoring: Rename, code fixes and refactorings (all with previews), and `.editorconfig` formatting.
+- **Testing**: a Test Explorer for xUnit, NUnit, MSTest and TUnit on VSTest and Microsoft.Testing.Platform, test margins in the editor, playlists, and code coverage with Coverlet.
 - **Build and run**: Build, Rebuild and Clean of the solution or a project (MSBuild, cancellable, errors in the Error List). Run the startup project with its launch profile (Ctrl+F5).
 - **Debugging** on netcoredbg:
   - launch (F5) and attach
@@ -33,12 +36,13 @@ Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs n
   - branches: create, switch, merge
   - fetch, pull and push
   - side-by-side and inline diffs, gutter change markers, and blame
+- **Terminal and C# Interactive**: an integrated terminal (your shells, splits, shell integration with clickable `file:line` links, `vim`-capable emulation) that can also run your console apps, and a C# REPL with `#r "nuget:"`, Send to Interactive and Initialize Interactive with Project.
 - **Extensible**: a versioned, out-of-process plugin API ([docs/plugins.md](docs/plugins.md)).
 - **Private**: no telemetry. Crash reports are local and opt-in.
 
 ## Documentation
 
-- [User guide](docs/user-guide/README.md): installing, solutions, editing, build and run, debugging, Git, settings, troubleshooting.
+- [User guide](docs/user-guide/README.md): installing, solutions, NuGet, editing, build and run, debugging, testing, Git, terminal and C# Interactive, settings, troubleshooting.
 - [Writing plugins](docs/plugins.md).
 - [Architecture decisions](docs/adr), [accessibility](docs/accessibility.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md).
 

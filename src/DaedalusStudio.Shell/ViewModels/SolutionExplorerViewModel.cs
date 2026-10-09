@@ -52,6 +52,8 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 
     public bool IsLinked => _node.IsLinked;
 
+    public bool IsUnloaded => _node.IsUnloaded;
+
     public bool HasChildren => _node.Children.Count > 0;
 
     public bool IsExpanded
@@ -134,6 +136,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             {
                 _shell.Workbench.Context.Set("explorerItemKind", value is null ? null : KindKey(value.Node.Kind));
                 _shell.Workbench.Context.Set("explorerItemIsProjectReference", value?.Node is { Kind: ExplorerNodeKind.Dependency } n && n.Id.Contains("|project|", StringComparison.Ordinal));
+                _shell.Workbench.Context.Set("explorerProjectUnloaded", value?.Node.IsUnloaded == true);
             }
         }
     }

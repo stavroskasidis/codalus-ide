@@ -10,7 +10,7 @@ using DaedalusStudio.Shell.Editor;
 namespace DaedalusStudio.Shell.Infrastructure;
 
 /// <summary>
-/// Benchmark support (<c>--open</c>, <c>--bench typing|scroll</c>, <c>--exit-on highlight|done|language</c>): opens a
+/// Benchmark support (<c>--open</c>, <c>--bench typing|scroll|test-filter|packages|terminal</c>, <c>--exit-on highlight|done|language</c>): opens a
 /// file, reports when it first shows semantic highlighting, and runs self-driven typing and scrolling with in-app
 /// frame probes. These complement the harness's external measurements and are the only source on CI runners.
 /// </summary>
@@ -33,6 +33,18 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
         if (shell.Options.Bench == "test-filter")
         {
             await TestFilterAsync().ConfigureAwait(true);
+            return;
+        }
+
+        if (shell.Options.Bench == "packages")
+        {
+            await PackagesAsync().ConfigureAwait(true);
+            return;
+        }
+
+        if (shell.Options.Bench == "terminal")
+        {
+            await TerminalAsync().ConfigureAwait(true);
             return;
         }
 
@@ -164,6 +176,135 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
         }
     }
 
+    /// <summary>Searches of <c>--bench packages</c> on samples/Packages' local feed.</summary>
+    private static readonly string[] s_packageQueries = ["Daedalus.Sample", "Greeting", "Licensed", "Text", "Daedalus.Sample.G", string.Empty];
+
+    /// <summary>
+    /// <c>--bench packages</c> (with a copy of samples/Packages): opens the NuGet Package Manager of Plain, measures
+    /// search pages (response → rendered) on the local feed, then updates Daedalus.Sample.Greeting and measures until the
+    /// project's new compiler inputs arrive, and how much of that was restore.
+    /// </summary>
+    private async Task PackagesAsync()
+    {
+        for (var i = 0; i < 6000 && !(shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState is "succeeded" or "failed"); i++)
+        {
+            await Task.Delay(50).ConfigureAwait(true);
+        }
+
+        var plain = shell.Solutions.Projects.Values.FirstOrDefault(p => p.Name == "Plain")?.Path;
+        if (plain is null || shell.OpenPackageManager(plain) is not { } vm)
+        {
+            BenchEvents.Emit(BenchEventNames.ScenarioDone);
+            Exit();
+            return;
+        }
+
+        for (var i = 0; i < 600 && !vm.Sources.Contains("local"); i++)
+        {
+            await Task.Delay(50).ConfigureAwait(true);
+        }
+
+        vm.SelectedSource = "local";
+        await Task.Delay(500).ConfigureAwait(true);
+        foreach (var query in s_packageQueries)
+        {
+            var loaded = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnPage(object? sender, EventArgs e) => loaded.TrySetResult(Stopwatch.GetTimestamp());
+            vm.PageLoaded += OnPage;
+            var requested = Stopwatch.GetTimestamp();
+            vm.Search = query;
+            _ = vm.SearchNowAsync();
+            if (await Task.WhenAny(loaded.Task, Task.Delay(TimeSpan.FromSeconds(60))).ConfigureAwait(true) == loaded.Task)
+            {
+                var arrived = loaded.Task.Result;
+                await RenderedAsync(window).ConfigureAwait(true);
+                var now = Stopwatch.GetTimestamp();
+                BenchEvents.Emit(
+                    BenchEventNames.PackageSearch,
+                    [("frame_us", (long)Stopwatch.GetElapsedTime(arrived, now).TotalMicroseconds), ("elapsed_us", (long)Stopwatch.GetElapsedTime(requested, now).TotalMicroseconds)]);
+            }
+
+            vm.PageLoaded -= OnPage;
+            await Task.Delay(200).ConfigureAwait(true);
+        }
+
+        // Update Greeting 1.0.0 → latest: until the project's compiler inputs reflect it (what IntelliSense sees).
+        vm.Search = "Daedalus.Sample.Greeting";
+        await vm.SearchNowAsync().ConfigureAwait(true);
+        vm.Selected = vm.Rows.FirstOrDefault(r => r.Id == "Daedalus.Sample.Greeting");
+        for (var i = 0; i < 600 && vm.Details is not { IsLoading: false, CanInstall: true }; i++)
+        {
+            await Task.Delay(50).ConfigureAwait(true);
+        }
+
+        if (vm.Details is { CanInstall: true } details)
+        {
+            long restoreStarted = 0, restoreEnded = 0;
+            var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnRestore(object? sender, Workbench.Projects.RestoreStateChangedEventArgs e)
+            {
+                if (e.State == "running")
+                {
+                    restoreStarted = Stopwatch.GetTimestamp();
+                }
+                else if (restoreStarted != 0)
+                {
+                    restoreEnded = Stopwatch.GetTimestamp();
+                }
+            }
+
+            void OnInputs(object? sender, Projects.Protocol.CompilerInputsInfo inputs)
+            {
+                if (restoreEnded != 0 && Workbench.Projects.SolutionService.PathComparer.Equals(inputs.Path, plain))
+                {
+                    done.TrySetResult();
+                }
+            }
+
+            shell.Solutions.RestoreStateChanged += OnRestore;
+            shell.Solutions.CompilerInputsChanged += OnInputs;
+            var started = Stopwatch.GetTimestamp();
+            details.InstallCommand.Execute(null);
+            if (await Task.WhenAny(done.Task, Task.Delay(TimeSpan.FromMinutes(5))).ConfigureAwait(true) == done.Task)
+            {
+                BenchEvents.Emit(
+                    BenchEventNames.PackageInstall,
+                    [("elapsed_us", (long)Stopwatch.GetElapsedTime(started).TotalMicroseconds), ("restore_us", (long)Stopwatch.GetElapsedTime(restoreStarted, restoreEnded).TotalMicroseconds)]);
+            }
+
+            shell.Solutions.RestoreStateChanged -= OnRestore;
+            shell.Solutions.CompilerInputsChanged -= OnInputs;
+        }
+
+        // Project properties: from the command to the Application page rendered with its values (three times: cold, warm).
+        for (var run = 0; run < 3; run++)
+        {
+            foreach (var open in shell.Layout.Documents.OfType<ViewModels.ProjectPropertiesDocument>().ToList())
+            {
+                shell.Layout.CloseDocument(open);
+            }
+
+            await RenderedAsync(window).ConfigureAwait(true);
+            var started = Stopwatch.GetTimestamp();
+            if (shell.OpenProjectProperties(plain) is { } properties)
+            {
+                for (var i = 0; i < 1200 && !(properties.Sections.Count > 0 && !properties.IsLoading); i++)
+                {
+                    await Task.Delay(5).ConfigureAwait(true);
+                }
+
+                await RenderedAsync(window).ConfigureAwait(true);
+                BenchEvents.Emit(BenchEventNames.PropertiesOpen, "elapsed_us", (long)Stopwatch.GetElapsedTime(started).TotalMicroseconds);
+            }
+        }
+
+        BenchEvents.Emit(BenchEventNames.ScenarioDone);
+        if (shell.Options.ExitOn == "done")
+        {
+            Exit();
+        }
+    }
+
     private static void Exit()
     {
         if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -259,6 +400,126 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
             BenchEvents.Emit("jump_frame", "frame_us", (long)Stopwatch.GetElapsedTime(t0).TotalMicroseconds);
             await Task.Delay(200).ConfigureAwait(true);
         }
+    }
+
+    private const int TerminalLines = 1_000_000;
+    private const int TerminalKeystrokes = 60;
+
+    /// <summary>
+    /// <c>--bench terminal</c> (M10, ADR 0014): prints a million-line file in a terminal (<c>cat</c>, or <c>type</c> on
+    /// Windows) while timing every frame, reports how long it took and the managed memory the terminal keeps (screen and
+    /// scrollback), then types into an interactive shell and times each echo until it is rendered.
+    /// </summary>
+    private async Task TerminalAsync()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"daedalus-bench-{Environment.ProcessId}.txt");
+        try
+        {
+            await using (var writer = new StreamWriter(file))
+            {
+                for (var i = 1; i <= TerminalLines; i++)
+                {
+                    await writer.WriteLineAsync($"{i:D7} the quick brown fox jumps over the lazy dog \u001b[32mok\u001b[0m").ConfigureAwait(true);
+                }
+            }
+
+            await RenderedAsync(window).ConfigureAwait(true);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            var before = GC.GetTotalMemory(forceFullCollection: true);
+            var (program, arguments) = OperatingSystem.IsWindows() ? ("cmd.exe", new[] { "/c", "type", file }) : ("cat", new[] { file });
+            var started = Stopwatch.GetTimestamp();
+            var printing = true;
+            var last = started;
+            void Frame(TimeSpan _)
+            {
+                var now = Stopwatch.GetTimestamp();
+                BenchEvents.Emit(BenchEventNames.TerminalFrame, "frame_us", (long)Stopwatch.GetElapsedTime(last, now).TotalMicroseconds);
+                last = now;
+                if (printing)
+                {
+                    window.RequestAnimationFrame(Frame);
+                }
+            }
+
+            var session = shell.Terminals.Run("bench", program, arguments, Path.GetTempPath(), null);
+            shell.ShowTerminal();
+            shell.TerminalWindow.Show(session);
+            window.RequestAnimationFrame(Frame);
+            while (session.ExitCode is null)
+            {
+                await Task.Delay(20).ConfigureAwait(true);
+            }
+
+            await RenderedAsync(window).ConfigureAwait(true);
+            printing = false;
+            var elapsed = Stopwatch.GetElapsedTime(started);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            var memory = GC.GetTotalMemory(forceFullCollection: true) - before;
+            BenchEvents.Emit(BenchEventNames.TerminalCat,
+            [
+                ("elapsed_us", (long)elapsed.TotalMicroseconds),
+                ("lines", TerminalLines),
+                ("memory_bytes", memory),
+            ]);
+            GC.KeepAlive(session);
+
+            await EchoAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        BenchEvents.Emit(BenchEventNames.ScenarioDone);
+        if (shell.Options.ExitOn == "done")
+        {
+            Exit();
+        }
+    }
+
+    /// <summary>Types into the default shell and times each echo, from the write to the rendered frame showing it.</summary>
+    private async Task EchoAsync()
+    {
+        if (shell.ShowTerminal(newTerminal: true) is not { } session)
+        {
+            return;
+        }
+
+        await Task.Delay(2000).ConfigureAwait(true); // the shell's startup and prompt
+        int Count() => session.Terminal.ScreenText().Count(c => c == 'x');
+        for (var i = 0; i < TerminalKeystrokes; i++)
+        {
+            var expected = Count() + 1;
+            var echoed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void OnChanged() => Dispatcher.UIThread.Post(() =>
+            {
+                if (Count() >= expected)
+                {
+                    echoed.TrySetResult();
+                }
+            });
+            session.Terminal.Changed += OnChanged;
+            var t0 = Stopwatch.GetTimestamp();
+            session.Write("x");
+            if (await Task.WhenAny(echoed.Task, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(true) == echoed.Task)
+            {
+                await RenderedAsync(window).ConfigureAwait(true);
+                BenchEvents.Emit(BenchEventNames.TerminalEcho, "latency_us", (long)Stopwatch.GetElapsedTime(t0).TotalMicroseconds);
+            }
+
+            session.Terminal.Changed -= OnChanged;
+            await Task.Delay(s_typingInterval).ConfigureAwait(true);
+        }
+
+        session.Write("\u0003");
     }
 
     /// <summary>Emits the time from <paramref name="t0"/> until the next composition batch has been rendered.</summary>

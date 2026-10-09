@@ -114,4 +114,31 @@ public static class BenchEventNames
 
     /// <summary>The first result of a test run: <c>elapsed_us</c> since the run was requested.</summary>
     public const string TestFirstResult = "test_first_result";
+
+    /// <summary>
+    /// A NuGet search page: <c>frame_us</c> from the host's response to the rendered list, <c>elapsed_us</c> from the
+    /// request (M9).
+    /// </summary>
+    public const string PackageSearch = "package_search";
+
+    /// <summary>
+    /// A package update in the package manager: <c>elapsed_us</c> from Update to the project's new compiler inputs (what
+    /// IntelliSense sees), <c>restore_us</c> of it spent in restore (M9).
+    /// </summary>
+    public const string PackageInstall = "package_install";
+
+    /// <summary>Project properties opened: <c>elapsed_us</c> from the command to the first page rendered with its values (M9).</summary>
+    public const string PropertiesOpen = "properties_open";
+
+    /// <summary>A frame while a terminal prints a large file: <c>frame_us</c> since the previous frame (M10).</summary>
+    public const string TerminalFrame = "terminal_frame";
+
+    /// <summary>
+    /// A terminal printed a file: <c>elapsed_us</c> until the program exited and its output was parsed, <c>lines</c> printed,
+    /// <c>memory_bytes</c> of managed memory the terminal holds afterwards (screen and scrollback) (M10).
+    /// </summary>
+    public const string TerminalCat = "terminal_cat";
+
+    /// <summary>A keystroke in an interactive shell: <c>latency_us</c> from writing it to the echo on screen, rendered (M10).</summary>
+    public const string TerminalEcho = "terminal_echo";
 }

@@ -26,6 +26,7 @@ internal sealed class ShellFixture : IAsyncDisposable
         Environment.SetEnvironmentVariable("DAEDALUS_PLUGINHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.Plugins.Host", "bin", Configuration, "net10.0", "daedalus-pluginhost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_BUILDHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.Projects.Host", "bin", Configuration, "net10.0", "daedalus-buildhost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_LSHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.LanguageServices.Host", "bin", Configuration, "net10.0", "daedalus-lshost.dll"));
+        Environment.SetEnvironmentVariable("DAEDALUS_REPLHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.Interactive.Host", "bin", Configuration, "net10.0", "daedalus-replhost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_TRASH_DIR", Path.Combine(userData, "trash"));
         Shell = new ShellHost(Application.Current!, new ShellOptions
         {

@@ -36,7 +36,7 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 | `project/addReference`, `project/removeReference` | `{projectPath, referencePath}` | `{}` | `ProjectReference` items, relative paths. |
 | `project/setActiveFramework` | `{path, targetFramework}` | `{}` | The framework of a multi-targeted project that design-time builds (and so the language service) use. Default: the first one. |
 | `project/designTimeBuild` | `{path?}` | `{}` | Runs design-time builds again (all projects when `path` is null); trusted only. |
-| `build/run` | `{target: build \| rebuild \| clean, project?, restore}` | `{succeeded, canceled, errors, warnings, elapsedMilliseconds}` | Builds the solution (`project` null) or a project with the active configuration (ADR 0006); restore first unless `restore` is false (never for clean). Completes after the build's last `build/output` and `build/diagnostic`. One at a time; trusted only. |
+| `build/run` | `{target: build \| rebuild \| clean \| pack, project?, restore}` | `{succeeded, canceled, errors, warnings, elapsedMilliseconds}` | Builds the solution (`project` null) or a project with the active configuration (ADR 0006); restore first unless `restore` is false (never for clean). Completes after the build's last `build/output` and `build/diagnostic`. One at a time; trusted only. |
 | `build/cancel` | `{}` | `{}` | Stops the running build; its `build/run` result has `canceled: true`. |
 | `project/runInfo` | `{path, targetFramework?}` | `RunInfo` | How to start a project, for the active configuration and the given (or active) target framework; trusted only. |
 
@@ -78,6 +78,48 @@ Builds use a `BuildManager` of their own with MSBuild's out-of-process worker no
 After evaluation the host builds `Compile` and `CoreCompile` with `DesignTimeBuild`, `SkipCompilerExecution`, `ProvideCommandLineArgs` and `BuildingInsideVisualStudio` set (referenced projects are asked for their target path, not built), for each project's active target framework, and reports `project/compilerInputs`. Builds are queued and coalesced: changes during a batch are built right after it. They re-run after evaluations caused by project-file or folder changes, configuration and framework switches, and after a restore for projects whose assets file changed. Unrestored projects fail with MSBuild's error (for example NETSDK1004).
 
 The tree (nesting, Dependencies grouping) is derived in the shell (`SolutionTree`), not sent by the host.
+
+## Packages and .NET tools
+
+NuGet package management ([ADR 0012](adr/0012-package-management.md)) uses the NuGet client libraries of the SDK the host loaded MSBuild from; all feed access happens in the host. Every request needs a trusted solution. Contracts are in `PackageMessages.cs`; the shell side is `PackageService` in `src/DaedalusStudio.Workbench/Packages`.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `packages/search` | `{query, prerelease, skip, take, source?, offline, refresh}` | `{packages, hasMore, errors}` | Every enabled source (or the one named), merged by id, highest version wins. `skip`/`take` page each source. A failing source is reported in `errors`; the others still answer. |
+| `packages/details` | `{id, prerelease, version?, source?, offline}` | `PackageDetails` | The chosen (or latest) version's metadata, every version for the picker, the README (global packages folder, the feed's `ReadmeUriTemplate`, or the `.nupkg` of a local source). |
+| `packages/installed` | `{project?}` | `{projects: ProjectPackages[]}` | From each target framework's evaluation and `project.assets.json`. All loaded projects when `project` is null. |
+| `packages/status` | `{packages: [{id, version?}], prerelease, offline, refresh}` | `{packages: [{id, latest?, deprecated, vulnerabilitySeverity, iconUrl?}], errors}` | The latest version across sources, and the deprecation and vulnerability badges of the given version. |
+| `packages/why` | `{project, id}` | `{paths: [{framework, chain}]}` | Every chain (`id/version` steps) from a top-level dependency to the package. |
+| `packages/install` | `{projects: [{project, framework?}], id, version, versionOverride, restore}` | `{updatedFiles}` | Adds or updates the reference as `dotnet add package` does. Under CPM the version goes to the central `PackageVersion` (or, with `versionOverride`, the project's `VersionOverride`). A restore follows. |
+| `packages/uninstall` | `{projects, id, restore}` | `{updatedFiles}` | Removes the project's references, as `dotnet remove package` does; a central `PackageVersion` stays. |
+| `packages/sources` | `{}` | `{sources, mappings, configFiles, globalPackagesFolder}` | Effective sources in priority order (`{name, url, enabled, isMachineWide, configFile?}`), package source mapping (`{source, patterns}`), and the config files (most specific first). |
+| `packages/setSources` | `{sources, mappings}` | `{}` | Saves the whole list. Existing sources change in the file that defines them; new sources and mappings go to the most specific config file under the solution folder (created when there is none); machine-wide files are never written. |
+| `tools/list` | `{}` | `{manifest?, local, global}` | The nearest `.config/dotnet-tools.json` and `dotnet tool list --global`. |
+| `tools/run` | `{action: install \| update \| uninstall \| restore \| createManifest, id?, version?, global}` | `{succeeded, output}` | Runs `dotnet tool` (or `dotnet new tool-manifest`) in the solution folder. |
+
+- **`PackageDetails`** `{id, version, versions: [{version, downloads?, deprecated, vulnerabilitySeverity}], title?, description?, authors?, licenseExpression?, licenseUrl?, projectUrl?, readme?, requireLicenseAcceptance, published?, downloads?, tags?, dependencyGroups: [{targetFramework, dependencies: [{id, range}]}], deprecation?: {reasons, message?, alternateId?, alternateRange?}, vulnerabilities: [{severity, advisoryUrl}], source}`. Severities are 0 low, 1 moderate, 2 high, 3 critical, -1 none.
+- **`ProjectPackages`** `{project, name, targetFrameworks, centralPackageManagement, centralPackagesFile?, restored, packages, transitive}`. `packages` are `{id, requested?, resolved?, frameworks, kind (direct | global | implicit), versionOverride?, centralVersion?, definedIn?}`; `transitive` are `{id, resolved, frameworks}`.
+
+## Project properties and solution management
+
+Property pages, references, configurations, dependencies, load/unload, solution filters and SDKs ([ADR 0013](adr/0013-project-properties-and-solution-management.md)). Contracts are in `ProjectManagementMessages.cs`; the shell side is `ProjectManagementService` in `src/DaedalusStudio.Workbench/Projects`.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `projectProperties/get` | `{project, names, configuration?}` | `{project, configuration, platform, configurations, properties}` | Evaluated with the active configuration, or `configuration`. Each property: `{name, value, unevaluated?, origin (project \| import \| sdk \| global \| unset), definedIn?, line, condition?, projectValue?}`; `projectValue` is the project file's value in the asked scope. |
+| `projectProperties/set` | `{project, name, value?, configuration?}` | `{changed}` | The minimal edit: an existing definition in the scope is updated, else the property goes into the scope's first property group (created after the last one, with `'$(Configuration)' == 'X'` for one configuration); `value` null removes the project's definitions in the scope. Visual Studio's `'$(Configuration)\|$(Platform)' == 'X\|AnyCPU'` groups count as X's scope. Imports are never edited. |
+| `references/add`, `references/remove` | `{project, kind (project \| assembly \| analyzer), path}` | `{}` | `Reference` with a relative `HintPath` (named after the assembly), `Analyzer`, or `ProjectReference`. |
+| `solution/configurations` | `{}` | `{buildTypes, platforms, projects: [{project, name, projectConfigurations, projectPlatforms, entries: [{solutionConfiguration, solutionPlatform, configuration, platform, build}]}]}` | The Configuration Manager's data. |
+| `solution/setProjectConfiguration` | `{project, solutionConfiguration, solutionPlatform, configuration?, platform?, build?}` | `{}` | Writes the solution's project configuration rules. |
+| `solution/addConfiguration`, `solution/removeConfiguration` | `{dimension (buildType \| platform), name, copyFrom?}` | `{}` | A new one copies `copyFrom`'s project mappings. A solution keeps at least one of each. |
+| `solution/dependencies` | `{}` | `{projects: [{project, dependsOn}]}` | Explicit build dependencies of the solution file. |
+| `solution/setDependencies` | `{project, dependsOn}` | `{}` | |
+| `project/unload`, `project/reload` | `{path}` | `{}` | An unloaded project is reported with state `unloaded` and isn't evaluated, design-time built or built (solution builds use a generated `.daedalus/build.slnf`). Kept in `.daedalus/solution.json`. |
+| `solution/saveFilter` | `{path, projects?}` | `{}` | Writes a `.slnf` (default: the loaded projects). |
+| `sdk/info` | `{}` | `{resolvedSdk?, resolvedVersion?, globalJson?, requestedVersion?, rollForward?, sdks: [{version, path}], workloads: [{id, version, source}], error?}` | `dotnet --list-sdks`, `dotnet workload list`, the `global.json` in effect and the SDK this host runs. |
+| `sdk/setGlobalJson` | `{version?, rollForward?}` | `{}` | Writes `sdk.version`/`sdk.rollForward` of the `global.json` in effect (or one next to the solution); `version` null removes the pin. The shell reopens the solution so a new host picks the SDK. |
+
+`solution/open` also accepts a `.slnf`: the filter's solution opens with only its projects loaded, and `SolutionInfo` gains `filterPath`.
 
 ## Errors
 

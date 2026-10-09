@@ -74,8 +74,9 @@ public sealed class GitShellTests
         await f.Shell.GitChanges.CommitAsync(all: false);
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Files.Count: 0 });
         Assert.Equal(string.Empty, f.Shell.GitChanges.Message);
+        // The index-changed notice (from the file watcher) refreshes the markers; it can lag on Linux.
         await controller.UpdateGitMarkersAsync();
-        Assert.Empty(controller.GitMargin.Changes);
+        await ShellFixture.PumpUntil(() => controller.GitMargin.Changes.Count == 0);
 
         // Blame annotates the editor; a new branch shows in the status bar.
         f.Shell.Layout.OpenDocument(editor);

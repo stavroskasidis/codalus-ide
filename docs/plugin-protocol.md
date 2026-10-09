@@ -57,6 +57,8 @@ Since protocol 0.2 (API 0.2.1). Only plugins loaded with `enableProposedApi` use
 |---|---|---|---|
 | `workspace/getSolution` | host → shell | request | `{}` → `{solution?: {path, trusted, configuration?, platform?, sdkPath?, projects: [{path, name, state, targetFrameworks, outputType?, isTestProject, testPlatform?: vstest\|mtp, compileFiles, projectReferences}]}}` |
 | `workspace/projectOutput` | host → shell | request | `{path, targetFramework?}` → `{path, targetFramework?, targetPath?, runCommand?, runArguments?, runWorkingDirectory?}` |
+| `workspace/packages` | host → shell | request | `{path}` → `{packages: [{id, requestedVersion?, resolvedVersion?, isTransitive, targetFrameworks}]}` (API 0.2.2) |
+| `workspace/properties` | host → shell | request | `{path, names}` → `{values: {name: value}}`, evaluated with the active configuration (API 0.2.2) |
 | `workspace/testCandidates` | host → shell | request | `{uris}` → `{documents: [{uri, candidates: [{kind: class\|method, name, type, namespace?, range, selectionRange, parameterized}]}]}` |
 | `workspace/typeOutline` | host → shell | request | `{uri, line, character}` → `{outline?: {name, namespace?, nestedName, isStatic, hasParameterlessConstructor, methods: [{name, returnType, parameters: [{name, type}], isStatic, isAsync, line}], selectedMethod?}}` |
 | `workspace/solutionChanged` | shell → host | notification | `{}` (coalesced) |
@@ -67,6 +69,11 @@ Since protocol 0.2 (API 0.2.1). Only plugins loaded with `enableProposedApi` use
 | `debug/attach` | host → shell | request | `{processId}` → `{sessionId, processId}` |
 | `debug/stop` | host → shell | request | `{sessionId}` → `{}` |
 | `debug/ended` | shell → host | notification | `{sessionId, exitCode?}` |
+| `terminal/create` | host → shell | request | `{name?, profile?, workingDirectory?, program?, arguments?, environment?, show, reportOutput}` → `{terminalId, processId}`: a shell (profile id, null for the default) or, with `program`, that program in a terminal (API 0.2.3) |
+| `terminal/sendText` | host → shell | request | `{terminalId, text}` → `{}` (as typed; `\r` runs a line) |
+| `terminal/kill` | host → shell | request | `{terminalId}` → `{}` (ends the program and closes the terminal) |
+| `terminal/output` | shell → host | notification | `{terminalId, text}` (UTF-8 decoded, escape sequences included; only with `reportOutput`; may arrive before the `terminal/create` response) |
+| `terminal/exited` | shell → host | notification | `{terminalId, exitCode?}` |
 | `tests/createController` | host → shell | notification | `{pluginId, controllerId, label}` (`controllerId` is `pluginId:id`) |
 | `tests/disposeController` | host → shell | notification | `{controllerId}` |
 | `tests/updateItems` | host → shell | notification | `{controllerId, items: [{id, parentId?, label, description?, uri?, range?, traits?: [{name, value?}], sortText?, error?}], removed: [id]}` (items after their parents; a removed id takes its descendants) |

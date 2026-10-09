@@ -12,6 +12,7 @@ internal sealed class ProposedHost : IDisposable
 {
     private readonly PluginHostServer _server;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<int?>> _debugSessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, HostTerminal> _terminals = new(StringComparer.Ordinal);
 
     public ProposedHost(PluginHostServer server)
     {
@@ -49,6 +50,34 @@ internal sealed class ProposedHost : IDisposable
                 ended.TrySetResult(p.ExitCode);
             }
         });
+
+        // Output and exit can arrive before the create response is handled: the terminal is created on first sight.
+        connection.OnNotification(ProposedMethods.TerminalOutput, json.TerminalOutputParams, p => Terminal(p.TerminalId).Received(p.Text));
+        connection.OnNotification(ProposedMethods.TerminalExited, json.TerminalExitedParams, p =>
+        {
+            if (_terminals.TryRemove(p.TerminalId, out var terminal))
+            {
+                terminal.Ended(p.ExitCode);
+            }
+            else
+            {
+                Terminal(p.TerminalId).Ended(p.ExitCode); // exited before the create response arrived
+            }
+        });
+    }
+
+    private HostTerminal Terminal(string id) => _terminals.GetOrAdd(id, i => new HostTerminal(this, i));
+
+    internal ITerminal TrackTerminal(TerminalDto dto)
+    {
+        var terminal = Terminal(dto.TerminalId);
+        terminal.ProcessId = dto.ProcessId;
+        if (terminal.Exited.IsCompleted)
+        {
+            _terminals.TryRemove(dto.TerminalId, out _);
+        }
+
+        return terminal;
     }
 
     internal static BuildResult ToResult(BuildResultDto dto) => new(dto.Succeeded, dto.Canceled, dto.Errors, dto.Warnings);
@@ -69,6 +98,86 @@ internal sealed class ProposedHost : IDisposable
         {
             session.TrySetResult(null);
         }
+
+        foreach (var terminal in _terminals.Values)
+        {
+            terminal.Ended(null);
+        }
+    }
+
+    /// <summary>A plugin's terminal. Output that arrives before anyone subscribes is kept and delivered to the first subscriber.</summary>
+    private sealed class HostTerminal(ProposedHost host, string id) : ITerminal
+    {
+        private readonly TaskCompletionSource<int?> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly Lock _gate = new();
+        private System.Text.StringBuilder? _early = new();
+        private EventHandler<TerminalOutputEventArgs>? _output;
+
+        public string Id { get; } = id;
+
+        public int ProcessId { get; set; }
+
+        public Task<int?> Exited => _exited.Task;
+
+        public event EventHandler<TerminalOutputEventArgs>? Output
+        {
+            add
+            {
+                string? early;
+                lock (_gate)
+                {
+                    _output += value;
+                    early = _early is { Length: > 0 } buffer ? buffer.ToString() : null;
+                    _early = null;
+                }
+
+                if (early is not null)
+                {
+                    value?.Invoke(this, new TerminalOutputEventArgs(early));
+                }
+            }
+
+            remove
+            {
+                lock (_gate)
+                {
+                    _output -= value;
+                }
+            }
+        }
+
+        public void Received(string text)
+        {
+            EventHandler<TerminalOutputEventArgs>? handler;
+            lock (_gate)
+            {
+                if (_early is not null)
+                {
+                    _early.Append(text);
+                    return;
+                }
+
+                handler = _output;
+            }
+
+            handler?.Invoke(this, new TerminalOutputEventArgs(text));
+        }
+
+        public void Ended(int? exitCode) => _exited.TrySetResult(exitCode);
+
+        public Task SendTextAsync(string text, CancellationToken cancellationToken) =>
+            host.RequestAsync(ProposedMethods.TerminalSendText, new TerminalTextParams(Id, text), PluginJsonContext.Default.TerminalTextParams, PluginJsonContext.Default.EmptyResult, cancellationToken);
+
+        public Task KillAsync(CancellationToken cancellationToken) =>
+            host.RequestAsync(ProposedMethods.TerminalKill, new TerminalIdParams(Id), PluginJsonContext.Default.TerminalIdParams, PluginJsonContext.Default.EmptyResult, cancellationToken);
+
+        public async ValueTask DisposeAsync()
+        {
+            if (!_exited.Task.IsCompleted)
+            {
+                await KillAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+        }
     }
 
     private sealed class DebugSession(ProposedHost host, string id, int processId, Task<int?> ended) : IDebugSession
@@ -83,7 +192,7 @@ internal sealed class ProposedHost : IDisposable
 }
 
 /// <summary>One plugin's view of the proposed APIs. Its event subscriptions end when the plugin is deactivated.</summary>
-internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBuild, IDebug, IDisposable
+internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBuild, IDebug, ITerminals, IDisposable
 {
     private readonly ProposedHost _host;
     private readonly string _pluginId;
@@ -105,6 +214,8 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
     public IBuild Build => this;
 
     public IDebug Debug => this;
+
+    public ITerminals Terminals => this;
 
     public event EventHandler? SolutionChanged;
 
@@ -148,6 +259,18 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
         return new ProjectOutput(o.Path, o.TargetFramework, o.TargetPath, o.RunCommand, o.RunArguments, o.RunWorkingDirectory);
     }
 
+    public async Task<IReadOnlyList<WorkspacePackage>> GetPackagesAsync(string projectPath, CancellationToken cancellationToken)
+    {
+        var result = await _host.RequestAsync(ProposedMethods.WorkspacePackages, new WorkspacePackagesParams(projectPath), PluginJsonContext.Default.WorkspacePackagesParams, PluginJsonContext.Default.WorkspacePackagesResult, cancellationToken).ConfigureAwait(false);
+        return [.. result.Packages.Select(p => new WorkspacePackage(p.Id, p.RequestedVersion, p.ResolvedVersion, p.IsTransitive, p.TargetFrameworks))];
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>> GetProjectPropertiesAsync(string projectPath, IReadOnlyList<string> names, CancellationToken cancellationToken)
+    {
+        var result = await _host.RequestAsync(ProposedMethods.WorkspaceProperties, new WorkspacePropertiesParams(projectPath, [.. names]), PluginJsonContext.Default.WorkspacePropertiesParams, PluginJsonContext.Default.WorkspacePropertiesResult, cancellationToken).ConfigureAwait(false);
+        return result.Values;
+    }
+
     public async Task<IReadOnlyList<DocumentTestCandidates>> FindTestCandidatesAsync(IReadOnlyList<string> documentUris, CancellationToken cancellationToken)
     {
         var result = await _host.RequestAsync(ProposedMethods.WorkspaceTestCandidates, new DocumentUrisParams([.. documentUris]), PluginJsonContext.Default.DocumentUrisParams, PluginJsonContext.Default.TestCandidatesResultDto, cancellationToken).ConfigureAwait(false);
@@ -182,6 +305,27 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
             PluginJsonContext.Default.DebugSessionDto,
             cancellationToken).ConfigureAwait(false);
         return _host.TrackSession(session);
+    }
+
+    // ------------------------------------------------------------------ terminals
+
+    public async Task<ITerminal> CreateAsync(TerminalOptions options, CancellationToken cancellationToken)
+    {
+        var terminal = await _host.RequestAsync(
+            ProposedMethods.TerminalCreate,
+            new TerminalCreateParams(
+                options.Name,
+                options.Profile,
+                options.WorkingDirectory,
+                options.Program,
+                [.. options.Arguments],
+                options.Environment is null ? null : new Dictionary<string, string>(options.Environment),
+                options.Show,
+                options.ReportOutput),
+            PluginJsonContext.Default.TerminalCreateParams,
+            PluginJsonContext.Default.TerminalDto,
+            cancellationToken).ConfigureAwait(false);
+        return _host.TrackTerminal(terminal);
     }
 
     public async Task<IDebugSession> AttachAsync(int processId, CancellationToken cancellationToken)

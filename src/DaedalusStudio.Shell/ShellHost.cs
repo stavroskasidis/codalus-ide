@@ -63,7 +63,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings()]);
+        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings()]);
+        InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
         {
@@ -71,7 +72,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -87,6 +88,10 @@ public sealed partial class ShellHost : IAsyncDisposable
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
         InitializeSolutions();
         InitializeBuild();
+        InitializePackages();
+        InitializeProjectManagement();
+        InitializeTerminal();
+        InitializeInteractive();
         InitializeDebugging();
         InitializeGit();
         InitializeEditor();
@@ -109,6 +114,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterDebugCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);
+        BuiltIns.RegisterPackageCommands(this);
+        BuiltIns.RegisterProjectManagementCommands(this);
         BuiltIns.RegisterMenus(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
         BuiltIns.RegisterEditorMenus(Workbench.Menus);
@@ -116,9 +123,15 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterDebugMenus(Workbench.Menus);
         BuiltIns.RegisterGitMenus(Workbench.Menus);
         BuiltIns.RegisterTestingMenus(Workbench.Menus);
+        BuiltIns.RegisterPackageMenus(Workbench.Menus);
+        BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
+        BuiltIns.RegisterTerminalMenus(Workbench.Menus);
+        BuiltIns.RegisterInteractiveMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
         Workbench.LoadUserKeybindings();
         SyncViewCommands();
+        BuiltIns.RegisterTerminalCommands(this);
+        BuiltIns.RegisterInteractiveCommands(this);
         LoadState();
 
         Workbench.ToolWindows.Changed += (_, _) => Ui.Post(SyncViewCommands);
@@ -293,6 +306,8 @@ public sealed partial class ShellHost : IAsyncDisposable
             BreakpointsViewModel.ToolWindowId => BreakpointList,
             DebugConsoleViewModel.ToolWindowId => DebugConsole,
             GitChangesViewModel.ToolWindowId => GitChanges,
+            TerminalViewModel.ToolWindowId => TerminalWindow,
+            InteractiveViewModel.ToolWindowId => InteractiveWindow,
             _ => null,
         },
     };
@@ -640,6 +655,11 @@ public sealed partial class ShellHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _instance?.Dispose();
+        Terminals?.Dispose();
+        if (Interactive is not null)
+        {
+            _ = Interactive.DisposeAsync().AsTask();
+        }
         await Debugger.DisposeAsync().ConfigureAwait(false);
         Git.Dispose();
         await Languages.DisposeAsync().ConfigureAwait(false);

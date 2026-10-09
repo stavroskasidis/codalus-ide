@@ -162,6 +162,28 @@ public sealed class KeybindingService(IContextKeyReader context, PlatformKind pl
         }
     }
 
+    /// <summary>
+    /// The single-key rule a press would run right now, without touching chord state (a focused terminal asks first
+    /// whether a key belongs to the IDE).
+    /// </summary>
+    public KeyDispatchResult Peek(KeyChord chord)
+    {
+        lock (_gate)
+        {
+            KeybindingRule? exact = null;
+            foreach (var rule in _effective)
+            {
+                var keys = rule.Keys!.Chords;
+                if (keys.Count == 1 && keys[0] == chord && rule.When.Evaluate(context))
+                {
+                    exact = rule;
+                }
+            }
+
+            return exact is null ? new KeyDispatchResult(KeyDispatchKind.NoMatch) : new KeyDispatchResult(KeyDispatchKind.Command, exact);
+        }
+    }
+
     public void ResetChord()
     {
         lock (_gate)

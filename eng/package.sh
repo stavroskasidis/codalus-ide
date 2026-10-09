@@ -20,6 +20,12 @@ name="daedalus-studio-$version-$rid"
 rm -rf "$stage"
 mkdir -p "$app" "$out"
 
+# Native AOT links with the selected Xcode's clang and ld; use that Xcode's SDK too. Otherwise clang may pick a newer
+# Command Line Tools SDK whose .tbd files that ld can't read ("tapi error: … unknown architecture").
+if [ "$(uname -s)" = Darwin ] && [ -z "${SDKROOT:-}" ] && command -v xcrun > /dev/null; then
+  SDKROOT="$(xcrun --sdk macosx --show-sdk-path 2> /dev/null || true)"
+  [ -n "$SDKROOT" ] && export SDKROOT
+fi
 echo "== Publishing the shell ($rid, $version)"
 dotnet publish "$repo/src/DaedalusStudio.Shell" -c Release -r "$rid" -o "$app" -p:Version="$version" -p:DebugType=none -p:DebugSymbols=false
 # Symbols stay out of packages (they are large); CI keeps them as a separate artifact.

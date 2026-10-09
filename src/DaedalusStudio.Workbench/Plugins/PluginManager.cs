@@ -711,6 +711,10 @@ public sealed class PluginManager : IAsyncDisposable
                 new GetSolutionResult(await Proposed.GetSolutionAsync(ct).ConfigureAwait(false)));
             connection.OnRequest(ProposedMethods.WorkspaceProjectOutput, json.ProjectOutputParams, json.ProjectOutputDto, (p, ct) =>
                 Proposed.GetProjectOutputAsync(p.Path, p.TargetFramework, ct));
+            connection.OnRequest(ProposedMethods.WorkspacePackages, json.WorkspacePackagesParams, json.WorkspacePackagesResult, (p, ct) =>
+                Proposed.GetPackagesAsync(p.Path, ct));
+            connection.OnRequest(ProposedMethods.WorkspaceProperties, json.WorkspacePropertiesParams, json.WorkspacePropertiesResult, (p, ct) =>
+                Proposed.GetPropertiesAsync(p.Path, p.Names, ct));
             connection.OnRequest(ProposedMethods.WorkspaceTestCandidates, json.DocumentUrisParams, json.TestCandidatesResultDto, (p, ct) =>
                 Proposed.FindTestCandidatesAsync(p.Uris, ct));
             connection.OnRequest(ProposedMethods.WorkspaceTypeOutline, json.TypeOutlineParamsDto, json.TypeOutlineResult, async (p, ct) =>
@@ -724,6 +728,18 @@ public sealed class PluginManager : IAsyncDisposable
             connection.OnRequest(ProposedMethods.DebugStop, json.DebugSessionParams, json.EmptyResult, async (p, ct) =>
             {
                 await Proposed.DebugStopAsync(p.SessionId, ct).ConfigureAwait(false);
+                return new EmptyResult();
+            });
+            connection.OnRequest(ProposedMethods.TerminalCreate, json.TerminalCreateParams, json.TerminalDto, (p, ct) =>
+                Proposed.TerminalCreateAsync(p, TerminalOutput, TerminalExited, ct));
+            connection.OnRequest(ProposedMethods.TerminalSendText, json.TerminalTextParams, json.EmptyResult, async (p, ct) =>
+            {
+                await Proposed.TerminalSendTextAsync(p.TerminalId, p.Text, ct).ConfigureAwait(false);
+                return new EmptyResult();
+            });
+            connection.OnRequest(ProposedMethods.TerminalKill, json.TerminalIdParams, json.EmptyResult, async (p, ct) =>
+            {
+                await Proposed.TerminalKillAsync(p.TerminalId, ct).ConfigureAwait(false);
                 return new EmptyResult();
             });
 
@@ -747,6 +763,12 @@ public sealed class PluginManager : IAsyncDisposable
 
         private void DebugEnded(DebugEndedParams ended) =>
             _ = NotifySafeAsync(ProposedMethods.DebugEnded, ended, PluginJsonContext.Default.DebugEndedParams);
+
+        private void TerminalOutput(TerminalOutputParams output) =>
+            _ = NotifySafeAsync(ProposedMethods.TerminalOutput, output, PluginJsonContext.Default.TerminalOutputParams);
+
+        private void TerminalExited(TerminalExitedParams exited) =>
+            _ = NotifySafeAsync(ProposedMethods.TerminalExited, exited, PluginJsonContext.Default.TerminalExitedParams);
 
         private sealed class ControllerConnection(HostConnection host, string controllerId) : ITestControllerConnection
         {

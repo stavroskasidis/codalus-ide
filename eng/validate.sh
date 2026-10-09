@@ -46,6 +46,12 @@ dotnet build DaedalusStudio.slnx -c Release --no-restore
 dotnet test --solution DaedalusStudio.slnx -c Release --no-build "$@"
 
 [ "$smoke" = yes ] || exit 0
+# Native AOT links with the selected Xcode's clang and ld; use that Xcode's SDK too. Otherwise clang may pick a newer
+# Command Line Tools SDK whose .tbd files that ld can't read ("tapi error: … unknown architecture").
+if [ "$(uname -s)" = Darwin ] && [ -z "${SDKROOT:-}" ] && command -v xcrun > /dev/null; then
+  SDKROOT="$(xcrun --sdk macosx --show-sdk-path 2> /dev/null || true)"
+  [ -n "$SDKROOT" ] && export SDKROOT
+fi
 echo "== Native AOT publish"
 rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
 dotnet publish src/DaedalusStudio.Shell -c Release -r "$rid" -o artifacts/shell

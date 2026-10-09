@@ -37,7 +37,7 @@ internal interface IHostEvents : ISessionEvents, IBuildEvents;
 /// One open solution (or a single project opened directly). Reads the solution file, evaluates projects in
 /// parallel (only when trusted), re-evaluates on file changes, runs restore, and performs file and solution edits.
 /// </summary>
-internal sealed class SolutionSession : IAsyncDisposable
+internal sealed partial class SolutionSession : IAsyncDisposable
 {
     private static readonly StringComparer s_pathComparer =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
@@ -96,6 +96,17 @@ internal sealed class SolutionSession : IAsyncDisposable
     public async Task<SolutionInfo> OpenAsync(OpenSolutionParams parameters, CancellationToken cancellationToken)
     {
         Path = System.IO.Path.GetFullPath(parameters.Path);
+        string[]? filterProjects = null;
+        if (System.IO.Path.GetExtension(Path).Equals(".slnf", StringComparison.OrdinalIgnoreCase))
+        {
+            FilterPath = Path;
+            (Path, filterProjects) = ReadFilter(FilterPath);
+            if (!File.Exists(Path))
+            {
+                throw new IOException($"The solution of the filter {System.IO.Path.GetFileName(FilterPath)} does not exist: {Path}");
+            }
+        }
+
         Trusted = parameters.Trusted;
         foreach (var (project, framework) in parameters.ActiveFrameworks ?? [])
         {
@@ -103,6 +114,7 @@ internal sealed class SolutionSession : IAsyncDisposable
         }
 
         _info = await ReadSolutionAsync(cancellationToken).ConfigureAwait(false);
+        LoadUnloadedState(filterProjects);
         if (parameters.Configuration is { } configuration && parameters.Platform is { } platform
             && _info.Configurations.FirstOrDefault(c => c.Configuration == configuration && c.Platform == platform) is { } requested)
         {
@@ -113,7 +125,7 @@ internal sealed class SolutionSession : IAsyncDisposable
             Active = _info.Configurations.FirstOrDefault(c => c.Configuration == "Debug") ?? _info.Configurations[0];
         }
 
-        _info = _info with { Active = Active, Trusted = Trusted };
+        _info = _info with { Active = Active, Trusted = Trusted, FilterPath = FilterPath };
         if (Trusted)
         {
             StartWatching();
@@ -235,7 +247,13 @@ internal sealed class SolutionSession : IAsyncDisposable
             async (project, token) =>
             {
                 var (configuration, platform) = ProjectConfiguration(project);
-                var result = _evaluator.Evaluate(project, configuration, platform, context);
+                var result = IsUnloaded(project)
+                    ? new EvaluatedProject(UnloadedInfo(project), [])
+                    : _evaluator.Evaluate(project, configuration, platform, context);
+                if (result.Info.State != ProjectStates.Unloaded && IsUnloaded(project))
+                {
+                    result = new EvaluatedProject(UnloadedInfo(project), []); // unloaded while it was being evaluated
+                }
                 _evaluated[project] = result;
                 await _events.ProjectEvaluatedAsync(result.Info).ConfigureAwait(false);
 
@@ -304,7 +322,7 @@ internal sealed class SolutionSession : IAsyncDisposable
 
         lock (_designTimePending)
         {
-            _designTimePending.UnionWith(projects);
+            _designTimePending.UnionWith(projects.Where(p => !IsUnloaded(p)));
             if (_designTimeWorker.IsCompleted)
             {
                 var token = _designTimeBatch.Token;
@@ -425,7 +443,7 @@ internal sealed class SolutionSession : IAsyncDisposable
         }
         else
         {
-            path = Path;
+            path = BuildEntryPoint();
             properties["Configuration"] = Active.Configuration;
             properties["Platform"] = Active.Platform;
         }
@@ -576,7 +594,7 @@ internal sealed class SolutionSession : IAsyncDisposable
                 try
                 {
                     var old = ProjectPaths.ToHashSet(s_pathComparer);
-                    _info = await ReadSolutionAsync(_lifetime.Token).ConfigureAwait(false) with { Active = Active, Trusted = Trusted };
+                    _info = await ReadSolutionAsync(_lifetime.Token).ConfigureAwait(false) with { Active = Active, Trusted = Trusted, FilterPath = FilterPath };
                     await _events.SolutionChangedAsync(_info).ConfigureAwait(false);
                     _watcher?.Watch(Path, ProjectPaths);
                     var added = ProjectPaths.Where(p => !old.Contains(p)).ToList();
@@ -625,35 +643,13 @@ internal sealed class SolutionSession : IAsyncDisposable
     private async Task RestoreAsync(string target)
     {
         await _events.RestoreStateAsync("running", null).ConfigureAwait(false);
-        var psi = new ProcessStartInfo(_dotnet)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WorkingDirectory = System.IO.Path.GetDirectoryName(target)!,
-        };
-        foreach (var arg in new[] { "restore", target, "--nologo", "--verbosity", "minimal" })
-        {
-            psi.ArgumentList.Add(arg);
-        }
-
-        psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
-        psi.Environment["DOTNET_NOLOGO"] = "1";
-        psi.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
-
-        // MSBuildLocator pointed this process at the SDK's MSBuild through environment variables; the child
-        // dotnet must resolve its own.
-        foreach (var variable in new[] { "MSBUILD_EXE_PATH", "MSBuildExtensionsPath", "MSBuildSDKsPath", "MSBuildLoadMicrosoftTargetsReadOnly" })
-        {
-            psi.Environment.Remove(variable);
-        }
+        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--nologo", "--verbosity", "minimal"]);
         try
         {
             using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet restore did not start.");
             var output = PumpAsync(process.StandardOutput);
             var error = PumpAsync(process.StandardError);
-            await process.WaitForExitAsync(_lifetime.Token).ConfigureAwait(false);
+            await Packages.DotnetProcess.WaitOrKillAsync(process, _lifetime.Token).ConfigureAwait(false);
             await Task.WhenAll(output, error).ConfigureAwait(false);
             var ok = process.ExitCode == 0;
             await _events.RestoreStateAsync(ok ? "succeeded" : "failed", ok ? null : $"dotnet restore exited with code {process.ExitCode}.").ConfigureAwait(false);
@@ -987,7 +983,7 @@ internal sealed class SolutionSession : IAsyncDisposable
 
             _watcher?.Suppress(Path);
             await _serializer.SaveAsync(Path, _model, cancellationToken).ConfigureAwait(false);
-            _info = Describe(_model);
+            _info = Describe(_model) with { FilterPath = FilterPath };
             await _events.SolutionChangedAsync(_info).ConfigureAwait(false);
             if (Trusted)
             {

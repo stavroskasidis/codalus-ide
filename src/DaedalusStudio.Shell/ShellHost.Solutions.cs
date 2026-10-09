@@ -17,7 +17,7 @@ public sealed partial class ShellHost
 {
     public const string RestoreOnOpenSetting = "projects.restoreOnOpen";
 
-    private static readonly string[] s_openPatterns = ["*.slnx", "*.sln", "*.csproj", "*.fsproj", "*.vbproj"];
+    private static readonly string[] s_openPatterns = ["*.slnx", "*.sln", "*.csproj", "*.fsproj", "*.vbproj", "*.slnf"];
 
     private bool _structureReported;
     private bool _evaluationReported;

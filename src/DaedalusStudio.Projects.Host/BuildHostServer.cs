@@ -56,7 +56,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
                 await previous.DisposeAsync().ConfigureAwait(false);
             }
 
-            _session = new SolutionSession(this, DotnetExecutable);
+            _session = new SolutionSession(this, DotnetExecutable) { SdkPath = _msbuildPath };
             return await Guard(() => _session.OpenAsync(p, ct)).ConfigureAwait(false);
         });
         _connection.OnRequest(ProjectMethods.CloseSolution, json.EmptyParams, json.EmptyResult, async (_, _) =>
@@ -101,6 +101,8 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         });
         _connection.OnRequest(ProjectMethods.CancelBuild, json.EmptyParams, json.EmptyResult, (_, _) => Sync(() => _session?.CancelBuild()));
         _connection.OnRequest(ProjectMethods.RunInfo, json.RunInfoParams, json.RunInfo, (p, _) => Guard(() => Task.Run(() => Session.GetRunInfo(p.Path, p.TargetFramework))));
+        RegisterPackageHandlers();
+        RegisterProjectManagementHandlers();
         _connection.OnRequest(ProjectMethods.Shutdown, json.EmptyParams, json.EmptyResult, async (_, _) =>
         {
             if (_session is { } session)
@@ -113,6 +115,68 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         });
         _connection.OnNotification(ProjectMethods.Exit, json.EmptyParams, _ => _exit.TrySetResult());
     }
+
+    /// <summary>Project properties, references and solution management (ADR 0013).</summary>
+    private void RegisterProjectManagementHandlers()
+    {
+        var json = ProjectManagementJsonContext.Default;
+        _connection.OnRequest(ProjectManagementMethods.GetProperties, json.GetPropertiesParams, json.ProjectPropertiesResult, (p, _) => Guard(() => Task.Run(() => Session.GetProperties(p))));
+        _connection.OnRequest(ProjectManagementMethods.SetProperty, json.SetPropertyParams, json.SetPropertyResult, (p, _) => Guard(() => Session.SetPropertyAsync(p)));
+        _connection.OnRequest(ProjectManagementMethods.AddReference, json.ReferenceEditParams, json.EmptyResult, (p, _) => Sync(() => Session.AddReference(p)));
+        _connection.OnRequest(ProjectManagementMethods.RemoveReference, json.ReferenceEditParams, json.EmptyResult, (p, _) => Sync(() => Session.RemoveReference(p)));
+        _connection.OnRequest(ProjectManagementMethods.Configurations, json.EmptyParams, json.SolutionConfigurationsResult, (_, _) => Guard(() => Task.Run(Session.GetConfigurations)));
+        _connection.OnRequest(ProjectManagementMethods.SetProjectConfiguration, json.SetProjectConfigurationParams, json.EmptyResult, (p, ct) => GuardEmpty(() => Session.SetProjectConfigurationAsync(p, ct)));
+        _connection.OnRequest(ProjectManagementMethods.AddConfiguration, json.SolutionConfigurationEditParams, json.EmptyResult, (p, ct) => GuardEmpty(() => Session.AddConfigurationAsync(p, ct)));
+        _connection.OnRequest(ProjectManagementMethods.RemoveConfiguration, json.SolutionConfigurationEditParams, json.EmptyResult, (p, ct) => GuardEmpty(() => Session.RemoveConfigurationAsync(p, ct)));
+        _connection.OnRequest(ProjectManagementMethods.Dependencies, json.EmptyParams, json.SolutionDependenciesResult, (_, _) => Guard(() => Task.FromResult(Session.GetDependencies())));
+        _connection.OnRequest(ProjectManagementMethods.SetDependencies, json.SetDependenciesParams, json.EmptyResult, (p, ct) => GuardEmpty(() => Session.SetDependenciesAsync(p, ct)));
+        _connection.OnRequest(ProjectManagementMethods.Unload, json.ProjectPathParams, json.EmptyResult, (p, _) => GuardEmpty(() => Session.UnloadAsync(p.Path)));
+        _connection.OnRequest(ProjectManagementMethods.Reload, json.ProjectPathParams, json.EmptyResult, (p, _) => GuardEmpty(() => Session.ReloadAsync(p.Path)));
+        _connection.OnRequest(ProjectManagementMethods.SaveFilter, json.SaveFilterParams, json.EmptyResult, (p, _) => Sync(() => Session.SaveFilter(p)));
+        _connection.OnRequest(ProjectManagementMethods.SdkInfo, json.EmptyParams, json.SdkInfoResult, (_, ct) => Guard(() => Session.GetSdkInfoAsync(ct)));
+        _connection.OnRequest(ProjectManagementMethods.SetGlobalJson, json.SetGlobalJsonParams, json.EmptyResult, (p, _) => Sync(() => Session.SetGlobalJson(p)));
+    }
+
+    /// <summary>NuGet packages and .NET tools (ADR 0012).</summary>
+    private void RegisterPackageHandlers()
+    {
+        var json = PackageJsonContext.Default;
+        _connection.OnRequest(PackageMethods.Search, json.PackageSearchParams, json.PackageSearchResult, (p, ct) => GuardNuGet(() => Session.NuGet.SearchAsync(p, ct)));
+        _connection.OnRequest(PackageMethods.Details, json.PackageDetailsParams, json.PackageDetails, (p, ct) => GuardNuGet(() => Session.NuGet.DetailsAsync(p, ct)));
+        _connection.OnRequest(PackageMethods.Status, json.PackageStatusParams, json.PackageStatusResult, (p, ct) => GuardNuGet(() => Session.NuGet.StatusAsync(p, ct)));
+        _connection.OnRequest(PackageMethods.Installed, json.InstalledPackagesParams, json.InstalledPackagesResult, (p, ct) => Guard(() => Session.InstalledPackagesAsync(p, ct)));
+        _connection.OnRequest(PackageMethods.Why, json.PackageWhyParams, json.PackageWhyResult, (p, _) => Guard(() => Task.Run(() => Session.WhyPackage(p))));
+        _connection.OnRequest(PackageMethods.Install, json.PackageInstallParams, json.PackageEditResult, (p, ct) => Guard(() => Session.InstallPackageAsync(p, ct)));
+        _connection.OnRequest(PackageMethods.Uninstall, json.PackageUninstallParams, json.PackageEditResult, (p, ct) => Guard(() => Session.UninstallPackageAsync(p, ct)));
+        _connection.OnRequest(PackageMethods.Sources, json.EmptyParams, json.PackageSourcesResult, (_, _) => GuardNuGet(() => Task.FromResult(Session.NuGet.GetSources())));
+        _connection.OnRequest(PackageMethods.SetSources, json.SetPackageSourcesParams, json.EmptyResult, (p, _) => GuardNuGet(() =>
+        {
+            Session.NuGet.SetSources(p);
+            return Task.FromResult(new EmptyResult());
+        }));
+        _connection.OnRequest(PackageMethods.Tools, json.EmptyParams, json.ToolsResult, (_, ct) => Guard(() => Session.Tools.ListAsync(ct)));
+        _connection.OnRequest(PackageMethods.ToolCommand, json.ToolCommandParams, json.ToolCommandResult, async (p, ct) =>
+        {
+            var (succeeded, output) = await Guard(() => Session.Tools.RunActionAsync(p, ct)).ConfigureAwait(false);
+            return new ToolCommandResult(succeeded, output);
+        });
+    }
+
+    /// <summary>
+    /// Like <see cref="Guard{T}"/>, and a NuGet API that this SDK's NuGet lacks (the host compiles against an older
+    /// one, ADR 0012) becomes a readable error instead of a crash.
+    /// </summary>
+    private static Task<T> GuardNuGet<T>(Func<Task<T>> action) => Guard(async () =>
+    {
+        try
+        {
+            return await action().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is MissingMethodException or MissingFieldException or TypeLoadException or FileNotFoundException { FileName: not null } && ex.Message.Contains("NuGet", StringComparison.Ordinal))
+        {
+            throw new JsonRpcHandlerException(ProjectErrorCodes.InvalidOperation, $"The NuGet client in this .NET SDK is not supported: {ex.Message}");
+        }
+    });
 
     /// <summary>Maps expected failures (missing files, conflicts, invalid edits) to protocol errors with readable messages.</summary>
     private static async Task<T> Guard<T>(Func<Task<T>> action)

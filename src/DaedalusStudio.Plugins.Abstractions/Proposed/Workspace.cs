@@ -23,7 +23,27 @@ public interface IWorkspace
 
     /// <summary>The class, record or struct at a zero-based position of a document, with its methods; null when there is none.</summary>
     Task<TypeOutline?> GetTypeOutlineAsync(string documentUri, int line, int character, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The NuGet packages of a project: top-level references (with the requested and restored versions) and transitive
+    /// packages from its last restore. Read only. Since API 0.2.2.
+    /// </summary>
+    Task<IReadOnlyList<WorkspacePackage>> GetPackagesAsync(string projectPath, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Evaluated MSBuild properties of a project (with the active configuration); unset properties are empty. Read only.
+    /// Since API 0.2.2.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetProjectPropertiesAsync(string projectPath, IReadOnlyList<string> names, CancellationToken cancellationToken);
 }
+
+/// <summary>A NuGet package of a project.</summary>
+/// <param name="Id">The package id.</param>
+/// <param name="RequestedVersion">The version or range asked for (top-level packages only).</param>
+/// <param name="ResolvedVersion">The restored version, or null when the project isn't restored.</param>
+/// <param name="IsTransitive">Whether it is only a dependency of other packages or projects.</param>
+/// <param name="TargetFrameworks">The target frameworks that use it.</param>
+public sealed record WorkspacePackage(string Id, string? RequestedVersion, string? ResolvedVersion, bool IsTransitive, IReadOnlyList<string> TargetFrameworks);
 
 /// <summary>A method's parameter, its type as written in source.</summary>
 /// <param name="Name">The parameter's name.</param>

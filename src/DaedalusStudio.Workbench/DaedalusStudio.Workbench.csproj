@@ -6,6 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\DaedalusStudio.Platform\DaedalusStudio.Platform.csproj" />
+    <ProjectReference Include="..\DaedalusStudio.Terminal\DaedalusStudio.Terminal.csproj" />
+    <ProjectReference Include="..\DaedalusStudio.Interactive.Protocol\DaedalusStudio.Interactive.Protocol.csproj" />
     <ProjectReference Include="..\DaedalusStudio.Rpc\DaedalusStudio.Rpc.csproj" />
     <ProjectReference Include="..\DaedalusStudio.Debugging\DaedalusStudio.Debugging.csproj" />
     <ProjectReference Include="..\DaedalusStudio.Plugins.Protocol\DaedalusStudio.Plugins.Protocol.csproj" />

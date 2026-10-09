@@ -32,6 +32,7 @@
     <HelperProcess Include="..\DaedalusStudio.Plugins.Host\DaedalusStudio.Plugins.Host.csproj" Folder="pluginhost" />
     <HelperProcess Include="..\DaedalusStudio.Projects.Host\DaedalusStudio.Projects.Host.csproj" Folder="buildhost" />
     <HelperProcess Include="..\DaedalusStudio.LanguageServices.Host\DaedalusStudio.LanguageServices.Host.csproj" Folder="lshost" />
+    <HelperProcess Include="..\DaedalusStudio.Interactive.Host\DaedalusStudio.Interactive.Host.csproj" Folder="replhost" />
     <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Welcome\DaedalusStudio.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Templates\DaedalusStudio.Plugins.Templates.csproj" PluginId="daedalus.templates" />
@@ -57,12 +58,22 @@
     <AvaloniaResource Include="..\..\assets\logo\daedalus.ico" Link="Assets\daedalus.ico" />
   </ItemGroup>
 
+  <!-- Terminal shell integration scripts (ADR 0014), next to the shell in terminal/. Dotfiles are listed explicitly. -->
+  <ItemGroup>
+    <None Include="ShellIntegration\daedalus-bash.sh" Link="terminal\daedalus-bash.sh" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ShellIntegration\daedalus.ps1" Link="terminal\daedalus.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ShellIntegration\zsh\.zshrc" Link="terminal\zsh\.zshrc" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ShellIntegration\zsh\.zshenv" Link="terminal\zsh\.zshenv" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!--
     Layout next to the shell executable:
       pluginhost/                 daedalus-pluginhost (framework-dependent, ReadyToRun when published)
       buildhost/                  daedalus-buildhost (likewise; MSBuild comes from the installed SDK)
       lshost/                     daedalus-lshost, the C# language service (likewise)
+      replhost/                   daedalus-replhost, C# Interactive (likewise)
       plugins/<plugin id>/        built-in plugins
+      terminal/                   shell integration scripts for the integrated terminal
   -->
   <Target Name="DaedalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>

@@ -24,6 +24,9 @@
     <PackageReference Include="Microsoft.Build" ExcludeAssets="runtime" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
+    <!-- NuGet's client libraries also come from the SDK at run time (ADR 0012), next to MSBuild. -->
+    <PackageReference Include="NuGet.Credentials" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="NuGet.Protocol" ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

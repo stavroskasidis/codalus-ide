@@ -118,7 +118,7 @@ public sealed partial class ShellHost
     {
         Workbench.Context.Set("buildRunning", true);
         var what = request.Project is { } project ? Path.GetFileNameWithoutExtension(project) : "solution";
-        var verb = request.Target switch { BuildTargets.Rebuild => "Rebuilding", BuildTargets.Clean => "Cleaning", _ => "Building" };
+        var verb = request.Target switch { BuildTargets.Rebuild => "Rebuilding", BuildTargets.Clean => "Cleaning", BuildTargets.Pack => "Packing", _ => "Building" };
         Workbench.StatusBar.Set(new StatusBarItem(BuildStatusItem, $"$(refresh) {verb} {what}…", StatusBarAlignment.Left, 45, ContributionSource.Shell.Id)
         {
             Command = "build.cancel",
@@ -130,7 +130,7 @@ public sealed partial class ShellHost
     {
         Workbench.Context.Set("buildRunning", false);
         var result = completed.Result;
-        var verb = completed.Request.Target switch { BuildTargets.Rebuild => "Rebuild", BuildTargets.Clean => "Clean", _ => "Build" };
+        var verb = completed.Request.Target switch { BuildTargets.Rebuild => "Rebuild", BuildTargets.Clean => "Clean", BuildTargets.Pack => "Pack", _ => "Build" };
         var text = result.Canceled ? $"$(warning) {verb} cancelled"
             : result.Succeeded ? $"$(check) {verb} succeeded"
             : $"$(error) {verb} failed";
@@ -173,7 +173,14 @@ public sealed partial class ShellHost
 
         try
         {
-            var program = await Runs.StartAsync(project, Workbench.Settings.GetBoolean(ExternalConsoleSetting, false), CancellationToken.None).ConfigureAwait(true);
+            var console = Workbench.Settings.GetString(RunConsoleSetting, "outputWindow");
+            if (console == "integratedTerminal" && Runs.IsExecutable(project))
+            {
+                await RunInTerminalAsync(project).ConfigureAwait(true);
+                return;
+            }
+
+            var program = await Runs.StartAsync(project, console == "externalConsole" || Workbench.Settings.GetBoolean(ExternalConsoleSetting, false), CancellationToken.None).ConfigureAwait(true);
             if (program.Channel is { } channel)
             {
                 Workbench.Output.Show(channel);

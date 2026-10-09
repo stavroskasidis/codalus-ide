@@ -19,6 +19,11 @@ public sealed class ViewLocator : IDataTemplate
         KeyboardShortcutsDocument document => new PaneHost(document, new KeyboardShortcutsView { DataContext = document.ViewModel }),
         CodeEditorDocument document => EditorHost(document),
         DiffDocument document => new PaneHost(document, new DiffView(document.ViewModel, document.Font)),
+        PackageManagerDocument document => new PaneHost(document, new PackageManagerView { DataContext = document.ViewModel }),
+        PackageSourcesDocument document => new PaneHost(document, new PackageSourcesView { DataContext = document.ViewModel }),
+        DotnetToolsDocument document => new PaneHost(document, new DotnetToolsView { DataContext = document.ViewModel }),
+        ProjectPropertiesDocument document => new PaneHost(document, new ProjectPropertiesView { DataContext = document.ViewModel }),
+        SolutionManagementDocument document => new PaneHost(document, BuildManagementContent(document.ViewModel)),
         _ => null,
     };
 
@@ -38,6 +43,15 @@ public sealed class ViewLocator : IDataTemplate
 
     public bool Match(object? data) => data is ToolWindowDockable or ShellDocument;
 
+    private static Control BuildManagementContent(object viewModel) => viewModel switch
+    {
+        ReferenceManagerViewModel vm => new ReferenceManagerView { DataContext = vm },
+        ConfigurationManagerViewModel vm => new ConfigurationManagerView { DataContext = vm },
+        ProjectDependenciesViewModel vm => new ProjectDependenciesView { DataContext = vm },
+        SdkViewModel vm => new SdkView { DataContext = vm },
+        _ => new TextBlock { Text = "This view is not available.", Margin = new Thickness(12) },
+    };
+
     private static Control BuildToolContent(object? content) => content switch
     {
         OutputViewModel vm => new OutputView { DataContext = vm },
@@ -56,6 +70,8 @@ public sealed class ViewLocator : IDataTemplate
         BreakpointsViewModel vm => new BreakpointsView { DataContext = vm },
         DebugConsoleViewModel vm => new DebugConsoleView { DataContext = vm },
         GitChangesViewModel vm => new GitChangesView { DataContext = vm },
+        TerminalViewModel vm => new TerminalView { DataContext = vm },
+        InteractiveViewModel vm => new InteractiveView { DataContext = vm },
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },
     };
 }

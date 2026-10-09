@@ -35,7 +35,8 @@ public sealed class DebugTests
 
         f.Shell.Run("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 180);
-        Assert.Equal(true, f.Shell.Workbench.Context.GetValue("debugStopped"));
+        // The context keys follow the state through Ui.Post.
+        await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("debugStopped"), true));
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == loop);
 
         // Locals, Call Stack, Watch, the Debug Console and a data tip.

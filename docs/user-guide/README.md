@@ -4,13 +4,15 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 
 1. [Installing and first start](getting-started.md)
 2. [Solutions and projects](solutions.md)
-3. [Editing and navigating code](editing.md)
-4. [Building and running](build-and-run.md)
-5. [Debugging](debugging.md)
-6. [Testing](testing.md)
-7. [Git](git.md)
-8. [Settings, themes and keyboard shortcuts](settings.md)
-9. [Troubleshooting, logs and crash reports](troubleshooting.md)
+3. [NuGet packages and .NET tools](packages.md)
+4. [Editing and navigating code](editing.md)
+5. [Building and running](build-and-run.md)
+6. [Debugging](debugging.md)
+7. [Testing](testing.md)
+8. [Git](git.md)
+9. [Terminal and C# Interactive](terminal.md)
+10. [Settings, themes and keyboard shortcuts](settings.md)
+11. [Troubleshooting, logs and crash reports](troubleshooting.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 
@@ -51,5 +53,8 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `Ctrl+R A`, `Ctrl+R Ctrl+A` | Run, debug all tests |
 | | `Ctrl+R T`, `Ctrl+R Ctrl+T` | Run, debug the tests at the cursor |
 | | `Ctrl+R L`, `Ctrl+R F` | Repeat the last run, run failed tests |
+| Terminal | `` Ctrl+` `` | Show or hide the terminal |
+| | `` Ctrl+Shift+` `` | New terminal |
+| | `Ctrl+E Ctrl+E` | Send selection to C# Interactive |
 | Git | `Ctrl+0 Ctrl+G` | Git Changes |
 | | `Ctrl+Alt+B` | Toggle blame |

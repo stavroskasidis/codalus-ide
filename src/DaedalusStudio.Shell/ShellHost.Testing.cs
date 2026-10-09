@@ -43,7 +43,16 @@ public sealed partial class ShellHost
     private void InitializeTesting()
     {
         Tests = new TestService { HistoryLength = Workbench.Settings.GetInt32(TestHistorySetting, 10) };
-        _proposedApi = new WorkbenchProposedApi(Solutions, Builds, Debugger, Languages, _ => Ui.RunAsync(SaveBeforeTestBuildAsync));
+        _proposedApi = new WorkbenchProposedApi(Solutions, Builds, Debugger, Languages, _ => Ui.RunAsync(SaveBeforeTestBuildAsync))
+        {
+            Terminals = Terminals,
+            DefaultTerminalDirectory = TerminalDirectory,
+            ShowTerminal = session => Ui.Post(() =>
+            {
+                Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
+                TerminalWindow.Show(session);
+            }),
+        };
         Plugins.ProposedApi = _proposedApi;
         Plugins.TestSink = Tests;
         TestExplorer = new TestExplorerViewModel(this);

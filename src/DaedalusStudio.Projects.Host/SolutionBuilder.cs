@@ -46,6 +46,7 @@ internal sealed class SolutionBuilder : IDisposable
         {
             BuildTargets.Rebuild => "Rebuild",
             BuildTargets.Clean => "Clean",
+            BuildTargets.Pack => "Pack",
             _ => "Build",
         };
         await events.BuildOutputAsync($"{msbuildTarget} started: {Path.GetFileName(path)} ({Describe(globalProperties)})").ConfigureAwait(false);

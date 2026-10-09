@@ -160,6 +160,7 @@ Proposed APIs are not covered by the versioning policy (ADR 0003): they may chan
 - **`Workspace`:** the open solution (`GetSolutionAsync`: projects with target frameworks, test project and test platform, compile files and project references), `GetProjectOutputAsync` (the build output per target framework), `FindTestCandidatesAsync` (test classes and methods found in source by the language service, before any build), `GetTypeOutlineAsync` (the type at a position and its methods), and the events `SolutionChanged` and `DocumentsChanged`.
 - **`Build`:** `BuildAsync(projects)` builds through the shell (after a build in progress; output in the Build channel and the Error List), and the `Finished` event.
 - **`Debug`:** `LaunchAsync` and `AttachAsync` start a debug session (netcoredbg, ADR 0007) and return its process id and an `Ended` task.
+- **`Terminals`** (0.2.3): `CreateAsync(new TerminalOptions { Program = "dotnet", Arguments = ["watch"] })` runs a command in an integrated terminal (ADR 0014); without `Program` it opens the user's shell (`Profile`, or the default). The `ITerminal` takes typed input (`SendTextAsync("dir\r")`), raises `Output` with the program's text when `ReportOutput` is set, completes `Exited` with the exit code, and closes on `KillAsync` or disposal.
 
 The built-in .NET test plugin (`src/Plugins/DaedalusStudio.Plugins.DotNetTest`) uses all of them.
 
@@ -173,6 +174,18 @@ The built-in .NET test plugin (`src/Plugins/DaedalusStudio.Plugins.DotNetTest`) 
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 0.2.3 (M10)
+
+Additive (plugins built for 0.2.0–0.2.2 keep working):
+- Proposed `ITerminals` (`context.Proposed().Terminals`): `CreateAsync` opens the user's shell (a profile) or runs a program in an integrated terminal ("run command in terminal"); the returned `ITerminal` sends text, raises `Output` (with `ReportOutput`) and completes `Exited` with the exit code; `KillAsync` and disposing close it.
+- Shell commands `workbench.view.terminal`, `terminal.new`, `terminal.split`, `terminal.kill`, `terminal.clear`, `terminal.find`, `terminal.openInTerminal`, `terminal.runSelectedText`, `workbench.view.interactive`, `interactive.reset`, `interactive.clear`, `interactive.sendSelection` and `interactive.initializeWithProject`.
+
+### 0.2.2 (M9)
+
+Additive (plugins built for 0.2.0 and 0.2.1 keep working):
+- Proposed `IWorkspace.GetPackagesAsync` (a project's top-level and transitive NuGet packages) and `IWorkspace.GetProjectPropertiesAsync` (evaluated MSBuild properties), read only.
+- Shell commands `packages.manage`, `packages.manageSolution`, `packages.sources`, `packages.tools`, `project.pack`, `project.properties`, `project.references`, `solution.configurationManager`, `solution.projectDependencies`, `project.unload`, `project.reload`, `solution.saveFilter` and `solution.sdks`; the context key `explorerProjectUnloaded`.
 
 ### 0.2.1 (M8)
 

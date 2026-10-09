@@ -210,6 +210,17 @@ public sealed class RunService : IDisposable
         profiles.FirstOrDefault(p => p.Name == ChosenProfile(projectPath)) ?? profiles.FirstOrDefault(p => p.IsRunnable);
 
     /// <summary>
+    /// What a run of <paramref name="projectPath"/> starts (program, arguments, directory, environment) with its launch
+    /// profile, for running it somewhere else (the integrated terminal). <c>Error</c> explains ignored launch settings.
+    /// </summary>
+    public async Task<(LaunchPlan Plan, LaunchProfile? Profile, string? Error)> PlanAsync(string projectPath, CancellationToken cancellationToken)
+    {
+        var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken).ConfigureAwait(false);
+        var profile = ResolveProfile(projectPath, profiles);
+        return (LaunchPlanner.Plan(info, profile), profile, error);
+    }
+
+    /// <summary>
     /// Starts a (built) project with its launch profile. Output goes to a "Run: name" channel, unless
     /// <paramref name="externalConsole"/> (Windows console apps) gives it a console window of its own.
     /// </summary>

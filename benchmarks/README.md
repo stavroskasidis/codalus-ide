@@ -28,7 +28,7 @@ dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- 
 dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- report --out benchmarks/results/summary.md
 ```
 
-The `shell` target is the published product shell in `artifacts/shell` (the publish puts the plugin host, build host, language service host and built-in plugins next to it). It runs every scenario; for `open-solution-50` the fixture's folder is trusted and restore-on-open is off in its fresh user data, since the harness restores the copy itself. Since M3 the editor scenarios run in the shell (`--open`, `--bench`); the results of the retired M0 prototypes remain under `results/windows/avalonia/` and `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
+The `shell` target is the published product shell in `artifacts/shell` (the publish puts the plugin host, build host, language service host, C# Interactive host and built-in plugins next to it). It runs every scenario; for `open-solution-50` the fixture's folder is trusted and restore-on-open is off in its fresh user data, since the harness restores the copy itself. Since M3 the editor scenarios run in the shell (`--open`, `--bench`); the results of the retired M0 prototypes remain under `results/windows/avalonia/` and `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
 
 ## Scenarios
 
@@ -39,7 +39,8 @@ The `shell` target is the published product shell in `artifacts/shell` (the publ
 | `open-solution-50` | Open a restored copy of the 50-project solution. VS Code is excluded: without the proprietary C# Dev Kit it has no solution explorer. | `solution_ready_ms` (black-box), `solution_structure_ms` (shell: tree from the solution file), `solution_loaded_ms` (in-app: every project evaluated), `language_ready_ms` (shell: the C# language service compiled every project once; informational), `memory_solution_private_mb` |
 | `self-driven` | Instrumented targets (the shell), on any OS including CI. The app drives typing (300 keys, 40 ms apart, mid-file) and scrolling (230 lines/s for 10 s, then 5 go-to-line jumps) itself. | `selfdriven_typing_ms`, `selfdriven_scroll_frame_ms`, `selfdriven_jump_ms`, `startup_interactive_ms`, `file_highlight_ms` |
 | `test-explorer` | The shell only (in-app events): open a restored copy of `samples/Tests5k` (FixtureGen `tests`: 20 xUnit projects, 5,000 tests), wait until the Test Explorer lists every test from source, apply filters, then run one class. Rider and Visual Studio are compared by hand. | `test_tree_ms` (solution structure → every test listed, before any build), `test_filter_frame_ms` (filter → rendered frame), `test_first_result_ms` (Run → first result, build included; informational) |
-| `binary-size` | Static measurement. | `shell_mb`, `shell_zip_mb` and one `<helper>_mb` per helper folder (`pluginhost`, `buildhost`, `plugins`, `lshost`); IDEs: `install_mb` (informative) |
+| `terminal` | The shell only (in-app events, no keystroke injection): a terminal prints a 1M-line file (`cat`, `type` on Windows), then a keystroke is written to the default shell 60 times. | `terminal_frame_ms` (frame intervals while printing), `terminal_cat_ms` and `terminal_cat_lines_per_s`, `terminal_memory_mb` (managed memory the terminal keeps, 10k lines of scrollback), `terminal_echo_ms` (write → echo rendered) |
+| `binary-size` | Static measurement. | `shell_mb`, `shell_zip_mb` and one `<helper>_mb` per helper folder (`pluginhost`, `buildhost`, `plugins`, `lshost`, `replhost`); IDEs: `install_mb` (informative) |
 
 ## Methods
 

@@ -14,7 +14,7 @@ internal sealed record RunOptions(int? Runs, bool AllowInput, TextWriter Log, bo
 /// </summary>
 internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 {
-    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "self-driven", "test-explorer", "binary-size"];
+    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "self-driven", "test-explorer", "packages", "terminal", "binary-size"];
 
     /// <summary>The tests in samples/Tests5k (FixtureGen <c>tests</c>) as found in source: 20 projects × 250 (a theory is one test until a runner lists its cases).</summary>
     private const int Tests5kLeaves = 20 * 10 * 25;
@@ -33,7 +33,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
     public static bool Applies(Target target, string scenario) => target.SupportedScenarios?.Contains(scenario) != false && scenario switch
     {
         "self-driven" => target.IsPrototype,
-        "test-explorer" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
+        "test-explorer" or "packages" or "terminal" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
         "open-solution-50" => target.Name != "vscode", // VS Code has no solution explorer without proprietary C# Dev Kit.
         "cold-start" or "editor-100k" => target.IsPrototype || OperatingSystem.IsWindows() || target.Name == "vscode",
         _ => true,
@@ -70,6 +70,12 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 break;
             case "test-explorer":
                 await TestExplorerAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
+                break;
+            case "packages":
+                await PackagesAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
+                break;
+            case "terminal":
+                await TerminalAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
                 break;
             case "binary-size":
                 BinarySize(target, result);
@@ -378,6 +384,94 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             }
 
             Log($"  {target.Name} test-explorer run {run}: tree {Last(result, "test_tree_ms")} ms, filter max {Max(result, "test_filter_frame_ms")} ms, first result {Last(result, "test_first_result_ms")} ms");
+        }
+    }
+
+    /// <summary>
+    /// The NuGet Package Manager (M9) on a copy of samples/Packages and its local feed: search pages from the host's
+    /// response to the rendered list, and an update from the click to the project's new compiler inputs, minus restore.
+    /// </summary>
+    private async Task PackagesAsync(Target target, ScenarioResult result, int runs, CancellationToken cancellationToken)
+    {
+        var source = Path.Combine(repoRoot, "samples", "Packages");
+        RequireFixture(source);
+        result.Notes.Add("In-app: package_search_frame_ms is from the host's search response to the rendered page; package_install_overhead_ms is "
+                         + "Update → the project's new compiler inputs, minus the restore in between (local feed).");
+        for (var run = 0; run < runs; run++)
+        {
+            var work = NewWorkDir();
+            var copy = CopyDirectory(source, Path.Combine(work, "Packages"));
+            var solution = Path.Combine(copy, "Packages.slnx");
+            Machine.Run("dotnet", $"restore \"{solution}\" -v q");
+            await using var session = await LaunchAsync(target, new LaunchRequest(work, Solution: solution, Bench: "packages", ExitOn: "done"), cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await session.Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromMinutes(8), cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                result.Notes.Add($"run {run}: the scenario did not finish within 8 minutes");
+            }
+
+            var events = BenchEventLog.Read(session.EventsFile);
+            foreach (var search in events.Where(e => e.Name == BenchEventNames.PackageSearch))
+            {
+                result.Add("package_search_frame_ms", search.Field("frame_us") / 1000.0);
+                result.Add("package_search_ms", search.Field("elapsed_us") / 1000.0);
+            }
+
+            foreach (var open in events.Where(e => e.Name == BenchEventNames.PropertiesOpen))
+            {
+                result.Add("properties_open_ms", open.Field("elapsed_us") / 1000.0);
+            }
+
+            if (events.FirstOrDefault(e => e.Name == BenchEventNames.PackageInstall) is { } install)
+            {
+                result.Add("package_install_ms", install.Field("elapsed_us") / 1000.0);
+                result.Add("package_install_overhead_ms", (install.Field("elapsed_us") - install.Field("restore_us")) / 1000.0);
+            }
+
+            Log($"  {target.Name} packages run {run}: search frame max {Max(result, "package_search_frame_ms")} ms, install {Last(result, "package_install_ms")} ms (overhead {Last(result, "package_install_overhead_ms")} ms)");
+        }
+    }
+
+    private async Task TerminalAsync(Target target, ScenarioResult result, int runs, CancellationToken cancellationToken)
+    {
+        result.Notes.Add("In-app (ADR 0014): terminal_frame_ms are frame intervals while a terminal prints a 1M-line file (cat, or type on "
+                         + "Windows); terminal_cat_ms is until the program exited and its output was parsed; terminal_memory_mb is the managed "
+                         + "memory the terminal keeps (10k lines of scrollback); terminal_echo_ms is a keystroke written to the default shell "
+                         + "until its echo is rendered.");
+        for (var run = 0; run < runs; run++)
+        {
+            await using var session = await LaunchAsync(target, new LaunchRequest(NewWorkDir(), Bench: "terminal", ExitOn: "done"), cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await session.Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromMinutes(8), cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                result.Notes.Add($"run {run}: the scenario did not finish within 8 minutes");
+            }
+
+            var events = BenchEventLog.Read(session.EventsFile);
+            foreach (var frame in events.Where(e => e.Name == BenchEventNames.TerminalFrame))
+            {
+                result.Add("terminal_frame_ms", frame.Field("frame_us") / 1000.0);
+            }
+
+            if (events.FirstOrDefault(e => e.Name == BenchEventNames.TerminalCat) is { } cat)
+            {
+                result.Add("terminal_cat_ms", cat.Field("elapsed_us") / 1000.0);
+                result.Add("terminal_cat_lines_per_s", cat.Field("lines") / (cat.Field("elapsed_us") / 1_000_000.0));
+                result.Add("terminal_memory_mb", cat.Field("memory_bytes") / (1024.0 * 1024.0));
+            }
+
+            foreach (var echo in events.Where(e => e.Name == BenchEventNames.TerminalEcho))
+            {
+                result.Add("terminal_echo_ms", echo.Field("latency_us") / 1000.0);
+            }
+
+            Log($"  {target.Name} terminal run {run}: cat {Last(result, "terminal_cat_ms")} ms, frame max {Max(result, "terminal_frame_ms")} ms, memory {Last(result, "terminal_memory_mb")} MB, echo max {Max(result, "terminal_echo_ms")} ms");
         }
     }
 

@@ -3,5 +3,7 @@
     <Description>Platform abstraction: OS conventions for paths, keyboard modifiers, file watching and shell integration.</Description>
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
+    <!-- The pseudo-terminal P/Invoke (Pty/) uses pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 </Project>

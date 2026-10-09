@@ -1,0 +1,145 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.ProjectPropertiesView"
+             x:DataType="vm:ProjectPropertiesViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.property">
+      <Setter Property="Padding" Value="12,8" />
+      <Setter Property="Margin" Value="0,0,0,4" />
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.property.set">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Modified}" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Padding="16,10" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.Border}">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock Classes="heading" VerticalAlignment="Center" Text="{Binding Title}" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsPropertiesPage}" Margin="0,0,12,0">
+          <TextBlock VerticalAlignment="Center" Text="Configuration:" />
+          <ComboBox x:Name="ScopePicker" MinWidth="170" ItemsSource="{Binding Scopes}" SelectedItem="{Binding Scope}" AutomationProperties.Name="Configuration" />
+        </StackPanel>
+        <Button Grid.Column="2" Classes="link" Content="Edit Project File" Command="{Binding OpenProjectFileCommand}" />
+      </Grid>
+    </Border>
+    <Grid ColumnDefinitions="180,*">
+      <ListBox x:Name="PageList" ItemsSource="{Binding Pages}" SelectedItem="{Binding SelectedPage}" Background="Transparent" Margin="0,8,0,0" AutomationProperties.Name="Property pages">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:PropertyPage">
+            <TextBlock Text="{Binding Title}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <!-- Properties. -->
+      <ScrollViewer Grid.Column="1" IsVisible="{Binding IsPropertiesPage}">
+        <StackPanel Margin="16,8,16,16" Spacing="4">
+          <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+          <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
+          <ItemsControl x:Name="Sections" ItemsSource="{Binding Sections}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:PropertySectionViewModel">
+                <StackPanel Spacing="4" Margin="0,8,0,4">
+                  <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" />
+                  <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:PropertyItemViewModel">
+                        <Border Classes="property" Classes.set="{Binding IsSetInProject}">
+                          <StackPanel Spacing="3">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <TextBlock FontWeight="SemiBold" Text="{Binding Label}" />
+                              <TextBlock Classes="muted" FontSize="11" VerticalAlignment="Center" Text="{Binding Name}" />
+                            </StackPanel>
+                            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+                            <TextBox Width="460" HorizontalAlignment="Left" IsVisible="{Binding IsText}" IsEnabled="{Binding CanEdit}"
+                                     Text="{Binding Text, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="{Binding Label}" />
+                            <CheckBox IsVisible="{Binding IsBool}" IsEnabled="{Binding CanEdit}" IsChecked="{Binding BoolValue}" Content="{Binding Label}" AutomationProperties.Name="{Binding Label}" />
+                            <ComboBox MinWidth="260" IsVisible="{Binding IsChoice}" IsEnabled="{Binding CanEdit}" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}"
+                                      PlaceholderText="(default)" AutomationProperties.Name="{Binding Label}">
+                              <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PropertyOption">
+                                  <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                              </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Classes="muted" FontSize="11" Text="{Binding EvaluatedNote}" IsVisible="{Binding HasEvaluatedNote}" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <Button Classes="link" FontSize="11" Content="{Binding Origin}" Command="{Binding OpenDefinitionCommand}" ToolTip.Tip="Open the file that sets it" />
+                              <Button Classes="link" FontSize="11" Content="Reset" Command="{Binding ResetCommand}" IsVisible="{Binding IsSetInProject}"
+                                      ToolTip.Tip="Remove it from the project file (back to the inherited or default value)" AutomationProperties.Name="{Binding Label, StringFormat='Reset {0}'}" />
+                            </StackPanel>
+                            <TextBlock Classes="muted" FontSize="11" FontStyle="Italic" Text="{Binding ScopeNote}" IsVisible="{Binding !CanEdit}" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- Debug: launch profiles. -->
+      <Panel Grid.Column="1" IsVisible="{Binding IsLaunchProfilesPage}">
+      <DockPanel Margin="16,8" DataContext="{Binding LaunchProfiles}" x:DataType="vm:LaunchProfilesViewModel">
+        <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,8">
+          <TextBlock FontSize="15" FontWeight="SemiBold" Text="Launch profiles" />
+          <TextBlock Classes="muted" TextWrapping="Wrap" Text="How F5 and Ctrl+F5 start the project (the same file dotnet run uses)." />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Classes="muted" FontSize="11" VerticalAlignment="Center" Text="{Binding Location}" />
+            <Button Grid.Column="1" Classes="link" Content="Open launchSettings.json" Command="{Binding OpenFileCommand}" />
+          </Grid>
+          <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+          <Button Content="Save" Command="{Binding SaveCommand}" AutomationProperties.Name="Save launch profiles" />
+          <Button Content="Revert" Command="{Binding RevertCommand}" />
+        </StackPanel>
+        <Grid ColumnDefinitions="220,*">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+              <Button Content="New…" Command="{Binding AddCommand}" />
+              <Button Content="Rename…" Command="{Binding RenameCommand}" />
+              <Button Content="Delete" Command="{Binding RemoveCommand}" />
+            </StackPanel>
+            <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Launch profiles">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:LaunchProfileViewModel">
+                  <TextBlock Text="{Binding Name}" />
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+          <Panel Grid.Column="1" IsVisible="{Binding HasSelection}">
+            <ScrollViewer>
+              <StackPanel Margin="16,0,0,0" Spacing="6" DataContext="{Binding Selected}" x:DataType="vm:LaunchProfileViewModel">
+                <TextBlock Text="Launch" />
+                <ComboBox MinWidth="200" ItemsSource="{x:Static vm:LaunchProfilesViewModel.CommandNames}" SelectedItem="{Binding CommandName}" AutomationProperties.Name="Launch" />
+                <TextBlock Text="Executable" IsVisible="{Binding IsExecutable}" />
+                <TextBox Text="{Binding ExecutablePath}" IsVisible="{Binding IsExecutable}" AutomationProperties.Name="Executable" />
+                <TextBlock Text="Command line arguments" />
+                <TextBox Text="{Binding CommandLineArgs}" AutomationProperties.Name="Command line arguments" />
+                <TextBlock Text="Working directory" />
+                <TextBox Text="{Binding WorkingDirectory}" AutomationProperties.Name="Working directory" />
+                <TextBlock Text="Environment variables (NAME=value, one per line)" />
+                <TextBox Text="{Binding EnvironmentVariables}" AcceptsReturn="True" MinHeight="70" AutomationProperties.Name="Environment variables" />
+                <TextBlock Text="App URL (web projects)" />
+                <TextBox Text="{Binding ApplicationUrl}" PlaceholderText="https://localhost:5001;http://localhost:5000" AutomationProperties.Name="App URL" />
+                <CheckBox Content="Launch browser" IsChecked="{Binding LaunchBrowser}" />
+                <TextBlock Text="URL to open" />
+                <TextBox Text="{Binding LaunchUrl}" PlaceholderText="relative to the app URL, e.g. swagger" AutomationProperties.Name="Launch URL" />
+              </StackPanel>
+            </ScrollViewer>
+          </Panel>
+        </Grid>
+      </DockPanel>
+      </Panel>
+    </Grid>
+  </DockPanel>
+</UserControl>

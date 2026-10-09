@@ -4,10 +4,11 @@ using DaedalusStudio.Benchmarks.FixtureGen;
 //   daedalus-fixturegen large-file <out-dir> [lines=100000]
 //   daedalus-fixturegen solution   <out-dir> [projects=50]
 //   daedalus-fixturegen tests      <out-dir> [projects=20]   (250 xUnit tests per project)
+//   daedalus-fixturegen packages   <feed-dir>              (samples/Packages/feed: committed, M9)
 //   daedalus-fixturegen all        <samples-dir>
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("usage: daedalus-fixturegen (large-file|solution|tests|all) <out-dir> [count]");
+    Console.Error.WriteLine("usage: daedalus-fixturegen (large-file|solution|tests|packages|all) <out-dir> [count]");
     return 2;
 }
 
@@ -23,6 +24,9 @@ switch (args[0])
         break;
     case "tests":
         TestsGenerator.Write(outDir, count > 0 ? count : TestsGenerator.DefaultProjects);
+        break;
+    case "packages":
+        PackageFeedGenerator.Write(outDir);
         break;
     case "all":
         LargeFileGenerator.WriteProject(Path.Combine(outDir, "Large100k"), LargeFileGenerator.DefaultLines);

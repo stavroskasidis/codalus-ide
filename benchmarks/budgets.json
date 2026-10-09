@@ -21,7 +21,13 @@
     { "target": "shell", "scenario": "self-driven", "metric": "selfdriven_typing_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b" },
     { "target": "shell", "scenario": "self-driven", "metric": "selfdriven_scroll_frames_over_50ms", "stat": "max", "max": 0, "source": "ADR 0002 #3b" },
     { "target": "shell", "scenario": "test-explorer", "metric": "test_tree_ms", "stat": "p50", "max": 1000, "source": "M8 (proposed)" },
-    { "target": "shell", "scenario": "test-explorer", "metric": "test_filter_frame_ms", "stat": "max", "max": 50, "source": "M8 (proposed)" }
+    { "target": "shell", "scenario": "test-explorer", "metric": "test_filter_frame_ms", "stat": "max", "max": 50, "source": "M8 (proposed)" },
+    { "target": "shell", "scenario": "packages", "metric": "package_search_frame_ms", "stat": "max", "max": 200, "source": "M9 (proposed)" },
+    { "target": "shell", "scenario": "packages", "metric": "package_install_overhead_ms", "stat": "p50", "max": 2000, "source": "M9 (proposed)" },
+    { "target": "shell", "scenario": "packages", "metric": "properties_open_ms", "stat": "p50", "max": 300, "source": "M9 (proposed)" },
+    { "target": "shell", "scenario": "terminal", "metric": "terminal_frame_ms", "stat": "max", "max": 50, "source": "M10 (proposed, ADR 0014)" },
+    { "target": "shell", "scenario": "terminal", "metric": "terminal_echo_ms", "stat": "p99", "max": 40, "os": "windows", "source": "M10 (proposed: ConPTY and PSReadLine round trip included)" },
+    { "target": "shell", "scenario": "terminal", "metric": "terminal_memory_mb", "stat": "max", "max": 30, "source": "M10 (proposed, ADR 0014)" }
   ],
   "regression": {
     "latencyP50": 0.10,

@@ -21,7 +21,7 @@ namespace DaedalusStudio.Shell.Infrastructure;
 
 /// <summary>
 /// The end-to-end smoke test (<c>--smoke-test samples</c>): drives the real, windowed app through one feature of each
-/// milestone (M1–M6 on a copy of <c>samples/BuildAndRun</c>, M8 on part of <c>samples/Testing</c>), with the hosts,
+/// milestone (M1–M6 on a copy of <c>samples/BuildAndRun</c>, M8 on part of <c>samples/Testing</c>, M9 on <c>samples/Packages</c>), with the hosts,
 /// plugins and debugger it was installed with. It is what CI runs on the published Native AOT build and on the release packages of every OS, so it catches what
 /// the in-process headless tests cannot: trimming and AOT breaks, the installed folder layout, and the real windowing
 /// platform. Results go to <c>smoke-test.json</c>, <c>smoke-test.md</c> and screenshots in the logs folder, and to
@@ -319,6 +319,46 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(output.Contains("GREETING: from the launch profile", StringComparison.Ordinal), "the launch profile's environment arrived");
         }, "build.solution").ConfigureAwait(true);
 
+        // M10: the integrated terminal (ADR 0014), while BuildAndRun is open.
+        await StepAsync("terminal.shell", "M10", "A terminal runs the default shell with shell integration", async () =>
+        {
+            var profile = shell.Terminals.FindProfile(shell.Workbench.Settings.GetString(ShellHost.TerminalDefaultProfileSetting))
+                ?? throw new SmokeFailure("No shell was found for the terminal.");
+            Console.Out.WriteLine($"  profile: {profile.Name} ({profile.Executable})");
+            var marks = new System.Collections.Concurrent.ConcurrentQueue<DaedalusStudio.Terminal.CommandMark>();
+            var session = shell.ShowTerminal(newTerminal: true, profile: profile.Id) ?? throw new SmokeFailure("The terminal did not start.");
+            session.Terminal.MarkReceived += marks.Enqueue;
+            await Task.Delay(1500).ConfigureAwait(true); // let the shell print its prompt
+            session.Write(profile.Shell switch
+            {
+                "pwsh" or "powershell" => "6*7\r",
+                "cmd" => "set /a 6*7\r",
+                "fish" => "math 6*7\r",
+                _ => "echo $((6*7))\r",
+            });
+            await WaitAsync(() => session.Terminal.ScreenText().Split('\n').Any(l => l.Trim() == "42"), "the shell prints 42", 60).ConfigureAwait(true);
+            if (profile.Shell is "bash" or "zsh" or "pwsh")
+            {
+                await WaitAsync(() => marks.Any(m => m is { Kind: DaedalusStudio.Terminal.CommandMarkKind.CommandEnd, ExitCode: 0 }), "shell integration reports the command's exit code (OSC 133)").ConfigureAwait(true);
+                Check(session.Terminal.WorkingDirectory is { Length: > 0 }, "shell integration reports the working directory (OSC 7)");
+            }
+
+            shell.TerminalWindow.Kill(shell.TerminalWindow.Tabs.First(t => t.Primary == session));
+            await WaitAsync(() => !shell.Terminals.Sessions.Contains(session), "the terminal closes", 20).ConfigureAwait(true);
+        }).ConfigureAwait(true);
+
+        await StepAsync("run.terminal", "M10", "A console app runs in the integrated terminal", async () =>
+        {
+            var hello = Path.Combine(_folder, "src", "Hello", "Hello.csproj");
+            Check(await shell.RunInTerminalAsync(hello).ConfigureAwait(true), "the program started in a terminal");
+            var session = shell.Terminals.Sessions[^1];
+            await WaitAsync(() => session.ExitCode is not null, "the program exits", 120).ConfigureAwait(true);
+            Check(session.ExitCode == 0, $"it exited with 0 (got {session.ExitCode})");
+            var screen = string.Join('\n', Enumerable.Range(0, session.Terminal.TotalRows).Select(i => session.Terminal.GetRow(i).GetText()));
+            Check(screen.Contains("Hello from Hello", StringComparison.Ordinal), "its output is in the terminal");
+            Check(screen.Contains("args: one two words", StringComparison.Ordinal), "the launch profile's arguments arrived");
+        }, "build.solution").ConfigureAwait(true);
+
         // M5: debugging (netcoredbg).
         await StepAsync("debug.session", "M5", "F5 stops at a breakpoint; locals, evaluation and continue to exit", async () =>
         {
@@ -402,6 +442,68 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => editor.CoverageMargin.Lines.Count > 0, "the editor colors the lines").ConfigureAwait(true);
             await WaitAsync(() => shell.Layout.IsVisible(CoverageResultsViewModel.ToolWindowId) && shell.CoverageResults.Rows.Any(r => r.Label == "Arithmetic"), "Coverage Results lists the class").ConfigureAwait(true);
         }, "testing.run").ConfigureAwait(true);
+
+        // M9: NuGet packages, on a copy of samples/Packages and its local feed (ADR 0012).
+        await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>
+        {
+            await shell.OpenSolutionAsync(PreparePackagesFixture()).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState == "succeeded", "the Packages solution is open and restored", 300).ConfigureAwait(true);
+            var vm = shell.OpenPackageManager(PlainProject) ?? throw new SmokeFailure("The NuGet Package Manager did not open.");
+            await WaitAsync(() => vm.Sources.Contains("local"), "the package sources are listed").ConfigureAwait(true);
+            vm.SelectedSource = "local";
+            vm.Search = "Daedalus.Sample.Greeting";
+            await WaitAsync(() => vm.Rows.Any(r => r is { Id: "Daedalus.Sample.Greeting", Version: "1.1.0", InstalledVersion: "1.0.0" }) && !vm.IsLoading, "the feed's package shows with its installed version", 60).ConfigureAwait(true);
+            vm.Selected = vm.Rows.First(r => r.Id == "Daedalus.Sample.Greeting");
+            await WaitAsync(() => vm.Details is { IsLoading: false, Package: not null, HasReadme: true }, "its details and README load", 60).ConfigureAwait(true);
+            vm.Details!.InstallCommand.Execute(null);
+            await WaitAsync(() => vm.Details?.InstalledVersion == "1.1.0" && ReadText(PlainProject).Contains("Version=\"1.1.0\"", StringComparison.Ordinal), "Update to 1.1.0 edits the project and restores", 300).ConfigureAwait(true);
+            vm.Tab = PackageTab.Installed;
+            vm.Search = string.Empty; // the search box also filters the Installed tab
+            await WaitAsync(() => vm.Rows.Any(r => r is { Id: "Daedalus.Sample.Text", IsTransitive: true }), "the new transitive dependency is listed", 120).ConfigureAwait(true);
+        }, "projects.open").ConfigureAwait(true);
+
+        await StepAsync("packages.pack", "M9", "Pack writes the project's NuGet package", async () =>
+        {
+            var created = await shell.PackAsync(PlainProject).ConfigureAwait(true);
+            Check(created.Count == 1 && File.Exists(created[0]) && created[0].EndsWith("Plain.1.0.0.nupkg", StringComparison.Ordinal), "Plain.1.0.0.nupkg was created");
+        }, "packages.manage").ConfigureAwait(true);
+
+        // M9: project properties and solution management (ADR 0013), on the same solution.
+        await StepAsync("projects.properties", "M9", "Property pages show provenance and edit the project; Configuration Manager; unload and reload", async () =>
+        {
+            var properties = shell.OpenProjectProperties(PlainProject) ?? throw new SmokeFailure("The property pages did not open.");
+            await WaitAsync(() => properties.Sections.Count > 0 && !properties.IsLoading, "the Application page loads").ConfigureAwait(true);
+            var items = properties.Sections.SelectMany(s => s.Items).ToDictionary(i => i.Definition.Name);
+            Check(items["Nullable"].Origin.StartsWith("Set in Plain.csproj", StringComparison.Ordinal), "Nullable comes from Plain.csproj");
+            items["RootNamespace"].Text = "Smoke.Plain";
+            await WaitAsync(() => ReadText(PlainProject).Contains("<RootNamespace>Smoke.Plain</RootNamespace>", StringComparison.Ordinal), "RootNamespace is written to the project").ConfigureAwait(true);
+
+            var configurations = shell.OpenConfigurationManager() ?? throw new SmokeFailure("The Configuration Manager did not open.");
+            await WaitAsync(() => configurations.Rows.Count == 4, "it lists the four projects").ConfigureAwait(true);
+
+            var multi = Path.Combine(_work, "Packages", "src", "Multi", "Multi.csproj");
+            await shell.UnloadProjectAsync(multi).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.TryGetValue(multi, out var p) && p.State == Projects.Protocol.ProjectStates.Unloaded, "Multi is unloaded").ConfigureAwait(true);
+            await shell.ReloadProjectAsync(multi).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.TryGetValue(multi, out var p) && p.State == Projects.Protocol.ProjectStates.Loaded, "Multi is loaded again", 60).ConfigureAwait(true);
+        }, "packages.manage").ConfigureAwait(true);
+
+        // M10: C# Interactive (ADR 0015), initialized with Plain (which references a package from the fixture feed).
+        await StepAsync("interactive.repl", "M10", "C# Interactive runs code, references a project and a NuGet package", async () =>
+        {
+            var window = shell.ShowInteractive();
+            await window.ExecuteAsync("var answer = 6 * 7;").ConfigureAwait(true);
+            await window.ExecuteAsync("answer").ConfigureAwait(true);
+            await WaitAsync(() => window.Transcript.GetText().Split('\n').Any(l => l.Trim() == "42"), "a submission prints 42", 60).ConfigureAwait(true);
+
+            await shell.InitializeInteractiveWithProjectAsync(PlainProject).ConfigureAwait(true);
+            await window.ExecuteAsync("Plain.Hello.Ada()").ConfigureAwait(true);
+            await WaitAsync(() => window.Transcript.GetText().Contains("\"Hello, Ada\"", StringComparison.Ordinal), "the project's code runs: " + Tail(window.Transcript.GetText(), 1500), 120).ConfigureAwait(true);
+
+            await window.ExecuteAsync("#r \"nuget: Daedalus.Sample.Text, 1.0.0\"").ConfigureAwait(true);
+            await window.ExecuteAsync("Daedalus.Sample.Text.Text.Shout(\"hi\")").ConfigureAwait(true);
+            await WaitAsync(() => window.Transcript.GetText().Contains("\"HI!\"", StringComparison.Ordinal), "a #r \"nuget:\" package runs: " + Tail(window.Transcript.GetText(), 1500), 180).ConfigureAwait(true);
+        }, "packages.manage").ConfigureAwait(true);
     }
 
     private Workbench.Testing.TestNode? TestClass(string project) =>
@@ -492,6 +594,28 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     /// Copies samples/Testing next to BuildAndRun and returns a solution with the code under test and the two xUnit
     /// projects (one per test platform), so the step builds three projects rather than eight.
     /// </summary>
+    private string PlainProject => Path.Combine(_work, "Packages", "src", "Plain", "Plain.csproj");
+
+    private string PreparePackagesFixture()
+    {
+        Check(File.Exists(Path.Combine(samples, "Packages", "Packages.slnx")), $"the samples folder {samples} has Packages");
+        Copy(Path.Combine(samples, "Packages"), Path.Combine(_work, "Packages"));
+        return Path.Combine(_work, "Packages", "Packages.slnx");
+    }
+
+    /// <summary>A file's text, or empty while another process writes it.</summary>
+    private static string ReadText(string path)
+    {
+        try
+        {
+            return File.ReadAllText(path);
+        }
+        catch (IOException)
+        {
+            return string.Empty;
+        }
+    }
+
     private string PrepareTestingFixture()
     {
         Check(File.Exists(Path.Combine(samples, "Testing", "Testing.slnx")), $"the samples folder {samples} has Testing");

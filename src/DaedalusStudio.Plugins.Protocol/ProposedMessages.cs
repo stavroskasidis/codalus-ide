@@ -12,10 +12,15 @@ public static class ProposedMethods
     public const string WorkspaceProjectOutput = "workspace/projectOutput";
     public const string WorkspaceTestCandidates = "workspace/testCandidates";
     public const string WorkspaceTypeOutline = "workspace/typeOutline";
+    public const string WorkspacePackages = "workspace/packages";
+    public const string WorkspaceProperties = "workspace/properties";
     public const string BuildStart = "build/start";
     public const string DebugLaunch = "debug/launch";
     public const string DebugAttach = "debug/attach";
     public const string DebugStop = "debug/stop";
+    public const string TerminalCreate = "terminal/create";
+    public const string TerminalSendText = "terminal/sendText";
+    public const string TerminalKill = "terminal/kill";
 
     // host → shell (notifications)
     public const string TestsCreateController = "tests/createController";
@@ -36,6 +41,8 @@ public static class ProposedMethods
     public const string WorkspaceDocumentsChanged = "workspace/documentsChanged";
     public const string BuildFinished = "build/finished";
     public const string DebugEnded = "debug/ended";
+    public const string TerminalOutput = "terminal/output";
+    public const string TerminalExited = "terminal/exited";
 }
 
 // ------------------------------------------------------------------ workspace
@@ -60,6 +67,18 @@ public sealed record ProjectOutputParams(string Path, string? TargetFramework);
 public sealed record ProjectOutputDto(string Path, string? TargetFramework, string? TargetPath, string? RunCommand, string? RunArguments, string? RunWorkingDirectory);
 
 public sealed record DocumentUrisParams(string[] Uris);
+
+/// <summary><c>workspace/packages</c> (since protocol 0.2, API 0.2.2).</summary>
+public sealed record WorkspacePackagesParams(string Path);
+
+public sealed record WorkspacePackageDto(string Id, string? RequestedVersion, string? ResolvedVersion, bool IsTransitive, string[] TargetFrameworks);
+
+public sealed record WorkspacePackagesResult(WorkspacePackageDto[] Packages);
+
+/// <summary><c>workspace/properties</c> (since protocol 0.2, API 0.2.2).</summary>
+public sealed record WorkspacePropertiesParams(string Path, string[] Names);
+
+public sealed record WorkspacePropertiesResult(Dictionary<string, string> Values);
 
 /// <summary>Zero-based, LSP style.</summary>
 public sealed record RangeDto(int StartLine, int StartCharacter, int EndLine, int EndCharacter);
@@ -99,6 +118,33 @@ public sealed record DebugSessionDto(string SessionId, int ProcessId);
 public sealed record DebugSessionParams(string SessionId);
 
 public sealed record DebugEndedParams(string SessionId, int? ExitCode);
+
+// ------------------------------------------------------------------ terminals (since API 0.2.3)
+
+/// <summary>
+/// <c>terminal/create</c>: a shell (<see cref="Profile"/>, null for the default) or, with <see cref="Program"/>, that
+/// program in a terminal. <see cref="ReportOutput"/> asks for <c>terminal/output</c> notifications.
+/// </summary>
+public sealed record TerminalCreateParams(
+    string? Name,
+    string? Profile,
+    string? WorkingDirectory,
+    string? Program,
+    string[]? Arguments,
+    Dictionary<string, string>? Environment,
+    bool Show,
+    bool ReportOutput);
+
+public sealed record TerminalDto(string TerminalId, int ProcessId);
+
+public sealed record TerminalIdParams(string TerminalId);
+
+public sealed record TerminalTextParams(string TerminalId, string Text);
+
+/// <summary>Text the program wrote (UTF-8 decoded, escape sequences included).</summary>
+public sealed record TerminalOutputParams(string TerminalId, string Text);
+
+public sealed record TerminalExitedParams(string TerminalId, int? ExitCode);
 
 // ------------------------------------------------------------------ tests
 

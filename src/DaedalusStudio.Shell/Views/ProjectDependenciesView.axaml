@@ -1,0 +1,42 @@
+<local:LoadingView xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+                   xmlns:local="using:DaedalusStudio.Shell.Views"
+                   xmlns:protocol="using:DaedalusStudio.Projects.Protocol"
+                   x:Class="DaedalusStudio.Shell.Views.ProjectDependenciesView"
+                   x:DataType="vm:ProjectDependenciesViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+      <TextBlock Classes="heading" Text="Project Dependencies" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="Projects build after the projects they reference. Check projects here to make the selected project also wait for them." />
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock VerticalAlignment="Center" Text="Project:" />
+        <ComboBox MinWidth="240" ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Project">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="protocol:SolutionProjectInfo">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+    </StackPanel>
+    <Grid ColumnDefinitions="*,16,*">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="Depends on" />
+        <Button DockPanel.Dock="Bottom" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Apply" Command="{Binding ApplyCommand}" AutomationProperties.Name="Apply dependencies" />
+        <ListBox ItemsSource="{Binding DependsOn}" AutomationProperties.Name="Depends on">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ReferenceChoiceViewModel">
+              <CheckBox Content="{Binding Name}" IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Name}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <DockPanel Grid.Column="2">
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="Build order" />
+        <ListBox ItemsSource="{Binding BuildOrder}" AutomationProperties.Name="Build order" />
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</local:LoadingView>

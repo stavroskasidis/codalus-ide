@@ -18,6 +18,9 @@ public interface IProposedApi
 
     /// <summary>Debug sessions through the shell's debugger.</summary>
     IDebug Debug { get; }
+
+    /// <summary>Integrated terminals: open a shell or run a command in one, send it text, read its output. Since API 0.2.3.</summary>
+    ITerminals Terminals { get; }
 }
 
 /// <summary>Implemented by plugin contexts that can offer proposed APIs.</summary>

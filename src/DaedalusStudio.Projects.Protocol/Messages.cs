@@ -76,6 +76,9 @@ public sealed record InitializeResult(string ServerName, string ServerVersion, s
 /// </summary>
 public sealed record OpenSolutionParams(string Path, bool Trusted, string? Configuration, string? Platform, bool Restore, Dictionary<string, string>? ActiveFrameworks = null);
 
+// A solution filter (.slnf) opens its solution with only the filter's projects loaded (ADR 0013); SolutionInfo.Path is
+// the solution itself and SolutionInfo.FilterPath the filter.
+
 /// <summary>The structure from the solution file, sent before any evaluation.</summary>
 public sealed record SolutionInfo(
     string Path,
@@ -84,7 +87,8 @@ public sealed record SolutionInfo(
     SolutionProjectInfo[] Projects,
     SolutionConfigurationInfo[] Configurations,
     SolutionConfigurationInfo? Active,
-    bool Trusted);
+    bool Trusted,
+    string? FilterPath = null);
 
 /// <summary>A solution folder. <see cref="Id"/> is its path inside the solution, e.g. <c>/src/tests/</c>.</summary>
 public sealed record SolutionFolderInfo(string Id, string Name, string? Parent, string[] Files);
@@ -115,6 +119,9 @@ public static class ProjectStates
     public const string Untrusted = "untrusted";
     public const string Unsupported = "unsupported";
     public const string Missing = "missing";
+
+    /// <summary>Unloaded by the user (or left out by a solution filter): not evaluated, not built (ADR 0013).</summary>
+    public const string Unloaded = "unloaded";
 }
 
 /// <summary>
@@ -260,6 +267,9 @@ public static class BuildTargets
     public const string Build = "build";
     public const string Rebuild = "rebuild";
     public const string Clean = "clean";
+
+    /// <summary><c>dotnet pack</c>: builds, then writes the project's <c>.nupkg</c> (and <c>.snupkg</c>).</summary>
+    public const string Pack = "pack";
 }
 
 /// <summary>

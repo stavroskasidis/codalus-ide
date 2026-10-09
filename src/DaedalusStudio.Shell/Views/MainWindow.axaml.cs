@@ -152,7 +152,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         Activate();
     }
 
-    public Task<string?> PickSolutionAsync() => PickAsync("Open Solution or Project", "Solutions and projects", ["*.slnx", "*.sln", "*.csproj", "*.fsproj", "*.vbproj"]);
+    public Task<string?> PickSolutionAsync() => PickAsync("Open Solution or Project", "Solutions, filters and projects", ["*.slnx", "*.sln", "*.slnf", "*.csproj", "*.fsproj", "*.vbproj"]);
 
     public Task<string?> PickProjectAsync() => PickAsync("Add Existing Project", "Projects", ["*.csproj", "*.fsproj", "*.vbproj"]);
 
@@ -259,6 +259,18 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         var platform = _shell.Workbench.Platform;
+
+        // A focused terminal gets every key except those bound to the commands that stay with the IDE
+        // (terminal.commandsToSkipShell); chords (Ctrl+K…, Ctrl+R…) go to the shell too.
+        if (e.Source is Terminal.TerminalControl && !_chordPending)
+        {
+            var peek = _shell.Workbench.Keybindings.Peek(chord);
+            if (peek is not { Kind: KeyDispatchKind.Command, Rule: { } rule } || !_shell.KeepsCommandFromTerminal(rule.Command))
+            {
+                return;
+            }
+        }
+
         var result = _shell.Workbench.Keybindings.Dispatch(chord);
         switch (result.Kind)
         {

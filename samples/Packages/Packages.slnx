@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/cpm/">
+    <Project Path="cpm/Central/Central.csproj" />
+    <Project Path="cpm/Other/Other.csproj" />
+  </Folder>
+  <Project Path="src/Multi/Multi.csproj" />
+  <Project Path="src/Plain/Plain.csproj" />
+</Solution>

@@ -19,7 +19,7 @@ dotnet run --project src/DaedalusStudio.Shell -- --user-data-dir .work/user-data
 dotnet publish src/DaedalusStudio.Shell -c Release -r win-x64 -o artifacts/shell           # Native AOT, with pluginhost/, buildhost/, lshost/ and plugins/ next to daedalus.exe
 ```
 
-Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--open <file>`, `--screenshot <png>`; for benchmarks `--bench typing|scroll` (on the `--open` file) and `--exit-on interactive|highlight|done|language`; for CI `--smoke-test <samples dir>` (below). With `DAEDALUS_BENCH_EVENTS=<file>` the shell writes timestamped bench events. `DAEDALUS_PLUGINHOST`, `DAEDALUS_BUILDHOST` and `DAEDALUS_LSHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
+Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--open <file>`, `--screenshot <png>`; for benchmarks `--bench typing|scroll` (on the `--open` file) and `--exit-on interactive|highlight|done|language`; for CI `--smoke-test <samples dir>` (below). With `DAEDALUS_BENCH_EVENTS=<file>` the shell writes timestamped bench events. `DAEDALUS_PLUGINHOST`, `DAEDALUS_BUILDHOST`, `DAEDALUS_LSHOST` and `DAEDALUS_REPLHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
 
 ## End-to-end smoke test
 
@@ -32,6 +32,10 @@ Arguments: an optional solution, project or folder to open. Options: `--user-dat
 ## Language services
 
 The C# language service host (`daedalus-lshost`, ADR 0005) speaks LSP over stdio (`docs/protocol.md`). It gets its projects from the build host's design-time builds, relayed by the shell (`LanguageService` in `src/DaedalusStudio.Workbench/Languages`). `DAEDALUS_LSHOST` points at a host `.exe` or `.dll`; otherwise the shell uses `lshost/` next to it. Fixture: `samples/LanguageFeatures`.
+
+## Terminal and C# Interactive
+
+The integrated terminal (ADR 0014) is our own VT engine (`src/DaedalusStudio.Terminal`, UI-agnostic) and pseudo-terminals in `DaedalusStudio.Platform/Pty`: ConPTY on Windows, `openpty` + `posix_spawn` on Unix. Never run managed code in a forked child: that is why it isn't `forkpty`. Sessions live in `TerminalService` (`src/DaedalusStudio.Workbench/Terminal`), the control in `src/DaedalusStudio.Shell/Terminal`, and the shell integration scripts in `src/DaedalusStudio.Shell/ShellIntegration` (copied to `terminal/`). C# Interactive (ADR 0015) runs user code in `daedalus-replhost` (`src/DaedalusStudio.Interactive.Host`, Roslyn scripting, protocol in `docs/interactive-protocol.md`), never in the shell or the language host.
 
 ## Debugging
 

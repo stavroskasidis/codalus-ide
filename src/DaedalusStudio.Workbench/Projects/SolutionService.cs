@@ -380,6 +380,23 @@ public sealed class SolutionService : IAsyncDisposable
         ? host.Connection
         : throw new InvalidOperationException(_host is null ? "No solution is open." : "The build host is not running.");
 
+    /// <summary>
+    /// Sends a request to the build host, for the services built on its connection (packages, project properties…).
+    /// It times out after <paramref name="timeout"/> (default two minutes).
+    /// </summary>
+    public async Task<TResult> RequestAsync<TParams, TResult>(
+        string method,
+        TParams parameters,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> parametersInfo,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TResult> resultInfo,
+        CancellationToken cancellationToken,
+        TimeSpan? timeout = null)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(timeout ?? s_operationTimeout);
+        return await Connection.InvokeAsync(method, parameters, parametersInfo, resultInfo, limit.Token).ConfigureAwait(false);
+    }
+
     private async Task InvokeAsync<T>(string method, T parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

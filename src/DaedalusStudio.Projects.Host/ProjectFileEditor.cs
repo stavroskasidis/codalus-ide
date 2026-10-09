@@ -40,7 +40,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
 
             if (edited)
             {
-                xml.Save();
+                xml.SaveFile();
                 changed.Add(projectPath);
             }
         }
@@ -74,7 +74,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
 
             if (edited)
             {
-                xml.Save();
+                xml.SaveFile();
                 changed.Add(projectPath);
             }
         }
@@ -98,7 +98,7 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
         }
 
         group.AddItem("ProjectReference", relative);
-        xml.Save();
+        xml.SaveFile();
         return true;
     }
 
@@ -114,10 +114,75 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
 
         if (items.Count > 0)
         {
-            xml.Save();
+            xml.SaveFile();
         }
 
         return items.Count > 0;
+    }
+
+    /// <summary>
+    /// Adds an assembly reference as Visual Studio writes it (<c>Reference</c> named after the assembly, with a relative
+    /// <c>HintPath</c>) or an <c>Analyzer</c> item. Returns false when the project already has it.
+    /// </summary>
+    public bool AddFileReference(string projectPath, string kind, string file)
+    {
+        var xml = Open(projectPath);
+        var directory = Path.GetDirectoryName(projectPath)!;
+        var relative = Relative(directory, file);
+        if (FileReferences(xml, directory, kind, file).Any())
+        {
+            return false;
+        }
+
+        var itemType = kind == Protocol.ReferenceEditKinds.Analyzer ? "Analyzer" : "Reference";
+        var group = xml.ItemGroups.FirstOrDefault(g => g.Condition.Length == 0 && g.Items.Any(i => i.ItemType == itemType)) ?? xml.AddItemGroup();
+        if (itemType == "Analyzer")
+        {
+            group.AddItem(itemType, relative);
+        }
+        else
+        {
+            group.AddItem(itemType, Path.GetFileNameWithoutExtension(file)).AddMetadata("HintPath", relative);
+        }
+
+        xml.SaveFile();
+        return true;
+    }
+
+    public bool RemoveFileReference(string projectPath, string kind, string file)
+    {
+        var xml = Open(projectPath);
+        var items = FileReferences(xml, Path.GetDirectoryName(projectPath)!, kind, file).ToList();
+        foreach (var item in items)
+        {
+            RemoveItem(item);
+        }
+
+        if (items.Count > 0)
+        {
+            xml.SaveFile();
+        }
+
+        return items.Count > 0;
+    }
+
+    /// <summary>
+    /// <c>Analyzer</c> items with the file's path, or <c>Reference</c> items whose <c>HintPath</c> is the file (or, for
+    /// references without one, whose name is the assembly's).
+    /// </summary>
+    private static IEnumerable<ProjectItemElement> FileReferences(ProjectRootElement xml, string directory, string kind, string file)
+    {
+        var full = Path.GetFullPath(file);
+        if (kind == Protocol.ReferenceEditKinds.Analyzer)
+        {
+            return xml.Items.Where(i => i.ItemType == "Analyzer" && !i.Include.Contains('$', StringComparison.Ordinal) && Full(directory, i.Include).Equals(full, s_pathComparison));
+        }
+
+        var name = Path.GetFileNameWithoutExtension(file);
+        return xml.Items.Where(i => i.ItemType == "Reference"
+            && (i.Metadata.FirstOrDefault(m => m.Name == "HintPath") is { } hint
+                ? !hint.Value.Contains('$', StringComparison.Ordinal) && Full(directory, hint.Value).Equals(full, s_pathComparison)
+                : i.Include.Split(',')[0].Trim().Equals(name, StringComparison.OrdinalIgnoreCase)));
     }
 
     private ProjectRootElement Open(string path)

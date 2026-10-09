@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.PackageSourcesView"
+             x:DataType="vm:PackageSourcesViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,8">
+      <TextBlock Classes="heading" Text="Package Sources" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="Sources are searched and restored in this order. Package source mapping restricts which packages come from which source." />
+      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,8,0,0">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="Save" Command="{Binding SaveCommand}" AutomationProperties.Name="Save package sources" />
+        <Button Content="Revert" Command="{Binding RevertCommand}" />
+      </StackPanel>
+      <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding ConfigFiles}" />
+      <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding GlobalPackagesFolder}" />
+    </StackPanel>
+    <Grid ColumnDefinitions="280,*">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="2" Margin="0,0,0,4">
+          <Button Classes="toolbar" Command="{Binding AddCommand}" ToolTip.Tip="Add Source" AutomationProperties.Name="Add source">
+            <TextBlock Text="+" FontWeight="Bold" />
+          </Button>
+          <Button Classes="toolbar" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove Source" AutomationProperties.Name="Remove source">
+            <controls:Icon Kind="trash" />
+          </Button>
+          <Button Classes="toolbar" Command="{Binding MoveUpCommand}" ToolTip.Tip="Move Up" AutomationProperties.Name="Move up">
+            <TextBlock Text="▲" FontSize="10" />
+          </Button>
+          <Button Classes="toolbar" Command="{Binding MoveDownCommand}" ToolTip.Tip="Move Down" AutomationProperties.Name="Move down">
+            <TextBlock Text="▼" FontSize="10" />
+          </Button>
+        </StackPanel>
+        <ListBox ItemsSource="{Binding Sources}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Package sources">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:PackageSourceRowViewModel">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <CheckBox IsChecked="{Binding Enabled}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Name, StringFormat='Enable {0}'}" />
+                <StackPanel>
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                  <TextBlock Classes="muted" FontSize="11" Text="{Binding Url}" TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                </StackPanel>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <Panel Grid.Column="1" IsVisible="{Binding HasSelection}">
+      <StackPanel Margin="16,0,0,0" Spacing="6" DataContext="{Binding Selected}" x:DataType="vm:PackageSourceRowViewModel">
+        <TextBlock Text="Name" />
+        <TextBox Text="{Binding Name}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Source name" />
+        <TextBlock Text="Source (URL or folder)" />
+        <TextBox Text="{Binding Url}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="Source URL" />
+        <CheckBox Content="Enabled" IsChecked="{Binding Enabled}" IsEnabled="{Binding CanEdit}" />
+        <TextBlock Text="Package source mapping: patterns of packages that come only from this source (one per line, e.g. Contoso.* or *)" TextWrapping="Wrap" />
+        <TextBox Text="{Binding Patterns}" AcceptsReturn="True" MinHeight="80" AutomationProperties.Name="Mapped package patterns" />
+        <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding Origin}" />
+      </StackPanel>
+      </Panel>
+    </Grid>
+  </DockPanel>
+</UserControl>

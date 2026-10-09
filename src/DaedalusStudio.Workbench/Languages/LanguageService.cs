@@ -60,6 +60,9 @@ public sealed class LanguageService : IAsyncDisposable
 
     public string? LanguageIdOf(string path) => _registry.ForFile(path)?.LanguageId;
 
+    /// <summary>The compiler inputs of a project from its last design-time build, or null.</summary>
+    public ProjectData? Project(string path) => _projects.GetValueOrDefault(path);
+
     /// <summary>The client of a language's service, starting it if needed; null when it can't be started.</summary>
     public Task<LanguageHostClient?> ClientAsync(string languageId) =>
         _clients.GetOrAdd(languageId, id => new Lazy<Task<LanguageHostClient?>>(() => StartAsync(id))).Value;

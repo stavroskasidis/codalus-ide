@@ -16,6 +16,10 @@ public interface IProposedApiHost
 
     Task<TypeOutlineDto?> GetTypeOutlineAsync(string uri, int line, int character, CancellationToken cancellationToken);
 
+    Task<WorkspacePackagesResult> GetPackagesAsync(string projectPath, CancellationToken cancellationToken);
+
+    Task<WorkspacePropertiesResult> GetPropertiesAsync(string projectPath, IReadOnlyList<string> names, CancellationToken cancellationToken);
+
     /// <summary>Builds the projects (null: the solution), after a build in progress.</summary>
     Task<BuildResultDto> BuildAsync(IReadOnlyList<string>? projects, CancellationToken cancellationToken);
 
@@ -25,6 +29,13 @@ public interface IProposedApiHost
     Task<DebugSessionDto> DebugAttachAsync(int processId, Action<DebugEndedParams> ended, CancellationToken cancellationToken);
 
     Task DebugStopAsync(string sessionId, CancellationToken cancellationToken);
+
+    /// <summary>Opens a terminal; <paramref name="output"/> (with <c>ReportOutput</c>) and <paramref name="exited"/> report on it.</summary>
+    Task<TerminalDto> TerminalCreateAsync(TerminalCreateParams create, Action<TerminalOutputParams> output, Action<TerminalExitedParams> exited, CancellationToken cancellationToken);
+
+    Task TerminalSendTextAsync(string terminalId, string text, CancellationToken cancellationToken);
+
+    Task TerminalKillAsync(string terminalId, CancellationToken cancellationToken);
 
     /// <summary>Raised to tell plugins about the workspace (solution changes, edited documents, finished builds).</summary>
     event EventHandler<ProposedNotification>? Notification;
