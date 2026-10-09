@@ -35,7 +35,7 @@ public class SolutionTests
         Assert.Equal(f.Shell.Solutions.Solution!.Path, f.Shell.Recent.Items[0]);
         Assert.EndsWith(Path.Combine(".daedalus", "settings.json"), f.Shell.Workbench.Settings.WorkspaceFile, StringComparison.Ordinal);
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("solutionOpen"));
-        Assert.Contains(f.Window.GetVisualDescendants().OfType<SolutionExplorerView>(), v => v.IsEffectivelyVisible);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().Any(v => v.IsEffectivelyVisible));
 
         await f.Shell.CloseSolutionAsync();
         await ShellFixture.PumpUntil(() => !f.Shell.Explorer.HasSolution);
