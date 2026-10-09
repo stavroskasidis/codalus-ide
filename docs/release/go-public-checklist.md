@@ -8,7 +8,7 @@ The history audit (section 6) found no secrets. A few tracked files are working 
 
 | File | What it is | Options |
 |---|---|---|
-| ~~`ide-prompt.md`~~ | The original mission and milestone brief. **Deleted** from the tree (after M7); it remains in git history. | Done. To purge it from history too, rewrite history (`git filter-repo --path ide-prompt.md --invert-paths`) and force-push before going public. |
+| ~~`ide-prompt.md`~~ | The original mission and milestone brief. **Deleted and purged from `master`'s history** (after M7, by rewriting history and force-pushing). | Done, except for the closed PR #1 (`refs/pull/1/head`, from M0): GitHub keeps that ref, and only GitHub Support can remove it. Ask them to purge the ref and run garbage collection, or delete and recreate the repository, before going public. |
 | `CLAUDE.md` | Instructions for the AI coding assistant: build commands and conventions. | Harmless and useful to contributors who use assistants; keep, or fold the build commands into `CONTRIBUTING.md`. |
 | `docs/roadmap.md` | Your local, uncommitted roadmap edits (117 KB). It isn't in git; commit it when you are happy with it, because `CLAUDE.md` and the user guide link to it. | Review and commit. |
 | `docs/checkpoints/*.md` | Per-milestone engineering notes: deviations, gaps, `TODO(issue)` lists. | Keep (they double as a changelog), or turn the `TODO(issue)`s into GitHub issues first (item 4). |
