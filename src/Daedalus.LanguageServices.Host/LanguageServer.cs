@@ -76,7 +76,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             if (DocumentUris.ToPath(p.TextDocument.Uri) is { } path)
             {
                 _workspace.Open(path, p.TextDocument.Text, p.TextDocument.Version);
-                _diagnostics.DocumentChanged(path);
+                _diagnostics.DocumentOpened(path);
             }
         });
         _connection.OnNotification(Methods.DidChange, json.DidChangeTextDocumentParams, p =>

@@ -28,7 +28,7 @@
           <TextBlock Text="{Binding MessagesLabel}" />
         </StackPanel>
       </ToggleButton>
-      <TextBox Text="{Binding Filter}" Watermark="Search Error List" MinWidth="200" AutomationProperties.Name="Search Error List" />
+      <TextBox Text="{Binding Filter}" PlaceholderText="Search Error List" MinWidth="200" AutomationProperties.Name="Search Error List" />
     </StackPanel>
     <Grid DockPanel.Dock="Top" ColumnDefinitions="28,90,*,140,200" Margin="8,2" >
       <TextBlock Grid.Column="1" Classes="muted" Text="Code" />

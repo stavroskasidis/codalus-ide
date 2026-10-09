@@ -29,7 +29,6 @@ internal static class TargetCatalog
     public static IReadOnlyList<Target> All(string repoRoot) =>
     [
         Shell(Path.Combine(repoRoot, "artifacts", "shell")),
-        Prototype("avalonia", Path.Combine(repoRoot, "artifacts", "spike-a"), "daedalus-spike-avalonia"),
         VsCode(),
         Rider(),
         VisualStudio(),
@@ -37,34 +36,10 @@ internal static class TargetCatalog
 
     private static string Exe(string name) => OperatingSystem.IsWindows() ? name + ".exe" : name;
 
-    private static Target Prototype(string name, string dir, string exe) => new(
-        name,
-        IsPrototype: true,
-        Path.Combine(dir, Exe(exe)),
-        Exe(exe),
-        static (target, request) =>
-        {
-            var psi = Base(target.Executable, request.WorkDir);
-            Add(psi, "--solution", request.Solution);
-            Add(psi, "--open", request.File);
-            Add(psi, "--bench", request.Bench);
-            Add(psi, "--exit-on", request.ExitOn);
-            if (request.EventsFile is not null)
-            {
-                psi.Environment["DAEDALUS_BENCH_EVENTS"] = request.EventsFile;
-            }
-
-            psi.Environment.Remove("DAEDALUS_LSHOST"); // Use the published host next to the shell.
-            return psi;
-        },
-        dir,
-        HelperDirectories: ["lshost"]);
-
     /// <summary>
     /// The product shell (<c>dotnet publish src/Daedalus.Shell -o artifacts/shell</c>), with a fresh user-data
-    /// directory per launch, so every start is a first start with default settings and layout. Until the editor
-    /// moves into the shell (M3), it is measured for startup, idle memory and size; the spike stays the editor
-    /// baseline.
+    /// directory per launch, so every start is a first start with default settings and layout. Since M3 it is also the
+    /// editor under measurement (the M0 spike's results remain under results/ for reference).
     /// </summary>
     private static Target Shell(string dir) => new(
         "shell",
@@ -77,6 +52,8 @@ internal static class TargetCatalog
             var userData = Path.Combine(request.WorkDir, "user-data");
             Add(psi, "--user-data-dir", userData);
             Add(psi, "--exit-on", request.ExitOn);
+            Add(psi, "--open", request.File);
+            Add(psi, "--bench", request.Bench);
             if (request.Solution is { } solution)
             {
                 // The harness copied and restored the fixture: trust its folder (as the user would once) and
@@ -94,14 +71,16 @@ internal static class TargetCatalog
                 psi.Environment["DAEDALUS_BENCH_EVENTS"] = request.EventsFile;
             }
 
-            psi.Environment.Remove("DAEDALUS_PLUGINHOST"); // Use the published host next to the shell.
+            // Use the published hosts next to the shell.
+            psi.Environment.Remove("DAEDALUS_PLUGINHOST");
+            psi.Environment.Remove("DAEDALUS_BUILDHOST");
+            psi.Environment.Remove("DAEDALUS_LSHOST");
             psi.Environment.Remove("DAEDALUS_USER_DATA_DIR");
             return psi;
         },
         dir,
         "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
-        HelperDirectories: ["pluginhost", "buildhost", "plugins"],
-        SupportedScenarios: new HashSet<string>(StringComparer.Ordinal) { "cold-start", "binary-size", "open-solution-50" });
+        HelperDirectories: ["pluginhost", "buildhost", "lshost", "plugins"]);
 
     /// <summary>
     /// VS Code with a throwaway profile: no extensions (C# tooling is not used; the editor runs on TextMate

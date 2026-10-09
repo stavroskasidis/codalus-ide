@@ -6,25 +6,26 @@ using Daedalus.Workbench.StatusBar;
 
 namespace Daedalus.Shell.ViewModels;
 
-/// <summary>A status bar entry. Text may start with <c>$(icon)</c> to show a built-in icon.</summary>
-public sealed partial class StatusItemViewModel
+/// <summary>
+/// A status bar entry. Text may start with <c>$(icon)</c> to show a built-in icon. Updated in place when only its
+/// content changes (the caret position changes on every keystroke), so the button isn't recreated.
+/// </summary>
+public sealed partial class StatusItemViewModel : ObservableObject
 {
     public StatusItemViewModel(StatusBarItem item, ICommand? command)
     {
         Item = item;
         Command = command;
-        var match = IconPrefix().Match(item.Text);
-        Icon = match.Success ? match.Groups[1].Value : null;
-        Text = match.Success ? item.Text[match.Length..] : item.Text;
+        (Icon, Text) = Split(item.Text);
     }
 
-    public StatusBarItem Item { get; }
+    public StatusBarItem Item { get; private set; }
 
-    public string? Icon { get; }
+    public string? Icon { get; private set; }
 
     public bool HasIcon => Icon is not null;
 
-    public string Text { get; }
+    public string Text { get; private set; }
 
     public bool HasText => Text.Length > 0;
 
@@ -32,9 +33,37 @@ public sealed partial class StatusItemViewModel
 
     public string AccessibleName => Item.AccessibleName ?? (Text.Length > 0 ? Text : Item.Tooltip ?? Item.Id);
 
-    public ICommand? Command { get; }
+    public ICommand? Command { get; private set; }
 
     public bool IsInteractive => Command is not null;
+
+    /// <summary>Shows <paramref name="item"/> (same id) without recreating the view.</summary>
+    public void Update(StatusBarItem item, ICommand? command)
+    {
+        var previous = Item;
+        Item = item;
+        (Icon, Text) = Split(item.Text);
+        if (previous.Command != item.Command)
+        {
+            Command = command;
+            OnPropertyChanged(nameof(Command));
+            OnPropertyChanged(nameof(IsInteractive));
+        }
+
+        OnPropertyChanged(nameof(Item));
+        OnPropertyChanged(nameof(Icon));
+        OnPropertyChanged(nameof(HasIcon));
+        OnPropertyChanged(nameof(Text));
+        OnPropertyChanged(nameof(HasText));
+        OnPropertyChanged(nameof(Tooltip));
+        OnPropertyChanged(nameof(AccessibleName));
+    }
+
+    private static (string? Icon, string Text) Split(string text)
+    {
+        var match = IconPrefix().Match(text);
+        return match.Success ? (match.Groups[1].Value, text[match.Length..]) : (null, text);
+    }
 
     [GeneratedRegex(@"^\$\(([a-z0-9-]+)\)\s*")]
     private static partial Regex IconPrefix();
@@ -116,6 +145,20 @@ public sealed class StatusBarViewModel : ObservableObject
     {
         if (target.Select(t => t.Item).SequenceEqual(items))
         {
+            return;
+        }
+
+        // Same items in the same order: update the changed ones in place.
+        if (target.Select(t => t.Item.Id).SequenceEqual(items.Select(i => i.Id)))
+        {
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (target[i].Item != items[i])
+                {
+                    target[i].Update(items[i], items[i].Command is { } command ? _commandFor(command) : null);
+                }
+            }
+
             return;
         }
 

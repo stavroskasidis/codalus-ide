@@ -90,6 +90,7 @@ public sealed partial class MainWindow : Window, IShellWindow
             {
                 BenchEvents.Emit(BenchEventNames.Interactive);
                 _shell.OnInteractive();
+                StartBenchDriver();
                 if (_shell.Options.Screenshot is { } screenshot)
                 {
                     // Late enough for startup plugins (the Start page) to have rendered.
@@ -102,6 +103,15 @@ public sealed partial class MainWindow : Window, IShellWindow
                 }
             }, DispatcherPriority.Background);
         }));
+    }
+
+    /// <summary>Benchmarks (<c>--open</c>, <c>--bench</c>, <c>--exit-on</c>): see <see cref="Infrastructure.BenchDriver"/>.</summary>
+    private void StartBenchDriver()
+    {
+        if (Infrastructure.BenchDriver.IsRequested(_shell.Options))
+        {
+            _ = new Infrastructure.BenchDriver(this, _shell).RunAsync();
+        }
     }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)

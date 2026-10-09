@@ -76,14 +76,14 @@ The `Daedalus.Plugins.Abstractions` package is not published yet (the repository
 ### Contribution points
 
 - **commands:** `id`, `title`, `category` (shown as "Category: Title"), `enablement` (a when-clause; disabled commands are hidden from the palette and greyed in menus).
-- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|view|project|tools|help`, `toolWindow/title` (buttons above a tool window) and `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
+- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|edit|view|project|tools|window|help`, `toolWindow/title` (buttons above a tool window) and `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
 - **keybindings:** `key` plus optional `mac`, `linux` and `win` overrides, `command`, `when` and `args`. Chords are space-separated (`ctrl+k ctrl+h`). `primary` means ⌘ on macOS and Ctrl elsewhere. Users override bindings in the Keyboard Shortcuts editor; user bindings win over plugin bindings, which win over defaults.
 - **toolWindows:** `id`, `title`, `location` (`left`, `right`, `bottom`), `kind` (`tree` or `markdown`) and `icon`.
 - **settings:** `title` (the Settings UI category) and `properties`, each with `type` (`string`, `boolean`, `integer`, `number`, `string[]`), `default`, `description`, `enum` and `enumDescriptions`, `minimum`/`maximum`, `scope` (`user`, or `workspace` to allow per-workspace overrides) and `order`. Invalid values in settings.json fall back to the default and are reported in the Settings UI.
 
 ### When-clauses
 
-`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`) and `explorerItemIsProjectReference`. In `toolWindow/title`, `view` is the tool window's id.
+`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`), `explorerItemIsProjectReference`, `editorTextFocus` (an editor has keyboard focus), `editorLanguageId` (`csharp`, or absent for plain text), `editorHasSelection` and `editorHasMultipleSelections`. Every text document, editor tabs included, has `activeDocumentKind == textFile`. In `toolWindow/title`, `view` is the tool window's id.
 
 ## The code
 
@@ -135,6 +135,8 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `workbench.getRecentSolutions` | none; returns `[{ path, name }]`, most recent first |
 | `solution.getInfo` | none; returns `{ path, format, trusted }` of the open solution, or null |
 | `solution.addProjectFile` | project path; adds it to the open solution (in the selected solution folder) |
+| `editor.action.revealDefinition`, `editor.action.goToImplementation`, `editor.action.triggerSuggest`, `editor.action.showHover`, `editor.action.find`, `editor.action.gotoLine` | none; act on the active editor |
+| `file.saveAll`, `workbench.navigateBack`, `workbench.navigateForward`, `workbench.splitEditorRight`, `workbench.splitEditorDown`, `workbench.view.errorList` | none |
 | `workbench.showCommandPalette`, `workbench.openSettings`, `workbench.openKeyboardShortcuts`, `workbench.selectTheme`, `workbench.showLogs`, `workbench.view.plugins` | none |
 
 The built-in Welcome plugin (`src/Plugins/Daedalus.Plugins.Welcome`) and Templates plugin (`src/Plugins/Daedalus.Plugins.Templates`: New Project and New Solution with quick picks, input boxes and `dotnet new`) are complete examples that reach the shell only through these commands.

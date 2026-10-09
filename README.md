@@ -7,7 +7,7 @@
 
 Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs natively on Windows, macOS and Linux. It aims to be a Visual Studio alternative with a VS-class experience: a rich semantic editor, a real project system, and integrated build and debugging.
 
-> **Status: Milestone 2 (solution and project system).** The shell opens `.sln`/`.slnx` solutions and SDK-style projects, with a Solution Explorer, file operations, configurations, restore and new projects from templates. It can't edit code with language services yet (M3). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
+> **Status: Milestone 3a (editor and core C# language services).** The shell opens `.sln`/`.slnx` solutions and SDK-style projects (Solution Explorer, file operations, configurations, restore, templates) and edits code: tabs with preview and split views, multiple carets, folding, a minimap, find/replace, and C# highlighting, completion, signature help, Quick Info, live diagnostics with an Error List, and Go to Definition/Implementation, on Roslyn with the projects' analyzers and source generators. References, rename, code fixes, formatting and search come in M3b. The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
 
 ## Architecture in one paragraph
 

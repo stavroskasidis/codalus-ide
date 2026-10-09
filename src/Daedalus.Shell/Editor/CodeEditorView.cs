@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 using AvaloniaEdit;
@@ -83,7 +82,17 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _editors.Children.Add(Row(_primary.Value.Editor, _primary.Value.Minimap, 2));
         _services.Options.PropertyChanged += OnOptionsChanged;
         _services.ProjectContextsChanged += OnProjectContextsChanged;
+        _font.PropertyChanged += OnFontChanged;
         UpdateProjectContext();
+    }
+
+    private void OnFontChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        foreach (var editor in new[] { _primary?.Editor, _split?.Editor }.OfType<TextEditor>())
+        {
+            editor.FontFamily = _font.Family;
+            editor.FontSize = _font.Size;
+        }
     }
 
     private void TearDown()
@@ -95,6 +104,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
         _services.Options.PropertyChanged -= OnOptionsChanged;
         _services.ProjectContextsChanged -= OnProjectContextsChanged;
+        _font.PropertyChanged -= OnFontChanged;
         primary.Controller.Dispose();
         _split?.Controller.Dispose();
         _primary = null;
@@ -110,8 +120,8 @@ public sealed class CodeEditorView : UserControl, IPaneView
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
-        editor.Bind(TextEditor.FontFamilyProperty, new Binding(nameof(EditorFont.Family)) { Source = _font });
-        editor.Bind(TextEditor.FontSizeProperty, new Binding(nameof(EditorFont.Size)) { Source = _font });
+        editor.FontFamily = _font.Family;
+        editor.FontSize = _font.Size;
         editor.Bind(TextEditor.BackgroundProperty, this.GetResourceObservable("Shell.Editor.Background"));
         editor.Bind(TextEditor.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
         editor.Bind(TextEditor.LineNumbersForegroundProperty, this.GetResourceObservable("Shell.Editor.LineNumbers"));

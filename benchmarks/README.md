@@ -1,6 +1,6 @@
 # Benchmarks
 
-`daedalus-bench` measures the shell (`daedalus`), the M0 editor spike and the reference IDEs (VS Code, JetBrains Rider and Visual Studio) on the same scenarios. Results are JSON files under `results/<os>/<target>/`, and `report` turns the latest result per target and scenario into the Markdown tables used in `docs/adr/0002-performance-budgets.md`.
+`daedalus-bench` measures the shell (`daedalus`) and the reference IDEs (VS Code, JetBrains Rider and Visual Studio) on the same scenarios. Results are JSON files under `results/<os>/<target>/`, and `report` turns the latest result per target and scenario into the Markdown tables used in `docs/adr/0002-performance-budgets.md`.
 
 ## Quick start
 
@@ -17,7 +17,7 @@ dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell
 ```
 
 ```bash
-dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --targets shell,avalonia --scenarios cold-start,self-driven,binary-size
+dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --targets shell --scenarios cold-start,self-driven,binary-size
 ```
 
 ```bash
@@ -28,7 +28,7 @@ dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- check
 dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- report --out benchmarks/results/summary.md
 ```
 
-The `shell` target is the published product shell in `artifacts/shell` (the publish puts the plugin host and built-in plugins next to it); until the editor moves into the shell (M3) it runs `cold-start`, `binary-size` and `open-solution-50` (with the fixture's folder trusted and restore-on-open off in its fresh user data, since the harness restores the copy itself), and the editor scenarios use the spike: publish it into `artifacts/spike-a` with a published language service host in `lshost/`. Results of the retired GPUI prototype (M0) remain under `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
+The `shell` target is the published product shell in `artifacts/shell` (the publish puts the plugin host, build host, language service host and built-in plugins next to it). It runs every scenario; for `open-solution-50` the fixture's folder is trusted and restore-on-open is off in its fresh user data, since the harness restores the copy itself. Since M3 the editor scenarios run in the shell (`--open`, `--bench`); the results of the retired M0 prototypes remain under `results/windows/avalonia/` and `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.
 
 ## Scenarios
 
@@ -36,8 +36,8 @@ The `shell` target is the published product shell in `artifacts/shell` (the publ
 |---|---|---|
 | `cold-start` | Launch with nothing open, N times. Run 0 is reported separately as `*_first`. | `startup_ready_ms` (black-box), `startup_interactive_ms` (prototypes, in-app), `startup_selfreported_ms` (VS Code's own `--prof-append-timers`), `memory_idle_*` after 5 s |
 | `editor-100k` | Open a copy of the 100k-line C# file, wait until ready plus 10 s, then (with `--allow-input`) type 200 characters at the end of the file every 60 ms and press PageDown 150 times every 50 ms. | `file_ready_ms`, `file_highlight_ms` (prototypes), `memory_file_*`, `typing_input_to_display_ms`, `scroll_input_to_display_ms`, `scroll_responses_over_50ms`, `scroll_responses_missing`, `typing_in_app_ms` (prototypes) |
-| `open-solution-50` | Open a restored copy of the 50-project solution. VS Code is excluded: without the proprietary C# Dev Kit it has no solution explorer. | `solution_ready_ms` (black-box), `solution_structure_ms` (shell: tree from the solution file), `solution_loaded_ms` (in-app: every project evaluated), `memory_solution_private_mb` |
-| `self-driven` | Prototypes only, on any OS including CI. The app drives typing (300 keys, 40 ms apart, mid-file) and scrolling (230 lines/s for 10 s, then 5 go-to-line jumps) itself. | `selfdriven_typing_ms`, `selfdriven_scroll_frame_ms`, `selfdriven_jump_ms`, `startup_interactive_ms`, `file_highlight_ms` |
+| `open-solution-50` | Open a restored copy of the 50-project solution. VS Code is excluded: without the proprietary C# Dev Kit it has no solution explorer. | `solution_ready_ms` (black-box), `solution_structure_ms` (shell: tree from the solution file), `solution_loaded_ms` (in-app: every project evaluated), `language_ready_ms` (shell: the C# language service compiled every project once; informational), `memory_solution_private_mb` |
+| `self-driven` | Instrumented targets (the shell), on any OS including CI. The app drives typing (300 keys, 40 ms apart, mid-file) and scrolling (230 lines/s for 10 s, then 5 go-to-line jumps) itself. | `selfdriven_typing_ms`, `selfdriven_scroll_frame_ms`, `selfdriven_jump_ms`, `startup_interactive_ms`, `file_highlight_ms` |
 | `binary-size` | Static measurement. | `shell_mb`, `shell_zip_mb` and one `<helper>_mb` per helper folder (`pluginhost`, `buildhost`, `plugins`, `lshost`); IDEs: `install_mb` (informative) |
 
 ## Methods

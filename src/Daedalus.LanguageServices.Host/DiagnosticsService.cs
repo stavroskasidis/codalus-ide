@@ -22,6 +22,9 @@ internal sealed class DiagnosticsService : IDisposable
     public const string ScopeSolution = "solution";
 
     private static readonly TimeSpan s_documentDelay = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>A newly opened document waits longer: its first highlighting and folding go first.</summary>
+    private static readonly TimeSpan s_openedDelay = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan s_backgroundDelay = TimeSpan.FromMilliseconds(1500);
 
     private readonly WorkspaceManager _workspace;
@@ -32,6 +35,7 @@ internal sealed class DiagnosticsService : IDisposable
     private readonly Dictionary<string, Diagnostic[]> _background = new(Paths.Comparer);
     private readonly ConditionalWeakTable<Compilation, CompilationWithAnalyzers> _analyzers = new();
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly MemoryTrimmer _trimmer = new();
     private CancellationTokenSource? _backgroundPass;
 
     public DiagnosticsService(WorkspaceManager workspace, Func<PublishDiagnosticsParams, Task> publish, Action<string> log)
@@ -49,7 +53,11 @@ internal sealed class DiagnosticsService : IDisposable
 
     // ------------------------------------------------------------------ open documents
 
-    public void DocumentChanged(string path)
+    public void DocumentOpened(string path) => Schedule(path, s_openedDelay);
+
+    public void DocumentChanged(string path) => Schedule(path, s_documentDelay);
+
+    private void Schedule(string path, TimeSpan delay)
     {
         path = Path.GetFullPath(path);
         CancellationToken token;
@@ -70,7 +78,7 @@ internal sealed class DiagnosticsService : IDisposable
         {
             try
             {
-                await Task.Delay(s_documentDelay, token).ConfigureAwait(false);
+                await Task.Delay(delay, token).ConfigureAwait(false);
                 await AnalyzeOpenDocumentAsync(path, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -131,6 +139,7 @@ internal sealed class DiagnosticsService : IDisposable
 
         cancellationToken.ThrowIfCancellationRequested();
         await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), version, Convert(diagnostics, tree))).ConfigureAwait(false);
+        _trimmer.WorkDone();
     }
 
     // ------------------------------------------------------------------ the whole solution
@@ -214,6 +223,7 @@ internal sealed class DiagnosticsService : IDisposable
         }
 
         BackgroundPassCompleted?.Invoke(projects, documents);
+        _trimmer.WorkDone();
     }
 
     // ------------------------------------------------------------------ helpers
@@ -275,6 +285,7 @@ internal sealed class DiagnosticsService : IDisposable
 
     public void Dispose()
     {
+        _trimmer.Dispose();
         _lifetime.Cancel();
         lock (_gate)
         {

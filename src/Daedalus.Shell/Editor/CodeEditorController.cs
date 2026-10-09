@@ -227,9 +227,21 @@ public sealed class CodeEditorController : IDisposable
     /// <summary>Requests everything again: after the language service (re)started, or the document was reloaded.</summary>
     public void RefreshAll()
     {
+        // Highlighting the visible lines first; folding (a walk of the whole file) and options when it's done.
+        _refreshPending = true;
         ScheduleTokens(TimeSpan.Zero);
-        ScheduleFolding(TimeSpan.Zero);
-        _ = LoadDocumentOptionsAsync();
+    }
+
+    private bool _refreshPending;
+
+    private void AfterTokens()
+    {
+        if (_refreshPending)
+        {
+            _refreshPending = false;
+            ScheduleFolding(TimeSpan.Zero);
+            _ = LoadDocumentOptionsAsync();
+        }
     }
 
     private async Task LoadDocumentOptionsAsync()
@@ -295,8 +307,13 @@ public sealed class CodeEditorController : IDisposable
             _colorizer.Apply(start, end, tokens.Data);
             Editor.TextArea.TextView.Redraw();
             TokensApplied?.Invoke(this, EventArgs.Empty);
+            AfterTokens();
         }
-        catch (Exception ex) when (IsTransient(ex))
+        catch (Exception ex) when (IsTransient(ex) && ex is not OperationCanceledException)
+        {
+            AfterTokens();
+        }
+        catch (OperationCanceledException)
         {
         }
     }

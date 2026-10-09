@@ -1,6 +1,6 @@
 // ADR 0002 in machine-readable form. `daedalus-bench check` applies the absolute budgets (reference hardware);
 // `daedalus-bench compare --baseline DIR` applies the regression policy (CI runners). Editor budgets are measured on
-// the M0 spike ("avalonia") and enforced once the editor moves into the shell (M3).
+// the shell since M3 (before, on the M0 spike "avalonia").
 {
   "budgets": [
     { "target": "shell", "scenario": "cold-start", "metric": "startup_ready_ms", "stat": "p50", "max": 800, "os": "windows", "source": "ADR 0002 #1" },
@@ -11,15 +11,15 @@
     { "target": "shell", "scenario": "open-solution-50", "metric": "solution_structure_ms", "stat": "p50", "max": 1500, "source": "ADR 0002 #4 (provisional)" },
     { "target": "shell", "scenario": "open-solution-50", "metric": "solution_loaded_ms", "stat": "p50", "max": 5000, "source": "ADR 0002 #4 (provisional)" },
 
-    { "target": "avalonia", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p50", "max": 13, "os": "windows", "source": "ADR 0002 #2", "pending": "M3 moves the editor into the shell" },
-    { "target": "avalonia", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p99", "max": 20, "os": "windows", "source": "ADR 0002 #2", "pending": "M3 moves the editor into the shell" },
-    { "target": "avalonia", "scenario": "editor-100k", "metric": "typing_in_app_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b", "pending": "M3 moves the editor into the shell" },
-    { "target": "avalonia", "scenario": "editor-100k", "metric": "file_ready_ms", "stat": "p50", "max": 1800, "os": "windows", "source": "ADR 0002 #3a", "pending": "M3 moves the editor into the shell" },
-    { "target": "avalonia", "scenario": "editor-100k", "metric": "scroll_input_to_display_ms", "stat": "p99", "max": 25, "os": "windows", "source": "ADR 0002 #3b", "pending": "M3 moves the editor into the shell" },
-    { "target": "avalonia", "scenario": "editor-100k", "metric": "scroll_responses_over_50ms", "stat": "max", "max": 0, "os": "windows", "source": "ADR 0002 #3b", "pending": "M3 moves the editor into the shell" },
-    { "target": "avalonia", "scenario": "editor-100k", "metric": "memory_file_private_mb", "stat": "p50", "max": 500, "source": "ADR 0002 #5b", "pending": "M3 moves the editor into the shell" },
-    { "target": "avalonia", "scenario": "self-driven", "metric": "selfdriven_typing_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b", "pending": "M3 moves the editor into the shell" },
-    { "target": "avalonia", "scenario": "self-driven", "metric": "selfdriven_scroll_frames_over_50ms", "stat": "max", "max": 0, "source": "ADR 0002 #3b", "pending": "M3 moves the editor into the shell" }
+    { "target": "shell", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p50", "max": 13, "os": "windows", "source": "ADR 0002 #2" },
+    { "target": "shell", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p99", "max": 20, "os": "windows", "source": "ADR 0002 #2" },
+    { "target": "shell", "scenario": "editor-100k", "metric": "typing_in_app_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b" },
+    { "target": "shell", "scenario": "editor-100k", "metric": "file_ready_ms", "stat": "p50", "max": 1800, "os": "windows", "source": "ADR 0002 #3a" },
+    { "target": "shell", "scenario": "editor-100k", "metric": "scroll_input_to_display_ms", "stat": "p99", "max": 25, "os": "windows", "source": "ADR 0002 #3b" },
+    { "target": "shell", "scenario": "editor-100k", "metric": "scroll_responses_over_50ms", "stat": "max", "max": 0, "os": "windows", "source": "ADR 0002 #3b" },
+    { "target": "shell", "scenario": "editor-100k", "metric": "memory_file_private_mb", "stat": "p50", "max": 500, "source": "ADR 0002 #5b" },
+    { "target": "shell", "scenario": "self-driven", "metric": "selfdriven_typing_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b" },
+    { "target": "shell", "scenario": "self-driven", "metric": "selfdriven_scroll_frames_over_50ms", "stat": "max", "max": 0, "source": "ADR 0002 #3b" }
   ],
   "regression": {
     "latencyP50": 0.10,

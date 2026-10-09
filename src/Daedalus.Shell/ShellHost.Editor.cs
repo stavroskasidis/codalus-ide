@@ -628,12 +628,28 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    private bool _caretStatusScheduled;
+
+    /// <summary>
+    /// The caret moves on every keystroke: the status bar follows at most every 100 ms, after the frame showing the
+    /// keystroke has rendered (typing latency budget, ADR 0002).
+    /// </summary>
     private void OnCaretChanged(object? sender, EventArgs e)
     {
-        if (ActiveEditor is { } editor && editor.Controller == sender)
+        if (_caretStatusScheduled || ActiveEditor?.Controller != sender)
         {
-            UpdateEditorStatus(editor);
+            return;
         }
+
+        _caretStatusScheduled = true;
+        Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+        {
+            _caretStatusScheduled = false;
+            if (ActiveEditor is { } editor)
+            {
+                UpdateEditorStatus(editor);
+            }
+        }, TimeSpan.FromMilliseconds(100), Avalonia.Threading.DispatcherPriority.Background);
     }
 
     private void UpdateEditorStatus(CodeEditorDocument editor)

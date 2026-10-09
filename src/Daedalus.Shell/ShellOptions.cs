@@ -12,6 +12,7 @@ public sealed record ShellOptions
           --plugin-dir <dir>      Load plugins from <dir> (a plugin folder or a folder of plugins). Repeatable.
           --enable-proposed-api   Allow plugins to use proposed APIs (development builds only).
           --dev                   Development mode: shows developer commands.
+          --open <file>           Open a file in the editor.
           --version               Print the version and exit.
           --help                  Print this help and exit.
         """;
@@ -31,8 +32,17 @@ public sealed record ShellOptions
 
     public bool ShowHelp { get; init; }
 
-    /// <summary>Benchmarks: exit as soon as the window is interactive (<c>--exit-on interactive</c>).</summary>
+    /// <summary>
+    /// Benchmarks: exit when the window is <c>interactive</c>, the opened file shows its first semantic
+    /// <c>highlight</c>, the <c>--bench</c> scenario is <c>done</c>, or the C# <c>language</c> service is ready.
+    /// </summary>
     public string? ExitOn { get; init; }
+
+    /// <summary>A file to open in the editor (<c>--open</c>).</summary>
+    public string? OpenFile { get; init; }
+
+    /// <summary>Benchmarks: a self-driven scenario on <see cref="OpenFile"/> (<c>--bench typing|scroll</c>).</summary>
+    public string? Bench { get; init; }
 
     /// <summary>Writes a screenshot of the window once it is interactive (<c>--screenshot file.png</c>).</summary>
     public string? Screenshot { get; init; }
@@ -91,6 +101,12 @@ public sealed record ShellOptions
                     break;
                 case "--exit-on":
                     options = options with { ExitOn = Value() };
+                    break;
+                case "--open":
+                    options = options with { OpenFile = Value() is { } file ? System.IO.Path.GetFullPath(file) : null };
+                    break;
+                case "--bench":
+                    options = options with { Bench = Value() };
                     break;
                 case "--screenshot":
                     options = options with { Screenshot = Value() };

@@ -73,6 +73,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
         InitializeSolutions();
         InitializeEditor();
+
+        // A file given on the command line: start its language service now, alongside the window.
+        if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
+        {
+            _ = Languages.ClientAsync(languageId);
+        }
+
         Layout = new LayoutManager(Workbench.ToolWindows, CreateToolContent);
         WireEditorToLayout();
 

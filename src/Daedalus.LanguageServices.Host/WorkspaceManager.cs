@@ -32,10 +32,12 @@ internal sealed class WorkspaceManager : IDisposable
         [.. ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Where(p => Path.GetFileName(p).StartsWith("System.", StringComparison.Ordinal) || Path.GetFileName(p) is "mscorlib.dll" or "netstandard.dll")
+            .AsParallel()
+            .AsOrdered()
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))]);
 
     private readonly Lock _gate = new();
-    private readonly DaedalusWorkspace _workspace = new(s_host.Value);
+    private readonly DaedalusWorkspace _workspace;
     private readonly ProjectLoader _loader = new();
     private readonly Dictionary<string, ProjectEntry> _projects = new(Paths.Comparer);
     private readonly Dictionary<string, OpenDocument> _open = new(Paths.Comparer);
@@ -46,6 +48,10 @@ internal sealed class WorkspaceManager : IDisposable
 
     public WorkspaceManager()
     {
+        // Independent and both slow on a cold start: the framework references (Miscellaneous Files) and the MEF
+        // composition of Roslyn's services. Load them in parallel.
+        var references = Task.Run(() => s_frameworkReferences.Value);
+        _workspace = new DaedalusWorkspace(s_host.Value);
         _loader.Log += (_, message) => Log?.Invoke(this, message);
         _reloadTimer = new Timer(_ => ReloadChangedFiles());
         _workspace.Replace(_workspace.CurrentSolution.AddProject(ProjectInfo.Create(
@@ -56,7 +62,7 @@ internal sealed class WorkspaceManager : IDisposable
             language: LanguageNames.CSharp,
             compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable),
             parseOptions: new CSharpParseOptions(LanguageVersion.Preview),
-            metadataReferences: s_frameworkReferences.Value)));
+            metadataReferences: references.Result)));
     }
 
     public Solution CurrentSolution => _workspace.CurrentSolution;

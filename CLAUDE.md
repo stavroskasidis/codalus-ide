@@ -16,10 +16,10 @@ NativeAOT publish on Windows needs `vswhere.exe` on `PATH` (`%ProgramFiles(x86)%
 
 ```bash
 dotnet run --project src/Daedalus.Shell -- --user-data-dir .work/user-data          # Debug; plugin host and built-in plugins are copied next to the build
-dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell           # Native AOT, with pluginhost/ and plugins/ next to daedalus.exe
+dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell           # Native AOT, with pluginhost/, buildhost/, lshost/ and plugins/ next to daedalus.exe
 ```
 
-Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--exit-on interactive`, `--screenshot <png>`. `DAEDALUS_PLUGINHOST` and `DAEDALUS_BUILDHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
+Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--open <file>`, `--screenshot <png>`; for benchmarks `--bench typing|scroll` (on the `--open` file) and `--exit-on interactive|highlight|done|language`. With `DAEDALUS_BENCH_EVENTS=<file>` the shell writes timestamped bench events. `DAEDALUS_PLUGINHOST`, `DAEDALUS_BUILDHOST` and `DAEDALUS_LSHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
 
 ## Language services
 

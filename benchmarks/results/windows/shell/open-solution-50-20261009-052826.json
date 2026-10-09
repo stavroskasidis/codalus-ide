@@ -1,0 +1,101 @@
+{
+  "target": "shell",
+  "scenario": "open-solution-50",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-09T05:28:26.5812761+00:00",
+  "method": "instrumented\u002Bblack-box",
+  "samples": {
+    "solution_structure_ms": [
+      474.818,
+      544.325,
+      702.237
+    ],
+    "solution_loaded_ms": [
+      1239.167,
+      1348.377,
+      1912.33
+    ],
+    "solution_ready_ms": [
+      1310.4392,
+      1411.3743,
+      1995.975
+    ],
+    "language_ready_ms": [
+      13627.641,
+      13620.142,
+      14356.258
+    ],
+    "memory_solution_private_mb": [
+      534.4609375,
+      531.0078125,
+      541.5390625
+    ]
+  },
+  "summary": {
+    "solution_structure_ms": {
+      "n": 3,
+      "min": 474.818,
+      "p50": 544.325,
+      "p95": 702.237,
+      "p99": 702.237,
+      "max": 702.237,
+      "mean": 573.7933333333334,
+      "stdDev": 116.53813707251945
+    },
+    "solution_loaded_ms": {
+      "n": 3,
+      "min": 1239.167,
+      "p50": 1348.377,
+      "p95": 1912.33,
+      "p99": 1912.33,
+      "max": 1912.33,
+      "mean": 1499.9579999999999,
+      "stdDev": 361.27511097915396
+    },
+    "solution_ready_ms": {
+      "n": 3,
+      "min": 1310.4392,
+      "p50": 1411.3743,
+      "p95": 1995.975,
+      "p99": 1995.975,
+      "max": 1995.975,
+      "mean": 1572.596166666667,
+      "stdDev": 370.1137676296618
+    },
+    "language_ready_ms": {
+      "n": 3,
+      "min": 13620.142,
+      "p50": 13627.641,
+      "p95": 14356.258,
+      "p99": 14356.258,
+      "max": 14356.258,
+      "mean": 13868.013666666666,
+      "stdDev": 422.8486201045634
+    },
+    "memory_solution_private_mb": {
+      "n": 3,
+      "min": 531.0078125,
+      "p50": 534.4609375,
+      "p95": 541.5390625,
+      "p99": 541.5390625,
+      "max": 541.5390625,
+      "mean": 535.6692708333334,
+      "stdDev": 5.368599326077365
+    }
+  },
+  "notes": [
+    "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+    "The fixture copy is restored (dotnet restore) before each launch; restore time is not measured."
+  ],
+  "discardedRuns": 0
+}

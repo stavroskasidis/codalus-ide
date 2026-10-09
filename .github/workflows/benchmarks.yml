@@ -50,19 +50,16 @@ jobs:
           "DAEDALUS_BENCH_VSCODE=C:\Program Files\Microsoft VS Code\Code.exe" >> $env:GITHUB_ENV
       - name: Generate fixtures
         run: dotnet run --project benchmarks/Daedalus.Benchmarks.FixtureGen -c Release -- all samples
-      - name: Publish the shell, the spike and the language service host
+      - name: Publish the shell (with its hosts and built-in plugins)
         shell: bash
         run: |
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
           dotnet publish src/Daedalus.Shell -c Release -r "$rid" -o artifacts/shell
-          dotnet publish src/Daedalus.LanguageServices.Host -c Release -r "$rid" --self-contained false -p:PublishReadyToRun=true -o artifacts/lshost
-          dotnet publish spikes/avalonia/Daedalus.Spike.Avalonia -c Release -r "$rid" -o artifacts/spike-a
-          cp -r artifacts/lshost artifacts/spike-a/lshost
       - name: Run benchmarks
         shell: bash
         run: |
           cmd="dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --results ci-results \
-            --targets shell,avalonia,vscode --scenarios cold-start,editor-100k,self-driven,binary-size --runs 3"
+            --targets shell,vscode --scenarios cold-start,editor-100k,self-driven,binary-size --runs 3"
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             xvfb-run -a -s "-screen 0 1920x1080x24" $cmd
           else

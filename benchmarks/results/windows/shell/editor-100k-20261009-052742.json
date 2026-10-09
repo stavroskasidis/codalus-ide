@@ -1,0 +1,101 @@
+{
+  "target": "shell",
+  "scenario": "editor-100k",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-09T05:27:42.0960786+00:00",
+  "method": "instrumented\u002Bblack-box",
+  "samples": {
+    "file_highlight_ms": [
+      1908.599,
+      1890.227,
+      1898.523
+    ],
+    "file_ready_ms": [
+      2016.7169,
+      1981.0541,
+      1991.7562
+    ],
+    "memory_file_private_mb": [
+      504.859375,
+      499.96484375,
+      506.36328125
+    ],
+    "memory_file_ws_mb": [
+      574.78125,
+      570.8828125,
+      575.15625
+    ],
+    "memory_file_shell_private_mb": [
+      243.75390625,
+      245.14453125,
+      244.625
+    ]
+  },
+  "summary": {
+    "file_highlight_ms": {
+      "n": 3,
+      "min": 1890.227,
+      "p50": 1898.523,
+      "p95": 1908.599,
+      "p99": 1908.599,
+      "max": 1908.599,
+      "mean": 1899.1163333333334,
+      "stdDev": 9.20036028280045
+    },
+    "file_ready_ms": {
+      "n": 3,
+      "min": 1981.0541,
+      "p50": 1991.7562,
+      "p95": 2016.7169,
+      "p99": 2016.7169,
+      "max": 2016.7169,
+      "mean": 1996.5090666666667,
+      "stdDev": 18.300304153847556
+    },
+    "memory_file_private_mb": {
+      "n": 3,
+      "min": 499.96484375,
+      "p50": 504.859375,
+      "p95": 506.36328125,
+      "p99": 506.36328125,
+      "max": 506.36328125,
+      "mean": 503.7291666666667,
+      "stdDev": 3.345598417010572
+    },
+    "memory_file_ws_mb": {
+      "n": 3,
+      "min": 570.8828125,
+      "p50": 574.78125,
+      "p95": 575.15625,
+      "p99": 575.15625,
+      "max": 575.15625,
+      "mean": 573.6067708333334,
+      "stdDev": 2.3664568454341364
+    },
+    "memory_file_shell_private_mb": {
+      "n": 3,
+      "min": 243.75390625,
+      "p50": 244.625,
+      "p95": 245.14453125,
+      "p99": 245.14453125,
+      "max": 245.14453125,
+      "mean": 244.5078125,
+      "stdDev": 0.7026799806977836
+    }
+  },
+  "notes": [
+    "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+    "Input injection not allowed (--allow-input) or not supported on this OS: typing/scrolling not measured."
+  ],
+  "discardedRuns": 0
+}

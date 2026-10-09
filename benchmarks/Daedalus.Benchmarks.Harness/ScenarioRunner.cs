@@ -318,10 +318,16 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 result.Add("solution_ready_ms", ready.Ready.TotalMilliseconds);
             }
 
+            // Language services ready: every project's design-time build loaded and compiled once (informational, ADR 0005).
+            if (target.Name == "shell" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.LanguageReady, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } language)
+            {
+                result.Add("language_ready_ms", (language.WallMicros - session.LaunchWallMicros) / 1000.0);
+            }
+
             await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
             var memory = ProcessTree.Memory(session.Process.Id);
             result.Add("memory_solution_private_mb", memory.PrivateBytes / 1048576.0);
-            Log($"  {target.Name} open-solution-50 run {run}: loaded {Last(result, "solution_loaded_ms")} / ready {Last(result, "solution_ready_ms")} ms");
+            Log($"  {target.Name} open-solution-50 run {run}: loaded {Last(result, "solution_loaded_ms")} / ready {Last(result, "solution_ready_ms")} / language {Last(result, "language_ready_ms")} ms");
         }
     }
 
