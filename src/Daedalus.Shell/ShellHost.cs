@@ -54,7 +54,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings()]);
+        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings()]);
         Theme = new ThemeService(app, Workbench);
 
         foreach (var window in BuiltIns.ToolWindows())
@@ -72,6 +72,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Dialogs = new DialogViewModel();
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
         InitializeSolutions();
+        InitializeBuild();
         InitializeEditor();
         InitializeRefactoring();
 
@@ -87,9 +88,11 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterCommands(this);
         BuiltIns.RegisterSolutionCommands(this);
         BuiltIns.RegisterEditorCommands(this);
+        BuiltIns.RegisterBuildCommands(this);
         BuiltIns.RegisterMenus(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
         BuiltIns.RegisterEditorMenus(Workbench.Menus);
+        BuiltIns.RegisterBuildMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
         Workbench.LoadUserKeybindings();
         SyncViewCommands();

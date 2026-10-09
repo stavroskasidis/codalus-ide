@@ -34,6 +34,9 @@ public static class ProjectMethods
     public const string RemoveProjectReference = "project/removeReference";
     public const string SetActiveFramework = "project/setActiveFramework";
     public const string DesignTimeBuild = "project/designTimeBuild";
+    public const string Build = "build/run";
+    public const string CancelBuild = "build/cancel";
+    public const string RunInfo = "project/runInfo";
 
     // host → shell
     public const string SolutionChanged = "solution/changed";
@@ -43,6 +46,8 @@ public static class ProjectMethods
     public const string RestoreState = "restore/state";
     public const string CompilerInputs = "project/compilerInputs";
     public const string DesignTimeProgress = "solution/designTimeProgress";
+    public const string BuildOutput = "build/output";
+    public const string BuildDiagnostic = "build/diagnostic";
     public const string Log = "log";
 }
 
@@ -231,6 +236,65 @@ public sealed record CompilerInputsInfo(
 
 public sealed record DesignTimeProgressParams(int Built, int Total, bool Completed);
 
+// ------------------------------------------------------------------ builds
+
+public static class BuildTargets
+{
+    public const string Build = "build";
+    public const string Rebuild = "rebuild";
+    public const string Clean = "clean";
+}
+
+/// <summary>
+/// Builds the solution (<see cref="Project"/> null) or one project (and the projects it references) with the active
+/// configuration. <see cref="Target"/> is <c>build</c>, <c>rebuild</c> or <c>clean</c>. A restore runs first unless
+/// <see cref="Restore"/> is false (never for clean). <c>build/cancel</c> stops it; the result then says so.
+/// </summary>
+public sealed record BuildParams(string Target, string? Project, bool Restore = true);
+
+/// <summary>Sent once every <c>build/output</c> and <c>build/diagnostic</c> of the build has been sent.</summary>
+public sealed record BuildResultInfo(bool Succeeded, bool Canceled, int Errors, int Warnings, long ElapsedMilliseconds);
+
+/// <summary>A line for the Build output channel.</summary>
+public sealed record BuildOutputParams(string Line);
+
+public static class BuildSeverities
+{
+    public const string Error = "error";
+    public const string Warning = "warning";
+}
+
+/// <summary>
+/// An error or warning of a build. <see cref="File"/> is absolute (or null when MSBuild gave none); lines and
+/// columns are 1-based as MSBuild reports them, 0 when unknown. <see cref="Project"/> is the project file.
+/// </summary>
+public sealed record BuildDiagnosticInfo(
+    string Severity,
+    string? Code,
+    string Message,
+    string? File,
+    int Line,
+    int Column,
+    int EndLine,
+    int EndColumn,
+    string? Project,
+    string? HelpLink);
+
+/// <summary>
+/// How to start a project (<c>project/runInfo</c>), from the SDK's <c>RunCommand</c>, <c>RunArguments</c> and
+/// <c>RunWorkingDirectory</c> properties (what <c>dotnet run</c> uses) for the active configuration and framework.
+/// <see cref="LaunchSettings"/> is <c>Properties/launchSettings.json</c> when it exists.
+/// </summary>
+public sealed record RunInfo(
+    string Path,
+    string? TargetFramework,
+    string? OutputType,
+    string? TargetPath,
+    string? RunCommand,
+    string? RunArguments,
+    string? RunWorkingDirectory,
+    string? LaunchSettings);
+
 // ------------------------------------------------------------------ log
 
 /// <summary><see cref="Level"/> is <c>debug</c>, <c>info</c>, <c>warning</c> or <c>error</c>.</summary>
@@ -270,4 +334,9 @@ public sealed record LogParams(string Level, string Message);
 [JsonSerializable(typeof(DesignTimeBuildParams))]
 [JsonSerializable(typeof(CompilerInputsInfo))]
 [JsonSerializable(typeof(DesignTimeProgressParams))]
+[JsonSerializable(typeof(BuildParams))]
+[JsonSerializable(typeof(BuildResultInfo))]
+[JsonSerializable(typeof(BuildOutputParams))]
+[JsonSerializable(typeof(BuildDiagnosticInfo))]
+[JsonSerializable(typeof(RunInfo))]
 public sealed partial class ProjectJsonContext : JsonSerializerContext;

@@ -156,7 +156,7 @@ internal static partial class BuiltIns
     {
         menus.AddMenuBarMenu(new MenuBarMenu("file", "_File", 1));
         menus.AddMenuBarMenu(new MenuBarMenu("view", "_View", 3));
-        menus.AddMenuBarMenu(new MenuBarMenu("tools", "_Tools", 5));
+        menus.AddMenuBarMenu(new MenuBarMenu("tools", "_Tools", 7));
         menus.AddMenuBarMenu(new MenuBarMenu("help", "_Help", 9));
 
         var shell = ContributionSource.Shell;
@@ -186,6 +186,7 @@ internal static partial class BuiltIns
             .. KeybindingService.ParseRules(DefaultKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(SolutionKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(EditorKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+            .. KeybindingService.ParseRules(BuildKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         ];
 
     private static CommandHandler Ui(Action action) => async (_, _) =>

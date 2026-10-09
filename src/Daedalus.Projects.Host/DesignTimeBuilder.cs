@@ -10,14 +10,15 @@ namespace Daedalus.Projects.Host;
 /// Design-time builds (ADR 0005): runs <c>Compile</c> and <c>CoreCompile</c> with <c>SkipCompilerExecution</c> and
 /// <c>ProvideCommandLineArgs</c>, the way Roslyn's own project loading does, and returns the compiler command line.
 /// Referenced projects are not built (<c>BuildingInsideVisualStudio</c> makes <c>ResolveProjectReferences</c> ask
-/// them for their target path only). One batch at a time, through a <see cref="BuildManager"/> of its own.
+/// them for their target path only). One batch at a time, through a <see cref="BuildManager"/> of its own;
+/// <paramref name="gate"/> is shared with real builds, so the two never run at the same time.
 /// </summary>
-internal sealed class DesignTimeBuilder(ProjectCollection collection) : IDisposable
+internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreSlim gate) : IDisposable
 {
     private static readonly string[] s_targets = ["Compile", "CoreCompile"];
 
     private readonly BuildManager _manager = new("daedalus-designtime");
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _gate = gate;
 
     /// <summary>One project to build: its configuration and, for multi-targeted projects, the framework.</summary>
     public sealed record Request(string Path, string Configuration, string Platform, string? TargetFramework);
@@ -147,11 +148,7 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection) : IDisposa
         _ => "C#",
     };
 
-    public void Dispose()
-    {
-        _manager.Dispose();
-        _gate.Dispose();
-    }
+    public void Dispose() => _manager.Dispose();
 
     /// <summary>Keeps the first few errors of each project, so a failed design-time build can say why.</summary>
     private sealed class ErrorCollector : ILogger

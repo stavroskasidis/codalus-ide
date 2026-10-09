@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/Greetings/Greetings.csproj" />
+  <Project Path="src/Hello/Hello.csproj" />
+</Solution>

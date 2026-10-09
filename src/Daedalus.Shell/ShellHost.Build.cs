@@ -1,0 +1,287 @@
+using System.Globalization;
+using Daedalus.Platform;
+using Daedalus.Projects.Protocol;
+using Daedalus.Rpc;
+using Daedalus.Shell.Infrastructure;
+using Daedalus.Shell.ViewModels;
+using Daedalus.Workbench.Build;
+using Daedalus.Workbench.Commands;
+using Daedalus.Workbench.Notifications;
+using Daedalus.Workbench.Projects;
+using Daedalus.Workbench.StatusBar;
+
+namespace Daedalus.Shell;
+
+/// <summary>Build, Rebuild and Clean; the startup project, launch profiles and Run Without Debugging (ADR 0006).</summary>
+public sealed partial class ShellHost
+{
+    public const string SaveAllBeforeBuildSetting = "build.saveAllBeforeBuild";
+    public const string ExternalConsoleSetting = "run.externalConsole";
+
+    private const string BuildStatusItem = "daedalus.build";
+    private const string StartupStatusItem = "daedalus.startup";
+
+    public BuildService Builds { get; private set; } = null!;
+
+    public RunService Runs { get; private set; } = null!;
+
+    private void InitializeBuild()
+    {
+        Builds = new BuildService(Solutions, Workbench.Output);
+        Runs = new RunService(Solutions, Workbench.Output, ShellIntegration.OpenUrl);
+        Builds.Started += (_, request) => Ui.Post(() => OnBuildStarted(request));
+        Builds.Finished += (_, completed) => Ui.Post(() => OnBuildFinished(completed));
+        Runs.RunningChanged += (_, _) => Ui.Post(UpdateRunState);
+        Runs.StartupChanged += (_, _) => Ui.Post(UpdateRunState);
+        Solutions.SolutionChanged += (_, _) => Ui.Post(UpdateRunState);
+        Solutions.ProjectChanged += (_, _) => Ui.Post(UpdateRunState);
+        UpdateRunState();
+    }
+
+    // ------------------------------------------------------------------ build
+
+    /// <summary>
+    /// Builds, rebuilds or cleans the solution (<paramref name="project"/> null) or a project. Saves open documents
+    /// first (setting <c>build.saveAllBeforeBuild</c>). Returns false when the build failed, was cancelled or didn't run.
+    /// </summary>
+    public async Task<bool> BuildAsync(string target, string? project)
+    {
+        if (Solutions.Solution is not { } solution)
+        {
+            StatusBar.ShowMessage("Open a solution to build it.", TimeSpan.FromSeconds(4));
+            return false;
+        }
+
+        if (!solution.Trusted)
+        {
+            var notification = Workbench.Notifications.Warning("Builds run only in trusted folders.", "Trust Folder");
+            if (await notification.Result.ConfigureAwait(true) == "Trust Folder")
+            {
+                await TrustSolutionAsync().ConfigureAwait(true);
+            }
+
+            return false;
+        }
+
+        if (Builds.IsBuilding)
+        {
+            StatusBar.ShowMessage("A build is already running.", TimeSpan.FromSeconds(4));
+            return false;
+        }
+
+        if (Workbench.Settings.GetBoolean(SaveAllBeforeBuildSetting, true))
+        {
+            await SaveAllAsync().ConfigureAwait(true);
+        }
+
+        Workbench.Output.Show(Builds.Channel);
+        var result = await Builds.BuildAsync(target, project, CancellationToken.None).ConfigureAwait(true);
+        return result.Succeeded;
+    }
+
+    /// <summary>The project a project-level command acts on: the argument, the Solution Explorer's selection, the active document's project, or the startup project.</summary>
+    public string? CurrentProject(string? argument = null)
+    {
+        if (argument is not null)
+        {
+            return Path.GetFullPath(argument);
+        }
+
+        if (Equals(Workbench.Context.GetValue("focusedView"), SolutionExplorerViewModel.ToolWindowId) && Explorer.Selected?.Node.ProjectPath is { } selected)
+        {
+            return selected;
+        }
+
+        if (ActiveEditor?.Model.Path is { } path
+            && Solutions.Projects.Values.FirstOrDefault(p => p.Items.Any(i => SolutionService.PathComparer.Equals(i.Path, path))) is { } owner)
+        {
+            return owner.Path;
+        }
+
+        return Explorer.Selected?.Node.ProjectPath ?? Runs.StartupProject;
+    }
+
+    public Task<bool> BuildProjectAsync(string target, string? argument = null)
+    {
+        if (CurrentProject(argument) is not { } project)
+        {
+            StatusBar.ShowMessage("Select a project to build.", TimeSpan.FromSeconds(4));
+            return Task.FromResult(false);
+        }
+
+        return BuildAsync(target, project);
+    }
+
+    public void CancelBuild() => Builds.Cancel();
+
+    private void OnBuildStarted(BuildRequest request)
+    {
+        Workbench.Context.Set("buildRunning", true);
+        var what = request.Project is { } project ? Path.GetFileNameWithoutExtension(project) : "solution";
+        var verb = request.Target switch { BuildTargets.Rebuild => "Rebuilding", BuildTargets.Clean => "Cleaning", _ => "Building" };
+        Workbench.StatusBar.Set(new StatusBarItem(BuildStatusItem, $"$(refresh) {verb} {what}…", StatusBarAlignment.Left, 45, ContributionSource.Shell.Id)
+        {
+            Command = "build.cancel",
+            Tooltip = "Click to cancel the build (Ctrl+Break)",
+        });
+    }
+
+    private void OnBuildFinished(BuildCompleted completed)
+    {
+        Workbench.Context.Set("buildRunning", false);
+        var result = completed.Result;
+        var verb = completed.Request.Target switch { BuildTargets.Rebuild => "Rebuild", BuildTargets.Clean => "Clean", _ => "Build" };
+        var text = result.Canceled ? $"$(warning) {verb} cancelled"
+            : result.Succeeded ? $"$(check) {verb} succeeded"
+            : $"$(error) {verb} failed";
+        var counts = $"{result.Errors.ToString(CultureInfo.InvariantCulture)} error(s), {result.Warnings.ToString(CultureInfo.InvariantCulture)} warning(s)";
+        Workbench.StatusBar.Set(new StatusBarItem(BuildStatusItem, text, StatusBarAlignment.Left, 45, ContributionSource.Shell.Id)
+        {
+            Command = "workbench.view.output",
+            Tooltip = $"{counts}, {TimeSpan.FromMilliseconds(result.ElapsedMilliseconds):mm\\:ss\\.f}. Click to show the build output.",
+            AccessibleName = $"{text[(text.IndexOf(' ', StringComparison.Ordinal) + 1)..]}: {counts}",
+        });
+        if (!result.Succeeded && !result.Canceled && result.Errors > 0)
+        {
+            Layout.ShowToolWindow(ErrorListViewModel.ToolWindowId, focus: false);
+        }
+    }
+
+    // ------------------------------------------------------------------ run
+
+    /// <summary>Builds the startup project, then starts it with its launch profile (Ctrl+F5).</summary>
+    public async Task StartWithoutDebuggingAsync(string? argument = null)
+    {
+        var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
+        if (project is null)
+        {
+            Workbench.Notifications.Warning(Solutions.IsOpen
+                ? "There is no startup project: the solution has no executable project. Set one with 'Set as Startup Project'."
+                : "Open a solution to run it.");
+            return;
+        }
+
+        if (!await BuildAsync(BuildTargets.Build, project).ConfigureAwait(true))
+        {
+            if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
+            {
+                StatusBar.ShowMessage("The build failed, so the program was not started.", TimeSpan.FromSeconds(6));
+            }
+
+            return;
+        }
+
+        try
+        {
+            var program = await Runs.StartAsync(project, Workbench.Settings.GetBoolean(ExternalConsoleSetting, false), CancellationToken.None).ConfigureAwait(true);
+            if (program.Channel is { } channel)
+            {
+                Workbench.Output.Show(channel);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
+        {
+            Workbench.Notifications.Error($"Could not start {Path.GetFileNameWithoutExtension(project)}: {ex.Message}");
+        }
+    }
+
+    public void StopRunning() => Runs.StopAll();
+
+    public async Task SelectStartupProjectAsync()
+    {
+        if (Solutions.Solution is not { } solution)
+        {
+            return;
+        }
+
+        var current = Runs.StartupProject;
+        var items = solution.Projects
+            .Select(p => new QuickPickItem(p.Name)
+            {
+                Tag = p.Path,
+                Detail = SolutionService.PathComparer.Equals(p.Path, current) ? "startup project" : Runs.IsExecutable(p.Path) ? null : "not executable",
+            })
+            .ToList();
+        var active = Math.Max(0, items.FindIndex(i => SolutionService.PathComparer.Equals((string)i.Tag!, current)));
+        if (await Palette.ShowAsync(items, "Select the startup project", active).ConfigureAwait(true) is { Tag: string picked })
+        {
+            SetStartupProject(picked);
+        }
+    }
+
+    public void SetStartupProject(string? project)
+    {
+        Runs.SetStartupProject(project);
+        SaveEditorSession();
+    }
+
+    /// <summary>Picks the launch profile of the startup project (or of <paramref name="argument"/>).</summary>
+    public async Task SelectLaunchProfileAsync(string? argument = null)
+    {
+        if ((argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject) is not { } project)
+        {
+            return;
+        }
+
+        IReadOnlyList<LaunchProfile> profiles;
+        try
+        {
+            (_, profiles, var error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
+            if (error is not null)
+            {
+                Workbench.Notifications.Warning("The launch settings could not be read: " + error);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException)
+        {
+            Workbench.Notifications.Error(ex.Message);
+            return;
+        }
+
+        if (profiles.Count == 0)
+        {
+            StatusBar.ShowMessage($"{Path.GetFileNameWithoutExtension(project)} has no launch profiles (Properties/launchSettings.json).", TimeSpan.FromSeconds(6));
+            return;
+        }
+
+        var current = Runs.ResolveProfile(project, profiles)?.Name;
+        var items = profiles
+            .Select(p => new QuickPickItem(p.Name)
+            {
+                Tag = p.Name,
+                Detail = p.IsRunnable ? p.CommandLineArgs : $"'{p.CommandName}' profiles can't run in Daedalus Studio",
+            })
+            .ToList();
+        var active = Math.Max(0, items.FindIndex(i => (string)i.Tag! == current));
+        if (await Palette.ShowAsync(items, $"Select the launch profile of {Path.GetFileNameWithoutExtension(project)}", active).ConfigureAwait(true) is { Tag: string picked })
+        {
+            Runs.SetProfile(project, picked);
+            SaveEditorSession();
+        }
+    }
+
+    private void UpdateRunState()
+    {
+        var running = Runs.Running;
+        Workbench.Context.Set("programRunning", running.Count > 0);
+        var startup = Runs.StartupProject;
+        Workbench.Context.Set("hasStartupProject", startup is not null);
+        Explorer.SetStartupProject(startup);
+        if (startup is null || Solutions.Solution is not { Trusted: true })
+        {
+            Workbench.StatusBar.Remove(StartupStatusItem);
+            return;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(startup);
+        var profile = Runs.ChosenProfile(startup);
+        var label = profile is null ? name : $"{name}: {profile}";
+        var text = running.Count > 0 ? $"$(stop) {label} (running)" : $"$(play) {label}";
+        Workbench.StatusBar.Set(new StatusBarItem(StartupStatusItem, text, StatusBarAlignment.Left, 48, ContributionSource.Shell.Id)
+        {
+            Command = running.Count > 0 ? "run.stop" : "run.selectLaunchProfile",
+            Tooltip = running.Count > 0 ? "Click to stop the program (Shift+F5)" : "Startup project and launch profile (click to change the profile; Ctrl+F5 runs it)",
+            AccessibleName = running.Count > 0 ? $"{label} is running" : $"Startup project {label}",
+        });
+    }
+}

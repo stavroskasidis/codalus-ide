@@ -59,7 +59,14 @@ public sealed record WindowPlacement(double Width, double Height, int? X, int? Y
 internal sealed partial class ShellJsonContext : JsonSerializerContext;
 
 /// <summary>The documents open in a solution, reopened with it (<c>sessions/&lt;hash&gt;.json</c> in the state folder).</summary>
-public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, string? Active);
+public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, string? Active)
+{
+    /// <summary>The startup project the user chose (null: the default, the first executable project).</summary>
+    public string? StartupProject { get; init; }
+
+    /// <summary>The launch profile chosen per project path.</summary>
+    public Dictionary<string, string>? LaunchProfiles { get; init; }
+}
 
 /// <summary>An open file and its caret (zero-based line and character).</summary>
 public sealed record SessionDocument(string Path, int Line, int Character);

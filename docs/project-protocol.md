@@ -36,6 +36,9 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 | `project/addReference`, `project/removeReference` | `{projectPath, referencePath}` | `{}` | `ProjectReference` items, relative paths. |
 | `project/setActiveFramework` | `{path, targetFramework}` | `{}` | The framework of a multi-targeted project that design-time builds (and so the language service) use. Default: the first one. |
 | `project/designTimeBuild` | `{path?}` | `{}` | Runs design-time builds again (all projects when `path` is null); trusted only. |
+| `build/run` | `{target: build \| rebuild \| clean, project?, restore}` | `{succeeded, canceled, errors, warnings, elapsedMilliseconds}` | Builds the solution (`project` null) or a project with the active configuration (ADR 0006); restore first unless `restore` is false (never for clean). Completes after the build's last `build/output` and `build/diagnostic`. One at a time; trusted only. |
+| `build/cancel` | `{}` | `{}` | Stops the running build; its `build/run` result has `canceled: true`. |
+| `project/runInfo` | `{path}` | `RunInfo` | How to start a project, for the active configuration and target framework; trusted only. |
 
 `FileOperationResult` is `{updatedFiles, createdPaths}`: the project and solution files that were edited to keep up, and what was created.
 
@@ -50,6 +53,8 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 | `restore/state` | `{state: running \| succeeded \| failed, message?}` |
 | `project/compilerInputs` | `CompilerInputsInfo` (a design-time build finished) |
 | `solution/designTimeProgress` | `{built, total, completed}`; `completed` once nothing more is queued |
+| `build/output` | `{line}`: a line for the Build output channel |
+| `build/diagnostic` | `BuildDiagnosticInfo` |
 | `log` | `{level, message}` |
 
 ## Model
@@ -60,6 +65,13 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 - **References** `{kind (framework | package | project | assembly), name, version?, path?, targetFramework, resolved}`. Package versions are the resolved ones from `obj/project.assets.json` when restored, else the requested ones with `resolved: false`.
 
 - **`CompilerInputsInfo`** `{path, targetFramework, language (C# | VB | F#), state (ok | failed), error?, arguments, projectReferences, outputPath?, outputRefPath?}`: the compiler command line of a design-time build ([ADR 0005](adr/0005-editor-and-language-services.md)). `arguments` are `csc`/`vbc`/`fsc` arguments as MSBuild passes them, with source files relative to the project directory. References to another project's `outputPath` or `outputRefPath` stand for a project reference.
+
+- **`BuildDiagnosticInfo`** `{severity (error | warning), code?, message, file?, line, column, endLine, endColumn, project?, helpLink?}`: positions are 1-based as MSBuild reports them (0 when unknown); `file` is absolute.
+- **`RunInfo`** `{path, targetFramework?, outputType?, targetPath?, runCommand?, runArguments?, runWorkingDirectory?, launchSettings?}`: the SDK's `RunCommand`, `RunArguments` and `RunWorkingDirectory` properties (what `dotnet run` starts) and the path of `Properties/launchSettings.json` when it exists.
+
+## Builds
+
+Builds use a `BuildManager` of their own with MSBuild's out-of-process worker nodes only (no in-process node, no node reuse) and a fresh `ProjectCollection`. A build cancels the design-time builds in flight and queues them again for after it; projects whose assets file its restore changed are evaluated again.
 
 ## Design-time builds
 

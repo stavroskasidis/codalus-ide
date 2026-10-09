@@ -40,7 +40,7 @@ See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.
 - Root namespace `Daedalus.*`. The product name is "Daedalus Studio", and the CLI is `daedalus`. Never use "Visual Studio" branding in the product.
 - Central package management (`Directory.Packages.props`). Check and record the license of every new dependency in `THIRD-PARTY-NOTICES.md`.
 - Heavy work runs out of process (language service host, build host, debug adapter, plugin hosts). The shell supervises hosts with `Daedalus.Rpc.SupervisedProcess` and restarts them on crashes. MSBuild only ever runs in the build host (ADR 0004), and only for trusted folders.
-- Project-system fixtures: `samples/ProjectSystem` (`.sln` and `.slnx`); tests copy it to a temp folder before changing anything.
+- Project-system fixtures: `samples/ProjectSystem` (`.sln` and `.slnx`); build and run: `samples/BuildAndRun` (ADR 0006). Tests copy them to a temp folder before changing anything.
 - Wire contracts follow LSP where it fits. Extensions use the `daedalus/` prefix and are documented in `docs/protocol.md`; the plugin host protocol is in `docs/plugin-protocol.md`.
 - The plugin API (`Daedalus.Plugins.Abstractions`) is a public contract: changes follow ADR 0003's versioning policy and go into the changelog in `docs/plugins.md`.
 - Shell views talk to `Daedalus.Workbench` services; workbench events arrive on any thread, so views marshal through `Ui.Post`. Built-in features register through the same registries as plugins (`BuiltIns.cs`).

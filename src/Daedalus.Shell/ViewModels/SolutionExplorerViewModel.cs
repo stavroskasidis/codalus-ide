@@ -12,6 +12,7 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 {
     private ExplorerNode _node = node;
     private bool _isExpanded = expanded;
+    private bool _isStartup;
 
     public ExplorerNode Node
     {
@@ -66,6 +67,13 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
         }
     }
 
+    /// <summary>The startup project's row (shown in bold).</summary>
+    public bool IsStartup
+    {
+        get => _isStartup;
+        set => SetField(ref _isStartup, value);
+    }
+
     public string? Chevron => HasChildren ? (_isExpanded ? "chevron-down" : "chevron-right") : null;
 
     public string AccessibleName
@@ -98,6 +106,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private bool _refreshQueued;
     private string? _pendingReveal;
     private (IReadOnlyList<string> Paths, bool Cut)? _clipboard;
+    private string? _startupProject;
 
     public SolutionExplorerViewModel(ShellHost shell)
     {
@@ -130,6 +139,22 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     }
 
     public ExplorerNode? Root => _root;
+
+    /// <summary>Marks the startup project's row.</summary>
+    public void SetStartupProject(string? projectPath)
+    {
+        _startupProject = projectPath;
+        MarkStartupProject();
+    }
+
+    private void MarkStartupProject()
+    {
+        foreach (var row in Rows)
+        {
+            row.IsStartup = row.Node.Kind == ExplorerNodeKind.Project && _startupProject is not null
+                            && SolutionService.PathComparer.Equals(row.Node.Path, _startupProject);
+        }
+    }
 
     public static string KindKey(ExplorerNodeKind kind) => kind switch
     {
@@ -225,6 +250,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             Rows.Insert(i, new ExplorerRowViewModel(rows[i].Node, rows[i].Depth, _expanded.Contains(rows[i].Node.Id)));
         }
 
+        MarkStartupProject();
         Selected = Rows.FirstOrDefault(r => r.Id == selectedId) ?? (selectedId is null ? null : Selected);
         if (Selected is not null && !Rows.Contains(Selected))
         {

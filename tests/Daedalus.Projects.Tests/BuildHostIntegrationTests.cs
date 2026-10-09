@@ -15,6 +15,9 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
     internal static string RepoRoot => Metadata("DaedalusRepoRoot");
 
+    /// <summary>The build host the build tests use: <c>DAEDALUS_BUILDHOST</c> (e.g. a published one), else the built one.</summary>
+    internal static string HostAssemblyPath => Environment.GetEnvironmentVariable("DAEDALUS_BUILDHOST") is { Length: > 0 } host ? host : HostAssembly;
+
     private static string HostAssembly => Path.Combine(RepoRoot, "src", "Daedalus.Projects.Host", "bin", Metadata("DaedalusConfiguration"), "net10.0", "daedalus-buildhost.dll");
 
     private static string Metadata(string key) =>

@@ -109,6 +109,7 @@ public static class KeyMapper
         Key.Down => "down",
         Key.Left => "left",
         Key.Right => "right",
+        Key.Pause or Key.Cancel => "pause", // Ctrl+Break arrives as Cancel on Windows
         Key.OemComma => ",",
         Key.OemPeriod => ".",
         Key.OemMinus => "-",

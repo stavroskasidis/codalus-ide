@@ -30,6 +30,9 @@ internal interface ISessionEvents
     Task DesignTimeProgressAsync(DesignTimeProgressParams progress);
 }
 
+/// <summary>The session's events plus those of builds.</summary>
+internal interface IHostEvents : ISessionEvents, IBuildEvents;
+
 /// <summary>
 /// One open solution (or a single project opened directly). Reads the solution file, evaluates projects in
 /// parallel (only when trusted), re-evaluates on file changes, runs restore, and performs file and solution edits.
@@ -45,6 +48,9 @@ internal sealed class SolutionSession : IAsyncDisposable
     private readonly ProjectEvaluator _evaluator;
     private readonly ProjectFileEditor _editor;
     private readonly DesignTimeBuilder _designTime;
+    private readonly SolutionBuilder _builder = new();
+    private string[] _designTimeInFlight = [];
+    private CancellationTokenSource? _buildCancellation;
     private readonly ConcurrentDictionary<string, string> _activeFrameworks = new(s_pathComparer);
     private readonly ConcurrentDictionary<string, DateTime> _builtAssets = new(s_pathComparer);
     private readonly HashSet<string> _designTimePending = new(s_pathComparer);
@@ -66,7 +72,13 @@ internal sealed class SolutionSession : IAsyncDisposable
         _dotnet = dotnet;
         _evaluator = new ProjectEvaluator(_collection);
         _editor = new ProjectFileEditor(_collection);
-        _designTime = new DesignTimeBuilder(_collection);
+        _designTime = new DesignTimeBuilder(_collection, _builder.Gate);
+
+        // The SDK's tasks (Csc among them) and RunCommand find the dotnet host through this, as under `dotnet build`.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH")) && System.IO.Path.IsPathRooted(dotnet))
+        {
+            Environment.SetEnvironmentVariable("DOTNET_HOST_PATH", dotnet);
+        }
     }
 
     public string Path { get; private set; } = string.Empty;
@@ -215,18 +227,24 @@ internal sealed class SolutionSession : IAsyncDisposable
         var started = Stopwatch.GetTimestamp();
         var context = EvaluationContext.Create(EvaluationContext.SharingPolicy.Shared);
         var done = 0;
+        var progressGate = new Lock();
         await _events.ProgressAsync(new EvaluationProgressParams(0, projects.Count, projects.Count == 0)).ConfigureAwait(false);
         await Parallel.ForEachAsync(
             projects,
             new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount / 2), CancellationToken = cancellationToken },
-            async (project, _) =>
+            async (project, token) =>
             {
                 var (configuration, platform) = ProjectConfiguration(project);
                 var result = _evaluator.Evaluate(project, configuration, platform, context);
                 _evaluated[project] = result;
                 await _events.ProjectEvaluatedAsync(result.Info).ConfigureAwait(false);
-                var count = Interlocked.Increment(ref done);
-                await _events.ProgressAsync(new EvaluationProgressParams(count, projects.Count, count == projects.Count)).ConfigureAwait(false);
+
+                // Counted and queued together, so progress never goes backwards (or ends "incomplete").
+                lock (progressGate)
+                {
+                    done++;
+                    _ = _events.ProgressAsync(new EvaluationProgressParams(done, projects.Count, done == projects.Count));
+                }
             }).ConfigureAwait(false);
         _watcher?.SetImports(_evaluated.Values.SelectMany(e => e.Imports));
         await _events.LogAsync("info", $"Evaluated {projects.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms ({Active.Name}).").ConfigureAwait(false);
@@ -327,7 +345,15 @@ internal sealed class SolutionSession : IAsyncDisposable
                     return;
                 }
 
-                await BuildBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+                _designTimeInFlight = batch;
+                try
+                {
+                    await BuildBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _designTimeInFlight = [];
+                }
             }
         }
         catch (OperationCanceledException)
@@ -370,6 +396,143 @@ internal sealed class SolutionSession : IAsyncDisposable
 
         await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, requests.Count, !more)).ConfigureAwait(false);
         await _events.LogAsync("info", $"Design-time build of {requests.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms.").ConfigureAwait(false);
+    }
+
+    // ------------------------------------------------------------------ builds
+
+    /// <summary>
+    /// Builds the solution or a project (ADR 0006). Design-time builds in flight are cancelled and run again
+    /// afterwards; projects whose assets file the build's restore changed are evaluated again.
+    /// </summary>
+    public async Task<BuildResultInfo> BuildAsync(BuildParams parameters, IBuildEvents events, CancellationToken cancellationToken)
+    {
+        if (!Trusted)
+        {
+            throw new InvalidOperationException("Builds run only in trusted solutions.");
+        }
+
+        string path;
+        var properties = SolutionProperties();
+        if (parameters.Project is { } project)
+        {
+            path = System.IO.Path.GetFullPath(project);
+            (properties["Configuration"], properties["Platform"]) = ProjectConfiguration(path);
+        }
+        else if (IsSingleProject)
+        {
+            path = Path;
+            (properties["Configuration"], properties["Platform"]) = ProjectConfiguration(path);
+        }
+        else
+        {
+            path = Path;
+            properties["Configuration"] = Active.Configuration;
+            properties["Platform"] = Active.Platform;
+        }
+
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+        if (Interlocked.CompareExchange(ref _buildCancellation, cancellation, null) is not null)
+        {
+            throw new InvalidOperationException("A build is already running.");
+        }
+
+        var interrupted = await PauseDesignTimeBuildsAsync().ConfigureAwait(false);
+        try
+        {
+            await _builder.Gate.WaitAsync(cancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            Interlocked.Exchange(ref _buildCancellation, null);
+            ScheduleDesignTimeBuilds(interrupted);
+            return new BuildResultInfo(false, true, 0, 0, 0);
+        }
+
+        try
+        {
+            return await _builder.BuildAsync(path, parameters.Target, parameters.Restore, properties, events, cancellation.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _buildCancellation, null);
+            _builder.Gate.Release();
+            ScheduleDesignTimeBuilds(interrupted);
+            var restored = ProjectPaths.Where(p => _builtAssets.TryGetValue(p, out var built) && built != AssetsStamp(p)).ToList();
+            if (restored.Count > 0)
+            {
+                _ = Task.Run(() => EvaluateAsync(restored, _lifetime.Token), CancellationToken.None);
+            }
+        }
+    }
+
+    /// <summary>Cancels the running build, if any; its result reports the cancellation.</summary>
+    public void CancelBuild()
+    {
+        try
+        {
+            Volatile.Read(ref _buildCancellation)?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    /// <summary>Cancels design-time builds (running and queued) and returns their projects, to queue them again later.</summary>
+    private async Task<string[]> PauseDesignTimeBuildsAsync()
+    {
+        string[] interrupted;
+        Task worker;
+        lock (_designTimePending)
+        {
+            interrupted = [.. _designTimePending, .. _designTimeInFlight];
+            worker = _designTimeWorker;
+        }
+
+        CancelDesignTimeBuilds();
+        try
+        {
+            await worker.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        return interrupted;
+    }
+
+    /// <summary>How to start a project: the SDK's run properties for the active configuration and target framework.</summary>
+    public RunInfo GetRunInfo(string projectPath)
+    {
+        if (!Trusted)
+        {
+            throw new InvalidOperationException("Projects run only in trusted solutions.");
+        }
+
+        var path = System.IO.Path.GetFullPath(projectPath);
+        var properties = SolutionProperties();
+        (properties["Configuration"], properties["Platform"]) = ProjectConfiguration(path);
+        string? framework = null;
+        if (_evaluated.TryGetValue(path, out var evaluated) && evaluated.Info.TargetFrameworks.Length > 1)
+        {
+            var frameworks = evaluated.Info.TargetFrameworks;
+            framework = _activeFrameworks.TryGetValue(path, out var active) && frameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active : frameworks[0];
+            properties["TargetFramework"] = framework;
+        }
+
+        using var collection = new ProjectCollection(properties);
+        var project = collection.LoadProject(path);
+        string? Property(string name) => project.GetPropertyValue(name) is { Length: > 0 } value ? value : null;
+        var directory = System.IO.Path.GetDirectoryName(path)!;
+        var launchSettings = System.IO.Path.Combine(directory, "Properties", "launchSettings.json");
+        return new RunInfo(
+            path,
+            framework ?? Property("TargetFramework"),
+            Property("OutputType"),
+            Property("TargetPath"),
+            Property("RunCommand"),
+            Property("RunArguments"),
+            Property("RunWorkingDirectory"),
+            File.Exists(launchSettings) ? launchSettings : null);
     }
 
     /// <summary>The properties MSBuild sets when it builds a solution; some projects rely on them.</summary>
@@ -839,6 +1002,7 @@ internal sealed class SolutionSession : IAsyncDisposable
 
         _designTime.Dispose();
         _designTimeBatch.Dispose();
+        _builder.Dispose();
 
         _evaluation.Dispose();
         _lifetime.Dispose();

@@ -57,7 +57,7 @@ public sealed partial class ShellHost : IEditorServices
         var registry = new LanguageServiceRegistry();
         registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve));
         Languages = new LanguageService(registry, Solutions);
-        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position));
+        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position));
     }
 
     /// <summary>The editor's reactions to the layout (after <see cref="InitializeEditor"/> and the layout exist).</summary>
@@ -568,7 +568,11 @@ public sealed partial class ShellHost : IEditorServices
                 return new Docking.SessionDocument(e.Model.Path, caret.Line, caret.Character);
             })
             .ToList();
-        WriteJson(file, new Docking.EditorSession(documents, ActiveEditor?.Model.Path), Docking.ShellJsonContext.Default.EditorSession);
+        WriteJson(file, new Docking.EditorSession(documents, ActiveEditor?.Model.Path)
+        {
+            StartupProject = Runs.ChosenStartupProject,
+            LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
+        }, Docking.ShellJsonContext.Default.EditorSession);
     }
 
     /// <summary>Reopens the documents that were open the last time this solution was closed.</summary>
@@ -576,8 +580,11 @@ public sealed partial class ShellHost : IEditorServices
     {
         if (SessionFile(solutionPath) is not { } file || ReadJson(file, Docking.ShellJsonContext.Default.EditorSession) is not { } session)
         {
+            Runs.Load(null, null);
             return;
         }
+
+        Runs.Load(session.StartupProject, session.LaunchProfiles);
 
         foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))
         {

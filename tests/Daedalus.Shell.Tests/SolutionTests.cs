@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.VisualTree;
@@ -89,7 +90,9 @@ public class SolutionTests
         f.Shell.Dialogs.InputText = "settings.json";
         f.Shell.Dialogs.Accept();
         await ShellFixture.PumpUntil(() => File.Exists(Path.Combine(appDir, "settings.json")));
-        Assert.Contains("None Update=\"settings.json\"", File.ReadAllText(app), StringComparison.Ordinal);
+
+        // The file moves first; the project file is updated right after.
+        await ShellFixture.PumpUntil(() => File.ReadAllText(app).Contains("None Update=\"settings.json\"", StringComparison.Ordinal));
 
         await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Name == "settings.json"), seconds: 30);
         explorer.Reveal("f:" + Path.Combine(appDir, "settings.json"));
@@ -119,8 +122,12 @@ public class SolutionTests
         f.Press(Key.Enter);
         await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is Daedalus.Shell.Editor.CodeEditorDocument { Title: "Program.cs" });
 
+        // Opening moves the focus to the editor once its view is attached; take it back after that.
+        await ShellFixture.PumpUntil(() => (f.Window.FocusManager?.GetFocusedElement() as Visual)?.FindAncestorOfType<Daedalus.Shell.Editor.CodeEditorView>() is not null);
         explorer.Selected = Row(f, "Program.cs");
-        f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().Single().FocusPrimary();
+        var view = f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().Single();
+        view.FocusPrimary();
+        await ShellFixture.PumpUntil(() => view.IsKeyboardFocusWithin);
         f.Press(Key.Left);
         Assert.Equal("App", explorer.Selected?.Name);
         f.Press(Key.Left);

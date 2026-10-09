@@ -29,7 +29,7 @@ public class ShellHeadlessTests
         var menus = PlatformInfo.Current == PlatformKind.MacOS
             ? NativeMenu.GetMenu(f.Window)!.Items.OfType<NativeMenuItem>().Select(m => m.Header).ToList()
             : f.Window.MenuBar.Items.OfType<MenuItem>().Select(m => AutomationProperties.GetName(m)).ToList();
-        Assert.Equal(["File", "Edit", "View", "Project", "Tools", "Window", "Help"], menus);
+        Assert.Equal(["File", "Edit", "View", "Project", "Build", "Debug", "Tools", "Window", "Help"], menus);
         Assert.Equal(PlatformInfo.Current != PlatformKind.MacOS, f.Window.MenuBar.IsVisible);
         Assert.True(f.Shell.Layout.IsVisible(BuiltIns.OutputWindow));
         Assert.Contains(f.Shell.StatusBar.Right, i => i.Item.Id == "daedalus.notifications");
@@ -226,7 +226,8 @@ public class ShellHeadlessTests
         for (var i = 0; i < PaneHost.VisiblePanes(f.Window).Count; i++)
         {
             f.Press(Key.F6);
-            var focused = PaneHost.Of(f.Window.FocusManager?.GetFocusedElement() as Visual);
+            PaneHost? focused = null;
+            await ShellFixture.PumpUntil(() => (focused = PaneHost.Of(f.Window.FocusManager?.GetFocusedElement() as Visual)) is not null, seconds: 5);
             Assert.NotNull(focused);
             visited.Add(focused.Dockable);
         }

@@ -1,0 +1,20 @@
+{
+  // Comments are allowed, as in Visual Studio's and dotnet run's reader.
+  "profiles": {
+    "Hello": {
+      "commandName": "Project",
+      "commandLineArgs": "one \"two words\"",
+      "environmentVariables": {
+        "GREETING": "from the launch profile"
+      }
+    },
+    "Fails": {
+      "commandName": "Project",
+      "commandLineArgs": "--exit 3"
+    },
+    "IIS Express": {
+      "commandName": "IISExpress",
+      "launchBrowser": true
+    }
+  }
+}

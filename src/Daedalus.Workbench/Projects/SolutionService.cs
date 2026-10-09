@@ -95,6 +95,12 @@ public sealed class SolutionService : IAsyncDisposable
 
     public event EventHandler<RestoreStateChangedEventArgs>? RestoreStateChanged;
 
+    /// <summary>A line of a running build's output.</summary>
+    public event EventHandler<string>? BuildOutput;
+
+    /// <summary>An error or warning of a running build.</summary>
+    public event EventHandler<BuildDiagnosticInfo>? BuildDiagnostic;
+
     /// <summary>Build host messages and process output, for the Output window.</summary>
     public event EventHandler<string>? Log;
 
@@ -214,6 +220,8 @@ public sealed class SolutionService : IAsyncDisposable
             RestoreStateChanged?.Invoke(this, new RestoreStateChangedEventArgs(p.State, p.Message));
         });
         connection.OnNotification(ProjectMethods.Log, json.LogParams, p => Log?.Invoke(this, $"[{p.Level}] {p.Message}"));
+        connection.OnNotification(ProjectMethods.BuildOutput, json.BuildOutputParams, p => BuildOutput?.Invoke(this, p.Line));
+        connection.OnNotification(ProjectMethods.BuildDiagnostic, json.BuildDiagnosticInfo, d => BuildDiagnostic?.Invoke(this, d));
     }
 
     /// <summary>Runs for the first start and after every restart: (re)opens the solution with the latest settings.</summary>
@@ -275,6 +283,39 @@ public sealed class SolutionService : IAsyncDisposable
     /// <summary>Runs design-time builds again (one project, or every project when null).</summary>
     public Task DesignTimeBuildAsync(string? projectPath, CancellationToken cancellationToken) =>
         InvokeAsync(ProjectMethods.DesignTimeBuild, new DesignTimeBuildParams(projectPath), ProjectJsonContext.Default.DesignTimeBuildParams, cancellationToken);
+
+    /// <summary>
+    /// Builds the solution (<paramref name="projectPath"/> null) or a project, and completes when the build has finished:
+    /// after every <see cref="BuildOutput"/> and <see cref="BuildDiagnostic"/> of it. Cancelling the token asks the
+    /// host to stop the build; the result then reports <see cref="BuildResultInfo.Canceled"/>.
+    /// </summary>
+    public async Task<BuildResultInfo> BuildAsync(string target, string? projectPath, CancellationToken cancellationToken)
+    {
+        var connection = Connection;
+        await using var registration = cancellationToken.Register(() => _ = CancelBuildAsync(connection)).ConfigureAwait(false);
+        return await connection.InvokeAsync(
+            ProjectMethods.Build, new BuildParams(target, projectPath), ProjectJsonContext.Default.BuildParams, ProjectJsonContext.Default.BuildResultInfo, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private static async Task CancelBuildAsync(JsonRpcConnection connection)
+    {
+        try
+        {
+            await connection.InvokeAsync(ProjectMethods.CancelBuild, new EmptyParams(), ProjectJsonContext.Default.EmptyParams, ProjectJsonContext.Default.EmptyResult, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is JsonRpcConnectionLostException or JsonRpcRemoteException or ObjectDisposedException)
+        {
+            // The build ends with the host.
+        }
+    }
+
+    /// <summary>How to start a project (the SDK's run properties and its launch settings file).</summary>
+    public async Task<RunInfo> GetRunInfoAsync(string projectPath, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(s_operationTimeout);
+        return await Connection.InvokeAsync(ProjectMethods.RunInfo, new ProjectPathParams(projectPath), ProjectJsonContext.Default.ProjectPathParams, ProjectJsonContext.Default.RunInfo, timeout.Token).ConfigureAwait(false);
+    }
 
     public Task ReevaluateAsync(string projectPath, CancellationToken cancellationToken) =>
         InvokeAsync(ProjectMethods.Reevaluate, new ProjectPathParams(projectPath), ProjectJsonContext.Default.ProjectPathParams, cancellationToken);

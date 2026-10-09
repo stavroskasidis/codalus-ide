@@ -9,7 +9,7 @@ namespace Daedalus.Projects.Host;
 /// The build host's side of the protocol (docs/project-protocol.md). One solution session at a time; the shell
 /// starts one host per solution. Notifications to the shell go through one ordered queue.
 /// </summary>
-internal sealed class BuildHostServer : IAsyncDisposable, ISessionEvents
+internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
 {
     private readonly JsonRpcConnection _connection;
     private readonly string _msbuildPath;
@@ -93,6 +93,14 @@ internal sealed class BuildHostServer : IAsyncDisposable, ISessionEvents
         _connection.OnRequest(ProjectMethods.RemoveProjectReference, json.ProjectReferenceParams, json.EmptyResult, (p, _) => Sync(() => Session.RemoveProjectReference(p)));
         _connection.OnRequest(ProjectMethods.SetActiveFramework, json.SetActiveFrameworkParams, json.EmptyResult, (p, _) => Sync(() => Session.SetActiveFramework(p)));
         _connection.OnRequest(ProjectMethods.DesignTimeBuild, json.DesignTimeBuildParams, json.EmptyResult, (p, _) => Sync(() => Session.RequestDesignTimeBuild(p.Path)));
+        _connection.OnRequest(ProjectMethods.Build, json.BuildParams, json.BuildResultInfo, async (p, ct) =>
+        {
+            var result = await Guard(() => Session.BuildAsync(p, this, ct)).ConfigureAwait(false);
+            await FlushAsync().ConfigureAwait(false);
+            return result;
+        });
+        _connection.OnRequest(ProjectMethods.CancelBuild, json.EmptyParams, json.EmptyResult, (_, _) => Sync(() => _session?.CancelBuild()));
+        _connection.OnRequest(ProjectMethods.RunInfo, json.ProjectPathParams, json.RunInfo, (p, _) => Guard(() => Task.Run(() => Session.GetRunInfo(p.Path))));
         _connection.OnRequest(ProjectMethods.Shutdown, json.EmptyParams, json.EmptyResult, async (_, _) =>
         {
             if (_session is { } session)
@@ -152,6 +160,26 @@ internal sealed class BuildHostServer : IAsyncDisposable, ISessionEvents
     public Task CompilerInputsAsync(CompilerInputsInfo inputs) => Post(ProjectMethods.CompilerInputs, inputs, ProjectJsonContext.Default.CompilerInputsInfo);
 
     public Task DesignTimeProgressAsync(DesignTimeProgressParams progress) => Post(ProjectMethods.DesignTimeProgress, progress, ProjectJsonContext.Default.DesignTimeProgressParams);
+
+    public Task BuildOutputAsync(string line) => Post(ProjectMethods.BuildOutput, new BuildOutputParams(line), ProjectJsonContext.Default.BuildOutputParams);
+
+    public Task BuildDiagnosticAsync(BuildDiagnosticInfo diagnostic) => Post(ProjectMethods.BuildDiagnostic, diagnostic, ProjectJsonContext.Default.BuildDiagnosticInfo);
+
+    /// <summary>Completes once every notification queued so far has been sent (a response must not overtake them).</summary>
+    private Task FlushAsync()
+    {
+        var sent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_outgoing.Writer.TryWrite(() =>
+            {
+                sent.TrySetResult();
+                return Task.CompletedTask;
+            }))
+        {
+            sent.TrySetResult();
+        }
+
+        return sent.Task;
+    }
 
     public Task LogAsync(string level, string message) => Post(ProjectMethods.Log, new LogParams(level, message), ProjectJsonContext.Default.LogParams);
 
