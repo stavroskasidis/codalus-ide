@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Daedalus.Shell.Controls;
 using Daedalus.Shell.Docking;
+using Daedalus.Shell.Editor;
 using Daedalus.Shell.ViewModels;
 using Daedalus.Shell.Views;
 
@@ -16,7 +17,7 @@ public sealed class ViewLocator : IDataTemplate
         ToolWindowDockable tool => new PaneHost(tool, BuildToolContent(tool.Content)),
         SettingsDocument document => new PaneHost(document, new SettingsView { DataContext = document.ViewModel }),
         KeyboardShortcutsDocument document => new PaneHost(document, new KeyboardShortcutsView { DataContext = document.ViewModel }),
-        TextFileDocument document => new PaneHost(document, new TextFileView { DataContext = document }),
+        CodeEditorDocument document => new PaneHost(document, new CodeEditorView(document, document.Services, document.Font)),
         _ => null,
     };
 
@@ -30,6 +31,7 @@ public sealed class ViewLocator : IDataTemplate
         TreeToolViewModel vm => new TreeToolView { DataContext = vm },
         MarkdownToolViewModel vm => new MarkdownToolView { DataContext = vm },
         SolutionExplorerViewModel vm => new SolutionExplorerView { DataContext = vm },
+        ErrorListViewModel vm => new ErrorListView { DataContext = vm },
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },
     };
 }

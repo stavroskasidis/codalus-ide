@@ -37,9 +37,31 @@ public sealed class ToolWindowDockable : Tool
 public abstract class ShellDocument : Document
 {
     private bool _closeConfirmed;
+    private bool _isPreview;
 
     /// <summary>The value of the <c>activeDocumentKind</c> context key while this document is active.</summary>
     public abstract string Kind { get; }
+
+    /// <summary>
+    /// A preview tab (italic title): the next preview replaces it, until it is edited, double-clicked or kept open.
+    /// </summary>
+    public bool IsPreview
+    {
+        get => _isPreview;
+        set
+        {
+            if (SetProperty(ref _isPreview, value))
+            {
+                OnPropertyChanged(nameof(TitleFontStyle));
+            }
+        }
+    }
+
+    /// <summary>The tab title's style: italic for preview tabs.</summary>
+    public Avalonia.Media.FontStyle TitleFontStyle => IsPreview ? Avalonia.Media.FontStyle.Italic : Avalonia.Media.FontStyle.Normal;
+
+    /// <summary>Whether closing must ask to save first (by default: when modified).</summary>
+    protected virtual bool NeedsSaveOnClose => IsModified;
 
     /// <summary>Raised instead of closing when the document has unsaved changes.</summary>
     public event EventHandler? CloseRequested;
@@ -53,7 +75,7 @@ public abstract class ShellDocument : Document
 
     public override bool OnClose()
     {
-        if (IsModified && !_closeConfirmed)
+        if (NeedsSaveOnClose && !_closeConfirmed)
         {
             CloseRequested?.Invoke(this, EventArgs.Empty);
             return false;

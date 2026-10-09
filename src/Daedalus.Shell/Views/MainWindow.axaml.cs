@@ -268,6 +268,7 @@ public sealed partial class MainWindow : Window, IShellWindow
             _ => null,
         };
         _shell.Workbench.Context.Set("focusedView", view);
+        _shell.Workbench.Context.Set("editorTextFocus", view == "textFile");
         _shell.Notifications.SuppressToasts = view == BuiltIns.NotificationsWindow;
     }
 

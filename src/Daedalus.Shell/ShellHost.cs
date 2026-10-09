@@ -54,7 +54,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting()]);
+        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings()]);
         Theme = new ThemeService(app, Workbench);
 
         foreach (var window in BuiltIns.ToolWindows())
@@ -73,11 +73,14 @@ public sealed partial class ShellHost : IAsyncDisposable
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
         InitializeSolutions();
         Layout = new LayoutManager(Workbench.ToolWindows, CreateToolContent);
+        InitializeEditor();
 
         BuiltIns.RegisterCommands(this);
         BuiltIns.RegisterSolutionCommands(this);
+        BuiltIns.RegisterEditorCommands(this);
         BuiltIns.RegisterMenus(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
+        BuiltIns.RegisterEditorMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
         Workbench.LoadUserKeybindings();
         SyncViewCommands();
@@ -172,6 +175,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             BuiltIns.NotificationsWindow => Notifications,
             BuiltIns.PluginsWindow => PluginList,
             SolutionExplorerViewModel.ToolWindowId => Explorer,
+            ErrorListViewModel.ToolWindowId => ErrorList,
             _ => null,
         },
     };
@@ -327,91 +331,6 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     private const string KeybindingsTemplate = "// Daedalus Studio key bindings. Entries override the defaults; \"-command\" removes a default binding.\n[\n]\n";
 
-    public async Task OpenTextFileAsync(string path, string initialContent)
-    {
-        if (Layout.FindDocument<TextFileDocument>("file:" + path) is { } open)
-        {
-            Layout.OpenDocument(open);
-            return;
-        }
-
-        var document = await TextFileDocument.OpenAsync(path, initialContent, EditorFont, CancellationToken.None).ConfigureAwait(true);
-        document.CloseRequested += (_, _) => _ = ConfirmCloseAsync(document);
-        Layout.OpenDocument(document);
-    }
-
-    private async Task ConfirmCloseAsync(TextFileDocument document)
-    {
-        var choice = await Workbench.Notifications.Warning($"Save changes to {Path.GetFileName(document.FilePath)} before closing?", "Save", "Don't Save").Result.ConfigureAwait(false);
-        await Ui.RunAsync(async () =>
-        {
-            if (choice == "Save")
-            {
-                await SaveAsync(document).ConfigureAwait(true);
-                document.CloseConfirmed();
-            }
-            else if (choice == "Don't Save")
-            {
-                document.CloseConfirmed();
-            }
-        }).ConfigureAwait(false);
-    }
-
-    public async Task SaveActiveDocumentAsync()
-    {
-        if (Layout.ActiveDocument is TextFileDocument document)
-        {
-            await SaveAsync(document).ConfigureAwait(true);
-        }
-    }
-
-    private async Task SaveAsync(TextFileDocument document)
-    {
-        try
-        {
-            await document.SaveAsync(CancellationToken.None).ConfigureAwait(true);
-            StatusBar.ShowMessage($"Saved {Path.GetFileName(document.FilePath)}", TimeSpan.FromSeconds(3));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Workbench.Notifications.Error($"Could not save {document.FilePath}: {ex.Message}");
-        }
-    }
-
-    public void CloseActiveDocument()
-    {
-        if (Layout.ActiveDocument is { } document)
-        {
-            Layout.CloseDocument(document);
-        }
-    }
-
-    public bool HasUnsavedDocuments => Layout.Documents.Any(d => d.IsModified);
-
-    /// <summary>Asks before quitting with unsaved changes; true when the window may close.</summary>
-    public async Task<bool> ConfirmQuitAsync()
-    {
-        var unsaved = Layout.Documents.OfType<TextFileDocument>().Where(d => d.IsModified).ToList();
-        if (unsaved.Count == 0)
-        {
-            return true;
-        }
-
-        var names = string.Join(", ", unsaved.Select(d => Path.GetFileName(d.FilePath)));
-        var choice = await Workbench.Notifications.Warning($"You have unsaved changes in {names}.", "Save All and Exit", "Exit Without Saving").Result.ConfigureAwait(true);
-        if (choice == "Save All and Exit")
-        {
-            foreach (var document in unsaved)
-            {
-                await SaveAsync(document).ConfigureAwait(true);
-            }
-
-            return unsaved.All(d => !d.IsModified);
-        }
-
-        return choice == "Exit Without Saving";
-    }
-
     public void ShowLogs()
     {
         Output.Selected = Workbench.Log;
@@ -484,6 +403,11 @@ public sealed partial class ShellHost : IAsyncDisposable
             StatusBar.IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true);
         }
 
+        if (e.Affects("languageServices.analysisScope"))
+        {
+            _ = ConfigureLanguagesAsync();
+        }
+
         if (e.Affects("output.wordWrap"))
         {
             Output.WordWrap = Workbench.Settings.GetBoolean("output.wordWrap");
@@ -546,6 +470,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        await Languages.DisposeAsync().ConfigureAwait(false);
         await Solutions.DisposeAsync().ConfigureAwait(false);
         await Plugins.DisposeAsync().ConfigureAwait(false);
         Workbench.Dispose();

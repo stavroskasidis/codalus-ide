@@ -65,6 +65,9 @@ public sealed class LayoutManager : ObservableObject
 
     public event EventHandler<ShellDocument?>? ActiveDocumentChanged;
 
+    /// <summary>A document tab was closed.</summary>
+    public event EventHandler<ShellDocument>? DocumentClosed;
+
     /// <summary>Raised when a tool window should receive keyboard focus once its view exists.</summary>
     public event EventHandler<IDockable>? FocusRequested;
 
@@ -235,14 +238,37 @@ public sealed class LayoutManager : ObservableObject
 
     // ------------------------------------------------------------------ documents
 
-    public void OpenDocument(ShellDocument document)
+    /// <summary>
+    /// Shows <paramref name="document"/> (or the open document with its id). A <paramref name="preview"/> document
+    /// takes the place of the group's current preview tab, unless that one was modified.
+    /// </summary>
+    public void OpenDocument(ShellDocument document, bool preview = false, bool focus = false)
     {
         var existing = Documents.FirstOrDefault(d => d.Id == document.Id);
         if (existing is null)
         {
-            var dock = _lastDocumentDock is { Owner: not null } last && AllDockables().Contains(last) ? last : DocumentsDock();
-            Factory.AddDockable(dock, document);
+            var dock = ActiveDocumentDock();
+            if (preview && dock.VisibleDockables?.OfType<ShellDocument>().FirstOrDefault(d => d.IsPreview && !d.IsModified) is { } previous)
+            {
+                Factory.InsertDockable(dock, document, dock.VisibleDockables.IndexOf(previous));
+                Factory.CloseDockable(previous);
+            }
+            else
+            {
+                Factory.AddDockable(dock, document);
+            }
+
+            document.IsPreview = preview;
             existing = document;
+        }
+        else if (!preview)
+        {
+            existing.IsPreview = false;
+        }
+
+        if (focus)
+        {
+            FocusRequested?.Invoke(this, existing);
         }
 
         Factory.SetActiveDockable(existing);
@@ -253,6 +279,26 @@ public sealed class LayoutManager : ObservableObject
 
         UpdateActiveDocument();
     }
+
+    /// <summary>Adds <paramref name="view"/> next to the active document in a new group, to the right or below.</summary>
+    public void OpenInNewGroup(ShellDocument view, bool below)
+    {
+        Factory.AddDockable(ActiveDocumentDock(), view);
+        if (below)
+        {
+            Factory.NewVerticalDocumentDock(view);
+        }
+        else
+        {
+            Factory.NewHorizontalDocumentDock(view);
+        }
+
+        OpenDocument(view);
+    }
+
+    /// <summary>The document dock that has the active document (or the main one).</summary>
+    private IDocumentDock ActiveDocumentDock() =>
+        _lastDocumentDock is { Owner: not null } last && AllDockables().Contains(last) ? last : DocumentsDock();
 
     public T? FindDocument<T>(string id)
         where T : ShellDocument => Documents.OfType<T>().FirstOrDefault(d => d.Id == id);
@@ -275,7 +321,15 @@ public sealed class LayoutManager : ObservableObject
 
     private void OnFocusedDockableChanged(object? sender, FocusedDockableChangedEventArgs e) => UpdateActiveDocument(e.Dockable);
 
-    private void OnDockableClosed(object? sender, DockableClosedEventArgs e) => UpdateActiveDocument();
+    private void OnDockableClosed(object? sender, DockableClosedEventArgs e)
+    {
+        if (e.Dockable is ShellDocument document)
+        {
+            DocumentClosed?.Invoke(this, document);
+        }
+
+        UpdateActiveDocument();
+    }
 
     private void UpdateActiveDocument(IDockable? changed = null)
     {

@@ -1,18 +1,19 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:Daedalus.Shell.Controls"
-        xmlns:core="using:Dock.Model.Core">
+        xmlns:core="using:Dock.Model.Core"
+        xmlns:docking="using:Daedalus.Shell.Docking">
 
   <Style Selector="Window">
     <Setter Property="Background" Value="{DynamicResource Shell.Background}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
   </Style>
 
-  <!-- Dock tab headers show the dockable title. -->
+  <!-- Dock tab headers show the dockable title; preview tabs in italics. -->
   <Style Selector="DocumentControl">
     <Setter Property="HeaderTemplate">
-      <DataTemplate DataType="core:IDockable">
-        <TextBlock Text="{Binding Title}" VerticalAlignment="Center" Padding="2" />
+      <DataTemplate DataType="docking:ShellDocument">
+        <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
       </DataTemplate>
     </Setter>
   </Style>
@@ -102,5 +103,13 @@
   </Style>
   <Style Selector="controls|Icon.error">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Error}" />
+  </Style>
+  <!-- Quick Info and diagnostics popup in the editor. -->
+  <Style Selector="Border.editorHover">
+    <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Padding" Value="8,6" />
   </Style>
 </Styles>

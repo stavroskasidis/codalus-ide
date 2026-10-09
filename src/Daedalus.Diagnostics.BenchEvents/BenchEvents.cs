@@ -92,6 +92,9 @@ public static class BenchEventNames
 
     public const string SolutionLoaded = "solution_loaded";
 
+    /// <summary>The language service compiled every project once (first background pass finished).</summary>
+    public const string LanguageReady = "language_ready";
+
     /// <summary>The open document shows semantic highlighting for the visible range.</summary>
     public const string HighlightReady = "highlight_ready";
 

@@ -54,6 +54,7 @@ public sealed record WindowPlacement(double Width, double Height, int? X, int? Y
 [JsonSerializable(typeof(ShellState))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(string[]))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 internal sealed partial class ShellJsonContext : JsonSerializerContext;
 
 /// <summary>Small bits of per-user state that survive restarts (<c>state.json</c>).</summary>

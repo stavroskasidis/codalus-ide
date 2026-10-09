@@ -77,7 +77,7 @@ public class SolutionTests
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.InputText = "Order.cs";
         f.Shell.Dialogs.Accept();
-        await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is TextFileDocument { Title: "Order.cs" });
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is Daedalus.Shell.Editor.CodeEditorDocument { Title: "Order.cs" });
         Assert.Contains("namespace App;", File.ReadAllText(Path.Combine(appDir, "Order.cs")), StringComparison.Ordinal);
 
         explorer.Reveal("f:" + Path.Combine(appDir, "appsettings.json"));
@@ -117,7 +117,7 @@ public class SolutionTests
 
         explorer.Selected = Row(f, "Program.cs");
         f.Press(Key.Enter);
-        await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is TextFileDocument { Title: "Program.cs" });
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is Daedalus.Shell.Editor.CodeEditorDocument { Title: "Program.cs" });
 
         explorer.Selected = Row(f, "Program.cs");
         f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().Single().FocusPrimary();

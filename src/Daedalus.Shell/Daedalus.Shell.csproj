@@ -31,6 +31,7 @@
   <ItemGroup>
     <HelperProcess Include="..\Daedalus.Plugins.Host\Daedalus.Plugins.Host.csproj" Folder="pluginhost" />
     <HelperProcess Include="..\Daedalus.Projects.Host\Daedalus.Projects.Host.csproj" Folder="buildhost" />
+    <HelperProcess Include="..\Daedalus.LanguageServices.Host\Daedalus.LanguageServices.Host.csproj" Folder="lshost" />
     <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <BuiltInPlugin Include="..\Plugins\Daedalus.Plugins.Welcome\Daedalus.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
     <BuiltInPlugin Include="..\Plugins\Daedalus.Plugins.Templates\Daedalus.Plugins.Templates.csproj" PluginId="daedalus.templates" />
@@ -59,6 +60,7 @@
     Layout next to the shell executable:
       pluginhost/                 daedalus-pluginhost (framework-dependent, ReadyToRun when published)
       buildhost/                  daedalus-buildhost (likewise; MSBuild comes from the installed SDK)
+      lshost/                     daedalus-lshost, the C# language service (likewise)
       plugins/<plugin id>/        built-in plugins
   -->
   <Target Name="DaedalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">

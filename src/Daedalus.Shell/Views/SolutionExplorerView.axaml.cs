@@ -40,9 +40,18 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
         };
         List.Tapped += (_, e) =>
         {
-            if (IsChevron(e.Source) && RowAt(e.Source) is { } row)
+            if (RowAt(e.Source) is not { } row)
+            {
+                return;
+            }
+
+            if (IsChevron(e.Source))
             {
                 ViewModel?.Toggle(row);
+            }
+            else
+            {
+                _ = ViewModel?.PreviewAsync(row);
             }
         };
         List.ContextRequested += OnContextRequested;

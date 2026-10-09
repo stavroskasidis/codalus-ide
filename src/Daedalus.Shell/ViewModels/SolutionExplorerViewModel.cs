@@ -300,13 +300,22 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     // ------------------------------------------------------------------ activation
 
+    /// <summary>A single click on a file shows it in the preview tab, keeping focus here.</summary>
+    public async Task PreviewAsync(ExplorerRowViewModel row)
+    {
+        if (row.Node is { Kind: ExplorerNodeKind.File or ExplorerNodeKind.SolutionItem, Path: { } path } && File.Exists(path))
+        {
+            await _shell.OpenFileAsync(path, preview: true).ConfigureAwait(true);
+        }
+    }
+
     /// <summary>Enter or double-click: files open, containers expand or collapse, project references jump to the project.</summary>
     public async Task ActivateAsync(ExplorerRowViewModel row)
     {
         switch (row.Node)
         {
             case { Kind: ExplorerNodeKind.File or ExplorerNodeKind.SolutionItem, Path: { } path }:
-                await _shell.OpenTextFileAsync(path, string.Empty).ConfigureAwait(true);
+                await _shell.OpenFileAsync(path).ConfigureAwait(true);
                 break;
             case { Kind: ExplorerNodeKind.Dependency, Path: { } target } when target.EndsWith("proj", StringComparison.OrdinalIgnoreCase):
                 Reveal("p:" + target);
