@@ -39,6 +39,20 @@ jobs:
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
           bash eng/package.sh "${{ inputs.version }}"
+      # Installs the packages it just built (outside the checkout) and runs the smoke test on them, with their bundled
+      # debugger: the Windows zip, the macOS .app from the dmg, the Linux .deb (and --version of the tar.gz and AppImage).
+      - name: Display for the smoke test (Xvfb)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y --no-install-recommends xvfb
+      - name: Smoke test the packages
+        shell: bash
+        run: bash eng/smoke-test.sh --packages artifacts/packages artifacts/smoke-test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-test-${{ runner.os }}
+          path: artifacts/smoke-test/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: packages-${{ runner.os }}

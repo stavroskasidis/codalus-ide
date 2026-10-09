@@ -81,3 +81,19 @@ jobs:
         run: |
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
           dotnet publish src/DaedalusStudio.Shell -c Release -r "$rid" -o artifacts/shell
+      - name: Display for the smoke test (Xvfb)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
+      # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the
+      # in-process headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform).
+      - name: End-to-end smoke test of the published app
+        shell: bash
+        env:
+          DAEDALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
+        run: bash eng/smoke-test.sh artifacts/shell/daedalus artifacts/smoke-test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-test-${{ runner.os }}
+          path: artifacts/smoke-test/
+          if-no-files-found: ignore

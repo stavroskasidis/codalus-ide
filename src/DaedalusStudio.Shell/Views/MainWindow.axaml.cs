@@ -112,6 +112,11 @@ public sealed partial class MainWindow : Window, IShellWindow
         {
             _ = new Infrastructure.BenchDriver(this, _shell).RunAsync();
         }
+
+        if (_shell.Options.SmokeTest is { } samples)
+        {
+            _ = new Infrastructure.SmokeTest(this, _shell, samples).RunAsync();
+        }
     }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)

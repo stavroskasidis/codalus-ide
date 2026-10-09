@@ -47,6 +47,12 @@ public sealed record ShellOptions
     /// <summary>Writes a screenshot of the window once it is interactive (<c>--screenshot file.png</c>).</summary>
     public string? Screenshot { get; init; }
 
+    /// <summary>
+    /// CI: runs the end-to-end smoke test (<see cref="Infrastructure.SmokeTest"/>) on fixtures copied from this samples
+    /// folder, writes a report to the logs folder and exits with 0 when every step passed (<c>--smoke-test samples</c>).
+    /// </summary>
+    public string? SmokeTest { get; init; }
+
     /// <summary>Where the built-in plugins live; defaults to <c>plugins/</c> next to the executable.</summary>
     public string? BuiltInPluginsDir { get; init; }
 
@@ -110,6 +116,9 @@ public sealed record ShellOptions
                     break;
                 case "--screenshot":
                     options = options with { Screenshot = Value() };
+                    break;
+                case "--smoke-test":
+                    options = options with { SmokeTest = Value() is { } samples ? System.IO.Path.GetFullPath(samples) : null };
                     break;
                 case var other when other.StartsWith('-'):
                     errors.Add($"Unknown option '{other}'.");
