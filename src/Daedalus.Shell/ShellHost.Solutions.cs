@@ -68,7 +68,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        path = Path.GetFullPath(path);
+        path = Daedalus.Platform.RealPath.Resolve(path);
         if (!File.Exists(path))
         {
             Recent.Remove(path);
@@ -113,6 +113,7 @@ public sealed partial class ShellHost
             Workbench.Settings.SetWorkspaceFile(Path.Combine(folder, ".daedalus", "settings.json"));
             Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
             await RestoreEditorSessionAsync(path).ConfigureAwait(true);
+            await OpenRepositoryAsync(folder).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException or System.ComponentModel.Win32Exception)
         {
@@ -142,6 +143,7 @@ public sealed partial class ShellHost
         SaveEditorSession();
         CloseSolutionDocuments();
         await Solutions.CloseAsync().ConfigureAwait(true);
+        Git.Close();
         Workbench.Settings.SetWorkspaceFile(null);
     }
 

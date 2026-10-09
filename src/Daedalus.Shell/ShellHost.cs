@@ -57,7 +57,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings()]);
         Theme = new ThemeService(app, Workbench);
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -74,6 +74,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeSolutions();
         InitializeBuild();
         InitializeDebugging();
+        InitializeGit();
         InitializeEditor();
         InitializeRefactoring();
 
@@ -91,11 +92,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterEditorCommands(this);
         BuiltIns.RegisterBuildCommands(this);
         BuiltIns.RegisterDebugCommands(this);
+        BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterMenus(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
         BuiltIns.RegisterEditorMenus(Workbench.Menus);
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
         BuiltIns.RegisterDebugMenus(Workbench.Menus);
+        BuiltIns.RegisterGitMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
         Workbench.LoadUserKeybindings();
         SyncViewCommands();
@@ -198,6 +201,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             CallStackViewModel.ToolWindowId => CallStack,
             BreakpointsViewModel.ToolWindowId => BreakpointList,
             DebugConsoleViewModel.ToolWindowId => DebugConsole,
+            GitChangesViewModel.ToolWindowId => GitChanges,
             _ => null,
         },
     };
@@ -494,6 +498,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await Debugger.DisposeAsync().ConfigureAwait(false);
+        Git.Dispose();
         await Languages.DisposeAsync().ConfigureAwait(false);
         await Solutions.DisposeAsync().ConfigureAwait(false);
         await Plugins.DisposeAsync().ConfigureAwait(false);

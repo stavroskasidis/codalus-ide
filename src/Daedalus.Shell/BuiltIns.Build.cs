@@ -94,8 +94,8 @@ internal static partial class BuiltIns
 
     public static void RegisterBuildMenus(MenuRegistry menus)
     {
-        menus.AddMenuBarMenu(new MenuBarMenu("build", "_Build", 5));
-        menus.AddMenuBarMenu(new MenuBarMenu("debug", "_Debug", 6));
+        menus.AddMenuBarMenu(new MenuBarMenu("build", "_Build", 50));
+        menus.AddMenuBarMenu(new MenuBarMenu("debug", "_Debug", 60));
         var shell = ContributionSource.Shell;
         MenuItemRule Item(string location, string command, string group, int order = 0, string? when = null, string? title = null) =>
             new(location, command, shell) { Group = group, Order = order, When = WhenClause.Parse(when), Title = title };

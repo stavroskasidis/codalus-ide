@@ -183,8 +183,8 @@ internal static partial class BuiltIns
 
     public static void RegisterEditorMenus(MenuRegistry menus)
     {
-        menus.AddMenuBarMenu(new MenuBarMenu("edit", "_Edit", 2));
-        menus.AddMenuBarMenu(new MenuBarMenu("window", "_Window", 8));
+        menus.AddMenuBarMenu(new MenuBarMenu("edit", "_Edit", 20));
+        menus.AddMenuBarMenu(new MenuBarMenu("window", "_Window", 80));
         var shell = ContributionSource.Shell;
         MenuItemRule Item(string location, string command, string group, int order = 0) =>
             new(location, command, shell) { Group = group, Order = order };

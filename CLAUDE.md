@@ -29,6 +29,10 @@ The C# language service host (`daedalus-lshost`, ADR 0005) speaks LSP over stdio
 
 The shell debugs through netcoredbg (Samsung, MIT) over DAP (ADR 0007; client in `src/Daedalus.Debugging`, sessions in `DebugService` in `src/Daedalus.Workbench/Debugging`). Get it with `eng/get-netcoredbg.sh` (pinned, checksummed, into `.work/netcoredbg`); `DAEDALUS_NETCOREDBG` points at another one, and installed builds look in `debugger/` next to the shell. Debugger tests skip without it locally and fail without it in CI. Fixture: `samples/Debugging`.
 
+## Git
+
+Source control uses the git CLI (ADR 0008), not a library: `GitService` in `src/Daedalus.Workbench/Git` runs one `git` process per operation and parses porcelain output only. `DAEDALUS_GIT` points at another git. Tests build throwaway repositories in temp folders (git writes read-only object files; clear the attribute before deleting).
+
 ## Benchmarks
 
 See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -- list | run ... | report | check | compare --baseline DIR`. Budgets live in `benchmarks/budgets.json`. Scenarios that inject keystrokes require `--allow-input` and a machine that nobody is using at the time.

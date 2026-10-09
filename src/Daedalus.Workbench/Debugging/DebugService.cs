@@ -182,6 +182,12 @@ public sealed class DebugService : IAsyncDisposable
 
         await _session.CancelAsync().ConfigureAwait(false);
         await adapter.DisposeAsync().ConfigureAwait(false);
+        foreach (var breakpoint in Breakpoints.All.Where(b => b.Enabled && Breakpoints.StateOf(b) is { Verified: false }))
+        {
+            var message = Breakpoints.StateOf(breakpoint)?.Message;
+            Output?.Invoke(this, new DebugOutput("console", $"The breakpoint at {breakpoint.Path}, line {breakpoint.Line.ToString(CultureInfo.InvariantCulture)} was never bound{(message is null ? "." : ": " + message)}\n"));
+        }
+
         CurrentStop = null;
         Threads = [];
         Frames = [];

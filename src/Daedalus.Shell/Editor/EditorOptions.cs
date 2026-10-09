@@ -112,4 +112,7 @@ public interface IEditorServices
 
     /// <summary>Breakpoints, the current statement and data tips (ADR 0007).</summary>
     Daedalus.Workbench.Debugging.DebugService Debugger { get; }
+
+    /// <summary>Gutter change markers and blame (ADR 0008).</summary>
+    Daedalus.Workbench.Git.GitService Git { get; }
 }

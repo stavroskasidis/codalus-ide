@@ -94,7 +94,7 @@ internal sealed class ShellFixture : IAsyncDisposable
     }
 
     public static ShellFixture Create(string? userData = null) =>
-        new(userData ?? Path.Combine(Path.GetTempPath(), "daedalus-shell-" + Guid.NewGuid().ToString("N")));
+        new(userData ?? Path.Combine(Daedalus.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-shell-" + Guid.NewGuid().ToString("N")));
 
     private static string Metadata(string key) =>
         typeof(ShellFixture).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
@@ -138,9 +138,15 @@ internal sealed class ShellFixture : IAsyncDisposable
         await Shell.DisposeAsync();
         try
         {
+            // git writes its object files read-only.
+            foreach (var file in Directory.EnumerateFiles(UserData, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
+            }
+
             Directory.Delete(UserData, recursive: true);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
         }
     }

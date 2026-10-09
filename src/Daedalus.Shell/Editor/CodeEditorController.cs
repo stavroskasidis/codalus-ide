@@ -17,6 +17,7 @@ using Daedalus.Rpc;
 using Daedalus.Shell.Controls;
 using Daedalus.Shell.Infrastructure;
 using Daedalus.Workbench.Debugging;
+using Daedalus.Workbench.Git;
 
 namespace Daedalus.Shell.Editor;
 
@@ -49,6 +50,12 @@ public sealed class CodeEditorController : IDisposable
     private readonly DispatcherTimer _hoverTimer;
     private readonly BreakpointMargin _breakpointMargin;
     private readonly DebugLineRenderer _debugLines;
+    private readonly GitChangeMargin _gitMargin = new();
+    private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
+    private BlameMargin? _blameMargin;
+    private string? _indexText;
+    private bool _indexLoaded;
+    private CancellationTokenSource? _gitCts;
     private CancellationTokenSource? _tokensCts;
     private CancellationTokenSource? _foldingCts;
     private CancellationTokenSource? _highlightCts;
@@ -86,6 +93,11 @@ public sealed class CodeEditorController : IDisposable
         services.Debugger.StateChanged += OnDebuggerChanged;
         services.Debugger.FrameChanged += OnDebuggerChanged;
         services.Debugger.Stopped += OnDebuggerStopped;
+        editor.TextArea.LeftMargins.Add(_gitMargin);
+        _gitTimer.Tick += OnGitTimer;
+        services.Git.IndexChanged += OnGitIndexChanged;
+        document.TextChanged += OnGitTextChanged;
+        _gitTimer.Start();
         _folding = FoldingManager.Install(editor.TextArea);
         _search = SearchPanel.Install(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
@@ -844,6 +856,106 @@ public sealed class CodeEditorController : IDisposable
         }
     }
 
+    // ------------------------------------------------------------------ git
+
+    public GitChangeMargin GitMargin => _gitMargin;
+
+    public BlameMargin? Blame => _blameMargin;
+
+    private void OnGitIndexChanged(object? sender, EventArgs e) => Ui.Post(() =>
+    {
+        _indexLoaded = false;
+        if (!_disposed)
+        {
+            _gitTimer.Stop();
+            _gitTimer.Start();
+        }
+    });
+
+    private void OnGitTextChanged(object? sender, EventArgs e)
+    {
+        _gitTimer.Stop();
+        _gitTimer.Start();
+    }
+
+    private void OnGitTimer(object? sender, EventArgs e)
+    {
+        _gitTimer.Stop();
+        _ = UpdateGitMarkersAsync();
+    }
+
+    /// <summary>Compares the editor's text with the file's index version and updates the change markers.</summary>
+    public async Task UpdateGitMarkersAsync()
+    {
+        var git = _services.Git;
+        if (_disposed || Model.IsReadOnly || git.Root is not { } root
+            || !Model.Path.StartsWith(root, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+        {
+            _gitMargin.Changes = [];
+            return;
+        }
+
+        var cancellationToken = Restart(ref _gitCts).Token;
+        try
+        {
+            if (!_indexLoaded)
+            {
+                _indexText = await git.ShowAsync(Model.Path, ":", cancellationToken).ConfigureAwait(true);
+                _indexLoaded = true;
+            }
+
+            var status = git.Status?.Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, Model.Path));
+            var current = Model.Text.Text;
+            var baseline = _indexText ?? (status is { IsUntracked: true } ? string.Empty : null);
+            if (baseline is null)
+            {
+                _gitMargin.Changes = []; // ignored or outside the repository
+                return;
+            }
+
+            var changes = await Task.Run(() => LineDiff.Changes(LineDiff.Lines(baseline), LineDiff.Lines(current)), cancellationToken).ConfigureAwait(true);
+            if (!cancellationToken.IsCancellationRequested && !_disposed)
+            {
+                _gitMargin.Changes = changes;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (GitException ex)
+        {
+            Report(ex);
+        }
+    }
+
+    /// <summary>Shows or hides blame annotations (blaming the editor's current text).</summary>
+    public async Task ToggleBlameAsync()
+    {
+        if (_blameMargin is not null)
+        {
+            Editor.TextArea.LeftMargins.Remove(_blameMargin);
+            _blameMargin = null;
+            return;
+        }
+
+        if (_services.Git.Root is null)
+        {
+            _services.ShowMessage("This file is not in a git repository.");
+            return;
+        }
+
+        try
+        {
+            var ranges = await _services.Git.BlameAsync(Model.Path, Model.Text.Text).ConfigureAwait(true);
+            _blameMargin = new BlameMargin { Ranges = ranges };
+            Editor.TextArea.LeftMargins.Insert(0, _blameMargin);
+        }
+        catch (GitException ex)
+        {
+            _services.ShowMessage("Blame failed: " + ex.Message);
+        }
+    }
+
     // ------------------------------------------------------------------ debugging
 
     /// <summary>The current statement's line in this document while the debugger is stopped here.</summary>
@@ -1040,6 +1152,17 @@ public sealed class CodeEditorController : IDisposable
         }
 
         _disposed = true;
+        _gitTimer.Stop();
+        _gitCts?.Cancel();
+        _gitCts?.Dispose();
+        _services.Git.IndexChanged -= OnGitIndexChanged;
+        Model.Text.TextChanged -= OnGitTextChanged;
+        Editor.TextArea.LeftMargins.Remove(_gitMargin);
+        if (_blameMargin is not null)
+        {
+            Editor.TextArea.LeftMargins.Remove(_blameMargin);
+        }
+
         if (_attached)
         {
             _dockable.Detach(this);

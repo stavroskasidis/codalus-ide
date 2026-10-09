@@ -67,7 +67,8 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
         }
         catch (OperationCanceledException)
         {
-            throw new TimeoutException($"The program did not stop. State: {_debug.State}. Output:\n{Output}");
+            var breakpoints = string.Join("; ", _debug.Breakpoints.All.Select(b => $"{b.Path}:{b.Line} {_debug.Breakpoints.StateOf(b)}"));
+            throw new TimeoutException($"The program did not stop. State: {_debug.State}. Breakpoints: {breakpoints}. Output:\n{Output}");
         }
     }
 

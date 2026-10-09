@@ -799,12 +799,12 @@ internal sealed class SolutionSession : IAsyncDisposable
             else if (caseOnly)
             {
                 var temp = destination + ".~" + Guid.NewGuid().ToString("N")[..8];
-                Directory.Move(source, temp);
-                Directory.Move(temp, destination);
+                Retry(() => Directory.Move(source, temp));
+                Retry(() => Directory.Move(temp, destination));
             }
             else
             {
-                Directory.Move(source, destination);
+                Retry(() => Directory.Move(source, destination));
             }
         }
         else if (copy)
@@ -813,7 +813,27 @@ internal sealed class SolutionSession : IAsyncDisposable
         }
         else
         {
-            File.Move(source, destination);
+            Retry(() => File.Move(source, destination));
+        }
+    }
+
+    /// <summary>
+    /// Retries a move that failed with a sharing violation: on Windows a file inside may be open for a moment (a
+    /// design-time build reading it, an indexer, antivirus).
+    /// </summary>
+    private static void Retry(Action move)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                move();
+                return;
+            }
+            catch (Exception ex) when (attempt < 10 && OperatingSystem.IsWindows() && (ex is UnauthorizedAccessException || (ex is IOException io && (io.HResult & 0xFFFF) is 32 or 33 or 5)))
+            {
+                Thread.Sleep(100 * attempt);
+            }
         }
     }
 

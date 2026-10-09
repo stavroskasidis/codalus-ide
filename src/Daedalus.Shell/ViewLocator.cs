@@ -18,6 +18,7 @@ public sealed class ViewLocator : IDataTemplate
         SettingsDocument document => new PaneHost(document, new SettingsView { DataContext = document.ViewModel }),
         KeyboardShortcutsDocument document => new PaneHost(document, new KeyboardShortcutsView { DataContext = document.ViewModel }),
         CodeEditorDocument document => EditorHost(document),
+        DiffDocument document => new PaneHost(document, new DiffView(document.ViewModel, document.Font)),
         _ => null,
     };
 
@@ -52,6 +53,7 @@ public sealed class ViewLocator : IDataTemplate
         CallStackViewModel vm => new CallStackView { DataContext = vm },
         BreakpointsViewModel vm => new BreakpointsView { DataContext = vm },
         DebugConsoleViewModel vm => new DebugConsoleView { DataContext = vm },
+        GitChangesViewModel vm => new GitChangesView { DataContext = vm },
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },
     };
 }

@@ -154,10 +154,10 @@ internal static partial class BuiltIns
 
     public static void RegisterMenus(MenuRegistry menus)
     {
-        menus.AddMenuBarMenu(new MenuBarMenu("file", "_File", 1));
-        menus.AddMenuBarMenu(new MenuBarMenu("view", "_View", 3));
-        menus.AddMenuBarMenu(new MenuBarMenu("tools", "_Tools", 7));
-        menus.AddMenuBarMenu(new MenuBarMenu("help", "_Help", 9));
+        menus.AddMenuBarMenu(new MenuBarMenu("file", "_File", 10));
+        menus.AddMenuBarMenu(new MenuBarMenu("view", "_View", 30));
+        menus.AddMenuBarMenu(new MenuBarMenu("tools", "_Tools", 70));
+        menus.AddMenuBarMenu(new MenuBarMenu("help", "_Help", 90));
 
         var shell = ContributionSource.Shell;
         MenuItemRule Item(string menu, string command, string group, int order = 0) =>
@@ -188,6 +188,7 @@ internal static partial class BuiltIns
             .. KeybindingService.ParseRules(EditorKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(BuildKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(DebugKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+            .. KeybindingService.ParseRules(GitKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         ];
 
     private static CommandHandler Ui(Action action) => async (_, _) =>

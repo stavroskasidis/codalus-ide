@@ -27,11 +27,7 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
     /// The temp folder without symbolic links: on macOS /var is a link to /private/var, and a solution opened through
     /// the link gets its projects restored twice (once per spelling of the path), racing on project.assets.json.
     /// </summary>
-    private static string RealTempPath()
-    {
-        var temp = Path.GetTempPath();
-        return OperatingSystem.IsMacOS() && temp.StartsWith("/var/", StringComparison.Ordinal) && Directory.Exists("/private" + temp) ? "/private" + temp : temp;
-    }
+    private static string RealTempPath() => Daedalus.Platform.RealPath.Resolve(Path.GetTempPath());
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(s_timeout).Token).Token;

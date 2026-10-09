@@ -101,7 +101,7 @@ internal static partial class BuiltIns
 
     public static void RegisterSolutionMenus(MenuRegistry menus)
     {
-        menus.AddMenuBarMenu(new MenuBarMenu("project", "_Project", 4));
+        menus.AddMenuBarMenu(new MenuBarMenu("project", "_Project", 40));
         var shell = ContributionSource.Shell;
         MenuItemRule Item(string location, string command, string group, int order = 0, string? when = null, string? title = null) =>
             new(location, command, shell) { Group = group, Order = order, When = WhenClause.Parse(when), Title = title };

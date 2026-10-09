@@ -7,7 +7,8 @@ namespace Daedalus.Debugging.Tests;
 /// <summary>samples/Debugging, copied to a temp folder and built once for the test class.</summary>
 public sealed class DebuggeeFixture : IAsyncLifetime
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "daedalus-debug-" + Guid.NewGuid().ToString("N"));
+    // The real path: on macOS the temp folder is behind a symbolic link, and breakpoints bind by the path the PDB records.
+    private readonly string _root = Path.Combine(Daedalus.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-debug-" + Guid.NewGuid().ToString("N"));
 
     public string Folder => Path.Combine(_root, "Debugging", "Debuggee");
 
