@@ -1,4 +1,4 @@
-# Shell ↔ plugin host protocol (v0.1)
+# Shell ↔ plugin host protocol (v0.2)
 
 This is the transport between the shell and `daedalus-pluginhost`: **JSON-RPC 2.0** over stdio, framed with LSP `Content-Length` headers, the same framing as `docs/protocol.md`. Requests flow in both directions. Parameters are a single camelCase object. Cancellation uses `$/cancelRequest`. The design decisions are in [ADR 0003](adr/0003-plugin-api.md). The C# contracts live in `src/DaedalusStudio.Plugins.Protocol`.
 
@@ -7,7 +7,7 @@ This is the transport between the shell and `daedalus-pluginhost`: **JSON-RPC 2.
 | Method | Direction | Kind | Params → Result |
 |---|---|---|---|
 | `initialize` | shell → host | request | `{protocolVersion, shellVersion, hostGroup, settings: {key: value}}` → `{protocolVersion, hostVersion}` |
-| `plugins/load` | shell → host | request | `{plugins: [{id, version, installPath, assembly}]}` → `{results: [{id, loaded, error?}]}` |
+| `plugins/load` | shell → host | request | `{plugins: [{id, version, installPath, assembly, entryType?, enableProposedApi}]}` → `{results: [{id, loaded, error?}]}` |
 | `plugins/activate` | shell → host | request | `{id, reason}` → `{activated, error?}` |
 | `plugins/deactivate` | shell → host | request | `{id}` → `{}` |
 | `shutdown` | shell → host | request | `{}` → `{}` (deactivates every plugin) |
@@ -49,6 +49,37 @@ A protocol major mismatch in `initialize` is an error. On a minor mismatch, both
 
 The host keeps a settings cache, seeded by `initialize`, and plugin `Settings.Get<T>` reads from that cache.
 
+## Proposed APIs
+
+Since protocol 0.2 (API 0.2.1). Only plugins loaded with `enableProposedApi` use them; see [ADR 0010](adr/0010-test-platform-integration.md) and `ProposedMessages.cs`. Ranges are zero-based `{startLine, startCharacter, endLine, endCharacter}`; documents are `file:` URIs; projects are paths.
+
+| Method | Direction | Kind | Params → Result |
+|---|---|---|---|
+| `workspace/getSolution` | host → shell | request | `{}` → `{solution?: {path, trusted, configuration?, platform?, sdkPath?, projects: [{path, name, state, targetFrameworks, outputType?, isTestProject, testPlatform?: vstest\|mtp, compileFiles, projectReferences}]}}` |
+| `workspace/projectOutput` | host → shell | request | `{path, targetFramework?}` → `{path, targetFramework?, targetPath?, runCommand?, runArguments?, runWorkingDirectory?}` |
+| `workspace/testCandidates` | host → shell | request | `{uris}` → `{documents: [{uri, candidates: [{kind: class\|method, name, type, namespace?, range, selectionRange, parameterized}]}]}` |
+| `workspace/typeOutline` | host → shell | request | `{uri, line, character}` → `{outline?: {name, namespace?, nestedName, isStatic, hasParameterlessConstructor, methods: [{name, returnType, parameters: [{name, type}], isStatic, isAsync, line}], selectedMethod?}}` |
+| `workspace/solutionChanged` | shell → host | notification | `{}` (coalesced) |
+| `workspace/documentsChanged` | shell → host | notification | `{uris}` (edited or saved, batched) |
+| `build/start` | host → shell | request | `{projects?}` → `{succeeded, canceled, errors, warnings}` (null projects: the solution) |
+| `build/finished` | shell → host | notification | `{target, project?, result}` (every build) |
+| `debug/launch` | host → shell | request | `{program, arguments, workingDirectory, environment?}` → `{sessionId, processId}` |
+| `debug/attach` | host → shell | request | `{processId}` → `{sessionId, processId}` |
+| `debug/stop` | host → shell | request | `{sessionId}` → `{}` |
+| `debug/ended` | shell → host | notification | `{sessionId, exitCode?}` |
+| `tests/createController` | host → shell | notification | `{pluginId, controllerId, label}` (`controllerId` is `pluginId:id`) |
+| `tests/disposeController` | host → shell | notification | `{controllerId}` |
+| `tests/updateItems` | host → shell | notification | `{controllerId, items: [{id, parentId?, label, description?, uri?, range?, traits?: [{name, value?}], sortText?, error?}], removed: [id]}` (items after their parents; a removed id takes its descendants) |
+| `tests/updateProfiles` | host → shell | notification | `{controllerId, profiles: [{id, label, kind: run\|debug\|coverage, isDefault}], canRefresh}` |
+| `tests/run` | shell → host | request | `{controllerId, profileId, requestId, include?: [id], exclude: [id]}` → `{runIds}`; `$/cancelRequest` cancels the run |
+| `tests/refresh` | shell → host | request | `{controllerId}` → `{}` |
+| `tests/runStarted` | host → shell | notification | `{controllerId, runId, name, requestId?, profileKind?}` |
+| `tests/runUpdate` | host → shell | notification | `{runId, states: [{itemId, state: enqueued\|started\|passed\|failed\|errored\|skipped, durationMs?, messages?: [{message, expected?, actual?, stackTrace?, uri?, range?}]}], output: [{itemId?, text}], attachments: [{uri, displayName?}]}` |
+| `tests/runCoverage` | host → shell | notification | `{runId, files: [{uri, lines: [{line, hits, branchesCovered, branchesTotal}]}], methods: [{assembly, namespace?, class, method, uri?, line, linesCovered, linesTotal, branchesCovered, branchesTotal}]}` |
+| `tests/runEnded` | host → shell | notification | `{runId}` |
+
+`tests/run` completes when the profile's handler completes and returns the runs it created. Their `tests/runEnded` may be processed after the response (notifications and responses are dispatched separately), so the shell waits for each.
+
 ## Errors
 
 These are JSON-RPC error codes. `-32601` means the method was not found. Daedalus-specific codes:
@@ -56,3 +87,5 @@ These are JSON-RPC error codes. `-32601` means the method was not found. Daedalu
 - `-33001`: plugin not activated
 - `-33002`: activation failed
 - `-33003`: command handler threw
+- `-33004`: no tree data provider for the view
+- `-33005`: a proposed API that the shell doesn't offer

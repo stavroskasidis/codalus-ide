@@ -2,7 +2,7 @@
 
 This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It turns the mission's one-line post-MVP list into milestones that future sessions can plan and build one at a time. It also covers the rest of the Visual Studio feature set that the mission's "parity is reachable" goal implies. The [Visual Studio parity matrix](#visual-studio-parity-matrix) maps every VS feature area to the milestone that delivers it, or records it as a gap or a non-goal. It is the checklist that keeps this plan complete.
 
-- **Status:** draft, written 2026-10-08 while M1 is in progress, and checked against Visual Studio 2026 on 2026-10-09. Nothing here is approved for building yet.
+- **Status:** written 2026-10-08 while M1 was in progress, and checked against Visual Studio 2026 on 2026-10-09. The MVP (M0–M7) is done; M8 was built on 2026-10-09 (checkpoints [M8a](checkpoints/m8a.md) and [M8b](checkpoints/m8b.md)). Each later milestone still needs the maintainer's go-ahead.
 - **Authority:** `ide-prompt.md` wins over this document. The fixed decisions and non-goals there still apply. ADRs win over this document once they are accepted.
 - **Licences:** the licences given below are what we believe them to be when this was written. Check each one again before adopting it, and record it in `THIRD-PARTY-NOTICES.md`. If a licence is ambiguous, stop and ask the maintainer.
 
@@ -26,9 +26,9 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
 | Milestone | Title | Status |
 |---|---|---|
 | M0 | Scaffold and UI stack spike | done (ADR 0001, 0002) |
-| M1 | Shell and plugin foundation | at checkpoint, awaiting approval |
-| M2–M7 | MVP (`ide-prompt.md`) | planned |
-| M8 | Testing: Test Explorer and code coverage | planned (this document) |
+| M1 | Shell and plugin foundation | done |
+| M2–M7 | MVP (`ide-prompt.md`) | done (checkpoints in `docs/checkpoints/`; M7 is the MVP) |
+| M8 | Testing: Test Explorer and code coverage | at checkpoint: M8a (Test Explorer) and M8b (coverage), ADR 0010 and 0011 |
 | M9 | Packages and project management | planned |
 | M10 | Integrated terminal and interactive windows | planned |
 | M11 | Language platform: LSP bridge, grammars, file-type editing | planned |
@@ -162,6 +162,8 @@ A dashed edge means "better with", not "blocked by".
 ## Phase 1: Daily driver
 
 ### M8 — Testing: Test Explorer and code coverage
+
+**Status.** Built as M8a and M8b ([m8a.md](checkpoints/m8a.md), [m8b.md](checkpoints/m8b.md)). Deferred, each with a `TODO(issue)` in the checkpoint notes: the HTML coverage report (ReportGenerator), coverage in the Solution Explorer, CodeLens test entries (M12), Rider comparison numbers, and test hosts the IDE doesn't start itself.
 
 **Goal.** Discover, run, debug and analyse tests across the solution, with coverage shown in the editor. This should be at least as capable as Rider's unit-test runner for the mainstream frameworks.
 
@@ -1589,7 +1591,7 @@ The "Daedalus" column uses these terms:
 | Just-In-Time debugger | M14 (opt-in) |
 | Hot Reload, Edit and Continue | Hot Reload M15; Hot Reload while debugging researched in M14. Full Edit and Continue is a gap. |
 | IntelliTrace, time-travel debugging, Snapshot Debugger | Gap / Trap |
-| Debugging tests | M8 |
+| Debugging tests | M8 (done) |
 | Blazor WebAssembly and JavaScript debugging | M16 |
 | Android and iOS debugging | M20 (D6) |
 | Graphics (DirectX) debugging, GPU usage | Non-goal |
@@ -1598,10 +1600,10 @@ The "Daedalus" column uses these terms:
 
 | Visual Studio feature | Daedalus |
 |---|---|
-| Test Explorer: discover, run, debug, group, filter, playlists | M8 |
-| Code coverage | M8 |
-| Create Unit Tests | M8 |
-| TRX results | M8 |
+| Test Explorer: discover, run, debug, group, filter, playlists | M8 (done) |
+| Code coverage | M8 (done: Coverlet, editor coloring, Coverage Results, Cobertura export; the HTML report is deferred) |
+| Create Unit Tests | M8 (done) |
+| TRX results | M8 (done: export and import) |
 | Remote testing (`testenvironments.json`) | M21 |
 | Live Unit Testing | Candidate |
 | Microsoft Fakes, IntelliTest | Trap |
@@ -1778,3 +1780,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **New track:** release, updates and the command line.
   - **New decisions:** D15 and D16.
   - **Additions to existing milestones:** Create Unit Tests and TRX (M8), local tools (M9), resx code generation (M11), about thirty editor and navigation features (M12), clone, publish and difftool integration (M13), PerfTips, QuickWatch, Make Object ID, Parallel Watch, symbol settings and JIT debugging (M14), scaffolding (M15), `.dcproj` (M17), the profiler hub plus the async, contention, exceptions and file I/O tools (M18), Live Visual Tree (M19), remote test environments (M21), IDE components and plugin performance (M22), Fonts and Colors and menu customization (M23).
+- 2026-10-09: M8 built and at its checkpoint, as M8a (Test Explorer, ADR 0010) and M8b (coverage, ADR 0011). The status table now also records M1–M7 as done. The proposed plugin API gained test controllers, `IWorkspace`, `IBuild` and `IDebug` (API 0.2.1). No decisions in the register changed.

@@ -69,21 +69,21 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 | `version` | SemVer. |
 | `engines.daedalus` | An npm-style range over the **plugin API version** (`^0.1.0`, `~0.1.2`, `>=0.1.0 <0.3.0`, `0.1.x`, `a \|\| b`). Plugins whose range doesn't include the running API are not loaded; the user is told why. |
 | `entry` | `runtime` is `dotnet`; `assembly` is the plugin DLL next to the manifest. If it contains more than one public `IDaedalusPlugin`, name one with `type`. |
-| `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`. Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. |
+| `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, and `onTestProjects` (the open solution has a test project; since 0.2.1). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
 | `isolation` | `shared` (default) or `dedicated` (a host process of its own). |
-| `enableProposedApi` | Use proposed APIs. Only honored when Daedalus runs with `--enable-proposed-api`. |
+| `enableProposedApi` | Use [proposed APIs](#proposed-apis). Honored for built-in plugins, and for others when Daedalus runs with `--enable-proposed-api`. |
 
 ### Contribution points
 
 - **commands:** `id`, `title`, `category` (shown as "Category: Title"), `enablement` (a when-clause; disabled commands are hidden from the palette and greyed in menus).
-- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|edit|view|git|project|build|debug|tools|window|help`, `toolWindow/title` (buttons above a tool window) and `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
+- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|edit|view|git|project|build|debug|test|tools|window|help`, `toolWindow/title` (buttons above a tool window), `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key) and `editor/context` (the code editor's context menu; its commands get the document URI and the zero-based caret line and column as arguments; since 0.2.1). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
 - **keybindings:** `key` plus optional `mac`, `linux` and `win` overrides, `command`, `when` and `args`. Chords are space-separated (`ctrl+k ctrl+h`). `primary` means ⌘ on macOS and Ctrl elsewhere. Users override bindings in the Keyboard Shortcuts editor; user bindings win over plugin bindings, which win over defaults.
 - **toolWindows:** `id`, `title`, `location` (`left`, `right`, `bottom`), `kind` (`tree` or `markdown`) and `icon`.
 - **settings:** `title` (the Settings UI category) and `properties`, each with `type` (`string`, `boolean`, `integer`, `number`, `string[]`), `default`, `description`, `enum` and `enumDescriptions`, `minimum`/`maximum`, `scope` (`user`, or `workspace` to allow per-workspace overrides) and `order`. Invalid values in settings.json fall back to the default and are reported in the Settings UI.
 
 ### When-clauses
 
-`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`), `explorerItemIsProjectReference`, `editorTextFocus` (an editor has keyboard focus), `editorLanguageId` (`csharp`, or absent for plain text), `editorHasSelection`, `editorHasMultipleSelections`, `buildRunning`, `programRunning` (a program started with Run Without Debugging is still running), `hasStartupProject`, `debugActive`, `debugRunning`, `debugStopped`, `hasBreakpoints`, `gitRepository` (the open solution is in a git repository) and `gitMerging`. Every text document, editor tabs included, has `activeDocumentKind == textFile`. In `toolWindow/title`, `view` is the tool window's id.
+`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`), `explorerItemIsProjectReference`, `editorTextFocus` (an editor has keyboard focus), `editorLanguageId` (`csharp`, or absent for plain text), `editorHasSelection`, `editorHasMultipleSelections`, `buildRunning`, `programRunning` (a program started with Run Without Debugging is still running), `hasStartupProject`, `debugActive`, `debugRunning`, `debugStopped`, `hasBreakpoints`, `gitRepository` (the open solution is in a git repository), `gitMerging`, `testsRunning`, `testExplorerSelection` and `coverageAvailable` (a coverage run's results are shown). Every text document, editor tabs included, has `activeDocumentKind == textFile`. In `toolWindow/title`, `view` is the tool window's id.
 
 ## The code
 
@@ -143,10 +143,25 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `debug.attach` | optional process id |
 | `debug.addWatch` | optional expression (default: the selection or the expression at the caret) |
 | `git.commit`, `git.refresh`, `git.switchBranch`, `git.createBranch`, `git.merge`, `git.abortMerge`, `git.fetch`, `git.pull`, `git.push`, `git.showDiff`, `git.stageFile`, `git.toggleBlame` | none (file commands act on the active editor) |
+| `editor.activePosition` | none; returns `[documentUri, line, character]` (zero-based) of the active editor's caret, or null. Since 0.2.1. |
+| `workbench.openFile` | a file path or `file:` URI, optional zero-based line. Since 0.2.1. |
+| `project.addReferenceTo` | project path, referenced project path. Since 0.2.1. |
+| `testing.runAll`, `testing.debugAll`, `testing.coverAll`, `testing.runFailed`, `testing.runNotRun`, `testing.repeatLast`, `testing.cancel`, `testing.runAtCursor`, `testing.debugAtCursor`, `testing.coverAtCursor`, `testing.refresh`, `testing.nextFailure`, `testing.previousFailure`, `testing.exportTrx`, `testing.importTrx` | none. Since 0.2.1. |
 | `file.saveAll`, `workbench.navigateBack`, `workbench.navigateForward`, `workbench.splitEditorRight`, `workbench.splitEditorDown`, `workbench.view.errorList` | none |
 | `workbench.showCommandPalette`, `workbench.openSettings`, `workbench.openKeyboardShortcuts`, `workbench.selectTheme`, `workbench.showLogs`, `workbench.view.plugins` | none |
 
 The built-in Welcome plugin (`src/Plugins/DaedalusStudio.Plugins.Welcome`) and Templates plugin (`src/Plugins/DaedalusStudio.Plugins.Templates`: New Project and New Solution with quick picks, input boxes and `dotnet new`) are complete examples that reach the shell only through these commands.
+
+## Proposed APIs
+
+Proposed APIs are not covered by the versioning policy (ADR 0003): they may change in any release, and are meant to be proved by built-in plugins before plugin API 1.0. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `DaedalusStudio.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. Since 0.2.1:
+
+- **`Tests`: test controllers** (ADR 0010), modelled on VS Code's testing API. `CreateController(id, label)` returns a controller whose `Items` (a tree of `TestItem`: id, label, URI, range, traits, children) appear in the Test Explorer, with editor glyphs on the items' ranges. `CreateRunProfile(label, Run|Debug|Coverage, handler)` adds a way to run tests: the handler gets a `TestRunRequest` (included and excluded items; `Include` null means all) and a token that the user's Cancel cancels. `CreateRun(request)` reports progress: `Enqueued`, `Started`, `Passed`, `Failed`/`Errored` with `TestMessage`s (message, expected, actual, stack trace, location), `Skipped`, `AppendOutput`, `AddAttachment`, `AddCoverage` (ADR 0011), then `Complete`. Item ids are unique within a controller; changes are sent to the shell in batches.
+- **`Workspace`:** the open solution (`GetSolutionAsync`: projects with target frameworks, test project and test platform, compile files and project references), `GetProjectOutputAsync` (the build output per target framework), `FindTestCandidatesAsync` (test classes and methods found in source by the language service, before any build), `GetTypeOutlineAsync` (the type at a position and its methods), and the events `SolutionChanged` and `DocumentsChanged`.
+- **`Build`:** `BuildAsync(projects)` builds through the shell (after a build in progress; output in the Build channel and the Error List), and the `Finished` event.
+- **`Debug`:** `LaunchAsync` and `AttachAsync` start a debug session (netcoredbg, ADR 0007) and return its process id and an `Ended` task.
+
+The built-in .NET test plugin (`src/Plugins/DaedalusStudio.Plugins.DotNetTest`) uses all of them.
 
 ## Running and debugging
 
@@ -158,6 +173,15 @@ The built-in Welcome plugin (`src/Plugins/DaedalusStudio.Plugins.Welcome`) and T
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 0.2.1 (M8)
+
+Additive (plugins built for 0.2.0 keep working):
+- Proposed APIs: test controllers, workspace, build and debug ([above](#proposed-apis)). Built-in plugins may use proposed APIs in every build.
+- Activation events `onTestProjects` and `onSolutionOpened`; menu locations `menuBar/test` and `editor/context`; context keys `testsRunning`, `testExplorerSelection` and `coverageAvailable`.
+- Shell commands `editor.activePosition`, `workbench.openFile`, `project.addReferenceTo` and the `testing.*` commands.
+- Protocol 0.2: the proposed-API methods (docs/plugin-protocol.md) and `enableProposedApi` in `plugins/load`. A 0.1 host still works with a 0.2 shell (the same major).
+- Icons `test-passed`, `test-failed`, `test-skipped`, `test-running`, `test-none`, `beaker`, `run-all`, `filter`, `collapse-all`, `coverage`.
 
 ### 0.2.0 (after M7): breaking
 

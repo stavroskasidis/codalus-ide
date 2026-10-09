@@ -38,7 +38,7 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 | `project/designTimeBuild` | `{path?}` | `{}` | Runs design-time builds again (all projects when `path` is null); trusted only. |
 | `build/run` | `{target: build \| rebuild \| clean, project?, restore}` | `{succeeded, canceled, errors, warnings, elapsedMilliseconds}` | Builds the solution (`project` null) or a project with the active configuration (ADR 0006); restore first unless `restore` is false (never for clean). Completes after the build's last `build/output` and `build/diagnostic`. One at a time; trusted only. |
 | `build/cancel` | `{}` | `{}` | Stops the running build; its `build/run` result has `canceled: true`. |
-| `project/runInfo` | `{path}` | `RunInfo` | How to start a project, for the active configuration and target framework; trusted only. |
+| `project/runInfo` | `{path, targetFramework?}` | `RunInfo` | How to start a project, for the active configuration and the given (or active) target framework; trusted only. |
 
 `FileOperationResult` is `{updatedFiles, createdPaths}`: the project and solution files that were edited to keep up, and what was created.
 
@@ -60,7 +60,7 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 ## Model
 
 - **`SolutionInfo`** `{path, format (sln | slnx | project), folders, projects, configurations, active, trusted}`. Folders are `{id, name, parent?, files}` where `id` is the folder's path in the solution (`/src/libs/`) and `files` are solution items. Projects are `{path, name, parent?, typeId?}`. Configurations are `{configuration, platform}` (solution platforms keep their spaces, e.g. `Any CPU`).
-- **`ProjectInfo`** `{path, name, state, error?, targetFrameworks, outputType?, items, references, diagnostics, restored}`. `state` is `loading`, `loaded`, `failed`, `untrusted`, `unsupported` (not SDK-style) or `missing`.
+- **`ProjectInfo`** `{path, name, state, error?, targetFrameworks, outputType?, items, references, diagnostics, restored, isTestProject, testPlatform?}`. `state` is `loading`, `loaded`, `failed`, `untrusted`, `unsupported` (not SDK-style) or `missing`. `isTestProject` is the `IsTestProject` property or `IsTestingPlatformApplication`; `testPlatform` is `mtp` when `IsTestingPlatformApplication` is true, `vstest` for other test projects (ADR 0010).
 - **Items** `{kind, path, link?, dependentUpon?}`: the item type (`Compile`, `None`, `Content`, `EmbeddedResource`, `Folder`, `Page`… and anything in `AvailableItemName`), with `Visible="false"` items left out. Multi-targeted projects report the union of their per-framework items.
 - **References** `{kind (framework | package | project | assembly), name, version?, path?, targetFramework, resolved}`. Package versions are the resolved ones from `obj/project.assets.json` when restored, else the requested ones with `resolved: false`.
 

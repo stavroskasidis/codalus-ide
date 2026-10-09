@@ -7,9 +7,10 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 3. [Editing and navigating code](editing.md)
 4. [Building and running](build-and-run.md)
 5. [Debugging](debugging.md)
-6. [Git](git.md)
-7. [Settings, themes and keyboard shortcuts](settings.md)
-8. [Troubleshooting, logs and crash reports](troubleshooting.md)
+6. [Testing](testing.md)
+7. [Git](git.md)
+8. [Settings, themes and keyboard shortcuts](settings.md)
+9. [Troubleshooting, logs and crash reports](troubleshooting.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 
@@ -23,6 +24,7 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `Ctrl+,` | Settings |
 | | `F6`, `Shift+F6` | Move focus between panes |
 | | `Ctrl+Shift+O` | Open solution or project |
+| | `Ctrl+K Ctrl+R` | Open recent |
 | Editing | `Ctrl+Space` | Completion |
 | | `Ctrl+Shift+Space` | Parameter info |
 | | `Ctrl+K Ctrl+I` | Quick Info |
@@ -45,5 +47,9 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `F10`, `F11`, `Shift+F11` | Step over, into, out |
 | | `F9`, `Ctrl+F9` | Toggle a breakpoint, enable or disable it |
 | | `Ctrl+Alt+P` | Attach to process |
+| Testing | `Ctrl+E T` | Test Explorer |
+| | `Ctrl+R A`, `Ctrl+R Ctrl+A` | Run, debug all tests |
+| | `Ctrl+R T`, `Ctrl+R Ctrl+T` | Run, debug the tests at the cursor |
+| | `Ctrl+R L`, `Ctrl+R F` | Repeat the last run, run failed tests |
 | Git | `Ctrl+0 Ctrl+G` | Git Changes |
 | | `Ctrl+Alt+B` | Toggle blame |
