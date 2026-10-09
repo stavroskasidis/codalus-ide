@@ -24,6 +24,10 @@ internal interface ISessionEvents
     Task RestoreStateAsync(string state, string? message);
 
     Task LogAsync(string level, string message);
+
+    Task CompilerInputsAsync(CompilerInputsInfo inputs);
+
+    Task DesignTimeProgressAsync(DesignTimeProgressParams progress);
 }
 
 /// <summary>
@@ -40,6 +44,12 @@ internal sealed class SolutionSession : IAsyncDisposable
     private readonly ProjectCollection _collection = new();
     private readonly ProjectEvaluator _evaluator;
     private readonly ProjectFileEditor _editor;
+    private readonly DesignTimeBuilder _designTime;
+    private readonly ConcurrentDictionary<string, string> _activeFrameworks = new(s_pathComparer);
+    private readonly ConcurrentDictionary<string, DateTime> _builtAssets = new(s_pathComparer);
+    private readonly HashSet<string> _designTimePending = new(s_pathComparer);
+    private Task _designTimeWorker = Task.CompletedTask;
+    private CancellationTokenSource _designTimeBatch = new();
     private readonly ConcurrentDictionary<string, EvaluatedProject> _evaluated = new(s_pathComparer);
     private readonly SemaphoreSlim _solutionLock = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
@@ -56,6 +66,7 @@ internal sealed class SolutionSession : IAsyncDisposable
         _dotnet = dotnet;
         _evaluator = new ProjectEvaluator(_collection);
         _editor = new ProjectFileEditor(_collection);
+        _designTime = new DesignTimeBuilder(_collection);
     }
 
     public string Path { get; private set; } = string.Empty;
@@ -74,6 +85,11 @@ internal sealed class SolutionSession : IAsyncDisposable
     {
         Path = System.IO.Path.GetFullPath(parameters.Path);
         Trusted = parameters.Trusted;
+        foreach (var (project, framework) in parameters.ActiveFrameworks ?? [])
+        {
+            _activeFrameworks[System.IO.Path.GetFullPath(project)] = framework;
+        }
+
         _info = await ReadSolutionAsync(cancellationToken).ConfigureAwait(false);
         if (parameters.Configuration is { } configuration && parameters.Platform is { } platform
             && _info.Configurations.FirstOrDefault(c => c.Configuration == configuration && c.Platform == platform) is { } requested)
@@ -115,6 +131,7 @@ internal sealed class SolutionSession : IAsyncDisposable
         _info = _info with { Active = Active };
         if (Trusted)
         {
+            CancelDesignTimeBuilds();
             StartEvaluation(restoreAfterwards: false);
         }
     }
@@ -179,8 +196,21 @@ internal sealed class SolutionSession : IAsyncDisposable
         }, token);
     }
 
-    /// <summary>Evaluates <paramref name="projects"/> in parallel, reporting each one as soon as it is done.</summary>
-    private async Task EvaluateAsync(IReadOnlyList<string> projects, CancellationToken cancellationToken)
+    /// <summary>When an evaluation is followed by design-time builds.</summary>
+    private enum DesignTimeMode
+    {
+        /// <summary>The project may have changed (opened, edited, files added, configuration switched).</summary>
+        Always,
+
+        /// <summary>After a restore: only projects whose assets file changed since their last design-time build.</summary>
+        IfAssetsChanged,
+    }
+
+    /// <summary>
+    /// Evaluates <paramref name="projects"/> in parallel, reporting each one as soon as it is done, then queues
+    /// their design-time builds.
+    /// </summary>
+    private async Task EvaluateAsync(IReadOnlyList<string> projects, CancellationToken cancellationToken, DesignTimeMode designTime = DesignTimeMode.Always)
     {
         var started = Stopwatch.GetTimestamp();
         var context = EvaluationContext.Create(EvaluationContext.SharingPolicy.Shared);
@@ -200,6 +230,9 @@ internal sealed class SolutionSession : IAsyncDisposable
             }).ConfigureAwait(false);
         _watcher?.SetImports(_evaluated.Values.SelectMany(e => e.Imports));
         await _events.LogAsync("info", $"Evaluated {projects.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms ({Active.Name}).").ConfigureAwait(false);
+        ScheduleDesignTimeBuilds(designTime == DesignTimeMode.Always
+            ? projects
+            : [.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]);
     }
 
     /// <summary>The project configuration the active solution configuration maps to (MSBuild spells "Any CPU" "AnyCPU").</summary>
@@ -217,6 +250,148 @@ internal sealed class SolutionSession : IAsyncDisposable
     }
 
     public Task ReevaluateAsync(IReadOnlyList<string> projects) => Trusted ? EvaluateAsync(projects, _lifetime.Token) : Task.CompletedTask;
+
+    // ------------------------------------------------------------------ design-time builds
+
+    /// <summary>Chooses the target framework the language service sees for a multi-targeted project.</summary>
+    public void SetActiveFramework(SetActiveFrameworkParams parameters)
+    {
+        var path = System.IO.Path.GetFullPath(parameters.Path);
+        if (_evaluated.TryGetValue(path, out var project) && !project.Info.TargetFrameworks.Contains(parameters.TargetFramework, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"'{parameters.TargetFramework}' is not a target framework of {System.IO.Path.GetFileName(path)}.");
+        }
+
+        _activeFrameworks[path] = parameters.TargetFramework;
+        ScheduleDesignTimeBuilds([path]);
+    }
+
+    /// <summary>Runs design-time builds again (one project, or all).</summary>
+    public void RequestDesignTimeBuild(string? path)
+    {
+        if (!Trusted)
+        {
+            throw new InvalidOperationException("Design-time builds run only in trusted solutions.");
+        }
+
+        ScheduleDesignTimeBuilds(path is null ? [.. ProjectPaths] : [System.IO.Path.GetFullPath(path)]);
+    }
+
+    private void ScheduleDesignTimeBuilds(IReadOnlyCollection<string> projects)
+    {
+        if (!Trusted || projects.Count == 0)
+        {
+            return;
+        }
+
+        lock (_designTimePending)
+        {
+            _designTimePending.UnionWith(projects);
+            if (_designTimeWorker.IsCompleted)
+            {
+                var token = _designTimeBatch.Token;
+                _designTimeWorker = Task.Run(() => RunDesignTimeBuildsAsync(token), CancellationToken.None);
+            }
+        }
+    }
+
+    private void CancelDesignTimeBuilds()
+    {
+        lock (_designTimePending)
+        {
+            _designTimePending.Clear();
+            var previous = Interlocked.Exchange(ref _designTimeBatch, CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token));
+            previous.Cancel();
+            previous.Dispose();
+        }
+    }
+
+    /// <summary>Drains the pending set in batches, so changes made during a batch are built right after it.</summary>
+    private async Task RunDesignTimeBuildsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Let a burst of changes (watcher events, many projects evaluated) settle into one batch.
+            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                string[] batch;
+                lock (_designTimePending)
+                {
+                    batch = [.. _designTimePending];
+                    _designTimePending.Clear();
+                }
+
+                if (batch.Length == 0)
+                {
+                    return;
+                }
+
+                await BuildBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task BuildBatchAsync(string[] batch, CancellationToken cancellationToken)
+    {
+        var requests = new List<DesignTimeBuilder.Request>();
+        foreach (var path in batch)
+        {
+            if (!_evaluated.TryGetValue(path, out var project) || project.Info.State != ProjectStates.Loaded)
+            {
+                continue;
+            }
+
+            var frameworks = project.Info.TargetFrameworks;
+            var framework = frameworks.Length <= 1 ? null
+                : _activeFrameworks.TryGetValue(path, out var active) && frameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active : frameworks[0];
+            var (configuration, platform) = ProjectConfiguration(path);
+            requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework));
+            _builtAssets[path] = AssetsStamp(path);
+        }
+
+        var started = Stopwatch.GetTimestamp();
+        var built = 0;
+        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(0, requests.Count, false)).ConfigureAwait(false);
+        await _designTime.BuildAsync(requests, SolutionProperties(), async inputs =>
+        {
+            await _events.CompilerInputsAsync(inputs).ConfigureAwait(false);
+            await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(Interlocked.Increment(ref built), requests.Count, false)).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
+
+        bool more;
+        lock (_designTimePending)
+        {
+            more = _designTimePending.Count > 0;
+        }
+
+        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, requests.Count, !more)).ConfigureAwait(false);
+        await _events.LogAsync("info", $"Design-time build of {requests.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms.").ConfigureAwait(false);
+    }
+
+    /// <summary>The properties MSBuild sets when it builds a solution; some projects rely on them.</summary>
+    private Dictionary<string, string> SolutionProperties()
+    {
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!IsSingleProject)
+        {
+            properties["SolutionDir"] = System.IO.Path.GetDirectoryName(Path) + System.IO.Path.DirectorySeparatorChar;
+            properties["SolutionPath"] = Path;
+            properties["SolutionFileName"] = System.IO.Path.GetFileName(Path);
+            properties["SolutionName"] = System.IO.Path.GetFileNameWithoutExtension(Path);
+            properties["SolutionExt"] = System.IO.Path.GetExtension(Path);
+        }
+
+        return properties;
+    }
+
+    private DateTime AssetsStamp(string project) =>
+        _evaluated.TryGetValue(project, out var evaluated) && evaluated.AssetsFile is { } assets && File.Exists(assets)
+            ? File.GetLastWriteTimeUtc(assets)
+            : DateTime.MinValue;
 
     // ------------------------------------------------------------------ watching
 
@@ -317,7 +492,7 @@ internal sealed class SolutionSession : IAsyncDisposable
             await Task.WhenAll(output, error).ConfigureAwait(false);
             var ok = process.ExitCode == 0;
             await _events.RestoreStateAsync(ok ? "succeeded" : "failed", ok ? null : $"dotnet restore exited with code {process.ExitCode}.").ConfigureAwait(false);
-            await EvaluateAsync(ProjectPaths.ToList(), _lifetime.Token).ConfigureAwait(false);
+            await EvaluateAsync(ProjectPaths.ToList(), _lifetime.Token, DesignTimeMode.IfAssetsChanged).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
@@ -652,6 +827,18 @@ internal sealed class SolutionSession : IAsyncDisposable
         catch (OperationCanceledException)
         {
         }
+
+        CancelDesignTimeBuilds();
+        try
+        {
+            await _designTimeWorker.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        _designTime.Dispose();
+        _designTimeBatch.Dispose();
 
         _evaluation.Dispose();
         _lifetime.Dispose();

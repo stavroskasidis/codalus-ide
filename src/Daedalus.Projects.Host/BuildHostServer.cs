@@ -91,6 +91,8 @@ internal sealed class BuildHostServer : IAsyncDisposable, ISessionEvents
         _connection.OnRequest(ProjectMethods.MoveInSolution, json.MoveInSolutionParams, json.EmptyResult, (p, ct) => GuardEmpty(() => Session.MoveInSolutionAsync(p, ct)));
         _connection.OnRequest(ProjectMethods.AddProjectReference, json.ProjectReferenceParams, json.EmptyResult, (p, _) => Sync(() => Session.AddProjectReference(p)));
         _connection.OnRequest(ProjectMethods.RemoveProjectReference, json.ProjectReferenceParams, json.EmptyResult, (p, _) => Sync(() => Session.RemoveProjectReference(p)));
+        _connection.OnRequest(ProjectMethods.SetActiveFramework, json.SetActiveFrameworkParams, json.EmptyResult, (p, _) => Sync(() => Session.SetActiveFramework(p)));
+        _connection.OnRequest(ProjectMethods.DesignTimeBuild, json.DesignTimeBuildParams, json.EmptyResult, (p, _) => Sync(() => Session.RequestDesignTimeBuild(p.Path)));
         _connection.OnRequest(ProjectMethods.Shutdown, json.EmptyParams, json.EmptyResult, async (_, _) =>
         {
             if (_session is { } session)
@@ -146,6 +148,10 @@ internal sealed class BuildHostServer : IAsyncDisposable, ISessionEvents
     public Task RestoreOutputAsync(string line) => Post(ProjectMethods.RestoreOutput, new RestoreOutputParams(line), ProjectJsonContext.Default.RestoreOutputParams);
 
     public Task RestoreStateAsync(string state, string? message) => Post(ProjectMethods.RestoreState, new RestoreStateParams(state, message), ProjectJsonContext.Default.RestoreStateParams);
+
+    public Task CompilerInputsAsync(CompilerInputsInfo inputs) => Post(ProjectMethods.CompilerInputs, inputs, ProjectJsonContext.Default.CompilerInputsInfo);
+
+    public Task DesignTimeProgressAsync(DesignTimeProgressParams progress) => Post(ProjectMethods.DesignTimeProgress, progress, ProjectJsonContext.Default.DesignTimeProgressParams);
 
     public Task LogAsync(string level, string message) => Post(ProjectMethods.Log, new LogParams(level, message), ProjectJsonContext.Default.LogParams);
 

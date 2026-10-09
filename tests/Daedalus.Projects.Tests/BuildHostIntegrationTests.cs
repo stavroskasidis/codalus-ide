@@ -343,4 +343,43 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         Assert.Contains("succeeded", states);
         await WaitForProjectAsync(AppProject, p => p.Restored && p.References.Any(r => r is { Name: "Microsoft.Build.Locator", Resolved: true }));
     }
+
+    // ------------------------------------------------------------------ design-time builds
+
+    [Fact]
+    public async Task Design_time_builds_produce_compiler_inputs_for_the_active_framework()
+    {
+        await _service.OpenAsync(Slnx, trusted: true, restore: true, Timeout());
+        var testsProject = Path.Combine(Fixture, "tests", "Core.Tests", "Core.Tests.csproj");
+        bool Ok(string path) => _service.CompilerInputs.TryGetValue(path, out var i) && i.State == CompilerInputStates.Ok;
+        await WaitUntilAsync(() => Ok(AppProject) && Ok(CoreProject) && Ok(testsProject), TimeSpan.FromMinutes(4));
+
+        var core = _service.CompilerInputs[CoreProject];
+        Assert.Equal("C#", core.Language);
+        Assert.Equal("net10.0", core.TargetFramework); // the first of a multi-targeted project
+        Assert.Contains(core.Arguments, a => a.StartsWith("/define:", StringComparison.Ordinal) && a.Contains("NET10_0", StringComparison.Ordinal));
+        Assert.EndsWith("Core.dll", core.OutputPath, StringComparison.Ordinal);
+
+        // App references Core's output (or its reference assembly), which the language host maps back to the project.
+        var app = _service.CompilerInputs[AppProject];
+        Assert.Contains(CoreProject, app.ProjectReferences);
+        Assert.Contains(app.Arguments, a => a.StartsWith("/reference:", StringComparison.Ordinal)
+                                            && (a.EndsWith(core.OutputPath!, StringComparison.OrdinalIgnoreCase) || (core.OutputRefPath is { } r && a.EndsWith(r, StringComparison.OrdinalIgnoreCase))));
+        Assert.Contains("Program.cs", app.Arguments); // sources are relative to the project directory, as csc gets them
+        Assert.Contains(app.Arguments, a => a.StartsWith("/analyzer:", StringComparison.Ordinal));
+
+        await _service.SetActiveFrameworkAsync(CoreProject, "netstandard2.0", Timeout());
+        await WaitUntilAsync(() => _service.CompilerInputs[CoreProject].TargetFramework == "netstandard2.0");
+        Assert.Contains(_service.CompilerInputs[CoreProject].Arguments, a => a.StartsWith("/define:", StringComparison.Ordinal) && a.Contains("NETSTANDARD2_0", StringComparison.Ordinal));
+        Assert.Equal("netstandard2.0", _service.ActiveFramework(CoreProject));
+    }
+
+    [Fact]
+    public async Task Untrusted_solutions_get_no_design_time_builds()
+    {
+        await _service.OpenAsync(Slnx, trusted: false, restore: false, Timeout());
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Assert.Empty(_service.CompilerInputs);
+        await Assert.ThrowsAsync<JsonRpcRemoteException>(() => _service.DesignTimeBuildAsync(null, Timeout()));
+    }
 }

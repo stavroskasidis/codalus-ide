@@ -44,6 +44,8 @@ public sealed class SolutionService : IAsyncDisposable
     private readonly Func<string?> _resolveHost;
     private readonly SupervisionPolicy? _policy;
     private readonly ConcurrentDictionary<string, ProjectInfo> _projects = new(PathComparer);
+    private readonly ConcurrentDictionary<string, CompilerInputsInfo> _compilerInputs = new(PathComparer);
+    private readonly ConcurrentDictionary<string, string> _activeFrameworks = new(PathComparer);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private SupervisedProcess? _host;
     private SolutionInfo? _solution;
@@ -67,6 +69,11 @@ public sealed class SolutionService : IAsyncDisposable
 
     public EvaluationProgressParams? Progress { get; private set; }
 
+    /// <summary>Design-time build results by project path (the active target framework of each project).</summary>
+    public IReadOnlyDictionary<string, CompilerInputsInfo> CompilerInputs => _compilerInputs;
+
+    public DesignTimeProgressParams? DesignTimeProgress { get; private set; }
+
     public string? RestoreState { get; private set; }
 
     /// <summary>The build host's process id while it runs (diagnostics and tests).</summary>
@@ -78,6 +85,11 @@ public sealed class SolutionService : IAsyncDisposable
     public event EventHandler<ProjectInfo>? ProjectChanged;
 
     public event EventHandler<EvaluationProgressParams>? ProgressChanged;
+
+    /// <summary>A design-time build finished for a project (new compiler inputs for the language service).</summary>
+    public event EventHandler<CompilerInputsInfo>? CompilerInputsChanged;
+
+    public event EventHandler<DesignTimeProgressParams>? DesignTimeProgressChanged;
 
     public event EventHandler<string>? RestoreOutput;
 
@@ -144,7 +156,10 @@ public sealed class SolutionService : IAsyncDisposable
         _solution = null;
         _openParams = null;
         _projects.Clear();
+        _compilerInputs.Clear();
+        _activeFrameworks.Clear();
         Progress = null;
+        DesignTimeProgress = null;
         RestoreState = null;
         if (_host is { } host)
         {
@@ -167,6 +182,7 @@ public sealed class SolutionService : IAsyncDisposable
             foreach (var removed in _projects.Keys.Where(k => !solution.Projects.Any(p => PathComparer.Equals(p.Path, k))).ToList())
             {
                 _projects.TryRemove(removed, out _);
+                _compilerInputs.TryRemove(removed, out _);
             }
 
             SolutionChanged?.Invoke(this, EventArgs.Empty);
@@ -180,6 +196,16 @@ public sealed class SolutionService : IAsyncDisposable
         {
             Progress = progress;
             ProgressChanged?.Invoke(this, progress);
+        });
+        connection.OnNotification(ProjectMethods.CompilerInputs, json.CompilerInputsInfo, inputs =>
+        {
+            _compilerInputs[inputs.Path] = inputs;
+            CompilerInputsChanged?.Invoke(this, inputs);
+        });
+        connection.OnNotification(ProjectMethods.DesignTimeProgress, json.DesignTimeProgressParams, progress =>
+        {
+            DesignTimeProgress = progress;
+            DesignTimeProgressChanged?.Invoke(this, progress);
         });
         connection.OnNotification(ProjectMethods.RestoreOutput, json.RestoreOutputParams, p => RestoreOutput?.Invoke(this, p.Line));
         connection.OnNotification(ProjectMethods.RestoreState, json.RestoreStateParams, p =>
@@ -208,7 +234,9 @@ public sealed class SolutionService : IAsyncDisposable
             open = open with { Trusted = previous.Trusted, Configuration = previous.Active?.Configuration, Platform = previous.Active?.Platform, Restore = false };
         }
 
+        open = open with { ActiveFrameworks = _activeFrameworks.IsEmpty ? null : new Dictionary<string, string>(_activeFrameworks) };
         _projects.Clear();
+        _compilerInputs.Clear();
         _solution = await connection.InvokeAsync(ProjectMethods.OpenSolution, open, json.OpenSolutionParams, json.SolutionInfo, cancellationToken).ConfigureAwait(false);
         SolutionChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -232,6 +260,21 @@ public sealed class SolutionService : IAsyncDisposable
 
     public Task RestoreAsync(string? path, CancellationToken cancellationToken) =>
         InvokeAsync(ProjectMethods.Restore, new RestoreParams(path), ProjectJsonContext.Default.RestoreParams, cancellationToken);
+
+    /// <summary>The target framework the language service sees for a multi-targeted project.</summary>
+    public string? ActiveFramework(string projectPath) =>
+        _activeFrameworks.TryGetValue(projectPath, out var framework) ? framework
+        : _projects.TryGetValue(projectPath, out var project) ? project.TargetFrameworks.FirstOrDefault() : null;
+
+    public async Task SetActiveFrameworkAsync(string projectPath, string targetFramework, CancellationToken cancellationToken)
+    {
+        await InvokeAsync(ProjectMethods.SetActiveFramework, new SetActiveFrameworkParams(projectPath, targetFramework), ProjectJsonContext.Default.SetActiveFrameworkParams, cancellationToken).ConfigureAwait(false);
+        _activeFrameworks[projectPath] = targetFramework;
+    }
+
+    /// <summary>Runs design-time builds again (one project, or every project when null).</summary>
+    public Task DesignTimeBuildAsync(string? projectPath, CancellationToken cancellationToken) =>
+        InvokeAsync(ProjectMethods.DesignTimeBuild, new DesignTimeBuildParams(projectPath), ProjectJsonContext.Default.DesignTimeBuildParams, cancellationToken);
 
     public Task ReevaluateAsync(string projectPath, CancellationToken cancellationToken) =>
         InvokeAsync(ProjectMethods.Reevaluate, new ProjectPathParams(projectPath), ProjectJsonContext.Default.ProjectPathParams, cancellationToken);

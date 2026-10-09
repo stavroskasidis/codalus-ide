@@ -6,7 +6,7 @@ using Microsoft.Build.Exceptions;
 namespace Daedalus.Projects.Host;
 
 /// <summary>A project's evaluation result plus what the watcher needs (imported files).</summary>
-internal sealed record EvaluatedProject(ProjectInfo Info, IReadOnlyList<string> Imports);
+internal sealed record EvaluatedProject(ProjectInfo Info, IReadOnlyList<string> Imports, string? AssetsFile = null);
 
 /// <summary>
 /// Evaluates SDK-style projects with MSBuild (no targets run) into the wire model. Multi-targeted projects are
@@ -101,7 +101,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 [.. references],
                 [.. diagnostics],
                 assets is not null);
-            return new EvaluatedProject(info, imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList());
+            return new EvaluatedProject(info, imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList(), NullIfEmpty(outer.GetPropertyValue("ProjectAssetsFile")));
         }
         catch (InvalidProjectFileException ex)
         {

@@ -32,6 +32,8 @@ public static class ProjectMethods
     public const string MoveInSolution = "solution/move";
     public const string AddProjectReference = "project/addReference";
     public const string RemoveProjectReference = "project/removeReference";
+    public const string SetActiveFramework = "project/setActiveFramework";
+    public const string DesignTimeBuild = "project/designTimeBuild";
 
     // host → shell
     public const string SolutionChanged = "solution/changed";
@@ -39,6 +41,8 @@ public static class ProjectMethods
     public const string EvaluationProgress = "solution/evaluationProgress";
     public const string RestoreOutput = "restore/output";
     public const string RestoreState = "restore/state";
+    public const string CompilerInputs = "project/compilerInputs";
+    public const string DesignTimeProgress = "solution/designTimeProgress";
     public const string Log = "log";
 }
 
@@ -62,9 +66,10 @@ public sealed record InitializeResult(string ServerName, string ServerVersion, s
 
 /// <summary>
 /// Opens a solution (<c>.sln</c>, <c>.slnx</c>) or a single project (<c>.csproj</c>…). With <see cref="Trusted"/>
-/// false only the solution file is read: no MSBuild evaluation and no restore.
+/// false only the solution file is read: no MSBuild evaluation and no restore. <see cref="ActiveFrameworks"/> maps
+/// multi-targeted project paths to the framework the language service sees (default: the first one).
 /// </summary>
-public sealed record OpenSolutionParams(string Path, bool Trusted, string? Configuration, string? Platform, bool Restore);
+public sealed record OpenSolutionParams(string Path, bool Trusted, string? Configuration, string? Platform, bool Restore, Dictionary<string, string>? ActiveFrameworks = null);
 
 /// <summary>The structure from the solution file, sent before any evaluation.</summary>
 public sealed record SolutionInfo(
@@ -190,6 +195,39 @@ public sealed record MoveInSolutionParams(string Item, string? TargetFolder);
 
 public sealed record ProjectReferenceParams(string ProjectPath, string ReferencePath);
 
+// ------------------------------------------------------------------ design-time builds
+
+/// <summary>Chooses which target framework of a multi-targeted project the language service sees.</summary>
+public sealed record SetActiveFrameworkParams(string Path, string TargetFramework);
+
+/// <summary>Runs design-time builds again: for one project, or (null) for every project.</summary>
+public sealed record DesignTimeBuildParams(string? Path);
+
+public static class CompilerInputStates
+{
+    public const string Ok = "ok";
+    public const string Failed = "failed";
+}
+
+/// <summary>
+/// What the compiler would get for a project (one target framework): the <c>csc</c>/<c>vbc</c> command line from a
+/// design-time build (<c>Compile</c> with <c>SkipCompilerExecution</c>), and the project's outputs so that
+/// references to other projects' outputs can be mapped back to those projects. <see cref="Language"/> is
+/// <c>C#</c>, <c>VB</c> or <c>F#</c>.
+/// </summary>
+public sealed record CompilerInputsInfo(
+    string Path,
+    string TargetFramework,
+    string Language,
+    string State,
+    string? Error,
+    string[] Arguments,
+    string[] ProjectReferences,
+    string? OutputPath,
+    string? OutputRefPath);
+
+public sealed record DesignTimeProgressParams(int Built, int Total, bool Completed);
+
 // ------------------------------------------------------------------ log
 
 /// <summary><see cref="Level"/> is <c>debug</c>, <c>info</c>, <c>warning</c> or <c>error</c>.</summary>
@@ -225,4 +263,8 @@ public sealed record LogParams(string Level, string Message);
 [JsonSerializable(typeof(MoveInSolutionParams))]
 [JsonSerializable(typeof(ProjectReferenceParams))]
 [JsonSerializable(typeof(LogParams))]
+[JsonSerializable(typeof(SetActiveFrameworkParams))]
+[JsonSerializable(typeof(DesignTimeBuildParams))]
+[JsonSerializable(typeof(CompilerInputsInfo))]
+[JsonSerializable(typeof(DesignTimeProgressParams))]
 public sealed partial class ProjectJsonContext : JsonSerializerContext;

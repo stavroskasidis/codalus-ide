@@ -7,9 +7,9 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 ## Lifecycle
 
 1. `initialize` `{processId, clientName, protocolVersion}` → `{serverName, serverVersion, protocolVersion, msbuildVersion, sdkPath}`.
-2. `solution/open` `{path, trusted, configuration?, platform?, restore}` → `SolutionInfo`, read from the solution file only. A `.csproj` (or `.fsproj`, `.vbproj`) opened on its own becomes an in-memory solution with format `project`.
-3. When trusted, projects are evaluated in parallel and each arrives as a `project/evaluated` notification, with `solution/evaluationProgress` `{evaluated, total, completed}` after each one. With `restore`, a restore follows.
-4. `shutdown` / `exit`. If the host crashes, the shell restarts it and repeats `initialize` and `solution/open` with the user's latest choices (trust, configuration), without restoring again.
+2. `solution/open` `{path, trusted, configuration?, platform?, restore, activeFrameworks?}` → `SolutionInfo`, read from the solution file only. A `.csproj` (or `.fsproj`, `.vbproj`) opened on its own becomes an in-memory solution with format `project`.
+3. When trusted, projects are evaluated in parallel and each arrives as a `project/evaluated` notification, with `solution/evaluationProgress` `{evaluated, total, completed}` after each one. Design-time builds follow (below). With `restore`, a restore follows; afterwards only projects whose assets file changed get a new design-time build.
+4. `shutdown` / `exit`. If the host crashes, the shell restarts it and repeats `initialize` and `solution/open` with the user's latest choices (trust, configuration, active frameworks), without restoring again.
 
 ## Requests (shell → host)
 
@@ -34,6 +34,8 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 | `solution/removeFolder` | `{id}` | `{}` | |
 | `solution/move` | `{item, targetFolder?}` | `{}` | `item` is a project path or a folder id; null target = solution root. |
 | `project/addReference`, `project/removeReference` | `{projectPath, referencePath}` | `{}` | `ProjectReference` items, relative paths. |
+| `project/setActiveFramework` | `{path, targetFramework}` | `{}` | The framework of a multi-targeted project that design-time builds (and so the language service) use. Default: the first one. |
+| `project/designTimeBuild` | `{path?}` | `{}` | Runs design-time builds again (all projects when `path` is null); trusted only. |
 
 `FileOperationResult` is `{updatedFiles, createdPaths}`: the project and solution files that were edited to keep up, and what was created.
 
@@ -46,6 +48,8 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 | `solution/evaluationProgress` | `{evaluated, total, completed}` |
 | `restore/output` | `{line}` |
 | `restore/state` | `{state: running \| succeeded \| failed, message?}` |
+| `project/compilerInputs` | `CompilerInputsInfo` (a design-time build finished) |
+| `solution/designTimeProgress` | `{built, total, completed}`; `completed` once nothing more is queued |
 | `log` | `{level, message}` |
 
 ## Model
@@ -54,6 +58,12 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 - **`ProjectInfo`** `{path, name, state, error?, targetFrameworks, outputType?, items, references, diagnostics, restored}`. `state` is `loading`, `loaded`, `failed`, `untrusted`, `unsupported` (not SDK-style) or `missing`.
 - **Items** `{kind, path, link?, dependentUpon?}`: the item type (`Compile`, `None`, `Content`, `EmbeddedResource`, `Folder`, `Page`… and anything in `AvailableItemName`), with `Visible="false"` items left out. Multi-targeted projects report the union of their per-framework items.
 - **References** `{kind (framework | package | project | assembly), name, version?, path?, targetFramework, resolved}`. Package versions are the resolved ones from `obj/project.assets.json` when restored, else the requested ones with `resolved: false`.
+
+- **`CompilerInputsInfo`** `{path, targetFramework, language (C# | VB | F#), state (ok | failed), error?, arguments, projectReferences, outputPath?, outputRefPath?}`: the compiler command line of a design-time build ([ADR 0005](adr/0005-editor-and-language-services.md)). `arguments` are `csc`/`vbc`/`fsc` arguments as MSBuild passes them, with source files relative to the project directory. References to another project's `outputPath` or `outputRefPath` stand for a project reference.
+
+## Design-time builds
+
+After evaluation the host builds `Compile` and `CoreCompile` with `DesignTimeBuild`, `SkipCompilerExecution`, `ProvideCommandLineArgs` and `BuildingInsideVisualStudio` set (referenced projects are asked for their target path, not built), for each project's active target framework, and reports `project/compilerInputs`. Builds are queued and coalesced: changes during a batch are built right after it. They re-run after evaluations caused by project-file or folder changes, configuration and framework switches, and after a restore for projects whose assets file changed. Unrestored projects fail with MSBuild's error (for example NETSDK1004).
 
 The tree (nesting, Dependencies grouping) is derived in the shell (`SolutionTree`), not sent by the host.
 
