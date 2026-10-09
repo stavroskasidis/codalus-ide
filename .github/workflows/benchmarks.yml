@@ -57,16 +57,16 @@ jobs:
           choco install vscode -y --no-progress
           "DAEDALUS_BENCH_VSCODE=C:\Program Files\Microsoft VS Code\Code.exe" >> $env:GITHUB_ENV
       - name: Generate fixtures
-        run: dotnet run --project benchmarks/Daedalus.Benchmarks.FixtureGen -c Release -- all samples
+        run: dotnet run --project benchmarks/DaedalusStudio.Benchmarks.FixtureGen -c Release -- all samples
       - name: Publish the shell (with its hosts and built-in plugins)
         shell: bash
         run: |
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
-          dotnet publish src/Daedalus.Shell -c Release -r "$rid" -o artifacts/shell
+          dotnet publish src/DaedalusStudio.Shell -c Release -r "$rid" -o artifacts/shell
       - name: Run benchmarks
         shell: bash
         run: |
-          cmd="dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --results ci-results \
+          cmd="dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- run --results ci-results \
             --targets shell,vscode --scenarios cold-start,editor-100k,self-driven,binary-size --runs 3"
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             xvfb-run -a -s "-screen 0 1920x1080x24" $cmd
@@ -75,7 +75,7 @@ jobs:
           fi
       - name: Report
         if: always()
-        run: dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- report --results ci-results --out ci-results/summary-${{ runner.os }}.md
+        run: dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- report --results ci-results --out ci-results/summary-${{ runner.os }}.md
       - name: Download the baseline (last 10 successful runs)
         if: github.ref == 'refs/heads/master'
         shell: bash
@@ -90,7 +90,7 @@ jobs:
         if: github.ref == 'refs/heads/master'
         shell: bash
         run: |
-          cmd="dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- compare \
+          cmd="dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- compare \
             --results ci-results --baseline baseline --confirm --out ci-results/regression-${RUNNER_OS}.md"
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             xvfb-run -a -s "-screen 0 1920x1080x24" $cmd

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>AOT-safe, bidirectional JSON-RPC 2.0 (LSP framing) and supervised service processes.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DaedalusStudio.Rpc.Tests" />
+  </ItemGroup>
+</Project>

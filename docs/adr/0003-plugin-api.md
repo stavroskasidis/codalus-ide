@@ -37,7 +37,7 @@ Constraints:
   - `default` hosts all third-party plugins.
   - A plugin that declares `"isolation": "dedicated"` gets its own host.
 
-  Each plugin is loaded into its own collectible `AssemblyLoadContext`. `Daedalus.Plugins.Abstractions` is shared from the default context so its types unify.
+  Each plugin is loaded into its own collectible `AssemblyLoadContext`. `DaedalusStudio.Plugins.Abstractions` is shared from the default context so its types unify.
 - **Lazy start.** A host process starts only when one of its plugins receives an activation event. With no `onStartup` plugins, no plugin host runs at all.
 - **Failure handling.**
   - If a host exits or its connection drops, the shell notifies the user ("Plugin host *default* stopped unexpectedly"). It restarts the host with exponential backoff and re-activates the plugins that were active.
@@ -91,7 +91,7 @@ Constraints:
 - **Menu locations:** `commandPalette`, `menuBar/<file|edit|view|tools|help>`, `toolWindow/title` and `statusBar`. Ordering uses `group` and `order`. `when` clauses use the shell's context keys.
 - **Settings schema:** a JSON-Schema subset (`type`: string, boolean, integer, number or array of strings; `default`, `enum`, `enumDescriptions`, `minimum`, `maximum`, `description`, `scope` user or workspace).
 
-### API (`Daedalus.Plugins.Abstractions`, NuGet, SemVer)
+### API (`DaedalusStudio.Plugins.Abstractions`, NuGet, SemVer)
 
 ```csharp
 public interface IDaedalusPlugin
@@ -121,11 +121,11 @@ public interface IPluginContext
 `docs/plugin-protocol.md` specifies it. It is **language-agnostic** JSON-RPC, so plugins in other languages could implement it later. The .NET SDK (`Abstractions` plus the host) is the only supported implementation in v0. Requests flow both ways: the shell activates plugins, executes commands and asks for tree children, and plugins register commands, show notifications, write output and set status items.
 
 ### Versioning policy
-- **The plugin API version** is the version of `Daedalus.Plugins.Abstractions`. The **protocol version** (major.minor) is negotiated in `initialize`, and the shell supports the current protocol major plus the previous one.
+- **The plugin API version** is the version of `DaedalusStudio.Plugins.Abstractions`. The **protocol version** (major.minor) is negotiated in `initialize`, and the shell supports the current protocol major plus the previous one.
 - **0.x (MVP):** a minor release may contain breaking changes. Each one is listed in `docs/plugins.md#changelog`, and the shell refuses plugins whose `engines.daedalus` range doesn't match.
 - **From 1.0:** minor releases are additive only, and breaking changes happen only in a major release. Deprecated members keep working for at least two minor releases, marked `[Obsolete("…", DiagnosticId = "DAEDALUS0001")]`, and are listed in the changelog.
 - **Load-time check:** a plugin whose `engines.daedalus` range is incompatible is not loaded. It appears as *incompatible* in the plugin list, with the reason in a notification.
-- **Proposed APIs** live in `Daedalus.Plugins.Abstractions.Proposed`. A plugin must set `"enableProposedApi": true` to use them, and they are only available in development builds (`--enable-proposed-api`).
+- **Proposed APIs** live in `DaedalusStudio.Plugins.Abstractions.Proposed`. A plugin must set `"enableProposedApi": true` to use them, and they are only available in development builds (`--enable-proposed-api`).
 
 ### Trust and installation (v0)
 - Plugins are **trusted code**, as in VS and VS Code: there is no sandbox inside the host process. Out-of-process isolation protects the UI's stability, not the user's security.

@@ -18,7 +18,7 @@ Both prototypes have the same docked layout (Solution Explorer, editor tabs, Out
 | | A: Avalonia | B: GPUI |
 |---|---|---|
 | Shell code | ~1,000 lines of C#: 8 files plus 3 XAML | ~1,350 lines of Rust across 6 files |
-| Host client | Shared AOT-safe C# client (`Daedalus.LanguageServices.Client`), also used by tests | Separate Rust JSON-RPC client. Protocol types are mirrored by hand. |
+| Host client | Shared AOT-safe C# client (`DaedalusStudio.LanguageServices.Client`), also used by tests | Separate Rust JSON-RPC client. Protocol types are mirrored by hand. |
 | Semantic highlighting | `DocumentColorizingTransformer` fed with *range* requests for the viewport | GPUI Kit's `DocumentRangeSemanticTokensProvider`. The editor only requests **whole-document** tokens after edits and never on scroll, so the spike vendors `gpui-base` with a one-method patch (see `spikes/gpui/vendor/PATCHES.md`). Semantic tokens only render when a tree-sitter grammar is loaded, so B also runs tree-sitter C#. |
 | Incremental edits to the host | Exact edit offsets from AvaloniaEdit's change events | The editor's change event carries no delta. A worker thread diffs snapshots (prefix and suffix) into UTF-16 edits. |
 | Native packaging | Native AOT (`PublishAot`). Builds clean in our code. **13 trim/AOT warnings in third-party code** (Dock's default data templates and reflection bindings in library XAML). They are non-fatal, and the published app works. | A single native executable. A release build takes about 4 minutes cold and 1 minute incremental. |
@@ -117,7 +117,7 @@ GPUI wins on raw typing latency, and that result is real. But both stacks alread
 
 ## Consequences
 
-- M1 builds the real shell (`src/Daedalus.Shell`) on Avalonia 12, reusing from the spike the language-host client and supervisor, the AOT-safe protocol, and the bench-event instrumentation. The spike UI code is a reference, not a base.
+- M1 builds the real shell (`src/DaedalusStudio.Shell`) on Avalonia 12, reusing from the spike the language-host client and supervisor, the AOT-safe protocol, and the bench-event instrumentation. The spike UI code is a reference, not a base.
 - `spikes/gpui`, its vendored `gpui-base` and `deny.toml` are deleted, together with the pending MPL-2.0 and `bzip2-1.0.6` licence questions, which only apply to B. The Rust CI job is removed.
 - The out-of-process protocol stays toolkit-neutral (LSP-shaped JSON-RPC), so a different UI front end remains possible later without touching the services.
 - Risks we accept: Dock's bus factor (we can fork it, or write our own docking on Avalonia primitives) and an editor component we may have to fork.

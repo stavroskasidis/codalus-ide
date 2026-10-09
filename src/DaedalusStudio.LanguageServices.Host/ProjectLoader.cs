@@ -1,0 +1,166 @@
+using System.Collections.Concurrent;
+using DaedalusStudio.LanguageServices.Protocol;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
+
+namespace DaedalusStudio.LanguageServices.Host;
+
+/// <summary>
+/// Turns a design-time compiler command line (<see cref="ProjectData"/>) into what Roslyn needs: options, documents,
+/// metadata references (shared across projects), analyzer references, and references that stand for other projects.
+/// </summary>
+internal sealed class ProjectLoader
+{
+    private readonly ConcurrentDictionary<string, (DateTime Stamp, PortableExecutableReference Reference)> _metadata = new(Paths.Comparer);
+    private readonly ConcurrentDictionary<string, AnalyzerFileReference> _analyzers = new(Paths.Comparer);
+    private readonly AnalyzerLoader _analyzerLoader = new();
+
+    public event EventHandler<string>? Log;
+
+    /// <summary>A parsed project. <see cref="OutputReferences"/> are references to files that may be other projects' outputs.</summary>
+    public sealed record Parsed(
+        ProjectData Data,
+        CompilationOptions CompilationOptions,
+        ParseOptions ParseOptions,
+        string AssemblyName,
+        IReadOnlyList<(string Path, IReadOnlyList<string> Folders)> Sources,
+        IReadOnlyList<string> AdditionalFiles,
+        IReadOnlyList<string> AnalyzerConfigFiles,
+        IReadOnlyList<(string Path, MetadataReferenceProperties Properties)> References,
+        IReadOnlyList<AnalyzerReference> Analyzers);
+
+    /// <summary>Parses C# command lines; other languages are not supported by this host (null).</summary>
+    public Parsed? Parse(ProjectData data)
+    {
+        if (data.Language != "C#")
+        {
+            return null;
+        }
+
+        var directory = Path.GetDirectoryName(data.Path)!;
+        var args = CSharpCommandLineParser.Default.Parse(data.Arguments, directory, sdkDirectory: null);
+        foreach (var error in args.Errors.Where(e => e.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error))
+        {
+            Log?.Invoke(this, $"{Path.GetFileName(data.Path)}: {error.GetMessage(System.Globalization.CultureInfo.CurrentCulture)}");
+        }
+
+        var options = args.CompilationOptions
+            .WithMetadataReferenceResolver(null)
+            .WithXmlReferenceResolver(new XmlFileResolver(directory))
+            .WithSourceReferenceResolver(new SourceFileResolver([], directory))
+            .WithStrongNameProvider(new DesktopStrongNameProvider([]))
+            .WithAssemblyIdentityComparer(DesktopAssemblyIdentityComparer.Default);
+
+        var sources = args.SourceFiles
+            .Select(f => (Path.GetFullPath(f.Path), Folders(directory, f.Path)))
+            .DistinctBy(f => f.Item1, Paths.Comparer)
+            .Select(f => (f.Item1, (IReadOnlyList<string>)f.Item2))
+            .ToList();
+        var references = args.MetadataReferences
+            .Select(r => (Path.GetFullPath(Path.Combine(directory, r.Reference)), r.Properties))
+            .DistinctBy(r => r.Item1, Paths.Comparer)
+            .ToList();
+        var analyzers = args.AnalyzerReferences
+            .Select(a => Path.GetFullPath(Path.Combine(directory, a.FilePath)))
+            .Distinct(Paths.Comparer)
+            .Where(File.Exists)
+            .Select(Analyzer)
+            .ToList();
+
+        return new Parsed(
+            data,
+            options,
+            // Without /doc the compiler ignores documentation comments; the IDE needs them (Quick Info, signature help).
+            args.ParseOptions.DocumentationMode == DocumentationMode.None ? args.ParseOptions.WithDocumentationMode(DocumentationMode.Parse) : args.ParseOptions,
+            args.CompilationName ?? Path.GetFileNameWithoutExtension(args.OutputFileName) ?? data.Name,
+            sources,
+            [.. args.AdditionalFiles.Select(f => Path.GetFullPath(f.Path)).Distinct(Paths.Comparer)],
+            [.. args.AnalyzerConfigPaths.Select(Path.GetFullPath).Distinct(Paths.Comparer)],
+            references,
+            analyzers);
+    }
+
+    /// <summary>A metadata reference to a file, shared by every project that references it while the file is unchanged.</summary>
+    public MetadataReference? Metadata(string path, MetadataReferenceProperties properties)
+    {
+        DateTime stamp;
+        try
+        {
+            stamp = File.GetLastWriteTimeUtc(path);
+            if (stamp.Year < 1700)
+            {
+                return null; // missing
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        var entry = _metadata.AddOrUpdate(
+            path,
+            p => (stamp, MetadataReference.CreateFromFile(p)),
+            (p, existing) => existing.Stamp == stamp ? existing : (stamp, MetadataReference.CreateFromFile(p)));
+        return properties == MetadataReferenceProperties.Assembly ? entry.Reference : entry.Reference.WithProperties(properties);
+    }
+
+    private AnalyzerFileReference Analyzer(string path) => _analyzers.GetOrAdd(path, p =>
+    {
+        var reference = new AnalyzerFileReference(p, _analyzerLoader);
+        reference.AnalyzerLoadFailed += (_, e) => Log?.Invoke(this, $"Analyzer {Path.GetFileName(p)}: {e.Message}");
+        return reference;
+    });
+
+    /// <summary>Folders of a source file relative to the project directory (none for files outside it).</summary>
+    private static string[] Folders(string projectDirectory, string file)
+    {
+        var relative = Path.GetRelativePath(projectDirectory, Path.GetFullPath(Path.Combine(projectDirectory, file)));
+        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+        {
+            return [];
+        }
+
+        var parts = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return parts[..^1];
+    }
+}
+
+internal static class Paths
+{
+    public static StringComparer Comparer { get; } =
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+}
+
+/// <summary>Conversions between LSP positions (UTF-16 line/character, like Roslyn's) and offsets.</summary>
+internal static class Positions
+{
+    public static int ToOffset(SourceText text, Position position)
+    {
+        if (position.Line >= text.Lines.Count)
+        {
+            return text.Length;
+        }
+
+        var line = text.Lines[Math.Max(0, position.Line)];
+        return Math.Min(line.Start + Math.Max(0, position.Character), line.End);
+    }
+
+    public static Position ToPosition(SourceText text, int offset)
+    {
+        var line = text.Lines.GetLinePosition(Math.Clamp(offset, 0, text.Length));
+        return new Position(line.Line, line.Character);
+    }
+
+    public static Protocol.Range ToRange(SourceText text, TextSpan span) => new(ToPosition(text, span.Start), ToPosition(text, span.End));
+
+    public static Protocol.Range ToRange(LinePositionSpan span) =>
+        new(new Position(span.Start.Line, span.Start.Character), new Position(span.End.Line, span.End.Character));
+
+    public static TextSpan ToSpan(SourceText text, Protocol.Range range)
+    {
+        var start = ToOffset(text, range.Start);
+        return TextSpan.FromBounds(start, Math.Max(start, ToOffset(text, range.End)));
+    }
+}

@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.TreeToolView"
+             x:DataType="vm:TreeToolViewModel">
+  <DockPanel>
+    <ItemsControl DockPanel.Dock="Top" Margin="6,4,6,0" ItemsSource="{Binding Actions}" IsVisible="{Binding HasActions}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <WrapPanel Orientation="Horizontal" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:ToolbarActionViewModel">
+          <Button Classes="toolbar"
+                  Margin="0,0,4,0"
+                  FontSize="12"
+                  Content="{Binding Title}"
+                  Command="{Binding Command}"
+                  ToolTip.Tip="{Binding Tooltip}"
+                  AutomationProperties.Name="{Binding Title}" />
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="{Binding ViewId}">
+      <TreeView.Styles>
+        <Style Selector="TreeViewItem" x:DataType="vm:TreeNodeViewModel">
+          <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          <Setter Property="MinHeight" Value="24" />
+        </Style>
+      </TreeView.Styles>
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate x:DataType="vm:TreeNodeViewModel" ItemsSource="{Binding Children}">
+          <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+            <controls:Icon Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" Classes.muted="{Binding IsPlaceholder}" />
+            <TextBlock Classes="muted" FontSize="11" Text="{Binding Description}" IsVisible="{Binding HasDescription}" VerticalAlignment="Center" />
+          </StackPanel>
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+    </TreeView>
+  </DockPanel>
+</UserControl>

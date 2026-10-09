@@ -1,0 +1,72 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.GitChangesView"
+             x:DataType="vm:GitChangesViewModel">
+  <UserControl.Resources>
+    <DataTemplate x:Key="FileRow" x:DataType="vm:GitFileRow">
+      <Grid ColumnDefinitions="18,*,Auto" Background="Transparent">
+        <TextBlock Text="{Binding Letter}" FontWeight="SemiBold" ToolTip.Tip="{Binding Description}" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="{Binding Name}" />
+          <TextBlock Text="{Binding Folder}" Classes="muted" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+          <Button Classes="toolbar" Content="+" ToolTip.Tip="Stage" IsVisible="{Binding CanStage}" Tag="stage" Click="OnRowAction" AutomationProperties.Name="Stage" />
+          <Button Classes="toolbar" Content="−" ToolTip.Tip="Unstage" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnRowAction" AutomationProperties.Name="Unstage" />
+          <Button Classes="toolbar" ToolTip.Tip="Discard changes" IsVisible="{Binding CanStage}" Tag="discard" Click="OnRowAction" AutomationProperties.Name="Discard changes">
+            <controls:Icon Kind="discard" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+  <Panel>
+    <StackPanel Margin="12" Spacing="8" IsVisible="{Binding HasNoRepository}">
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="The open solution is not in a git repository (or git is not installed)." />
+    </StackPanel>
+    <DockPanel IsVisible="{Binding HasRepository}">
+      <StackPanel DockPanel.Dock="Top" Margin="6,4" Spacing="4">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
+            <Button Classes="toolbar" Content="Fetch" Tag="git.fetch" Click="OnCommand" />
+            <Button Classes="toolbar" Content="Pull" Tag="git.pull" Click="OnCommand" />
+            <Button Classes="toolbar" Content="Push" Tag="git.push" Click="OnCommand" />
+          </StackPanel>
+          <Button Classes="toolbar" Tag="git.switchBranch" Click="OnCommand" ToolTip.Tip="Switch branch" AutomationProperties.Name="Branch">
+            <TextBlock Text="{Binding BranchText}" FontWeight="SemiBold" />
+          </Button>
+        </DockPanel>
+        <TextBox x:Name="Message" Text="{Binding Message}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" MaxHeight="160" PlaceholderText="Commit message (Ctrl+Enter to commit)" AutomationProperties.Name="Commit message" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Button Classes="accent" Content="Commit Staged" Tag="staged" Click="OnCommit" IsEnabled="{Binding HasStaged}" />
+          <Button Content="Commit All" Tag="all" Click="OnCommit" />
+          <CheckBox Content="Amend" IsChecked="{Binding Amend}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsMerging}">
+          <TextBlock Text="A merge is in progress." VerticalAlignment="Center" />
+          <Button Content="Abort Merge" Tag="git.abortMerge" Click="OnCommand" />
+        </StackPanel>
+      </StackPanel>
+      <ScrollViewer>
+        <StackPanel Margin="4,0" Spacing="2">
+          <StackPanel IsVisible="{Binding HasConflicts}">
+            <TextBlock Text="{Binding ConflictsHeader}" FontWeight="SemiBold" Margin="2,6,2,2" />
+            <ListBox x:Name="ConflictList" ItemsSource="{Binding Conflicts}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" AutomationProperties.Name="Merge conflicts" />
+          </StackPanel>
+          <DockPanel IsVisible="{Binding HasStaged}">
+            <Button DockPanel.Dock="Right" Classes="toolbar" Content="Unstage All" Tag="unstageAll" Click="OnAll" />
+            <TextBlock Text="{Binding StagedHeader}" FontWeight="SemiBold" Margin="2,6,2,2" />
+          </DockPanel>
+          <ListBox x:Name="StagedList" ItemsSource="{Binding Staged}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" IsVisible="{Binding HasStaged}" AutomationProperties.Name="Staged changes" />
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="toolbar" Content="Stage All" Tag="stageAll" Click="OnAll" IsVisible="{Binding HasChanges}" />
+            <TextBlock Text="{Binding ChangesHeader}" FontWeight="SemiBold" Margin="2,6,2,2" />
+          </DockPanel>
+          <ListBox x:Name="ChangesList" ItemsSource="{Binding Changes}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" AutomationProperties.Name="Changes" />
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Panel>
+</UserControl>

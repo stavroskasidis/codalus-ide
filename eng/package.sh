@@ -21,7 +21,7 @@ rm -rf "$stage"
 mkdir -p "$app" "$out"
 
 echo "== Publishing the shell ($rid, $version)"
-dotnet publish "$repo/src/Daedalus.Shell" -c Release -r "$rid" -o "$app" -p:Version="$version" -p:DebugType=none -p:DebugSymbols=false
+dotnet publish "$repo/src/DaedalusStudio.Shell" -c Release -r "$rid" -o "$app" -p:Version="$version" -p:DebugType=none -p:DebugSymbols=false
 # Symbols stay out of packages (they are large); CI keeps them as a separate artifact.
 find "$app" -name '*.pdb' -delete
 

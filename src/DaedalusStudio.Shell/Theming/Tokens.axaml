@@ -1,0 +1,119 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:theming="using:DaedalusStudio.Shell.Theming">
+  <!--
+    Theme tokens. Views use these keys (DynamicResource) instead of literal colors, so Light, Dark and High
+    Contrast switch at runtime. High Contrast follows the Windows "high contrast black" conventions: pure black
+    surfaces, white text, cyan accents, orange focus and selection outlines.
+  -->
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="Shell.Background" Color="#F3F3F3" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#616161" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#D4D4D4" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#E8E8E8" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#CCE4F7" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#005FB8" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#005FB8" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#005FB8" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#1F74C4" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#005FB8" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#C8C8C8" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#0066BF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#BF8803" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#006AB1" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#1A85FF" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="Shell.Background" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#CCCCCC" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#9D9D9D" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#2B2B2B" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#181818" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#2A2D2E" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#04395E" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#0078D4" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#0078D4" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#0E639C" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#1177BB" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#0E639C" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#252526" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#454545" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#2AAAFF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#4DAAFC" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#CCCCCC" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.HighContrast}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#6FC3DF" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#0E4A7B" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#F38518" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#6FC3DF" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#6FC3DF" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#21A6FF" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#FFFFFF" />
+      <!-- Fluent colors (palettes cannot target custom variants). The accent fills selected tabs and checkboxes
+           under white text, so it is a blue with about 5:1 contrast against white rather than cyan. -->
+      <Color x:Key="SystemAccentColor">#0F6CBD</Color>
+      <Color x:Key="SystemRegionColor">#000000</Color>
+      <Color x:Key="SystemAltHighColor">#000000</Color>
+      <Color x:Key="SystemBaseHighColor">#FFFFFF</Color>
+      <Color x:Key="SystemBaseMediumColor">#FFFFFF</Color>
+      <Color x:Key="SystemChromeLowColor">#000000</Color>
+      <Color x:Key="SystemChromeMediumColor">#000000</Color>
+      <Color x:Key="SystemChromeMediumLowColor">#000000</Color>
+      <Color x:Key="SystemListLowColor">#1F1F1F</Color>
+      <Color x:Key="SystemListMediumColor">#0E4A7B</Color>
+      <SolidColorBrush x:Key="SystemRegionBrush" Color="#000000" />
+      <SolidColorBrush x:Key="SystemControlBackgroundAltHighBrush" Color="#000000" />
+      <SolidColorBrush x:Key="SystemControlForegroundBaseHighBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#0F6CBD" />
+      <!-- Fluent focus rectangles. -->
+      <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#F38518" />
+      <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

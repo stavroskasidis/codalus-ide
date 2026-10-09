@@ -2,7 +2,7 @@
 
 Plugins extend Daedalus Studio with commands, menus, key bindings, settings, tool windows, notifications, output channels and status bar items. This guide walks through the sample in [`samples/plugins/HelloWorld`](../samples/plugins/HelloWorld). The design and its reasons are in [ADR 0003](adr/0003-plugin-api.md), and the wire protocol is in [plugin-protocol.md](plugin-protocol.md).
 
-**API version 0.1.1.** The API is pre-1.0: a minor release (0.2) may break plugins, while patch releases (0.1.x) only add. Ask for what you use: `^0.1.1` for the pickers below, `^0.1.0` otherwise. See the [changelog](#changelog).
+**API version 0.2.0.** The API is pre-1.0: a minor release (0.3) may break plugins, while patch releases (0.2.x) only add. Ask for `^0.2.0`. See the [changelog](#changelog).
 
 ## How plugins run
 
@@ -23,7 +23,7 @@ Plugins extend Daedalus Studio with commands, menus, key bindings, settings, too
   </PropertyGroup>
   <ItemGroup>
     <!-- The host provides the API at runtime, so it is not copied next to the plugin. -->
-    <PackageReference Include="Daedalus.Plugins.Abstractions" Version="0.1.0" ExcludeAssets="runtime" />
+    <PackageReference Include="DaedalusStudio.Plugins.Abstractions" Version="0.1.0" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup>
     <None Update="daedalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
@@ -31,7 +31,7 @@ Plugins extend Daedalus Studio with commands, menus, key bindings, settings, too
 </Project>
 ```
 
-The `Daedalus.Plugins.Abstractions` package is not published yet (the repository is private until M7). Until then, reference the project directly, as the sample does.
+The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repository is private until M7). Until then, reference the project directly, as the sample does.
 
 ## The manifest
 
@@ -146,7 +146,7 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `file.saveAll`, `workbench.navigateBack`, `workbench.navigateForward`, `workbench.splitEditorRight`, `workbench.splitEditorDown`, `workbench.view.errorList` | none |
 | `workbench.showCommandPalette`, `workbench.openSettings`, `workbench.openKeyboardShortcuts`, `workbench.selectTheme`, `workbench.showLogs`, `workbench.view.plugins` | none |
 
-The built-in Welcome plugin (`src/Plugins/Daedalus.Plugins.Welcome`) and Templates plugin (`src/Plugins/Daedalus.Plugins.Templates`: New Project and New Solution with quick picks, input boxes and `dotnet new`) are complete examples that reach the shell only through these commands.
+The built-in Welcome plugin (`src/Plugins/DaedalusStudio.Plugins.Welcome`) and Templates plugin (`src/Plugins/DaedalusStudio.Plugins.Templates`: New Project and New Solution with quick picks, input boxes and `dotnet new`) are complete examples that reach the shell only through these commands.
 
 ## Running and debugging
 
@@ -158,6 +158,15 @@ The built-in Welcome plugin (`src/Plugins/Daedalus.Plugins.Welcome`) and Templat
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 0.2.0 (after M7): breaking
+
+The SDK is now the assembly and NuGet package **`DaedalusStudio.Plugins.Abstractions`**, with the namespace **`DaedalusStudio.Plugins`**; it was `Daedalus.Plugins.Abstractions` and `Daedalus.Plugins`. The `Daedalus.*` package prefix on nuget.org belongs to unrelated packages, so every Daedalus Studio assembly and namespace now uses `DaedalusStudio.*`. To update a plugin:
+1. Reference `DaedalusStudio.Plugins.Abstractions`.
+2. Replace `using Daedalus.Plugins;` with `using DaedalusStudio.Plugins;`.
+3. Set `"engines": { "daedalus": "^0.2.0" }`.
+
+Plugins built for 0.1.x are refused with a message: they reference an assembly that no longer exists. Nothing else changed: the protocol, the manifest format and the API surface are the same.
 
 ### Unreleased (M4)
 

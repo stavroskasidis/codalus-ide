@@ -4,7 +4,7 @@ Date: 2026-10-09. CI (Windows, macOS, Linux) green on `c265f1f`; 206 tests pass.
 
 ## Built
 - **Design-time builds** in the build host (`project/compilerInputs`): the compiler command line per project for its active target framework, so the language service gets analyzers, source generators, `.editorconfig` and options; an Analyzers group under Dependencies. [ADR 0005](../adr/0005-editor-and-language-services.md).
-- **C# language host rewritten** on LSP 3.17 + `daedalus/` extensions ([protocol.md](../protocol.md)), on Roslyn's public Workspaces and Features APIs and `Daedalus.Rpc`: semantic tokens, completion (with added `using`s), signature help, Quick Info, definition and implementation (into source-generated files), document highlights, folding, live diagnostics with analyzers and a background compiler pass. Miscellaneous Files for files outside projects and untrusted folders. Restarts with projects and documents replayed.
+- **C# language host rewritten** on LSP 3.17 + `daedalus/` extensions ([protocol.md](../protocol.md)), on Roslyn's public Workspaces and Features APIs and `DaedalusStudio.Rpc`: semantic tokens, completion (with added `using`s), signature help, Quick Info, definition and implementation (into source-generated files), document highlights, folding, live diagnostics with analyzers and a background compiler pass. Miscellaneous Files for files outside projects and untrusted folders. Restarts with projects and documents replayed.
 - **Workbench language client** (`LanguageService`): hosts start on demand; generic LSP client.
 - **Editor in the shell**: encodings, BOM and line endings kept; atomic saves; external changes; deleted-file flag; preview tabs; split groups; in-tab split; Ctrl+Tab; multiple carets; find/replace; Go to Line; minimap; folding; navigation history; project-context picker; Error List; status bar items; per-solution session restore; Edit and Window menus.
 - Fixture `samples/LanguageFeatures`; editor benchmarks run in the shell; the M0 spike is retired.
@@ -25,7 +25,7 @@ Black-box typing and PageDown (injected input) were not re-measured.
 
 ## Deviations
 - Nightly CI and benchmark schedules removed (free plan minutes); manual dispatch once per checkpoint.
-- Protocol is standard LSP; M0 offset messages retired. StreamJsonRpc no longer used (all hosts on `Daedalus.Rpc`).
+- Protocol is standard LSP; M0 offset messages retired. StreamJsonRpc no longer used (all hosts on `DaedalusStudio.Rpc`).
 - M0 spike and SpikeSolution deleted (results kept under `benchmarks/results/`).
 - Adding carets is Ctrl+Alt+Click (Alt+drag is AvaloniaEdit's box selection).
 - Background analyzers run for open documents by default (`languageServices.analysisScope`).

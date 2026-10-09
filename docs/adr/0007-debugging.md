@@ -47,8 +47,8 @@ It sends `initialized` immediately after the `initialize` response.
 - `eng/get-netcoredbg.sh` downloads a pinned release and checks its SHA-256. CI runs it before the tests.
 - It is not committed, and not fetched during a build.
 
-**Client.** `Daedalus.Debugging` holds:
-- `DapConnection`: framing shared with `Daedalus.Rpc`, source-generated JSON (AOT-safe), reverse requests refused.
+**Client.** `DaedalusStudio.Debugging` holds:
+- `DapConnection`: framing shared with `DaedalusStudio.Rpc`, source-generated JSON (AOT-safe), reverse requests refused.
 - `DebugAdapter`: typed requests.
 
 The workbench's `DebugService` owns sessions and breakpoints, and the shell draws the UI.

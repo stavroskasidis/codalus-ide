@@ -1,0 +1,366 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text;
+using DaedalusStudio.Projects.Protocol;
+using DaedalusStudio.Workbench.Output;
+using DaedalusStudio.Workbench.Projects;
+
+namespace DaedalusStudio.Workbench.Build;
+
+/// <summary>A program started by Run Without Debugging. Its output goes to its own Output channel.</summary>
+public sealed class RunningProgram : IDisposable
+{
+    private readonly Process _process;
+    private readonly TaskCompletionSource<int> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    internal RunningProgram(string project, string name, Process process, OutputChannel? channel)
+    {
+        Project = project;
+        Name = name;
+        _process = process;
+        Channel = channel;
+        ProcessId = process.Id;
+    }
+
+    public string Project { get; }
+
+    public string Name { get; }
+
+    public int ProcessId { get; }
+
+    /// <summary>The channel with the program's output; null when it runs in a console window of its own.</summary>
+    public OutputChannel? Channel { get; }
+
+    /// <summary>Completes with the exit code.</summary>
+    public Task<int> Exited => _exited.Task;
+
+    public bool HasExited => _exited.Task.IsCompleted;
+
+    internal void OnExited(bool waitForOutput)
+    {
+        int code;
+        try
+        {
+            if (waitForOutput)
+            {
+                // Lets the asynchronous readers deliver the last lines first.
+                _process.WaitForExit();
+            }
+
+            code = _process.ExitCode;
+        }
+        catch (InvalidOperationException)
+        {
+            code = -1;
+        }
+
+        _exited.TrySetResult(code);
+    }
+
+    /// <summary>Ends the program and every process it started.</summary>
+    public void Stop()
+    {
+        try
+        {
+            if (!_process.HasExited)
+            {
+                _process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            // Already gone.
+        }
+    }
+
+    public void Dispose() => _process.Dispose();
+}
+
+/// <summary>
+/// Run Without Debugging (ADR 0006): the startup project, its launch profiles from <c>launchSettings.json</c>, and the
+/// programs started from it. The build before a run is the caller's (the shell builds, then calls <see cref="StartAsync"/>).
+/// </summary>
+public sealed class RunService : IDisposable
+{
+    private static readonly string[] s_listeningMarkers = ["Now listening on:", "Application started."];
+
+    private readonly SolutionService _solutions;
+    private readonly OutputService _output;
+    private readonly Action<Uri> _openBrowser;
+    private readonly Lock _gate = new();
+    private readonly List<RunningProgram> _running = [];
+    private readonly Dictionary<string, string> _profiles = new(SolutionService.PathComparer);
+    private string? _startupProject;
+
+    public RunService(SolutionService solutions, OutputService output, Action<Uri> openBrowser)
+    {
+        _solutions = solutions;
+        _output = output;
+        _openBrowser = openBrowser;
+    }
+
+    /// <summary>The project Run starts: the chosen one while it is in the solution, else the first executable project.</summary>
+    public string? StartupProject
+    {
+        get
+        {
+            var projects = _solutions.Solution?.Projects ?? [];
+            if (_startupProject is { } chosen && projects.Any(p => SolutionService.PathComparer.Equals(p.Path, chosen)))
+            {
+                return chosen;
+            }
+
+            return projects.Select(p => p.Path).FirstOrDefault(IsExecutable);
+        }
+    }
+
+    /// <summary>The user's choice (null: the default), for saving with the solution's state.</summary>
+    public string? ChosenStartupProject => _startupProject;
+
+    /// <summary>The chosen launch profile names by project path, for saving with the solution's state.</summary>
+    public IReadOnlyDictionary<string, string> ChosenProfiles
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return new Dictionary<string, string>(_profiles, SolutionService.PathComparer);
+            }
+        }
+    }
+
+    public IReadOnlyList<RunningProgram> Running
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _running];
+            }
+        }
+    }
+
+    public event EventHandler? StartupChanged;
+
+    public event EventHandler? RunningChanged;
+
+    /// <summary>Whether a project builds a program (OutputType Exe or WinExe, once evaluated).</summary>
+    public bool IsExecutable(string projectPath) =>
+        _solutions.Projects.TryGetValue(projectPath, out var project) && project.OutputType is { } type
+        && (type.Equals("Exe", StringComparison.OrdinalIgnoreCase) || type.Equals("WinExe", StringComparison.OrdinalIgnoreCase));
+
+    public void SetStartupProject(string? projectPath)
+    {
+        _startupProject = projectPath;
+        StartupChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The launch profile chosen for a project (null: the first runnable one).</summary>
+    public string? ChosenProfile(string projectPath)
+    {
+        lock (_gate)
+        {
+            return _profiles.GetValueOrDefault(projectPath);
+        }
+    }
+
+    public void SetProfile(string projectPath, string? profile)
+    {
+        lock (_gate)
+        {
+            if (profile is null)
+            {
+                _profiles.Remove(projectPath);
+            }
+            else
+            {
+                _profiles[projectPath] = profile;
+            }
+        }
+
+        StartupChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Restores the solution's saved choices (or clears them when a solution closes).</summary>
+    public void Load(string? startupProject, IReadOnlyDictionary<string, string>? profiles)
+    {
+        lock (_gate)
+        {
+            _startupProject = startupProject;
+            _profiles.Clear();
+            foreach (var (project, profile) in profiles ?? new Dictionary<string, string>())
+            {
+                _profiles[project] = profile;
+            }
+        }
+
+        StartupChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>A project's launch profiles (empty without a launch settings file).</summary>
+    public async Task<(RunInfo Info, IReadOnlyList<LaunchProfile> Profiles, string? Error)> GetProfilesAsync(string projectPath, CancellationToken cancellationToken)
+    {
+        var info = await _solutions.GetRunInfoAsync(projectPath, cancellationToken).ConfigureAwait(false);
+        var profiles = LaunchSettings.Read(info.LaunchSettings, out var error);
+        return (info, profiles, error);
+    }
+
+    /// <summary>The profile a run of <paramref name="projectPath"/> uses: the chosen one, else the first runnable one.</summary>
+    public LaunchProfile? ResolveProfile(string projectPath, IReadOnlyList<LaunchProfile> profiles) =>
+        profiles.FirstOrDefault(p => p.Name == ChosenProfile(projectPath)) ?? profiles.FirstOrDefault(p => p.IsRunnable);
+
+    /// <summary>
+    /// Starts a (built) project with its launch profile. Output goes to a "Run: name" channel, unless
+    /// <paramref name="externalConsole"/> (Windows console apps) gives it a console window of its own.
+    /// </summary>
+    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken)
+    {
+        var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken).ConfigureAwait(false);
+        var name = Path.GetFileNameWithoutExtension(projectPath);
+        var channel = _output.GetOrCreate("daedalus.run." + name, "Run: " + name);
+        if (error is not null)
+        {
+            channel.AppendLine($"Ignoring the launch settings: {error}");
+        }
+
+        var profile = ResolveProfile(projectPath, profiles);
+        var plan = LaunchPlanner.Plan(info, profile);
+        var console = externalConsole && OperatingSystem.IsWindows() && string.Equals(info.OutputType, "Exe", StringComparison.OrdinalIgnoreCase);
+        var start = CreateStartInfo(plan, console);
+
+        channel.Clear();
+        channel.AppendLine($"> {plan.FileName} {plan.Arguments}".TrimEnd() + (profile is null ? "" : $"   (profile '{profile.Name}')"));
+        var process = new Process { StartInfo = start, EnableRaisingEvents = true };
+        var ready = new TaskCompletionSource<RunningProgram>(TaskCreationOptions.RunContinuationsAsynchronously);
+        process.Exited += (_, _) => _ = ready.Task.ContinueWith(t => OnExited(t.Result, plan, channel, console), CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+        if (!process.Start())
+        {
+            process.Dispose();
+            throw new InvalidOperationException($"{plan.FileName} did not start.");
+        }
+
+        var program = new RunningProgram(projectPath, name, process, console ? null : channel);
+        var browserOpened = plan.BrowserUrl is null;
+        void OpenBrowserOnce()
+        {
+            lock (program)
+            {
+                if (browserOpened)
+                {
+                    return;
+                }
+
+                browserOpened = true;
+            }
+
+            if (Uri.TryCreate(plan.BrowserUrl, UriKind.Absolute, out var url))
+            {
+                _openBrowser(url);
+            }
+        }
+
+        if (!console)
+        {
+            void OnLine(string? line)
+            {
+                if (line is null)
+                {
+                    return;
+                }
+
+                channel.AppendLine(line);
+                if (!browserOpened && s_listeningMarkers.Any(m => line.Contains(m, StringComparison.Ordinal)))
+                {
+                    OpenBrowserOnce();
+                }
+            }
+
+            process.OutputDataReceived += (_, e) => OnLine(e.Data);
+            process.ErrorDataReceived += (_, e) => OnLine(e.Data);
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            process.StandardInput.Close(); // no console to read from: input ends right away instead of hanging
+        }
+
+        if (!browserOpened)
+        {
+            // Servers that don't log "Now listening on" still get their browser.
+            _ = Task.Delay(TimeSpan.FromSeconds(10), CancellationToken.None).ContinueWith(_ =>
+            {
+                if (!program.HasExited)
+                {
+                    OpenBrowserOnce();
+                }
+            }, TaskScheduler.Default);
+        }
+
+        lock (_gate)
+        {
+            _running.Add(program);
+        }
+
+        ready.SetResult(program);
+        RunningChanged?.Invoke(this, EventArgs.Empty);
+        return program;
+    }
+
+    private void OnExited(RunningProgram program, LaunchPlan plan, OutputChannel channel, bool console)
+    {
+        program.OnExited(waitForOutput: !console);
+        var code = program.Exited.Result;
+        channel.AppendLine($"The program '[{program.ProcessId.ToString(CultureInfo.InvariantCulture)}] {Path.GetFileName(plan.FileName)}' has exited with code {code.ToString(CultureInfo.InvariantCulture)} (0x{code:x}).");
+        lock (_gate)
+        {
+            _running.Remove(program);
+        }
+
+        RunningChanged?.Invoke(this, EventArgs.Empty);
+        program.Dispose();
+    }
+
+    private static ProcessStartInfo CreateStartInfo(LaunchPlan plan, bool console)
+    {
+        ProcessStartInfo start;
+        if (console)
+        {
+            // cmd keeps the window open after the program ends, as an IDE's console runs do.
+            start = new ProcessStartInfo("cmd.exe", $"/s /c \"\"{plan.FileName}\" {plan.Arguments} & echo. & pause\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = false,
+            };
+        }
+        else
+        {
+            start = new ProcessStartInfo(plan.FileName, plan.Arguments)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
+            };
+        }
+
+        start.WorkingDirectory = plan.WorkingDirectory;
+        foreach (var (name, value) in plan.Environment)
+        {
+            start.Environment[name] = value;
+        }
+
+        return start;
+    }
+
+    /// <summary>Stops every running program.</summary>
+    public void StopAll()
+    {
+        foreach (var program in Running)
+        {
+            program.Stop();
+        }
+    }
+
+    public void Dispose() => StopAll();
+}

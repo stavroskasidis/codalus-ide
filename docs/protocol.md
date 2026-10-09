@@ -1,6 +1,6 @@
 # Shell ↔ language service protocol
 
-Language services run out of process and speak **LSP 3.17** over **stdio** (JSON-RPC 2.0, `Content-Length` framing), with a few `daedalus/` extensions where LSP has no message ([ADR 0005](adr/0005-editor-and-language-services.md)). The shell's client is generic (`LanguageHostClient` in `src/Daedalus.LanguageServices.Client`, AOT-safe), so any LSP server can serve a language; the C# service is `daedalus-lshost` (`src/Daedalus.LanguageServices.Host`, Roslyn). Contracts are in `src/Daedalus.LanguageServices.Protocol`.
+Language services run out of process and speak **LSP 3.17** over **stdio** (JSON-RPC 2.0, `Content-Length` framing), with a few `daedalus/` extensions where LSP has no message ([ADR 0005](adr/0005-editor-and-language-services.md)). The shell's client is generic (`LanguageHostClient` in `src/DaedalusStudio.LanguageServices.Client`, AOT-safe), so any LSP server can serve a language; the C# service is `daedalus-lshost` (`src/DaedalusStudio.LanguageServices.Host`, Roslyn). Contracts are in `src/DaedalusStudio.LanguageServices.Protocol`.
 
 ## Process model
 

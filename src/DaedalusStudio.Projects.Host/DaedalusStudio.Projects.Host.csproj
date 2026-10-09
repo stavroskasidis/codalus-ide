@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>daedalus-buildhost</AssemblyName>
+    <RootNamespace>DaedalusStudio.Projects.Host</RootNamespace>
+    <Description>Out-of-process build host (ADR 0004): solution files, MSBuild evaluation, file watching, restore and project-file edits, over JSON-RPC on stdio.</Description>
+    <!-- MSBuild relies on reflection and the installed SDK; the host runs on the regular JIT runtime. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DaedalusStudio.Rpc\DaedalusStudio.Rpc.csproj" />
+    <ProjectReference Include="..\DaedalusStudio.Projects.Protocol\DaedalusStudio.Projects.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.SolutionPersistence" />
+    <!-- MSBuild assemblies come from the installed SDK at runtime via Microsoft.Build.Locator. -->
+    <PackageReference Include="Microsoft.Build.Locator" />
+    <PackageReference Include="Microsoft.Build" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DaedalusStudio.Projects.Tests" />
+  </ItemGroup>
+</Project>

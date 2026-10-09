@@ -1,4 +1,4 @@
-using Daedalus.Plugins;
+using DaedalusStudio.Plugins;
 
 namespace HelloWorld;
 

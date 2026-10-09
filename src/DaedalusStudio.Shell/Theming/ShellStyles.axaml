@@ -1,0 +1,120 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:DaedalusStudio.Shell.Controls"
+        xmlns:core="using:Dock.Model.Core"
+        xmlns:docking="using:DaedalusStudio.Shell.Docking">
+
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource Shell.Background}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+
+  <!-- Dock tab headers show the dockable title; preview tabs in italics. -->
+  <Style Selector="DocumentControl">
+    <Setter Property="HeaderTemplate">
+      <DataTemplate DataType="docking:ShellDocument">
+        <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
+      </DataTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="ToolControl">
+    <Setter Property="HeaderTemplate">
+      <DataTemplate DataType="core:IDockable">
+        <TextBlock Text="{Binding Title}" Padding="2" />
+      </DataTemplate>
+    </Setter>
+  </Style>
+
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
+  <Style Selector="TextBlock.heading">
+    <Setter Property="FontSize" Value="18" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <!-- Flat icon/text buttons in tool window toolbars. -->
+  <Style Selector="Button.toolbar">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Padding" Value="4,2" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="CornerRadius" Value="3" />
+  </Style>
+  <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="ToggleButton.toolbar">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Padding" Value="4,2" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="CornerRadius" Value="3" />
+  </Style>
+
+  <!-- Status bar entries. -->
+  <Style Selector="Button.statusbar">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Foreground}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="Padding" Value="8,1" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="Button.statusbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.StatusBar.Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Foreground}" />
+  </Style>
+  <Style Selector="Button.statusbar:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.StatusBar.Hover}" />
+  </Style>
+  <!-- Items without a command are plain text, not disabled buttons. -->
+  <Style Selector="Button.statusbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Foreground}" />
+  </Style>
+
+  <!-- Links (Settings UI, Markdown views). -->
+  <Style Selector="Button.link">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Link}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Link}" />
+    <Setter Property="TextElement.FontWeight" Value="SemiBold" />
+  </Style>
+
+  <!-- Floating surfaces: command palette and toasts. -->
+  <Style Selector="Border.overlay">
+    <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="BoxShadow" Value="0 6 18 0 #40000000" />
+  </Style>
+
+  <Style Selector="controls|Icon.info">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Info}" />
+  </Style>
+  <Style Selector="controls|Icon.warning">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Warning}" />
+  </Style>
+  <Style Selector="controls|Icon.error">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Error}" />
+  </Style>
+  <!-- Quick Info and diagnostics popup in the editor. -->
+  <Style Selector="Border.editorHover">
+    <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Overlay.Border}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Padding" Value="8,6" />
+  </Style>
+</Styles>

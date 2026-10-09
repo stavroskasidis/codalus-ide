@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Daedalus.Workbench\Daedalus.Workbench.csproj" />
-    <ProjectReference Include="..\..\src\Daedalus.Platform\Daedalus.Platform.csproj" />
-  </ItemGroup>
-</Project>

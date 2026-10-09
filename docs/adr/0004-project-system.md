@@ -21,7 +21,7 @@ Constraints:
 
 ## Decision
 
-**Option 2.** `daedalus-buildhost` is a .NET 10 process on the regular JIT runtime (ReadyToRun when published, framework-dependent like the plugin host). It finds MSBuild in the installed SDK with `Microsoft.Build.Locator` and speaks JSON-RPC (LSP framing, `Daedalus.Rpc`) with the shell, which supervises it with `SupervisedProcess`: a crash restarts it and the solution is reopened. It starts when a solution opens; with no solution, no build host runs.
+**Option 2.** `daedalus-buildhost` is a .NET 10 process on the regular JIT runtime (ReadyToRun when published, framework-dependent like the plugin host). It finds MSBuild in the installed SDK with `Microsoft.Build.Locator` and speaks JSON-RPC (LSP framing, `DaedalusStudio.Rpc`) with the shell, which supervises it with `SupervisedProcess`: a crash restarts it and the solution is reopened. It starts when a solution opens; with no solution, no build host runs.
 
 **Progressive loading.**
 1. The solution file is read with `Microsoft.VisualStudio.SolutionPersistence` (MIT; the library the `dotnet` CLI uses; reads and writes `.sln` and `.slnx` and keeps their formatting). Solution folders, projects and solution configurations go to the shell at once, so the tree appears before any evaluation.

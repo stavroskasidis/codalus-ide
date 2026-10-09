@@ -1,6 +1,6 @@
 # Shell ↔ plugin host protocol (v0.1)
 
-This is the transport between the shell and `daedalus-pluginhost`: **JSON-RPC 2.0** over stdio, framed with LSP `Content-Length` headers, the same framing as `docs/protocol.md`. Requests flow in both directions. Parameters are a single camelCase object. Cancellation uses `$/cancelRequest`. The design decisions are in [ADR 0003](adr/0003-plugin-api.md). The C# contracts live in `src/Daedalus.Plugins.Protocol`.
+This is the transport between the shell and `daedalus-pluginhost`: **JSON-RPC 2.0** over stdio, framed with LSP `Content-Length` headers, the same framing as `docs/protocol.md`. Requests flow in both directions. Parameters are a single camelCase object. Cancellation uses `$/cancelRequest`. The design decisions are in [ADR 0003](adr/0003-plugin-api.md). The C# contracts live in `src/DaedalusStudio.Plugins.Protocol`.
 
 ## Lifecycle
 

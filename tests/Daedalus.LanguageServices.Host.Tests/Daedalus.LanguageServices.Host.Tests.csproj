@@ -1,8 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Daedalus.LanguageServices.Host\Daedalus.LanguageServices.Host.csproj" />
-    <ProjectReference Include="..\..\src\Daedalus.Workbench\Daedalus.Workbench.csproj" />
-    <!-- Built so the tests can launch it; not referenced as an assembly. -->
-    <ProjectReference Include="..\..\src\Daedalus.Projects.Host\Daedalus.Projects.Host.csproj" ReferenceOutputAssembly="false" />
-  </ItemGroup>
-</Project>

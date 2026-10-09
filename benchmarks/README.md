@@ -5,27 +5,27 @@
 ## Quick start
 
 ```bash
-dotnet run --project benchmarks/Daedalus.Benchmarks.FixtureGen -- all samples
+dotnet run --project benchmarks/DaedalusStudio.Benchmarks.FixtureGen -- all samples
 ```
 
 ```bash
-dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- list
+dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- list
 ```
 
 ```bash
-dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell
+dotnet publish src/DaedalusStudio.Shell -c Release -r win-x64 -o artifacts/shell
 ```
 
 ```bash
-dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --targets shell --scenarios cold-start,self-driven,binary-size
+dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- run --targets shell --scenarios cold-start,self-driven,binary-size
 ```
 
 ```bash
-dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- check
+dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- check
 ```
 
 ```bash
-dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- report --out benchmarks/results/summary.md
+dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- report --out benchmarks/results/summary.md
 ```
 
 The `shell` target is the published product shell in `artifacts/shell` (the publish puts the plugin host, build host, language service host and built-in plugins next to it). It runs every scenario; for `open-solution-50` the fixture's folder is trusted and restore-on-open is off in its fresh user data, since the harness restores the copy itself. Since M3 the editor scenarios run in the shell (`--open`, `--bench`); the results of the retired M0 prototypes remain under `results/windows/avalonia/` and `results/windows/gpui/` for reference. CLAUDE.md has the commands, and `.github/workflows/benchmarks.yml` does all of it on CI.

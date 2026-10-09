@@ -54,7 +54,7 @@ The values are p50 / p99 unless noted, all measured with the same black-box proc
 **Rider is pending.** JetBrains IDEs keep an AF_UNIX `.port` socket in their system directory. A Rider launched from the harness process tree cannot take over that socket from a previous session, so every launch after the first fails with "Start Failed". Launching Rider normally works. The Rider portion therefore has to be run from a regular terminal:
 
 ```bash
-dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -c Release -- run --targets rider --scenarios cold-start,editor-100k,open-solution-50 --allow-input
+dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- run --targets rider --scenarios cold-start,editor-100k,open-solution-50 --allow-input
 ```
 
 The editor and typing budgets below depend only on VS Code, as the mission requires, so they are final. The solution and language-service budgets stay provisional until Rider has been measured.

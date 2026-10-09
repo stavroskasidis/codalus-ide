@@ -1,6 +1,6 @@
 # Shell ↔ build host protocol
 
-The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) owns MSBuild: solution files, project evaluation, file watching, restore and project-file edits. The shell starts one host per open solution (`--solution-dir <dir>`, so the solution's `global.json` picks the SDK) and talks to it over **stdio** with **JSON-RPC 2.0 and LSP framing**, like the other hosts. Contracts are in `src/Daedalus.Projects.Protocol`; the shell side is `SolutionService` in `src/Daedalus.Workbench/Projects`.
+The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) owns MSBuild: solution files, project evaluation, file watching, restore and project-file edits. The shell starts one host per open solution (`--solution-dir <dir>`, so the solution's `global.json` picks the SDK) and talks to it over **stdio** with **JSON-RPC 2.0 and LSP framing**, like the other hosts. Contracts are in `src/DaedalusStudio.Projects.Protocol`; the shell side is `SolutionService` in `src/DaedalusStudio.Workbench/Projects`.
 
 **Protocol version 0.1.** Parameters are single objects with camelCase names. Paths are absolute file system paths.
 

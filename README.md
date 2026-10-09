@@ -50,12 +50,12 @@ The UI shell (`daedalus`, Native AOT) is kept light and responsive. Heavy servic
 
 | Path | Contents |
 |---|---|
-| `src/Daedalus.Shell` | The IDE shell (`daedalus`): Avalonia views on top of the workbench services. |
-| `src/Daedalus.Workbench`, `src/Daedalus.Platform` | UI-independent services: commands, key bindings, menus, settings, notifications, output, the plugin manager; OS conventions. |
-| `src/Daedalus.Plugins.*`, `src/Plugins/` | The plugin SDK, protocol and host process, and the built-in plugins. |
-| `src/Daedalus.Projects.*` | The build host (`daedalus-buildhost`): solutions, MSBuild evaluation, restore and project-file edits. |
-| `src/Daedalus.Rpc`, `src/Daedalus.LanguageServices.*` | JSON-RPC and process supervision; the C# language service host (`daedalus-lshost`, Roslyn over LSP) and its client. |
-| `src/Daedalus.Debugging` | The Debug Adapter Protocol client for netcoredbg. |
+| `src/DaedalusStudio.Shell` | The IDE shell (`daedalus`): Avalonia views on top of the workbench services. |
+| `src/DaedalusStudio.Workbench`, `src/DaedalusStudio.Platform` | UI-independent services: commands, key bindings, menus, settings, notifications, output, the plugin manager; OS conventions. |
+| `src/DaedalusStudio.Plugins.*`, `src/Plugins/` | The plugin SDK, protocol and host process, and the built-in plugins. |
+| `src/DaedalusStudio.Projects.*` | The build host (`daedalus-buildhost`): solutions, MSBuild evaluation, restore and project-file edits. |
+| `src/DaedalusStudio.Rpc`, `src/DaedalusStudio.LanguageServices.*` | JSON-RPC and process supervision; the C# language service host (`daedalus-lshost`, Roslyn over LSP) and its client. |
+| `src/DaedalusStudio.Debugging` | The Debug Adapter Protocol client for netcoredbg. |
 | `eng/` | Scripts: fetching netcoredbg, building release packages (`package.sh`) and their templates. |
 | `tests/` | Unit, integration and headless UI tests. |
 | `benchmarks/` | The `daedalus-bench` harness, the fixture generator and committed results. |
@@ -67,15 +67,15 @@ The UI shell (`daedalus`, Native AOT) is kept light and responsive. Heavy servic
 You need the .NET SDK pinned in `global.json` (10.0) and git. For the debugger, run `eng/get-netcoredbg.sh` once.
 
 ```bash
-dotnet build Daedalus.slnx
+dotnet build DaedalusStudio.slnx
 ```
 
 ```bash
-dotnet test --solution Daedalus.slnx
+dotnet test --solution DaedalusStudio.slnx
 ```
 
 ```bash
-dotnet run --project src/Daedalus.Shell
+dotnet run --project src/DaedalusStudio.Shell
 ```
 
 More commands, including publishing the shell and running the benchmarks, are in [CLAUDE.md](CLAUDE.md) and [benchmarks/README.md](benchmarks/README.md). `eng/package.sh <version>` builds the release package for your OS ([ADR 0009](docs/adr/0009-packaging-and-release.md)).

@@ -5,9 +5,9 @@ Guidance for working in this repository. The MVP (milestones M0–M7) is done; t
 ## Build and test
 
 ```bash
-dotnet build Daedalus.slnx                          # everything .NET (warnings are errors)
-dotnet test --solution Daedalus.slnx                # unit + host integration + Avalonia headless UI test
-dotnet run --project benchmarks/Daedalus.Benchmarks.FixtureGen -- all samples   # generate Large100k/ and Solution50/
+dotnet build DaedalusStudio.slnx                          # everything .NET (warnings are errors)
+dotnet test --solution DaedalusStudio.slnx                # unit + host integration + Avalonia headless UI test
+dotnet run --project benchmarks/DaedalusStudio.Benchmarks.FixtureGen -- all samples   # generate Large100k/ and Solution50/
 ```
 
 NativeAOT publish on Windows needs `vswhere.exe` on `PATH` (`%ProgramFiles(x86)%\Microsoft Visual Studio\Installer`).
@@ -15,8 +15,8 @@ NativeAOT publish on Windows needs `vswhere.exe` on `PATH` (`%ProgramFiles(x86)%
 ## Running the shell
 
 ```bash
-dotnet run --project src/Daedalus.Shell -- --user-data-dir .work/user-data          # Debug; plugin host and built-in plugins are copied next to the build
-dotnet publish src/Daedalus.Shell -c Release -r win-x64 -o artifacts/shell           # Native AOT, with pluginhost/, buildhost/, lshost/ and plugins/ next to daedalus.exe
+dotnet run --project src/DaedalusStudio.Shell -- --user-data-dir .work/user-data          # Debug; plugin host and built-in plugins are copied next to the build
+dotnet publish src/DaedalusStudio.Shell -c Release -r win-x64 -o artifacts/shell           # Native AOT, with pluginhost/, buildhost/, lshost/ and plugins/ next to daedalus.exe
 ```
 
 Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--open <file>`, `--screenshot <png>`; for benchmarks `--bench typing|scroll` (on the `--open` file) and `--exit-on interactive|highlight|done|language`. With `DAEDALUS_BENCH_EVENTS=<file>` the shell writes timestamped bench events. `DAEDALUS_PLUGINHOST`, `DAEDALUS_BUILDHOST` and `DAEDALUS_LSHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
@@ -27,19 +27,19 @@ Arguments: an optional solution, project or folder to open. Options: `--user-dat
 
 ## Language services
 
-The C# language service host (`daedalus-lshost`, ADR 0005) speaks LSP over stdio (`docs/protocol.md`). It gets its projects from the build host's design-time builds, relayed by the shell (`LanguageService` in `src/Daedalus.Workbench/Languages`). `DAEDALUS_LSHOST` points at a host `.exe` or `.dll`; otherwise the shell uses `lshost/` next to it. Fixture: `samples/LanguageFeatures`.
+The C# language service host (`daedalus-lshost`, ADR 0005) speaks LSP over stdio (`docs/protocol.md`). It gets its projects from the build host's design-time builds, relayed by the shell (`LanguageService` in `src/DaedalusStudio.Workbench/Languages`). `DAEDALUS_LSHOST` points at a host `.exe` or `.dll`; otherwise the shell uses `lshost/` next to it. Fixture: `samples/LanguageFeatures`.
 
 ## Debugging
 
-The shell debugs through netcoredbg (Samsung, MIT) over DAP (ADR 0007; client in `src/Daedalus.Debugging`, sessions in `DebugService` in `src/Daedalus.Workbench/Debugging`). Get it with `eng/get-netcoredbg.sh` (pinned, checksummed, into `.work/netcoredbg`); `DAEDALUS_NETCOREDBG` points at another one, and installed builds look in `debugger/` next to the shell. Debugger tests skip without it locally and fail without it in CI. Fixture: `samples/Debugging`.
+The shell debugs through netcoredbg (Samsung, MIT) over DAP (ADR 0007; client in `src/DaedalusStudio.Debugging`, sessions in `DebugService` in `src/DaedalusStudio.Workbench/Debugging`). Get it with `eng/get-netcoredbg.sh` (pinned, checksummed, into `.work/netcoredbg`); `DAEDALUS_NETCOREDBG` points at another one, and installed builds look in `debugger/` next to the shell. Debugger tests skip without it locally and fail without it in CI. Fixture: `samples/Debugging`.
 
 ## Git
 
-Source control uses the git CLI (ADR 0008), not a library: `GitService` in `src/Daedalus.Workbench/Git` runs one `git` process per operation and parses porcelain output only. `DAEDALUS_GIT` points at another git. Tests build throwaway repositories in temp folders (git writes read-only object files; clear the attribute before deleting).
+Source control uses the git CLI (ADR 0008), not a library: `GitService` in `src/DaedalusStudio.Workbench/Git` runs one `git` process per operation and parses porcelain output only. `DAEDALUS_GIT` points at another git. Tests build throwaway repositories in temp folders (git writes read-only object files; clear the attribute before deleting).
 
 ## Benchmarks
 
-See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.Benchmarks.Harness -- list | run ... | report | check | compare --baseline DIR`. Budgets live in `benchmarks/budgets.json`. Scenarios that inject keystrokes require `--allow-input` and a machine that nobody is using at the time.
+See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -- list | run ... | report | check | compare --baseline DIR`. Budgets live in `benchmarks/budgets.json`. Scenarios that inject keystrokes require `--allow-input` and a machine that nobody is using at the time.
 
 ## Git
 
@@ -49,13 +49,13 @@ See `benchmarks/README.md`. In short: `dotnet run --project benchmarks/Daedalus.
 
 ## Conventions
 
-- Root namespace `Daedalus.*`. The product name is "Daedalus Studio", and the CLI is `daedalus`. Never use "Visual Studio" branding in the product.
+- Root namespace and assembly/package prefix `DaedalusStudio.*` (`Daedalus.*` is taken on nuget.org). The product name is "Daedalus Studio", and the CLI is `daedalus`. Never use "Visual Studio" branding in the product.
 - Central package management (`Directory.Packages.props`). Check and record the license of every new dependency in `THIRD-PARTY-NOTICES.md`.
-- Heavy work runs out of process (language service host, build host, debug adapter, plugin hosts). The shell supervises hosts with `Daedalus.Rpc.SupervisedProcess` and restarts them on crashes. MSBuild only ever runs in the build host (ADR 0004), and only for trusted folders.
+- Heavy work runs out of process (language service host, build host, debug adapter, plugin hosts). The shell supervises hosts with `DaedalusStudio.Rpc.SupervisedProcess` and restarts them on crashes. MSBuild only ever runs in the build host (ADR 0004), and only for trusted folders.
 - Project-system fixtures: `samples/ProjectSystem` (`.sln` and `.slnx`); build and run: `samples/BuildAndRun` (ADR 0006). Tests copy them to a temp folder before changing anything.
 - Wire contracts follow LSP where it fits. Extensions use the `daedalus/` prefix and are documented in `docs/protocol.md`; the plugin host protocol is in `docs/plugin-protocol.md`.
-- The plugin API (`Daedalus.Plugins.Abstractions`) is a public contract: changes follow ADR 0003's versioning policy and go into the changelog in `docs/plugins.md`.
-- Shell views talk to `Daedalus.Workbench` services; workbench events arrive on any thread, so views marshal through `Ui.Post`. Built-in features register through the same registries as plugins (`BuiltIns.cs`).
+- The plugin API (`DaedalusStudio.Plugins.Abstractions`) is a public contract: changes follow ADR 0003's versioning policy and go into the changelog in `docs/plugins.md`.
+- Shell views talk to `DaedalusStudio.Workbench` services; workbench events arrive on any thread, so views marshal through `Ui.Post`. Built-in features register through the same registries as plugins (`BuiltIns.cs`).
 - Never block the UI thread, and make everything cancellable.
 - The shell must stay Native-AOT clean: use compiled bindings, keep reflection-free view location, and use source-generated JSON.
 - Fixtures under `samples/` are standalone. They do not inherit the repo's build settings.

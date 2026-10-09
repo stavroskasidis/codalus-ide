@@ -71,13 +71,13 @@ jobs:
         shell: bash
         run: eng/get-netcoredbg.sh
       - name: Restore
-        run: dotnet restore Daedalus.slnx
+        run: dotnet restore DaedalusStudio.slnx
       - name: Build
-        run: dotnet build Daedalus.slnx -c Release --no-restore
+        run: dotnet build DaedalusStudio.slnx -c Release --no-restore
       - name: Test (unit, integration, headless UI)
-        run: dotnet test --solution Daedalus.slnx -c Release --no-build
+        run: dotnet test --solution DaedalusStudio.slnx -c Release --no-build
       - name: Native AOT publish must stay warning-free in our code
         shell: bash
         run: |
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
-          dotnet publish src/Daedalus.Shell -c Release -r "$rid" -o artifacts/shell
+          dotnet publish src/DaedalusStudio.Shell -c Release -r "$rid" -o artifacts/shell

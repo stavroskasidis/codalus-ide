@@ -4,7 +4,7 @@
   "displayName": "Hello World",
   "publisher": "daedalus-samples",
   "description": "A sample plugin that exercises every v0 contribution point.",
-  "engines": { "daedalus": "^0.1.0" },
+  "engines": { "daedalus": "^0.2.0" },
   "entry": { "runtime": "dotnet", "assembly": "HelloWorld.dll" },
   "activationEvents": [ "onSettingChanged:hello.announce" ],
   "contributes": {

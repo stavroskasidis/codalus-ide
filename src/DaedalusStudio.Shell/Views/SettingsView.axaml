@@ -1,0 +1,114 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.setting">
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.setting.modified">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Modified}" />
+    </Style>
+  </UserControl.Styles>
+
+  <!-- Editors by setting type. -->
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="vm:BoolSettingViewModel">
+      <CheckBox IsChecked="{Binding Value}" Content="{Binding Title}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Heading}" />
+    </DataTemplate>
+    <DataTemplate DataType="vm:EnumSettingViewModel">
+      <StackPanel Spacing="4" HorizontalAlignment="Left">
+        <ComboBox MinWidth="260" ItemsSource="{Binding Options}" SelectedItem="{Binding Selected}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Heading}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:EnumOption">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Classes="muted" FontSize="12" Text="{Binding SelectedDescription}" />
+      </StackPanel>
+    </DataTemplate>
+    <DataTemplate DataType="vm:TextSettingViewModel">
+      <TextBox Width="420"
+               HorizontalAlignment="Left"
+               Text="{Binding Text}"
+               PlaceholderText="{Binding Watermark}"
+               AcceptsReturn="{Binding IsMultiline}"
+               IsEnabled="{Binding CanEdit}"
+               AutomationProperties.Name="{Binding Heading}" />
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.Border}">
+      <StackPanel Spacing="8">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox x:Name="SearchBox"
+                   Text="{Binding Search}"
+                   PlaceholderText="Search settings (@modified shows changed ones)"
+                   AutomationProperties.Name="Search settings" />
+          <Button Grid.Column="1"
+                  Classes="link"
+                  Margin="16,0,0,0"
+                  VerticalAlignment="Center"
+                  Content="Edit in settings.json"
+                  Command="{Binding OpenJsonCommand}" />
+        </Grid>
+        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasWorkspace}">
+          <ToggleButton Content="User" IsChecked="{Binding IsUserScope}" AutomationProperties.Name="User settings" />
+          <ToggleButton Content="Workspace" IsChecked="{Binding IsWorkspaceScope}" AutomationProperties.Name="Workspace settings" />
+        </StackPanel>
+        <TextBlock Classes="muted" FontSize="11" Text="{Binding FileLabel}" />
+        <TextBlock Foreground="{DynamicResource Shell.Warning}" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
+      </StackPanel>
+    </Border>
+    <Grid ColumnDefinitions="210,*">
+      <ListBox ItemsSource="{Binding Categories}"
+               SelectedItem="{Binding SelectedCategory}"
+               Background="Transparent"
+               Margin="0,8,0,0"
+               AutomationProperties.Name="Setting categories">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:SettingCategoryViewModel">
+            <TextBlock Text="{Binding Label}" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <ScrollViewer Grid.Column="1">
+        <StackPanel Margin="16,8,16,16">
+          <TextBlock Classes="muted" Text="No settings found." IsVisible="{Binding IsEmpty}" Margin="0,8" />
+          <ItemsControl x:Name="Items" ItemsSource="{Binding Items}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:SettingItemViewModel">
+                <Border Classes="setting" Classes.modified="{Binding IsModified}">
+                  <StackPanel Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock FontWeight="SemiBold" Text="{Binding Heading}" />
+                      <TextBlock Classes="muted" FontSize="11" Text="Modified" IsVisible="{Binding IsModified}" VerticalAlignment="Center" />
+                      <Button Classes="link"
+                              FontSize="11"
+                              Content="Reset"
+                              Command="{Binding ResetCommand}"
+                              IsVisible="{Binding IsModified}"
+                              VerticalAlignment="Center"
+                              AutomationProperties.Name="{Binding Title, StringFormat='Reset {0}'}" />
+                    </StackPanel>
+                    <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
+                    <TextBlock Classes="muted" FontSize="11" FontStyle="Italic" Text="This setting can only be changed in user settings." IsVisible="{Binding IsUserOnlyHere}" />
+                    <ContentControl Content="{Binding}" Margin="0,4,0,0" />
+                    <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+                    <TextBlock Classes="muted" FontSize="10" Text="{Binding Key}" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</UserControl>
