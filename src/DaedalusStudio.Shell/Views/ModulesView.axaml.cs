@@ -1,0 +1,12 @@
+using Avalonia.Controls;
+using DaedalusStudio.Shell.Controls;
+
+namespace DaedalusStudio.Shell.Views;
+
+/// <summary>The Modules window: the loaded modules with their symbol status, searchable by name or path.</summary>
+public sealed partial class ModulesView : UserControl, IPaneView
+{
+    public ModulesView() => InitializeComponent();
+
+    public void FocusPrimary() => Search.Focus();
+}

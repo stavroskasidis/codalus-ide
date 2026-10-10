@@ -23,7 +23,16 @@ internal static partial class BuiltIns
           { "key": "f9", "command": "debug.toggleBreakpoint", "when": "editorTextFocus" },
           { "key": "ctrl+f9", "command": "debug.toggleBreakpointEnabled", "when": "editorTextFocus" },
           { "key": "primary+shift+f9", "command": "debug.deleteAllBreakpoints", "when": "hasBreakpoints" },
-          { "key": "ctrl+alt+p", "command": "debug.attach", "when": "!debugActive" }
+          { "key": "ctrl+alt+p", "command": "debug.attach", "when": "!debugActive" },
+          { "key": "shift+alt+p", "command": "debug.reattach", "when": "!debugActive" },
+          { "key": "shift+f9", "command": "debug.quickWatch", "when": "debugStopped" },
+          { "key": "primary+f10", "command": "debug.runToCursor", "when": "editorTextFocus && !debugRunning" },
+          { "key": "ctrl+alt+e", "command": "debug.exceptionSettings" },
+          { "key": "shift+alt+f9 t", "command": "debug.insertTemporaryBreakpoint", "when": "editorTextFocus" },
+          { "key": "ctrl+alt+b", "command": "workbench.view.debug.breakpoints", "when": "keyboardScheme != vscode" },
+          { "key": "ctrl+alt+h", "command": "workbench.view.debug.threads", "when": "keyboardScheme != vscode" },
+          { "key": "ctrl+alt+u", "command": "workbench.view.debug.modules", "when": "keyboardScheme != vscode" },
+          { "key": "ctrl+alt+c", "command": "workbench.view.debug.callStack", "when": "keyboardScheme != vscode" }
         ]
         """;
 
@@ -36,6 +45,10 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(CallStackViewModel.ToolWindowId, "Call Stack", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
         yield return new ToolWindowDescriptor(BreakpointsViewModel.ToolWindowId, "Breakpoints", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "circle" };
         yield return new ToolWindowDescriptor(DebugConsoleViewModel.ToolWindowId, "Debug Console", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "debug" };
+        yield return new ToolWindowDescriptor(QuickWatchViewModel.ToolWindowId, "QuickWatch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
+        yield return new ToolWindowDescriptor(ThreadsViewModel.ToolWindowId, "Threads", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(ModulesViewModel.ToolWindowId, "Modules", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(ExceptionSettingsViewModel.ToolWindowId, "Exception Settings", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "circle" };
     }
 
     public static IReadOnlyList<SettingDescriptor> DebugSettings() =>
@@ -46,6 +59,13 @@ internal static partial class BuiltIns
             Category = "Debugging",
             Description = "Step through and break in your own code only (optimized and framework code is stepped over).",
             Order = 1,
+        },
+        SettingDescriptor.Create(DaedalusStudio.Shell.Editor.EditorOptions.PerfTipsKey, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "PerfTips",
+            Category = "Debugging",
+            Description = "Show the time elapsed since the program was resumed at the end of the current statement's line.",
+            Order = 2,
         },
     ];
 
@@ -86,8 +106,16 @@ internal static partial class BuiltIns
         Add("debug.toggleBreakpointEnabled", "Enable or Disable Breakpoint", Sync(shell.ToggleBreakpointEnabled), "activeDocumentKind == textFile");
         Add("debug.editBreakpoint", "Breakpoint Conditions and Actions…", _ => shell.EditBreakpointAsync(), "activeDocumentKind == textFile");
         Add("debug.deleteAllBreakpoints", "Delete All Breakpoints", _ => shell.DeleteAllBreakpointsAsync(), "hasBreakpoints");
-        Add("debug.exceptionSettings", "Exception Settings…", _ => shell.SelectExceptionSettingsAsync());
+        Add("debug.exceptionSettings", "Exception Settings", Sync(shell.ShowExceptionSettings));
         Add("debug.addWatch", "Add Watch", shell.AddWatchAsync);
+        Add("debug.quickWatch", "QuickWatch…", shell.ShowQuickWatchAsync, "debugStopped");
+        Add("debug.runToCursor", "Run to Cursor", _ => shell.RunToCursorAsync(), "activeDocumentKind == textFile && !debugRunning");
+        Add("debug.forceRunToCursor", "Force Run to Cursor", _ => shell.RunToCursorAsync(force: true), "activeDocumentKind == textFile && debugStopped");
+        Add("debug.reattach", "Reattach to Process", _ => shell.ReattachAsync(), "!debugActive");
+        Add("debug.newFunctionBreakpoint", "New Function Breakpoint…", _ => shell.NewFunctionBreakpointAsync());
+        Add("debug.insertTemporaryBreakpoint", "Insert Temporary Breakpoint", Sync(shell.InsertTemporaryBreakpoint), "activeDocumentKind == textFile");
+        Add("debug.exportBreakpoints", "Export Breakpoints…", _ => shell.ExportBreakpointsAsync(), "hasBreakpoints");
+        Add("debug.importBreakpoints", "Import Breakpoints…", _ => shell.ImportBreakpointsAsync());
     }
 
     public static void RegisterDebugMenus(MenuRegistry menus)
@@ -104,21 +132,31 @@ internal static partial class BuiltIns
             Item("debug.restart", "0-debug", 4),
             Item("debug.pause", "0-debug", 5),
             Item("debug.attach", "0-debug", 6),
+            Item("debug.reattach", "0-debug", 7),
             Item("debug.stepOver", "3-step", 1),
             Item("debug.stepInto", "3-step", 2),
             Item("debug.stepOut", "3-step", 3),
+            Item("debug.runToCursor", "3-step", 4),
+            Item("debug.forceRunToCursor", "3-step", 5),
             Item("debug.toggleBreakpoint", "4-breakpoints", 1),
             Item("debug.toggleBreakpointEnabled", "4-breakpoints", 2),
             Item("debug.editBreakpoint", "4-breakpoints", 3),
-            Item("debug.deleteAllBreakpoints", "4-breakpoints", 4),
-            Item("debug.exceptionSettings", "4-breakpoints", 5),
+            Item("debug.insertTemporaryBreakpoint", "4-breakpoints", 4),
+            Item("debug.newFunctionBreakpoint", "4-breakpoints", 5),
+            Item("debug.deleteAllBreakpoints", "4-breakpoints", 6),
+            Item("debug.exportBreakpoints", "4-breakpoints", 7),
+            Item("debug.importBreakpoints", "4-breakpoints", 8),
+            Item("debug.exceptionSettings", "4-breakpoints", 9, "Exception Settings…"),
             Item("debug.addWatch", "5-windows", 1),
+            Item("debug.quickWatch", "5-windows", 2),
             Item(ViewCommandPrefix + VariablesViewModel.LocalsWindowId, "5-windows", 2, "Locals"),
             Item(ViewCommandPrefix + VariablesViewModel.AutosWindowId, "5-windows", 3, "Autos"),
             Item(ViewCommandPrefix + WatchViewModel.ToolWindowId, "5-windows", 4, "Watch"),
             Item(ViewCommandPrefix + CallStackViewModel.ToolWindowId, "5-windows", 5, "Call Stack"),
             Item(ViewCommandPrefix + BreakpointsViewModel.ToolWindowId, "5-windows", 6, "Breakpoints"),
             Item(ViewCommandPrefix + DebugConsoleViewModel.ToolWindowId, "5-windows", 7, "Debug Console"),
+            Item(ViewCommandPrefix + ThreadsViewModel.ToolWindowId, "5-windows", 8, "Threads"),
+            Item(ViewCommandPrefix + ModulesViewModel.ToolWindowId, "5-windows", 9, "Modules"),
         ]);
     }
 }

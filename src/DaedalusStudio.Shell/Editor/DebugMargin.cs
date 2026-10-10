@@ -24,7 +24,8 @@ internal static class DebugColors
 /// <summary>
 /// The breakpoint margin (ADR 0007): a filled circle per breakpoint, hollow when disabled or not verified by the
 /// debugger, a diamond for logpoints, a dot inside for conditions and hit counts; an arrow on the current statement.
-/// Clicking toggles a breakpoint. With <paramref name="relocate"/>, breakpoints follow edits to the document.
+/// Clicking toggles a breakpoint; Ctrl+click runs to the line while paused (Run to Click); right-clicking a breakpoint
+/// opens its menu. With <paramref name="relocate"/>, breakpoints follow edits to the document.
 /// </summary>
 public sealed class BreakpointMargin : AbstractMargin
 {
@@ -45,12 +46,20 @@ public sealed class BreakpointMargin : AbstractMargin
         _relocate = relocate;
         Cursor = new Cursor(StandardCursorType.Hand);
         store.Changed += OnStoreChanged;
+        store.StatesChanged += OnStoreChanged;
     }
+
+    /// <summary>Run to Click: runs to the line, or returns null when that isn't possible now (the program isn't paused).</summary>
+    public Func<int, Task?>? RunToLine { get; init; }
+
+    /// <summary>Opens the context menu of the breakpoint on a line.</summary>
+    public Action<int, Avalonia.Controls.Control>? ShowMenu { get; init; }
 
     /// <summary>Stops listening to the store (the editor closed).</summary>
     public void Detach()
     {
         _store.Changed -= OnStoreChanged;
+        _store.StatesChanged -= OnStoreChanged;
         if (_document is not null)
         {
             _document.Changed -= OnDocumentChanged;
@@ -192,17 +201,38 @@ public sealed class BreakpointMargin : AbstractMargin
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
-        if (TextView is not { } view || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        var properties = e.GetCurrentPoint(this).Properties;
+        if (TextView is not { } view || !(properties.IsLeftButtonPressed || properties.IsRightButtonPressed))
         {
             return;
         }
 
         var y = e.GetPosition(view).Y + view.VerticalOffset;
-        if (view.GetVisualLineFromVisualTop(y) is { } line)
+        if (view.GetVisualLineFromVisualTop(y) is not { } line)
         {
-            _store.Toggle(_path(), line.FirstDocumentLine.LineNumber);
-            e.Handled = true;
+            return;
         }
+
+        var number = line.FirstDocumentLine.LineNumber;
+        if (properties.IsRightButtonPressed)
+        {
+            if (_store.At(_path(), number) is not null && ShowMenu is { } menu)
+            {
+                menu(number, this);
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && RunToLine?.Invoke(number) is not null)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        _store.Toggle(_path(), number);
+        e.Handled = true;
     }
 }
 

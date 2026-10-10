@@ -5,7 +5,10 @@ using DaedalusStudio.Shell.ViewModels;
 
 namespace DaedalusStudio.Shell.Views;
 
-/// <summary>The Watch window: Enter in the box adds an expression; Delete removes the selected top-level watch.</summary>
+/// <summary>
+/// The Watch window: Enter in the box adds an expression; Delete removes the selected top-level watch; F2 edits a value
+/// (a watch with <c>setExpression</c>, a member with <c>setVariable</c>).
+/// </summary>
 public sealed partial class WatchView : UserControl, IPaneView
 {
     public WatchView()
@@ -27,6 +30,10 @@ public sealed partial class WatchView : UserControl, IPaneView
                 e.Handled = true;
             }
         };
+        VariableTreeSupport.Attach(
+            Tree,
+            (node, value) => DataContext is WatchViewModel vm ? vm.SetValueAsync(node, value) : Task.FromResult<string?>(null),
+            node => !node.IsError && node.Value.Length > 0 && (node.EvaluateName is not null || node.ParentReference is not null));
     }
 
     public void FocusPrimary() => Input.Focus();

@@ -30,6 +30,7 @@ public sealed class EditorOptions : ObservableObject
     public const string StickyScrollKey = "editor.stickyScroll";
     public const string OverviewRulerKey = "editor.overviewRuler";
     public const string NavigationBarKey = "editor.navigationBar";
+    public const string PerfTipsKey = "debug.perfTips";
 
     private readonly SettingsService _settings;
 
@@ -39,7 +40,7 @@ public sealed class EditorOptions : ObservableObject
         Read();
         settings.Changed += (_, e) =>
         {
-            if (e.Affects("editor"))
+            if (e.Affects("editor") || e.Affects(PerfTipsKey))
             {
                 Ui.Post(() =>
                 {
@@ -92,6 +93,9 @@ public sealed class EditorOptions : ObservableObject
 
     public bool NavigationBar { get; private set; }
 
+    /// <summary>Show the elapsed time at the current statement while debugging (ADR 0021).</summary>
+    public bool PerfTips { get; private set; }
+
     private void Read()
     {
         InlayParameterNames = _settings.GetBoolean(InlayParameterNamesKey, true);
@@ -104,6 +108,7 @@ public sealed class EditorOptions : ObservableObject
         StickyScroll = _settings.GetBoolean(StickyScrollKey, true);
         OverviewRuler = _settings.GetBoolean(OverviewRulerKey, true);
         NavigationBar = _settings.GetBoolean(NavigationBarKey, true);
+        PerfTips = _settings.GetBoolean(PerfTipsKey, true);
         TabSize = Math.Clamp(_settings.GetInt32(TabSizeKey, 4), 1, 16);
         InsertSpaces = _settings.GetBoolean(InsertSpacesKey, true);
         WordWrap = _settings.GetBoolean(WordWrapKey);
@@ -161,6 +166,18 @@ public interface IEditorServices
 
     /// <summary>Breakpoints, the current statement and data tips (ADR 0007).</summary>
     DaedalusStudio.Workbench.Debugging.DebugService Debugger { get; }
+
+    /// <summary>QuickWatch on an expression (the exception helper's View Details, ADR 0021).</summary>
+    void ShowQuickWatch(string expression);
+
+    /// <summary>Whether an exception type breaks when thrown (the exception helper's check box).</summary>
+    void SetBreakOnException(string type, bool value);
+
+    /// <summary>Run to Click: runs the paused program to a line.</summary>
+    Task RunToLineAsync(string path, int line);
+
+    /// <summary>The breakpoint glyph's context menu.</summary>
+    void ShowBreakpointMenu(string path, int line, Avalonia.Controls.Control anchor);
 
     /// <summary>Gutter change markers and blame (ADR 0008).</summary>
     DaedalusStudio.Workbench.Git.GitService Git { get; }

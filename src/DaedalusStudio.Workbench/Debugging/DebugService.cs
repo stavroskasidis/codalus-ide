@@ -20,8 +20,14 @@ public enum DebugState
     Stopped,
 }
 
-/// <summary>Why the program stopped. <see cref="Exception"/> is set for exception stops.</summary>
-public sealed record StopInfo(string Reason, int ThreadId, string? Description, ExceptionInfoResponse? Exception);
+/// <summary>
+/// Why the program stopped. <see cref="Exception"/> is set for exception stops. <see cref="Elapsed"/> is the time
+/// from resuming the program (or starting it) to this stop, for PerfTips.
+/// </summary>
+public sealed record StopInfo(string Reason, int ThreadId, string? Description, ExceptionInfoResponse? Exception, TimeSpan? Elapsed = null);
+
+/// <summary>A module the debuggee loaded (from the adapter's <c>module</c> events).</summary>
+public sealed record DebugModule(string Id, string Name, string? Path, string? SymbolStatus, bool? IsOptimized, bool? IsUserCode, int Order);
 
 /// <summary>A line of debugger output: <see cref="Category"/> is <c>stdout</c>, <c>stderr</c>, <c>console</c> (the debugger's own) or <c>important</c>.</summary>
 public sealed record DebugOutput(string Category, string Text);
@@ -39,24 +45,53 @@ public sealed class DebugService : IAsyncDisposable
     private readonly Lock _gate = new();
     private readonly Dictionary<int, BreakpointSpec> _adapterBreakpoints = [];
     private readonly Dictionary<BreakpointSpec, int> _hits = [];
+    private readonly Dictionary<int, FunctionBreakpointSpec> _adapterFunctionBreakpoints = [];
+    private readonly HashSet<int> _runToIds = [];
+    private readonly List<BreakpointLocation> _hitLocations = [];
+    private readonly Dictionary<string, DebugModule> _modules = new(StringComparer.Ordinal);
+    private RunTarget? _runTo;
+    private long _resumedAt;
     private DebugAdapter? _adapter;
     private bool _attached;
     private int _exitCode;
     private CancellationTokenSource _session = new();
     private TaskCompletionSource<int> _process = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    /// <summary>A Run to Cursor in progress: where to, and whether other breakpoints are skipped (Force Run to Cursor).</summary>
+    private sealed record RunTarget(BreakpointLocation Location, bool Force);
+
     public DebugService(Func<string?> resolveAdapter)
     {
         _resolveAdapter = resolveAdapter;
         Breakpoints.Changed += (_, path) => _ = SyncBreakpointsAsync(path);
+        Breakpoints.FunctionsChanged += (_, _) => _ = SyncFunctionBreakpointsAsync();
+        ExceptionSettings.Changed += (_, _) => _ = ApplyExceptionSettingsAsync();
     }
 
     public BreakpointStore Breakpoints { get; } = new();
 
-    /// <summary>The exception filters to break on (<see cref="ExceptionsAll"/>, <see cref="ExceptionsUserUnhandled"/>).</summary>
-    public IReadOnlyList<string> ExceptionFilters { get; private set; } = [ExceptionsUserUnhandled];
+    /// <summary>Which exceptions break when thrown (applied to a running session as they change).</summary>
+    public ExceptionSettings ExceptionSettings { get; } = new();
 
     public bool JustMyCode { get; set; } = true;
+
+    /// <summary>The modules the debuggee loaded, in load order.</summary>
+    public IReadOnlyList<DebugModule> Modules
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _modules.Values.OrderBy(m => m.Order)];
+            }
+        }
+    }
+
+    /// <summary>A module was loaded, changed or unloaded (or the list was cleared).</summary>
+    public event EventHandler? ModulesChanged;
+
+    /// <summary>Whether a Run to Cursor is in progress.</summary>
+    public bool IsRunningToCursor => _runTo is not null;
 
     public DebugState State { get; private set; }
 
@@ -140,8 +175,15 @@ public sealed class DebugService : IAsyncDisposable
         {
             _hits.Clear();
             _adapterBreakpoints.Clear();
+            _adapterFunctionBreakpoints.Clear();
+            _runToIds.Clear();
+            _hitLocations.Clear();
+            _modules.Clear();
+            _runTo = null;
         }
 
+        ModulesChanged?.Invoke(this, EventArgs.Empty);
+        _resumedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         DebugAdapter? adapter = null;
         try
         {
@@ -158,7 +200,13 @@ public sealed class DebugService : IAsyncDisposable
                 await SendBreakpointsAsync(adapter, file, cancellationToken).ConfigureAwait(false);
             }
 
-            await adapter.SetExceptionBreakpointsAsync([.. ExceptionFilters], cancellationToken).ConfigureAwait(false);
+            if (Breakpoints.Functions.Count > 0)
+            {
+                await SendFunctionBreakpointsAsync(adapter, cancellationToken).ConfigureAwait(false);
+            }
+
+            var (filters, options) = ExceptionSettings.ToFilters();
+            await adapter.SetExceptionBreakpointsAsync(filters, cancellationToken, options).ConfigureAwait(false);
             if (State == DebugState.Starting)
             {
                 SetState(DebugState.Running);
@@ -217,6 +265,7 @@ public sealed class DebugService : IAsyncDisposable
         Frames = [];
         SelectedFrame = null;
         SelectedThreadId = null;
+        _runTo = null;
         _process.TrySetCanceled();
         Breakpoints.ClearStates();
         SetState(DebugState.Idle);
@@ -243,6 +292,52 @@ public sealed class DebugService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Run to Cursor: continues until <paramref name="line"/> of <paramref name="path"/> is reached, through a hidden
+    /// breakpoint there. Any other stop ends it, except that <paramref name="force"/> continues past other breakpoints.
+    /// </summary>
+    public async Task RunToCursorAsync(string path, int line, bool force = false)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return;
+        }
+
+        _runTo = new RunTarget(new BreakpointLocation(path, line), force);
+        try
+        {
+            await SendBreakpointsAsync(adapter, path, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            _runTo = null;
+            Output?.Invoke(this, new DebugOutput("console", $"Run to Cursor failed: {ex.Message}\n"));
+            return;
+        }
+
+        MarkRunning();
+        await adapter.ContinueAsync(CurrentThread, _session.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>Ends a Run to Cursor: removes its hidden breakpoint.</summary>
+    private async Task EndRunToCursorAsync(DebugAdapter adapter)
+    {
+        if (_runTo is not { } target)
+        {
+            return;
+        }
+
+        _runTo = null;
+        try
+        {
+            await SendBreakpointsAsync(adapter, target.Location.Path, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            Output?.Invoke(this, new DebugOutput("console", $"Breakpoints could not be set: {ex.Message}\n"));
+        }
+    }
+
     private async Task ResumeAsync(Func<DebugAdapter, Task> resume)
     {
         if (_adapter is not { } adapter || State != DebugState.Stopped)
@@ -256,6 +351,7 @@ public sealed class DebugService : IAsyncDisposable
 
     private void MarkRunning()
     {
+        _resumedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         CurrentStop = null;
         Frames = [];
         SelectedFrame = null;
@@ -313,14 +409,64 @@ public sealed class DebugService : IAsyncDisposable
         return await adapter.SetVariableAsync(variablesReference, name, value, _session.Token).ConfigureAwait(false);
     }
 
+    /// <summary>Assigns a value to an expression (a watch, or a member by its evaluate name) in the selected frame.</summary>
+    public async Task<SetExpressionResponse> SetExpressionAsync(string expression, string value)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            throw new InvalidOperationException("Values can be changed only while the program is stopped.");
+        }
+
+        return await adapter.SetExpressionAsync(expression, value, SelectedFrame?.Id, _session.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>The top frame of each thread (for the Threads window), while stopped. Threads without frames are left out.</summary>
+    public async Task<IReadOnlyDictionary<int, StackFrame>> TopFramesAsync(CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, StackFrame>();
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return result;
+        }
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        foreach (var thread in Threads)
+        {
+            try
+            {
+                var frames = await adapter.StackTraceAsync(thread.Id, 1, linked.Token).ConfigureAwait(false);
+                if (frames.StackFrames.Length > 0)
+                {
+                    result[thread.Id] = frames.StackFrames[0];
+                }
+            }
+            catch (DapException)
+            {
+                // The thread is gone or has no managed frames.
+            }
+        }
+
+        return result;
+    }
+
     // ------------------------------------------------------------------ settings
 
-    public async Task SetExceptionFiltersAsync(IReadOnlyList<string> filters)
+    /// <summary>Sends <see cref="ExceptionSettings"/> to the running session (it also happens on every change).</summary>
+    public async Task ApplyExceptionSettingsAsync()
     {
-        ExceptionFilters = [.. filters];
-        if (_adapter is { } adapter)
+        if (_adapter is not { } adapter || State == DebugState.Starting)
         {
-            await adapter.SetExceptionBreakpointsAsync([.. filters], _session.Token).ConfigureAwait(false);
+            return;
+        }
+
+        var (filters, options) = ExceptionSettings.ToFilters();
+        try
+        {
+            await adapter.SetExceptionBreakpointsAsync(filters, _session.Token, options).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            Output?.Invoke(this, new DebugOutput("console", $"Exception settings could not be applied: {ex.Message}\n"));
         }
     }
 
@@ -349,13 +495,32 @@ public sealed class DebugService : IAsyncDisposable
     private async Task SendBreakpointsAsync(DebugAdapter adapter, string path, CancellationToken cancellationToken)
     {
         var specs = Breakpoints.For(path).Where(b => b.Enabled).ToList();
-        var result = await adapter.SetBreakpointsAsync(path, [.. specs.Select(b => new SourceBreakpoint(b.Line, Condition: b.Condition))], cancellationToken).ConfigureAwait(false);
+        var sent = specs.Select(b => new SourceBreakpoint(b.Line, Condition: b.Condition)).ToList();
+
+        // Run to Cursor's hidden breakpoint, unless a breakpoint without a condition is already on that line.
+        var runTo = _runTo is { } target && SolutionService.PathComparer.Equals(target.Location.Path, path)
+            && !specs.Any(b => b.Line == target.Location.Line && b.Condition is null)
+            ? target.Location.Line
+            : (int?)null;
+        if (runTo is { } line)
+        {
+            sent.RemoveAll(b => b.Line == line);
+            specs.RemoveAll(b => b.Line == line);
+            sent.Add(new SourceBreakpoint(line));
+        }
+
+        var result = await adapter.SetBreakpointsAsync(path, [.. sent], cancellationToken).ConfigureAwait(false);
         var states = new List<(int, BreakpointState)>();
         lock (_gate)
         {
             foreach (var stale in _adapterBreakpoints.Where(p => SolutionService.PathComparer.Equals(p.Value.Path, path)).Select(p => p.Key).ToList())
             {
                 _adapterBreakpoints.Remove(stale);
+            }
+
+            if (runTo is not null)
+            {
+                _runToIds.Clear();
             }
 
             for (var i = 0; i < specs.Count && i < result.Length; i++)
@@ -367,9 +532,53 @@ public sealed class DebugService : IAsyncDisposable
 
                 states.Add((specs[i].Line, new BreakpointState(result[i].Verified, result[i].Message)));
             }
+
+            if (runTo is not null && result.Length == sent.Count && result[^1].Id is { } runToId)
+            {
+                _runToIds.Add(runToId);
+            }
         }
 
         Breakpoints.SetStates(path, states);
+    }
+
+    private async Task SyncFunctionBreakpointsAsync()
+    {
+        if (_adapter is not { } adapter || State == DebugState.Starting)
+        {
+            return;
+        }
+
+        try
+        {
+            await SendFunctionBreakpointsAsync(adapter, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            Output?.Invoke(this, new DebugOutput("console", $"Function breakpoints could not be set: {ex.Message}\n"));
+        }
+    }
+
+    private async Task SendFunctionBreakpointsAsync(DebugAdapter adapter, CancellationToken cancellationToken)
+    {
+        var specs = Breakpoints.Functions.Where(f => f.Enabled).ToList();
+        var result = await adapter.SetFunctionBreakpointsAsync([.. specs.Select(f => new FunctionBreakpoint(f.Name, f.Condition))], cancellationToken).ConfigureAwait(false);
+        var states = new List<(string, BreakpointState)>();
+        lock (_gate)
+        {
+            _adapterFunctionBreakpoints.Clear();
+            for (var i = 0; i < specs.Count && i < result.Length; i++)
+            {
+                if (result[i].Id is { } id)
+                {
+                    _adapterFunctionBreakpoints[id] = specs[i];
+                }
+
+                states.Add((specs[i].Name, new BreakpointState(result[i].Verified, result[i].Message)));
+            }
+        }
+
+        Breakpoints.SetFunctionStates(states);
     }
 
     // ------------------------------------------------------------------ events
@@ -403,18 +612,47 @@ public sealed class DebugService : IAsyncDisposable
                 break;
             case DapEvents.Breakpoint when DebugAdapter.Read(e.Body, DapJsonContext.Default.BreakpointEvent) is { Breakpoint.Id: { } id } changed:
                 BreakpointSpec? spec;
+                FunctionBreakpointSpec? function;
                 lock (_gate)
                 {
                     spec = _adapterBreakpoints.GetValueOrDefault(id);
+                    function = _adapterFunctionBreakpoints.GetValueOrDefault(id);
                 }
 
+                var state = new BreakpointState(changed.Breakpoint.Verified, changed.Breakpoint.Message);
                 if (spec is not null)
                 {
-                    Breakpoints.SetStates(spec.Path, [(spec.Line, new BreakpointState(changed.Breakpoint.Verified, changed.Breakpoint.Message))]);
+                    Breakpoints.SetStates(spec.Path, [(spec.Line, state)]);
+                }
+                else if (function is not null)
+                {
+                    Breakpoints.SetFunctionState(function.Name, state);
                 }
 
                 break;
+            case DapEvents.Module when DebugAdapter.Read(e.Body, DapJsonContext.Default.ModuleEvent) is { } module:
+                OnModule(module);
+                break;
         }
+    }
+
+    private void OnModule(ModuleEvent e)
+    {
+        var id = e.Module.Id.ValueKind == System.Text.Json.JsonValueKind.String ? e.Module.Id.GetString()! : e.Module.Id.GetRawText();
+        lock (_gate)
+        {
+            if (e.Reason == "removed")
+            {
+                _modules.Remove(id);
+            }
+            else
+            {
+                var order = _modules.TryGetValue(id, out var existing) ? existing.Order : _modules.Count;
+                _modules[id] = new DebugModule(id, e.Module.Name, e.Module.Path, e.Module.SymbolStatus, e.Module.IsOptimized, e.Module.IsUserCode, order);
+            }
+        }
+
+        ModulesChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private async Task OnStoppedAsync(StoppedEvent stopped)
@@ -424,16 +662,38 @@ public sealed class DebugService : IAsyncDisposable
             return;
         }
 
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_resumedAt);
         var threadId = stopped.ThreadId ?? 0;
         try
         {
             var frames = (await adapter.StackTraceAsync(threadId, 200, _session.Token).ConfigureAwait(false)).StackFrames;
-            if (stopped.Reason == "breakpoint" && FindBreakpoint(stopped, frames) is { NeedsClientHandling: true } breakpoint
+            var atRunTarget = _runTo is { } target && (IsRunToHit(stopped) || frames.Length > 0 && frames[0] is { Source.Path: { } topPath } top
+                && target.Location.Matches(new BreakpointLocation(topPath, top.Line)));
+            if (stopped.Reason == "breakpoint" && !atRunTarget && _runTo is { Force: true })
+            {
+                // Force Run to Cursor: past every other breakpoint.
+                await adapter.ContinueAsync(threadId, _session.Token).ConfigureAwait(false);
+                return;
+            }
+
+            var breakpoint = stopped.Reason == "breakpoint" ? FindBreakpoint(stopped, frames) : null;
+            if (breakpoint is { NeedsClientHandling: true } && !atRunTarget
                 && !await ShouldBreakAsync(adapter, breakpoint, frames, threadId).ConfigureAwait(false))
             {
                 await adapter.ContinueAsync(threadId, _session.Token).ConfigureAwait(false);
                 return;
             }
+
+            if (breakpoint is not null)
+            {
+                RecordHit(breakpoint.Location);
+                if (breakpoint.Temporary)
+                {
+                    Breakpoints.Remove(breakpoint);
+                }
+            }
+
+            await EndRunToCursorAsync(adapter).ConfigureAwait(false);
 
             ExceptionInfoResponse? exception = null;
             if (stopped.Reason == "exception" && adapter.Capabilities.SupportsExceptionInfoRequest)
@@ -451,7 +711,7 @@ public sealed class DebugService : IAsyncDisposable
             SelectedThreadId = threadId;
             Frames = frames;
             SelectedFrame = frames.FirstOrDefault(f => f.Source?.Path is not null) ?? (frames.Length > 0 ? frames[0] : null);
-            var info = new StopInfo(stopped.Reason, threadId, stopped.Description ?? stopped.Text, exception);
+            var info = new StopInfo(stopped.Reason, threadId, stopped.Description ?? stopped.Text, exception, elapsed);
             CurrentStop = info;
             SetState(DebugState.Stopped);
             Stopped?.Invoke(this, info);
@@ -478,12 +738,37 @@ public sealed class DebugService : IAsyncDisposable
         return frames.Length > 0 && frames[0] is { Source.Path: { } path } top ? Breakpoints.At(path, top.Line) : null;
     }
 
-    /// <summary>Client-side hit counts and logpoints: whether this hit shows as a stop.</summary>
+    private bool IsRunToHit(StoppedEvent stopped)
+    {
+        lock (_gate)
+        {
+            return stopped.HitBreakpointIds?.Any(_runToIds.Contains) == true;
+        }
+    }
+
+    /// <summary>Remembers that the breakpoint at <paramref name="location"/> was hit (for dependent breakpoints).</summary>
+    private void RecordHit(BreakpointLocation location)
+    {
+        lock (_gate)
+        {
+            if (!_hitLocations.Any(l => l.Matches(location)))
+            {
+                _hitLocations.Add(location);
+            }
+        }
+    }
+
+    /// <summary>Client-side dependencies, hit counts and logpoints: whether this hit shows as a stop.</summary>
     private async Task<bool> ShouldBreakAsync(DebugAdapter adapter, BreakpointSpec breakpoint, StackFrame[] frames, int threadId)
     {
         int hits;
         lock (_gate)
         {
+            if (breakpoint.DependsOn is { } dependency && !_hitLocations.Any(l => l.Matches(dependency)))
+            {
+                return false;
+            }
+
             hits = _hits[breakpoint] = _hits.GetValueOrDefault(breakpoint) + 1;
         }
 
@@ -494,6 +779,7 @@ public sealed class DebugService : IAsyncDisposable
 
         if (breakpoint.LogMessage is { } message)
         {
+            RecordHit(breakpoint.Location);
             var text = await FormatLogMessageAsync(adapter, message, frames.Length > 0 ? frames[0] : null, threadId).ConfigureAwait(false);
             Output?.Invoke(this, new DebugOutput("console", text + "\n"));
             return false;

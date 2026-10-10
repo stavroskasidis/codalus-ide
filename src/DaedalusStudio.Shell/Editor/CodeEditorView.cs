@@ -27,6 +27,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
     private readonly ComboBox _context = new() { MinWidth = 140, Margin = new Thickness(4, 2) };
     private readonly Border _contextBar;
     private readonly Popup _hover = new() { IsLightDismissEnabled = true };
+    private readonly Popup _exception = new() { IsLightDismissEnabled = true };
     private PeekPresenter? _peek;
     private EditorParts? _primary;
     private EditorParts? _split;
@@ -73,6 +74,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
         root.Children.Add(_navigationBar);
         root.Children.Add(_editors);
         root.Children.Add(_hover);
+        root.Children.Add(_exception);
         Content = root;
         Build();
     }
@@ -219,7 +221,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
         editor.Bind(TextEditor.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
         editor.Bind(TextEditor.LineNumbersForegroundProperty, this.GetResourceObservable("Shell.Editor.LineNumbers"));
         AutomationProperties.SetName(editor, _document.Model.Path);
-        var controller = new CodeEditorController(editor, _document, _services, _hover, attach: primary);
+        var controller = new CodeEditorController(editor, _document, _services, _hover, attach: primary, exceptionPopup: primary ? _exception : null);
         controller.ZoomChanged += (_, _) =>
         {
             editor.FontSize = _font.Size * controller.Zoom;

@@ -466,6 +466,40 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit");
         }, "build.solution").ConfigureAwait(true);
 
+        await StepAsync("debug.depth", "M14", "Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", async () =>
+        {
+            var lines = File.ReadAllLines(Program);
+            var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+            var cwdLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"cwd", StringComparison.Ordinal)) + 1;
+
+            // Run to Cursor with no session starts debugging with a temporary breakpoint.
+            await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the debugger stops at the cursor's line", 300).ConfigureAwait(true);
+            await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == argsLine, $"the editor shows line {argsLine}").ConfigureAwait(true);
+            Check(shell.Debugger.Breakpoints.At(Program, argsLine) is null, "the temporary breakpoint is gone after its stop");
+
+            await shell.ShowQuickWatchAsync("args[1]").ConfigureAwait(true);
+            Check(shell.QuickWatch.Roots.SingleOrDefault()?.Value == "\"two words\"", "QuickWatch evaluates args[1]: " + (shell.QuickWatch.Error ?? shell.QuickWatch.Roots.SingleOrDefault()?.Value));
+
+            // Run to Cursor while paused, with a PerfTip at the new line.
+            await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == cwdLine, $"Run to Cursor stops at line {cwdLine}", 60).ConfigureAwait(true);
+            Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
+
+            shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
+            await shell.ThreadList.RefreshAsync().ConfigureAwait(true);
+            Check(shell.ThreadList.Rows.Any(r => r.IsCurrent), "the Threads window marks the current thread");
+            shell.Layout.ShowToolWindow(ModulesViewModel.ToolWindowId);
+            await WaitAsync(() => shell.ModuleList.Rows.Any(r => r.Name == "Hello.dll"), "the Modules window lists Hello.dll").ConfigureAwait(true);
+            shell.Run("debug.exceptionSettings");
+            await WaitAsync(() => window.GetVisualDescendants().OfType<ExceptionSettingsView>().Any(), "the Exception Settings window renders").ConfigureAwait(true);
+            Check(shell.ExceptionSettingsWindow.Rows.Any(r => r.Type == "System.NullReferenceException"), "it lists the common exception types");
+            Screenshot("smoke-test-debug-depth.png");
+
+            shell.Run("debug.stop");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        }, "debug.session").ConfigureAwait(true);
+
         // M6: Git.
         await StepAsync("git.changes", "M6", "Git status, diff, stage, commit, blame and branches", async () =>
         {

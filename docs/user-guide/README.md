@@ -51,6 +51,11 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `F10`, `F11`, `Shift+F11` | Step over, into, out |
 | | `F9`, `Ctrl+F9` | Toggle a breakpoint, enable or disable it |
 | | `Ctrl+Alt+P` | Attach to process |
+| | `Shift+Alt+P` | Reattach to the last process |
+| | `Ctrl+F10` | Run to Cursor |
+| | `Shift+F9` | QuickWatch |
+| | `Ctrl+Alt+E` | Exception Settings |
+| | `Ctrl+Alt+B`, `Ctrl+Alt+C`, `Ctrl+Alt+H`, `Ctrl+Alt+U` | Breakpoints, Call Stack, Threads, Modules |
 | Testing | `Ctrl+E T` | Test Explorer |
 | | `Ctrl+R A`, `Ctrl+R Ctrl+A` | Run, debug all tests |
 | | `Ctrl+R T`, `Ctrl+R Ctrl+T` | Run, debug the tests at the cursor |

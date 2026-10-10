@@ -10,6 +10,11 @@ if (args.Length == 2 && args[0] == "--wait-for")
     }
 }
 
+if (args is ["--depth"])
+{
+    return Depth.Run();
+}
+
 var numbers = new List<int> { 1, 2, 3, 4, 5 };
 var total = 0;
 for (var i = 0; i < numbers.Count; i++)

@@ -53,6 +53,7 @@ public sealed record WindowPlacement(double Width, double Height, int? X, int? Y
 [JsonSerializable(typeof(LayoutSnapshot))]
 [JsonSerializable(typeof(ShellState))]
 [JsonSerializable(typeof(EditorSession))]
+[JsonSerializable(typeof(BreakpointExport))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(int))]
@@ -70,12 +71,35 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
 
     public IReadOnlyList<SessionBreakpoint>? Breakpoints { get; init; }
 
+    public IReadOnlyList<SessionFunctionBreakpoint>? FunctionBreakpoints { get; init; }
+
+    /// <summary>Whether exception types that aren't listed break when thrown (ADR 0021).</summary>
+    public bool? BreakOnOtherExceptions { get; init; }
+
+    /// <summary>Exception types whose setting differs from the defaults: type → break when thrown.</summary>
+    public Dictionary<string, bool>? ExceptionTypes { get; init; }
+
     /// <summary>Watch window expressions.</summary>
     public IReadOnlyList<string>? Watches { get; init; }
 }
 
-/// <summary>A breakpoint (1-based line), kept with the solution.</summary>
-public sealed record SessionBreakpoint(string Path, int Line, string? Condition = null, string? HitCondition = null, string? LogMessage = null, bool Enabled = true);
+/// <summary>A breakpoint (1-based line), kept with the solution. <see cref="DependsOnPath"/> and <see cref="DependsOnLine"/> name the breakpoint it depends on.</summary>
+public sealed record SessionBreakpoint(string Path, int Line, string? Condition = null, string? HitCondition = null, string? LogMessage = null, bool Enabled = true)
+{
+    public bool Temporary { get; init; }
+
+    public string? DependsOnPath { get; init; }
+
+    public int? DependsOnLine { get; init; }
+
+    public string? Labels { get; init; }
+}
+
+/// <summary>A function breakpoint, kept with the solution.</summary>
+public sealed record SessionFunctionBreakpoint(string Name, string? Condition = null, bool Enabled = true, string? Labels = null);
+
+/// <summary>Breakpoints exported to a file (Breakpoints window → Export), in the session's format.</summary>
+public sealed record BreakpointExport(IReadOnlyList<SessionBreakpoint> Breakpoints, IReadOnlyList<SessionFunctionBreakpoint>? FunctionBreakpoints);
 
 /// <summary>An open file and its caret (zero-based line and character).</summary>
 public sealed record SessionDocument(string Path, int Line, int Character);

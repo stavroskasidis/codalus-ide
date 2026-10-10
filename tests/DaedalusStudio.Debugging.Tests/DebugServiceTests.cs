@@ -159,7 +159,7 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
     public async Task Threads_and_exceptions()
     {
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Types, DebuggeeFixture.Line(debuggee.Types, "worker")));
-        await _debug.SetExceptionFiltersAsync([DebugService.ExceptionsAll]);
+        _debug.ExceptionSettings.SetAll(true);
         await _debug.LaunchAsync(Plan(), TestContext.Current.CancellationToken);
 
         var stop = await NextStopAsync();

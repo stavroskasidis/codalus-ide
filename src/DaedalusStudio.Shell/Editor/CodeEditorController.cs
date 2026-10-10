@@ -50,6 +50,9 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly DispatcherTimer _hoverTimer;
     private readonly BreakpointMargin _breakpointMargin;
     private readonly DebugLineRenderer _debugLines;
+    private readonly PerfTipRenderer _perfTip;
+    private readonly Popup? _exceptionPopup;
+    private StopInfo? _exceptionShownFor;
     private readonly GitChangeMargin _gitMargin = new();
     private readonly TestMargin _testMargin;
     private readonly CoverageMargin _coverageMargin;
@@ -73,8 +76,9 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly bool _attached;
     private bool _disposed;
 
-    public CodeEditorController(TextEditor editor, CodeEditorDocument dockable, IEditorServices services, Popup hoverPopup, bool attach = true)
+    public CodeEditorController(TextEditor editor, CodeEditorDocument dockable, IEditorServices services, Popup hoverPopup, bool attach = true, Popup? exceptionPopup = null)
     {
+        _exceptionPopup = exceptionPopup;
         Editor = editor;
         _dockable = dockable;
         _services = services;
@@ -90,7 +94,11 @@ public sealed partial class CodeEditorController : IDisposable
         view.LineTransformers.Add(_markers);
         view.BackgroundRenderers.Add(_highlights);
         view.BackgroundRenderers.Add(_markers);
-        _breakpointMargin = new BreakpointMargin(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine, relocate: attach);
+        _breakpointMargin = new BreakpointMargin(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine, relocate: attach)
+        {
+            RunToLine = line => services.Debugger.State == DebugState.Stopped && !_disposed ? services.RunToLineAsync(Model.Path, line) : null,
+            ShowMenu = (line, anchor) => services.ShowBreakpointMenu(Model.Path, line, anchor),
+        };
         editor.TextArea.LeftMargins.Insert(0, _breakpointMargin);
         _testMargin = new TestMargin(() => Model.Path, services.Tests, services.ShowTestMenu);
         editor.TextArea.LeftMargins.Insert(1, _testMargin);
@@ -99,6 +107,8 @@ public sealed partial class CodeEditorController : IDisposable
         editor.TextArea.ContextRequested += OnContextRequested;
         _debugLines = new DebugLineRenderer(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine);
         view.BackgroundRenderers.Insert(0, _debugLines);
+        _perfTip = new PerfTipRenderer(CurrentDebugLine, () => services.Debugger.CurrentStop?.Elapsed, () => services.Options.PerfTips);
+        view.BackgroundRenderers.Add(_perfTip);
         services.Debugger.StateChanged += OnDebuggerChanged;
         services.Debugger.FrameChanged += OnDebuggerChanged;
         services.Debugger.Stopped += OnDebuggerStopped;
@@ -143,6 +153,7 @@ public sealed partial class CodeEditorController : IDisposable
         UpdateDiagnostics();
         UpdateGrammar();
         RefreshAll();
+        Ui.Post(ShowExceptionHelperIfStopped);
         _attached = attach;
         if (attach)
         {
@@ -1266,11 +1277,8 @@ public sealed partial class CodeEditorController : IDisposable
                 parts.Add($"**{diagnostic.Code}**: {Escape(diagnostic.Message)}");
             }
 
-            if (await DataTipAsync(offset, cancellationToken).ConfigureAwait(true) is { } dataTip)
-            {
-                parts.Add(dataTip);
-            }
-            else if (Client is { } client)
+            var dataTip = await DataTipAsync(offset, cancellationToken).ConfigureAwait(true);
+            if (dataTip is null && Client is { } client)
             {
                 var hover = await client.HoverAsync(Model.Uri, Model.PositionAt(offset), cancellationToken).ConfigureAwait(true);
                 if (hover?.Contents.Value is { Length: > 0 } markdown)
@@ -1279,16 +1287,25 @@ public sealed partial class CodeEditorController : IDisposable
                 }
             }
 
-            if (cancellationToken.IsCancellationRequested || _disposed || parts.Count == 0)
+            if (cancellationToken.IsCancellationRequested || _disposed || (parts.Count == 0 && dataTip is null))
             {
                 return;
+            }
+
+            Control content = parts.Count > 0 ? MarkdownRenderer.Render(string.Join("\n\n---\n\n", parts), _services.OpenLink) : new Panel();
+            if (dataTip is not null)
+            {
+                // The data tip is a tree that expands and edits values (ADR 0021); diagnostics stay above it.
+                var tip = new Views.DataTipView { DataContext = dataTip };
+                LastDataTip = dataTip;
+                content = parts.Count > 0 ? new StackPanel { Spacing = 6, Children = { content, tip } } : tip;
             }
 
             _hoverPopup.Child = new Border
             {
                 Classes = { "editorHover" },
                 MaxWidth = 640,
-                Child = MarkdownRenderer.Render(string.Join("\n\n---\n\n", parts), _services.OpenLink),
+                Child = content,
             };
             _hoverPopup.PlacementTarget = Editor.TextArea.TextView;
             _hoverPopup.Placement = PlacementMode.AnchorAndGravity;
@@ -1417,7 +1434,11 @@ public sealed partial class CodeEditorController : IDisposable
 
     public BreakpointMargin BreakpointMargin => _breakpointMargin;
 
-    private void OnDebuggerStopped(object? sender, StopInfo e) => OnDebuggerChanged(sender, EventArgs.Empty);
+    private void OnDebuggerStopped(object? sender, StopInfo e)
+    {
+        OnDebuggerChanged(sender, EventArgs.Empty);
+        Ui.Post(ShowExceptionHelperIfStopped);
+    }
 
     private void OnDebuggerChanged(object? sender, EventArgs e) => Ui.Post(() =>
     {
@@ -1426,9 +1447,39 @@ public sealed partial class CodeEditorController : IDisposable
             return;
         }
 
+        if (_services.Debugger.State != DebugState.Stopped && _exceptionPopup is { } popup)
+        {
+            popup.IsOpen = false;
+        }
+
         _breakpointMargin.InvalidateVisual();
         Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
     });
+
+    /// <summary>The exception helper, when the program stopped on an exception at a line of this document.</summary>
+    public bool IsExceptionHelperOpen => _exceptionPopup?.IsOpen == true;
+
+    private void ShowExceptionHelperIfStopped()
+    {
+        var debugger = _services.Debugger;
+        if (_disposed || _exceptionPopup is not { } popup || debugger.CurrentStop is not { Reason: "exception" } stop || ReferenceEquals(stop, _exceptionShownFor)
+            || CurrentDebugLine() is not { } line || line > Model.Text.LineCount)
+        {
+            return;
+        }
+
+        _exceptionShownFor = stop;
+        var view = Editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        var position = view.GetVisualPosition(new TextViewPosition(line, Model.Text.GetLineByNumber(line).Length + 1), VisualYPosition.LineBottom) - view.ScrollOffset;
+        popup.Child = ExceptionHelper.Build(stop, debugger.ExceptionSettings, _services, () => popup.IsOpen = false, Editor);
+        popup.PlacementTarget = view;
+        popup.Placement = PlacementMode.AnchorAndGravity;
+        popup.PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft;
+        popup.PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight;
+        popup.PlacementRect = new Rect(Math.Max(0, position.X - 40), Math.Max(0, position.Y + 2), 1, 1);
+        popup.IsOpen = true;
+    }
 
     /// <summary>The expression a data tip evaluates: the identifier at <paramref name="offset"/> with the member accesses before it.</summary>
     public string? ExpressionAt(int offset)
@@ -1472,8 +1523,19 @@ public sealed partial class CodeEditorController : IDisposable
         return expression.Length == 0 || char.IsDigit(expression[0]) ? null : expression;
     }
 
-    /// <summary>A data tip's Markdown: the value and, for objects, their first members.</summary>
-    private async Task<string?> DataTipAsync(int offset, CancellationToken cancellationToken)
+    /// <summary>The last data tip shown (tests).</summary>
+    public ViewModels.DataTipViewModel? LastDataTip { get; private set; }
+
+    /// <summary>Shows the data tip (or Quick Info) for the expression at <paramref name="offset"/>.</summary>
+    public Task ShowDataTipAsync(int offset)
+    {
+        var view = Editor.TextArea.TextView;
+        var location = view.GetVisualPosition(new TextViewPosition(Model.Text.GetLocation(offset)), VisualYPosition.LineBottom) - view.ScrollOffset;
+        return ShowQuickInfoAsync(offset, location);
+    }
+
+    /// <summary>A data tip: the expression at <paramref name="offset"/> evaluated as an expandable, editable tree.</summary>
+    private async Task<ViewModels.DataTipViewModel?> DataTipAsync(int offset, CancellationToken cancellationToken)
     {
         var debugger = _services.Debugger;
         if (debugger.State != DebugState.Stopped || ExpressionAt(offset) is not { } expression)
@@ -1481,22 +1543,10 @@ public sealed partial class CodeEditorController : IDisposable
             return null;
         }
 
-        static string Code(string text) => "`" + text.Replace("`", "'", StringComparison.Ordinal) + "`";
         try
         {
             var result = await debugger.EvaluateAsync(expression, "hover", cancellationToken).ConfigureAwait(true);
-            var lines = new List<string> { $"{Code(expression)} = {Code(result.Result)}" + (string.IsNullOrEmpty(result.Type) ? string.Empty : $" ({result.Type})") };
-            if (result.VariablesReference > 0)
-            {
-                var children = await debugger.VariablesAsync(result.VariablesReference).ConfigureAwait(true);
-                lines.AddRange(children.Take(25).Select(c => $"- {Code(c.Name)} = {Code(c.Value)}"));
-                if (children.Count > 25)
-                {
-                    lines.Add($"- … {children.Count - 25} more (see Locals or add a watch)");
-                }
-            }
-
-            return string.Join("\n", lines);
+            return new ViewModels.DataTipViewModel(debugger, expression, result);
         }
         catch (Exception ex) when (ex is DaedalusStudio.Debugging.DapException or DaedalusStudio.Debugging.DapConnectionLostException or InvalidOperationException)
         {

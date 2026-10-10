@@ -83,7 +83,13 @@ public sealed record FunctionBreakpoint(string Name, string? Condition = null, s
 
 public sealed record SetFunctionBreakpointsArguments(FunctionBreakpoint[] Breakpoints);
 
-public sealed record SetExceptionBreakpointsArguments(string[] Filters);
+/// <summary>
+/// A filter with a condition. netcoredbg's condition is a comma-separated list of exception type names (matched
+/// exactly); a leading <c>!</c> negates the whole list.
+/// </summary>
+public sealed record ExceptionFilterOptions(string FilterId, string? Condition = null);
+
+public sealed record SetExceptionBreakpointsArguments(string[] Filters, ExceptionFilterOptions[]? FilterOptions = null);
 
 public sealed record EmptyArguments;
 
@@ -124,7 +130,17 @@ public sealed record SetVariableArguments(int VariablesReference, string Name, s
 
 public sealed record SetVariableResponse(string Value, string? Type = null, int? VariablesReference = null);
 
-public sealed record ExceptionDetails(string? Message = null, string? TypeName = null, string? FullTypeName = null, string? StackTrace = null);
+public sealed record SetExpressionArguments(string Expression, string Value, int? FrameId = null);
+
+public sealed record SetExpressionResponse(string Value, string? Type = null, int? VariablesReference = null);
+
+public sealed record ExceptionDetails(
+    string? Message = null,
+    string? TypeName = null,
+    string? FullTypeName = null,
+    string? StackTrace = null,
+    string? EvaluateName = null,
+    ExceptionDetails[]? InnerException = null);
 
 public sealed record ExceptionInfoResponse(string ExceptionId, string? Description = null, string? BreakMode = null, ExceptionDetails? Details = null);
 
@@ -148,7 +164,11 @@ public sealed record ThreadEvent(string Reason, int ThreadId);
 
 public sealed record BreakpointEvent(string Reason, Breakpoint Breakpoint);
 
-public sealed record ModuleEvent(string Reason, JsonElement Module);
+/// <summary>A loaded module. <see cref="Id"/> is a number or a string, depending on the adapter.</summary>
+public sealed record DapModule(JsonElement Id, string Name, string? Path = null, string? SymbolStatus = null, string? SymbolFilePath = null, string? Version = null, bool? IsOptimized = null, bool? IsUserCode = null);
+
+/// <summary><see cref="Reason"/> is <c>new</c>, <c>changed</c> or <c>removed</c>.</summary>
+public sealed record ModuleEvent(string Reason, DapModule Module);
 
 /// <summary>The debuggee started (launch) or was attached to; <see cref="SystemProcessId"/> is its process id.</summary>
 public sealed record ProcessEvent(string Name, int? SystemProcessId = null, bool? IsLocalProcess = null, string? StartMethod = null);
@@ -191,6 +211,8 @@ public static class DapEvents
 [JsonSerializable(typeof(EvaluateResponse))]
 [JsonSerializable(typeof(SetVariableArguments))]
 [JsonSerializable(typeof(SetVariableResponse))]
+[JsonSerializable(typeof(SetExpressionArguments))]
+[JsonSerializable(typeof(SetExpressionResponse))]
 [JsonSerializable(typeof(ExceptionInfoResponse))]
 [JsonSerializable(typeof(StoppedEvent))]
 [JsonSerializable(typeof(ContinuedEvent))]

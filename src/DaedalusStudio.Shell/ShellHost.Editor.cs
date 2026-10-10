@@ -655,7 +655,10 @@ public sealed partial class ShellHost : IEditorServices
         WriteJson(file, new Docking.EditorSession(documents, ActiveEditor?.Model.Path)
         {
             StartupProject = Runs.ChosenStartupProject,
-            Breakpoints = Debugger.Breakpoints.All.Count == 0 ? null : [.. Debugger.Breakpoints.All.Select(b => new Docking.SessionBreakpoint(b.Path, b.Line, b.Condition, b.HitCondition, b.LogMessage, b.Enabled))],
+            Breakpoints = Debugger.Breakpoints.All.Count == 0 ? null : [.. Debugger.Breakpoints.All.Select(ToSession)],
+            FunctionBreakpoints = Debugger.Breakpoints.Functions.Count == 0 ? null : [.. Debugger.Breakpoints.Functions.Select(ToSession)],
+            BreakOnOtherExceptions = Debugger.ExceptionSettings.BreakOnOthers ? true : null,
+            ExceptionTypes = Debugger.ExceptionSettings.Changes() is { Count: > 0 } exceptionTypes ? exceptionTypes : null,
             Watches = Watch.Expressions.Count == 0 ? null : Watch.Expressions,
             LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
         }, Docking.ShellJsonContext.Default.EditorSession);
@@ -668,12 +671,14 @@ public sealed partial class ShellHost : IEditorServices
         {
             Runs.Load(null, null);
             Debugger.Breakpoints.Clear();
+            Debugger.ExceptionSettings.Reset();
             Watch.Load(null);
             return;
         }
 
         Runs.Load(session.StartupProject, session.LaunchProfiles);
-        Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(b => new BreakpointSpec(b.Path, b.Line, b.Condition, b.HitCondition, b.LogMessage, b.Enabled)));
+        Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(FromSession), (session.FunctionBreakpoints ?? []).Select(FromSession));
+        Debugger.ExceptionSettings.Load(session.BreakOnOtherExceptions ?? false, session.ExceptionTypes);
         Watch.Load(session.Watches);
 
         foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))

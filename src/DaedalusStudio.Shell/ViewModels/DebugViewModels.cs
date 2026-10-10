@@ -16,9 +16,10 @@ public sealed class VariableNode : ObservableObject
     private string? _type;
     private int _reference;
 
-    public VariableNode(string name, string value, string? type, int reference, Func<int, Task<IReadOnlyList<Variable>>>? load, int? parentReference = null)
+    public VariableNode(string name, string value, string? type, int reference, Func<int, Task<IReadOnlyList<Variable>>>? load, int? parentReference = null, string? evaluateName = null)
     {
         Name = name;
+        EvaluateName = evaluateName;
         _value = value;
         _type = type;
         _reference = reference;
@@ -33,6 +34,12 @@ public sealed class VariableNode : ObservableObject
     private static VariableNode Placeholder => new(string.Empty, "Loading…", null, 0, null);
 
     public string Name { get; }
+
+    /// <summary>The expression that evaluates to this value (the adapter's <c>evaluateName</c>; a watch's own expression).</summary>
+    public string? EvaluateName { get; }
+
+    /// <summary>Whether the value is a string (visualizers apply).</summary>
+    public bool IsString => _type is "string" or "System.String" && _value.StartsWith('"');
 
     /// <summary>The variables reference of the container (for setting this variable's value).</summary>
     public int? ParentReference { get; }
@@ -62,6 +69,13 @@ public sealed class VariableNode : ObservableObject
     public ObservableCollection<VariableNode> Children { get; } = [];
 
     public string AccessibleName => HasType ? $"{Name} = {Value} ({Type})" : $"{Name} = {Value}";
+
+    /// <summary>Shows a value set from outside (an edit through another node).</summary>
+    public void SetValue(string value, string? type)
+    {
+        Value = value;
+        Type = type ?? Type;
+    }
 
     public bool IsExpanded
     {
@@ -112,7 +126,7 @@ public sealed class VariableNode : ObservableObject
             Children.Clear();
             foreach (var child in children)
             {
-                Children.Add(new VariableNode(child.Name, child.Value, child.Type, child.VariablesReference, _load, _reference));
+                Children.Add(new VariableNode(child.Name, child.Value, child.Type, child.VariablesReference, _load, _reference, child.EvaluateName));
             }
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
@@ -200,7 +214,7 @@ public sealed class VariablesViewModel : ObservableObject
             var reference = scopes.Count > 0 ? scopes[0].VariablesReference : 0;
             foreach (var variable in variables)
             {
-                Roots.Add(new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, r => _debugger.VariablesAsync(r), reference));
+                Roots.Add(new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, r => _debugger.VariablesAsync(r), reference, variable.EvaluateName));
             }
 
             IsEmpty = Roots.Count == 0;
@@ -255,25 +269,8 @@ public sealed class VariablesViewModel : ObservableObject
         return names;
     }
 
-    /// <summary>Sets a top-level variable's value (Locals and Autos are editable).</summary>
-    public async Task<string?> SetValueAsync(VariableNode node, string value)
-    {
-        if (node.ParentReference is not { } parent)
-        {
-            return "This value can't be changed.";
-        }
-
-        try
-        {
-            var result = await _debugger.SetVariableAsync(parent, node.Name, value).ConfigureAwait(true);
-            node.Update(result.Value, result.Type ?? node.Type, result.VariablesReference ?? 0);
-            return null;
-        }
-        catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException)
-        {
-            return ex.Message;
-        }
-    }
+    /// <summary>Sets a variable's value: <c>setVariable</c> in its container (Locals, Autos and their members).</summary>
+    public Task<string?> SetValueAsync(VariableNode node, string value) => VariableEditing.SetAsync(_debugger, node, value, isWatchRoot: false);
 }
 
 /// <summary>The Watch window: user expressions, evaluated in the selected frame on every stop.</summary>
@@ -343,7 +340,19 @@ public sealed class WatchViewModel : ObservableObject
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private VariableNode Node(string expression) => new(expression, string.Empty, null, 0, r => _debugger.VariablesAsync(r));
+    private VariableNode Node(string expression) => new(expression, string.Empty, null, 0, r => _debugger.VariablesAsync(r), evaluateName: expression);
+
+    /// <summary>Sets a watch's value (<c>setExpression</c>) or a member's (<c>setVariable</c>), then re-evaluates the watches.</summary>
+    public async Task<string?> SetValueAsync(VariableNode node, string value)
+    {
+        var error = await VariableEditing.SetAsync(_debugger, node, value, Roots.Contains(node)).ConfigureAwait(true);
+        if (error is null)
+        {
+            await RefreshAsync().ConfigureAwait(true);
+        }
+
+        return error;
+    }
 
     public async Task RefreshAsync()
     {
@@ -535,39 +544,73 @@ public sealed class DebugConsoleViewModel : ObservableObject
     public void Clear() => Channel.Clear();
 }
 
-/// <summary>A row of the Breakpoints window.</summary>
-public sealed class BreakpointRow(BreakpointSpec spec, BreakpointState? state, Action<BreakpointSpec, bool> setEnabled) : ObservableObject
+/// <summary>A row of the Breakpoints window: a source breakpoint (<see cref="Spec"/>) or a function breakpoint (<see cref="Function"/>).</summary>
+public sealed class BreakpointRow : ObservableObject
 {
-    public BreakpointSpec Spec { get; } = spec;
+    private readonly Action<BreakpointRow, bool> _setEnabled;
 
-    public string Location => $"{System.IO.Path.GetFileName(Spec.Path)}, line {Spec.Line}";
+    public BreakpointRow(BreakpointSpec spec, BreakpointState? state, Action<BreakpointRow, bool> setEnabled)
+    {
+        Spec = spec;
+        State = state;
+        _setEnabled = setEnabled;
+    }
+
+    public BreakpointRow(FunctionBreakpointSpec function, BreakpointState? state, Action<BreakpointRow, bool> setEnabled)
+    {
+        Function = function;
+        State = state;
+        _setEnabled = setEnabled;
+    }
+
+    public BreakpointSpec? Spec { get; }
+
+    public FunctionBreakpointSpec? Function { get; }
+
+    public BreakpointState? State { get; }
+
+    public string Location => Spec is { } spec ? $"{System.IO.Path.GetFileName(spec.Path)}, line {spec.Line}" : $"Function {Function!.Name}";
+
+    public string Labels => Spec?.Labels ?? Function?.Labels ?? string.Empty;
+
+    public bool HasLabels => Labels.Length > 0;
 
     public string Details => string.Join("; ", new[]
     {
-        Spec.Condition is { } c ? "when " + c : null,
-        Spec.HitCondition is { } h ? "hit count " + h : null,
-        Spec.LogMessage is { } m ? "log \"" + m + "\"" : null,
-        state is { Verified: false, Message: { } message } ? message : null,
+        (Spec?.Condition ?? Function?.Condition) is { } c ? "when " + c : null,
+        Spec?.HitCondition is { } h ? "hit count " + h : null,
+        Spec?.LogMessage is { } m ? "log \"" + m + "\"" : null,
+        Spec?.Temporary == true ? "temporary" : null,
+        Spec?.DependsOn is { } d ? $"after {System.IO.Path.GetFileName(d.Path)}, line {d.Line}" : null,
+        State is { Verified: false, Message: { } message } ? message : null,
     }.OfType<string>());
 
-    public bool IsVerified => state?.Verified ?? true;
+    public bool IsVerified => State?.Verified ?? true;
 
     public bool Enabled
     {
-        get => Spec.Enabled;
+        get => Spec?.Enabled ?? Function!.Enabled;
         set
         {
-            if (value != Spec.Enabled)
+            if (value != Enabled)
             {
-                setEnabled(Spec, value);
+                _setEnabled(this, value);
             }
         }
     }
 
-    public string AccessibleName => $"Breakpoint {Location}{(Spec.Enabled ? string.Empty : ", disabled")}{(Details.Length > 0 ? ", " + Details : string.Empty)}";
+    /// <summary>Whether the row matches the window's search text (location, condition, labels).</summary>
+    public bool Matches(string filter) =>
+        filter.Length == 0
+        || Location.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        || Labels.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        || Details.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        || (Spec?.Path.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    public string AccessibleName => $"Breakpoint {Location}{(Enabled ? string.Empty : ", disabled")}{(HasLabels ? ", labels " + Labels : string.Empty)}{(Details.Length > 0 ? ", " + Details : string.Empty)}";
 }
 
-/// <summary>The Breakpoints window.</summary>
+/// <summary>The Breakpoints window: source and function breakpoints, searchable by location, condition or label.</summary>
 public sealed class BreakpointsViewModel : ObservableObject
 {
     public const string ToolWindowId = "debug.breakpoints";
@@ -575,18 +618,34 @@ public sealed class BreakpointsViewModel : ObservableObject
     private readonly DebugService _debugger;
     private readonly Func<string, int, Task> _open;
     private bool _refreshQueued;
+    private string _filter = string.Empty;
 
     public BreakpointsViewModel(DebugService debugger, Func<string, int, Task> open)
     {
         _debugger = debugger;
         _open = open;
         debugger.Breakpoints.Changed += (_, _) => Ui.Post(QueueRefresh);
+        debugger.Breakpoints.FunctionsChanged += (_, _) => Ui.Post(QueueRefresh);
+        debugger.Breakpoints.StatesChanged += (_, _) => Ui.Post(QueueRefresh);
         Refresh();
     }
 
     public ObservableCollection<BreakpointRow> Rows { get; } = [];
 
     public bool IsEmpty => Rows.Count == 0;
+
+    /// <summary>Search text: matches locations, conditions and labels.</summary>
+    public string Filter
+    {
+        get => _filter;
+        set
+        {
+            if (SetField(ref _filter, value ?? string.Empty))
+            {
+                Refresh();
+            }
+        }
+    }
 
     private void QueueRefresh()
     {
@@ -607,15 +666,99 @@ public sealed class BreakpointsViewModel : ObservableObject
     {
         var store = _debugger.Breakpoints;
         Rows.Clear();
-        foreach (var breakpoint in store.All)
+        var rows = store.All.Select(b => new BreakpointRow(b, store.StateOf(b), SetEnabled))
+            .Concat(store.Functions.Select(f => new BreakpointRow(f, store.StateOf(f), SetEnabled)));
+        foreach (var row in rows.Where(r => r.Matches(_filter.Trim())))
         {
-            Rows.Add(new BreakpointRow(breakpoint, store.StateOf(breakpoint), (spec, enabled) => store.Set(spec with { Enabled = enabled })));
+            Rows.Add(row);
         }
 
         OnPropertyChanged(nameof(IsEmpty));
     }
 
-    public Task OpenAsync(BreakpointRow row) => _open(row.Spec.Path, row.Spec.Line);
+    private void SetEnabled(BreakpointRow row, bool enabled)
+    {
+        if (row.Spec is { } spec)
+        {
+            _debugger.Breakpoints.Set(spec with { Enabled = enabled });
+        }
+        else if (row.Function is { } function)
+        {
+            _debugger.Breakpoints.SetFunction(function with { Enabled = enabled });
+        }
+    }
 
-    public void Remove(BreakpointRow row) => _debugger.Breakpoints.Remove(row.Spec);
+    /// <summary>Enables or disables every breakpoint shown (the search applies).</summary>
+    public void SetAllEnabled(bool enabled)
+    {
+        foreach (var row in Rows.ToList())
+        {
+            if (row.Enabled != enabled)
+            {
+                SetEnabled(row, enabled);
+            }
+        }
+    }
+
+    public Task OpenAsync(BreakpointRow row) => row.Spec is { } spec ? _open(spec.Path, spec.Line) : Task.CompletedTask;
+
+    public void Remove(BreakpointRow row)
+    {
+        if (row.Spec is { } spec)
+        {
+            _debugger.Breakpoints.Remove(spec);
+        }
+        else if (row.Function is { } function)
+        {
+            _debugger.Breakpoints.RemoveFunction(function);
+        }
+    }
+
+    /// <summary>Sets a row's labels (a comma-separated list).</summary>
+    public void SetLabels(BreakpointRow row, string? labels)
+    {
+        var normalized = BreakpointStore.JoinLabels(BreakpointStore.SplitLabels(labels));
+        if (row.Spec is { } spec)
+        {
+            _debugger.Breakpoints.Set(spec with { Labels = normalized });
+        }
+        else if (row.Function is { } function)
+        {
+            _debugger.Breakpoints.SetFunction(function with { Labels = normalized });
+        }
+    }
+}
+
+/// <summary>Editing values in the debugger's trees (ADR 0021).</summary>
+internal static class VariableEditing
+{
+    /// <summary>
+    /// A root of Watch or QuickWatch is assigned with <c>setExpression</c>; a variable with <c>setVariable</c> in its
+    /// container, or by its evaluate name when it has none. Returns an error message, or null.
+    /// </summary>
+    public static async Task<string?> SetAsync(DebugService debugger, VariableNode node, string value, bool isWatchRoot)
+    {
+        try
+        {
+            if (!isWatchRoot && node.ParentReference is { } parent)
+            {
+                var result = await debugger.SetVariableAsync(parent, node.Name, value).ConfigureAwait(true);
+                node.Update(result.Value, result.Type ?? node.Type, result.VariablesReference ?? 0);
+                return null;
+            }
+
+            if (node.EvaluateName is { } expression)
+            {
+                var result = await debugger.SetExpressionAsync(expression, value).ConfigureAwait(true);
+                node.Update(result.Value, result.Type ?? node.Type, result.VariablesReference ?? 0);
+                return null;
+            }
+
+            return "This value can't be changed.";
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException)
+        {
+            return ex.Message;
+        }
+    }
 }

@@ -52,10 +52,20 @@ public sealed partial class ShellHost
         CallStack = new CallStackViewModel(Debugger, (path, line) => OpenFileAsync(path, preview: false, new Position(Math.Max(0, line - 1), 0)));
         DebugConsole = new DebugConsoleViewModel(Debugger, DebugLog, EditorFont);
         BreakpointList = new BreakpointsViewModel(Debugger, (path, line) => OpenFileAsync(path, preview: false, new Position(Math.Max(0, line - 1), 0)));
-        VariablesView.AskValue = async node =>
+        VariableActions.AskValue = async node =>
         {
             var result = await Dialogs.ShowAsync(new DialogRequest($"Set {node.Name}", "New value (a C# expression):", ["Set", "Cancel"]) { Input = node.Value }).ConfigureAwait(true);
             return result.Button == "Set" ? result.Input : null;
+        };
+        VariableActions.AddWatch = expression => AddWatchAsync(expression);
+        VariableActions.QuickWatch = expression => ShowQuickWatchAsync(expression);
+        VariableActions.Visualize = VisualizeAsync;
+        VariableActions.CopyText = async text =>
+        {
+            if (Window?.Clipboard is { } clipboard)
+            {
+                await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text).ConfigureAwait(true);
+            }
         };
 
         Debugger.StateChanged += (_, _) => Ui.Post(OnDebugStateChanged);
@@ -63,8 +73,9 @@ public sealed partial class ShellHost
         Debugger.Output += (_, output) => OnDebugOutput(output);
         Debugger.Ended += (_, code) => Ui.Post(() => StatusBar.ShowMessage(
             code is { } c ? $"The program exited with code {c.ToString(CultureInfo.InvariantCulture)}." : "Debugging stopped.", TimeSpan.FromSeconds(6)));
-        Debugger.Breakpoints.Changed += (_, _) => Ui.Post(() => Workbench.Context.Set("hasBreakpoints", Debugger.Breakpoints.All.Count > 0));
+        Debugger.Breakpoints.Changed += (_, _) => Ui.Post(() => Workbench.Context.Set("hasBreakpoints", Debugger.Breakpoints.All.Count + Debugger.Breakpoints.Functions.Count > 0));
         Watch.Changed += (_, _) => SaveEditorSession();
+        InitializeDebugDepth();
         OnDebugStateChanged();
     }
 
@@ -186,6 +197,7 @@ public sealed partial class ShellHost
             DebugLog.AppendLine($"Attaching to process {processId.ToString(CultureInfo.InvariantCulture)}…");
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             await Debugger.AttachAsync(processId, CancellationToken.None).ConfigureAwait(true);
+            RememberAttached(processId);
         }
         catch (InvalidOperationException ex)
         {
@@ -285,20 +297,6 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Debug → Exception Settings: break when any exception is thrown, or only on user-unhandled ones.</summary>
-    public async Task SelectExceptionSettingsAsync()
-    {
-        var all = Debugger.ExceptionFilters.Contains(DebugService.ExceptionsAll);
-        QuickPickItem[] items =
-        [
-            new("Break on user-unhandled exceptions") { Tag = DebugService.ExceptionsUserUnhandled, Detail = all ? null : "current" },
-            new("Break when any exception is thrown") { Tag = DebugService.ExceptionsAll, Detail = all ? "current" : null },
-        ];
-        if (await Palette.ShowAsync(items, "Exception settings", all ? 1 : 0).ConfigureAwait(true) is { Tag: string filter })
-        {
-            await Debugger.SetExceptionFiltersAsync(filter == DebugService.ExceptionsAll ? [DebugService.ExceptionsAll, DebugService.ExceptionsUserUnhandled] : [DebugService.ExceptionsUserUnhandled]).ConfigureAwait(true);
-        }
-    }
 
     /// <summary>Adds the selection (or the expression under the caret) to the Watch window.</summary>
     public async Task AddWatchAsync(string? expression = null)
