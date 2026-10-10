@@ -137,7 +137,8 @@ public sealed class Net11Tests
             editor.Model.Text.Replace(offset, "message: before".Length, "message: after");
             f.Shell.Run("run.applyCodeChanges");
             await ShellFixture.PumpUntil(() => program.Channel!.GetText().Contains("message: after", StringComparison.Ordinal), seconds: 180);
-            Assert.True(program.HotReload!.Applied >= 1 || program.HotReload.Restarts >= 1);
+            // dotnet watch reports the change after the app already runs the new code.
+            await ShellFixture.PumpUntil(() => program.HotReload!.Applied >= 1 || program.HotReload.Restarts >= 1, seconds: 60);
         }
         finally
         {
