@@ -94,6 +94,29 @@ public sealed class ManifestValidationTests : IDisposable
     }
 
     [Fact]
+    public void Hosting_providers_activate_their_plugin_implicitly_and_bad_ones_are_ignored()
+    {
+        var plugin = PluginDescription.Read(Variant("hosting", m => m["contributes"]!["hostingProviders"] = JsonNode.Parse("""
+            [
+              { "id": "gitea", "label": "Gitea", "hosts": ["gitea.example.com"], "serverSetting": "gitea.serverUrl" },
+              { "id": "Not Valid", "label": "Broken" },
+              { "id": "nolabel", "label": "" }
+            ]
+            """)), isBuiltIn: false, PlatformKind.Windows);
+        Assert.Equal(PluginState.Ready, plugin.State);
+        Assert.Contains("onHostingProvider:gitea", plugin.ActivationEvents);
+        Assert.DoesNotContain(plugin.ActivationEvents, e => e.Contains("Not Valid", StringComparison.Ordinal) || e.EndsWith(":nolabel", StringComparison.Ordinal));
+        Assert.Equal(2, plugin.Warnings.Count(w => w.Contains("hosting provider", StringComparison.Ordinal)));
+        Assert.Equal("gitea.serverUrl", plugin.Manifest!.Contributes!.HostingProviders![0].ServerSetting);
+
+        // The built-in GitHub plugin declares its provider and needs proposed APIs, which built-ins always have.
+        var github = PluginDescription.Read(HostingPluginHostTests.GitHubPluginDir, isBuiltIn: true, PlatformKind.Windows);
+        Assert.Equal(PluginState.Ready, github.State);
+        Assert.Empty(github.Warnings);
+        Assert.Contains("onHostingProvider:github", github.ActivationEvents);
+    }
+
+    [Fact]
     public void Missing_assembly_and_proposed_api_are_rejected()
     {
         Assert.Equal(PluginState.Invalid, PluginDescription.Read(Variant("noasm", m => m["entry"]!["assembly"] = "Missing.dll"), false, PlatformKind.Windows).State);

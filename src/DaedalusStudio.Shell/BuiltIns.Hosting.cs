@@ -33,7 +33,7 @@ internal static partial class BuiltIns
             {
                 Title = "Show CI Status",
                 Category = "Source Control",
-                Description = "Show the current branch's checks, pipelines or builds in the status bar and Git Changes.",
+                Description = "Show the checks, pipelines or builds of the current branch, beside the branch and in Git Changes.",
                 Order = 2,
             },
             SettingDescriptor.Create(ShellHost.HostingStatusSecondsSetting, "120", SettingType.Integer, shell) with

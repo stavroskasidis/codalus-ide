@@ -35,6 +35,7 @@ public sealed partial class ShellHost : IHostingActions
     private HostingProviderInfo? _suggested;
     private CancellationTokenSource? _hostingCts;
     private string? _hostingKey;
+    private string? _hostingFingerprint;
     private DispatcherTimer? _statusTimer;
     private DispatcherTimer? _repositoryTimer;
     private BranchStatusDto? _branchStatus;
@@ -93,7 +94,14 @@ public sealed partial class ShellHost : IHostingActions
         Hosting.Changed += (_, _) => Ui.Post(() =>
         {
             UpdateAccounts();
-            ScheduleHostingRefresh(force: true);
+
+            // Any plugin's state change raises it: look at the host again only when a provider or an account changed.
+            var fingerprint = string.Join('|', Hosting.Providers.Select(p => $"{p.Id}:{p.IsRegistered}").Concat(Hosting.Accounts.Select(a => $"{a.ProviderId}@{a.Host}/{a.Name}")));
+            if (fingerprint != _hostingFingerprint)
+            {
+                _hostingFingerprint = fingerprint;
+                ScheduleHostingRefresh(force: true);
+            }
         });
         Hosting.DeviceCodeReceived += (_, code) => Ui.Post(() => Accounts.Row(code.ProviderId)?.ShowCode(code.UserCode, code.VerificationUriComplete ?? code.VerificationUri));
         Hosting.SignInRequired += (_, providerId) => Ui.Post(() =>
