@@ -31,7 +31,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     private readonly Stream _writer;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> _pending = new();
-    private readonly ConcurrentDictionary<string, CancellationTokenSource> _incoming = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, IncomingRequest> _incoming = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<JsonElement, CancellationToken, Task<Action<Utf8JsonWriter>?>>> _requestHandlers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<JsonElement, Task>> _notificationHandlers = new(StringComparer.Ordinal);
     private readonly Channel<byte[]> _inbox = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
@@ -71,7 +71,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     /// <summary>Raised once when the connection is lost (stream closed, peer died, or protocol error).</summary>
     public event EventHandler<Exception?>? Disconnected;
 
-    /// <summary>Raised when an incoming handler throws (the peer receives an error response).</summary>
+    /// <summary>
+    /// Raised when an incoming handler throws (a request's peer receives an error response), or when a message can't be
+    /// dispatched at all; the messages after it still are.
+    /// </summary>
     public event EventHandler<Exception>? HandlerFailed;
 
     /// <summary>
@@ -359,8 +362,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         {
             // Disposed while reading (a completed pipe reader throws InvalidOperationException).
         }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or JsonException or InvalidDataException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            // Any failure ends the connection visibly (a malformed message too): a loop that stopped quietly would
+            // leave every pending request waiting forever.
             failure = ex;
         }
 
@@ -373,7 +378,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
         foreach (var incoming in _incoming.Values)
         {
-            incoming.Cancel();
+            _ = incoming.CancelAsync();
         }
 
         Disconnected?.Invoke(this, failure);
@@ -410,48 +415,62 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     {
         await foreach (var payload in _inbox.Reader.ReadAllAsync().ConfigureAwait(false))
         {
-            JsonElement root;
-            using (var document = JsonDocument.Parse(payload))
+            // Nothing one message does may stop the loop: the read loop would go on queueing everything after it,
+            // and the peer would wait for answers forever without the connection ever being reported lost.
+            try
             {
-                root = document.RootElement.Clone();
+                await DispatchAsync(payload).ConfigureAwait(false);
             }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                HandlerFailed?.Invoke(this, ex);
+            }
+        }
+    }
 
-            var method = root.GetProperty("method").GetString() ?? string.Empty;
-            var parameters = root.TryGetProperty("params", out var p) ? p : default;
-            if (root.TryGetProperty("id", out var id))
+    private async Task DispatchAsync(byte[] payload)
+    {
+        JsonElement root;
+        using (var document = JsonDocument.Parse(payload))
+        {
+            root = document.RootElement.Clone();
+        }
+
+        var method = root.GetProperty("method").GetString() ?? string.Empty;
+        var parameters = root.TryGetProperty("params", out var p) ? p : default;
+        if (root.TryGetProperty("id", out var id))
+        {
+            // Started in order; completes concurrently.
+            _ = HandleRequestAsync(id.Clone(), method, parameters);
+        }
+        else if (method == "$/cancelRequest")
+        {
+            if (parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty("id", out var cancelId)
+                && _incoming.TryGetValue(cancelId.GetRawText(), out var incoming))
             {
-                // Started in order; completes concurrently.
-                _ = HandleRequestAsync(id.Clone(), method, parameters);
+                await incoming.CancelAsync().ConfigureAwait(false);
             }
-            else if (method == "$/cancelRequest")
+        }
+        else if (_notificationHandlers.TryGetValue(method, out var handler))
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            _notification = (method, started);
+            try
             {
-                if (parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty("id", out var cancelId)
-                    && _incoming.TryGetValue(cancelId.GetRawText(), out var cts))
+                await handler(parameters).ConfigureAwait(false);
+                var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+                if (elapsed > SlowNotification)
                 {
-                    await cts.CancelAsync().ConfigureAwait(false);
+                    Slow?.Invoke(this, $"Notification {method} took {elapsed.TotalMilliseconds:0} ms; the messages after it waited.");
                 }
             }
-            else if (_notificationHandlers.TryGetValue(method, out var handler))
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                var started = System.Diagnostics.Stopwatch.GetTimestamp();
-                _notification = (method, started);
-                try
-                {
-                    await handler(parameters).ConfigureAwait(false);
-                    var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started);
-                    if (elapsed > SlowNotification)
-                    {
-                        Slow?.Invoke(this, $"Notification {method} took {elapsed.TotalMilliseconds:0} ms; the messages after it waited.");
-                    }
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    HandlerFailed?.Invoke(this, ex);
-                }
-                finally
-                {
-                    _notification = null;
-                }
+                HandlerFailed?.Invoke(this, ex);
+            }
+            finally
+            {
+                _notification = null;
             }
         }
     }
@@ -459,8 +478,8 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     private async Task HandleRequestAsync(JsonElement id, string method, JsonElement parameters)
     {
         var key = id.GetRawText();
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
-        _incoming[key] = cts;
+        using var incoming = new IncomingRequest(_shutdown.Token);
+        _incoming[key] = incoming;
         _running[key] = (method, System.Diagnostics.Stopwatch.GetTimestamp());
         try
         {
@@ -473,9 +492,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             Action<Utf8JsonWriter>? writeResult;
             try
             {
-                writeResult = await handler(parameters, cts.Token).ConfigureAwait(false);
+                writeResult = await handler(parameters, incoming.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            catch (OperationCanceledException) when (incoming.Token.IsCancellationRequested)
             {
                 await WriteErrorAsync(id, RequestCancelled, "Request cancelled.").ConfigureAwait(false);
                 return;
@@ -558,6 +577,42 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
         _shutdown.Dispose();
         _writeLock.Dispose();
+    }
+
+    /// <summary>
+    /// An incoming request's cancellation. A <c>$/cancelRequest</c> (or the connection's end) can find the request
+    /// just as it finishes and disposes its token source; cancelling it then must be a no-op, not an exception.
+    /// </summary>
+    private sealed class IncomingRequest : IDisposable
+    {
+        private readonly CancellationTokenSource _source;
+        private bool _ended;
+
+        public IncomingRequest(CancellationToken shutdown)
+        {
+            _source = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
+            Token = _source.Token;
+        }
+
+        public CancellationToken Token { get; }
+
+        public Task CancelAsync()
+        {
+            lock (_source)
+            {
+                // The callbacks run on the thread pool, outside the lock.
+                return _ended ? Task.CompletedTask : _source.CancelAsync();
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_source)
+            {
+                _ended = true;
+                _source.Dispose();
+            }
+        }
     }
 }
 

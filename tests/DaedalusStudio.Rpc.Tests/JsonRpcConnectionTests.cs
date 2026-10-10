@@ -201,6 +201,69 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
         Assert.Equal("second", next.Text);
     }
 
+    [Fact]
+    public async Task A_cancel_that_races_with_the_end_of_its_request_leaves_the_connection_working()
+    {
+        // Each $/cancelRequest follows its request at once, so some arrive just as the request ends and disposes
+        // its token source. That once threw in the dispatch loop, and the peer went silent for good.
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, async (p, _) =>
+        {
+            await Task.Yield();
+            return new Pong(p.Text);
+        });
+        _a.Start();
+        _b.Start();
+
+        var input = _aToB.Writer.AsStream();
+        for (var id = 1_000_000; id < 1_003_000; id++)
+        {
+            await WriteFrameAsync(input, $$$"""{"jsonrpc":"2.0","id":{{{id}}},"method":"echo","params":{"text":"x"}}""");
+            await WriteFrameAsync(input, $$$"""{"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":{{{id}}}}}""");
+        }
+
+        var next = await _a.InvokeAsync("echo", new Ping("after"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+
+        Assert.Equal("after", next.Text);
+    }
+
+    [Fact]
+    public async Task A_message_the_dispatcher_cannot_read_is_reported_and_later_messages_still_arrive()
+    {
+        var failures = new List<Exception>();
+        _b.HandlerFailed += (_, ex) => failures.Add(ex);
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) => Task.FromResult(new Pong(p.Text)));
+        _a.Start();
+        _b.Start();
+
+        await WriteFrameAsync(_aToB.Writer.AsStream(), """{"jsonrpc":"2.0","method":42}""");
+        var next = await _a.InvokeAsync("echo", new Ping("after"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+
+        Assert.Equal("after", next.Text);
+        Assert.Single(failures);
+    }
+
+    [Fact]
+    public async Task A_malformed_response_ends_the_connection_instead_of_leaving_requests_waiting()
+    {
+        var disconnected = new TaskCompletionSource<Exception?>();
+        _a.Disconnected += (_, ex) => disconnected.TrySetResult(ex);
+        _a.Start();
+
+        var pending = _a.InvokeAsync("echo", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+        await WriteFrameAsync(_bToA.Writer.AsStream(), """{"jsonrpc":"2.0","id":1,"error":{"code":"not a number","message":"x"}}""");
+
+        await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => pending);
+        Assert.NotNull(await disconnected.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken));
+    }
+
+    private static async Task WriteFrameAsync(Stream stream, string json)
+    {
+        var body = System.Text.Encoding.UTF8.GetBytes(json);
+        await stream.WriteAsync(FramedMessageWriter.Header(body.Length), TestContext.Current.CancellationToken);
+        await stream.WriteAsync(body, TestContext.Current.CancellationToken);
+        await stream.FlushAsync(TestContext.Current.CancellationToken);
+    }
+
     private sealed class CancelOnFirstWriteStream(Stream inner, CancellationTokenSource cancel) : Stream
     {
         public override bool CanRead => false;

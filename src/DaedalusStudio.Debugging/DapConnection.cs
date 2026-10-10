@@ -188,8 +188,10 @@ public sealed class DapConnection : IAsyncDisposable
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
         {
         }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or JsonException or InvalidDataException or DapConnectionLostException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
+            // Any failure ends the connection visibly (a malformed message too): a loop that stopped quietly would
+            // leave every pending request waiting forever.
             failure = ex;
         }
 
