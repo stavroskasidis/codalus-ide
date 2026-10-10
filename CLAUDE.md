@@ -70,16 +70,16 @@ The development machine is Windows. Validate on Linux and macOS locally, and lea
 
   Run it in the background; a full run takes several minutes. Don't build the Linux side straight from `/mnt/d`.
 - **macOS (the user's Mac, Apple silicon, a Remote Control session)**: the user's clone is `/Volumes/M2/Projects/daedalus-studio`; leave its checkout alone. A Claude session started with `--name daedalus-mac --remote-control` runs there. With Remote Control on in this session, it shows up in `ListAgents` as `daedalus-mac`.
-  1. Push the working tree with `bash eng/push-snapshot.sh`. This force-pushes a snapshot commit to the scratch branch `validate`, the one exception to "no feature branches". It leaves HEAD and the index alone, and costs no CI minutes because workflows only trigger on `master`.
+  1. Push the working tree with `bash eng/push-snapshot.sh`. This force-pushes a snapshot commit to the scratch branch `validate`, the one exception to "no feature branches". It leaves HEAD and the index alone, and costs no CI minutes because workflows only trigger on `develop` and `master`.
   2. `SendMessage` to `daedalus-mac` with the snapshot commit. Ask it to `git fetch origin validate`, create or reuse a git worktree at `FETCH_HEAD` outside the user's checkout, run `bash eng/validate.sh [--smoke]` there, and reply with: the environment, the counts, the failing tests with their messages and our stack frames, the smoke-test steps that failed, and the artifact paths. The first run installs the SDK (10–20 min with `--smoke`).
   3. If `daedalus-mac` is missing or `offline`, say so and ask the user to start it. Don't fall back to the hosted macOS runner without asking. Nothing reports back when the Mac holds a message for approval, so silence isn't a result.
 - `eng/validate.sh` is the shared entry point on Linux and macOS: SDK check, netcoredbg, restore, build, test (Release, as CI), and with `--smoke`, publish plus smoke test.
 
 ## Git
 
-- Commit directly to `master`; no pull requests and no feature branches for now (the repo is private and pre-public).
+- Commit directly to `develop`, the default branch (M31, D21); no pull requests and no feature branches for now (the repo is private and pre-public). `master` only receives merges from `develop`, each one a stable release, and hotfixes; `release.yml` merges a hotfix back into `develop`.
 - Commit messages carry **no** AI co-author or "Generated with" trailers.
-- CI minutes are limited (private repo, free plan). Every push to `master` builds and tests on Linux (documentation-only pushes are skipped); the full Windows/macOS/Linux matrix and the benchmarks run only on manual dispatch, once per milestone checkpoint. Test locally first, push in batches, and don't push while a matrix run is in progress (it gets cancelled).
+- CI minutes are limited (private repo, free plan). Every push to `develop` or `master` builds and tests on Linux (documentation-only pushes are skipped); the full Windows/macOS/Linux matrix and the benchmarks run only on manual dispatch, once per milestone checkpoint. Test locally first, push in batches, and don't push while a matrix run is in progress (it gets cancelled).
 
 ## Conventions
 

@@ -2,7 +2,7 @@
 # Pushes the current working tree (uncommitted and untracked-but-not-ignored files included) to the scratch branch
 # `validate` on origin, so another machine (the Mac, see CLAUDE.md) can test work that is not committed yet.
 # It leaves HEAD, the index and the working tree untouched: the snapshot commit is built from a temporary index, with
-# HEAD as its parent, and force-pushed. CI and the benchmarks only trigger on master, so the push costs no CI minutes.
+# HEAD as its parent, and force-pushed. CI and the benchmarks only trigger on develop and master, so the push costs no CI minutes.
 #
 # Usage: eng/push-snapshot.sh [branch]      prints the snapshot commit
 # On the other machine: git fetch origin validate && git checkout --detach FETCH_HEAD

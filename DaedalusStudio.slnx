@@ -3,6 +3,9 @@
     <Project Path="benchmarks/DaedalusStudio.Benchmarks.FixtureGen/DaedalusStudio.Benchmarks.FixtureGen.csproj" />
     <Project Path="benchmarks/DaedalusStudio.Benchmarks.Harness/DaedalusStudio.Benchmarks.Harness.csproj" />
   </Folder>
+  <Folder Name="/eng/">
+    <Project Path="eng/DaedalusStudio.Release/DaedalusStudio.Release.csproj" />
+  </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/plugins/HelloWorld/HelloWorld.csproj" />
     <Project Path="samples/plugins/TodoLanguage/TodoLanguage.csproj" />
@@ -39,6 +42,7 @@
     <Project Path="tests/DaedalusStudio.LspConformance.Server/DaedalusStudio.LspConformance.Server.csproj" />
     <Project Path="tests/DaedalusStudio.Plugins.Tests/DaedalusStudio.Plugins.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Projects.Tests/DaedalusStudio.Projects.Tests.csproj" />
+    <Project Path="tests/DaedalusStudio.Release.Tests/DaedalusStudio.Release.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Rpc.Tests/DaedalusStudio.Rpc.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Shell.Tests/DaedalusStudio.Shell.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Workbench.Tests/DaedalusStudio.Workbench.Tests.csproj" />

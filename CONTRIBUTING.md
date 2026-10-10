@@ -15,7 +15,7 @@ Thanks for your interest in Daedalus Studio. The MVP (milestones M0–M7) is don
 
 1. Open an issue first for anything bigger than a small fix, so the approach can be agreed on before you write code.
 2. For significant decisions, write an ADR (`docs/adr/NNNN-title.md`, from `0000-template.md`) before the code.
-3. Fork, branch, and open a pull request against `master`. CI builds and tests on Windows, macOS and Linux for every pull request; it must be green.
+3. Fork, branch, and open a pull request against `develop`. CI builds and tests on Windows, macOS and Linux for every pull request; it must be green.
 4. Keep changes covered by tests: unit tests, integration tests against the `samples/` fixtures, and headless UI tests where the UI stack allows them.
 5. Never block the UI thread. All I/O and analysis is asynchronous and cancellable, and long operations report progress.
 6. No silent stubs. If you defer something, leave a `TODO(issue)` that names the tracking issue.

@@ -4,7 +4,7 @@
     <AssemblyName>daedalus</AssemblyName>
     <RootNamespace>DaedalusStudio.Shell</RootNamespace>
     <Description>Daedalus Studio: the Avalonia shell (Native AOT).</Description>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>$(DaedalusVersion)</VersionPrefix>
     <VersionSuffix>dev</VersionSuffix>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
