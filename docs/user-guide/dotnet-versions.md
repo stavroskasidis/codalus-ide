@@ -29,8 +29,8 @@ Tested on Ubuntu 24.04 (WSL), and in containers of Ubuntu 18.04 and 20.04 for th
 | Framework | Open | Editor | Build | Run | Debug | Tests | Coverage | Hot Reload | NuGet |
 |---|---|---|---|---|---|---|---|---|---|
 | `netcoreapp2.0` – `netcoreapp2.2` | yes | yes | yes | yes [2] [3] | yes [2] | yes [2] | yes | no [1] | yes |
-| `netcoreapp3.0`, `netcoreapp3.1` | yes | yes | yes | yes [2] | yes [2] | yes [2] | yes | no [1] | yes |
-| `net5.0` | yes | yes | yes | yes | yes | yes | yes | no [1] | yes |
+| `netcoreapp3.0`, `netcoreapp3.1` | yes | yes | yes | yes [2] [3] | yes [2] | yes [2] | yes | no [1] | yes |
+| `net5.0` | yes | yes | yes | yes [3] | yes | yes | yes | no [1] | yes |
 | `net6.0` – `net10.0` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | `netstandard2.0`, `2.1` | yes | yes | yes | – | – | – | – | – | yes |
 
@@ -50,7 +50,7 @@ The macOS results are pending the Mac run of this milestone (see the M33 checkpo
 
 1. **Hot Reload needs .NET 6.** `dotnet watch` applies changes to programs of .NET 6 and later. For an older startup project, Start with Hot Reload is disabled and its menu item says "(needs .NET 6 or later)"; with Hot Reload on by the setting, Ctrl+F5 runs the program without it and says so in its output. A limit of .NET itself.
 2. **ICU on current Linux distributions.** .NET Core 2.x to 3.1 look for the ICU versions that existed when they shipped, and stop at start on a newer distribution ("Couldn't find a valid ICU package"). Daedalus sets `CLR_ICU_VERSION_OVERRIDE` to the system's ICU when it runs, debugs or tests them, and says so in the output. To choose otherwise, set `CLR_ICU_VERSION_OVERRIDE` or `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` in the launch profile. Outside Daedalus (`dotnet run`, a terminal), set the same variable yourself.
-3. **OpenSSL 1.x for .NET Core 2.x on Linux.** .NET Core 2.x uses OpenSSL 1.0 or 1.1 for cryptography and HTTPS, and current distributions (Ubuntu 22.04 and later, Debian 12, Fedora 36 and later) only have OpenSSL 3. Programs that hash, encrypt or call HTTPS fail ("No usable version of libssl was found"); the rest runs. .NET Core 3.1 and .NET 5 use OpenSSL 3. To use those features of 2.x programs, install OpenSSL 1.1 next to OpenSSL 3 (for example `libssl1.1` from the distribution's previous release, or OpenSSL 1.1.1 built into `/usr/local/lib` with `LD_LIBRARY_PATH` set in the launch profile), or develop in a container of a distribution of that time. A documented gap: Daedalus can't supply a library the distribution lacks.
+3. **OpenSSL 1.x for .NET Core 2.x to .NET 5 on Linux.** These runtimes use OpenSSL 1.0 or 1.1 for cryptography and HTTPS; .NET 6 added OpenSSL 3, the only one current distributions have (Ubuntu 22.04 and later, Debian 12, Fedora 36 and later). Programs that hash, encrypt or call HTTPS fail ("No usable version of libssl was found"); the rest runs. To use those features, install OpenSSL 1.1 next to OpenSSL 3 (for example `libssl1.1` from the distribution's previous release, or OpenSSL 1.1.1 built into `/usr/local/lib` with `LD_LIBRARY_PATH` set in the launch profile), or develop in a container of a distribution of that time. A documented gap: Daedalus can't supply a library the distribution lacks.
 4. **x64 under Rosetta 2.** Install Rosetta 2 (`softwareupdate --install-rosetta`) and the x64 runtime of each version (the x64 installer, or `dotnet-install.sh --architecture x64 --install-dir /usr/local/share/dotnet/x64`). Without it, Run says which runtime to install. The .NET test plugin runs these test hosts as x64 too.
 5. **Attaching to an x64 process** (Debug → Attach to Process) on Apple silicon uses the Arm64 debugger, which can't debug it. Start such programs with F5 instead. `TODO(issue)`: pick the debugger by the process's architecture.
 
@@ -68,7 +68,7 @@ A solution whose `global.json` pins an older SDK opens and builds with that SDK,
 6. Below the floor, the build host loads the newest installed SDK instead, which also builds the older frameworks, and says which SDK the solution asked for and why (the .NET SDKs panel and the Output window). The 2.0 SDKs' compiler task can't run on a newer .NET.
 7. A `global.json` that asks for an SDK that isn't installed (taking its `rollForward` policy into account) is named in the same places, with the SDK used instead. `dotnet build` fails in that folder until the SDK is installed or `global.json` changes.
 
-On Linux, the SDKs before .NET 5 run on their own runtimes for restores: Daedalus gives them the system's ICU as above, and the 2.x SDKs need OpenSSL 1.x to reach nuget.org (note 3). On Apple silicon, the SDKs before .NET 6 are x64 programs that the Arm64 `dotnet` doesn't see, so a `global.json` that pins one counts as not installed.
+On Linux, the SDKs before .NET 6 run on their own runtimes for restores: Daedalus gives the ones before .NET 5 the system's ICU as above, and all of them need OpenSSL 1.x to reach nuget.org (note 3), so on a current distribution they open but don't restore. On Apple silicon, the SDKs before .NET 6 are x64 programs that the Arm64 `dotnet` doesn't see, so a `global.json` that pins one counts as not installed.
 
 ## Checking it yourself
 

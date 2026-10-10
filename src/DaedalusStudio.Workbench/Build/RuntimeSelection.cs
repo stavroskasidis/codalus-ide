@@ -75,8 +75,14 @@ public static class RuntimeSelection
 
                 foreach (var file in Directory.EnumerateFiles(folder, "libicuuc.so.*"))
                 {
-                    var suffix = Path.GetFileName(file)["libicuuc.so.".Length..];
-                    var major = suffix.Split('.')[0];
+                    // The pattern also matches the unversioned libicuuc.so.
+                    var name = Path.GetFileName(file);
+                    if (name.Length <= "libicuuc.so.".Length)
+                    {
+                        continue;
+                    }
+
+                    var major = name["libicuuc.so.".Length..].Split('.')[0];
                     if (int.TryParse(major, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var version) && version > (newest ?? 0))
                     {
                         newest = version;

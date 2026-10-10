@@ -65,8 +65,9 @@ public sealed class MatrixFixture : IAsyncLifetime
             return;
         }
 
-        // Every project's design-time build feeds the language service.
-        await WaitUntilAsync(() => solution.Projects.All(p => Solutions.CompilerInputs.ContainsKey(p.Path)), timeout.Token);
+        // Every project's design-time build after the restore (the one before it has no package references; .NET Core
+        // 2.x and 3.0 get even their framework from packages) feeds the language service.
+        await WaitUntilAsync(() => solution.Projects.All(p => HasReferences(Solutions, p.Path)), timeout.Token);
         var builds = new BuildService(Solutions, Output);
         Build = await builds.BuildAsync(BuildTargets.Build, null, timeout.Token);
         BuildOutput = builds.Channel.GetText();
@@ -103,6 +104,11 @@ public sealed class MatrixFixture : IAsyncLifetime
             _log.Add(line);
         }
     }
+
+    /// <summary>Whether a project's latest design-time build references its framework (<c>System.Runtime.dll</c>).</summary>
+    public static bool HasReferences(SolutionService solutions, string project) =>
+        solutions.CompilerInputs.TryGetValue(project, out var inputs)
+        && inputs.Arguments.Any(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase) && a.EndsWith("System.Runtime.dll", StringComparison.OrdinalIgnoreCase));
 
     public static async Task WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken)
     {

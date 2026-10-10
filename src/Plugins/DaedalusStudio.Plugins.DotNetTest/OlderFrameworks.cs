@@ -64,9 +64,9 @@ internal static class OlderFrameworks
         {
             try
             {
-                foreach (var file in Directory.Exists(folder) ? Directory.EnumerateFiles(folder, "libicuuc.so.*") : [])
+                foreach (var file in Directory.Exists(folder) ? Directory.EnumerateFiles(folder, "libicuuc.so.?*") : [])
                 {
-                    if (int.TryParse(Path.GetFileName(file)["libicuuc.so.".Length..].Split('.')[0], NumberStyles.None, CultureInfo.InvariantCulture, out var major) && major > (newest ?? 0))
+                    if (Path.GetFileName(file).Length > "libicuuc.so.".Length && int.TryParse(Path.GetFileName(file)["libicuuc.so.".Length..].Split('.')[0], NumberStyles.None, CultureInfo.InvariantCulture, out var major) && major > (newest ?? 0))
                     {
                         newest = major;
                     }

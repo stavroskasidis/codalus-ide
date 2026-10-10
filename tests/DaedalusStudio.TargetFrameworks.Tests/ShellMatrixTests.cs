@@ -1,3 +1,4 @@
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using DaedalusStudio.Debugging;
 using DaedalusStudio.LanguageServices.Protocol;
@@ -22,6 +23,9 @@ public sealed class ShellMatrixTests
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "TargetFrameworks.sln"));
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 38 && f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.RestoreState is "succeeded" or "failed", seconds: 600);
         Assert.Equal("succeeded", f.Shell.Solutions.RestoreState);
+
+        // The design-time builds after the restore: .NET Core 2.x and 3.0 get their framework from packages.
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Keys.All(p => MatrixFixture.HasReferences(f.Shell.Solutions, p)), seconds: 600);
         return folder;
     }
 
@@ -44,10 +48,25 @@ public sealed class ShellMatrixTests
             var marker = text.IndexOf("// [next]", StringComparison.Ordinal);
             editor.Model.Text.Replace(marker, "// [next]".Length, framework.NextFeature!);
             var expected = $"not available in C# {framework.CSharp}";
-            await ShellFixture.PumpUntil(() => f.Shell.Languages.Diagnostics.For(file).Any(d => d.Message.Contains(expected, StringComparison.Ordinal)), seconds: 180);
-            var errors = f.Shell.Languages.Diagnostics.For(file).Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
             var line = Matrix.Line(file, "next") - 1;
-            Assert.True(errors.All(e => e.Range.Start.Line == line), $"{framework.Tfm}: errors elsewhere than on the edited line: " + string.Join("; ", errors.Select(e => $"{e.Range.Start.Line + 1}: {e.Message}")));
+
+            // The compiler's error on the edited line, and none elsewhere (the language service has the project's
+            // references). Both settle as the host catches up, so they are waited for together.
+            List<Diagnostic> errors = [];
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            while (true)
+            {
+                errors = [.. f.Shell.Languages.Diagnostics.For(file).Where(d => d.Severity == DiagnosticSeverity.Error)];
+                if (errors.Any(d => d.Message.Contains(expected, StringComparison.Ordinal)) && errors.All(e => e.Range.Start.Line == line))
+                {
+                    break;
+                }
+
+                Assert.True(started.Elapsed < TimeSpan.FromSeconds(240),
+                    $"{framework.Tfm}: expected only '{expected}' on line {line + 1}, got: " + string.Join("; ", errors.Select(e => $"{e.Range.Start.Line + 1}: {e.Message}")));
+                ShellFixture.Pump();
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+            }
             editor.Model.Text.Replace(marker, framework.NextFeature!.Length, "// [next]");
             ShellFixture.Pump();
         }
@@ -125,6 +144,45 @@ public sealed class ShellMatrixTests
         finally
         {
             f.Shell.StopRunning();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_solution_explorer_shows_the_framework_package_of_netcoreapp21()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = await OpenAsync(f);
+        var lib = Path.Combine(folder, "Core21", "Core21.Lib", "Core21.Lib.csproj");
+        var id = $"deps:{lib}|framework|Microsoft.NETCore.App";
+        f.Shell.Explorer.RevealWhenAvailable(id);
+        await ShellFixture.PumpUntil(() => f.Shell.Explorer.Selected?.Id == id, seconds: 60);
+        Assert.Equal("(2.1.0)", f.Shell.Explorer.Selected!.Node.Detail);
+
+        // The Debug menu's item says why Hot Reload is off (looked at in the screenshots, D25).
+        f.Shell.Runs.SetStartupProject(Path.Combine(folder, "Core31", "Core31.App", "Core31.App.csproj"));
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Context.GetValue("hotReloadSupported") is false);
+        foreach (var theme in new[] { "blue", "dark" })
+        {
+            await f.Shell.Workbench.Settings.SetAsync(DaedalusStudio.Shell.Theming.ThemeService.SettingKey, theme, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+            ShellFixture.Pump();
+            Screenshot(f, $"m33-dependencies-{theme}");
+        }
+    }
+
+    /// <summary>Saves the window when <c>DAEDALUS_UI_SNAPSHOTS</c> names a folder (for looking at the rendering).</summary>
+    private static void Screenshot(ShellFixture f, string name)
+    {
+        if (Environment.GetEnvironmentVariable("DAEDALUS_UI_SNAPSHOTS") is { Length: > 0 } folder)
+        {
+            Directory.CreateDirectory(folder);
+            foreach (var visual in Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(f.Window))
+            {
+                visual.InvalidateVisual();
+            }
+
+            ShellFixture.Pump();
+            using var frame = f.Window.CaptureRenderedFrame();
+            frame?.Save(Path.Combine(folder, name + ".png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
         }
     }
 

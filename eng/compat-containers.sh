@@ -6,11 +6,11 @@
 #
 # Current distributions (Ubuntu 22.04 and later) have OpenSSL 3 and an ICU newer than these runtimes know. Daedalus
 # Studio sets CLR_ICU_VERSION_OVERRIDE for .NET Core 2.x to 3.1 when it runs them (the test suite covers that on the
-# host); OpenSSL 1.x, which .NET Core 2.x needs for cryptography and HTTPS, has no such switch. This script proves the
+# host); OpenSSL 1.x, which .NET Core 2.x to .NET 5 need for cryptography and HTTPS, has no such switch. This script proves the
 # programs themselves on the distributions of their time, with what those distributions bring:
 #   - Ubuntu 18.04 (ICU 60, OpenSSL 1.1): .NET Core 2.0 to 3.1 and ASP.NET Core 2.1 and 3.1
 #   - Ubuntu 20.04 (ICU 66, OpenSSL 1.1): .NET Core 3.1 and .NET 5
-#   - Ubuntu 24.04 (ICU 74, OpenSSL 3): what fails without help, and the ICU override
+#   - Ubuntu 24.04 (ICU 74, OpenSSL 3): what fails without help (ICU, OpenSSL), and the ICU override
 # It builds the fixture on the host with the repository's SDK, installs the old runtimes into
 # .work/compat-containers/dotnet (their own root: the current host needs a newer glibc than Ubuntu 18.04 has), and
 # mounts both read-only. Results go to stdout and artifacts/compat-containers.md; it fails when an expectation fails.
@@ -110,8 +110,10 @@ done
 expect "Ubuntu 24.04" "$noble" "Core21.App without help" "Couldn't find a valid ICU package" "/dotnet/dotnet $(app Core21 netcoreapp2.1)"
 expect "Ubuntu 24.04" "$noble" "Core21.App, CLR_ICU_VERSION_OVERRIDE=74" "runtime=2.1." "CLR_ICU_VERSION_OVERRIDE=74 TARGETFRAMEWORKS_CRYPTO=0 /dotnet/dotnet $(app Core21 netcoreapp2.1)"
 expect "Ubuntu 24.04" "$noble" "Core21.App, SHA-256 (no OpenSSL 1.x)" "No usable version of" "CLR_ICU_VERSION_OVERRIDE=74 /dotnet/dotnet $(app Core21 netcoreapp2.1)"
-expect "Ubuntu 24.04" "$noble" "Core31.App, CLR_ICU_VERSION_OVERRIDE=74, SHA-256 (OpenSSL 3)" "sha256=32" "CLR_ICU_VERSION_OVERRIDE=74 /dotnet/dotnet $(app Core31 netcoreapp3.1)"
-expect "Ubuntu 24.04" "$noble" "Net50.App, SHA-256 (OpenSSL 3)" "sha256=32" "/dotnet/dotnet $(app Net50 net5.0)"
+expect "Ubuntu 24.04" "$noble" "Core31.App, CLR_ICU_VERSION_OVERRIDE=74" "runtime=3.1." "CLR_ICU_VERSION_OVERRIDE=74 TARGETFRAMEWORKS_CRYPTO=0 /dotnet/dotnet $(app Core31 netcoreapp3.1)"
+expect "Ubuntu 24.04" "$noble" "Core31.App, SHA-256 (no OpenSSL 1.x)" "No usable version of" "CLR_ICU_VERSION_OVERRIDE=74 /dotnet/dotnet $(app Core31 netcoreapp3.1)"
+expect "Ubuntu 24.04" "$noble" "Net50.App" "runtime=5.0." "TARGETFRAMEWORKS_CRYPTO=0 /dotnet/dotnet $(app Net50 net5.0)"
+expect "Ubuntu 24.04" "$noble" "Net50.App, SHA-256 (no OpenSSL 1.x)" "No usable version of" "/dotnet/dotnet $(app Net50 net5.0)"
 
 echo
 echo "== $results"

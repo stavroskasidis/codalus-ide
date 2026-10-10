@@ -16,7 +16,7 @@ Before deciding anything, M33 ran each framework and each older SDK through the 
 4. **The 2.0 SDKs can't build at all.** Their compiler task starts `csc.exe` directly when MSBuild runs on a newer .NET, and that isn't an executable (Win32 error 193). The 2.1.2xx SDKs (MSBuild 15.7) and later run `dotnet csc.dll`. The 1.x SDKs are out of scope with `netcoreapp1.x`.
 5. **A `global.json` that asked for a missing SDK was silent, or crashed the host.** `Microsoft.Build.Locator` either offered the newest SDK without saying so or threw, depending on how hostfxr reported it.
 6. **The test process's own environment hid a problem:** `dotnet test` starts a test apphost with `DOTNET_ROOT_X64` pointing at its own `dotnet`, which apphosts of .NET 6 and later read before `DOTNET_ROOT`. A program started from such a process runs on that `dotnet`, whatever the solution uses.
-7. **On Linux,** .NET Core 2.x to 3.1 stop at start on a current distribution ("Couldn't find a valid ICU package": they look for the ICU versions that existed when they shipped). `CLR_ICU_VERSION_OVERRIDE` lets them load the system's ICU. .NET Core 3.1 and .NET 5 load OpenSSL 3 (later servicing added it); .NET Core 2.x needs OpenSSL 1.0 or 1.1 for cryptography and HTTPS, which current distributions don't have.
+7. **On Linux,** .NET Core 2.x to 3.1 stop at start on a current distribution ("Couldn't find a valid ICU package": they look for the ICU versions that existed when they shipped). `CLR_ICU_VERSION_OVERRIDE` lets them load the system's ICU. .NET Core 2.x to .NET 5 also need OpenSSL 1.0 or 1.1 for cryptography and HTTPS (.NET 6 added OpenSSL 3), which current distributions don't have: their programs fail when they hash or call HTTPS, and their SDKs can't restore from nuget.org.
 8. **On Apple silicon,** .NET 5 and earlier have no Arm64 runtime; they run as x64 under Rosetta 2, from the x64 `dotnet` (`/usr/local/share/dotnet/x64`). A debugger debugs processes of its own architecture, and netcoredbg 3.2.0, our pinned release, dropped its macOS x64 build.
 9. **Coverage:** Coverlet 10's VSTest collector is built for .NET 8 and doesn't load into older test hosts.
 10. **Hot Reload** (`dotnet watch`) applies changes from .NET 6 on; before, it only restarts.
@@ -56,7 +56,7 @@ Before deciding anything, M33 ran each framework and each older SDK through the 
 
 ## Consequences
 
-- Every target framework from .NET Core 2.0 works with the current SDK on Windows and Linux; on Linux, .NET Core 2.x programs that use cryptography or HTTPS need OpenSSL 1.x (documented in the user guide, with what to install).
+- Every target framework from .NET Core 2.0 works with the current SDK on Windows and Linux; on Linux, programs of .NET Core 2.x to .NET 5 that use cryptography or HTTPS need OpenSSL 1.x, and so do those SDKs' restores (documented in the user guide, with what to install).
 - Older SDKs down to 2.1.200 open and build, those before .NET 6 in the build host's node. Builds with them don't persist the reference cache, and their task assemblies stay loaded in the host until the solution closes.
 - The build host's `DOTNET_HOST_PATH` and the apphost's `DOTNET_ROOT` now follow the SDK in use, including a private one (`~/.dotnet`).
 - The macOS package grows by the x64 netcoredbg. TODO(issue): attaching to an x64 process on Apple silicon still uses the Arm64 debugger, because a process's architecture isn't known from its id.

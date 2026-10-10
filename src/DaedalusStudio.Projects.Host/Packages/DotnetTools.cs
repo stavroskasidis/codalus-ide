@@ -128,7 +128,7 @@ internal sealed class DotnetTools(string dotnet, string directory)
 /// <summary>Starting the SDK's <c>dotnet</c> from the build host.</summary>
 internal static class DotnetProcess
 {
-    /// <summary>The SDK the build host loaded (its CLI runs restores and tools).</summary>
+    /// <summary>The SDK whose CLI runs restores and tools in the solution's folder: the one <c>global.json</c> resolves.</summary>
     public static Version? SdkVersion { get; set; }
 
     /// <summary>The system's ICU major version on Linux (<c>libicuuc.so.74</c> → 74), found once.</summary>
@@ -184,9 +184,9 @@ internal static class DotnetProcess
         {
             try
             {
-                foreach (var file in Directory.Exists(folder) ? Directory.EnumerateFiles(folder, "libicuuc.so.*") : [])
+                foreach (var file in Directory.Exists(folder) ? Directory.EnumerateFiles(folder, "libicuuc.so.?*") : [])
                 {
-                    if (int.TryParse(Path.GetFileName(file)["libicuuc.so.".Length..].Split('.')[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var major)
+                    if (Path.GetFileName(file).Length > "libicuuc.so.".Length && int.TryParse(Path.GetFileName(file)["libicuuc.so.".Length..].Split('.')[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var major)
                         && major > (newest ?? 0))
                     {
                         newest = major;

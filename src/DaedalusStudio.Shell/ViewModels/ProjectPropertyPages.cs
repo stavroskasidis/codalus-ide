@@ -61,7 +61,7 @@ public static class ProjectPropertyPages
             [
                 new("Nullable", "Nullable", "Nullable reference types.", PropertyEditor.Choice) { Options = [O("enable", "Enable"), O("disable", "Disable"), O("warnings", "Warnings only"), O("annotations", "Annotations only")] },
                 new("ImplicitUsings", "Implicit global usings", "Adds common global using directives for the project's SDK.", PropertyEditor.Choice) { Options = [O("enable", "Enable"), O("disable", "Disable")] },
-                new("LangVersion", "Language version", "The C# language version.", PropertyEditor.Choice) { Options = [O("default", "Default for the framework"), O("latest", "Latest"), O("latestMajor", "Latest major"), O("preview", "Preview"), O("15.0", "C# 15"), O("14.0", "C# 14"), O("13.0", "C# 13"), O("12.0", "C# 12"), O("11.0", "C# 11"), O("10.0", "C# 10")] },
+                new("LangVersion", "Language version", "The C# language version.", PropertyEditor.Choice) { Options = [O("default", "Default for the framework"), O("latest", "Latest"), O("latestMajor", "Latest major"), O("preview", "Preview"), O("15.0", "C# 15"), O("14.0", "C# 14"), O("13.0", "C# 13"), O("12.0", "C# 12"), O("11.0", "C# 11"), O("10.0", "C# 10"), O("9.0", "C# 9"), O("8.0", "C# 8"), O("7.3", "C# 7.3")] },
             ]),
         ]),
         new("build", "Build",

@@ -58,7 +58,8 @@ if (sdkWarning is not null)
     await Console.Error.WriteLineAsync(sdkWarning).ConfigureAwait(false);
 }
 
-DaedalusStudio.Projects.Host.Packages.DotnetProcess.SdkVersion = instance.Version;
+// The CLI that restores and runs tools in the solution's folder is the SDK global.json resolves, not necessarily the one loaded here.
+DaedalusStudio.Projects.Host.Packages.DotnetProcess.SdkVersion = unresolved is null && instances.Count > 0 ? instances[0].Version : instance.Version;
 MSBuildLocator.RegisterInstance(instance);
 return await RunAsync(stdin, stdout, instance.MSBuildPath, sdkWarning).ConfigureAwait(false);
 

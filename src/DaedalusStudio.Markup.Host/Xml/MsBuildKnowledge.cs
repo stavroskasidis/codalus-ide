@@ -17,7 +17,8 @@ internal static class MsBuildKnowledge
 
     public static readonly string[] TargetFrameworks =
     [
-        "net11.0", "net10.0", "net9.0", "net8.0", "net7.0", "net6.0", "netstandard2.1", "netstandard2.0", "net48", "net472", "net462",
+        "net11.0", "net10.0", "net9.0", "net8.0", "net7.0", "net6.0", "net5.0", "netcoreapp3.1", "netcoreapp3.0", "netcoreapp2.2", "netcoreapp2.1", "netcoreapp2.0",
+        "netstandard2.1", "netstandard2.0", "net48", "net472", "net462",
         "net11.0-windows", "net11.0-android", "net11.0-ios", "net11.0-maccatalyst", "net11.0-macos", "net11.0-browser",
         "net10.0-windows", "net10.0-android", "net10.0-ios", "net10.0-maccatalyst", "net10.0-macos", "net10.0-browser",
         "net9.0-windows", "net8.0-windows",
@@ -39,7 +40,7 @@ internal static class MsBuildKnowledge
         new("OutputType", "What the project builds.", ["Exe", "Library", "WinExe", "Module"]),
         new("Nullable", "Nullable reference types.", ["enable", "disable", "warnings", "annotations"]),
         new("ImplicitUsings", "Global usings for the project's SDK (`System`, `System.Linq`, …).", ["enable", "disable"]),
-        new("LangVersion", "The C# language version.", ["latest", "preview", "default", "latestMajor", "15", "14", "13", "12", "11", "10"]),
+        new("LangVersion", "The C# language version.", ["latest", "preview", "default", "latestMajor", "15", "14", "13", "12", "11", "10", "9.0", "8.0", "7.3"]),
         new("RootNamespace", "The default namespace of new files."),
         new("AssemblyName", "The output assembly's name."),
         new("Version", "The package and assembly version (`1.2.3` or `1.2.3-beta.1`)."),
