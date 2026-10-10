@@ -10,7 +10,7 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
 
 1. Read `ide-prompt.md`, then the latest checkpoint summary, then this document's [status table](#status).
 2. Pick the next milestone allowed by the [dependency graph](#dependency-graph) and the maintainer's instructions. The numbers are identifiers, not a strict order. The maintainer may reorder phases.
-3. Check the milestone's **Decisions needed** entries against the [decision register](#decision-register). Don't start work that depends on an open decision. Raise it at the checkpoint instead.
+3. Check the milestone's **Decisions** entries against the [decision register](#decision-register). Every decision there is closed as of 2026-10-10. If a new question comes up, don't start work that depends on it. Add it to the register and raise it with the maintainer.
 4. Follow the normal milestone workflow from `ide-prompt.md`:
    - plan mode
    - ADRs before code
@@ -40,13 +40,13 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
 | M17 | Containers, Aspire and publishing | planned |
 | M18 | Profiling and diagnostics tools | planned |
 | M19 | Avalonia XAML editing and live previewer | planned |
-| M20 | .NET MAUI | exploratory, needs a go/no-go (D6) |
+| M20 | .NET MAUI | planned (D6: go, for Android, iOS and Mac Catalyst), after M28 and before M34 |
 | M21 | Remote development | planned |
 | M22 | Plugin platform 1.0 and marketplace | planned |
 | M23 | Personalization, settings sync and localization | planned |
 | M26 | Build and project-system depth | planned |
 | M27 | Data and Entity Framework Core tooling | planned |
-| M28 | AI assistance | needs a decision (D7) |
+| M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
 | M30 | .NET 11 and following .NET releases | planned, **next** (.NET 11 GA is expected in November 2026) |
 | M31 | Automated release cycle and installers | planned, after M30 |
@@ -81,7 +81,7 @@ These add to the architecture principles in `ide-prompt.md`. They don't replace 
 - **Plugin first, where latency allows.** As ADR 0003 says, a new feature is a built-in plugin unless it sits on a latency-critical path. When a feature needs an API that doesn't exist yet, it is added under `Daedalus.Plugins.Abstractions.Proposed` first. Built-ins using proposed APIs is how the API gets proved before 1.0 (M22).
 - **The shell owns generic UI, providers own data.** Examples: the shell renders Test Explorer, and test controllers supply tests. The shell renders language features, and language services (Roslyn, LSP servers) supply data. This keeps large views virtualized and AOT-clean, and lets third parties plug in.
 - **Reuse before writing.** Prefer maintained MIT, Apache-2.0 or BSD components. When a VS feature is backed by something proprietary, say so, and either build an open replacement or record a known gap.
-- **Every interactive surface gets a budget.** Each milestone adds harness scenarios, measures Rider (and VS Code where relevant), and proposes budgets at its checkpoint. The rule is the same as in ADR 0002: at least as good as VS Code for editor surfaces, and at least as good as Rider for solution and language features.
+- **Every interactive surface gets a budget.** Each milestone adds harness scenarios, measures VS Code where relevant, and proposes absolute budgets at its checkpoint. Editor surfaces must be at least as good as VS Code (ADR 0002). Rider is no longer a reference (D28): where a milestone below says "compare with Rider", it sets an absolute target instead.
 - **Every protocol extension is documented** in `docs/protocol.md` or `docs/plugin-protocol.md` with the `daedalus/` prefix. Plugin API changes are listed in the plugin changelog.
 
 ### Known proprietary traps
@@ -112,6 +112,12 @@ These decisions get more expensive with every milestone. **Raise them at the M7 
 | F6 | **Workspace trust.** | Opening a solution runs MSBuild evaluation, analyzers and source generators, all of which can run arbitrary code. Plugins and tasks add more. That matters once the repository is public. | Add a "restricted mode" for untrusted folders before or with the public release. It parses but doesn't evaluate, build or load analyzers, generators or workspace plugins until the user trusts the folder. Raise this at the M7 checkpoint (D4). |
 | F7 | **Per-solution state.** | Breakpoints, open documents, layouts, test playlists, profiles and caches need a home. | `.daedalus/` next to the solution (git-ignored, like `.vs/`) for state the user may want to inspect or share. User-local caches go in the platform data directory, keyed by a solution hash. |
 
+All seven are settled:
+- F1–F4 and F6 are D1–D4 in the [decision register](#decision-register).
+- F5 and F7 are as built:
+  - F5: Razor is cohosted in the C# host, F# runs on FsAutoComplete (D10), and the LSP bridge serves the rest.
+  - F7: `.daedalus/` sits next to the solution.
+
 ## Phase overview
 
 | Phase | Milestones | Theme |
@@ -122,11 +128,12 @@ These decisions get more expensive with every milestone. **Raise them at the M7 
 | 4. Platform and release | M30, M31, M32, M33 | The newest .NET (11, then each new release), automated nightly and stable releases with setup installers, self-update, and proof that .NET Core 2.0 to .NET 10 projects work. |
 | 5. Web, data and cloud-native | M15, M16, M27, M17 | ASP.NET Core, Blazor, Hot Reload, EF Core and databases, containers, Aspire, publishing. |
 | 6. Diagnostics | M18 | Profiling, counters, memory analysis, dumps, benchmarks. |
-| 7. UI frameworks | M19, M20 | Avalonia XAML with a live previewer. MAUI is exploratory. |
+| 7. UI frameworks | M19 | Avalonia XAML with a live previewer. |
 | 8. Remote | M21 | SSH, WSL, Dev Containers. |
-| 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance if D7 says yes. |
-| 10. Polish | M34 | Every panel, window and feature brought to one finished standard. |
-| 11. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
+| 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
+| 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
+| 11. Polish | M34 | Every panel, window and feature brought to one finished standard. |
+| 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
 Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. Work continues with M16c once phase 4 is done.
 
@@ -138,9 +145,10 @@ Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. 
   - Automated releases (M31) and self-update (M32) come before the repository goes public, so that the first public users get installers and updates.
   - The older-.NET validation (M33) builds on M30's hosts, which must start with any SDK.
 - Web development is the biggest .NET workload. It comes after depth work because Hot Reload and Blazor debugging build on M12 and M14. Data tooling (M27) sits with it, because EF Core and a database are part of most web apps.
-- AI assistance (M28) is a headline Visual Studio 2026 feature, but it waits for D7. It goes after the plugin API freeze (M22), because it should be built on public provider APIs.
+- AI assistance (M28) is a headline Visual Studio 2026 feature. D7 settles it as opt-in, with any provider. It goes after the plugin API freeze (M22), because it should be built on public provider APIs.
+- .NET MAUI (M20) comes after everything except polish, VB and F#, by the maintainer's choice (D6). It builds on the XAML engine (M19), and the polish pass then covers its panels too.
 - Remote development comes late because it touches every host. F1 and F2 make sure it doesn't need a rewrite.
-- UI polish (M34) comes after every other milestone except VB and F#, so that one pass covers all the UI. Until then, each milestone reviews its own panels against M34's checklist.
+- UI polish (M34) comes after every other milestone except VB and F#, so that one pass covers all the UI, MAUI's included. Until then, each milestone reviews its own panels against M34's checklist.
 - VB and F# come last, after everything else, and stay last when milestones are added. Solutions with VB and F# projects already load, build and run from the MVP, and the C# depth, web and tooling work serves more users first. M11 keeps them cheap whenever they are picked up.
 
 ### Dependency graph
@@ -396,7 +404,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - Memory per terminal with 10k scrollback lines: ≤ 30 MB.
 
 **Risks.**
-- ConPTY differences between Windows versions. The supported Windows floor needs a decision.
+- ConPTY differences between Windows versions. The supported floor is Windows 10 22H2 (D26).
 - The macOS login-shell environment.
 - IME in a custom-drawn control.
 - Screen-reader support for a live buffer.
@@ -559,7 +567,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - a compare-any-two-files command (reuses the M6 diff viewer)
   - encoding and line-ending UI
   - a hex viewer for binaries, and an image viewer (PNG, JPEG, GIF, SVG, ICO) with zoom
-- **Spell checking** in comments and strings (D9: dictionary licensing).
+- **Spell checking** in comments and strings (D9: the en-US dictionary from SCOWL is bundled, and other languages download on demand).
 - **Roslyn component authoring**, for people who write analyzers and source generators:
   - a **Syntax Visualizer** tool window: syntax tree, tokens, trivia and the `IOperation` tree for the caret position, plus semantic information (symbol, type, converted type)
   - templates for analyzer, code fix and source generator projects
@@ -889,6 +897,8 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - **Nightly:** `0.2.0-nightly.20261011.1` (the date and the run number), so it sorts before the stable `0.2.0`.
   - After a stable release, the workflow commits the next minor version (`0.3.0`) to `develop`. A new major version or a patch is a manual edit of the file.
   - Local builds keep the `-dev` suffix and never update themselves (M32).
+  - Versions stay 0.x until the maintainer says otherwise, even after the repository goes public (D14).
+- **Builds** (D27): Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. The Linux ARM64 packages use GitHub's ARM64 Linux runners.
 - **Workflows:**
   - **`nightly.yml`** runs once a night from `develop` if `develop` changed since the last nightly, and on manual dispatch.
     - It builds the installers on three OSes and smoke-tests the installed packages.
@@ -1014,6 +1024,8 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - On each OS, an installed nightly updates itself to the next nightly through the published feed.
 - The same works for a stable install updating to the next stable release.
 - While the repository is private, the feed is read with a token (D20).
+
+**Then: going public** (D29). After M32's checkpoint, work through the go-public checklist. The maintainer changes the visibility. That switches on the automatic releases (D20) and hosted Weblate (D11), and starts the review of code signing (D19).
 
 ### M33 — Older .NET: .NET Core 2.0 to .NET 10
 
@@ -1153,7 +1165,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Depends on.** M15, M11, F1 (generated and virtual documents), F4 (Node policy).
 
-**Decisions needed.** D3 (Node).
+**Decisions.** D3 (Node), decided in ADR 0024.
 
 **Scope.**
 - **Razor language services** from `dotnet/razor` (MIT):
@@ -1199,7 +1211,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Depends on.** M11 (language registry, LSP bridge), M15 (scaffolding uses DbContext discovery). M13's credential store (in `Daedalus.Platform`) holds connection secrets.
 
-**Decisions needed.** D15 (database scope and the SQL language service).
+**Decisions.** D15: SQL Server, PostgreSQL, SQLite and MySQL/MariaDB first, T-SQL through SQL Tools Service, and DacFx only if its licence is OSI-approved.
 
 **Scope.**
 - **Entity Framework Core:**
@@ -1216,7 +1228,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - **a query editor:** run all or the current statement, with results grids, messages, execution time, cancel, and history. It also shows the estimated and actual execution plan where the engine offers one (SQL Server XML plans, PostgreSQL `EXPLAIN`).
 - **SQL language service:**
   - highlighting, completion of keywords and of schema objects from the active connection, diagnostics and formatting
-  - **T-SQL:** Microsoft's SQL Tools Service (`microsoft/sqltoolsservice`, MIT; it powers the open-source mssql extension) through the M11 LSP bridge, or our own built on ScriptDom (`microsoft/SqlScriptDOM`, MIT). D15 decides.
+  - **T-SQL:** Microsoft's SQL Tools Service (`microsoft/sqltoolsservice`, MIT; it powers the open-source mssql extension) through the M11 LSP bridge (D15).
   - **Other dialects:** grammar-based highlighting plus schema completion from the connection
 - **SQL database projects:** SDK-style `.sqlproj` (Microsoft.Build.Sql) loads and builds through MSBuild like any project. Add schema compare and publish to a database, if the DacFx licence allows it (verify; D15).
 - **Secrets:** connection passwords never go in settings. They stay in the source the user chose (user secrets, environment), or in the OS credential store.
@@ -1247,7 +1259,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Depends on.** M15, M14 (container attach), M9 (property pages).
 
-**Decisions needed.** D12 (Aspire's orchestrator licensing).
+**Decisions.** D12: integrate with Aspire only through the IDE execution protocol, and never redistribute its orchestrator (DCP).
 
 **Scope.**
 - **Publish profiles** (`.pubxml`), with a UI:
@@ -1312,7 +1324,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - **Threads and contention:** lock contention events with the contending stacks, thread pool starvation and injection events, and a per-thread state timeline.
 - **Exceptions:** first-chance exceptions over time, grouped by type and throw site.
 - **File I/O:** read and write activity where the runtime or OS emits it. Windows ETW gives the most detail. Expect partial data on Linux and macOS, and document what each OS gives.
-- **Instrumentation** (exact call counts and times, which Visual Studio has as a separate tool): a candidate. It needs a CLR profiler (`ICorProfiler`) of our own, written as native code. Decide after the sampling tools ship.
+- **Instrumentation** (exact call counts and times, which Visual Studio has as a separate tool): a candidate. It needs a CLR profiler (`ICorProfiler`) of our own, written as native code. Not in M18: it is reviewed with the other candidates after the last milestone (D30).
 - **Memory:**
   - GC heap snapshots (gcdump), with type statistics and paths to roots
   - **diffs between two snapshots**, for leak hunting
@@ -1391,25 +1403,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - Edit → preview updated: p95 ≤ 300 ms after the first render.
 - Build → first preview frame: ≤ 3 s.
 
-### M20 — .NET MAUI (exploratory)
-
-**Status: needs a go/no-go decision (D6) before any planning.**
-
-**Constraints to put to the maintainer.**
-- MAUI has no Linux target.
-- Its Windows target is WinUI, which the mission lists as a non-goal technology.
-- iOS and Mac Catalyst builds need macOS and Xcode. Android needs the Android SDK and a JDK.
-- MAUI apps run on the **Mono runtime** on Android and iOS, and **netcoredbg doesn't debug Mono**. A Mono soft-debugger DAP adapter (MonoDevelop's debugger libraries and `vscode-mono-debug` are MIT) would be needed.
-- Microsoft's MAUI XAML language service, XAML Hot Reload and Live Preview are proprietary. We would have to build our own or accept gaps.
-
-**If go, proposed scope.**
-- **Phase 1:** the Android target on all three OSes:
-  - device and emulator list (adb)
-  - deploy and debug through a Mono debugger adapter
-  - MAUI XAML editing (the M19 engine with MAUI schemas taken from assemblies)
-  - C# Hot Reload, if the Mono runtime path supports it
-- **Phase 2:** iOS and Mac Catalyst on macOS hosts.
-- **Gaps:** the WinUI target (non-goal) and a XAML previewer (none exists in open source; candidate).
+MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
 
 ---
 
@@ -1470,7 +1464,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Depends on.** F1, F3, and the proposed APIs proved by built-ins: test controllers (M8), language servers (M11), the visualizer API (M14), the SCM provider used by Git (M13), and placement (M21).
 
-**Decisions needed.** D5 (distribution).
+**Decisions.** D2 (declarative views first, webviews after 1.0), D5 (NuGet as the transport).
 
 **Scope.**
 - **Freeze API 1.0.** Promote the proved proposed APIs, and apply ADR 0003's post-1.0 policy (additive minor releases, the `DAEDALUS0001` deprecation diagnostics).
@@ -1478,17 +1472,16 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - **From earlier milestones:** languages, grammars and language servers (M11), test controllers (M8), visualizers (M14), SCM providers (M13).
   - **Debuggers:** DAP adapter contributions.
   - **Appearance:** themes and icon themes, snippets.
-  - **UI:** quick picks and input boxes, progress, webviews or rich UI (F3), custom editors for file types.
+  - **UI:** quick picks and input boxes, progress, declarative views (D2: forms, lists, trees, tables and toolbars, rendered by the shell), and custom editors for file types. Webviews follow after 1.0 as a proposed API.
   - **Platform:** file-system providers, authentication providers.
 - **Developer experience:**
   - a `dotnet new daedalus-plugin` template
   - a `Daedalus.Plugins.Testing` package for headless plugin tests
   - "Run plugin in a development instance", with a debugger attached to its plugin host
   - an API reference generated from XML docs, plus samples
-- **Distribution (D5).**
-  - **Recommendation:** use **NuGet as the transport**. Use a dedicated package type, discover plugins through nuget.org search filtered by that type, and reuse author and repository signing.
-  - **Alternative:** a static index hosted by the project.
-  - **UI either way:** a plugin browser in the IDE, auto-update, enable and disable per workspace, and a "bisect plugins" troubleshooting command.
+- **Distribution (D5, decided):**
+  - **NuGet is the transport.** Plugins use a dedicated package type, are discovered through nuget.org search filtered by that type, and reuse NuGet's author and repository signing. Private feeds work too.
+  - **The UI:** a plugin browser in the IDE, auto-update (reusing M32's download and verification code), enable and disable per workspace, and a "bisect plugins" troubleshooting command.
 - **IDE components** (the equivalent of Visual Studio Installer's workloads and components):
   - One "Components" page lists everything Daedalus downloads on demand: Node, FsAutoComplete, the web language servers, `vscode-js-debug`, the remote server bundles, grammars and schema caches.
   - For each component: version, size, licence, and update or remove.
@@ -1512,25 +1505,25 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - customize menus, toolbars and context menus: add, remove, reorder and create toolbars from any command
   - named window layouts (save, apply, switch per profile), full-screen mode, and a distraction-free editing mode
 - **Import and export settings,** as a file, choosing categories (Visual Studio's Import and Export Settings wizard).
-- **Managed settings for organizations:** an optional machine-wide policy file that locks settings, such as disabling network features or plugin installation (Visual Studio supports group policies). This is a candidate unless the maintainer wants it for 1.0.
+- **Managed settings for organizations:** an optional machine-wide policy file that locks settings, such as disabling network features or plugin installation (Visual Studio supports group policies). Not in M23: it is a candidate, reviewed after the last milestone (D30).
 - **Settings sync** with a **user-chosen backend**: a Git repository, a gist, or a synced folder. There is no Daedalus-hosted service, and nothing syncs until the user sets it up.
 - **Localization:**
   - Move every UI string to resources (AOT-safe), with a pseudo-localization build and a test that catches hard-coded strings.
-  - A community translation workflow (tool choice is D11).
+  - A community translation workflow on hosted Weblate (D11). It starts once the repository is public, and translations come back to the resource files.
   - An RTL layout review.
   - Plugin manifest localization (`%key%` placeholders with per-locale files).
 - **Onboarding:** a first-run experience (theme, keymap, import), and tips, using the Welcome plugin.
 
 ### M28 — AI assistance
 
-**Status: needs a decision (D7) before any planning.** Visual Studio 2026 makes GitHub Copilot central:
+**Status.** The maintainer decided yes on 2026-10-10 (D7), as the design below describes: off by default, with any provider. Visual Studio 2026 makes GitHub Copilot central:
 - inline and next-edit suggestions, chat and agent mode
 - MCP servers
 - AI help in the debugger, the profiler, test generation, commit messages and pull request descriptions
 
 Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#known-proprietary-traps)). Parity therefore means an open design, or an explicit decision not to build this.
 
-**If go, proposed design.**
+**Design.**
 - **Principles:**
   - off by default, with no telemetry
   - the user picks a provider, and nothing is sent anywhere until then
@@ -1552,7 +1545,57 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 ---
 
-## Phase 10: Polish
+## Phase 10: Mobile
+
+### M20 — .NET MAUI
+
+**Status.** The maintainer decided go on 2026-10-10 (D6): Android, iOS and Mac Catalyst. M20 comes after M28 and before UI polish (M34), so it is the last feature milestone before Visual Basic and F#.
+
+**Goal.** Create, build, deploy, debug and edit .NET MAUI apps for Android, iOS and Mac Catalyst.
+
+**Depends on.** M19 (the XAML engine), M14 (debugger depth), M17 (publishing), M9 (workloads).
+
+**Constraints.**
+- MAUI has no Linux target, so on Linux only the Android target works.
+- Its Windows target is WinUI, which the mission lists as a non-goal technology, so the Windows target is out of scope.
+- iOS and Mac Catalyst builds need macOS and Xcode. Android needs the Android SDK and a JDK.
+- MAUI apps run on the **Mono runtime** on Android and iOS, and **netcoredbg doesn't debug Mono**. M20 needs a Mono soft-debugger DAP adapter. MonoDevelop's debugger libraries and `vscode-mono-debug` are MIT.
+- Microsoft's MAUI XAML language service, XAML Hot Reload and Live Preview are proprietary. We build our own or accept gaps.
+
+**Scope.**
+- **Android** on all three OSes:
+  - **Devices:** the device and emulator list, starting emulators, and SDK and JDK detection. When something is missing, offer to install it through the Android workload's own targets.
+  - **Deploy and debug** through a Mono debugger adapter.
+- **iOS and Mac Catalyst** on macOS hosts:
+  - **Devices:** simulators and devices, and the signing identities and provisioning profiles that a build will use.
+  - **Deploy and debug** through the same Mono debugger adapter.
+- **MAUI XAML editing:** the M19 engine, with MAUI schemas taken from assemblies.
+- **C# Hot Reload,** where the Mono runtime supports it.
+- **Workloads:** the status and installation of the `maui`, `android`, `ios` and `maccatalyst` workloads (M9's workload status).
+- **Templates:** `dotnet new maui` and the related templates in the New Project dialog.
+- **Gaps:**
+  - the WinUI target (non-goal)
+  - a XAML previewer (none exists in open source; candidate)
+  - XAML Hot Reload (candidate)
+
+**Process.** The Mono debugger adapter is a new supervised host, started only when a mobile debug session starts.
+
+**ADRs.** "Mobile debugging through a Mono adapter". "Devices, emulators and simulators".
+
+**Fixtures and tests.**
+- `samples/Maui/`: an app with a page, a view model and a platform-specific file.
+- **Android:** tested in an emulator on Windows and Linux.
+- **iOS and Mac Catalyst:** tested on the Mac, in the simulator.
+
+**Risks.**
+- The Mono debugger adapter's maturity.
+- The workloads' size and installation time.
+- Keeping the Xcode version aligned with the workloads.
+- Apple signing for physical devices.
+
+---
+
+## Phase 11: Polish
 
 ### M34 — UI polish
 
@@ -1628,7 +1671,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 ---
 
-## Phase 11: Visual Basic and F#
+## Phase 12: Visual Basic and F#
 
 These two milestones are always last (see [Status](#status)).
 
@@ -1663,13 +1706,12 @@ These two milestones are always last (see [Status](#status)).
 
 **Depends on.** M11 (LSP bridge), M10 (REPL infrastructure for F# Interactive), M8 (tests).
 
-**Decisions needed.** D10: the host approach.
+**Decisions.** D10: FsAutoComplete through the LSP bridge.
 
 **Scope.**
-- **Language service.**
-  - **Recommendation:** run **FsAutoComplete** (Apache-2.0, built on FSharp.Compiler.Service, MIT) as a built-in plugin, through the M11 LSP bridge. Pin its version, and update it together with the SDK's F# version.
+- **Language service** (D10):
+  - Run **FsAutoComplete** (Apache-2.0, built on FSharp.Compiler.Service, MIT) as a built-in plugin, through the M11 LSP bridge. Pin its version, and update it together with the SDK's F# version.
   - Add `daedalus/` extensions through a thin wrapper, or upstream them, where LSP isn't enough.
-  - **Alternative:** our own host directly on FCS. It gives full control, but costs much more. The ADR decides.
 - **Features:**
   - semantic highlighting, completion (including unopened namespaces), tooltips with signatures and XML docs
   - signature help, diagnostics, go to definition and references, rename
@@ -1728,7 +1770,9 @@ New APIs start in `Daedalus.Plugins.Abstractions.Proposed` and are promoted in M
 
 ### Performance
 
-- **Rider measurement is a prerequisite** for every "at least as good as Rider" budget. ADR 0002 has it pending. Do it before M8's budgets are proposed.
+- **Rider is no longer a reference** (D28, 2026-10-10).
+  - The budgets proposed at M8–M16 are approved as gates, and ADR 0002's budget 4 (solution) is final as it stands.
+  - Later budgets are absolute targets, and the maintainer approves them at each checkpoint.
 - Each milestone adds harness scenarios for its surfaces (listed in the milestone) and proposes budgets at its checkpoint. They become gates once the maintainer approves them.
 - **Scaling:**
   - Add a **500-project solution** fixture (`FixtureGen`) by M12, and propose a large-solution budget.
@@ -1764,13 +1808,17 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
 
 ### Platforms
 
-- **Targets:** Windows x64 and ARM64, macOS ARM64 and x64, Linux x64 and ARM64 (X11 and Wayland). Decide the ARM64 and Wayland status at M7. Each milestone lists any OS-specific behaviour.
+- **Builds** (D27): Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64.
+  - Windows ARM64 waits for a netcoredbg build. Intel Macs aren't supported.
+  - Linux runs on X11, and on Wayland through XWayland. It moves to Avalonia's native Wayland backend once that is stable.
+  - Each milestone lists any OS-specific behaviour.
+- **OS versions** (D26): Windows 10 22H2 and Windows 11. macOS and Linux versions follow what the .NET that Daedalus runs on supports.
 - **.NET versions** (D22, D23):
   - Daedalus itself runs on the newest .NET. It moves to each new major version when it ships, following M30's checklist.
   - User projects are supported from `netcoreapp2.0` to the newest .NET, on every OS where their runtime installs. M33 has the support table.
 - **Windows:** ConPTY versions and dev-certificate trust.
 - **macOS:** the Keychain, notarization of downloaded tools, and the login-shell environment.
-- **Linux:** libsecret availability, distribution trust stores, and Flatpak sandbox restrictions on spawning processes. The Flatpak build may need `--talk-name` and host-spawn permissions for the SDK, Docker and the terminal. Decide this in M7, and revisit it for M10, M17 and M21.
+- **Linux:** libsecret availability, distribution trust stores, and Flatpak sandbox restrictions on spawning processes. The Flatpak build would need `--talk-name` and host-spawn permissions for the SDK, Docker and the terminal. No Flatpak for now (D18).
 
 ### Release, updates and the command line
 
@@ -1852,7 +1900,7 @@ The "Daedalus" column uses these terms:
 | Report a Problem, Suggest a Feature | Release track (no telemetry, user-reviewed bundle) |
 | Installer, workloads and components, updates, offline layout | M7 (packages); M31 (setup installers, release channels); M32 (updates); M22 (components, offline layout) |
 | Consistent, polished UI across every tool window and dialog | M29 (look and feel); M34 (polish) |
-| Group policy and managed settings | M23 (candidate unless wanted for 1.0) |
+| Group policy and managed settings | Candidate (D30) |
 | `devenv` command-line switches | Release track (`daedalus` CLI) |
 
 ### Solutions and projects
@@ -1925,7 +1973,7 @@ The "Daedalus" column uses these terms:
 | Scroll bar map mode and annotations | M12 |
 | Inline diagnostics, document health indicator | M12 |
 | Regex, JSON and date-format support inside strings | M12 |
-| Spell checker | M12 (D9) |
+| Spell checker | M12 (deferred at M12b); en-US bundled, other languages on demand (D9) |
 | AutoRecover | M12 (verify at M3) |
 | Local history | M12 (beyond Visual Studio) |
 | Large files | M3 (budget 3) |
@@ -1980,7 +2028,7 @@ The "Daedalus" column uses these terms:
 | HTML, CSS, JavaScript and TypeScript | M16 |
 | SQL (T-SQL and other dialects) | M27 |
 | XAML: Avalonia | M19 |
-| XAML: .NET MAUI | M20 (D6) |
+| XAML: .NET MAUI | M20 |
 | MSBuild, JSON, XML, YAML | M11 |
 | T4 | M26 |
 | C# Interactive | M10 |
@@ -2013,7 +2061,7 @@ The "Daedalus" column uses these terms:
 | IntelliTrace, time-travel debugging, Snapshot Debugger | Gap / Trap |
 | Debugging tests | M8 (done) |
 | Blazor WebAssembly and JavaScript debugging | M16 |
-| Android and iOS debugging | M20 (D6) |
+| Android and iOS debugging | M20 |
 | Graphics (DirectX) debugging, GPU usage | Non-goal |
 
 ### Testing
@@ -2039,9 +2087,9 @@ The "Daedalus" column uses these terms:
 | CPU usage, .NET object allocations, memory snapshots and diffs | M18 |
 | .NET Async, .NET counters, events viewer, exceptions, file I/O, threads and contention | M18 |
 | Database and HTTP activity | M18 |
-| Instrumentation profiling | Candidate (decide in M18) |
+| Instrumentation profiling | Candidate (D30) |
 | GPU usage, Application Timeline (WPF/UWP) | Non-goal |
-| AI insights in the profiler | M28 (D7) |
+| AI insights in the profiler | M28 |
 
 ### Packages and tools
 
@@ -2089,7 +2137,7 @@ The "Daedalus" column uses these terms:
 | WinForms, WPF, UWP and WinUI designers | Non-goal |
 | XAML editing, previewer, Live Visual Tree and Live Property Explorer (Avalonia) | M19 |
 | XAML Hot Reload (Avalonia) | Candidate |
-| .NET MAUI XAML, Hot Reload, Live Preview, Android and iOS deployment | M20 (D6). The previewer is a gap. |
+| .NET MAUI XAML, Hot Reload, Live Preview, Android and iOS deployment | M20. The previewer and XAML Hot Reload are gaps. |
 | Accessibility Checker for UI apps | Candidate |
 
 ### Version control
@@ -2104,15 +2152,15 @@ The "Daedalus" column uses these terms:
 | Merge conflict editor | M13 |
 | Line staging | M13 |
 | Worktrees, submodules, LFS, commit signing | M13 |
-| GitHub and Azure DevOps pull requests and work items | M13 (D8) |
-| AI commit messages and pull request descriptions | M28 (D7) |
+| GitHub and Azure DevOps pull requests and work items | M13b: GitHub, Azure DevOps and GitLab (D8); other hosts as plugins |
+| AI commit messages and pull request descriptions | M28 |
 | Team Foundation Version Control | Not planned (plugins through the SCM API) |
 
 ### Collaboration and AI
 
 | Visual Studio feature | Daedalus |
 |---|---|
-| GitHub Copilot: completions, next-edit suggestions, chat, agent mode, MCP | M28 (D7), with an open design |
+| GitHub Copilot: completions, next-edit suggestions, chat, agent mode, MCP | M28, with an open design (D7) |
 | Live Share | Trap; an open alternative is a candidate |
 
 ### Extensibility
@@ -2135,7 +2183,7 @@ The "Daedalus" column uses these terms:
 
 ## Unscheduled candidates
 
-These are VS or Rider features, or common requests, that aren't scheduled. Each needs a maintainer decision before it gets a milestone.
+These are VS or Rider features, or common requests, that aren't scheduled. The maintainer reviews them after the last milestone and picks which get milestones (D30).
 
 | Candidate | Notes |
 |---|---|
@@ -2143,7 +2191,8 @@ These are VS or Rider features, or common requests, that aren't scheduled. Each 
 | Live Unit Testing | Test impact from coverage maps (M8b) plus continuous runs. Expensive. Belongs after M8 and M18. |
 | Code maps and dependency diagrams, architecture validation, Class Designer | Project, namespace and type graphs; layer rules as analyzers; class diagrams (`.cd`) that can be viewed and edited. |
 | Native debugging | `lldb-dap` sessions for native dependencies, side by side with a managed session. True mixed mode needs netcoredbg changes. |
-| Instrumentation profiler | Exact call counts through our own `ICorProfiler`. Decide after M18. |
+| Instrumentation profiler | Exact call counts through our own `ICorProfiler`. From M18. |
+| Managed settings for organizations | A machine-wide policy file that locks settings (Visual Studio supports group policies). From M23. |
 | Cloud tooling plugins | Azure, AWS and GCP: publish targets, Functions and Lambda projects, resource explorers. Their SDKs are MIT or Apache-2.0, but they are vendor services, so they are plugins, not core. |
 | Image editor | Pixel editing of icons and bitmaps, as Visual Studio has. |
 | Accessibility checker | Automated accessibility checks for running Avalonia apps, built on M19's diagnostics agent. |
@@ -2169,25 +2218,25 @@ Restated from `ide-prompt.md`, plus what follows from it for the areas above:
 
 ## Decision register
 
-These are the maintainer decisions this plan depends on. Update the status column at each checkpoint.
+These are the maintainer decisions this plan depends on. Update the status column at each checkpoint. As of 2026-10-10 every decision here is closed. New questions get the next free number.
 
 | ID | Question | Needed by | Recommendation | Status |
 |---|---|---|---|---|
-| D1 | Switch document identity to URIs and add a VFS (F1, F2)? | M7 checkpoint | Yes, before going public and before API 1.0 | open |
-| D2 | Rich plugin UI: webview, remote UI, or both (F3)? | M6 (ADR 0003) | Per the M6 ADR | open |
+| D1 | Switch document identity to URIs and add a VFS (F1, F2)? | M7 checkpoint | Yes, before going public and before API 1.0 | decided 2026-10-10: the contracts already use URIs (`file:`, `daedalus-generated:`, `daedalus-metadata:`). The file-system provider (F2) comes with M21, and its plugin API with M22. Settled as recommended, without a separate question. |
+| D2 | Rich plugin UI: webview, remote UI, or both (F3)? | M6 (ADR 0003) | Per the M6 ADR | decided 2026-10-10: declarative views first. Plugins describe forms, lists, trees, tables and toolbars as data, and the shell renders them with its own controls, so they are themed, accessible and AOT-clean. They are a proposed API before M22 and frozen in 1.0. Webviews follow as a proposed API after 1.0, for UI that needs full freedom. |
 | D3 | Node.js policy (F4) | M16 (M11 if a Node LSP is wanted earlier) | Pinned, verified, on-demand download | decided (ADR 0024): Node.js 24.21.0 from nodejs.org, SHA-256 pinned; servers from a shipped lockfile with `npm ci`; the user's consent on first use |
-| D4 | Workspace trust and restricted mode (F6) | M7 checkpoint | Yes, with the public release | open |
-| D5 | Plugin distribution channel | M22 | NuGet package type, with a plugin browser in the IDE | open |
-| D6 | MAUI go/no-go, and the scope without WinUI | Before M20 | Decide after M19 | open |
-| D7 | AI assistance (M28): whether, and in what form | Before M28 (any time) | Yes, because it is now central to Visual Studio. Only as opt-in, provider-agnostic plugins, with no telemetry. | open |
-| D8 | Hosting integrations (GitHub, GitLab, Azure DevOps) built in? | M13 | A built-in plugin, inactive until sign-in | open |
-| D9 | Spell-check dictionaries and their licences | M12b | Only MIT/BSD-compatible dictionaries, or user-supplied ones | open |
-| D10 | F# host: FsAutoComplete or our own FCS host | M36 | FsAutoComplete through the LSP bridge | open |
-| D11 | Translation platform for localization | M23 | Decide at M23 | open |
-| D12 | Licence of Aspire's orchestrator (DCP), and the IDE's relationship to it | M17 | Integrate through the IDE execution protocol only, never redistribute | open |
-| D13 | Phase order | Each phase start | As listed in this document | open. Settled on 2026-10-10 for the new work: phase 4 (M30–M33) comes next, before M16c; M34 comes last before VB and F#; VB and F# are always the last two milestones. |
-| D14 | Product 1.0 criteria (as opposed to preview releases) | After Phase 2 | Phases 1–2 complete, and plugin API 1.0 frozen early (pulled ahead of the marketplace work) | open |
-| D15 | Data tooling scope: which database engines first, the T-SQL language service (SQL Tools Service or our own on ScriptDom), and whether DacFx's licence allows schema compare and publish | M27 | SQL Server, PostgreSQL, SQLite and MySQL; SQL Tools Service through the LSP bridge; DacFx only if its licence is OSI-approved | open |
+| D4 | Workspace trust and restricted mode (F6) | M7 checkpoint | Yes, with the public release | decided (ADR 0004, built in M2): a trust prompt per folder, and restricted mode for untrusted folders, showing the structure only. Every later feature that runs workspace code checks trust (Security track). |
+| D5 | Plugin distribution channel | M22 | NuGet package type, with a plugin browser in the IDE | decided 2026-10-10: as recommended. |
+| D6 | MAUI go/no-go, and the scope without WinUI | Before M20 | Decide after M19 | decided 2026-10-10: go, for Android, iOS and Mac Catalyst. WinUI stays a non-goal. M20 moves to after M28 and before UI polish (M34). |
+| D7 | AI assistance (M28): whether, and in what form | Before M28 (any time) | Yes, because it is now central to Visual Studio. Only as opt-in, provider-agnostic plugins, with no telemetry. | decided 2026-10-10: yes, as recommended (the M28 design). |
+| D8 | Hosting integrations (GitHub, GitLab, Azure DevOps) built in? | M13 | A built-in plugin, inactive until sign-in | decided 2026-10-10: built-in plugins for GitHub, Azure DevOps and GitLab, inactive until sign-in. Other hosts, such as Bitbucket, come as third-party plugins through the SCM and authentication APIs. |
+| D9 | Spell-check dictionaries and their licences | M12b | Only MIT/BSD-compatible dictionaries, or user-supplied ones | decided 2026-10-10: the en-US dictionary from SCOWL (permissive licence) is bundled. Other languages download on demand, each showing its licence first. |
+| D10 | F# host: FsAutoComplete or our own FCS host | M36 | FsAutoComplete through the LSP bridge | decided 2026-10-10: FsAutoComplete through the LSP bridge. |
+| D11 | Translation platform for localization | M23 | Decide at M23 | decided 2026-10-10: hosted Weblate (free for open-source projects), once the repository is public. |
+| D12 | Licence of Aspire's orchestrator (DCP), and the IDE's relationship to it | M17 | Integrate through the IDE execution protocol only, never redistribute | decided 2026-10-10: as recommended, without a separate question. M17 still checks DCP's licence. |
+| D13 | Phase order | Each phase start | As listed in this document | decided 2026-10-10. Phase 4 (M30–M33) comes next. Then M16c, and the rest in the phase table's order. The list ends with M28, then M20 (MAUI), M34 (polish), and VB and F# (M35, M36), which always stay last. |
+| D14 | Product 1.0 criteria (as opposed to preview releases) | After Phase 2 | Phases 1–2 complete, and plugin API 1.0 frozen early (pulled ahead of the marketplace work) | decided 2026-10-10: there are no criteria. Releases stay 0.x, even after the repository goes public, until the maintainer says otherwise. Plugin API 1.0 (M22) is separate from the product's version. |
+| D15 | Data tooling scope: which database engines first, the T-SQL language service (SQL Tools Service or our own on ScriptDom), and whether DacFx's licence allows schema compare and publish | M27 | SQL Server, PostgreSQL, SQLite and MySQL; SQL Tools Service through the LSP bridge; DacFx only if its licence is OSI-approved | decided 2026-10-10: as recommended. SQL Server, PostgreSQL, SQLite and MySQL/MariaDB come first. M27 checks DacFx's licence. |
 | D16 | Self-update mechanism and release channels | M32 | An updater for the direct-download builds, with stable, preview and nightly channels; package-manager builds update through their own channel | decided 2026-10-10: Velopack, with two channels, stable (`master`) and nightly (`develop`). Updates download silently in the background and are applied at the next restart, with a "Restart to update" status bar item and a setting to switch to notify-only or off. apt and dnf installs update through the package manager. |
 | D17 | Installer technology | M31 | Velopack (MIT): installers, delta updates and channels from one tool | decided 2026-10-10: Velopack. A per-user `Setup.exe` on Windows, a `.pkg` on macOS and an AppImage on Linux. The Windows zip and the macOS `.app` zip stay. |
 | D18 | Linux formats | M31 | An AppImage, plus `.deb` and `.rpm` from our own repositories | decided 2026-10-10: a self-updating AppImage; `.deb` and `.rpm` from apt and dnf repositories on GitHub Pages, which update with the system; and the `.tar.gz`. No Flatpak for now. |
@@ -2198,6 +2247,11 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D23 | How far to validate older versions of .NET | M33 | Every target framework from 2.0 to 10.0 with the current SDK; older SDKs pinned by `global.json` only opened and built | decided 2026-10-10: as recommended. |
 | D24 | Icon sets | M34 | Fluent UI System Icons (MIT) for commands, and Material Icon Theme (MIT) for file types | decided 2026-10-10: as recommended. Check both licences again at M34. |
 | D25 | What "polished" means | M34 | A written checklist per surface, and a screenshot gallery that the maintainer approves | decided 2026-10-10: as recommended. Every milestone reviews its own panels against the checklist until M34. |
+| D26 | Supported OS versions | M30 | Windows 10 22H2 and Windows 11; macOS and Linux as the .NET that Daedalus runs on supports | decided 2026-10-10: as recommended. |
+| D27 | Which builds ship: architectures and Wayland | M31 | Add Linux ARM64. Windows ARM64 waits for a netcoredbg build | decided 2026-10-10: Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. There are no Windows ARM64 or Intel Mac builds for now. Linux runs on X11 and on Wayland through XWayland, and moves to Avalonia's native Wayland backend once it is stable (the Wayland part settled without a separate question). |
+| D28 | Approving the proposed budgets, and the Rider comparison of ADR 0002 | Now | Approve them, and the maintainer measures Rider once | decided 2026-10-10: the budgets proposed at M8–M16 are approved as gates, and budget 4 is final as it stands. Rider is no longer a reference. Where a milestone says "compare with Rider", it sets an absolute target instead. |
+| D29 | When the repository goes public | M32 | After M32 | decided 2026-10-10: after M32's checkpoint, through the go-public checklist. Changing the visibility stays the maintainer's action. |
+| D30 | The unscheduled candidates | After M36 | Review them after the last milestone | decided 2026-10-10: as recommended. Managed settings for organizations (from M23) and the instrumentation profiler (from M18) join the candidates. |
 
 ## Change log
 
@@ -2236,3 +2290,20 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Decisions:** D16 decided; D17–D25 added and decided.
   - **Definition of done:** it now includes a screenshot review of each milestone's own panels.
   - **Older documents:** ADR 0010 and the M9b checkpoint still say M25 and M24/M25 for F# and VB.
+- 2026-10-10: every open decision closed, at the maintainer's request.
+  - **Decided by the maintainer:**
+    - D2: declarative plugin views first, webviews after 1.0
+    - D5: plugins distributed as NuGet packages
+    - D6: MAUI is a go, for Android, iOS and Mac Catalyst
+    - D7: AI assistance, opt-in, with any provider
+    - D8: GitHub, Azure DevOps and GitLab built in
+    - D9: en-US spell-check dictionary bundled
+    - D10: FsAutoComplete
+    - D11: hosted Weblate
+    - D13: the phase order
+    - D14: 0.x until the maintainer says otherwise
+    - D15: four database engines
+  - **Closed as recommended, without a separate question:** D1 (URIs are done; the VFS comes with M21), D4 (as built, ADR 0004), D12, and native Wayland.
+  - **New and decided:** D26 (Windows 10 22H2 and 11), D27 (Linux ARM64 added; no Windows ARM64 or Intel Mac builds), D28 (the proposed budgets approved; Rider dropped as a reference), D29 (go public after M32), D30 (candidates reviewed after the last milestone).
+  - **MAUI (M20)** moves to a new phase 10 (Mobile), after M28 and before M34. Polish and VB/F# become phases 11 and 12.
+  - **Out of date elsewhere:** ADR 0002 still calls budget 4 provisional until Rider is measured, and `benchmarks/budgets.json` still labels the M8–M11 budgets as proposed.
