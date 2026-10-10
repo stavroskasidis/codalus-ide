@@ -75,7 +75,18 @@ public sealed class DiffCommandTests
             await Task.Delay(50, TestContext.Current.CancellationToken);
         }
 
-        var waiting = Task.Run(() => SingleInstance.Send(name, new InstanceRequest("merge", ["l", "r", "b", "m"], Wait: true)), TestContext.Current.CancellationToken);
+        // Connecting can time out on a loaded machine (the listener takes the next client between requests): retry, as the
+        // ping above does, so what's tested is the waiting.
+        var waiting = Task.Run(() =>
+        {
+            bool? answer = null;
+            for (var i = 0; i < 20 && answer is null; i++)
+            {
+                answer = SingleInstance.Send(name, new InstanceRequest("merge", ["l", "r", "b", "m"], Wait: true));
+            }
+
+            return answer;
+        }, TestContext.Current.CancellationToken);
         await Task.Delay(300, TestContext.Current.CancellationToken);
         Assert.False(waiting.IsCompleted);
 

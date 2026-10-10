@@ -80,8 +80,9 @@ internal static partial class Installation
 
     private static string[] Entries(string path) => path.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+    /// <summary>Windows paths: either separator, any case (written out, so the tests compare the same way on every OS).</summary>
     private static bool SameFolder(string a, string b) =>
-        string.Equals(Path.TrimEndingDirectorySeparator(a), Path.TrimEndingDirectorySeparator(b), StringComparison.OrdinalIgnoreCase);
+        string.Equals(a.TrimEnd('\\', '/'), b.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Rewrites the user's PATH in the registry, keeping its value kind: <c>Environment.SetEnvironmentVariable</c> would
