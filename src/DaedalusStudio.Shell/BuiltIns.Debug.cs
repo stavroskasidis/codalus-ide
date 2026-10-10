@@ -147,16 +147,9 @@ internal static partial class BuiltIns
             Item("debug.exportBreakpoints", "4-breakpoints", 7),
             Item("debug.importBreakpoints", "4-breakpoints", 8),
             Item("debug.exceptionSettings", "4-breakpoints", 9, "Exception Settings…"),
+            // Debug → Windows lists the debugger's tool windows (BuiltIns.ViewMenuEntry).
             Item("debug.addWatch", "5-windows", 1),
             Item("debug.quickWatch", "5-windows", 2),
-            Item(ViewCommandPrefix + VariablesViewModel.LocalsWindowId, "5-windows", 2, "Locals"),
-            Item(ViewCommandPrefix + VariablesViewModel.AutosWindowId, "5-windows", 3, "Autos"),
-            Item(ViewCommandPrefix + WatchViewModel.ToolWindowId, "5-windows", 4, "Watch"),
-            Item(ViewCommandPrefix + CallStackViewModel.ToolWindowId, "5-windows", 5, "Call Stack"),
-            Item(ViewCommandPrefix + BreakpointsViewModel.ToolWindowId, "5-windows", 6, "Breakpoints"),
-            Item(ViewCommandPrefix + DebugConsoleViewModel.ToolWindowId, "5-windows", 7, "Debug Console"),
-            Item(ViewCommandPrefix + ThreadsViewModel.ToolWindowId, "5-windows", 8, "Threads"),
-            Item(ViewCommandPrefix + ModulesViewModel.ToolWindowId, "5-windows", 9, "Modules"),
         ]);
     }
 }

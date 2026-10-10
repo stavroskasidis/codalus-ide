@@ -58,7 +58,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 | Next and Previous Problem | `F8`, `Shift+F8` | Errors and warnings in the document, with the message in the status bar. |
 | Help on Symbol | `F1`, `Shift+F1` | The API reference page of a framework symbol, or the package's site. |
 
-**Tool windows** (View menu)
+**Tool windows** (View menu, or View → Other Windows)
 - **Document Outline**: the document's types and members. It follows the caret; click a symbol to go there, or type to filter.
 - **Code Definition**: the definition of the symbol at the caret, read-only, updated as the caret moves.
 - **Hierarchy**: Call Hierarchy and Type Hierarchy results.

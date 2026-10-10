@@ -34,7 +34,18 @@ test_app() {
   rm -rf "$userdata"
   local cmd=("$exe" --user-data-dir "$userdata" --smoke-test "$repo/samples")
   local status=0
-  if [[ "$(uname -s)" == Linux && -z "${DISPLAY:-}" ]]; then
+  # A DISPLAY without an X server behind it (WSLg not running) aborts the app: use xvfb-run then, as without one.
+  local display_number="${DISPLAY:-}"
+  display_number="${display_number#:}"
+  display_number="${display_number%%.*}"
+  local x_socket="/tmp/.X11-unix/X$display_number"
+  if [[ "$(uname -s)" == Linux && ( -z "${DISPLAY:-}" || ( "$DISPLAY" == :* && ! -S "$x_socket" ) ) ]]; then
+    if ! command -v xvfb-run > /dev/null; then
+      echo "error: no X server for DISPLAY='${DISPLAY:-}' ($x_socket is missing) and xvfb-run isn't installed." >&2
+      echo "       On WSL, restart WSLg with 'wsl --shutdown' (from Windows), or install xvfb: sudo apt install xvfb" >&2
+      return 1
+    fi
+
     xvfb-run -a -s "-screen 0 1920x1080x24" "${cmd[@]}" || status=$?
   else
     "${cmd[@]}" || status=$?

@@ -74,7 +74,7 @@ internal static partial class BuiltIns
 
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("view"), "terminal.new", "view", 51),
+            Item(MenuLocations.MenuBar("view"), "terminal.new", "view", 85), // after Terminal
             Item(SolutionExplorerView.ContextMenuLocation, "terminal.openInTerminal", "5-path", 3, "explorerItemKind == folder || explorerItemKind == project || explorerItemKind == solution"),
             Item(MenuLocations.EditorContext, "terminal.runSelectedText", "5-terminal", 1),
         ]);

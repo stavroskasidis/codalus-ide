@@ -73,6 +73,15 @@ internal static class MenuBuilder
             }
 
             group = item.Group;
+            if (item.Submenu is { } submenu)
+            {
+                var child = new MenuItem { Header = item.Title };
+                AutomationProperties.SetName(child, item.Title);
+                Fill(child, submenu, shell);
+                top.Items.Add(child);
+                continue;
+            }
+
             var header = new DockPanel { LastChildFill = true };
             if (item.KeyLabel is { } keys)
             {
@@ -119,6 +128,14 @@ internal static class MenuBuilder
             }
 
             group = item.Group;
+            if (item.Submenu is { } submenu)
+            {
+                var child = new NativeMenuItem(item.Title) { Menu = new NativeMenu() };
+                FillNative(child.Menu, submenu, shell);
+                menu.Items.Add(child);
+                continue;
+            }
+
             var binding = shell.Workbench.Keybindings.GetBinding(item.Command);
             menu.Items.Add(new NativeMenuItem(item.Title)
             {

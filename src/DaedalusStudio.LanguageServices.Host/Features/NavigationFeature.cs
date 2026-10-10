@@ -137,6 +137,12 @@ internal static class NavigationFeature
         var result = new List<Location>();
         foreach (var location in locations.Where(l => l.IsInSource && l.SourceTree is not null))
         {
+            if (Razor.RazorLocations.Map(location) is { } razor)
+            {
+                result.Add(razor);
+                continue;
+            }
+
             var document = solution.GetDocument(location.SourceTree!)
                            ?? await WorkspaceManager.FindGeneratedAsync(solution, location.SourceTree!, cancellationToken).ConfigureAwait(false);
             var uri = document is not null ? WorkspaceManager.UriOf(document) : DocumentUris.FromPath(location.SourceTree!.FilePath);

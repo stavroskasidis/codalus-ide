@@ -317,7 +317,7 @@ public sealed partial class ShellHost
 
     void IEditorServices.ShowEditorContextMenu(CodeEditorController editor, Control anchor)
     {
-        var items = Workbench.Menus.GetItems(MenuLocations.EditorContext);
+        var items = Workbench.Menus.GetItems(MenuLocations.EditorContext).Where(i => i.Submenu is null).ToList();
         if (items.Count == 0)
         {
             return;

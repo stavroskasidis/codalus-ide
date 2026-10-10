@@ -116,6 +116,12 @@ internal sealed class DiagnosticsService : IDisposable
     {
         var solution = _workspace.CurrentSolution;
         var version = _workspace.Version(path);
+        if (Razor.RazorFiles.IsRazor(path))
+        {
+            await AnalyzeRazorAsync(solution, path, version, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (await WorkspaceManager.FindDocumentAsync(solution, DocumentUris.FromPath(path), cancellationToken).ConfigureAwait(false) is not { } document)
         {
             return;
@@ -133,6 +139,29 @@ internal sealed class DiagnosticsService : IDisposable
         await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), version, Convert(diagnostics, tree))).ConfigureAwait(false);
         _trimmer.WorkDone();
     }
+
+    /// <summary>A Razor file's diagnostics (ADR 0023): its generated document's, where they map into the file.</summary>
+    private async Task AnalyzeRazorAsync(Solution solution, string path, int? version, CancellationToken cancellationToken)
+    {
+        if (await Razor.RazorMapping.CreateAsync(solution, path, cancellationToken).ConfigureAwait(false) is not { } mapping)
+        {
+            return;
+        }
+
+        var diagnostics = await DiagnosticsInSpanAsync(mapping.Generated, null, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), version, ConvertRazor(diagnostics, path))).ConfigureAwait(false);
+        _trimmer.WorkDone();
+    }
+
+    /// <summary>The diagnostics that map into the Razor file <paramref name="path"/>, with their Razor ranges.</summary>
+    private static Diagnostic[] ConvertRazor(IEnumerable<RoslynDiagnostic> diagnostics, string path) =>
+        [.. diagnostics
+            .Where(d => !d.IsSuppressed && d.Location.IsInSource && d.Severity != RoslynSeverity.Hidden)
+            .Select(d => (Diagnostic: d, Mapped: d.Location.GetMappedLineSpan()))
+            .Where(d => d.Mapped.HasMappedPath && Paths.Comparer.Equals(Path.GetFullPath(d.Mapped.Path), Path.GetFullPath(path)))
+            .DistinctBy(d => (d.Diagnostic.Id, d.Mapped.Span, d.Diagnostic.GetMessage(System.Globalization.CultureInfo.CurrentCulture)))
+            .Select(d => Convert(d.Diagnostic) with { Range = Positions.ToRange(d.Mapped.Span) })];
 
     /// <summary>
     /// Compiler, project analyzer and (for documents up to <see cref="IdeAnalyzerLineLimit"/> lines) IDE analyzer
@@ -225,6 +254,10 @@ internal sealed class DiagnosticsService : IDisposable
                 if (group.Key.FilePath is { Length: > 0 } path && File.Exists(path))
                 {
                     found[path] = [.. (found.GetValueOrDefault(path) ?? []).Concat(Convert(group, group.Key))];
+                }
+                else if (Razor.RazorLocations.IsRazorGenerated(group.Key.FilePath) && Razor.RazorLocations.SourceFile(group.Key) is { } razor && File.Exists(razor))
+                {
+                    found[razor] = [.. (found.GetValueOrDefault(razor) ?? []).Concat(ConvertRazor(group, razor))];
                 }
             }
         }

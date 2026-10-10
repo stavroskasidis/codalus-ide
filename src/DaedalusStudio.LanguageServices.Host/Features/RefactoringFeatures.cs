@@ -32,6 +32,17 @@ internal static class ReferencesFeature
 
             foreach (var reference in referenced.Locations.Where(l => !l.IsImplicit))
             {
+                if (Razor.RazorLocations.IsRazorGenerated(reference.Location.SourceTree?.FilePath))
+                {
+                    // A reference in a Razor file's generated C#: where it is in the Razor file, unless the generator wrote it.
+                    if (reference.Location.GetMappedLineSpan() is { HasMappedPath: true } mapped && Razor.RazorFiles.IsRazor(mapped.Path))
+                    {
+                        result.Add(new Location(DocumentUris.FromPath(Path.GetFullPath(mapped.Path)), Positions.ToRange(mapped.Span)));
+                    }
+
+                    continue;
+                }
+
                 var text = await reference.Document.GetTextAsync(cancellationToken).ConfigureAwait(false);
                 result.Add(new Location(WorkspaceManager.UriOf(reference.Document), Positions.ToRange(text, reference.Location.SourceSpan)));
             }

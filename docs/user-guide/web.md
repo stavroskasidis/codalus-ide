@@ -11,6 +11,21 @@ Debug → **Start with Hot Reload** runs the startup project under `dotnet watch
 
 The status bar shows the state (watching, applied in N ms, compile errors, restarting); click it to see the output. The **Hot Reload on Start Without Debugging** setting (`run.hotReload`) makes `Ctrl+F5` start with Hot Reload. Hot Reload isn't available while debugging: the debugger can't apply changes to a paused program, so restart the session instead.
 
+## Razor and Blazor
+
+`.razor` and `.cshtml` files are served by the C# language service, through the same Razor compiler the build uses:
+- **C# in a Razor file** (expressions like `@count`, event handlers like `@onclick="Increment"`, `@code` blocks): completion, hover, parameter info, Go to Definition, Find All References and highlighting. Errors appear in the editor and the Error List as you type.
+- **Markup:**
+  - after `<`: component names (your own and the framework's), with HTML elements;
+  - inside a component's tag: its parameters (`[Parameter]` properties) and directive attributes such as `@onclick` and `@bind`;
+  - after `@` at the start of a line: directives (`@page`, `@inject`, `@code`…).
+- **Hover and Go to Definition** work on a component's tag and on its parameters.
+- **Navigating to a component** from a `.cs` file opens its `.razor` file.
+
+Run, Debug and Hot Reload work as for other ASP.NET Core apps: with Hot Reload, saving a component applies markup and code changes to the running app.
+
+Not available in Razor files yet: rename, quick actions, formatting and folding. Errors that the Razor compiler itself reports (`RZ…`) appear after a build.
+
 ## The Endpoints Explorer
 
 View → Endpoints Explorer lists every endpoint of the solution's ASP.NET Core projects, by project:

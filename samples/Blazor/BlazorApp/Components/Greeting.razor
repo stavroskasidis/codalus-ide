@@ -1,0 +1,10 @@
+<p class="greeting">Hello, @Name!</p>
+
+@code {
+    /// <summary>Who to greet.</summary>
+    [Parameter]
+    public string Name { get; set; } = "world";
+
+    [Parameter]
+    public int Times { get; set; } = 1;
+}

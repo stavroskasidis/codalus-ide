@@ -327,6 +327,11 @@ internal sealed class WorkspaceManager : IDisposable
     {
         foreach (var (path, open) in _open.ToList())
         {
+            if (Razor.RazorFiles.IsRazor(path))
+            {
+                continue; // additional documents, loaded with the open text; never in Miscellaneous Files
+            }
+
             var ids = ProjectDocumentIds(solution, path);
             if (ids.Length > 0 && open.MiscId is { } miscId)
             {
@@ -345,7 +350,20 @@ internal sealed class WorkspaceManager : IDisposable
     }
 
     private ImmutableArray<DocumentId> ProjectDocumentIds(Solution solution, string path) =>
-        [.. solution.GetDocumentIdsWithFilePath(path).Where(id => id.ProjectId != _miscId)];
+        [.. solution.GetDocumentIdsWithFilePath(path).Where(id => id.ProjectId != _miscId && solution.ContainsDocument(id))];
+
+    /// <summary>A Razor file's additional documents (ADR 0023): its text drives the Razor source generator.</summary>
+    private static Solution WithRazorText(Solution solution, string path, SourceText text, bool fromDisk = false)
+    {
+        foreach (var id in solution.GetDocumentIdsWithFilePath(path).Where(solution.ContainsAdditionalDocument))
+        {
+            solution = fromDisk
+                ? solution.WithAdditionalDocumentTextLoader(id, new FileTextLoader(path, defaultEncoding: null), PreservationMode.PreserveValue)
+                : solution.WithAdditionalDocumentText(id, text, PreservationMode.PreserveIdentity);
+        }
+
+        return solution;
+    }
 
     // ------------------------------------------------------------------ open documents
 
@@ -356,6 +374,13 @@ internal sealed class WorkspaceManager : IDisposable
         lock (_gate)
         {
             var solution = _workspace.CurrentSolution;
+            if (Razor.RazorFiles.IsRazor(path))
+            {
+                _open[path] = new OpenDocument(version, sourceText, null);
+                _workspace.Replace(WithRazorText(solution, path, sourceText));
+                return;
+            }
+
             var ids = ProjectDocumentIds(solution, path);
             DocumentId? miscId = null;
             if (ids.Length > 0)
@@ -393,8 +418,16 @@ internal sealed class WorkspaceManager : IDisposable
             }
 
             var solution = _workspace.CurrentSolution;
-            var ids = open.MiscId is { } miscId ? [miscId] : ProjectDocumentIds(solution, path);
-            _workspace.Replace(solution.WithDocumentText(ids, text, PreservationMode.PreserveIdentity));
+            if (Razor.RazorFiles.IsRazor(path))
+            {
+                _workspace.Replace(WithRazorText(solution, path, text));
+            }
+            else
+            {
+                var ids = open.MiscId is { } miscId ? [miscId] : ProjectDocumentIds(solution, path);
+                _workspace.Replace(solution.WithDocumentText(ids, text, PreservationMode.PreserveIdentity));
+            }
+
             _open[path] = open with { Version = version, Text = text };
             return true;
         }
@@ -411,7 +444,11 @@ internal sealed class WorkspaceManager : IDisposable
             }
 
             var solution = _workspace.CurrentSolution;
-            if (open.MiscId is { } miscId)
+            if (Razor.RazorFiles.IsRazor(path))
+            {
+                solution = WithRazorText(solution, path, open.Text, fromDisk: true);
+            }
+            else if (open.MiscId is { } miscId)
             {
                 solution = solution.RemoveDocument(miscId);
             }

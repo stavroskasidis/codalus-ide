@@ -60,7 +60,7 @@ internal static partial class BuiltIns
 
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("view"), "web.endpoints", "view", 53),
+            Item(OtherWindowsMenu, "web.endpoints", "windows", AlphabeticalOrder("Endpoints Explorer")),
             Item(MenuLocations.MenuBar("project"), "web.manageUserSecrets", "web", 1),
             Item(MenuLocations.MenuBar("debug"), "web.selectEnvironment", "6-web", 1),
             Item(MenuLocations.MenuBar("debug"), "web.checkDevCertificate", "6-web", 2),

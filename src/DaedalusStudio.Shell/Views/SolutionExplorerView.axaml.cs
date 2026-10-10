@@ -150,7 +150,7 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
             vm.Selected = row;
         }
 
-        var items = shell.Workbench.Menus.GetItems(ContextMenuLocation);
+        var items = shell.Workbench.Menus.GetItems(ContextMenuLocation).Where(i => i.Submenu is null).ToList();
         if (items.Count == 0)
         {
             return;

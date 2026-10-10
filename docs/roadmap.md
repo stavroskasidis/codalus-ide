@@ -35,8 +35,8 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
 | M12 | Editor and code-navigation depth | at checkpoint: M12a (navigation and inline information, ADR 0017) and M12b (editing, refactoring UI and analysis, ADR 0018) |
 | M13 | Git depth and hosting integration | M13a at checkpoint: history, merge editor, operations, ADR 0020; M13b (hosting integration) planned |
 | M14 | Debugger depth | M14a at checkpoint: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b (companion host, dumps) and M14c (remote sessions) planned |
-| M15 | ASP.NET Core and Hot Reload | M15a and M15b at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch`, ADR 0022; M15c (scaffolding, service references) planned |
-| M16 | Razor, Blazor and web front-end | planned |
+| M15 | ASP.NET Core and Hot Reload | M15a and M15b at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch`, ADR 0022; M15c (scaffolding, service references) deferred until after M16 |
+| M16 | Razor, Blazor and web front-end | M16a at checkpoint: Razor editing through the Razor source generator, Blazor run and Hot Reload, ADR 0023; M16b (HTML, CSS and JavaScript services on Node) and M16c (Blazor WebAssembly, browser debugging) planned |
 | M17 | Containers, Aspire and publishing | planned |
 | M18 | Profiling and diagnostics tools | planned |
 | M19 | Avalonia XAML editing and live previewer | planned |
@@ -858,6 +858,8 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 ### M16 — Razor, Blazor and web front-end
 
 **Goal.** Rich editing for `.razor` and `.cshtml`, Blazor run, debug and hot reload, and good HTML, CSS and JavaScript editing.
+
+**Split (ADR 0023).** **M16a** (done): Razor through the Razor source generator in the C# host (C# features mapped through the generated code, component, parameter and directive completion, diagnostics), Blazor Web App run and Hot Reload. **M16b**: HTML, CSS and JavaScript/TypeScript language services on a pinned, on-demand Node runtime (D3). **M16c**: Blazor WebAssembly run and Hot Reload, and WebAssembly and JavaScript debugging through `vscode-js-debug`.
 
 **Depends on.** M15, M11, F1 (generated and virtual documents), F4 (Node policy).
 
@@ -1828,3 +1830,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-10: M14a built and at its checkpoint (ADR 0021): exception settings per type (conditions on netcoredbg's `all` filter), an exception helper with the inner-exception chain, Run to Cursor, Force Run to Cursor and Run to Click, function, temporary and dependent breakpoints, breakpoint labels, search, import and export, QuickWatch, editing values in Watch, QuickWatch and data tips (`setExpression`), data tips as trees, Text, JSON, XML and HTML visualizers, PerfTips, the Threads and Modules windows, and Reattach to Process. M14 is split into M14a, M14b (companion host, dumps) and M14c (remote and special sessions).
 - 2026-10-10: M15a built and at its checkpoint (ADR 0022): an Endpoints Explorer from Roslyn (minimal APIs with `MapGroup` prefixes, controller attribute and conventional routes) with Generate Request, `.http` files (grammar, send glyphs, file, environment and request variables, dynamic variables, `< file` bodies) run in the shell with an HTTP Response window and history, an ASP.NET Core environment selector for Run and Debug, the HTTPS development certificate (check, trust, an offer before the first https run), and user secrets. Hot Reload (M15b) will use `dotnet watch` instead of Roslyn's unpublished hot-reload API.
 - 2026-10-10: M15b built and at its checkpoint (ADR 0022): Start with Hot Reload runs the startup project under `dotnet watch` with the plan Run would use, Apply Code Changes (`Alt+F10`), a status bar item that follows the watch's output, a notification on rude edits, and a setting for Hot Reload on `Ctrl+F5`. Not while debugging (netcoredbg can't apply updates).
+- 2026-10-10: M16a built and at its checkpoint (ADR 0023): `.razor` and `.cshtml` files served by the C# host through the Razor source generator. C# features (completion, hover, signature help, definition, references, highlights, diagnostics) are mapped through the generator's `#line` mappings; markup gets component, parameter and directive completion, plus hover and definition on components. Locations in Razor-generated code move to the Razor file. A Blazor fixture, run and Hot Reload. M15c (scaffolding, service references) is deferred until after M16; it has no dependents among M16's parts.

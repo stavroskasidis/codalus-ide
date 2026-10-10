@@ -43,7 +43,7 @@ public class LanguageFixture : IAsyncLifetime
         var policy = new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) };
         Solutions = new SolutionService(() => RepoPaths.BuildHostAssembly, policy);
         var registry = new LanguageServiceRegistry();
-        registry.Register(new LanguageServiceDescriptor("csharp", "C#", [".cs"], "C#", () => ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly)));
+        registry.Register(new LanguageServiceDescriptor("csharp", "C#", [".cs"], "C#", () => ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly)) { Languages = ["csharp", "razor"] });
         Languages = new LanguageService(registry, Solutions, policy);
         Solutions.Log += (_, line) => Record("[build] " + line);
         Languages.Log += (_, line) => Record("[lang] " + line);
@@ -98,13 +98,14 @@ public class LanguageFixture : IAsyncLifetime
 
     public async Task<string> OpenAsync(string path)
     {
+        var languageId = path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase) ? "razor" : "csharp";
         var text = await System.IO.File.ReadAllTextAsync(path);
         lock (_texts)
         {
             _texts[path] = (text, 1);
         }
 
-        await Languages.OpenAsync(new LanguageDocument(path, "csharp", () => Text(path)));
+        await Languages.OpenAsync(new LanguageDocument(path, languageId, () => Text(path)));
         return text;
     }
 

@@ -22,6 +22,8 @@ namespace DaedalusStudio.Shell;
 public sealed partial class ShellHost : IEditorServices
 {
     public const string CSharpLanguageId = "csharp";
+
+    public const string RazorLanguageId = "razor";
     private const string StatusSource = "daedalus.editor";
 
     private readonly Dictionary<string, CodeDocument> _models = new(SolutionPaths.Comparer);
@@ -62,7 +64,11 @@ public sealed partial class ShellHost : IEditorServices
     {
         EditorOptions = new EditorOptions(Workbench.Settings);
         var registry = Workbench.LanguageServers;
-        registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve));
+        registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve)
+        {
+            // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023).
+            Languages = [CSharpLanguageId, RazorLanguageId],
+        });
         registry.Register(new LanguageServiceDescriptor("markup", "JSON, XML and YAML", [], null, MarkupHostLaunch.Resolve)
         {
             Languages = MarkupHostLaunch.Languages,

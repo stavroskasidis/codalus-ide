@@ -17,6 +17,7 @@ internal sealed class LanguageServer : IAsyncDisposable
     private readonly JsonRpcConnection _connection;
     private readonly WorkspaceManager _workspace = new();
     private readonly CompletionFeature _completion = new();
+    private readonly Razor.RazorFeatures _razor;
     private readonly CodeActionsFeature _codeActions;
     private readonly CodeCleanupFeature _cleanup;
     private readonly DiagnosticsService _diagnostics;
@@ -25,6 +26,7 @@ internal sealed class LanguageServer : IAsyncDisposable
     public LanguageServer(JsonRpcConnection connection)
     {
         _connection = connection;
+        _razor = new Razor.RazorFeatures(_completion, message => Log(MessageType.Log, message));
         _diagnostics = new DiagnosticsService(_workspace, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _cleanup = new CodeCleanupFeature(_diagnostics, message => Log(MessageType.Log, message));
@@ -127,18 +129,23 @@ internal sealed class LanguageServer : IAsyncDisposable
         // ------------------------------------------------------------ features
 
         OnPosition(Methods.Completion, json.CompletionParams, json.CompletionList, p => (p.TextDocument, p.Position),
-            async (document, offset, p, ct) => await _completion.CompleteAsync(document, offset, p.Context, ct).ConfigureAwait(false), new CompletionList(false, []));
+            async (document, offset, p, ct) => await _completion.CompleteAsync(document, offset, p.Context, ct).ConfigureAwait(false), new CompletionList(false, []),
+            (mapping, offset, p, ct) => _razor.CompleteAsync(mapping, offset, p.Context, ct));
         _connection.OnRequest(Methods.CompletionResolve, json.CompletionItem, json.CompletionItem, (item, ct) => _completion.ResolveAsync(item, ct));
         OnPosition(Methods.Hover, json.TextDocumentPositionParams, json.Hover, p => (p.TextDocument, p.Position),
-            (document, offset, _, ct) => HoverFeature.HoverAsync(document, offset, ct), null);
+            (document, offset, _, ct) => HoverFeature.HoverAsync(document, offset, ct), null,
+            (mapping, offset, _, ct) => _razor.HoverAsync(mapping, offset, ct));
         OnPosition(Methods.SignatureHelp, json.SignatureHelpParams, json.SignatureHelp, p => (p.TextDocument, p.Position),
-            (document, offset, _, ct) => SignatureHelpFeature.SignatureHelpAsync(document, offset, ct), null);
+            (document, offset, _, ct) => SignatureHelpFeature.SignatureHelpAsync(document, offset, ct), null,
+            (mapping, offset, _, ct) => mapping.ToGenerated(offset) is { } generated ? SignatureHelpFeature.SignatureHelpAsync(mapping.Generated, generated, ct) : Task.FromResult<SignatureHelp?>(null));
         OnPosition(Methods.Definition, json.TextDocumentPositionParams, json.LocationArray, p => (p.TextDocument, p.Position),
-            async (document, offset, _, ct) => await NavigationFeature.DefinitionAsync(document, offset, ct).ConfigureAwait(false), []);
+            async (document, offset, _, ct) => await NavigationFeature.DefinitionAsync(document, offset, ct).ConfigureAwait(false), [],
+            async (mapping, offset, _, ct) => await _razor.DefinitionAsync(mapping, offset, ct).ConfigureAwait(false));
         OnPosition(Methods.Implementation, json.TextDocumentPositionParams, json.LocationArray, p => (p.TextDocument, p.Position),
             async (document, offset, _, ct) => await NavigationFeature.ImplementationAsync(document, offset, ct).ConfigureAwait(false), []);
         OnPosition(Methods.DocumentHighlight, json.TextDocumentPositionParams, json.DocumentHighlightArray, p => (p.TextDocument, p.Position),
-            async (document, offset, _, ct) => await NavigationFeature.HighlightsAsync(document, offset, ct).ConfigureAwait(false), []);
+            async (document, offset, _, ct) => await NavigationFeature.HighlightsAsync(document, offset, ct).ConfigureAwait(false), [],
+            async (mapping, offset, _, ct) => await _razor.HighlightsAsync(mapping, offset, ct).ConfigureAwait(false));
         OnDocument(Methods.FoldingRange, json.FoldingRangeParams, json.FoldingRangeArray, p => p.TextDocument,
             async (document, _, ct) => await FoldingFeature.FoldingRangesAsync(document, ct).ConfigureAwait(false), []);
         OnDocument(Methods.SemanticTokensFull, json.SemanticTokensParams, json.SemanticTokens, p => p.TextDocument,
@@ -148,7 +155,10 @@ internal sealed class LanguageServer : IAsyncDisposable
         OnDocument(Methods.DocumentOptions, json.DocumentOptionsParams, json.DocumentOptions, p => p.TextDocument,
             DocumentOptionsAsync, new DocumentOptions(true, 4, 4, null));
         OnPosition(Methods.References, json.ReferenceParams, json.LocationArray, p => (p.TextDocument, p.Position),
-            async (document, offset, p, ct) => await ReferencesFeature.ReferencesAsync(document, offset, p.Context.IncludeDeclaration, ct).ConfigureAwait(false), []);
+            async (document, offset, p, ct) => await ReferencesFeature.ReferencesAsync(document, offset, p.Context.IncludeDeclaration, ct).ConfigureAwait(false), [],
+            async (mapping, offset, p, ct) => mapping.ToGenerated(offset) is { } generated
+                ? await ReferencesFeature.ReferencesAsync(mapping.Generated, generated, p.Context.IncludeDeclaration, ct).ConfigureAwait(false)
+                : []);
         OnPosition(Methods.PrepareRename, json.TextDocumentPositionParams, json.PrepareRenameResult, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => RenameFeature.PrepareAsync(document, offset, ct), null);
         OnPosition(Methods.Rename, json.RenameParams, json.WorkspaceEdit, p => (p.TextDocument, p.Position),
@@ -268,19 +278,30 @@ internal sealed class LanguageServer : IAsyncDisposable
         _diagnostics.ScheduleBackground();
     }
 
-    /// <summary>A request about a position in a document. The solution is read when the request arrives.</summary>
+    /// <summary>
+    /// A request about a position in a document. The solution is read when the request arrives. In a Razor file, the
+    /// request goes to <paramref name="razor"/> (ADR 0023) with the file's mapping to its generated C#.
+    /// </summary>
     private void OnPosition<TParams, TResult>(
         string method,
         JsonTypeInfo<TParams> paramsInfo,
         JsonTypeInfo<TResult> resultInfo,
         Func<TParams, (TextDocumentIdentifier Document, Position Position)> where,
         Func<Document, int, TParams, CancellationToken, Task<TResult?>> handler,
-        TResult? empty)
+        TResult? empty,
+        Func<Razor.RazorMapping, int, TParams, CancellationToken, Task<TResult?>>? razor = null)
     {
         _connection.OnRequest(method, paramsInfo, resultInfo, async (p, ct) =>
         {
             var solution = _workspace.CurrentSolution;
             var (identifier, position) = where(p);
+            if (razor is not null && DocumentUris.ToPath(identifier.Uri) is { } path && Razor.RazorFiles.IsRazor(path))
+            {
+                return await Razor.RazorMapping.CreateAsync(solution, path, ct).ConfigureAwait(false) is { } mapping
+                    ? await razor(mapping, Positions.ToOffset(mapping.RazorText, position), p, ct).ConfigureAwait(false) ?? empty!
+                    : empty!;
+            }
+
             if (await WorkspaceManager.FindDocumentAsync(solution, identifier.Uri, ct).ConfigureAwait(false) is not { } document)
             {
                 return empty!;

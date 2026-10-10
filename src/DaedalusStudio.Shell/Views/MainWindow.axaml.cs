@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using DaedalusStudio.Diagnostics.BenchEvents;
 using DaedalusStudio.Shell.Controls;
 using DaedalusStudio.Shell.Docking;
@@ -231,10 +232,17 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void SaveScreenshot(string path)
     {
+        // The visual root includes the window decorations Avalonia draws (the caption buttons on Windows).
+        Visual root = this;
+        while (root.GetVisualParent() is { } parent)
+        {
+            root = parent;
+        }
+
         var scaling = RenderScaling;
-        var size = new PixelSize((int)(Bounds.Width * scaling), (int)(Bounds.Height * scaling));
+        var size = new PixelSize((int)(root.Bounds.Width * scaling), (int)(root.Bounds.Height * scaling));
         using var bitmap = new RenderTargetBitmap(size, new Vector(96 * scaling, 96 * scaling));
-        bitmap.Render(this);
+        bitmap.Render(root);
         bitmap.Save(path, PngBitmapEncoderOptions.Default);
     }
 

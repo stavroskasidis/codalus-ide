@@ -56,7 +56,7 @@ internal static partial class BuiltIns
 
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("view"), "workbench.view.interactive", "view", 52),
+            Item(OtherWindowsMenu, "workbench.view.interactive", "windows", AlphabeticalOrder("C# Interactive")),
             Item(SolutionExplorerView.ContextMenuLocation, "interactive.initializeWithProject", "5-path", 4, "explorerItemKind == project"),
             Item(MenuLocations.EditorContext, "interactive.sendSelection", "5-terminal", 2),
         ]);

@@ -386,7 +386,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     private IReadOnlyList<ToolbarActionViewModel> TitleActions(string viewId)
     {
         var scope = Workbench.Context.With(new Dictionary<string, object?>(StringComparer.Ordinal) { ["view"] = viewId, ["focusedView"] = viewId });
-        return [.. Workbench.Menus.GetItems(MenuLocations.ToolWindowTitle, scope).Select(i => new ToolbarActionViewModel(i.Title, i.KeyLabel, CommandFor(i.Command)))];
+        return [.. Workbench.Menus.GetItems(MenuLocations.ToolWindowTitle, scope).Where(i => i.Submenu is null).Select(i => new ToolbarActionViewModel(i.Title, i.KeyLabel, CommandFor(i.Command)))];
     }
 
     /// <summary>One <c>workbench.view.&lt;id&gt;</c> command (and View menu entry) per tool window.</summary>
@@ -409,7 +409,10 @@ public sealed partial class ShellHost : IAsyncDisposable
                 await Ui.RunAsync(() => Layout.ShowToolWindow(windowId, focus: !preserveFocus)).ConfigureAwait(false);
                 return null;
             });
-            added.Add(new MenuItemRule(MenuLocations.MenuBar("view"), id, ContributionSource.Shell) { Group = "view" });
+            if (BuiltIns.ViewMenuEntry(window.Id, window.Title, id, ContributionSource.Shell) is { } entry)
+            {
+                added.Add(entry);
+            }
         }
 
         if (added.Count > 0)

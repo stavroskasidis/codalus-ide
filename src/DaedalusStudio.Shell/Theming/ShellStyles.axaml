@@ -75,6 +75,11 @@
   <Style Selector="Border.titleBar Menu">
     <Setter Property="Background" Value="Transparent" />
   </Style>
+  <!-- Avalonia's drawn decorations write the window's title over the client area; our title row has the menu there
+       (the solution's name is shown next to the search box). A trigger selector outranks the template's binding. -->
+  <Style Selector="WindowDrawnDecorations:not(:fullscreen) /template/ Panel#PART_TitleTextPanel">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
   <Style Selector="Border.standardToolbar">
     <Setter Property="Background" Value="{DynamicResource Shell.Toolbar}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Border}" />

@@ -105,6 +105,38 @@ public class ChromeTests
     }
 
     [AvaloniaFact]
+    public async Task The_view_menu_keeps_the_main_windows_and_the_rest_in_submenus()
+    {
+        await using var f = ShellFixture.Create();
+        var menus = f.Shell.Workbench.Menus;
+        var view = menus.GetItems(Workbench.Menus.MenuLocations.MenuBar("view"));
+
+        // Short enough for a screen, without duplicates, with the main windows first and Other Windows after them.
+        Assert.True(view.Count <= 20, string.Join(", ", view.Select(i => i.Title)));
+        Assert.Equal(view.Count, view.Where(i => i.Submenu is null).Select(i => i.Command).Distinct().Count() + view.Count(i => i.Submenu is not null));
+        Assert.Equal(["Solution Explorer", "Git Changes", "Test Explorer"], view.Where(i => i.Group == "view").Take(3).Select(i => i.Title));
+        var other = Assert.Single(view, i => i.Submenu == BuiltIns.OtherWindowsMenu);
+        Assert.Equal("Other Windows", other.Title);
+        Assert.DoesNotContain(view, i => i.Title is "Locals" or "Find Results" or "C# Interactive");
+
+        var others = menus.GetItems(BuiltIns.OtherWindowsMenu).Select(i => i.Title).ToList();
+        Assert.Contains("Find Results", others);
+        Assert.Contains("C# Interactive", others);
+        Assert.Contains("Endpoints Explorer", others);
+        Assert.Equal(others.Order(StringComparer.OrdinalIgnoreCase), others); // alphabetical
+        Assert.Equal(others.Count, others.Distinct().Count());
+
+        // The debugger's windows are under Debug → Windows.
+        var debug = menus.GetItems(Workbench.Menus.MenuLocations.MenuBar("debug"));
+        Assert.Contains(debug, i => i is { Submenu: BuiltIns.DebugWindowsMenu, Title: "Windows" });
+        var windows = menus.GetItems(BuiltIns.DebugWindowsMenu).Select(i => i.Title).ToList();
+        Assert.Contains("Locals", windows);
+        Assert.Contains("Breakpoints", windows);
+        Assert.Contains("Threads", windows);
+        Assert.DoesNotContain(debug, i => i.Title == "Locals");
+    }
+
+    [AvaloniaFact]
     public async Task Settings_are_an_options_tree_reached_from_the_tools_menu()
     {
         await using var f = ShellFixture.Create();

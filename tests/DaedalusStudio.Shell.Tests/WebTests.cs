@@ -58,11 +58,12 @@ public sealed class WebTests
         {
             await ShellFixture.PumpUntil(() => f.Shell.Runs.Running[0].Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true, seconds: 120);
             await f.Shell.SendHttpRequestAsync(http, editor.Model.Text.Text, 3);
-            await ShellFixture.PumpUntil(() => f.Shell.HttpResponse.Selected is not null);
+            await ShellFixture.PumpUntil(() => f.Shell.HttpResponse.History.Count == 1);
             Assert.Equal(200, f.Shell.HttpResponse.Selected!.Exchange.Response?.StatusCode);
             Assert.Equal("Hello from the Web fixture", f.Shell.HttpResponse.Selected.Exchange.Response?.Body);
 
             await f.Shell.SendHttpRequestAsync(http, editor.Model.Text.Text, 14);
+            await ShellFixture.PumpUntil(() => f.Shell.HttpResponse.History.Count == 2); // the window updates through Ui.Post
             Assert.Equal(201, f.Shell.HttpResponse.Selected!.Exchange.Response?.StatusCode);
             Assert.Contains("\"title\": \"From the .http file\"", f.Shell.HttpResponse.Body.Text, StringComparison.Ordinal); // indented JSON
             Assert.Equal("json", f.Shell.HttpResponse.Body.LanguageId);

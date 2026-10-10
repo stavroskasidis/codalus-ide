@@ -203,6 +203,49 @@ internal static partial class BuiltIns
         }, palette: false);
     }
 
+    /// <summary>View → Other Windows: the tool windows that aren't on the View menu itself.</summary>
+    public const string OtherWindowsMenu = "menuBar/view/otherWindows";
+
+    /// <summary>Debug → Windows: the debugger's tool windows.</summary>
+    public const string DebugWindowsMenu = "menuBar/debug/windows";
+
+    /// <summary>The tool windows on the View menu itself, in this order (as a classic IDE's View menu); the rest go to submenus.</summary>
+    private static readonly string[] s_mainViewWindows =
+        ["solutionExplorer", "git.changes", "testExplorer", "bookmarks", "codeDefinition", "errorList", "output", "taskList", "terminal", "notifications"];
+
+    /// <summary>Tool windows whose menu entry is contributed explicitly (with a command that does more than show them).</summary>
+    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints" };
+
+    /// <summary>Where a tool window's <c>workbench.view.*</c> entry goes, or null when it has an explicit one.</summary>
+    public static MenuItemRule? ViewMenuEntry(string windowId, string title, string command, ContributionSource source)
+    {
+        if (s_explicitViewEntries.Contains(windowId))
+        {
+            return null;
+        }
+
+        var main = Array.IndexOf(s_mainViewWindows, windowId);
+        if (main >= 0)
+        {
+            return new MenuItemRule(MenuLocations.MenuBar("view"), command, source) { Group = "view", Order = main * 10 };
+        }
+
+        var location = windowId.StartsWith("debug.", StringComparison.Ordinal) ? DebugWindowsMenu : OtherWindowsMenu;
+        return new MenuItemRule(location, command, source) { Group = "windows", Order = AlphabeticalOrder(title) };
+    }
+
+    /// <summary>An order that sorts titles alphabetically (by their first four letters).</summary>
+    internal static int AlphabeticalOrder(string title)
+    {
+        var order = 0;
+        for (var i = 0; i < 4; i++)
+        {
+            order = (order * 64) + (i < title.Length ? Math.Clamp(char.ToUpperInvariant(title[i]) - ' ', 0, 63) : 0);
+        }
+
+        return order;
+    }
+
     public static void RegisterMenus(MenuRegistry menus)
     {
         menus.AddMenuBarMenu(new MenuBarMenu("file", "_File", 10));
@@ -224,6 +267,8 @@ internal static partial class BuiltIns
             Item("tools", "workbench.openOptions", "preferences", 3),
             Item("file", "workbench.quit", "exit"),
             Item("view", "workbench.showCommandPalette", "navigation"),
+            MenuItemRule.ForSubmenu(MenuLocations.MenuBar("view"), OtherWindowsMenu, "Other Windows", shell) with { Group = "view", Order = 1000 },
+            MenuItemRule.ForSubmenu(MenuLocations.MenuBar("debug"), DebugWindowsMenu, "Windows", shell) with { Group = "5-windows", Order = 0 },
             Item("view", "workbench.resetLayout", "layout", 1),
             Item("view", "workbench.focusNextPane", "layout", 2),
             Item("view", "workbench.focusPreviousPane", "layout", 3),

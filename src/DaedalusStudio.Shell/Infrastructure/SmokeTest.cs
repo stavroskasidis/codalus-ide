@@ -756,6 +756,56 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
                 shell.StopRunning();
             }
         }, "web.http").ConfigureAwait(true);
+
+        await StepAsync("blazor.razor", "M16", "Razor files get C# features through the Razor generator; the Blazor app runs", async () =>
+        {
+            await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+            var (solution, port) = PrepareBlazorFixture();
+            await shell.OpenSolutionAsync(solution).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Blazor solution is open", 300).ConfigureAwait(true);
+            await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready, Projects: 1 }, "the C# service loads the Blazor project", 300).ConfigureAwait(true);
+            var counter = Path.Combine(_work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
+            var editor = await OpenAsync(counter).ConfigureAwait(true);
+            Check(editor.Model.LanguageId == ShellHost.RazorLanguageId, "Counter.razor is a Razor file");
+            var client = shell.Languages.RunningClient(ShellHost.CSharpLanguageId)!;
+            var at = editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("@currentCount", StringComparison.Ordinal) + 3);
+            string? hover = null;
+            await WaitAsync(() => (hover = client.HoverAsync(editor.Model.Uri, at, CancellationToken.None).GetAwaiter().GetResult()?.Contents.Value) is not null,
+                "hover on C# in the Razor file", 120).ConfigureAwait(true);
+            Check(hover!.Contains("currentCount", StringComparison.Ordinal), "the hover describes the field: " + hover);
+            var completion = await client.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("<button", StringComparison.Ordinal) + 1),
+                new LanguageServices.Protocol.CompletionContext(LanguageServices.Protocol.CompletionTriggerKind.Invoked, null), CancellationToken.None).ConfigureAwait(true);
+            Check(completion?.Items.Any(i => i.Label == "PageTitle") == true, "markup completion offers components");
+
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            try
+            {
+                await WaitAsync(() => shell.Runs.Running.Count == 1 && shell.Runs.Running[0].Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true,
+                    "the Blazor app listens", 300).ConfigureAwait(true);
+                using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+                var page = await http.GetStringAsync(new Uri($"http://localhost:{port}/counter")).ConfigureAwait(true);
+                Check(page.Contains("<h1>Counter</h1>", StringComparison.Ordinal), "the app renders the Counter page");
+            }
+            finally
+            {
+                shell.StopRunning();
+            }
+        }).ConfigureAwait(true);
+    }
+
+    /// <summary>samples/Blazor with a free port in its launch profile.</summary>
+    private (string Solution, string Port) PrepareBlazorFixture()
+    {
+        Check(File.Exists(Path.Combine(samples, "Blazor", "Blazor.slnx")), $"the samples folder {samples} has Blazor");
+        var target = Path.Combine(_work, "Blazor");
+        Copy(Path.Combine(samples, "Blazor"), target);
+        using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        socket.Start();
+        var port = ((System.Net.IPEndPoint)socket.LocalEndpoint).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        socket.Stop();
+        var settings = Path.Combine(target, "BlazorApp", "Properties", "launchSettings.json");
+        File.WriteAllText(settings, File.ReadAllText(settings).Replace("5280", port, StringComparison.Ordinal));
+        return (Path.Combine(target, "Blazor.slnx"), port);
     }
 
     /// <summary>samples/Web with a free port in its launch profile and .http file.</summary>
@@ -976,10 +1026,16 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     {
         try
         {
+            Visual root = window; // up to the host, with the decorations Avalonia draws
+            while (root.GetVisualParent() is { } parent)
+            {
+                root = parent;
+            }
+
             var scaling = window.RenderScaling;
-            var size = new PixelSize(Math.Max(1, (int)(window.Bounds.Width * scaling)), Math.Max(1, (int)(window.Bounds.Height * scaling)));
+            var size = new PixelSize(Math.Max(1, (int)(root.Bounds.Width * scaling)), Math.Max(1, (int)(root.Bounds.Height * scaling)));
             using var bitmap = new RenderTargetBitmap(size, new Vector(96 * scaling, 96 * scaling));
-            bitmap.Render(window);
+            bitmap.Render(root);
             Directory.CreateDirectory(shell.Paths.Logs);
             bitmap.Save(Path.Combine(shell.Paths.Logs, name), PngBitmapEncoderOptions.Default);
         }

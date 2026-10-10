@@ -33,10 +33,23 @@ public sealed record MenuItemRule(string Location, string Command, ContributionS
 
     /// <summary>Overrides the command title in this menu.</summary>
     public string? Title { get; init; }
+
+    /// <summary>
+    /// Makes the entry a submenu titled <see cref="Title"/> whose items are those of this location (its
+    /// <see cref="Command"/> is ignored). It is shown while it has visible items.
+    /// </summary>
+    public string? Submenu { get; init; }
+
+    /// <summary>A submenu entry: <paramref name="submenu"/> is the location of its items.</summary>
+    public static MenuItemRule ForSubmenu(string location, string submenu, string title, ContributionSource source) =>
+        new(location, string.Empty, source) { Submenu = submenu, Title = title };
 }
 
-/// <summary>A resolved, visible menu entry.</summary>
-public sealed record MenuItem(string Command, string Title, string? KeyLabel, bool Enabled, string Group);
+/// <summary>A resolved, visible menu entry. A <see cref="Submenu"/> entry has no command: its items are that location's.</summary>
+public sealed record MenuItem(string Command, string Title, string? KeyLabel, bool Enabled, string Group)
+{
+    public string? Submenu { get; init; }
+}
 
 public sealed class MenuRegistry(CommandRegistry commands, KeybindingService keybindings, IContextKeyReader context)
 {
@@ -120,7 +133,22 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
                      .ThenBy(r => r.Group, StringComparer.Ordinal)
                      .ThenBy(r => r.Order))
         {
-            if (!rule.When.Evaluate(scope) || commands.Find(rule.Command) is not { } descriptor)
+            if (!rule.When.Evaluate(scope))
+            {
+                continue;
+            }
+
+            if (rule.Submenu is { } submenu)
+            {
+                if (submenu != location && GetItems(submenu, scope).Count > 0)
+                {
+                    result.Add(new MenuItem(string.Empty, rule.Title ?? submenu, null, true, rule.Group) { Submenu = submenu });
+                }
+
+                continue;
+            }
+
+            if (commands.Find(rule.Command) is not { } descriptor)
             {
                 continue;
             }

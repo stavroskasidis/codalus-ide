@@ -63,6 +63,8 @@ Shapes narrowed from LSP's unions (documented on the C# types): `documentation` 
 
 **`ProjectData`** `{path, name, language, targetFramework, arguments, outputPath?, outputRefPath?, projectReferences?}` is a design-time build's result (the build host's `project/compilerInputs`, [project-protocol.md](project-protocol.md)): the compiler command line, with sources relative to the project directory. The server parses it like the compiler does. A reference to another project's output (or reference assembly), or to the assembly of a referenced project built for another target framework, becomes a project reference. Only one target framework per project is loaded: the active one, chosen in the editor's project-context picker.
 
+**Razor files** (M16a, ADR 0023). The server also takes `.razor` and `.cshtml` documents (language `razor`). They are additional files of their projects: their text drives the Razor source generator. Completion, hover, signature help, definition, highlights and references in their C# run on the generated document and are mapped back. In markup, completion offers components, parameters and directives, and hover and definition work on components and parameters. Diagnostics are published for the Razor file. Other requests answer empty. Locations in Razor-generated C# are reported in the Razor file.
+
 **Projects and files.** Files of loaded projects get full semantics. Files outside any loaded project, and every file of an untrusted folder, go to a "Miscellaneous Files" project with framework references only. Open documents move between the two as projects arrive. Closed files are reloaded when they change on disk.
 
 ## Semantic token legend

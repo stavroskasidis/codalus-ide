@@ -29,7 +29,26 @@ internal sealed class CompletionFeature
     private Cached? _last;
     private long _nextResultId;
 
-    private sealed record Cached(long ResultId, Document Document, RoslynCompletionList List);
+    /// <summary>A list's items; <see cref="MapRange"/> maps the edits of a Razor file's list (ADR 0023).</summary>
+    private sealed record Cached(long ResultId, Document Document, RoslynCompletionList List)
+    {
+        public Func<Protocol.Range, Protocol.Range?>? MapRange { get; init; }
+    }
+
+    /// <summary>
+    /// The last list was for a Razor file: resolving its items maps the main edit back to the Razor file and drops the
+    /// additional ones (a using added to the generated file).
+    /// </summary>
+    public void MapLastList(Func<Protocol.Range, Protocol.Range?> mapRange)
+    {
+        lock (_gate)
+        {
+            if (_last is { } last)
+            {
+                _last = last with { MapRange = mapRange };
+            }
+        }
+    }
 
     internal sealed record ItemData(long ResultId, int Index);
 
@@ -125,9 +144,20 @@ internal sealed class CompletionFeature
         }
 
         var additional = changes.Where(c => c != main).Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), c.NewText ?? string.Empty)).ToArray();
+        var documentation = description is null || description.TaggedParts.IsEmpty ? null : MarkupContent.Markdown(Markdown.FromDescription(description.TaggedParts));
+        if (cached.MapRange is { } map)
+        {
+            return item with
+            {
+                Documentation = documentation,
+                TextEdit = map(Positions.ToRange(text, main.Span)) is { } range ? new Protocol.TextEdit(range, main.NewText ?? string.Empty) : item.TextEdit,
+                AdditionalTextEdits = null,
+            };
+        }
+
         return item with
         {
-            Documentation = description is null || description.TaggedParts.IsEmpty ? null : MarkupContent.Markdown(Markdown.FromDescription(description.TaggedParts)),
+            Documentation = documentation,
             TextEdit = new Protocol.TextEdit(Positions.ToRange(text, main.Span), main.NewText ?? string.Empty),
             AdditionalTextEdits = additional.Length == 0 ? null : additional,
         };
