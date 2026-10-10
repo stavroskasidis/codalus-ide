@@ -491,6 +491,54 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => shell.Git.Status is { Branch: "smoke/branch" }, "the new branch is checked out").ConfigureAwait(true);
         }, "projects.open").ConfigureAwait(true);
 
+        await StepAsync("git.depth", "M13", "History with its graph, stash, tags, and a conflict resolved in the merge editor", async () =>
+        {
+            // History: the commits of every branch, with the graph laid out.
+            var history = await shell.ShowHistoryAsync().ConfigureAwait(true) ?? throw new SmokeFailure("The history didn't open.");
+            await WaitAsync(() => history.ViewModel.Rows.Any(r => r.Subject == "Smoke test") && history.ViewModel.Rows.All(r => r.Graph is not null), "the history lists the smoke commit with its graph", 60).ConfigureAwait(true);
+
+            // Stash and pop an edit.
+            var original = await File.ReadAllTextAsync(Greeter).ConfigureAwait(true);
+            await File.WriteAllTextAsync(Greeter, original + "// stashed\n").ConfigureAwait(true);
+            await shell.Git.RefreshAsync().ConfigureAwait(true);
+            await shell.Git.StashAsync("smoke", includeUntracked: false).ConfigureAwait(true);
+            Check(!(await File.ReadAllTextAsync(Greeter).ConfigureAwait(true)).Contains("// stashed", StringComparison.Ordinal), "the edit is stashed");
+            var stash = (await shell.Git.StashesAsync().ConfigureAwait(true)).Single();
+            await shell.Git.ApplyStashAsync(stash, pop: true).ConfigureAwait(true);
+            Check((await File.ReadAllTextAsync(Greeter).ConfigureAwait(true)).Contains("// stashed", StringComparison.Ordinal), "the stash pops back");
+            await shell.Git.DiscardAsync([Greeter]).ConfigureAwait(true);
+
+            // Tags.
+            await shell.Git.CreateTagAsync("smoke-tag", null, "Smoke").ConfigureAwait(true);
+            Check((await shell.Git.TagsAsync().ConfigureAwait(true)).Any(t => t.Name == "smoke-tag"), "the tag is created");
+
+            // A conflict between two branches, resolved in the merge editor and continued.
+            await File.WriteAllTextAsync(Greeter, original.Replace("Hello from", "Ours from", StringComparison.Ordinal)).ConfigureAwait(true);
+            await shell.Git.CommitAsync("ours", amend: false, all: true).ConfigureAwait(true);
+            await shell.Git.CreateBranchAtAsync("smoke/theirs", "HEAD~1", switchTo: true).ConfigureAwait(true);
+            await File.WriteAllTextAsync(Greeter, original.Replace("Hello from", "Theirs from", StringComparison.Ordinal)).ConfigureAwait(true);
+            await shell.Git.CommitAsync("theirs", amend: false, all: true).ConfigureAwait(true);
+            await shell.Git.SwitchAsync(new DaedalusStudio.Workbench.Git.GitBranch("smoke/branch", false, false, null, string.Empty)).ConfigureAwait(true);
+            try
+            {
+                await shell.Git.MergeAsync("smoke/theirs").ConfigureAwait(true);
+            }
+            catch (DaedalusStudio.Workbench.Git.GitException)
+            {
+                // The expected conflict.
+            }
+
+            await WaitAsync(() => shell.Git.Status is { Operation: "merge" } && shell.Git.Status.Conflicts.Any(), "the merge stops on the conflict").ConfigureAwait(true);
+            _ = await shell.OpenMergeEditorAsync(Greeter).ConfigureAwait(true) ?? throw new SmokeFailure("The merge editor didn't open.");
+            await WaitAsync(() => window.GetVisualDescendants().OfType<MergeEditorView>().Any(), "the merge editor renders").ConfigureAwait(true);
+            var merge = window.GetVisualDescendants().OfType<MergeEditorView>().Single();
+            merge.Accept("incoming");
+            await merge.AcceptMergeAsync().ConfigureAwait(true);
+            await shell.ContinueOperationAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.Git.Status is { Operation: null, Files.Count: 0 }, "the merge is committed").ConfigureAwait(true);
+            Check((await File.ReadAllTextAsync(Greeter).ConfigureAwait(true)).Contains("Theirs from", StringComparison.Ordinal), "the incoming side won");
+        }, "git.changes").ConfigureAwait(true);
+
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
         {
@@ -533,7 +581,14 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => vm.Sources.Contains("local"), "the package sources are listed").ConfigureAwait(true);
             vm.SelectedSource = "local";
             vm.Search = "Daedalus.Sample.Greeting";
-            await WaitAsync(() => vm.Rows.Any(r => r is { Id: "Daedalus.Sample.Greeting", Version: "1.1.0", InstalledVersion: "1.0.0" }) && !vm.IsLoading, "the feed's package shows with its installed version", 60).ConfigureAwait(true);
+            try
+            {
+                await WaitAsync(() => vm.Rows.Any(r => r is { Id: "Daedalus.Sample.Greeting", Version: "1.1.0", InstalledVersion: "1.0.0" }) && !vm.IsLoading, "the feed's package shows with its installed version", 60).ConfigureAwait(true);
+            }
+            catch (SmokeFailure ex)
+            {
+                throw new SmokeFailure($"{ex.Message} Rows: {string.Join(", ", vm.Rows.Select(r => $"{r.Id} {r.Version} (installed {r.InstalledVersion ?? "-"})"))}; error: {vm.Error ?? "none"}; loading: {vm.IsLoading}.");
+            }
             vm.Selected = vm.Rows.First(r => r.Id == "Daedalus.Sample.Greeting");
             await WaitAsync(() => vm.Details is { IsLoading: false, Package: not null, HasReadme: true }, "its details and README load", 60).ConfigureAwait(true);
             vm.Details!.InstallCommand.Execute(null);

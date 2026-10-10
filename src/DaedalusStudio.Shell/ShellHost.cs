@@ -267,20 +267,66 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         // Later 'daedalus diff' invocations open here.
-        _instance = Infrastructure.SingleInstance.Listen(Infrastructure.SingleInstance.PipeName(Paths.State), request => Ui.Post(() => OnInstanceRequest(request)));
+        _instance = Infrastructure.SingleInstance.Listen(Infrastructure.SingleInstance.PipeName(Paths.State), OnInstanceRequestAsync);
+
+        // Started as git's merge tool or editor: do that, then exit with its outcome.
+        if (Options.Merge is { } merge)
+        {
+            _ = ExitWhenDoneAsync(MergeFilesAsync(merge.Local, merge.Remote, merge.Base, merge.Merged));
+        }
+        else if (Options.WaitFile is { } waitFile)
+        {
+            _ = ExitWhenDoneAsync(EditAndWaitAsync(waitFile));
+        }
 
         _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
     }
 
     private Infrastructure.SingleInstance? _instance;
 
-    private void OnInstanceRequest(Infrastructure.InstanceRequest request)
+    /// <summary>A request from another <c>daedalus</c> process (on a background thread).</summary>
+    private Task<bool> OnInstanceRequestAsync(Infrastructure.InstanceRequest request)
     {
-        if (request is { Command: "diff", Arguments: [var left, var right] })
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Ui.Post(async () =>
         {
-            _ = OpenFileDiffAsync(left, right);
-            Window?.BringToFront();
-        }
+            try
+            {
+                Window?.BringToFront();
+                switch (request)
+                {
+                    case { Command: "diff", Arguments: [var left, var right] }:
+                        await OpenFileDiffAsync(left, right).ConfigureAwait(true);
+                        done.TrySetResult(true);
+                        break;
+                    case { Command: "merge", Arguments: [var local, var remote, var @base, var merged] }:
+                        done.TrySetResult(await MergeFilesAsync(local, remote, @base, merged).ConfigureAwait(true));
+                        break;
+                    case { Command: "wait", Arguments: [var file] }:
+                        done.TrySetResult(await EditAndWaitAsync(file).ConfigureAwait(true));
+                        break;
+                    default:
+                        done.TrySetResult(false);
+                        break;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+            {
+                Workbench.Notifications.Error(ex.Message);
+                done.TrySetResult(false);
+            }
+        });
+        return done.Task;
+    }
+
+    /// <summary>The process's exit code when it was started for a merge or an edit (1: not resolved).</summary>
+    public static int ExitCode { get; private set; }
+
+    private async Task ExitWhenDoneAsync(Task<bool> work)
+    {
+        var succeeded = await work.ConfigureAwait(true);
+        ExitCode = succeeded ? 0 : 1;
+        Window?.RequestClose();
     }
 
     private void DiscoverPlugins()

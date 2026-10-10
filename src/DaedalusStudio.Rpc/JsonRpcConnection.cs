@@ -41,6 +41,22 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     private long _nextId;
     private int _started;
 
+    /// <summary>Requests being handled: their method and when they started (slow-request reports).</summary>
+    private readonly ConcurrentDictionary<string, (string Method, long Started)> _running = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, bool> _reportedSlow = new(StringComparer.Ordinal);
+
+    /// <summary>Messages being written: what, when it started, and whether it got the write lock (stuck-write reports).</summary>
+    private readonly ConcurrentDictionary<long, (string What, long Started, bool Locked)> _writing = new();
+    private readonly ConcurrentDictionary<long, bool> _reportedWrites = new();
+    private long _nextWrite;
+    private Timer? _watchdog;
+
+    /// <summary>A request handled for longer than this is reported once through <see cref="Slow"/>.</summary>
+    public static TimeSpan SlowRequest { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>A notification handler running longer than this is reported (it holds up every later message).</summary>
+    public static TimeSpan SlowNotification { get; set; } = TimeSpan.FromSeconds(2);
+
     public JsonRpcConnection(Stream reader, Stream writer)
     {
         _reader = reader;
@@ -52,6 +68,12 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     /// <summary>Raised when an incoming handler throws (the peer receives an error response).</summary>
     public event EventHandler<Exception>? HandlerFailed;
+
+    /// <summary>
+    /// A request has been handled for longer than <see cref="SlowRequest"/>, or a notification handler took longer than
+    /// <see cref="SlowNotification"/> (it holds up the messages after it). For logs: hangs leave a trace.
+    /// </summary>
+    public event EventHandler<string>? Slow;
 
     /// <summary>Completes when the connection has stopped reading.</summary>
     public Task Completion => _readLoop;
@@ -65,6 +87,31 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
         _dispatchLoop = Task.Run(DispatchLoopAsync);
         _readLoop = Task.Run(ReadLoopAsync);
+        _watchdog = new Timer(_ => ReportSlowRequests(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private void ReportSlowRequests()
+    {
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        foreach (var (key, (method, started)) in _running)
+        {
+            var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started, now);
+            if (elapsed > SlowRequest && _reportedSlow.TryAdd(key, true))
+            {
+                Slow?.Invoke(this, $"Request {method} ({key}) has been running for {elapsed.TotalSeconds:0} s; {_running.Count} request(s) in progress.");
+            }
+        }
+
+        foreach (var (id, (what, started, locked)) in _writing)
+        {
+            var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started, now);
+            if (elapsed > SlowRequest && _reportedWrites.TryAdd(id, true))
+            {
+                Slow?.Invoke(this, locked
+                    ? $"Writing {what} has been blocked in the stream for {elapsed.TotalSeconds:0} s."
+                    : $"Writing {what} has waited {elapsed.TotalSeconds:0} s for the write lock; {_writing.Count} write(s) pending.");
+            }
+        }
     }
 
     // ------------------------------------------------------------------ incoming
@@ -157,7 +204,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 writer.WriteNumber("id", id);
                 writer.WriteString("method", method);
                 writeParams(writer);
-            }, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken, "request " + method).ConfigureAwait(false);
 
             try
             {
@@ -183,10 +230,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             writer.WriteString("method", method);
             writer.WritePropertyName("params");
             JsonSerializer.Serialize(writer, parameters, paramsInfo);
-        }, cancellationToken);
+        }, cancellationToken, "notification " + method);
 
     public Task NotifyAsync(string method, CancellationToken cancellationToken) =>
-        WriteMessageAsync(writer => writer.WriteString("method", method), cancellationToken);
+        WriteMessageAsync(writer => writer.WriteString("method", method), cancellationToken, "notification " + method);
 
     private Task CancelRemoteAsync(long id) =>
         WriteMessageAsync(writer =>
@@ -197,7 +244,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             writer.WriteEndObject();
         }, CancellationToken.None).ContinueWith(static _ => { }, TaskScheduler.Default);
 
-    private async Task WriteMessageAsync(Action<Utf8JsonWriter> writeBody, CancellationToken cancellationToken)
+    private async Task WriteMessageAsync(Action<Utf8JsonWriter> writeBody, CancellationToken cancellationToken, string what = "a message")
     {
         var body = new ArrayBufferWriter<byte>(256);
         using (var writer = new Utf8JsonWriter(body))
@@ -209,12 +256,26 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
 
         var header = FramedMessageWriter.Header(body.WrittenCount);
-        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var write = Interlocked.Increment(ref _nextWrite);
+        _writing[write] = (what, System.Diagnostics.Stopwatch.GetTimestamp(), false);
         try
         {
-            await _writer.WriteAsync(header, cancellationToken).ConfigureAwait(false);
-            await _writer.WriteAsync(body.WrittenMemory, cancellationToken).ConfigureAwait(false);
-            await _writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+            await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            _writing.TryRemove(write, out _);
+            throw;
+        }
+
+        _writing[write] = (what, System.Diagnostics.Stopwatch.GetTimestamp(), true);
+        try
+        {
+            // Never cancel a frame halfway: a header without its body corrupts the stream, and the peer drops
+            // the connection. Cancellation applies while waiting for the lock only.
+            await _writer.WriteAsync(header, CancellationToken.None).ConfigureAwait(false);
+            await _writer.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
+            await _writer.FlushAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {
@@ -224,6 +285,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         finally
         {
             _writeLock.Release();
+            _writing.TryRemove(write, out _);
+            if (_reportedWrites.TryRemove(write, out _))
+            {
+                Slow?.Invoke(this, $"Writing {what} finished.");
+            }
         }
     }
 
@@ -327,9 +393,15 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             }
             else if (_notificationHandlers.TryGetValue(method, out var handler))
             {
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 try
                 {
                     await handler(parameters).ConfigureAwait(false);
+                    var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+                    if (elapsed > SlowNotification)
+                    {
+                        Slow?.Invoke(this, $"Notification {method} took {elapsed.TotalMilliseconds:0} ms; the messages after it waited.");
+                    }
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
@@ -344,6 +416,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         var key = id.GetRawText();
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
         _incoming[key] = cts;
+        _running[key] = (method, System.Diagnostics.Stopwatch.GetTimestamp());
         try
         {
             if (!_requestHandlers.TryGetValue(method, out var handler))
@@ -401,6 +474,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         finally
         {
             _incoming.TryRemove(key, out _);
+            _running.TryRemove(key, out _);
+            if (_reportedSlow.TryRemove(key, out _))
+            {
+                Slow?.Invoke(this, $"Request {method} ({key}) finished.");
+            }
         }
     }
 
@@ -418,6 +496,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _shutdown.CancelAsync().ConfigureAwait(false);
+        if (_watchdog is { } watchdog)
+        {
+            await watchdog.DisposeAsync().ConfigureAwait(false);
+        }
         await _writer.DisposeAsync().ConfigureAwait(false);
         await _reader.DisposeAsync().ConfigureAwait(false);
         try

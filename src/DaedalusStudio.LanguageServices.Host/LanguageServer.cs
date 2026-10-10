@@ -31,6 +31,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _diagnostics.BackgroundPassCompleted += (projects, documents) =>
             _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(WorkspaceStates.Ready, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
         _workspace.Log += (_, message) => Log(MessageType.Warning, message);
+        _connection.Slow += (_, message) => Log(MessageType.Warning, message);
         _workspace.FileReloaded += (_, _) => _diagnostics.ScheduleBackground();
     }
 

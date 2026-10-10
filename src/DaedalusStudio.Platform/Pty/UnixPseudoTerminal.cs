@@ -30,12 +30,14 @@ internal sealed partial class UnixPseudoTerminal : PseudoTerminal
     private const int SigSetSize = 256;
 
     private readonly int _master;
+    private readonly int _slave;
     private readonly Thread _reader;
     private int _closed;
 
-    private UnixPseudoTerminal(int master, int pid)
+    private UnixPseudoTerminal(int master, int slave, int pid)
     {
         _master = master;
+        _slave = slave;
         ProcessId = pid;
         _reader = new Thread(ReadLoop) { IsBackground = true, Name = "pty reader" };
         _reader.Start();
@@ -128,8 +130,10 @@ internal sealed partial class UnixPseudoTerminal : PseudoTerminal
             var envp = Array([.. info.Environment.Select(e => $"{e.Key}={e.Value}")]);
             int pid;
             Check(posix_spawn(&pid, Utf8(file), actions, attributes, argv, envp), "posix_spawn");
-            _ = close(slave);
-            return new UnixPseudoTerminal(master, pid);
+
+            // The slave stays open here until the child is reaped: on macOS, output still unread when the last slave
+            // descriptor closes is discarded, so a program that writes and exits at once would lose its output.
+            return new UnixPseudoTerminal(master, slave, pid);
         }
         catch
         {
@@ -208,6 +212,9 @@ internal sealed partial class UnixPseudoTerminal : PseudoTerminal
         }
         while (result < 0 && Marshal.GetLastPInvokeError() == EIntr);
 
+        // Now the reader drains what's left and then gets EOF (EIO on Linux), unless a background process still holds
+        // the terminal; it gets 5 s.
+        _ = close(_slave);
         _reader.Join(TimeSpan.FromSeconds(5));
         var code = (status & 0x7F) == 0 ? (status >> 8) & 0xFF : 128 + (status & 0x7F);
         RaiseExited(result < 0 ? -1 : code);

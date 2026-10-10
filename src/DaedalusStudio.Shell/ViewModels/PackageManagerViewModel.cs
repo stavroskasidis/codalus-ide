@@ -439,7 +439,18 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
         var generation = ++_installedGeneration;
         try
         {
-            var installed = await _packages.InstalledAsync(null, CancellationToken.None).ConfigureAwait(true);
+            IReadOnlyList<ProjectPackages> installed;
+            try
+            {
+                installed = await _packages.InstalledAsync(null, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (IsExpected(ex) && generation == _installedGeneration)
+            {
+                // Once more after a moment: a project file read while a restore or an edit writes it can fail.
+                await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(true);
+                installed = await _packages.InstalledAsync(null, CancellationToken.None).ConfigureAwait(true);
+            }
+
             if (generation != _installedGeneration)
             {
                 return;

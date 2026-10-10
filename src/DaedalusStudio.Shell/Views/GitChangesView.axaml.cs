@@ -54,7 +54,8 @@ public sealed partial class GitChangesView : UserControl, IPaneView
     {
         if (DataContext is GitChangesViewModel vm && list.SelectedItem is GitFileRow row)
         {
-            _ = Report(vm.OpenDiffAsync(row));
+            // A conflicted file opens in the merge editor (M13).
+            _ = Report(row.Status.IsConflict ? vm.RunAsync("git.mergeEditor:" + row.Status.Path) : vm.OpenDiffAsync(row));
         }
     }
 

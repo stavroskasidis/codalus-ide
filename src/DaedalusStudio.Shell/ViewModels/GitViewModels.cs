@@ -86,6 +86,36 @@ public sealed class GitChangesViewModel : ObservableObject
 
     public bool IsMerging => _git.Status?.IsMerging ?? false;
 
+    private string? _operation;
+
+    /// <summary>The merge, rebase, cherry-pick or revert in progress (M13); the banner offers Continue, Skip and Abort.</summary>
+    public string? Operation
+    {
+        get => _operation;
+        set
+        {
+            if (SetField(ref _operation, value))
+            {
+                OnPropertyChanged(nameof(HasOperation));
+                OnPropertyChanged(nameof(OperationText));
+                OnPropertyChanged(nameof(CanSkip));
+            }
+        }
+    }
+
+    public bool HasOperation => _operation is not null;
+
+    public bool CanSkip => _operation is "rebase" or "cherry-pick" or "revert";
+
+    public string OperationText => _operation switch
+    {
+        "merge" => "A merge is in progress.",
+        "rebase" => "A rebase is in progress.",
+        "cherry-pick" => "A cherry-pick is in progress.",
+        "revert" => "A revert is in progress.",
+        _ => string.Empty,
+    } + (HasConflicts ? " Resolve the conflicts, then Continue." : " Continue when ready.");
+
     public bool HasStaged => Staged.Count > 0;
 
     public bool HasChanges => Changes.Count > 0;
@@ -141,7 +171,7 @@ public sealed class GitChangesViewModel : ObservableObject
         Replace(Staged, status?.Staged.Select(f => new GitFileRow(f, staged: true)));
         Replace(Changes, status?.Unstaged.Select(f => new GitFileRow(f, staged: false)));
         Replace(Conflicts, status?.Conflicts.Select(f => new GitFileRow(f, staged: false)));
-        foreach (var name in new[] { nameof(HasRepository), nameof(HasNoRepository), nameof(BranchText), nameof(IsMerging), nameof(HasStaged), nameof(HasChanges), nameof(HasConflicts), nameof(StagedHeader), nameof(ChangesHeader), nameof(ConflictsHeader) })
+        foreach (var name in new[] { nameof(HasRepository), nameof(HasNoRepository), nameof(BranchText), nameof(IsMerging), nameof(HasStaged), nameof(HasChanges), nameof(HasConflicts), nameof(StagedHeader), nameof(ChangesHeader), nameof(ConflictsHeader), nameof(OperationText) })
         {
             OnPropertyChanged(name);
         }
@@ -204,6 +234,30 @@ public sealed class DiffViewModel : ObservableObject
         Path = rightPath;
     }
 
+    /// <summary>
+    /// Two versions of a file read by <paramref name="oldText"/> and <paramref name="newText"/> (revisions, M13: a commit
+    /// against its parent, a branch against the working tree…). <paramref name="key"/> identifies the document.
+    /// </summary>
+    public DiffViewModel(string path, string key, string oldTitle, Func<Task<string>> oldText, string newTitle, Func<Task<string>> newText)
+    {
+        Path = path;
+        Key = key;
+        _oldTitle = oldTitle;
+        _newTitle = newTitle;
+        _oldProvider = oldText;
+        _newProvider = newText;
+    }
+
+    private readonly string? _oldTitle;
+    private readonly string? _newTitle;
+    private readonly Func<Task<string>>? _oldProvider;
+    private readonly Func<Task<string>>? _newProvider;
+
+    /// <summary>A revision comparison's document key; null otherwise.</summary>
+    public string? Key { get; }
+
+    public bool IsRevisionComparison => _oldProvider is not null;
+
     public string Path { get; }
 
     /// <summary>The left file of a file comparison; null for Git diffs.</summary>
@@ -251,11 +305,11 @@ public sealed class DiffViewModel : ObservableObject
         private set => SetField(ref _summary, value);
     }
 
-    public string OldTitle => LeftPath ?? (Staged ? "HEAD" : "Index");
+    public string OldTitle => _oldTitle ?? LeftPath ?? (Staged ? "HEAD" : "Index");
 
-    public string NewTitle => IsFileComparison ? Path : Staged ? "Index (staged)" : "Working tree";
+    public string NewTitle => _newTitle ?? (IsFileComparison ? Path : Staged ? "Index (staged)" : "Working tree");
 
-    public bool CanStage => !Staged && !IsFileComparison;
+    public bool CanStage => !Staged && !IsFileComparison && !IsRevisionComparison;
 
     public bool CanUnstage => Staged;
 
@@ -264,6 +318,12 @@ public sealed class DiffViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
+        if (_oldProvider is not null && _newProvider is not null)
+        {
+            await LoadTextsAsync(await _oldProvider().ConfigureAwait(true), await _newProvider().ConfigureAwait(true)).ConfigureAwait(true);
+            return;
+        }
+
         if (_git is null)
         {
             await LoadFilesAsync().ConfigureAwait(true);
@@ -314,8 +374,13 @@ public sealed class DiffViewModel : ObservableObject
             }
         }
 
-        OldText = await ReadAsync(LeftPath!).ConfigureAwait(true);
-        NewText = await ReadAsync(Path).ConfigureAwait(true);
+        await LoadTextsAsync(await ReadAsync(LeftPath!).ConfigureAwait(true), await ReadAsync(Path).ConfigureAwait(true)).ConfigureAwait(true);
+    }
+
+    private async Task LoadTextsAsync(string oldText, string newText)
+    {
+        OldText = oldText;
+        NewText = newText;
         OldLines = LineDiff.Lines(OldText);
         NewLines = LineDiff.Lines(NewText);
         var ops = await Task.Run(() => LineDiff.Diff(OldLines, NewLines)).ConfigureAwait(true);
@@ -435,6 +500,72 @@ public sealed class DiffViewModel : ObservableObject
         return null;
     }
 
+    /// <summary>
+    /// Stages, unstages or discards only the changed lines in the given rows (per-line staging, M13): a removal is
+    /// chosen by its old line, an addition by its new line.
+    /// </summary>
+    public async Task ApplyToLinesAsync(IReadOnlyCollection<int> rows, string action)
+    {
+        if (Diff is null || _git is null)
+        {
+            return;
+        }
+
+        var oldLines = rows.Where(r => r >= 0 && r < Rows.Count).Select(r => Rows[r].OldLine).OfType<int>().ToHashSet();
+        var newLines = rows.Where(r => r >= 0 && r < Rows.Count).Select(r => Rows[r].NewLine).OfType<int>().ToHashSet();
+        foreach (var hunk in Diff.Hunks)
+        {
+            var chosen = new HashSet<int>();
+            int oldNo = hunk.OldStart, newNo = hunk.NewStart;
+            for (var i = 0; i < hunk.Lines.Count; i++)
+            {
+                switch (hunk.Lines[i].Kind)
+                {
+                    case ' ':
+                        oldNo++;
+                        newNo++;
+                        break;
+                    case '-':
+                        if (oldLines.Contains(oldNo++))
+                        {
+                            chosen.Add(i);
+                        }
+
+                        break;
+                    case '+':
+                        if (newLines.Contains(newNo++))
+                        {
+                            chosen.Add(i);
+                        }
+
+                        break;
+                }
+            }
+
+            if (chosen.Count == 0)
+            {
+                continue;
+            }
+
+            switch (action)
+            {
+                case "stage":
+                    await _git.StageLinesAsync(Diff, hunk, chosen).ConfigureAwait(true);
+                    break;
+                case "unstage":
+                    await _git.UnstageLinesAsync(Diff, hunk, chosen).ConfigureAwait(true);
+                    break;
+                case "discard":
+                    await _git.DiscardLinesAsync(Diff, hunk, chosen).ConfigureAwait(true);
+                    break;
+            }
+
+            break; // the diff changed: one hunk per action
+        }
+
+        await LoadAsync().ConfigureAwait(true);
+    }
+
     public async Task ApplyToHunkAsync(DiffHunk hunk, string action)
     {
         if (Diff is null || _git is null)
@@ -466,10 +597,12 @@ public sealed class DiffDocument : ShellDocument
     {
         ViewModel = viewModel;
         Font = font;
-        Id = viewModel.LeftPath is { } left ? IdFor(left, viewModel.Path) : IdFor(viewModel.Path, viewModel.Staged);
-        Title = viewModel.LeftPath is { } leftPath
-            ? $"{System.IO.Path.GetFileName(leftPath)} ↔ {System.IO.Path.GetFileName(viewModel.Path)}"
-            : $"{System.IO.Path.GetFileName(viewModel.Path)} ({(viewModel.Staged ? "Staged" : "Working Tree")})";
+        Id = viewModel.Key is { } key ? "diff:revisions:" + key : viewModel.LeftPath is { } left ? IdFor(left, viewModel.Path) : IdFor(viewModel.Path, viewModel.Staged);
+        Title = viewModel.IsRevisionComparison
+            ? $"{System.IO.Path.GetFileName(viewModel.Path)} ({viewModel.OldTitle} ↔ {viewModel.NewTitle})"
+            : viewModel.LeftPath is { } leftPath
+                ? $"{System.IO.Path.GetFileName(leftPath)} ↔ {System.IO.Path.GetFileName(viewModel.Path)}"
+                : $"{System.IO.Path.GetFileName(viewModel.Path)} ({(viewModel.Staged ? "Staged" : "Working Tree")})";
     }
 
     public static string IdFor(string path, bool staged) => $"diff:{(staged ? "staged" : "worktree")}:{path}";

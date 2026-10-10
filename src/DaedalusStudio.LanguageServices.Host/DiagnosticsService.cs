@@ -63,18 +63,16 @@ internal sealed class DiagnosticsService : IDisposable
     {
         path = Path.GetFullPath(path);
         CancellationToken token;
+        CancellationTokenSource? previous;
         lock (_gate)
         {
-            if (_documentPasses.Remove(path, out var previous))
-            {
-                previous.Cancel();
-                previous.Dispose();
-            }
-
+            _documentPasses.Remove(path, out previous);
             var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             _documentPasses[path] = cts;
             token = cts.Token;
         }
+
+        Cancel(previous);
 
         _ = Task.Run(async () =>
         {
@@ -98,15 +96,13 @@ internal sealed class DiagnosticsService : IDisposable
     public void DocumentClosed(string path)
     {
         path = Path.GetFullPath(path);
+        CancellationTokenSource? previous;
         lock (_gate)
         {
-            if (_documentPasses.Remove(path, out var previous))
-            {
-                previous.Cancel();
-                previous.Dispose();
-            }
+            _documentPasses.Remove(path, out previous);
         }
 
+        Cancel(previous);
         Diagnostic[] background;
         lock (_gate)
         {
@@ -174,13 +170,15 @@ internal sealed class DiagnosticsService : IDisposable
     public void ScheduleBackground()
     {
         CancellationToken token;
+        CancellationTokenSource? previous;
         lock (_gate)
         {
-            _backgroundPass?.Cancel();
-            _backgroundPass?.Dispose();
+            previous = _backgroundPass;
             _backgroundPass = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             token = _backgroundPass.Token;
         }
+
+        Cancel(previous);
 
         _ = Task.Run(async () =>
         {
@@ -315,6 +313,32 @@ internal sealed class DiagnosticsService : IDisposable
             CodeDescription = string.IsNullOrEmpty(help) ? null : new CodeDescription(help),
             Tags = tags.Count == 0 ? null : [.. tags],
         };
+    }
+
+    /// <summary>
+    /// Cancels and disposes a pass's token source, on the thread pool: Cancel runs the pass's callbacks and
+    /// continuations synchronously, which must not hold up the caller (for edits, the connection's dispatch loop) or run
+    /// under <see cref="_gate"/>.
+    /// </summary>
+    private static void Cancel(CancellationTokenSource? source)
+    {
+        if (source is null)
+        {
+            return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                source.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            source.Dispose();
+        });
     }
 
     public void Dispose()

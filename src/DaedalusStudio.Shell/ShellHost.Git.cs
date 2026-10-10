@@ -78,6 +78,11 @@ public sealed partial class ShellHost
             return DiscardAsync(command["git.discard:".Length..]);
         }
 
+        if (command.StartsWith("git.mergeEditor:", StringComparison.Ordinal))
+        {
+            return OpenMergeEditorAsync(command["git.mergeEditor:".Length..]);
+        }
+
         Run(command);
         return Task.CompletedTask;
     }
@@ -103,6 +108,7 @@ public sealed partial class ShellHost
     {
         Workbench.Context.Set("gitRepository", Git.Status is not null);
         Workbench.Context.Set("gitMerging", Git.Status?.IsMerging ?? false);
+        UpdateGitDepthStatus();
         if (Git.Status is not { } status)
         {
             Workbench.StatusBar.Remove(BranchStatusItem);

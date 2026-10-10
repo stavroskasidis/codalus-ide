@@ -28,10 +28,24 @@ internal static partial class Program
             }
         }
 
+        // daedalus merge and --wait: the running shell does the work and answers when it's done (git waits for us).
+        if (options.Merge is { } merge || options.WaitFile is not null)
+        {
+            var paths = DaedalusStudio.Platform.AppPaths.Resolve(DaedalusStudio.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
+            var request = options.Merge is { } m
+                ? new Infrastructure.InstanceRequest("merge", [m.Local, m.Remote, m.Base, m.Merged], Wait: true)
+                : new Infrastructure.InstanceRequest("wait", [options.WaitFile!], Wait: true);
+            if (Infrastructure.SingleInstance.Send(Infrastructure.SingleInstance.PipeName(paths.State), request) is { } succeeded)
+            {
+                return succeeded ? 0 : 1;
+            }
+        }
+
         App.Options = options;
         try
         {
-            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            var code = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+            return code != 0 ? code : ShellHost.ExitCode;
         }
         catch (InvalidOperationException ex) when (ex.StackTrace?.Contains("AppBuilder.Setup", StringComparison.Ordinal) == true)
         {

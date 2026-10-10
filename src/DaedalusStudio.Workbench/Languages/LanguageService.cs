@@ -140,19 +140,26 @@ public sealed class LanguageService : IAsyncDisposable
         };
         client.Restarted += (_, _) => HostRestarted?.Invoke(this, languageId);
 
+        // Each stage is logged when the start takes long, so a client that never becomes usable says where it stopped.
+        var stage = "starting the host";
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        using var watchdog = new Timer(_ => Log?.Invoke(this, $"[{languageId}] Still {stage} after {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:0} s."), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30));
         try
         {
             await client.StartAsync(_lifetime.Token).ConfigureAwait(false);
             if (_settings is { } settings)
             {
+                stage = "sending the settings";
                 await client.ConfigureAsync(settings, _lifetime.Token).ConfigureAwait(false);
             }
 
             if (descriptor.ProjectLanguage is { } language && _projects.Values.Where(p => p.Language == language).ToList() is { Count: > 0 } projects)
             {
+                stage = "sending the projects";
                 await client.UpdateProjectsAsync(projects, _lifetime.Token).ConfigureAwait(false);
             }
 
+            stage = "started";
             return client;
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcConnectionLostException)

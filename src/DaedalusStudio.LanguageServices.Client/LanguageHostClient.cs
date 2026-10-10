@@ -136,6 +136,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
     private void Configure(JsonRpcConnection connection)
     {
         var json = ProtocolJsonContext.Default;
+        connection.Slow += (_, message) => Log?.Invoke(this, message);
         connection.OnNotification(Methods.PublishDiagnostics, json.JsonElement, raw =>
         {
             if (LspNormalizer.PublishDiagnostics(raw).Deserialize(json.PublishDiagnosticsParams) is { } p)

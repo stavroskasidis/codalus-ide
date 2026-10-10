@@ -118,9 +118,10 @@ public sealed class DapConnection : IAsyncDisposable
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await _output.WriteAsync(FramedMessageWriter.Header(body.WrittenCount), cancellationToken).ConfigureAwait(false);
-            await _output.WriteAsync(body.WrittenMemory, cancellationToken).ConfigureAwait(false);
-            await _output.FlushAsync(cancellationToken).ConfigureAwait(false);
+            // Never cancel a frame halfway (a header without its body corrupts the stream); only the lock wait is cancellable.
+            await _output.WriteAsync(FramedMessageWriter.Header(body.WrittenCount), CancellationToken.None).ConfigureAwait(false);
+            await _output.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
+            await _output.FlushAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {

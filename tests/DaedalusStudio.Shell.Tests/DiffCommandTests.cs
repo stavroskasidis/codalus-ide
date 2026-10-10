@@ -1,6 +1,7 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using DaedalusStudio.Shell.Infrastructure;
+using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Shell.Views;
 
 namespace DaedalusStudio.Shell.Tests;
@@ -32,7 +33,11 @@ public sealed class DiffCommandTests
         Assert.False(SingleInstance.TrySend(name, new InstanceRequest("diff", ["a", "b"])));
 
         var received = new TaskCompletionSource<InstanceRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var server = SingleInstance.Listen(name, request => received.TrySetResult(request));
+        using var server = SingleInstance.Listen(name, request =>
+        {
+            received.TrySetResult(request);
+            return Task.FromResult(true);
+        });
         var sent = false;
         for (var i = 0; i < 50 && !sent; i++)
         {
@@ -48,6 +53,77 @@ public sealed class DiffCommandTests
         Assert.Equal("diff", request.Command);
         Assert.Equal(["left.txt", "right.txt"], request.Arguments);
         Assert.NotEqual(name, SingleInstance.PipeName(Path.GetTempPath())); // one pipe per user-data folder
+    }
+
+    [Fact]
+    public void Merge_and_wait_parse_their_files()
+    {
+        var merge = ShellOptions.Parse(["merge", "l.cs", "r.cs", "b.cs", "m.cs"]);
+        Assert.Equal((Path.GetFullPath("l.cs"), Path.GetFullPath("r.cs"), Path.GetFullPath("b.cs"), Path.GetFullPath("m.cs")), merge.Merge);
+        Assert.Single(ShellOptions.Parse(["merge", "l.cs", "r.cs"]).Errors);
+        Assert.Equal(Path.GetFullPath("COMMIT_EDITMSG"), ShellOptions.Parse(["--wait", "COMMIT_EDITMSG"]).WaitFile);
+    }
+
+    [Fact]
+    public async Task A_waiting_request_is_answered_when_the_work_is_done()
+    {
+        var name = SingleInstance.PipeName(Path.Combine(Path.GetTempPath(), "daedalus-instance-" + Guid.NewGuid().ToString("N")));
+        var finish = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var server = SingleInstance.Listen(name, request => request.Wait ? finish.Task : Task.FromResult(true));
+        for (var i = 0; i < 50 && !SingleInstance.TrySend(name, new InstanceRequest("ping", [])); i++)
+        {
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        var waiting = Task.Run(() => SingleInstance.Send(name, new InstanceRequest("merge", ["l", "r", "b", "m"], Wait: true)), TestContext.Current.CancellationToken);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+        Assert.False(waiting.IsCompleted);
+
+        // Meanwhile other requests are still served.
+        Assert.True(SingleInstance.TrySend(name, new InstanceRequest("diff", ["a", "b"])));
+
+        finish.SetResult(false);
+        Assert.False(await waiting.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+    }
+
+    [AvaloniaFact]
+    public async Task Merge_tool_and_wait_finish_when_the_merge_is_accepted_or_the_tab_closed()
+    {
+        await using var f = ShellFixture.Create();
+        string Write(string name, string text)
+        {
+            var path = Path.Combine(f.UserData, name);
+            File.WriteAllText(path, text);
+            return path;
+        }
+
+        var local = Write("LOCAL.txt", "a\nmine\nz\n");
+        var remote = Write("REMOTE.txt", "a\ntheirs\nz\n");
+        var @base = Write("BASE.txt", "a\nbase\nz\n");
+        var merged = Write("merged.txt", "a\n<<<<<<< LOCAL\nmine\n=======\ntheirs\n>>>>>>> REMOTE\nz\n");
+
+        var merging = f.Shell.MergeFilesAsync(local, remote, @base, merged);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<MergeEditorView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<MergeEditorView>().Single();
+        view.Accept("current");
+        await view.AcceptMergeAsync();
+        Assert.True(await merging);
+        Assert.Equal("a\nmine\nz\n", File.ReadAllText(merged));
+
+        // Closing the tab without accepting: not resolved.
+        File.WriteAllText(merged, "a\n<<<<<<< LOCAL\nmine\n=======\ntheirs\n>>>>>>> REMOTE\nz\n");
+        merging = f.Shell.MergeFilesAsync(local, remote, @base, merged);
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<MergeEditorDocument>().Any());
+        f.Shell.Layout.CloseDocument(f.Shell.Layout.Documents.OfType<MergeEditorDocument>().Single());
+        Assert.False(await merging);
+
+        // --wait: done when the file's tab closes.
+        var message = Write("COMMIT_EDITMSG", "subject\n");
+        var editing = f.Shell.EditAndWaitAsync(message);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == message);
+        Assert.False(editing.IsCompleted);
+        f.Shell.CloseActiveDocument();
+        Assert.True(await editing);
     }
 
     [AvaloniaFact]

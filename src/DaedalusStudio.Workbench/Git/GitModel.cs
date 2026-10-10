@@ -35,6 +35,12 @@ public sealed record GitStatus(
     IReadOnlyList<GitFileStatus> Files,
     bool IsMerging)
 {
+    /// <summary>
+    /// The operation in progress (M13): <c>merge</c>, <c>rebase</c>, <c>cherry-pick</c> or <c>revert</c>; null when none.
+    /// Conflicts stop it until they're resolved and it is continued, or it is aborted.
+    /// </summary>
+    public string? Operation { get; init; }
+
     public bool IsDetached => Branch is null;
 
     public IEnumerable<GitFileStatus> Staged => Files.Where(f => f.IsStaged);
@@ -77,6 +83,111 @@ public sealed record FileDiff(string Path, IReadOnlyList<string> Header, IReadOn
 
         return patch.ToString();
     }
+
+    /// <summary>
+    /// A patch with only the chosen lines of <paramref name="hunk"/> (indexes into its lines), for per-line staging
+    /// (<paramref name="reverse"/> false: applied to the index) or unstaging and discarding (true: applied in reverse).
+    /// Lines not chosen stay as they are on the side being changed: an unchosen removal becomes context, an unchosen
+    /// addition is left out (reversed, the other way around).
+    /// </summary>
+    public string PatchForLines(DiffHunk hunk, IReadOnlySet<int> chosen, bool reverse = false)
+    {
+        var lines = new List<DiffLine>();
+        for (var i = 0; i < hunk.Lines.Count; i++)
+        {
+            var line = hunk.Lines[i];
+            var keep = chosen.Contains(i);
+            switch (line.Kind)
+            {
+                case '+' when !keep:
+                    if (reverse)
+                    {
+                        lines.Add(new DiffLine(' ', line.Text));
+                    }
+
+                    break;
+                case '-' when !keep:
+                    if (!reverse)
+                    {
+                        lines.Add(new DiffLine(' ', line.Text));
+                    }
+
+                    break;
+                default:
+                    lines.Add(line);
+                    break;
+            }
+        }
+
+        var oldCount = lines.Count(l => l.Kind is ' ' or '-');
+        var newCount = lines.Count(l => l.Kind is ' ' or '+');
+        // Applied forward, the other hunks aren't in the target yet, so the new side starts where the old one does;
+        // applied in reverse, git finds the hunk by its new side, which is where it is in the file now.
+        var newStart = reverse ? hunk.NewStart : hunk.OldStart;
+        var header = $"@@ -{hunk.OldStart.ToString(CultureInfo.InvariantCulture)},{oldCount.ToString(CultureInfo.InvariantCulture)} +{newStart.ToString(CultureInfo.InvariantCulture)},{newCount.ToString(CultureInfo.InvariantCulture)} @@";
+        return PatchFor(hunk with { Header = header, Lines = lines, OldCount = oldCount, NewCount = newCount });
+    }
+}
+
+/// <summary>
+/// A commit in the history (M13): its full and short hash, parents, author, dates, refs (<c>HEAD -&gt; main</c>,
+/// <c>tag: v1</c>…) and subject. <see cref="Graph"/> places it in the history graph.
+/// </summary>
+public sealed record GitCommit(string Hash, IReadOnlyList<string> Parents, string Author, string AuthorEmail, DateTimeOffset Date, IReadOnlyList<string> Refs, string Subject)
+{
+    public string ShortHash => Hash.Length > 8 ? Hash[..8] : Hash;
+
+    public GraphRow? Graph { get; set; }
+}
+
+/// <summary>
+/// A commit's row in the history graph (M13): its lane (column) and the lines to draw. <see cref="Top"/> runs from the
+/// row's top edge at lane <c>From</c> to the commit's dot (lane <c>To</c>, always <see cref="Lane"/>); <see cref="Bottom"/>
+/// from the dot to the bottom edge at lane <c>To</c>; <see cref="Passing"/> lanes go straight through.
+/// </summary>
+public sealed record GraphRow(int Lane, int LaneCount, IReadOnlyList<(int From, int To)> Top, IReadOnlyList<(int From, int To)> Bottom, IReadOnlyList<int> Passing);
+
+/// <summary>A history query: a revision range (null: every branch), and filters.</summary>
+public sealed record GitLogQuery
+{
+    /// <summary>A branch or revision; null with <see cref="AllBranches"/> false means HEAD.</summary>
+    public string? Revision { get; init; }
+
+    public bool AllBranches { get; init; }
+
+    public string? Author { get; init; }
+
+    /// <summary>Text in the commit message (case-insensitive).</summary>
+    public string? Message { get; init; }
+
+    /// <summary>A file or folder: its history (renames followed for a single file).</summary>
+    public string? Path { get; init; }
+
+    public DateTimeOffset? Since { get; init; }
+
+    public DateTimeOffset? Until { get; init; }
+}
+
+/// <summary>A commit's full message and changed files (status letter and path, the old path of a rename).</summary>
+public sealed record GitCommitDetails(GitCommit Commit, string Message, IReadOnlyList<(char Status, string Path, string? OldPath)> Files);
+
+public sealed record GitStash(int Index, string Name, string Message);
+
+public sealed record GitTag(string Name, string Commit, string? Message);
+
+public sealed record GitRemote(string Name, string FetchUrl, string? PushUrl);
+
+public sealed record GitSubmodule(string Path, string Commit, char State)
+{
+    /// <summary><c>-</c> not initialized, <c>+</c> checked out at another commit, <c>U</c> conflicts, space: up to date.</summary>
+    public bool IsInitialized => State != '-';
+}
+
+/// <summary>An entry of an interactive rebase's todo list: <c>pick</c>, <c>reword</c>, <c>squash</c>, <c>fixup</c> or <c>drop</c>.</summary>
+public sealed record RebaseStep(string Action, string Hash, string Subject)
+{
+    /// <summary>The new message, for <c>reword</c>.</summary>
+    public string? Message { get; init; }
 }
 
 /// <summary>The commit that last changed a range of lines (1-based, inclusive).</summary>

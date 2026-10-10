@@ -141,12 +141,15 @@ public sealed class DiffView : UserControl, IPaneView
         if (viewModel.CanStage)
         {
             toolbar.Children.Add(Button("Stage Hunk", () => _ = HunkActionAsync("stage")));
+            toolbar.Children.Add(Button("Stage Selected Lines", () => _ = LineActionAsync("stage")));
             toolbar.Children.Add(Button("Discard Hunk", () => _ = HunkActionAsync("discard")));
+            toolbar.Children.Add(Button("Discard Selected Lines", () => _ = LineActionAsync("discard")));
         }
 
         if (viewModel.CanUnstage)
         {
             toolbar.Children.Add(Button("Unstage Hunk", () => _ = HunkActionAsync("unstage")));
+            toolbar.Children.Add(Button("Unstage Selected Lines", () => _ = LineActionAsync("unstage")));
         }
 
         toolbar.Children.Add(Button("Refresh", () => _ = viewModel.LoadAsync()));
@@ -329,6 +332,48 @@ public sealed class DiffView : UserControl, IPaneView
         if (_viewModel.NextChange(CurrentRow, direction) is { } row)
         {
             ShowRow(row);
+        }
+    }
+
+    /// <summary>The rows of the selected lines in the active editor (the caret's row without a selection).</summary>
+    public IReadOnlyList<int> SelectedRows()
+    {
+        var editor = ActiveEditor;
+        var area = editor.TextArea;
+        int first, last;
+        if (area.Selection.IsEmpty)
+        {
+            first = last = area.Caret.Line - 1;
+        }
+        else
+        {
+            first = editor.Document.GetLineByOffset(editor.SelectionStart).LineNumber - 1;
+            last = editor.Document.GetLineByOffset(Math.Max(editor.SelectionStart, editor.SelectionStart + editor.SelectionLength - 1)).LineNumber - 1;
+        }
+
+        var rows = new List<int>();
+        for (var line = first; line <= last; line++)
+        {
+            var row = _viewModel.SideBySide ? line : line < _inlineRows.Count ? _inlineRows[line] : -1;
+            if (row >= 0 && !rows.Contains(row))
+            {
+                rows.Add(row);
+            }
+        }
+
+        return rows;
+    }
+
+    /// <summary>Stages, unstages or discards the changed lines of the selection (per-line staging).</summary>
+    public async Task LineActionAsync(string action)
+    {
+        try
+        {
+            await _viewModel.ApplyToLinesAsync(SelectedRows(), action).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
+        {
+            ReportError?.Invoke(ex);
         }
     }
 

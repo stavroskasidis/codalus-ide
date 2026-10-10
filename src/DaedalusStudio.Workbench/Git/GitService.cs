@@ -8,7 +8,7 @@ namespace DaedalusStudio.Workbench.Git;
 /// Source control through the git CLI (ADR 0008): one process per operation, porcelain output only. Tracks one
 /// repository (the open solution's). Events may be raised on any thread.
 /// </summary>
-public sealed class GitService : IDisposable
+public sealed partial class GitService : IDisposable
 {
     public const string EnvironmentVariable = "DAEDALUS_GIT";
 
@@ -43,7 +43,8 @@ public sealed class GitService : IDisposable
 
     /// <summary>Runs git in <paramref name="directory"/>; throws <see cref="GitException"/> on a non-zero exit (unless <paramref name="check"/> is false).</summary>
     public async Task<(int ExitCode, string Output, string Error)> RunAsync(
-        string directory, IReadOnlyList<string> arguments, CancellationToken cancellationToken, string? input = null, bool check = true, bool readOnly = false)
+        string directory, IReadOnlyList<string> arguments, CancellationToken cancellationToken, string? input = null, bool check = true, bool readOnly = false,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo(_git)
         {
@@ -66,6 +67,11 @@ public sealed class GitService : IDisposable
         if (readOnly)
         {
             start.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+        }
+
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+        {
+            start.Environment[name] = value;
         }
 
         Process process;
@@ -183,7 +189,8 @@ public sealed class GitService : IDisposable
                 return;
             }
 
-            Status = GitParsers.ParseStatus(root, output, merging);
+            Status = GitParsers.ParseStatus(root, output, merging) with { Operation = gitDirCode == 0 ? OperationIn(gitDir.Trim()) : null };
+            GitDirectory = gitDirCode == 0 ? gitDir.Trim() : null;
         }
         catch (GitException ex)
         {

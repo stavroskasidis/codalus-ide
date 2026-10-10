@@ -44,9 +44,20 @@
           <Button Content="Commit All" Tag="all" Click="OnCommit" />
           <CheckBox Content="Amend" IsChecked="{Binding Amend}" />
         </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsMerging}">
-          <TextBlock Text="A merge is in progress." VerticalAlignment="Center" />
-          <Button Content="Abort Merge" Tag="git.abortMerge" Click="OnCommand" />
+        <Border IsVisible="{Binding HasOperation}" Background="{DynamicResource Shell.Hover}" CornerRadius="3" Padding="6,4">
+          <StackPanel Spacing="4">
+            <TextBlock Text="{Binding OperationText}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Button Classes="accent" Content="Continue" Tag="git.continue" Click="OnCommand" />
+              <Button Content="Skip" Tag="git.skip" Click="OnCommand" IsVisible="{Binding CanSkip}" />
+              <Button Content="Abort" Tag="git.abort" Click="OnCommand" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+        <StackPanel Orientation="Horizontal" Spacing="2">
+          <Button Classes="toolbar" Content="Stash" Tag="git.stash" Click="OnCommand" ToolTip.Tip="Stash the changes" />
+          <Button Classes="toolbar" Content="Stashes" Tag="git.stashes" Click="OnCommand" ToolTip.Tip="Apply, pop or drop a stash" />
+          <Button Classes="toolbar" Content="History" Tag="git.history" Click="OnCommand" ToolTip.Tip="View the history" />
         </StackPanel>
       </StackPanel>
       <ScrollViewer>

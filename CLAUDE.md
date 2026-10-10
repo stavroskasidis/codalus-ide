@@ -51,7 +51,7 @@ The shell debugs through netcoredbg (Samsung, MIT) over DAP (ADR 0007; client in
 
 ## Git
 
-Source control uses the git CLI (ADR 0008), not a library: `GitService` in `src/DaedalusStudio.Workbench/Git` runs one `git` process per operation and parses porcelain output only. `DAEDALUS_GIT` points at another git. Tests build throwaway repositories in temp folders (git writes read-only object files; clear the attribute before deleting).
+Source control uses the git CLI (ADR 0008), not a library: `GitService` in `src/DaedalusStudio.Workbench/Git` runs one `git` process per operation and parses porcelain output only. `DAEDALUS_GIT` points at another git. Tests build throwaway repositories in temp folders (git writes read-only object files; clear the attribute before deleting). Git depth (ADR 0020): history pages and `GitGraph` lanes, operations in progress (continue, skip, abort), conflicts, stash, rebase (interactive through `GIT_SEQUENCE_EDITOR`), tags, remotes and per-line patches in `GitService.History.cs`/`GitService.Operations.cs`; the history window, merge editor and interactive rebase are shell documents (`ShellHost.GitDepth.cs`). `daedalus merge` and `daedalus --wait` are waiting single-instance requests.
 
 ## Benchmarks
 

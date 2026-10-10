@@ -59,4 +59,5 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `` Ctrl+Shift+` `` | New terminal |
 | | `Ctrl+E Ctrl+E` | Send selection to C# Interactive |
 | Git | `Ctrl+0 Ctrl+G` | Git Changes |
+| | `Ctrl+0 Ctrl+H` | History |
 | | `Ctrl+Alt+B` | Toggle blame |

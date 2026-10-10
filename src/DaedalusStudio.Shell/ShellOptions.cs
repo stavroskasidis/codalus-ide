@@ -8,6 +8,9 @@ public sealed record ShellOptions
     public const string HelpText = """
         Usage: daedalus [path] [options]
                daedalus diff <left> <right> [options]   Compare two files (in the running window, if there is one).
+               daedalus merge <local> <remote> <base> <merged> [options]
+                                                        Resolve a merge (git mergetool); exits when it is accepted.
+               daedalus --wait <file> [options]         Edit a file and exit when its tab closes (git's core.editor).
 
           --user-data-dir <dir>   Keep settings, state and plugins under <dir> instead of the OS defaults.
           --plugin-dir <dir>      Load plugins from <dir> (a plugin folder or a folder of plugins). Repeatable.
@@ -42,6 +45,12 @@ public sealed record ShellOptions
     /// <summary><c>daedalus diff left right</c>: two files to compare side by side.</summary>
     public (string Left, string Right)? Diff { get; init; }
 
+    /// <summary><c>daedalus merge local remote base merged</c>: git mergetool's four files.</summary>
+    public (string Local, string Remote, string Base, string Merged)? Merge { get; init; }
+
+    /// <summary><c>--wait file</c>: edit the file and exit (or answer) when its tab closes.</summary>
+    public string? WaitFile { get; init; }
+
     /// <summary>A file to open in the editor (<c>--open</c>).</summary>
     public string? OpenFile { get; init; }
 
@@ -72,7 +81,20 @@ public sealed record ShellOptions
         var pluginDirs = new List<string>();
         var errors = new List<string>();
         var start = 0;
-        if (args.Count > 0 && args[0] == "diff")
+        if (args.Count > 0 && args[0] == "merge")
+        {
+            if (args.Count >= 5 && args.Skip(1).Take(4).All(a => !a.StartsWith("--", StringComparison.Ordinal)))
+            {
+                options = options with { Merge = (System.IO.Path.GetFullPath(args[1]), System.IO.Path.GetFullPath(args[2]), System.IO.Path.GetFullPath(args[3]), System.IO.Path.GetFullPath(args[4])) };
+                start = 5;
+            }
+            else
+            {
+                errors.Add("'merge' needs four files: daedalus merge <local> <remote> <base> <merged>.");
+                start = args.Count;
+            }
+        }
+        else if (args.Count > 0 && args[0] == "diff")
         {
             if (args.Count >= 3 && !args[1].StartsWith("--", StringComparison.Ordinal) && !args[2].StartsWith("--", StringComparison.Ordinal))
             {
@@ -126,6 +148,9 @@ public sealed record ShellOptions
                     break;
                 case "--exit-on":
                     options = options with { ExitOn = Value() };
+                    break;
+                case "--wait":
+                    options = options with { WaitFile = Value() is { } waited ? System.IO.Path.GetFullPath(waited) : null };
                     break;
                 case "--open":
                     options = options with { OpenFile = Value() is { } file ? System.IO.Path.GetFullPath(file) : null };

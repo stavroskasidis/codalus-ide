@@ -28,9 +28,9 @@ public sealed class BuildTests
         f.Shell.Run("build.buildSolution");
         await ShellFixture.PumpUntil(() => f.Shell.Builds.LastBuild is not null, seconds: 180);
         Assert.False(f.Shell.Builds.LastBuild!.Result.Succeeded, f.Shell.Builds.Channel.GetText());
-        await ShellFixture.PumpUntil(() => f.Shell.ErrorList.Rows.Any(r => r.Code == "CS0103"));
-        var row = f.Shell.ErrorList.Rows.First(r => r.Code == "CS0103");
-        Assert.Contains("Build", row.Source, StringComparison.Ordinal);
+        // The live (IntelliSense) diagnostic can show first; wait for the build's.
+        await ShellFixture.PumpUntil(() => f.Shell.ErrorList.Rows.Any(r => r.Code == "CS0103" && r.Source.Contains("Build", StringComparison.Ordinal)));
+        var row = f.Shell.ErrorList.Rows.First(r => r.Code == "CS0103" && r.Source.Contains("Build", StringComparison.Ordinal));
         Assert.Equal("Greetings", row.Project);
         await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Left.Any(i => i.Item.Id == "daedalus.build" && i.Text.Contains("failed", StringComparison.Ordinal)));
 

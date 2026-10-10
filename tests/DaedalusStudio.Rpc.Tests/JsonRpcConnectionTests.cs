@@ -175,4 +175,61 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
         Assert.Equal(3, result.GetProperty("a").GetArrayLength());
         Assert.Equal("x", result.GetProperty("b").GetString());
     }
+
+    [Fact]
+    public async Task A_request_cancelled_while_its_frame_is_written_leaves_the_stream_intact()
+    {
+        // The token is cancelled right after the header goes out: the body must follow, or the peer reads garbage.
+        using var cts = new CancellationTokenSource();
+        var cancelling = new CancelOnFirstWriteStream(_aToB.Writer.AsStream(), cts);
+        await using var a = new JsonRpcConnection(_bToA.Reader.AsStream(), cancelling);
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) => Task.FromResult(new Pong(p.Text)));
+        a.Start();
+        _b.Start();
+
+        try
+        {
+            // Cancelled, or answered before the cancellation was seen: either way the frame went out whole.
+            await a.InvokeAsync("echo", new Ping("first"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        var next = await a.InvokeAsync("echo", new Ping("second"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+
+        Assert.Equal("second", next.Text);
+    }
+
+    private sealed class CancelOnFirstWriteStream(Stream inner, CancellationTokenSource cancel) : Stream
+    {
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() => inner.Flush();
+
+        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await inner.WriteAsync(buffer, cancellationToken);
+            await cancel.CancelAsync();
+        }
+    }
 }
