@@ -1,0 +1,44 @@
+{
+  "id": "daedalus.azuredevops",
+  "version": "0.1.0",
+  "displayName": "Azure DevOps",
+  "publisher": "daedalus",
+  "description": "Pull requests, review comments, pipelines, work items and publishing for Azure DevOps. Inactive until you sign in.",
+  "engines": { "daedalus": "^0.2.6" },
+  "entry": { "runtime": "dotnet", "assembly": "DaedalusStudio.Plugins.AzureDevOps.dll" },
+  "enableProposedApi": true,
+  "contributes": {
+    "hostingProviders": [
+      { "id": "azure-devops", "label": "Azure DevOps", "hosts": ["dev.azure.com", "*.visualstudio.com", "ssh.dev.azure.com", "vs-ssh.visualstudio.com"], "icon": "cloud" }
+    ],
+    "settings": {
+      "title": "Azure DevOps",
+      "properties": {
+        "azureDevOps.serverUrl": {
+          "type": "string",
+          "default": "https://dev.azure.com",
+          "description": "The Azure DevOps server: https://dev.azure.com, or an Azure DevOps Server's collection address without the collection.",
+          "scope": "user"
+        },
+        "azureDevOps.authorityUrl": {
+          "type": "string",
+          "default": "https://login.microsoftonline.com/organizations",
+          "description": "The Microsoft Entra ID authority for signing in with a device code.",
+          "scope": "user"
+        },
+        "azureDevOps.profileUrl": {
+          "type": "string",
+          "default": "https://app.vssps.visualstudio.com",
+          "description": "The Azure DevOps profile service (who is signed in, their organizations).",
+          "scope": "user"
+        },
+        "azureDevOps.oauthClientId": {
+          "type": "string",
+          "default": "",
+          "description": "The client id of the Microsoft Entra ID app used to sign in with a device code. Empty: sign in with a personal access token.",
+          "scope": "user"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared by the built-in GitHub, Azure DevOps and GitLab plugins (ADR 0031): the OAuth device flow, sessions in the OS credential store, and HTTP and JSON helpers. Copied next to each of them.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The plugin host provides the API at runtime, so it is not copied next to the plugins. -->
+    <ProjectReference Include="..\..\DaedalusStudio.Plugins.Abstractions\DaedalusStudio.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DaedalusStudio.Plugins.GitHub" />
+    <InternalsVisibleTo Include="DaedalusStudio.Plugins.AzureDevOps" />
+    <InternalsVisibleTo Include="DaedalusStudio.Plugins.GitLab" />
+    <InternalsVisibleTo Include="DaedalusStudio.Plugins.Tests" />
+  </ItemGroup>
+</Project>
