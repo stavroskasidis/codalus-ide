@@ -9,7 +9,7 @@
   "enableProposedApi": true,
   "contributes": {
     "hostingProviders": [
-      { "id": "azure-devops", "label": "Azure DevOps", "hosts": ["dev.azure.com", "*.visualstudio.com", "ssh.dev.azure.com", "vs-ssh.visualstudio.com"], "icon": "cloud" }
+      { "id": "azure-devops", "label": "Azure DevOps", "hosts": ["dev.azure.com", "*.visualstudio.com", "ssh.dev.azure.com", "vs-ssh.visualstudio.com"], "serverSetting": "azureDevOps.serverUrl", "icon": "cloud" }
     ],
     "settings": {
       "title": "Azure DevOps",

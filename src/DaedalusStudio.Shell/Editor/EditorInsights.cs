@@ -83,7 +83,62 @@ public sealed class EditorInsights : IDisposable
         editor.TextArea.AddHandler(InputElement.KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         services.Options.PropertyChanged += OnOptionsChanged;
         services.ThemeChanged += OnThemeChanged;
+        _reviews = new TextSegmentCollection<ReviewSegment>(document);
+        services.ReviewThreadsChanged += OnReviewThreadsChanged;
         ApplyOptions();
+        LoadReviewThreads();
+    }
+
+    // ------------------------------------------------------------------ review comments (M13b)
+
+    private readonly TextSegmentCollection<ReviewSegment> _reviews;
+
+    /// <summary>The review threads shown at the end of lines: one-based line and the threads there (tests).</summary>
+    internal IReadOnlyList<(int Line, IReadOnlyList<Workbench.Hosting.EditorReviewThread> Threads)> ReviewLines =>
+        [.. _reviews.Select(r => (_editor.Document.GetLineByOffset(r.StartOffset).LineNumber, r.Threads))];
+
+    private void OnReviewThreadsChanged(object? sender, EventArgs e) => Ui.Post(LoadReviewThreads);
+
+    /// <summary>Places the review threads of the current branch's pull request on this file's lines (they follow edits).</summary>
+    private void LoadReviewThreads()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _reviews.Clear();
+        var document = _editor.Document;
+        foreach (var group in _services.ReviewThreadsFor(_model().Path).Where(t => t.Line >= 1 && t.Line <= document.LineCount).GroupBy(t => t.Line))
+        {
+            var line = document.GetLineByNumber(group.Key);
+            _reviews.Add(new ReviewSegment([.. group]) { StartOffset = line.Offset, Length = 0 });
+        }
+
+        _editor.TextArea.TextView.Redraw();
+        Updated?.Invoke(this, EventArgs.Empty);
+    }
+
+    private sealed class ReviewSegment(IReadOnlyList<Workbench.Hosting.EditorReviewThread> threads) : TextSegment
+    {
+        public IReadOnlyList<Workbench.Hosting.EditorReviewThread> Threads { get; } = threads;
+
+        /// <summary>"bo: Rename this? (+2)": the first comment of the first thread, and how many more there are.</summary>
+        public string Summary
+        {
+            get
+            {
+                var first = Threads[0].Comments.Count > 0 ? Threads[0].Comments[0] : null;
+                var more = Threads.Sum(t => t.Comments.Count) - 1;
+                var body = (first?.Body ?? string.Empty).ReplaceLineEndings(" ").Trim();
+                if (body.Length > 60)
+                {
+                    body = body[..57] + "…";
+                }
+
+                return $"◆ {first?.Author}: {body}{(more > 0 ? $" (+{more.ToString(System.Globalization.CultureInfo.InvariantCulture)})" : string.Empty)}";
+            }
+        }
     }
 
     /// <summary>The inheritance margin (added to the editor's left margins by the controller).</summary>
@@ -562,8 +617,10 @@ public sealed class EditorInsights : IDisposable
         _brackets.Detach();
         _hints.Disconnect(_editor.Document);
         _lenses.Disconnect(_editor.Document);
+        _reviews.Disconnect(_editor.Document);
         _services.Options.PropertyChanged -= OnOptionsChanged;
         _services.ThemeChanged -= OnThemeChanged;
+        _services.ReviewThreadsChanged -= OnReviewThreadsChanged;
     }
 
     // ------------------------------------------------------------------ segments
@@ -594,14 +651,25 @@ public sealed class EditorInsights : IDisposable
 
     // ------------------------------------------------------------------ rendering
 
-    private sealed record EndOfLine(string Text, LensSegment? Lens);
+    private sealed record EndOfLine(string Text, LensSegment? Lens)
+    {
+        /// <summary>Review threads on the line (M13b): clicking the text shows them.</summary>
+        public ReviewSegment? Review { get; init; }
+    }
 
-    /// <summary>Inserts the hints (zero-length elements) and the end-of-line text (diagnostic, lenses).</summary>
+    /// <summary>Inserts the hints (zero-length elements) and the end-of-line text (diagnostic, lenses, review comments).</summary>
     private sealed class InlineGenerator(EditorInsights owner) : VisualLineElementGenerator
     {
         public EndOfLine? EndOfLine(DocumentLine line)
         {
             var parts = new List<string>();
+            var review = owner._reviews.FindSegmentsContaining(line.Offset).FirstOrDefault(r => r.StartOffset >= line.Offset && r.StartOffset <= line.EndOffset)
+                ?? owner._reviews.FindOverlappingSegments(line.Offset, line.Length).FirstOrDefault();
+            if (review is not null)
+            {
+                parts.Add(review.Summary);
+            }
+
             if (owner._diagnosticsByLine.TryGetValue(line.LineNumber, out var message))
             {
                 parts.Add(message);
@@ -618,7 +686,7 @@ public sealed class EditorInsights : IDisposable
                 }
             }
 
-            return parts.Count == 0 ? null : new EndOfLine("    " + string.Join("    ", parts), first);
+            return parts.Count == 0 ? null : new EndOfLine("    " + string.Join("    ", parts), first) { Review = review };
         }
 
         public override int GetFirstInterestedOffset(int startOffset)
@@ -647,8 +715,13 @@ public sealed class EditorInsights : IDisposable
             }
 
             var lens = eol!.Lens;
-            var color = owner._diagnosticsByLine.ContainsKey(line.LineNumber) ? owner.Brush("Shell.Warning") : owner.Brush("Shell.Editor.InlayHint.Foreground");
-            return new InlineTextElement((hintText ?? string.Empty) + eol.Text, color, null, lens is null ? null : () => owner.RunLens(lens));
+            var color = eol.Review is not null ? owner.Brush("Shell.Info")
+                : owner._diagnosticsByLine.ContainsKey(line.LineNumber) ? owner.Brush("Shell.Warning")
+                : owner.Brush("Shell.Editor.InlayHint.Foreground");
+            Action? click = eol.Review is { } review ? () => owner._services.ShowReviewThreads(review.Threads, owner._editor.TextArea)
+                : lens is null ? null
+                : () => owner.RunLens(lens);
+            return new InlineTextElement((hintText ?? string.Empty) + eol.Text, color, null, click);
         }
     }
 

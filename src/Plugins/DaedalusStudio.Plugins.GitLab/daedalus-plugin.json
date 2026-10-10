@@ -9,7 +9,7 @@
   "enableProposedApi": true,
   "contributes": {
     "hostingProviders": [
-      { "id": "gitlab", "label": "GitLab", "hosts": ["gitlab.com"], "icon": "cloud" }
+      { "id": "gitlab", "label": "GitLab", "hosts": ["gitlab.com"], "serverSetting": "gitlab.serverUrl", "icon": "cloud" }
     ],
     "settings": {
       "title": "GitLab",

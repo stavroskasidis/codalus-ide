@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.CreatePullRequestView"
+             x:DataType="vm:CreatePullRequestViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="24,18" Spacing="10" MaxWidth="780" HorizontalAlignment="Left">
+      <TextBlock Classes="heading" FontSize="18" Text="{Binding Header}" TextWrapping="Wrap" />
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4">
+        <TextBlock Text="From" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
+        <TextBlock Grid.Column="1" Text="{Binding SourceBranch}" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Grid.Row="1" Text="Into" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding Target}" MinWidth="220" Margin="0,6,0,0" AutomationProperties.Name="Branch to merge into" />
+      </Grid>
+      <TextBlock Text="Title" Classes="muted" />
+      <TextBox x:Name="TitleBox" Text="{Binding Title}" AutomationProperties.Name="Pull request title" />
+      <TextBlock Text="Description (Markdown)" Classes="muted" />
+      <TextBox Text="{Binding Description}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" AutomationProperties.Name="Pull request description" />
+      <CheckBox Content="Create as a draft" IsChecked="{Binding IsDraft}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Classes="accent" Content="Create Pull Request" Command="{Binding CreateCommand}" IsEnabled="{Binding !IsBusy}" />
+        <TextBlock Text="Pushing the branch and creating the pull request…" Classes="muted" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Created}" IsVisible="{Binding HasCreated}" FontWeight="SemiBold" TextWrapping="Wrap" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

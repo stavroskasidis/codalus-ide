@@ -23,6 +23,7 @@
       <TextBox x:Name="Input"
                Text="{Binding InputText}"
                IsVisible="{Binding HasInput}"
+               PasswordChar="{Binding PasswordChar}"
                AutomationProperties.Name="{Binding Title}" />
       <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasChoices}">
         <Border BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="320">

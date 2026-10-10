@@ -81,6 +81,9 @@ public sealed record ManifestHostingProvider(string Id, string Label)
 {
     public string[]? Hosts { get; init; }
 
+    /// <summary>A setting holding the server's URL (an enterprise server): its host counts as one of <see cref="Hosts"/>.</summary>
+    public string? ServerSetting { get; init; }
+
     /// <summary>A built-in icon name.</summary>
     public string? Icon { get; init; }
 }

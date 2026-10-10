@@ -59,6 +59,12 @@
     <InternalsVisibleTo Include="DaedalusStudio.Shell.Tests" />
   </ItemGroup>
 
+  <!-- The smoke test's mock GitHub (M13b): the same source as the tests' mock servers, so nothing reaches GitHub. -->
+  <ItemGroup>
+    <Compile Include="..\..\tests\Shared\MockHttpServer.cs" Link="Infrastructure\Mocks\MockHttpServer.cs" />
+    <Compile Include="..\..\tests\Shared\MockGitHub.cs" Link="Infrastructure\Mocks\MockGitHub.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <AvaloniaResource Include="..\..\assets\logo\daedalus.ico" Link="Assets\daedalus.ico" />
     <!-- Built-in snippets, one file per language (M12b). -->

@@ -78,15 +78,21 @@ public sealed class HostingService : IHostingSink
 
     public bool IsEnabled => _enabled();
 
-    /// <summary>The declared providers.</summary>
+    /// <summary>The declared providers, with the host of their configured server (<c>serverSetting</c>) among their hosts.</summary>
     public IReadOnlyList<HostingProviderInfo> Providers =>
         [.. _plugins.HostingProviderDeclarations
             .GroupBy(d => d.Provider.Id, StringComparer.Ordinal)
             .Select(g => g.First())
-            .Select(d => new HostingProviderInfo(d.Provider.Id, d.Provider.Label, d.Plugin.Id, d.Provider.Hosts ?? [], d.Provider.Icon)
+            .Select(d => new HostingProviderInfo(d.Provider.Id, d.Provider.Label, d.Plugin.Id, [.. d.Provider.Hosts ?? [], .. ServerHost(d.Provider.ServerSetting)], d.Provider.Icon)
             {
                 IsRegistered = _connections.ContainsKey(d.Provider.Id),
             })];
+
+    /// <summary>Reads a setting's text (the provider's server URL); set by the shell.</summary>
+    public Func<string, string?>? ReadSetting { get; set; }
+
+    private IEnumerable<string> ServerHost(string? setting) =>
+        setting is not null && ReadSetting?.Invoke(setting) is { Length: > 0 } url && HostOf(url.Trim().TrimEnd('/') + "/x.git") is { } host ? [host] : [];
 
     public HostingProviderInfo? Provider(string id) => Providers.FirstOrDefault(p => p.Id == id);
 

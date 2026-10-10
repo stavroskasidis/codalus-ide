@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using DaedalusStudio.Shell.Controls;
 using DaedalusStudio.Shell.ViewModels;
 
@@ -33,6 +34,114 @@ public sealed partial class GitChangesView : UserControl, IPaneView
                 e.Handled = true;
             }
         };
+
+        // # completion of issues and work items (M13b).
+        Message.TextChanged += (_, _) =>
+        {
+            _completionTimer.Stop();
+            _completionTimer.Start();
+        };
+        _completionTimer.Tick += (_, _) =>
+        {
+            _completionTimer.Stop();
+            _ = UpdateCompletionAsync();
+        };
+        Message.AddHandler(KeyDownEvent, OnMessageKeyDown, RoutingStrategies.Tunnel);
+        CompletionList.DoubleTapped += (_, _) => AcceptCompletion();
+    }
+
+    private readonly DispatcherTimer _completionTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
+
+    // Only the latest request's answer is shown (older ones are ignored; their searches are short).
+    private int _completionVersion;
+
+    /// <summary>Whether the completion list is open (tests).</summary>
+    internal bool IsCompletionOpen => CompletionPopup.IsOpen;
+
+    /// <summary>The completions shown (tests).</summary>
+    internal IReadOnlyList<CommitCompletion> CompletionItems => CompletionList.ItemsSource as IReadOnlyList<CommitCompletion> ?? [];
+
+    /// <summary>Asks for completions of the <c>#…</c> before the caret (also called by tests, without the typing delay).</summary>
+    internal async Task UpdateCompletionAsync()
+    {
+        if (DataContext is not GitChangesViewModel vm)
+        {
+            return;
+        }
+
+        var version = ++_completionVersion;
+        var text = Message.Text ?? string.Empty;
+        var caret = Message.CaretIndex;
+        if (GitChangesViewModel.CompletionQuery(text, caret) is null)
+        {
+            CompletionPopup.IsOpen = false;
+            return;
+        }
+
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var items = await vm.CompleteAsync(text, caret, timeout.Token).ConfigureAwait(true);
+            if (version != _completionVersion)
+            {
+                return;
+            }
+
+            CompletionList.ItemsSource = items;
+            CompletionList.SelectedIndex = items.Count > 0 ? 0 : -1;
+            CompletionPopup.IsOpen = items.Count > 0;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex) when (ex is Workbench.Hosting.HostingRequestException or Workbench.Hosting.HostingSignInRequiredException)
+        {
+            CompletionPopup.IsOpen = false;
+        }
+    }
+
+    private void OnMessageKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!CompletionPopup.IsOpen)
+        {
+            return;
+        }
+
+        var count = CompletionItems.Count;
+        switch (e.Key)
+        {
+            case Key.Down when count > 0:
+                CompletionList.SelectedIndex = (CompletionList.SelectedIndex + 1) % count;
+                e.Handled = true;
+                break;
+            case Key.Up when count > 0:
+                CompletionList.SelectedIndex = (CompletionList.SelectedIndex + count - 1) % count;
+                e.Handled = true;
+                break;
+            case Key.Enter or Key.Tab when e.KeyModifiers == KeyModifiers.None:
+                AcceptCompletion();
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                CompletionPopup.IsOpen = false;
+                e.Handled = true;
+                break;
+        }
+    }
+
+    /// <summary>Puts the selected completion's reference in place of the <c>#…</c> being typed.</summary>
+    internal void AcceptCompletion()
+    {
+        CompletionPopup.IsOpen = false;
+        if (CompletionList.SelectedItem is not CommitCompletion item)
+        {
+            return;
+        }
+
+        var (text, caret) = GitChangesViewModel.ApplyCompletion(Message.Text ?? string.Empty, Message.CaretIndex, item.Reference);
+        Message.Text = text;
+        Message.CaretIndex = caret;
+        Message.Focus();
     }
 
     /// <summary>Shows git errors (set by the shell).</summary>

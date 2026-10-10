@@ -9,7 +9,7 @@
   "enableProposedApi": true,
   "contributes": {
     "hostingProviders": [
-      { "id": "github", "label": "GitHub", "hosts": ["github.com", "ssh.github.com"], "icon": "cloud" }
+      { "id": "github", "label": "GitHub", "hosts": ["github.com", "ssh.github.com"], "serverSetting": "github.serverUrl", "icon": "cloud" }
     ],
     "settings": {
       "title": "GitHub",
