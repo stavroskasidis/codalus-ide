@@ -2,7 +2,7 @@
 
 This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It turns the mission's one-line post-MVP list into milestones that future sessions can plan and build one at a time. It also covers the rest of the Visual Studio feature set that the mission's "parity is reachable" goal implies. The [Visual Studio parity matrix](#visual-studio-parity-matrix) maps every VS feature area to the milestone that delivers it, or records it as a gap or a non-goal. It is the checklist that keeps this plan complete.
 
-- **Status:** written 2026-10-08 while M1 was in progress, and checked against Visual Studio 2026 on 2026-10-09. The MVP (M0–M7) is done; M8 was built on 2026-10-09 (checkpoints [M8a](checkpoints/m8a.md) and [M8b](checkpoints/m8b.md)), and M9 the same day ([M9a](checkpoints/m9a.md), [M9b](checkpoints/m9b.md)). On 2026-10-09 the maintainer gave a standing go-ahead for M9 through M16, built in order with each milestone validated on Windows, Linux and macOS.
+- **Status:** written 2026-10-08 while M1 was in progress, and checked against Visual Studio 2026 on 2026-10-09. The MVP (M0–M7) is done; M8 was built on 2026-10-09 (checkpoints [M8a](checkpoints/m8a.md) and [M8b](checkpoints/m8b.md)), and M9 the same day ([M9a](checkpoints/m9a.md), [M9b](checkpoints/m9b.md)). On 2026-10-09 the maintainer gave a standing go-ahead for M9 through M16, built in order with each milestone validated on Windows, Linux and macOS. On 2026-10-10 the maintainer added a platform and release phase (M30–M33), placed next, after M16b and before M16c. The same day they added UI polish (M34) as the last milestone before Visual Basic and F#, which were renumbered M35 and M36 so that they stay last.
 - **Authority:** `ide-prompt.md` wins over this document. The fixed decisions and non-goals there still apply. ADRs win over this document once they are accepted.
 - **Licences:** the licences given below are what we believe them to be when this was written. Check each one again before adopting it, and record it in `THIRD-PARTY-NOTICES.md`. If a licence is ambiguous, stop and ask the maintainer.
 
@@ -15,7 +15,7 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
    - plan mode
    - ADRs before code
    - task breakdown
-   - the definition of done (unit, integration and headless UI tests, CI green on three OSes, budgets met, docs updated)
+   - the definition of done (unit, integration and headless UI tests, CI green on three OSes, budgets met, docs updated, and a screenshot review of the milestone's own panels against [M34's checklist](#m34--ui-polish), D25)
    - **stop at the checkpoint**
 5. The scope lists here are the **target**. At plan time, split a milestone (for example M12a/M12b) if it is too big to ship in one checkpoint. Move items out explicitly with a `TODO(issue)`. Never drop them silently.
 6. When planning a milestone, also go through the parity matrix rows that point at it. A row can only move to "gap" or to another milestone with a stated reason.
@@ -44,14 +44,21 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
 | M21 | Remote development | planned |
 | M22 | Plugin platform 1.0 and marketplace | planned |
 | M23 | Personalization, settings sync and localization | planned |
-| M24 | Visual Basic | planned |
-| M25 | F# | planned |
 | M26 | Build and project-system depth | planned |
 | M27 | Data and Entity Framework Core tooling | planned |
 | M28 | AI assistance | needs a decision (D7) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
+| M30 | .NET 11 and following .NET releases | planned, **next** (.NET 11 GA is expected in November 2026) |
+| M31 | Automated release cycle and installers | planned, after M30 |
+| M32 | Self-update | planned, after M31 |
+| M33 | Older .NET: .NET Core 2.0 to .NET 10 | planned, after M32; then M16c continues |
+| M34 | UI polish | planned, the last milestone before Visual Basic and F# |
+| M35 | Visual Basic | planned, always second to last |
+| M36 | F# | planned, always last |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
+
+**Visual Basic and F# are always the last two milestones** (the maintainer's rule, 2026-10-10). They keep the two highest numbers: a new milestone takes Visual Basic's current number, and Visual Basic and F# each move up by one. The change log records every such renumbering. M24 and M25 are retired: they were Visual Basic and F# until 2026-10-10 and aren't reused.
 
 ## Baseline: what the MVP is assumed to deliver
 
@@ -112,20 +119,29 @@ These decisions get more expensive with every milestone. **Raise them at the M7 
 | 1. Daily driver | M8, M9, M10 | What a C# developer misses most on day one after the MVP: tests, packages, a terminal. |
 | 2. Language platform | M11 | Pluggable languages (LSP bridge, grammars) and editing for the non-C# files every .NET repository has. |
 | 3. Depth | M12, M29, M13, M14, M26 | Bringing the editor, Git, the debugger and the build and project tooling from "MVP" to "VS-class", and the look and feel from VS Code's to Visual Studio's (M29). |
-| 4. Web, data and cloud-native | M15, M16, M27, M17 | ASP.NET Core, Blazor, Hot Reload, EF Core and databases, containers, Aspire, publishing. |
-| 5. Diagnostics | M18 | Profiling, counters, memory analysis, dumps, benchmarks. |
-| 6. UI frameworks | M19, M20 | Avalonia XAML with a live previewer. MAUI is exploratory. |
-| 7. Remote | M21 | SSH, WSL, Dev Containers. |
-| 8. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance if D7 says yes. |
-| 9. Visual Basic and F# | M24, M25 | Rich editing for the mission's other .NET languages, on top of the language platform. |
+| 4. Platform and release | M30, M31, M32, M33 | The newest .NET (11, then each new release), automated nightly and stable releases with setup installers, self-update, and proof that .NET Core 2.0 to .NET 10 projects work. |
+| 5. Web, data and cloud-native | M15, M16, M27, M17 | ASP.NET Core, Blazor, Hot Reload, EF Core and databases, containers, Aspire, publishing. |
+| 6. Diagnostics | M18 | Profiling, counters, memory analysis, dumps, benchmarks. |
+| 7. UI frameworks | M19, M20 | Avalonia XAML with a live previewer. MAUI is exploratory. |
+| 8. Remote | M21 | SSH, WSL, Dev Containers. |
+| 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance if D7 says yes. |
+| 10. Polish | M34 | Every panel, window and feature brought to one finished standard. |
+| 11. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
+
+Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. Work continues with M16c once phase 4 is done.
 
 **Why this order.**
 - Tests, NuGet and a terminal are what stop people from using the IDE every day.
 - The language platform (M11) comes early, because it proves the "pluggable language services" requirement and every later language and file type builds on it.
+- Platform and release (phase 4) comes next, by the maintainer's choice:
+  - .NET 11 (M30) goes first, so that Daedalus is ready when .NET 11 is released.
+  - Automated releases (M31) and self-update (M32) come before the repository goes public, so that the first public users get installers and updates.
+  - The older-.NET validation (M33) builds on M30's hosts, which must start with any SDK.
 - Web development is the biggest .NET workload. It comes after depth work because Hot Reload and Blazor debugging build on M12 and M14. Data tooling (M27) sits with it, because EF Core and a database are part of most web apps.
 - AI assistance (M28) is a headline Visual Studio 2026 feature, but it waits for D7. It goes after the plugin API freeze (M22), because it should be built on public provider APIs.
 - Remote development comes late because it touches every host. F1 and F2 make sure it doesn't need a rewrite.
-- VB and F# come last, after everything else. Solutions with VB and F# projects already load, build and run from the MVP, and the C# depth, web and tooling work serves more users first. M11 keeps them cheap whenever they are picked up.
+- UI polish (M34) comes after every other milestone except VB and F#, so that one pass covers all the UI. Until then, each milestone reviews its own panels against M34's checklist.
+- VB and F# come last, after everything else, and stay last when milestones are added. Solutions with VB and F# projects already load, build and run from the MVP, and the C# depth, web and tooling work serves more users first. M11 keeps them cheap whenever they are picked up.
 
 ### Dependency graph
 
@@ -143,9 +159,13 @@ graph LR
   M8 --> M12
   M9 --> M11
   M9 --> M17
-  M10 --> M25
+  M10 --> M36
   M10 --> M21
-  M11 --> M16 & M19 & M22 & M24 & M25
+  M11 --> M16 & M19 & M22 & M35 & M36
+  M30 --> M33
+  M31 --> M32
+  M32 -.-> M21 & M22
+  M29 --> M34
   M12 --> M14
   M14 --> M15
   M15 --> M16 & M17
@@ -175,7 +195,7 @@ A dashed edge means "better with", not "blocked by".
   - xUnit v2 and v3, NUnit 3 and 4, MSTest 3 and later.
   - Both test platforms: VSTest, and Microsoft.Testing.Platform (MTP) for projects that opt into it.
   - TUnit (MTP only), if its licence checks out.
-  - F# frameworks (Expecto) are added in M25.
+  - F# frameworks (Expecto) are added in M36.
 - **Discovery:**
   - **Source-based** discovery from Roslyn gives a tree immediately after the solution opens, before any build. It finds methods with known test attributes.
   - **Runner-based** discovery runs after a build and is authoritative: data rows, theories, dynamic tests.
@@ -786,7 +806,277 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 
 ---
 
-## Phase 4: Web and cloud-native
+## Phase 4: Platform and release
+
+The maintainer added this phase on 2026-10-10 and put it next, after M16b and before M16c. It has four goals:
+- keep Daedalus on the newest .NET
+- prove that the older versions of .NET work
+- automate releases and updates
+- have all of this in place before the repository goes public
+
+### M30 — .NET 11 and following .NET releases
+
+**Goal.** Daedalus runs on .NET 11. On the day .NET 11 is released (GA is expected in November 2026), it fully supports .NET 11 projects. After that, Daedalus moves to every new .NET release (D22).
+
+**Depends on.** Nothing new, but it touches every host.
+
+**Decisions.** D22: Daedalus moves to each new .NET major version when it ships, starting with .NET 11.
+
+**Scope.**
+- **Daedalus on .NET 11:**
+  - `global.json` uses the .NET 11 SDK, and `Directory.Build.props` targets `net11.0` for the shell and every host. The shell is Native AOT on 11, with no new trimming warnings.
+  - Check every dependency on 11: Avalonia, Dock, the Roslyn, MSBuild and NuGet client packages, Microsoft.Testing.Platform, Coverlet, Velopack (M31) and the TextMate engine. Record any version changes in `THIRD-PARTY-NOTICES.md`.
+  - CI, `eng/validate.sh`, `eng/wsl-test.sh` and the Mac validation install the .NET 11 SDK.
+- **The hosts and the user's SDK.**
+  - The build host loads MSBuild from the user's SDK. An SDK's MSBuild needs that SDK's runtime or a newer one.
+  - The hosts must start with whatever SDK the user has installed, from the oldest one M33 supports to the newest.
+  - The ADR picks one of two options:
+    - the hosts carry the runtime they target: one private runtime in the package, shared by all hosts
+    - the hosts roll forward onto the newest installed runtime
+  - The installers' prerequisites (M31) change to match.
+- **.NET 11 projects** (`net11.0` with the .NET 11 SDK):
+  - **Opening:** projects open and evaluate. `net11.0` appears in the New Project dialog, the target framework lists and the property pages.
+  - **C# 15 in the language host:** the host's Roslyn tracks the compiler of the newest SDK. New syntax doesn't show false errors, and analyzers and source generators built against the new Roslyn load.
+  - **Build and run:** build, run, Hot Reload (`dotnet watch` from SDK 11) and Razor (the SDK 11 source generator).
+  - **Debugging:** a netcoredbg release that supports the .NET 11 runtime.
+  - **Tests and C# Interactive:** tests and coverage on 11 (VSTest, MTP, Coverlet), and C# Interactive with C# 15.
+  - **Markup host schemas:** the new `global.json`, `runtimeconfig` and MSBuild properties.
+  - **SDK status:** the SDK and workload status (M9) shows 11 and marks SDKs that are out of support.
+- **The upgrade checklist.**
+  - `docs/release/dotnet-upgrade.md` lists every step above.
+  - Each later major version of .NET (12 in November 2027, and so on) follows it as a milestone-sized task. The task starts at the first release candidate and finishes at GA.
+
+**Fixtures.**
+- `net11.0` targets in `samples/BuildAndRun` and `samples/Debugging`.
+- A multi-targeted `net10.0;net11.0` project in `samples/Testing`.
+- C# 15 features in `samples/LanguageFeatures`.
+
+**Budgets.** Measure startup, typing, idle memory and the size of the shell's binary before and after the move. None of them may regress.
+
+**Risks.**
+- netcoredbg can lag behind a new runtime. If no netcoredbg release supports 11 at GA, debugging on 11 is a documented gap until one does.
+- Avalonia, Dock or another dependency may not support the new runtime or its AOT compiler on day one.
+- Work can start on the release candidate, with `allowPrerelease` in `global.json` for the time being. The milestone isn't done until it builds on the GA SDK.
+
+**Exit criteria.**
+- Daedalus builds on .NET 11 and passes its tests and the smoke test on three OSes.
+- The `net11.0` fixtures open, build, run, debug, test and Hot Reload.
+
+### M31 — Automated release cycle and installers
+
+**Goal.** Releases are fully automated.
+- Work lands on `develop`, which publishes nightly builds.
+- A merge into `master` publishes a stable build.
+- Each release is a GitHub release, with setup installers for every platform.
+
+**Depends on.** M7 (packaging, ADR 0009). M31 replaces the manual packages of `release.yml`.
+
+**Decisions.**
+- D17: installers built with Velopack
+- D18: the Linux formats
+- D19: no code signing for now
+- D20: switched on when the repository goes public
+- D21: branches and versioning
+
+**Scope.**
+- **Branches** (D21):
+  - `develop` is the default branch. Day-to-day commits land there directly, the way they land on `master` today. Every push runs the Linux CI.
+  - `master` only receives merges from `develop` (each one is a stable release) and hotfixes. After a hotfix release, the workflow merges `master` back into `develop`.
+  - `CLAUDE.md`, `CONTRIBUTING.md` and the go-public checklist change from committing to `master` to committing to `develop`. The `validate` scratch branch stays.
+- **Versioning** (D21):
+  - A one-line `VERSION` file at the repository root holds the version of the next release (for example `0.2.0`). `Directory.Build.props` and the workflows read it. The shell's `VersionPrefix` moves there.
+  - **Stable:** the version as it is, tagged `v0.2.0`. The release fails if the tag already exists.
+  - **Nightly:** `0.2.0-nightly.20261011.1` (the date and the run number), so it sorts before the stable `0.2.0`.
+  - After a stable release, the workflow commits the next minor version (`0.3.0`) to `develop`. A new major version or a patch is a manual edit of the file.
+  - Local builds keep the `-dev` suffix and never update themselves (M32).
+- **Workflows:**
+  - **`nightly.yml`** runs once a night from `develop` if `develop` changed since the last nightly, and on manual dispatch.
+    - It builds the installers on three OSes and smoke-tests the installed packages.
+    - It publishes a GitHub prerelease, `v0.2.0-nightly.20261011.1`, with the commits since the previous nightly as its notes.
+    - Only the last 14 nightlies are kept.
+  - **`release.yml`** runs on every push to `master`.
+    - It runs the same build and smoke test.
+    - It publishes a GitHub release `v0.2.0` with release notes, the update feed (M32), the apt and dnf repositories, and the winget manifests.
+  - **Release notes** are generated from the commits since the previous stable tag. They are grouped by milestone (commit subjects name the milestone) and link to the checkpoint summaries. If `CHANGELOG.md` has a hand-written section, it goes first.
+  - **While the repository is private** (D20):
+    - Both workflows run on manual dispatch only, as the benchmarks do.
+    - The nightly schedule and the push trigger switch on by themselves once the repository is public, where Actions minutes are free.
+    - Anonymous users can't download a private repository's releases, so until then the releases are for the maintainer.
+- **Installers** (D17, D18):
+  - **Windows:**
+    - a Velopack `Setup.exe`: per-user, no administrator rights, a Start menu entry, an uninstall entry, and the `daedalus` command on the `PATH`
+    - the portable zip, which stays
+    - the winget manifests, which point at the installer
+  - **macOS:** a Velopack `.pkg`, which replaces the `.dmg`, plus a zip of the `.app`.
+  - **Linux:**
+    - an **AppImage** (Velopack), which updates itself
+    - **`.deb` and `.rpm`** packages, served from an apt repository and a dnf repository that the release workflow publishes on GitHub Pages. They are signed with the project's repository key. These packages update with the system (`apt upgrade`, `dnf upgrade`).
+    - the **`.tar.gz`**, which stays
+    - Flatpak stays a `TODO(issue)` (ADR 0009). The manifest is kept.
+  - **Prerequisites:**
+    - The installers don't install the .NET SDK or git. The installer or the first run checks for them and links to their downloads.
+    - The `.deb` and `.rpm` declare them as dependencies.
+- **Signing** (D19):
+  - The installers aren't code-signed for now.
+  - Every asset has a SHA-256 checksum in the release, and the update feed is signed with the project key (M32).
+  - The user guide shows how to get past SmartScreen ("More info → Run anyway") and Gatekeeper (right-click → Open).
+  - **Revisit when going public:**
+    - Windows: SignPath Foundation (free for open source) or Azure Trusted Signing
+    - macOS: an Apple Developer ID, with notarization
+    - The workflows already contain the signing steps. They wait behind secrets that aren't set yet.
+- **Secrets:**
+  - Repository secrets hold the signing key of the apt and dnf repositories and the feed signing key.
+  - The public halves are in the repository and in the app.
+
+**Architecture.**
+- The only change in the app is where the version comes from.
+- `eng/package.sh` becomes the per-OS build step that the workflows call. It can still be run locally.
+
+**ADRs.** "Release cycle and installers". It replaces ADR 0009's packaging table.
+
+**Tests.**
+- `eng/smoke-test.sh --packages` installs each package the way a user would, runs the smoke test on the installed app, then uninstalls it and checks that nothing is left behind:
+  - a silent `Setup.exe` on Windows
+  - `installer -pkg` on macOS
+  - the AppImage on Linux, plus the `.deb` and `.rpm` in containers
+- A dry-run mode of both workflows builds and verifies without publishing, so the workflows themselves can be tested.
+- The version stamping, the tag check and the version bump are scripts with unit tests.
+
+**Exit criteria.** One nightly release from `develop` and one stable release from `master` are published by the workflows. Both install and pass the smoke test on Windows, macOS and Linux.
+
+### M32 — Self-update
+
+**Goal.** Daedalus keeps itself up to date without getting in the way. Updates download in the background and are applied at the next restart (D16).
+
+**Depends on.** M31 (releases and the update feed).
+
+**Decisions.**
+- D16: Velopack, a silent download, applied at restart
+- D19: the feed has its own signature while the installers are unsigned
+
+**Scope.**
+- **Channels:**
+  - stable (from `master`) and nightly (from `develop`)
+  - The installed build sets the default. Options → Environment → Updates switches it.
+  - Moving from nightly to stable installs the newest stable release, even though its version is lower, after a confirmation.
+- **Checks:**
+  - after startup, once the shell is interactive, off the UI thread
+  - then every four hours
+  - Help → Check for Updates checks right away.
+- **Download and apply:**
+  - Velopack's delta packages download in the background, at low priority.
+  - The update is applied when the IDE next restarts.
+  - A status bar item offers "Restart to update (0.3.0)". The restart reopens the solution and the documents (the AutoRecover state, M12).
+  - Nothing is modal, and the restart isn't offered while debugging or building.
+  - While the single instance has more than one window, the update waits until the last one closes.
+- **Settings:**
+  - `update.mode`: `auto` (the default), `notify` or `off`
+  - `update.channel`
+  - Turning updates off stops all update traffic. The update check is listed with the other network calls (Security track).
+- **Feed verification:**
+  - The release manifest is signed with the project key (ed25519). The public key is built into the app.
+  - The updater refuses a manifest whose signature doesn't verify, and a package whose hash doesn't match the manifest.
+  - The ADR confirms that a custom Velopack update source is the place for this check.
+- **Other kinds of install:**
+  - **`.deb` and `.rpm`:** no self-update. A notification says that a new version is available through the package manager.
+  - **`.tar.gz`:** Velopack only updates Windows and macOS installs and AppImages. The tar.gz build gets "update available" notifications with a link to the release, unless the ADR finds a way to update it in place.
+  - **winget:** winget installs are Velopack installs, and they update themselves.
+  - **Development builds** (`-dev` versions, `dotnet run`) never check.
+- **What's new:** after an update, the release notes of every version since the previous one open once in a document. Help → What's New opens them again.
+- **Everything ships together:**
+  - The helper hosts, the built-in plugins and netcoredbg are inside the package, so they update with the shell.
+  - M21's server bundles follow the client's version.
+  - M22's plugin updates and components reuse the download and verification code.
+- **Pulled releases:** a bad release can be pulled from the feed. Clients that haven't installed it skip it, and the next release fixes the clients that have.
+
+**Architecture.**
+- The Velopack client (the `Velopack` NuGet package, MIT) runs in the shell:
+  - its startup hook runs at the start of `Main`
+  - the checks and downloads run in a workbench `UpdateService`
+- Velopack's own update process applies the packages after the shell exits.
+- The ADR checks that the client works under Native AOT. If it doesn't, the update logic moves to a small supervised helper process.
+
+**ADRs.** "Self-update": channels, verification, kinds of install.
+
+**Tests.**
+- **Integration tests against a local folder feed.**
+  - Install version N, publish N+1 to the feed, then check, download and restart, and verify that N+1 runs.
+  - Cover a delta update and a refused unsigned manifest.
+- **Headless UI tests** for the status bar item, the settings and What's New.
+- **Release workflows:** they run the same update test against the installed packages on three OSes.
+
+**Budgets.**
+- Startup must not regress. Velopack's hook is measured in the cold-start scenario.
+- The background download doesn't affect the typing budget.
+- Idle memory doesn't change.
+
+**Exit criteria.**
+- On each OS, an installed nightly updates itself to the next nightly through the published feed.
+- The same works for a stable install updating to the next stable release.
+- While the repository is private, the feed is read with a token (D20).
+
+### M33 — Older .NET: .NET Core 2.0 to .NET 10
+
+**Goal.** Prove that projects targeting every version of .NET (Core) from 2.0 to 10.0 work in Daedalus. Fix what doesn't work, or document it (D23).
+
+**Depends on.**
+- M30 (the hosts start with any SDK)
+- It relies on M4 (build and run), M5 and M14 (debugging), and M8 (tests).
+
+**Decisions.** D23: what is validated.
+
+**Scope.**
+- **Target frameworks:**
+  - `netcoreapp2.0`, `2.1`, `2.2`, `3.0` and `3.1`
+  - `net5.0`, `net6.0`, `net7.0`, `net8.0`, `net9.0` and `net10.0`
+  - `netstandard2.0` and `netstandard2.1` libraries referenced from them
+  - Out of scope: `netcoreapp1.x`, and .NET Framework (a non-goal).
+- **With the current SDK** (the common case: an old project in a new IDE), each target framework goes through:
+  - **Opening:** evaluation, the Dependencies node (including the package-based `Microsoft.NETCore.App` of 2.x) and the property pages.
+  - **IntelliSense:** references are resolved from targeting packs or packages, and the default language version of each framework applies (C# 7.3 for 2.x, 8 for 3.x, …), so diagnostics match the compiler.
+  - **Build, run and debug.**
+  - **Tests:** the test SDK and adapter versions that these frameworks support (VSTest for the old ones), and coverage.
+  - **Hot Reload:** works from .NET 6. For older frameworks the command is disabled, and the reason is given.
+  - **NuGet:** the package manager offers the versions that are compatible with the framework.
+- **Older SDKs pinned by `global.json`:**
+  - Opening and building are checked down to the oldest SDK the build host can load. That floor is recorded in the ADR and the user guide.
+  - Below the floor, Daedalus names the SDK the solution asks for and says why it can't load it, instead of failing silently.
+- **Operating systems:** every OS where the framework's runtime installs.
+  - **Windows x64:** all of the frameworks.
+  - **Linux x64:**
+    - The old runtimes (2.x to 5.0) need OpenSSL 1.x and an old ICU, which current distributions don't have.
+    - Test them in containers of the distributions they supported.
+    - Document what users on current distributions need.
+  - **macOS on Apple silicon:**
+    - .NET 6 and later run natively. 2.x to 5.0 run as x64 under Rosetta.
+    - Run and Debug must launch the x64 `dotnet`.
+    - Debugging an x64 process needs the x64 netcoredbg. Ship it, download it, or record a gap.
+- **A support page** in the user guide: a table of target framework × feature × OS, with every gap and its reason.
+- **Keeping it checked:** the matrix becomes a test suite. It runs at every milestone checkpoint and for every new .NET release (M30's checklist).
+
+**Fixtures.** `samples/TargetFrameworks/`, standalone like every sample:
+- a console app, a library and an xUnit test project for each framework
+- a multi-targeted library (`netstandard2.0;netcoreapp3.1;net8.0`)
+- an ASP.NET Core 2.1 app (the old hosting model) and an ASP.NET Core 3.1 app
+- folders that pin older SDKs in `global.json`
+
+**Tests.**
+- `eng/get-runtimes.sh` installs the runtimes and SDKs into `.work/dotnet-compat`, locally and in CI. The versions are pinned, and the official install script does the installing.
+- The suite runs on Windows, in WSL and on the Mac.
+- Hosted CI runs it on manual dispatch only, because installing a dozen runtimes is slow.
+
+**Risks.**
+- netcoredbg's support for 2.x and 3.x runtimes: its `dbgshim` and the runtimes' debugging interfaces.
+- Old test SDKs and adapters may not work with the current VSTest or MTP clients.
+- MSBuild from very old SDKs may not load in a host on a new runtime. That sets the `global.json` floor.
+
+**Exit criteria.**
+- The support table is filled in from test results on three OSes.
+- Every "no" in it has a reason, and either a `TODO(issue)` or a documented gap.
+
+---
+
+## Phase 5: Web and cloud-native
 
 ### M15 — ASP.NET Core and Hot Reload
 
@@ -992,7 +1282,7 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 
 ---
 
-## Phase 5: Diagnostics
+## Phase 6: Diagnostics
 
 ### M18 — Profiling and diagnostics tools
 
@@ -1061,7 +1351,7 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 
 ---
 
-## Phase 6: UI frameworks
+## Phase 7: UI frameworks
 
 ### M19 — Avalonia XAML editing and live previewer
 
@@ -1123,7 +1413,7 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 
 ---
 
-## Phase 7: Remote
+## Phase 8: Remote
 
 ### M21 — Remote development
 
@@ -1172,7 +1462,7 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 
 ---
 
-## Phase 8: Ecosystem
+## Phase 9: Ecosystem
 
 ### M22 — Plugin platform 1.0 and marketplace
 
@@ -1262,9 +1552,87 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 ---
 
-## Phase 9: Visual Basic and F#
+## Phase 10: Polish
 
-### M24 — Visual Basic
+### M34 — UI polish
+
+**Goal.** Go through every panel, window, dialog and feature, and bring each one to the same finished standard. The standard is a written checklist, and the maintainer approves the result from a screenshot gallery (D25). M34 comes last before Visual Basic and F#, so it covers the UI of every earlier milestone.
+
+**Depends on.**
+- M29 (the look and feel)
+- every milestone before it, whose UI it polishes
+- M22 (icon themes): our icon set becomes the default icon theme
+
+**Decisions.**
+- D24: the icons
+- D25: the checklist and the gallery review
+
+**Until then.** From 2026-10-10, every milestone's definition of done includes a screenshot review of its own panels against this checklist, so M34 finds less.
+
+**Scope.**
+- **An inventory of every surface:**
+  - **Window chrome:** the title row, the menus, the toolbars, the status bar and the Start page.
+  - **The Solution Explorer.**
+  - **The editor's chrome:** tabs, the navigation bar, the gutter, sticky scroll, Peek, CodeLens, inlay hints and data tips.
+  - **Finding things:** Find and Replace, Go To All, Search and the command palette.
+  - **Options.**
+  - **Tool windows:**
+    - Error List, Output, Task List and Bookmarks
+    - references, the hierarchies, Document Outline and Code Definition
+    - Test Explorer and Coverage Results
+    - NuGet and the project properties
+    - the terminal and C# Interactive
+    - Git Changes, the history and the merge editor
+    - the debugger's windows
+    - Endpoints Explorer and HTTP Response
+    - the Syntax Visualizer and Code Metrics
+  - **Dialogs:** New Project, Add New Item, the rename and code action previews, the refactoring options, Configuration Manager and Exception Settings.
+  - **Notifications and plugin views.**
+  - **Later additions:** everything the milestones after M29 added.
+- **The checklist** (D25), applied to each surface:
+  - **Layout:** spacing and alignment on a shared grid. Spacing and size tokens go in `Theming/Tokens.axaml`, next to the colors.
+  - **Toolbars:** one height and one icon size, and tooltips that show the shortcut.
+  - **Icons** (D24).
+  - **Typography:** 9 pt UI text, consistent headings, sentence-case titles and consistent terms.
+  - **States:** an empty state, a loading state and an error state, each with a next step.
+  - **Keyboard:** the tab order, visible focus, and shortcuts shown in menus and tooltips. Context menus wherever users expect them.
+  - **Narrow and wide sizes:** no text cut off without an ellipsis and a tooltip, and no wrapping toolbars.
+  - **Themes:** Blue, Light, Dark and High Contrast, with WCAG AA contrast checked with a tool.
+  - **Operating systems:** all three, including macOS conventions (Cmd shortcuts, the global menu), at display scales from 100 % to 200 %.
+  - **Accessibility:** names and announcements, as the Accessibility track requires.
+- **Icons** (D24):
+  - Commands and tool windows: Fluent UI System Icons (MIT).
+  - File types in the Solution Explorer, tabs, Go To and search: the SVGs from Material Icon Theme (MIT).
+  - Both are compiled to Avalonia geometries at build time, so nothing parses SVG at runtime and the shell stays AOT-clean.
+  - Check both licences again, and record them in `THIRD-PARTY-NOTICES.md`.
+- **M29's open items:**
+  - Blue's inactive tabs (Dock's tab template)
+  - pinned tabs, tab colors by project, the preview tab on the right, and inactive caption colors
+  - the Solution Explorer's root label, which is cut off
+  - the Test Explorer's filter row, which wraps
+  - Light's faint muted text
+- **A UI guide,** `docs/ui-guidelines.md`: the checklist, the tokens and the icon rules, for later milestones and for plugin authors.
+
+**Tests.**
+- **The gallery:**
+  - A smoke-test mode opens every surface in representative states (with data, empty, and with an error) and saves screenshots for each theme and OS.
+  - The gallery is published for the maintainer to approve at the checkpoint (D25).
+- **Clipped text:** a headless test walks each surface at its minimum width and flags text that is cut off without trimming.
+- **Contrast:** checks for every token pair in every theme.
+
+**Budgets.**
+- Startup, typing and idle memory must not regress.
+- Report how much the icon assets add to the size of the shell.
+
+**Exit criteria.** Every surface in the inventory passes the checklist, and the maintainer has approved the gallery on three OSes.
+
+---
+
+## Phase 11: Visual Basic and F#
+
+These two milestones are always last (see [Status](#status)).
+
+### M35 — Visual Basic
 
 **Goal.** Rich editing for VB projects at the same level as C#. Since the MVP, VB projects only load, build and run.
 
@@ -1289,7 +1657,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 **Budgets.** The same as C# (budget 2, plus the M3 language budgets).
 
-### M25 — F#
+### M36 — F#
 
 **Goal.** First-class F# editing, scripting and project handling, on par with Ionide or Rider for everyday work.
 
@@ -1388,23 +1756,35 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
 - **Network calls** are listed in the documentation and each can be turned off: NuGet, symbol servers, SchemaStore, update checks and hosting integrations.
 - **Plugins:** signature checks and declared permissions (M22).
 - **Remote:** a threat model (M21).
+- **Releases and updates** (M31, M32):
+  - Every release asset has a SHA-256 checksum.
+  - The update feed's manifest is signed with the project key, and the updater refuses anything that doesn't verify.
+  - The apt and dnf repositories are signed with the project's repository key.
+  - The installers stay unsigned until D19 is revisited.
 
 ### Platforms
 
 - **Targets:** Windows x64 and ARM64, macOS ARM64 and x64, Linux x64 and ARM64 (X11 and Wayland). Decide the ARM64 and Wayland status at M7. Each milestone lists any OS-specific behaviour.
+- **.NET versions** (D22, D23):
+  - Daedalus itself runs on the newest .NET. It moves to each new major version when it ships, following M30's checklist.
+  - User projects are supported from `netcoreapp2.0` to the newest .NET, on every OS where their runtime installs. M33 has the support table.
 - **Windows:** ConPTY versions and dev-certificate trust.
 - **macOS:** the Keychain, notarization of downloaded tools, and the login-shell environment.
 - **Linux:** libsecret availability, distribution trust stores, and Flatpak sandbox restrictions on spawning processes. The Flatpak build may need `--talk-name` and host-spawn permissions for the SDK, Docker and the terminal. Decide this in M7, and revisit it for M10, M17 and M21.
 
 ### Release, updates and the command line
 
-M7 delivers installers. Visual Studio parity also needs the following. Plan them at the M7 checkpoint or early in Phase 1.
-- **Self-update** (D16):
-  - stable, preview and nightly channels
-  - background download, applied on restart, with delta updates
-  - an "update available" notification that never interrupts work
-  - Package-manager installs (winget, Homebrew, apt/Flatpak) update through their own channel instead.
-- **Offline installs:** a full installer plus the M22 components layout for air-gapped machines.
+M7 delivers packages. Visual Studio parity also needs the following.
+- **The release cycle and setup installers** are M31 (D17–D21):
+  - nightly builds from `develop` and stable builds from `master`
+  - the version comes from the `VERSION` file
+  - GitHub releases with a Velopack installer for each OS, plus `.deb` and `.rpm` packages from our own apt and dnf repositories
+- **Self-update** is M32 (D16):
+  - stable and nightly channels
+  - a background download with delta updates, applied at restart
+  - a "Restart to update" status bar item that never interrupts work
+  - Installs from the apt and dnf repositories update through the package manager instead. Homebrew is a candidate.
+- **Offline installs:** the Velopack installers contain the full app. M22 adds the components layout for air-gapped machines.
 - **The `daedalus` command line,** for the integrations other tools expect:
   - `daedalus <path>[:line[:col]]` opens a file, folder or solution in the running instance
   - `--new-window`
@@ -1415,7 +1795,7 @@ M7 delivers installers. Visual Studio parity also needs the following. Plan them
 - **Help and feedback:**
   - Help menu links to the user documentation
   - "Report a problem": opens a pre-filled GitHub issue with a diagnostics bundle the user reviews first (versions, OS, the logs they choose, no telemetry)
-  - "What's new" after updates
+  - "What's new" after updates (M32)
 
 ### Documentation
 
@@ -1468,9 +1848,10 @@ The "Daedalus" column uses these terms:
 | Full screen, distraction-free mode | M23 |
 | Localized UI | M23 |
 | Keyboard, screen reader and high-contrast accessibility | M1 onward, required in every milestone ([Accessibility](#accessibility)) |
-| F1 help, Help menu, "What's new" | M12 (F1); [release track](#release-updates-and-the-command-line) |
+| F1 help, Help menu, "What's new" | M12 (F1); "What's new" M32; the rest on the [release track](#release-updates-and-the-command-line) |
 | Report a Problem, Suggest a Feature | Release track (no telemetry, user-reviewed bundle) |
-| Installer, workloads and components, updates, offline layout | M7 (installers); M22 (components); release track (updates, offline) |
+| Installer, workloads and components, updates, offline layout | M7 (packages); M31 (setup installers, release channels); M32 (updates); M22 (components, offline layout) |
+| Consistent, polished UI across every tool window and dialog | M29 (look and feel); M34 (polish) |
 | Group policy and managed settings | M23 (candidate unless wanted for 1.0) |
 | `devenv` command-line switches | Release track (`daedalus` CLI) |
 
@@ -1504,6 +1885,7 @@ The "Daedalus" column uses these terms:
 | Open Folder (no solution) | M26 |
 | Docker Compose projects (`.dcproj`) | M17 |
 | SQL database projects (`.sqlproj`) | M27 |
+| Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET); M33 (.NET Core 2.0 to .NET 10) |
 | Non-SDK-style projects, .NET Framework-only scenarios | Non-goal |
 | WinForms, WPF, UWP and WinUI project types and designers | Non-goal |
 | C++, Python and Node.js workloads | Not first-party: plugins over the M11 LSP bridge (C++/CLI is a non-goal) |
@@ -1592,8 +1974,8 @@ The "Daedalus" column uses these terms:
 | Visual Studio feature | Daedalus |
 |---|---|
 | C# | M3 |
-| Visual Basic | M24 (load, build and run since M2) |
-| F# | M25 (load, build and run since M2) |
+| Visual Basic | M35 (load, build and run since M2) |
+| F# | M36 (load, build and run since M2) |
 | Razor and Blazor | M16 |
 | HTML, CSS, JavaScript and TypeScript | M16 |
 | SQL (T-SQL and other dialects) | M27 |
@@ -1602,7 +1984,7 @@ The "Daedalus" column uses these terms:
 | MSBuild, JSON, XML, YAML | M11 |
 | T4 | M26 |
 | C# Interactive | M10 |
-| F# Interactive | M25 |
+| F# Interactive | M36 |
 | Other languages | Plugins over M11 |
 
 ### Debugging
@@ -1800,13 +2182,22 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D7 | AI assistance (M28): whether, and in what form | Before M28 (any time) | Yes, because it is now central to Visual Studio. Only as opt-in, provider-agnostic plugins, with no telemetry. | open |
 | D8 | Hosting integrations (GitHub, GitLab, Azure DevOps) built in? | M13 | A built-in plugin, inactive until sign-in | open |
 | D9 | Spell-check dictionaries and their licences | M12b | Only MIT/BSD-compatible dictionaries, or user-supplied ones | open |
-| D10 | F# host: FsAutoComplete or our own FCS host | M25 | FsAutoComplete through the LSP bridge | open |
+| D10 | F# host: FsAutoComplete or our own FCS host | M36 | FsAutoComplete through the LSP bridge | open |
 | D11 | Translation platform for localization | M23 | Decide at M23 | open |
 | D12 | Licence of Aspire's orchestrator (DCP), and the IDE's relationship to it | M17 | Integrate through the IDE execution protocol only, never redistribute | open |
-| D13 | Phase order | Each phase start | As listed in this document | open |
+| D13 | Phase order | Each phase start | As listed in this document | open. Settled on 2026-10-10 for the new work: phase 4 (M30–M33) comes next, before M16c; M34 comes last before VB and F#; VB and F# are always the last two milestones. |
 | D14 | Product 1.0 criteria (as opposed to preview releases) | After Phase 2 | Phases 1–2 complete, and plugin API 1.0 frozen early (pulled ahead of the marketplace work) | open |
 | D15 | Data tooling scope: which database engines first, the T-SQL language service (SQL Tools Service or our own on ScriptDom), and whether DacFx's licence allows schema compare and publish | M27 | SQL Server, PostgreSQL, SQLite and MySQL; SQL Tools Service through the LSP bridge; DacFx only if its licence is OSI-approved | open |
-| D16 | Self-update mechanism and release channels | M7 checkpoint | An updater for the direct-download builds, with stable, preview and nightly channels; package-manager builds update through their own channel | open |
+| D16 | Self-update mechanism and release channels | M32 | An updater for the direct-download builds, with stable, preview and nightly channels; package-manager builds update through their own channel | decided 2026-10-10: Velopack, with two channels, stable (`master`) and nightly (`develop`). Updates download silently in the background and are applied at the next restart, with a "Restart to update" status bar item and a setting to switch to notify-only or off. apt and dnf installs update through the package manager. |
+| D17 | Installer technology | M31 | Velopack (MIT): installers, delta updates and channels from one tool | decided 2026-10-10: Velopack. A per-user `Setup.exe` on Windows, a `.pkg` on macOS and an AppImage on Linux. The Windows zip and the macOS `.app` zip stay. |
+| D18 | Linux formats | M31 | An AppImage, plus `.deb` and `.rpm` from our own repositories | decided 2026-10-10: a self-updating AppImage; `.deb` and `.rpm` from apt and dnf repositories on GitHub Pages, which update with the system; and the `.tar.gz`. No Flatpak for now. |
+| D19 | Code signing of the installers | M31 | Sign on both OSes (an Apple Developer ID, and SignPath Foundation or Azure Trusted Signing) | decided 2026-10-10: unsigned for now. Checksums and a signed update feed. Revisit when the repository goes public. |
+| D20 | Releases while the repository is private | M31 | Build everything now, and switch it on when the repository goes public | decided 2026-10-10: as recommended. Manual dispatch while private; the nightly schedule and the release on push to `master` switch on automatically once public. |
+| D21 | Branches and versioning | M31 | `develop` for daily work and nightlies, `master` for stable releases; the version in a file, bumped after each release | decided 2026-10-10: as recommended. The version is in the `VERSION` file; the next minor version is committed to `develop` automatically after each stable release; nightlies are `X.Y.Z-nightly.YYYYMMDD.N`. |
+| D22 | Which .NET Daedalus itself runs on | M30 | Support .NET 11 projects, and keep Daedalus on .NET 10 LTS until .NET 12 | decided 2026-10-10: Daedalus follows the newest .NET and moves to each major version when it ships, starting with .NET 11. |
+| D23 | How far to validate older versions of .NET | M33 | Every target framework from 2.0 to 10.0 with the current SDK; older SDKs pinned by `global.json` only opened and built | decided 2026-10-10: as recommended. |
+| D24 | Icon sets | M34 | Fluent UI System Icons (MIT) for commands, and Material Icon Theme (MIT) for file types | decided 2026-10-10: as recommended. Check both licences again at M34. |
+| D25 | What "polished" means | M34 | A written checklist per surface, and a screenshot gallery that the maintainer approves | decided 2026-10-10: as recommended. Every milestone reviews its own panels against the checklist until M34. |
 
 ## Change log
 
@@ -1831,3 +2222,16 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-10: M15a built and at its checkpoint (ADR 0022): an Endpoints Explorer from Roslyn (minimal APIs with `MapGroup` prefixes, controller attribute and conventional routes) with Generate Request, `.http` files (grammar, send glyphs, file, environment and request variables, dynamic variables, `< file` bodies) run in the shell with an HTTP Response window and history, an ASP.NET Core environment selector for Run and Debug, the HTTPS development certificate (check, trust, an offer before the first https run), and user secrets. Hot Reload (M15b) will use `dotnet watch` instead of Roslyn's unpublished hot-reload API.
 - 2026-10-10: M15b built and at its checkpoint (ADR 0022): Start with Hot Reload runs the startup project under `dotnet watch` with the plan Run would use, Apply Code Changes (`Alt+F10`), a status bar item that follows the watch's output, a notification on rude edits, and a setting for Hot Reload on `Ctrl+F5`. Not while debugging (netcoredbg can't apply updates).
 - 2026-10-10: M16a built and at its checkpoint (ADR 0023): `.razor` and `.cshtml` files served by the C# host through the Razor source generator. C# features (completion, hover, signature help, definition, references, highlights, diagnostics) are mapped through the generator's `#line` mappings; markup gets component, parameter and directive completion, plus hover and definition on components. Locations in Razor-generated code move to the Razor file. A Blazor fixture, run and Hot Reload. M15c (scaffolding, service references) is deferred until after M16; it has no dependents among M16's parts.
+- 2026-10-10: at the maintainer's request:
+  - **New phase 4, platform and release, placed next (after M16b, before M16c):**
+    - M30: .NET 11, and Daedalus following every new .NET release
+    - M31: an automated release cycle, with `develop` publishing nightlies, `master` publishing stable releases, the version in a `VERSION` file, and setup installers on GitHub releases
+    - M32: self-update
+    - M33: proof that .NET Core 2.0 to .NET 10 projects work
+  - **New phase 10:** UI polish (M34), the last milestone before Visual Basic and F#.
+  - **Renumbering:**
+    - Visual Basic and F# are renumbered from M24 and M25 to M35 and M36. They stay the last two milestones from now on, and M24 and M25 are retired.
+    - The old phases 4–8 became phases 5–9, and phase 9 (Visual Basic and F#) became phase 11.
+  - **Decisions:** D16 decided; D17–D25 added and decided.
+  - **Definition of done:** it now includes a screenshot review of each milestone's own panels.
+  - **Older documents:** ADR 0010 and the M9b checkpoint still say M25 and M24/M25 for F# and VB.
