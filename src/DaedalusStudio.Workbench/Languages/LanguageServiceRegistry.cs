@@ -12,11 +12,25 @@ public sealed record LanguageServiceDescriptor(
     string DisplayName,
     IReadOnlyList<string> FileExtensions,
     string? ProjectLanguage,
-    Func<ProcessLaunchInfo?> Launch);
+    Func<ProcessLaunchInfo?> Launch)
+{
+    /// <summary>The language ids (<see cref="LanguageRegistry"/>) whose documents it serves; default: <see cref="LanguageId"/>.</summary>
+    public IReadOnlyList<string>? Languages { get; init; }
+
+    public System.Text.Json.JsonElement? InitializationOptions { get; init; }
+
+    /// <summary>The settings section it reads through <c>workspace/configuration</c>.</summary>
+    public string? SettingsSection { get; init; }
+
+    /// <summary>Who registered it: <c>shell</c> or a plugin id.</summary>
+    public string Source { get; init; } = "shell";
+
+    public bool Serves(string languageId) => (Languages ?? [LanguageId]).Contains(languageId, StringComparer.Ordinal);
+}
 
 /// <summary>
-/// The registered language services. C# is registered by the shell as a built-in.
-/// TODO(issue): a <c>languageServers</c> plugin contribution point, so F# and VB services can be plugins (post-MVP).
+/// The registered language services: C# (the shell's built-in) and the LSP servers plugins contribute
+/// (<c>contributes.languageServers</c>, ADR 0016).
 /// </summary>
 public sealed class LanguageServiceRegistry
 {
@@ -49,6 +63,24 @@ public sealed class LanguageServiceRegistry
         lock (_gate)
         {
             return _services.FirstOrDefault(s => s.FileExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase));
+        }
+    }
+
+    /// <summary>The service of a language id (a document's language), or null.</summary>
+    public LanguageServiceDescriptor? ForLanguage(string languageId)
+    {
+        lock (_gate)
+        {
+            return _services.LastOrDefault(s => s.Serves(languageId));
+        }
+    }
+
+    /// <summary>Removes the services <paramref name="source"/> (a plugin id) registered.</summary>
+    public void Unregister(string source)
+    {
+        lock (_gate)
+        {
+            _services.RemoveAll(s => s.Source == source);
         }
     }
 

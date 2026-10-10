@@ -20,6 +20,7 @@ public sealed class ViewLocator : IDataTemplate
         CodeEditorDocument document => EditorHost(document),
         DiffDocument document => new PaneHost(document, new DiffView(document.ViewModel, document.Font)),
         PackageManagerDocument document => new PaneHost(document, new PackageManagerView { DataContext = document.ViewModel }),
+        MarkdownPreviewDocument document => new PaneHost(document, new MarkdownPreviewView(document)),
         PackageSourcesDocument document => new PaneHost(document, new PackageSourcesView { DataContext = document.ViewModel }),
         DotnetToolsDocument document => new PaneHost(document, new DotnetToolsView { DataContext = document.ViewModel }),
         ProjectPropertiesDocument document => new PaneHost(document, new ProjectPropertiesView { DataContext = document.ViewModel }),

@@ -22,7 +22,8 @@ public sealed record PluginManifest
 
     public required ManifestEngines Engines { get; init; }
 
-    public required ManifestEntry Entry { get; init; }
+    /// <summary>The plugin's code. Optional since API 0.2.4: a declarative plugin (languages, grammars, language servers) has none.</summary>
+    public ManifestEntry? Entry { get; init; }
 
     /// <summary><c>shared</c> (default) or <c>dedicated</c>.</summary>
     public string? Isolation { get; init; }
@@ -55,6 +56,58 @@ public sealed record ManifestContributions
     public ManifestToolWindow[]? ToolWindows { get; init; }
 
     public ManifestSettings? Settings { get; init; }
+
+    /// <summary>Languages: ids, file patterns and a <c>language-configuration.json</c> (API 0.2.4, ADR 0016).</summary>
+    public ManifestLanguage[]? Languages { get; init; }
+
+    /// <summary>TextMate grammars (JSON or plist files in the plugin's folder).</summary>
+    public ManifestGrammar[]? Grammars { get; init; }
+
+    /// <summary>LSP servers the shell starts and supervises for the plugin's languages (no plugin code is loaded).</summary>
+    public ManifestLanguageServer[]? LanguageServers { get; init; }
+}
+
+/// <summary>A language, as in VS Code's <c>contributes.languages</c>. Paths are relative to the plugin's folder.</summary>
+public sealed record ManifestLanguage(string Id)
+{
+    public string[]? Aliases { get; init; }
+
+    public string[]? Extensions { get; init; }
+
+    public string[]? Filenames { get; init; }
+
+    public string[]? FilenamePatterns { get; init; }
+
+    public string? FirstLine { get; init; }
+
+    public string? Configuration { get; init; }
+}
+
+/// <summary>A TextMate grammar, as in VS Code's <c>contributes.grammars</c>.</summary>
+public sealed record ManifestGrammar(string ScopeName, string Path)
+{
+    public string? Language { get; init; }
+
+    public Dictionary<string, string>? EmbeddedLanguages { get; init; }
+}
+
+/// <summary>
+/// An LSP server over stdio: <see cref="Command"/> is a file in the plugin's folder (a <c>.dll</c> runs with
+/// <c>dotnet</c>) or a program on <c>PATH</c>; <c>${pluginDir}</c> in it and in <see cref="Args"/> is the plugin's folder.
+/// </summary>
+public sealed record ManifestLanguageServer(string Id, string[] Languages, string Command)
+{
+    public string? Name { get; init; }
+
+    public string[]? Args { get; init; }
+
+    /// <summary>Only <c>stdio</c> in this version.</summary>
+    public string? Transport { get; init; }
+
+    public JsonElement? InitializationOptions { get; init; }
+
+    /// <summary>The settings section answered for <c>workspace/configuration</c> (e.g. <c>ini</c> for <c>ini.*</c> settings).</summary>
+    public string? SettingsSection { get; init; }
 }
 
 public sealed record ManifestCommand(string Id, string Title)

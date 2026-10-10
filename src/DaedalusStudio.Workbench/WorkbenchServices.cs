@@ -33,6 +33,8 @@ public sealed class WorkbenchServices : IDisposable
         Output = new OutputService();
         StatusBar = new StatusBarService();
         ToolWindows = new ToolWindowRegistry();
+        LanguageDefinitions = new Languages.LanguageRegistry();
+        LanguageServers = new Languages.LanguageServiceRegistry();
         if (watchFiles)
         {
             _keybindingsWatcher = new FileWatcher(paths.KeybindingsFile);
@@ -63,6 +65,12 @@ public sealed class WorkbenchServices : IDisposable
     public StatusBarService StatusBar { get; }
 
     public ToolWindowRegistry ToolWindows { get; }
+
+    /// <summary>Languages and TextMate grammars (ADR 0016).</summary>
+    public Languages.LanguageRegistry LanguageDefinitions { get; }
+
+    /// <summary>Language servers (C# and the ones plugins contribute).</summary>
+    public Languages.LanguageServiceRegistry LanguageServers { get; }
 
     /// <summary>The shell's own log channel.</summary>
     public OutputChannel Log => Output.GetOrCreate("daedalus.log", "Daedalus Studio");

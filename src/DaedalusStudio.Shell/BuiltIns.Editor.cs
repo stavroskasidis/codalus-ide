@@ -45,6 +45,11 @@ internal static partial class BuiltIns
           { "key": "primary+.", "command": "editor.action.quickFix", "when": "editorTextFocus" },
           { "key": "alt+enter", "command": "editor.action.quickFix", "when": "editorTextFocus" },
           { "key": "primary+k primary+d", "command": "editor.action.formatDocument", "when": "editorTextFocus" },
+          { "key": "primary+k primary+c", "command": "editor.action.addCommentLine", "when": "editorTextFocus" },
+          { "key": "primary+k v", "command": "markdown.showPreviewToSide", "when": "activeDocumentKind == textFile" },
+          { "key": "primary+k primary+u", "command": "editor.action.removeCommentLine", "when": "editorTextFocus" },
+          { "key": "primary+/", "command": "editor.action.commentLine", "when": "editorTextFocus" },
+          { "key": "primary+alt+space", "command": "editor.action.triggerWordCompletion", "when": "editorTextFocus" },
           { "key": "shift+alt+f", "command": "editor.action.formatDocument", "when": "editorTextFocus" },
           { "key": "primary+k primary+f", "command": "editor.action.formatSelection", "when": "editorTextFocus" },
           { "key": "primary+t", "command": "workbench.action.gotoAll" },
@@ -68,6 +73,13 @@ internal static partial class BuiltIns
             Setting(EditorOptions.RulersKey, "[]", SettingType.StringArray, "Rulers", "Columns at which to draw vertical rulers, e.g. 120.", 9),
             Setting(EditorOptions.HighlightCurrentLineKey, "true", SettingType.Boolean, "Highlight Current Line", "Highlight the line with the caret.", 10),
             Setting(EditorOptions.FormatOnTypeKey, "true", SettingType.Boolean, "Format on Type", "Format the statement or block after typing ; or }.", 11),
+            SettingDescriptor.Create(ShellHost.SchemaDownloadSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+            {
+                Title = "Download JSON Schemas",
+                Category = "JSON",
+                Description = "Download schemas from SchemaStore.org (cached for a week) for JSON and YAML files without a bundled schema. Takes effect after a restart.",
+            },
+            Setting(EditorOptions.AutoClosingBracketsKey, "true", SettingType.Boolean, "Auto Closing Brackets", "Insert the closing bracket or quote after typing an opening one, as the language defines them.", 12),
             SettingDescriptor.Create("languageServices.analysisScope", "\"openDocuments\"", SettingType.String, shell) with
             {
                 Title = "Background Analysis Scope",
@@ -125,6 +137,11 @@ internal static partial class BuiltIns
         Add("editor.action.rename", "Rename…", "Editor", Ui(shell.RenameSymbolAsync), Editor);
         Add("editor.action.quickFix", "Quick Actions and Refactorings…", "Editor", Ui(shell.ShowCodeActionsAsync), Editor);
         Add("editor.action.formatDocument", "Format Document", "Editor", Ui(() => shell.FormatAsync(selectionOnly: false)), Editor);
+        Add("editor.action.commentLine", "Toggle Line Comment", "Editor", OnEditor(c => c.Comment(CommentAction.Toggle)), Editor);
+        Add("markdown.showPreviewToSide", "Markdown: Open Preview to the Side", "Markdown", Ui(() => shell.ShowMarkdownPreview()), Editor);
+        Add("editor.action.addCommentLine", "Comment Selection", "Editor", OnEditor(c => c.Comment(CommentAction.Comment)), Editor);
+        Add("editor.action.removeCommentLine", "Uncomment Selection", "Editor", OnEditor(c => c.Comment(CommentAction.Uncomment)), Editor);
+        Add("editor.action.triggerWordCompletion", "Complete Word", "Editor", OnEditor(c => c.CompleteWords()), Editor);
         Add("editor.action.formatSelection", "Format Selection", "Editor", Ui(() => shell.FormatAsync(selectionOnly: true)), Editor);
         Add("workbench.action.gotoAll", "Go To All…", "Edit", Ui(shell.GoToAllAsync));
         Add("workbench.action.findInFiles", "Find in Files", "Edit", Ui(shell.FindInFiles));

@@ -84,10 +84,107 @@ public sealed class LanguageHostClient : IAsyncDisposable
 
     public Task StartAsync(CancellationToken cancellationToken) => _process.StartAsync(cancellationToken);
 
+    /// <summary>
+    /// Sent as <c>initializationOptions</c> instead of the settings (servers contributed by plugins declare their own,
+    /// ADR 0016).
+    /// </summary>
+    public JsonElement? InitializationOptions { get; set; }
+
+    /// <summary>Answers <c>workspace/configuration</c> for a section (null: no value).</summary>
+    public Func<string?, JsonElement?>? ConfigurationProvider { get; set; }
+
+    /// <summary>
+    /// Answers the markup host's <c>daedalus/msbuild/property</c> (a project's evaluated property, ADR 0016):
+    /// <c>{ project, name }</c> → <c>{ value, origin }</c>, or null when unknown.
+    /// </summary>
+    public Func<string, string, CancellationToken, Task<(string? Value, string? Origin)?>>? PropertyEvaluator { get; set; }
+
+    /// <summary>The workspace folder sent as <c>rootUri</c> and <c>workspaceFolders</c>.</summary>
+    public string? RootUri { get; set; }
+
+    /// <summary>What this client supports, so servers built for any LSP client send results it can use.</summary>
+    private const string ClientCapabilities = """
+        {
+          "workspace": { "configuration": true, "workspaceFolders": true, "symbol": {}, "workspaceEdit": { "documentChanges": true } },
+          "textDocument": {
+            "synchronization": { "didSave": true, "dynamicRegistration": false },
+            "completion": { "completionItem": { "snippetSupport": false, "documentationFormat": ["markdown", "plaintext"], "resolveSupport": { "properties": ["documentation", "detail", "textEdit", "additionalTextEdits"] }, "insertReplaceSupport": false }, "contextSupport": true },
+            "hover": { "contentFormat": ["markdown", "plaintext"] },
+            "signatureHelp": { "signatureInformation": { "documentationFormat": ["markdown", "plaintext"], "parameterInformation": { "labelOffsetSupport": true } }, "contextSupport": true },
+            "definition": { "linkSupport": false },
+            "implementation": { "linkSupport": false },
+            "references": {},
+            "documentHighlight": {},
+            "foldingRange": { "lineFoldingOnly": false },
+            "rename": { "prepareSupport": true },
+            "codeAction": { "codeActionLiteralSupport": { "codeActionKind": { "valueSet": ["quickfix", "refactor", "refactor.extract", "refactor.inline", "refactor.rewrite", "source", "source.organizeImports"] } }, "resolveSupport": { "properties": ["edit"] } },
+            "formatting": {},
+            "rangeFormatting": {},
+            "onTypeFormatting": {},
+            "publishDiagnostics": { "relatedInformation": false, "tagSupport": { "valueSet": [1, 2] }, "codeDescriptionSupport": true },
+            "semanticTokens": {
+              "requests": { "full": true, "range": true },
+              "tokenTypes": ["namespace", "type", "class", "enum", "interface", "struct", "typeParameter", "parameter", "variable", "property", "enumMember", "event", "function", "method", "macro", "keyword", "modifier", "comment", "string", "number", "regexp", "operator", "decorator"],
+              "tokenModifiers": ["declaration", "definition", "readonly", "static", "deprecated", "abstract", "async", "modification", "documentation", "defaultLibrary"],
+              "formats": ["relative"]
+            }
+          },
+          "window": { "workDoneProgress": true, "showMessage": {} }
+        }
+        """;
+
     private void Configure(JsonRpcConnection connection)
     {
         var json = ProtocolJsonContext.Default;
-        connection.OnNotification(Methods.PublishDiagnostics, json.PublishDiagnosticsParams, p => Diagnostics?.Invoke(this, p));
+        connection.OnNotification(Methods.PublishDiagnostics, json.JsonElement, raw =>
+        {
+            if (LspNormalizer.PublishDiagnostics(raw).Deserialize(json.PublishDiagnosticsParams) is { } p)
+            {
+                Diagnostics?.Invoke(this, p);
+            }
+        });
+
+        // Requests and notifications other servers send to any LSP client.
+        connection.OnRequest("workspace/configuration", (parameters, _) =>
+        {
+            var items = parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty("items", out var i) && i.ValueKind == JsonValueKind.Array ? i : default;
+            var values = new List<string>();
+            foreach (var item in items.ValueKind == JsonValueKind.Array ? items.EnumerateArray() : default)
+            {
+                var section = item.ValueKind == JsonValueKind.Object && item.TryGetProperty("section", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null;
+                values.Add(ConfigurationProvider?.Invoke(section) is { } value ? value.GetRawText() : "null");
+            }
+
+            using var document = JsonDocument.Parse("[" + string.Join(',', values) + "]");
+            return Task.FromResult<JsonElement?>(document.RootElement.Clone());
+        });
+        connection.OnRequest("daedalus/msbuild/property", async (parameters, ct) =>
+        {
+            if (PropertyEvaluator is not { } evaluate
+                || !parameters.TryGetProperty("project", out var project) || project.ValueKind != JsonValueKind.String
+                || !parameters.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String
+                || await evaluate(project.GetString()!, name.GetString()!, ct).ConfigureAwait(false) is not { } result)
+            {
+                return null;
+            }
+
+            var node = new System.Text.Json.Nodes.JsonObject { ["value"] = result.Value, ["origin"] = result.Origin };
+            using var document = JsonDocument.Parse(node.ToJsonString());
+            return document.RootElement.Clone();
+        });
+        foreach (var accepted in new[] { "client/registerCapability", "client/unregisterCapability", "window/workDoneProgress/create", "workspace/semanticTokens/refresh", "workspace/codeLens/refresh", "workspace/inlayHint/refresh", "workspace/diagnostic/refresh" })
+        {
+            connection.OnRequest(accepted, (_, _) => Task.FromResult<JsonElement?>(null));
+        }
+
+        connection.OnRequest("window/showMessageRequest", (parameters, _) =>
+        {
+            Log?.Invoke(this, parameters.TryGetProperty("message", out var m) ? m.GetString() ?? string.Empty : string.Empty);
+            return Task.FromResult<JsonElement?>(null);
+        });
+        connection.OnNotification("window/showMessage", json.LogMessageParams, p => Log?.Invoke(this, p.Message));
+        connection.OnNotification("$/progress", json.JsonElement, _ => { });
+        connection.OnNotification("telemetry/event", json.JsonElement, _ => { });
         connection.OnNotification(Methods.WorkspaceStatus, json.WorkspaceStatusParams, p => WorkspaceStatus?.Invoke(this, p));
         connection.OnNotification(Methods.LogMessage, json.LogMessageParams, p => Log?.Invoke(this, p.Message));
     }
@@ -95,12 +192,22 @@ public sealed class LanguageHostClient : IAsyncDisposable
     private async Task InitializeAsync(JsonRpcConnection connection, bool isRestart, CancellationToken cancellationToken)
     {
         var json = ProtocolJsonContext.Default;
-        var result = await connection.InvokeAsync(
-            Methods.Initialize,
-            new InitializeParams(Environment.ProcessId, new ClientInfo(_clientName, null), null, null, _settings),
-            json.InitializeParams,
-            json.InitializeResult,
-            cancellationToken).ConfigureAwait(false);
+        using var capabilities = JsonDocument.Parse(ClientCapabilities);
+        var parameters = JsonSerializer.SerializeToElement(
+            new InitializeParams(Environment.ProcessId, new ClientInfo(_clientName, null), RootUri, capabilities.RootElement.Clone(), InitializationOptions ?? _settings),
+            json.InitializeParams);
+        if (RootUri is not null)
+        {
+            // workspaceFolders isn't in the narrowed InitializeParams; add it to the JSON.
+            var node = System.Text.Json.Nodes.JsonNode.Parse(parameters.GetRawText())!;
+            node["workspaceFolders"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["uri"] = RootUri, ["name"] = Path.GetFileName(RootUri.TrimEnd('/')) });
+            using var withFolders = JsonDocument.Parse(node.ToJsonString());
+            parameters = withFolders.RootElement.Clone();
+        }
+
+        var raw = await connection.InvokeRawAsync(Methods.Initialize, parameters, cancellationToken).ConfigureAwait(false);
+        var result = LspNormalizer.Result(Methods.Initialize, raw).Deserialize(json.InitializeResult)
+            ?? throw new InvalidOperationException("The language server returned no capabilities.");
         Capabilities = result.Capabilities;
         await connection.NotifyAsync(Methods.Initialized, new EmptyObject(), json.EmptyObject, cancellationToken).ConfigureAwait(false);
         if (!isRestart)
@@ -230,15 +337,20 @@ public sealed class LanguageHostClient : IAsyncDisposable
 
     private static TextDocumentPositionParams At(string uri, Position position) => new(new TextDocumentIdentifier(uri), position);
 
-    private Task<TResult> Invoke<TParams, TResult>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken) =>
-        _process.Connection.InvokeAsync(method, parameters, paramsInfo, resultInfo, cancellationToken);
+    private async Task<TResult> Invoke<TParams, TResult>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken)
+    {
+        var raw = await _process.Connection.InvokeRawAsync(method, JsonSerializer.SerializeToElement(parameters, paramsInfo), cancellationToken).ConfigureAwait(false);
+        return LspNormalizer.Result(method, raw).Deserialize(resultInfo)
+            ?? throw new JsonException($"The language server returned no result for {method}.");
+    }
 
     /// <summary>A request whose result may be JSON <c>null</c> (LSP's "nothing here").</summary>
     private async Task<TResult?> InvokeNullable<TParams, TResult>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken)
         where TResult : class
     {
         var raw = await _process.Connection.InvokeRawAsync(method, JsonSerializer.SerializeToElement(parameters, paramsInfo), cancellationToken).ConfigureAwait(false);
-        return raw.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? null : raw.Deserialize(resultInfo);
+        var normalized = LspNormalizer.Result(method, raw);
+        return normalized.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? null : normalized.Deserialize(resultInfo);
     }
 
     public ValueTask DisposeAsync() => _process.DisposeAsync();

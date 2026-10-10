@@ -19,7 +19,7 @@ dotnet run --project src/DaedalusStudio.Shell -- --user-data-dir .work/user-data
 dotnet publish src/DaedalusStudio.Shell -c Release -r win-x64 -o artifacts/shell           # Native AOT, with pluginhost/, buildhost/, lshost/ and plugins/ next to daedalus.exe
 ```
 
-Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--open <file>`, `--screenshot <png>`; for benchmarks `--bench typing|scroll` (on the `--open` file) and `--exit-on interactive|highlight|done|language`; for CI `--smoke-test <samples dir>` (below). With `DAEDALUS_BENCH_EVENTS=<file>` the shell writes timestamped bench events. `DAEDALUS_PLUGINHOST`, `DAEDALUS_BUILDHOST`, `DAEDALUS_LSHOST` and `DAEDALUS_REPLHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
+Arguments: an optional solution, project or folder to open. Options: `--user-data-dir <dir>` (settings, state and plugins under one folder), `--plugin-dir <dir>` (repeatable; load a plugin under development), `--enable-proposed-api`, `--dev`, `--version`, `--open <file>`, `--screenshot <png>`; for benchmarks `--bench typing|scroll` (on the `--open` file) and `--exit-on interactive|highlight|done|language`; for CI `--smoke-test <samples dir>` (below). With `DAEDALUS_BENCH_EVENTS=<file>` the shell writes timestamped bench events. `DAEDALUS_PLUGINHOST`, `DAEDALUS_BUILDHOST`, `DAEDALUS_LSHOST`, `DAEDALUS_REPLHOST` and `DAEDALUS_MARKUPHOST` point at a host `.exe` or `.dll`; `DAEDALUS_TRASH_DIR` sends deletes to a folder instead of the OS trash (tests). Plugin authoring: `docs/plugins.md`; build host protocol: `docs/project-protocol.md`.
 
 ## End-to-end smoke test
 
@@ -32,6 +32,8 @@ Arguments: an optional solution, project or folder to open. Options: `--user-dat
 ## Language services
 
 The C# language service host (`daedalus-lshost`, ADR 0005) speaks LSP over stdio (`docs/protocol.md`). It gets its projects from the build host's design-time builds, relayed by the shell (`LanguageService` in `src/DaedalusStudio.Workbench/Languages`). `DAEDALUS_LSHOST` points at a host `.exe` or `.dll`; otherwise the shell uses `lshost/` next to it. Fixture: `samples/LanguageFeatures`.
+
+Other languages (ADR 0016) are registered in `LanguageRegistry` (workbench; built-ins in `src/DaedalusStudio.Shell/Editor/BuiltInLanguages.cs`) and colored with TextMate grammars (`TextMateSupport`); C# keeps Roslyn's semantic tokens. Any LSP server can serve a language: plugins declare `contributes.languageServers`, and `LspNormalizer` turns VS Code-shaped results into our narrowed types. `daedalus-markuphost` (`src/DaedalusStudio.Markup.Host`) serves JSON (schemas), XML/MSBuild, YAML and `.editorconfig`, and asks the shell for evaluated MSBuild values. `tests/DaedalusStudio.LspConformance.Server` is a scripted third-party-style server for the bridge tests; `samples/plugins/TodoLanguage` is a declarative language plugin.
 
 ## Terminal and C# Interactive
 

@@ -1,5 +1,6 @@
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
+using DaedalusStudio.LanguageServices.Protocol;
 
 namespace DaedalusStudio.Shell.Editor;
 
@@ -103,6 +104,36 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
     }
 
     private static int CountNewlines(string text) => text.AsSpan().Count('\n');
+
+    private static string[]? s_lastLegend;
+    private static int[]? s_lastMap;
+
+    /// <summary>
+    /// Rewrites token types from a server's legend to the shell's (<see cref="TokenTypes"/>), by name; unknown types
+    /// become -1 (uncolored). The C# host uses the shell's legend, so its data passes unchanged.
+    /// </summary>
+    public static int[] Remap(int[] data, string[] legend)
+    {
+        if (legend.AsSpan().SequenceEqual(TokenTypes.All))
+        {
+            return data;
+        }
+
+        var map = s_lastLegend == legend ? s_lastMap! : [.. legend.Select(name => Array.IndexOf(TokenTypes.All, name switch
+        {
+            "decorator" => "macro",
+            "typeParameter" => "typeParameter",
+            _ => name,
+        }))];
+        (s_lastLegend, s_lastMap) = (legend, map);
+        var result = (int[])data.Clone();
+        for (var i = 3; i < result.Length; i += 5)
+        {
+            result[i] = (uint)result[i] < (uint)map.Length ? map[result[i]] : -1;
+        }
+
+        return result;
+    }
 
     private readonly record struct LineToken(int Start, int Length, int Type);
 }

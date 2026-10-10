@@ -19,7 +19,7 @@ mkdir -p "$dst"
 # Drop mirror files that no longer exist in the source tree (keeps bin/, obj/, .work/ and artifacts/).
 (cd "$dst" && comm -23 \
   <(find . -type f -not -path './.git/*' -not -path '*/bin/*' -not -path '*/obj/*' -not -path './.work/*' \
-      -not -path './artifacts/*' -not -path './samples/Large100k/*' -not -path './samples/Solution50/*' -printf '%P\n' | sort) \
+      -not -path './artifacts/*' -not -path './samples/Large100k/*' -not -path './samples/LargeMarkup100k/*' -not -path './samples/Solution50/*' -printf '%P\n' | sort) \
   <(cd "$src" && git ls-files --cached --others --exclude-standard | sort) \
   | while IFS= read -r f; do rm -f -- "$f"; done)
 [ -d "$dst/.git" ] || git -C "$dst" init -q   # some tests expect to run inside a git work tree

@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "runtimeconfig.template.json",
+  "description": "Runtime settings merged into the app's runtimeconfig.json at build.",
+  "type": "object",
+  "properties": {
+    "configProperties": {
+      "type": "object",
+      "description": "Runtime configuration knobs (AppContext switches).",
+      "properties": {
+        "System.GC.Server": { "type": "boolean", "description": "Server garbage collection." },
+        "System.GC.Concurrent": { "type": "boolean", "description": "Background (concurrent) garbage collection." },
+        "System.GC.RetainVM": { "type": "boolean" },
+        "System.Globalization.Invariant": { "type": "boolean", "description": "Culture-invariant globalization (no ICU)." },
+        "System.Runtime.TieredCompilation": { "type": "boolean" },
+        "System.Runtime.TieredPGO": { "type": "boolean" },
+        "System.Threading.ThreadPool.MinThreads": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "rollForward": { "type": "string", "enum": [ "Minor", "Major", "LatestPatch", "LatestMinor", "LatestMajor", "Disable" ], "description": "How the app rolls forward to newer runtimes." }
+  }
+}

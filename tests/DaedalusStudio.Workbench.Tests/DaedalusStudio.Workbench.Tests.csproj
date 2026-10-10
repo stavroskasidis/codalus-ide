@@ -4,5 +4,7 @@
     <ProjectReference Include="..\..\src\DaedalusStudio.Platform\DaedalusStudio.Platform.csproj" />
     <!-- Built so the tests can launch it; not referenced as an assembly. -->
     <ProjectReference Include="..\..\src\DaedalusStudio.Interactive.Host\DaedalusStudio.Interactive.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DaedalusStudio.LspConformance.Server\DaedalusStudio.LspConformance.Server.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\DaedalusStudio.Markup.Host\DaedalusStudio.Markup.Host.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

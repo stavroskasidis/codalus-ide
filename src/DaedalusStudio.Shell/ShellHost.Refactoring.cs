@@ -63,17 +63,36 @@ public sealed partial class ShellHost
         }
 
         var position = editor.Model.PositionAt(controller.Editor.CaretOffset);
-        if (await client.PrepareRenameAsync(editor.Model.Uri, position, CancellationToken.None).ConfigureAwait(true) is not { } prepared)
+        var word = WordAt(controller.Editor.Document, controller.Editor.CaretOffset);
+        string placeholder;
+        if (client.Capabilities?.PrepareRenameProvider == false)
+        {
+            // Servers without prepareRename (ADR 0016): rename the word at the caret.
+            if (word.Length == 0)
+            {
+                ShowMessage("You cannot rename this element.");
+                return;
+            }
+
+            placeholder = word;
+        }
+        else if (await client.PrepareRenameAsync(editor.Model.Uri, position, CancellationToken.None).ConfigureAwait(true) is { } prepared)
+        {
+            placeholder = prepared.Placeholder is { Length: > 0 } text ? text : word;
+        }
+        else
         {
             ShowMessage("You cannot rename this element.");
             return;
         }
 
-        var choice = await Dialogs.ShowAsync(new DialogRequest("Rename", $"New name for '{prepared.Placeholder}':", ["Preview", "Cancel"])
+        var csharp = editor.Model.LanguageId == CSharpLanguageId;
+        var choice = await Dialogs.ShowAsync(new DialogRequest("Rename", $"New name for '{placeholder}':", ["Preview", "Cancel"])
         {
-            Input = prepared.Placeholder,
-            Validate = name => name == prepared.Placeholder ? "Enter a different name."
-                : IsIdentifier(name) ? null
+            Input = placeholder,
+            Validate = name => name == placeholder ? "Enter a different name."
+                : string.IsNullOrWhiteSpace(name) ? "Enter a name."
+                : !csharp || IsIdentifier(name) ? null
                 : "Not a valid C# identifier.",
         }).ConfigureAwait(true);
         if (choice.Button != "Preview" || choice.Input is not { } newName)
@@ -88,7 +107,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        await PreviewAndApplyAsync($"Rename '{prepared.Placeholder}' to '{newName}'", edit).ConfigureAwait(true);
+        await PreviewAndApplyAsync($"Rename '{placeholder}' to '{newName}'", edit).ConfigureAwait(true);
     }
 
     // ------------------------------------------------------------------ the lightbulb
@@ -469,5 +488,24 @@ public sealed partial class ShellHost
         }
 
         return text[start..end];
+    }
+
+    /// <summary>The identifier-like word around an offset (letters, digits, '_' and '-').</summary>
+    private static string WordAt(AvaloniaEdit.Document.TextDocument document, int offset)
+    {
+        static bool IsWord(char c) => char.IsLetterOrDigit(c) || c is '_' or '-';
+        var start = offset;
+        var end = offset;
+        while (start > 0 && IsWord(document.GetCharAt(start - 1)))
+        {
+            start--;
+        }
+
+        while (end < document.TextLength && IsWord(document.GetCharAt(end)))
+        {
+            end++;
+        }
+
+        return document.GetText(start, end - start);
     }
 }

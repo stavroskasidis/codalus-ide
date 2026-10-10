@@ -504,6 +504,19 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await window.ExecuteAsync("Daedalus.Sample.Text.Text.Shout(\"hi\")").ConfigureAwait(true);
             await WaitAsync(() => window.Transcript.GetText().Contains("\"HI!\"", StringComparison.Ordinal), "a #r \"nuget:\" package runs: " + Tail(window.Transcript.GetText(), 1500), 180).ConfigureAwait(true);
         }, "packages.manage").ConfigureAwait(true);
+
+        // M11: languages and TextMate grammars (ADR 0016).
+        await StepAsync("languages.grammars", "M11", "JSON and MSBuild files are colored by their TextMate grammars", async () =>
+        {
+            var json = Path.Combine(_work, "smoke-settings.json");
+            await File.WriteAllTextAsync(json, "{\n  \"Logging\": { \"Level\": 3, \"On\": true }\n}\n").ConfigureAwait(true);
+            var editor = await OpenAsync(json).ConfigureAwait(true);
+            Check(editor.Model.LanguageId == "json" && editor.GrammarScope == "source.json", $"the file is JSON with its grammar (got {editor.Model.LanguageId}, {editor.GrammarScope})");
+            await WaitAsync(() => editor.LineColors(2) >= 3, "the JSON grammar colors keys, numbers and keywords").ConfigureAwait(true);
+            var project = await OpenAsync(PlainProject).ConfigureAwait(true);
+            Check(project.Model.LanguageId == "msbuild" && project.GrammarScope == "text.xml", "the project file is MSBuild with the XML grammar");
+            await WaitAsync(() => project.LineColors(1) >= 2, "the XML grammar colors the project file").ConfigureAwait(true);
+        }, "packages.manage").ConfigureAwait(true);
     }
 
     private Workbench.Testing.TestNode? TestClass(string project) =>

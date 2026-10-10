@@ -19,6 +19,7 @@ public sealed class EditorOptions : ObservableObject
     public const string RulersKey = "editor.rulers";
     public const string HighlightCurrentLineKey = "editor.highlightCurrentLine";
     public const string FormatOnTypeKey = "editor.formatOnType";
+    public const string AutoClosingBracketsKey = "editor.autoClosingBrackets";
 
     private readonly SettingsService _settings;
 
@@ -57,6 +58,9 @@ public sealed class EditorOptions : ObservableObject
 
     public bool FormatOnType { get; private set; }
 
+    /// <summary>Insert the closing bracket or quote of the language's pairs (ADR 0016).</summary>
+    public bool AutoClosingBrackets { get; private set; }
+
     private void Read()
     {
         TabSize = Math.Clamp(_settings.GetInt32(TabSizeKey, 4), 1, 16);
@@ -67,6 +71,7 @@ public sealed class EditorOptions : ObservableObject
         RenderWhitespace = _settings.GetString(RenderWhitespaceKey, "none") == "all";
         HighlightCurrentLine = _settings.GetBoolean(HighlightCurrentLineKey, true);
         FormatOnType = _settings.GetBoolean(FormatOnTypeKey, true);
+        AutoClosingBrackets = _settings.GetBoolean(AutoClosingBracketsKey, true);
         Rulers = [.. _settings.GetStrings(RulersKey).Select(r => int.TryParse(r, NumberStyles.Integer, CultureInfo.InvariantCulture, out var column) ? column : 0).Where(c => c > 0)];
     }
 }
@@ -82,6 +87,9 @@ public interface IEditorServices
     EditorTheme Theme { get; }
 
     DiagnosticsStore Diagnostics { get; }
+
+    /// <summary>TextMate grammars and language configurations (ADR 0016).</summary>
+    TextMateSupport TextMate { get; }
 
     /// <summary>The running language service client of a document's language, or null.</summary>
     LanguageHostClient? Client(CodeDocument document);

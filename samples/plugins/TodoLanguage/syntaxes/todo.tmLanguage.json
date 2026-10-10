@@ -1,0 +1,20 @@
+{
+  "name": "Todo",
+  "scopeName": "source.todo",
+  "patterns": [
+    { "name": "comment.line.number-sign.todo", "match": "^\\s*#.*$" },
+    { "name": "markup.heading.todo", "match": "^[^-#\\s].*:\\s*$" },
+    { "name": "comment.done.todo", "match": "^\\s*- \\[x\\].*$" },
+    {
+      "begin": "^\\s*(- \\[ \\])",
+      "beginCaptures": { "1": { "name": "keyword.control.todo" } },
+      "end": "$",
+      "patterns": [
+        { "name": "entity.name.tag.todo", "match": "@[\\w-]+" },
+        { "name": "invalid.priority.todo", "match": "!(high|urgent)\\b" },
+        { "name": "constant.numeric.date.todo", "match": "\\bdue:\\d{4}-\\d{2}-\\d{2}\\b" },
+        { "name": "string.quoted.double.todo", "match": "\"[^\"]*\"" }
+      ]
+    }
+  ]
+}

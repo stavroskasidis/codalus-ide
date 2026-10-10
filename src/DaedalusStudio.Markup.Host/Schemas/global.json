@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "global.json",
+  "description": "Selects the .NET SDK and MSBuild SDKs for this folder and the folders below it.",
+  "type": "object",
+  "properties": {
+    "sdk": {
+      "type": "object",
+      "description": "The .NET SDK to use.",
+      "properties": {
+        "version": { "type": "string", "description": "The SDK version, e.g. `10.0.100`.", "pattern": "^\\d+\\.\\d+\\.\\d+(-.+)?$", "patternErrorMessage": "Expected an SDK version such as 10.0.100." },
+        "rollForward": {
+          "type": "string",
+          "description": "How the version may roll forward when it isn't installed.",
+          "enum": [ "patch", "feature", "minor", "major", "latestPatch", "latestFeature", "latestMinor", "latestMajor", "disable" ]
+        },
+        "allowPrerelease": { "type": "boolean", "description": "Whether preview SDKs may be selected." },
+        "paths": { "type": "array", "items": { "type": "string" }, "description": "Folders searched for SDKs (`$host$` is the dotnet executable's folder)." },
+        "errorMessage": { "type": "string", "description": "The message shown when no SDK matches." }
+      },
+      "additionalProperties": false
+    },
+    "msbuild-sdks": {
+      "type": "object",
+      "description": "Versions of MSBuild project SDKs, e.g. `\"Microsoft.Build.Traversal\": \"4.1.0\"`.",
+      "additionalProperties": { "type": "string" }
+    },
+    "test": {
+      "type": "object",
+      "description": "Test settings for `dotnet test`.",
+      "properties": {
+        "runner": { "type": "string", "enum": [ "VSTest", "Microsoft.Testing.Platform" ], "description": "The test runner `dotnet test` uses." }
+      }
+    }
+  }
+}

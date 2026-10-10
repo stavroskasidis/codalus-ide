@@ -1,0 +1,8 @@
+{
+  // Comments, brackets and pairs for .todo files (VS Code's language-configuration.json format).
+  "comments": { "lineComment": "#" },
+  "brackets": [ [ "[", "]" ], [ "(", ")" ] ],
+  "autoClosingPairs": [ { "open": "[", "close": "]" }, { "open": "(", "close": ")" }, { "open": "\"", "close": "\"", "notIn": [ "string" ] } ],
+  "surroundingPairs": [ [ "[", "]" ], [ "(", ")" ], [ "\"", "\"" ] ],
+  "folding": { "offSide": true }
+}

@@ -21,6 +21,25 @@ Daedalus Studio uses Roslyn, with your projects' analyzers and source generators
 - **Rename** (`F2`): previewed across the solution.
 - **Format Document** (`Ctrl+K Ctrl+D`) and **Format Selection**, following `.editorconfig`, and formatting as you type (`;`, `}`).
 
+## Other languages
+
+Every file type gets the basics, and many get more:
+
+- **Highlighting** for about forty languages from VS Code's TextMate grammars: XML and MSBuild, JSON, YAML, Markdown, HTML, CSS, JavaScript, TypeScript, F#, VB, SQL, PowerShell, shell scripts, Dockerfiles and more. The status bar shows the language.
+- **Comments**: Toggle Line Comment (`Ctrl+/`), Comment Selection (`Ctrl+K Ctrl+C`) and Uncomment Selection (`Ctrl+K Ctrl+U`) use each language's comment style.
+- **Brackets and quotes** close automatically, and typing the closing character steps over it (setting **Text Editor → Auto Closing Brackets**).
+- **Folding** follows the language server, or else XML elements, `#region`-style markers and indentation.
+- **Word completion** (`Ctrl+Alt+Space`, and while you type) offers the words of the document when no language service completes.
+
+**Project and configuration files**
+- **MSBuild** (`.csproj`, `.props`, `.targets` and friends): completion of elements, properties, items, metadata and values (target frameworks, runtime identifiers, choices), and warnings for unknown values. Hovering a property shows its **evaluated value and where it is set**, when the folder is trusted.
+- **JSON**: syntax errors, and completion, hover and validation from a schema. Schemas come from `$schema`, from built-in schemas (`global.json`, `launchSettings.json`, `appsettings*.json`, `dotnet-tools.json`, `runtimeconfig.template.json`, `daedalus-plugin.json`), or from the SchemaStore catalog (setting **JSON → Schema Download**, on by default; schemas are cached for a week).
+- **YAML**: syntax errors, and validation and hover from a schema.
+- **`.editorconfig`**: completion and hover for EditorConfig and .NET options, and warnings for invalid values.
+- **Markdown**: Open Preview to the Side (`Ctrl+K V`) shows a live preview that follows your edits.
+
+Plugins can add languages, grammars and language servers ([plugins.md](../plugins.md#languages-grammars-and-language-servers)).
+
 ## Navigation
 
 | Command | Shortcut | Notes |

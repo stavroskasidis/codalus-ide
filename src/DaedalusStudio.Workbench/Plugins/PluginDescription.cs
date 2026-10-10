@@ -60,6 +60,9 @@ public sealed partial class PluginDescription
 
     public bool IsUsable => State is PluginState.Ready or PluginState.Active;
 
+    /// <summary>No code: its contributions apply at discovery and it never loads in a plugin host.</summary>
+    public bool IsDeclarative => Manifest is { Entry: null };
+
     public override string ToString() => $"{Id} ({State})";
 
     /// <summary>
@@ -108,13 +111,22 @@ public sealed partial class PluginDescription
             return;
         }
 
-        if (m.Entry is null || m.Entry.Runtime != "dotnet" || string.IsNullOrWhiteSpace(m.Entry.Assembly))
+        if (m.Entry is null)
+        {
+            // Declarative: only contributions that need no plugin code (API 0.2.4, ADR 0016).
+            var contributes = m.Contributes;
+            if (contributes is null || (contributes.Languages is null && contributes.Grammars is null && contributes.LanguageServers is null && contributes.Settings is null))
+            {
+                Fail("A plugin without an entry must contribute languages, grammars, language servers or settings.");
+                return;
+            }
+        }
+        else if (m.Entry.Runtime != "dotnet" || string.IsNullOrWhiteSpace(m.Entry.Assembly))
         {
             Fail("entry must be { \"runtime\": \"dotnet\", \"assembly\": \"<file>.dll\" }.");
             return;
         }
-
-        if (!File.Exists(Path.Combine(InstallPath, m.Entry.Assembly)))
+        else if (!File.Exists(Path.Combine(InstallPath, m.Entry.Assembly)))
         {
             Fail($"Entry assembly not found: {m.Entry.Assembly}");
             return;

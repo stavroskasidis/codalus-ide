@@ -54,3 +54,41 @@ Shapes narrowed from LSP's unions (documented on the C# types): `documentation` 
 Indices 0–21 are the LSP standard token types. Indices 22 and up are Roslyn classifications LSP has no name for: `delegate`, `record`, `recordStruct`, `field`, `constant`, `local`, `label`, `excludedCode`, `preprocessor`, `punctuation`, `stringEscape`, `xmlDocComment`, `controlKeyword`, `extensionMethod`, `stringVerbatim`. The legend is append-only. Modifiers: `static`. Tokens are single-line and don't overlap: multi-line Roslyn spans are split, and nested spans (an escape inside a string) win over their container.
 
 Range requests matter: on the 100k-line fixture, classifying the whole document took 1.6–15 s and returned 549k tokens; a 150-line range takes 5–50 ms (ADR 0002).
+
+## Other language servers (ADR 0016)
+
+The same client talks to every language server: the C# host, the markup host and the servers plugins declare (`contributes.languageServers`, [plugins.md](plugins.md#languages-grammars-and-language-servers)). A server serves the [language ids](adr/0016-language-platform.md) it lists; the shell starts it when the first document of one of them opens.
+
+**What the client sends.**
+- `initialize` declares the client's capabilities: completion without snippets, Markdown documentation, offset parameter labels, no location links, prepare-rename support, code action literals, semantic tokens in the relative format with the standard legend, publish diagnostics with tags.
+- It sends `rootUri` and `workspaceFolders` (the solution's folder) and the server's `initializationOptions`.
+- Servers with `textDocumentSync: 1` (full) get the whole text on every change.
+
+**What it answers.**
+- `workspace/configuration` returns the settings under each requested section, as an object nested at the dots. A server's `settingsSection` is used when an item has no section.
+- `client/registerCapability`, `client/unregisterCapability`, `window/workDoneProgress/create` and the `workspace/*/refresh` requests are accepted.
+- `window/showMessage`, `window/showMessageRequest` and `window/logMessage` go to the Language Services log.
+
+**Normalization.** Results are rewritten into the narrowed shapes above (`LspNormalizer`):
+
+| From the server | Becomes |
+|---|---|
+| Options objects in capabilities (`hoverProvider: {}`, `textDocumentSync: {change}`, `renameProvider: {prepareProvider}`) | Booleans and the sync kind; `prepareRenameProvider` records whether rename has a prepare step. |
+| A completion array; plain-string documentation; insert/replace edits; snippets | A list; Markdown; the replace range; plain text. |
+| Hover contents as strings, marked strings or arrays | One Markdown string. |
+| Parameter labels as `[start, end]` offsets | Substrings of the signature label. |
+| `Location`, `Location[]` or `LocationLink[]` | `Location[]` (a link's target selection range). |
+| A prepare-rename range or `{defaultBehavior}` | `{range, placeholder}`, or null. |
+| `WorkspaceEdit.changes` | `documentChanges`. File operations are skipped. |
+| Bare `Command`s among code actions; numeric diagnostic codes | Dropped; strings. |
+| `WorkspaceSymbol` with only a URI | A location at the start of the file. |
+
+## Markup host
+
+`daedalus-markuphost` (`src/DaedalusStudio.Markup.Host`, `DAEDALUS_MARKUPHOST` overrides) serves `json`, `jsonc`, `xml`, `msbuild`, `yaml` and `editorconfig`.
+- It supports completion and hover, and publishes diagnostics 250 ms after edits.
+- Initialization options: `{schemaDownload, schemaCache}`, from the setting `json.schemaDownload` and the cache folder.
+
+| Method | Direction | Params → result | Notes |
+|---|---|---|---|
+| `daedalus/msbuild/property` | server → client request | `{project, name}` → `{value, origin}` or null | MSBuild hover's evaluated value. The shell answers from the build host's `projectProperties/get` (with the active configuration); null when the project isn't loaded. |

@@ -172,6 +172,41 @@ public sealed class SettingsService : IDisposable
     public IReadOnlyList<string> GetStrings(string key) =>
         GetValue(key) is { ValueKind: JsonValueKind.Array } v ? [.. v.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!)] : [];
 
+    /// <summary>
+    /// The settings under <c>section.</c> as one object, nested at the dots (<c>ini.lint.enabled</c> →
+    /// <c>{ "lint": { "enabled": … } }</c>), as LSP's <c>workspace/configuration</c> expects; null when none exist.
+    /// </summary>
+    public JsonElement? GetSection(string section)
+    {
+        var prefix = section + ".";
+        var root = new System.Text.Json.Nodes.JsonObject();
+        foreach (var (key, value) in Snapshot().Where(e => e.Key.StartsWith(prefix, StringComparison.Ordinal)).OrderBy(e => e.Key, StringComparer.Ordinal))
+        {
+            var parts = key[prefix.Length..].Split('.');
+            var node = root;
+            foreach (var part in parts[..^1])
+            {
+                if (node[part] is not System.Text.Json.Nodes.JsonObject child)
+                {
+                    child = [];
+                    node[part] = child;
+                }
+
+                node = child;
+            }
+
+            node[parts[^1]] = System.Text.Json.Nodes.JsonNode.Parse(value.GetRawText());
+        }
+
+        if (root.Count == 0)
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(root.ToJsonString());
+        return document.RootElement.Clone();
+    }
+
     /// <summary>All effective values (used to seed plugin hosts).</summary>
     public IReadOnlyDictionary<string, JsonElement> Snapshot()
     {

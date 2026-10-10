@@ -7,7 +7,7 @@ public static class PluginMethods
     public const string ProtocolVersion = "0.2";
 
     /// <summary>The plugin API version that <c>engines.daedalus</c> ranges are checked against.</summary>
-    public const string ApiVersion = "0.2.3";
+    public const string ApiVersion = "0.2.4";
 
     // shell → host
     public const string Initialize = "initialize";

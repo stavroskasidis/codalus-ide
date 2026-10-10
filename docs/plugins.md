@@ -152,6 +152,50 @@ Icons are names from the shell's set, so they follow the theme, including high c
 
 The built-in Welcome plugin (`src/Plugins/DaedalusStudio.Plugins.Welcome`) and Templates plugin (`src/Plugins/DaedalusStudio.Plugins.Templates`: New Project and New Solution with quick picks, input boxes and `dotnet new`) are complete examples that reach the shell only through these commands.
 
+## Languages, grammars and language servers
+
+Since 0.2.4 a plugin can add a language without any code ([ADR 0016](adr/0016-language-platform.md)). The contribution points use VS Code's shapes, so existing grammars and language configurations work unchanged. `samples/plugins/TodoLanguage` is a complete example: the `.todo` language with a grammar, a language configuration and a small LSP server.
+
+```json
+{
+  "id": "contoso.todo",
+  "version": "1.0.0",
+  "engines": { "daedalus": "^0.2.4" },
+  "contributes": {
+    "languages": [
+      { "id": "todo", "aliases": ["Todo"], "extensions": [".todo"], "filenames": ["TODO"], "configuration": "language-configuration.json" }
+    ],
+    "grammars": [
+      { "language": "todo", "scopeName": "source.todo", "path": "syntaxes/todo.tmLanguage.json" }
+    ],
+    "languageServers": [
+      { "id": "todo-server", "languages": ["todo"], "command": "TodoLanguage.dll", "settingsSection": "todo" }
+    ]
+  }
+}
+```
+
+**Declarative plugins**
+- A plugin whose contributions are only languages, grammars, language servers and settings may leave out `entry`.
+- It never loads in a plugin host, and its contributions apply as soon as it is discovered.
+
+**`languages`**
+- `id` is what other contributions refer to.
+- Files match by `filenames` (exact), `filenamePatterns` (`*`, `?`), `extensions` (the longest wins) and `firstLine` (a regular expression), in that order.
+- Contributing an existing id adds file patterns to that language.
+- `configuration` is a `language-configuration.json`. The editor uses its comments (Toggle Line Comment), brackets, `autoClosingPairs` and `surroundingPairs`, `folding` (markers and `offSide`) and indentation patterns.
+
+**`grammars`**
+- A TextMate grammar (JSON or plist) for a language.
+- It colors the language's files, with the theme's TextMate colors. Semantic tokens from a language server are applied on top.
+
+**`languageServers`**
+- An LSP server over stdio, for one or more `languages`.
+- `command` is a file in the plugin's folder (a `.dll` runs with `dotnet`) or a program on `PATH`. `${pluginDir}` in `command` and `args` is the plugin's folder.
+- The shell starts it with the first document of its languages and restarts it if it crashes.
+- `initializationOptions` are sent in `initialize`. `workspace/configuration` requests are answered with the settings under `settingsSection`.
+- The server's results go through the same editor features as C#: completion, hover, signature help, definition, references, rename, code actions, formatting, folding, semantic tokens and diagnostics ([protocol.md](protocol.md#other-language-servers-adr-0016)).
+
 ## Proposed APIs
 
 Proposed APIs are not covered by the versioning policy (ADR 0003): they may change in any release, and are meant to be proved by built-in plugins before plugin API 1.0. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `DaedalusStudio.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. Since 0.2.1:
@@ -174,6 +218,13 @@ The built-in .NET test plugin (`src/Plugins/DaedalusStudio.Plugins.DotNetTest`) 
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 0.2.4 (M11)
+
+Additive (plugins built for 0.2.0–0.2.3 keep working):
+- `contributes.languages`, `contributes.grammars` and `contributes.languageServers` ([above](#languages-grammars-and-language-servers)).
+- `entry` is optional for declarative plugins.
+- Shell commands `editor.action.commentLine`, `editor.action.addCommentLine`, `editor.action.removeCommentLine`, `editor.action.triggerWordCompletion` and `markdown.showPreviewToSide`; the setting `editor.autoClosingBrackets`.
 
 ### 0.2.3 (M10)
 

@@ -36,6 +36,63 @@ internal static class LargeFileGenerator
     }
 }
 
+/// <summary>100k-line JSON and XML files for the markup editing budgets (M11, ADR 0016).</summary>
+internal static class MarkupGenerator
+{
+    public static void Write(string outDir, int lines)
+    {
+        Directory.CreateDirectory(outDir);
+        File.WriteAllText(Path.Combine(outDir, "Large.json"), Json(lines));
+        File.WriteAllText(Path.Combine(outDir, "Large.xml"), Xml(lines));
+    }
+
+    // Each record is 10 lines; the array brackets add 2.
+    public static string Json(int lines)
+    {
+        var builder = new StringBuilder("[\n");
+        var records = Math.Max(1, (lines - 2) / 10);
+        for (var i = 0; i < records; i++)
+        {
+            var n = i.ToString(CultureInfo.InvariantCulture);
+            builder.Append("  {\n")
+                .Append("    \"id\": ").Append(n).Append(",\n")
+                .Append("    \"name\": \"item ").Append(n).Append("\",\n")
+                .Append("    \"enabled\": ").Append(i % 3 == 0 ? "true" : "false").Append(",\n")
+                .Append("    \"ratio\": ").Append((i % 1000 / 7.0).ToString("F3", CultureInfo.InvariantCulture)).Append(",\n")
+                .Append("    \"tags\": [\"alpha\", \"beta\", \"gamma\"],\n")
+                .Append("    \"parent\": ").Append(i == 0 ? "null" : (i - 1).ToString(CultureInfo.InvariantCulture)).Append(",\n")
+                .Append("    \"description\": \"generated record number ").Append(n).Append(" for the markup benchmark\",\n")
+                .Append("    \"kind\": \"").Append((i % 4) switch { 0 => "file", 1 => "folder", 2 => "link", _ => "other" }).Append("\"\n")
+                .Append(i == records - 1 ? "  }\n" : "  },\n");
+        }
+
+        return builder.Append("]\n").ToString();
+    }
+
+    // Each item is 10 lines; the declaration and root add 3.
+    public static string Xml(int lines)
+    {
+        var builder = new StringBuilder("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<catalog>\n");
+        var records = Math.Max(1, (lines - 3) / 10);
+        for (var i = 0; i < records; i++)
+        {
+            var n = i.ToString(CultureInfo.InvariantCulture);
+            builder.Append("  <item id=\"").Append(n).Append("\" enabled=\"").Append(i % 3 == 0 ? "true" : "false").Append("\">\n")
+                .Append("    <!-- generated record ").Append(n).Append(" -->\n")
+                .Append("    <name>item ").Append(n).Append("</name>\n")
+                .Append("    <ratio>").Append((i % 1000 / 7.0).ToString("F3", CultureInfo.InvariantCulture)).Append("</ratio>\n")
+                .Append("    <tags>\n")
+                .Append("      <tag>alpha</tag>\n")
+                .Append("      <tag>beta</tag>\n")
+                .Append("    </tags>\n")
+                .Append("    <description>generated record number ").Append(n).Append(" for the markup benchmark</description>\n")
+                .Append("  </item>\n");
+        }
+
+        return builder.Append("</catalog>\n").ToString();
+    }
+}
+
 internal static class SolutionGenerator
 {
     public const int DefaultProjects = 50;

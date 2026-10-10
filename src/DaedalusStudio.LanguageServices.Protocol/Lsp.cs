@@ -67,8 +67,11 @@ public sealed record ServerCapabilities
 
     public bool ReferencesProvider { get; init; }
 
-    /// <summary>True here means rename with <c>prepareRename</c> (LSP's <c>{ prepareProvider: true }</c>).</summary>
+    /// <summary>True here means rename with <c>prepareRename</c> (LSP's <c>{ prepareProvider: true }</c>) unless <see cref="PrepareRenameProvider"/> is false.</summary>
     public bool RenameProvider { get; init; }
+
+    /// <summary>Set by the client for servers that state it: false means rename without <c>prepareRename</c>.</summary>
+    public bool? PrepareRenameProvider { get; init; }
 
     public bool CodeActionProvider { get; init; }
 

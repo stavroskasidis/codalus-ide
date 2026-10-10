@@ -27,7 +27,11 @@
     { "target": "shell", "scenario": "packages", "metric": "properties_open_ms", "stat": "p50", "max": 300, "source": "M9 (proposed)" },
     { "target": "shell", "scenario": "terminal", "metric": "terminal_frame_ms", "stat": "max", "max": 50, "source": "M10 (proposed, ADR 0014)" },
     { "target": "shell", "scenario": "terminal", "metric": "terminal_echo_ms", "stat": "p99", "max": 40, "os": "windows", "source": "M10 (proposed: ConPTY and PSReadLine round trip included)" },
-    { "target": "shell", "scenario": "terminal", "metric": "terminal_memory_mb", "stat": "max", "max": 30, "source": "M10 (proposed, ADR 0014)" }
+    { "target": "shell", "scenario": "terminal", "metric": "terminal_memory_mb", "stat": "max", "max": 30, "source": "M10 (proposed, ADR 0014)" },
+    { "target": "shell", "scenario": "markup-100k", "metric": "json_highlight_ms", "stat": "p50", "max": 1800, "source": "ADR 0002 #3a (M11, in-app)" },
+    { "target": "shell", "scenario": "markup-100k", "metric": "xml_highlight_ms", "stat": "p50", "max": 1800, "source": "ADR 0002 #3a (M11, in-app)" },
+    { "target": "shell", "scenario": "markup-100k", "metric": "json_typing_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b (M11)" },
+    { "target": "shell", "scenario": "markup-100k", "metric": "xml_typing_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b (M11)" }
   ],
   "regression": {
     "latencyP50": 0.10,

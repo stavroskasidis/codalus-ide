@@ -8,6 +8,7 @@ using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Shell.Theming;
 using DaedalusStudio.Shell.ViewModels;
+using DaedalusStudio.Shell.Views;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Languages;
 using DaedalusStudio.Workbench.StatusBar;
@@ -50,15 +51,71 @@ public sealed partial class ShellHost : IEditorServices
 
     EditorTheme IEditorServices.Theme => EditorTheme;
 
+    /// <summary>TextMate grammars and language configurations (ADR 0016).</summary>
+    public TextMateSupport TextMate { get; private set; } = null!;
+
+    TextMateSupport IEditorServices.TextMate => TextMate;
+
     DiagnosticsStore IEditorServices.Diagnostics => Languages.Diagnostics;
 
     private void InitializeEditor()
     {
         EditorOptions = new EditorOptions(Workbench.Settings);
-        var registry = new LanguageServiceRegistry();
+        var registry = Workbench.LanguageServers;
         registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve));
-        Languages = new LanguageService(registry, Solutions);
+        registry.Register(new LanguageServiceDescriptor("markup", "JSON, XML and YAML", [], null, MarkupHostLaunch.Resolve)
+        {
+            Languages = MarkupHostLaunch.Languages,
+            InitializationOptions = MarkupOptions(),
+        });
+        BuiltInLanguages.Register(Workbench.LanguageDefinitions);
+        TextMate = new TextMateSupport(Workbench.LanguageDefinitions) { Log = line => LanguageLog.AppendLine(line) };
+        Languages = new LanguageService(registry, Solutions, languages: Workbench.LanguageDefinitions)
+        {
+            SettingsProvider = section => section is { Length: > 0 } ? Workbench.Settings.GetSection(section) : null,
+            PropertyEvaluator = EvaluatePropertyAsync,
+        };
         ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position));
+    }
+
+    /// <summary>The markup host's options: schema downloads (setting <c>json.schemaDownload</c>) and their cache folder.</summary>
+    private System.Text.Json.JsonElement MarkupOptions()
+    {
+        var options = new System.Text.Json.Nodes.JsonObject
+        {
+            ["schemaDownload"] = Workbench.Settings.GetBoolean(SchemaDownloadSetting, true),
+            ["schemaCache"] = Path.Combine(Paths.Cache, "schemas"),
+        };
+        using var document = System.Text.Json.JsonDocument.Parse(options.ToJsonString());
+        return document.RootElement.Clone();
+    }
+
+    public const string SchemaDownloadSetting = "json.schemaDownload";
+
+    /// <summary>A project's evaluated property and where it is set, for MSBuild hover (from the build host, M9b).</summary>
+    private async Task<(string? Value, string? Origin)?> EvaluatePropertyAsync(string project, string name, CancellationToken cancellationToken)
+    {
+        if (!Solutions.Projects.ContainsKey(project))
+        {
+            return null;
+        }
+
+        var result = await ProjectManagement.GetPropertiesAsync(project, [name], null, cancellationToken).ConfigureAwait(false);
+        if (result.Properties.FirstOrDefault() is not { } property)
+        {
+            return null;
+        }
+
+        var where = property.DefinedIn is { } file ? $"{Path.GetFileName(file)}:{property.Line}" : null;
+        var origin = property.Origin switch
+        {
+            Projects.Protocol.PropertyOrigins.Project => $"set in {where}",
+            Projects.Protocol.PropertyOrigins.Import => $"set in {where}",
+            Projects.Protocol.PropertyOrigins.Sdk => "a default of the SDK" + (where is null ? string.Empty : $" ({where})"),
+            Projects.Protocol.PropertyOrigins.Global => "a global property",
+            _ => "not set",
+        };
+        return (property.Value, origin + $" ({result.Configuration}|{result.Platform})");
     }
 
     /// <summary>The editor's reactions to the layout (after <see cref="InitializeEditor"/> and the layout exist).</summary>
@@ -67,13 +124,14 @@ public sealed partial class ShellHost : IEditorServices
         Languages.Log += (_, line) => LanguageLog.AppendLine(line);
         Languages.HostCrashed += (_, e) => Ui.Post(() =>
         {
+            var name = Workbench.LanguageServers.Get(e.LanguageId)?.DisplayName ?? e.LanguageId;
             if (e.WillRestart)
             {
-                Workbench.Notifications.Warning("The C# language service stopped unexpectedly and is restarting.");
+                Workbench.Notifications.Warning($"The {name} language service stopped unexpectedly and is restarting.");
             }
             else
             {
-                Workbench.Notifications.Error("The C# language service keeps crashing and was stopped. Reopen the solution to try again.");
+                Workbench.Notifications.Error($"The {name} language service keeps crashing and was stopped. Reopen the solution to try again.");
             }
         });
         Languages.HostRestarted += (_, _) => Ui.Post(RefreshEditors);
@@ -631,6 +689,36 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    /// <summary>Opens a live preview of the active Markdown document beside it (Ctrl+K V).</summary>
+    public MarkdownPreviewDocument? ShowMarkdownPreview()
+    {
+        if (ActiveEditor is not { Model: { LanguageId: "markdown" } model })
+        {
+            StatusBar.ShowMessage("Open a Markdown file to preview it.", TimeSpan.FromSeconds(4));
+            return null;
+        }
+
+        if (Layout.FindDocument<MarkdownPreviewDocument>(MarkdownPreviewDocument.DocumentIdFor(model.Path)) is { } open)
+        {
+            Layout.OpenDocument(open, focus: false);
+            return open;
+        }
+
+        var preview = new MarkdownPreviewDocument(model, link =>
+        {
+            if (Uri.TryCreate(link, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
+            {
+                ShellIntegration.OpenUrl(uri);
+            }
+            else if (link.StartsWith("command:", StringComparison.Ordinal))
+            {
+                Run(link["command:".Length..]);
+            }
+        });
+        Layout.OpenInNewGroup(preview, below: false);
+        return preview;
+    }
+
     /// <summary>Ctrl+Tab: activates the next (or previous) document tab, wrapping around.</summary>
     public void CycleDocument(int direction)
     {
@@ -705,7 +793,7 @@ public sealed partial class ShellHost : IEditorServices
         Workbench.StatusBar.Set(new StatusBarItem("daedalus.editor.indentation", indentation, StatusBarAlignment.Right, 890, source));
         Workbench.StatusBar.Set(new StatusBarItem("daedalus.editor.encoding", model.Format.EncodingName, StatusBarAlignment.Right, 880, source) { Tooltip = "Encoding" });
         Workbench.StatusBar.Set(new StatusBarItem("daedalus.editor.eol", model.Format.LineEndingName, StatusBarAlignment.Right, 870, source) { Tooltip = "Line endings (click to change)", Command = "editor.action.changeEndOfLine" });
-        var language = model.LanguageId switch { CSharpLanguageId => "C#", null => "Plain Text", var other => other };
+        var language = model.LanguageId is { } id ? Workbench.LanguageDefinitions.Get(id)?.Name ?? id : "Plain Text";
         Workbench.StatusBar.Set(new StatusBarItem("daedalus.editor.language", language, StatusBarAlignment.Right, 860, source) { Tooltip = "Language" });
         Workbench.Context.Set("editorHasSelection", caret.SelectionLength > 0);
         Workbench.Context.Set("editorHasMultipleSelections", caret.Carets > 1);

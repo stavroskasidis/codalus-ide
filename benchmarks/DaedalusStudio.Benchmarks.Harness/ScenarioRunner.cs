@@ -14,7 +14,7 @@ internal sealed record RunOptions(int? Runs, bool AllowInput, TextWriter Log, bo
 /// </summary>
 internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 {
-    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "self-driven", "test-explorer", "packages", "terminal", "binary-size"];
+    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "self-driven", "test-explorer", "packages", "terminal", "markup-100k", "binary-size"];
 
     /// <summary>The tests in samples/Tests5k (FixtureGen <c>tests</c>) as found in source: 20 projects × 250 (a theory is one test until a runner lists its cases).</summary>
     private const int Tests5kLeaves = 20 * 10 * 25;
@@ -33,7 +33,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
     public static bool Applies(Target target, string scenario) => target.SupportedScenarios?.Contains(scenario) != false && scenario switch
     {
         "self-driven" => target.IsPrototype,
-        "test-explorer" or "packages" or "terminal" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
+        "test-explorer" or "packages" or "terminal" or "markup-100k" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
         "open-solution-50" => target.Name != "vscode", // VS Code has no solution explorer without proprietary C# Dev Kit.
         "cold-start" or "editor-100k" => target.IsPrototype || OperatingSystem.IsWindows() || target.Name == "vscode",
         _ => true,
@@ -76,6 +76,9 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 break;
             case "terminal":
                 await TerminalAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
+                break;
+            case "markup-100k":
+                await Markup100kAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
                 break;
             case "binary-size":
                 BinarySize(target, result);
@@ -472,6 +475,45 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             }
 
             Log($"  {target.Name} terminal run {run}: cat {Last(result, "terminal_cat_ms")} ms, frame max {Max(result, "terminal_frame_ms")} ms, memory {Last(result, "terminal_memory_mb")} MB, echo max {Max(result, "terminal_echo_ms")} ms");
+        }
+    }
+
+    // ------------------------------------------------------------------ 100k-line JSON and XML (M11, ADR 0016)
+
+    private async Task Markup100kAsync(Target target, ScenarioResult result, int runs, CancellationToken cancellationToken)
+    {
+        var source = Path.Combine(repoRoot, "samples", "LargeMarkup100k");
+        RequireFixture(source);
+        result.Notes.Add("In-app: *_highlight_ms is launch until the TextMate grammar colored the visible lines and the frame was rendered; "
+                         + "*_typing_ms is the shell's self-driven typing in the middle of the file (markup host diagnostics included).");
+        for (var run = 0; run < runs; run++)
+        {
+            foreach (var kind in new[] { "json", "xml" })
+            {
+                var work = NewWorkDir();
+                var file = Path.Combine(CopyDirectory(source, Path.Combine(work, "LargeMarkup100k")), "Large." + kind);
+                await using var session = await LaunchAsync(target, new LaunchRequest(work, File: file, Bench: "typing", ExitOn: "done"), cancellationToken).ConfigureAwait(false);
+                if (await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.HighlightReady, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } highlight)
+                {
+                    result.Add(kind + "_highlight_ms", (highlight.WallMicros - session.LaunchWallMicros) / 1000.0);
+                    await Task.Delay(2000, cancellationToken).ConfigureAwait(false);
+                    result.Add(kind + "_memory_private_mb", ProcessTree.Memory(session.Process.Id).PrivateBytes / 1048576.0);
+                }
+
+                try
+                {
+                    await session.Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromMinutes(3), cancellationToken).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    result.Notes.Add($"run {run} {kind}: scenario did not finish within 3 minutes");
+                }
+
+                var events = BenchEventLog.Read(session.EventsFile);
+                result.AddRange(kind + "_typing_ms", events.Where(e => e.Name == BenchEventNames.KeyLatency && e.Field("synthetic") == 1).Select(e => e.Field("latency_us") / 1000.0));
+            }
+
+            Log($"  {target.Name} markup-100k run {run}: json {Last(result, "json_highlight_ms")} ms (typing p99 {Pct(result, "json_typing_ms", 0.99)}), xml {Last(result, "xml_highlight_ms")} ms (typing p99 {Pct(result, "xml_typing_ms", 0.99)})");
         }
     }
 

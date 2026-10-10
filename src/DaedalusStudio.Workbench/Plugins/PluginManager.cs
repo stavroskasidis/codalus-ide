@@ -229,6 +229,8 @@ public sealed class PluginManager : IAsyncDisposable
             });
         }
 
+        ApplyLanguageContributions(plugin);
+
         if (contributions?.Settings?.Properties is { } properties)
         {
             var descriptors = new List<SettingDescriptor>();
@@ -254,6 +256,84 @@ public sealed class PluginManager : IAsyncDisposable
             }
 
             _workbench.Settings.Register(descriptors);
+        }
+    }
+
+    /// <summary>Languages, grammars and language servers (ADR 0016). They need no plugin code, so they apply at discovery.</summary>
+    private void ApplyLanguageContributions(PluginDescription plugin)
+    {
+        var contributions = plugin.Manifest!.Contributes;
+        var folder = plugin.InstallPath;
+        var source = plugin.Id;
+        string Resolve(string path) => path.Replace("${pluginDir}", folder, StringComparison.Ordinal);
+        foreach (var language in contributions?.Languages ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(language.Id))
+            {
+                continue;
+            }
+
+            Languages.LanguageConfiguration? configuration = null;
+            if (language.Configuration is { Length: > 0 } configurationPath)
+            {
+                try
+                {
+                    configuration = Languages.LanguageConfiguration.Parse(File.ReadAllText(Path.Combine(folder, Resolve(configurationPath))));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+                {
+                    PluginLog.AppendLine($"[{plugin.Id}] language '{language.Id}': {ex.Message}");
+                }
+            }
+
+            _workbench.LanguageDefinitions.Register(new Languages.LanguageDefinition(language.Id, language.Aliases?.FirstOrDefault() ?? language.Id)
+            {
+                Aliases = language.Aliases ?? [],
+                Extensions = language.Extensions ?? [],
+                FileNames = language.Filenames ?? [],
+                FileNamePatterns = language.FilenamePatterns ?? [],
+                FirstLine = language.FirstLine,
+                Configuration = configuration,
+                Source = source,
+            });
+        }
+
+        foreach (var grammar in contributions?.Grammars ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(grammar.ScopeName) || string.IsNullOrWhiteSpace(grammar.Path))
+            {
+                continue;
+            }
+
+            _workbench.LanguageDefinitions.RegisterGrammar(new Languages.GrammarDefinition(grammar.ScopeName, grammar.Language, Path.Combine(folder, Resolve(grammar.Path)))
+            {
+                EmbeddedLanguages = grammar.EmbeddedLanguages,
+                Source = source,
+            });
+        }
+
+        foreach (var server in contributions?.LanguageServers ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(server.Id) || server.Languages is not { Length: > 0 } || string.IsNullOrWhiteSpace(server.Command)
+                || server.Transport is not (null or "stdio"))
+            {
+                PluginLog.AppendLine($"[{plugin.Id}] language server '{server.Id}': needs an id, languages and a command over stdio.");
+                continue;
+            }
+
+            var command = Resolve(server.Command);
+            var local = Path.Combine(folder, command);
+            var arguments = (server.Args ?? []).Select(Resolve).ToArray();
+            ProcessLaunchInfo Launch() => File.Exists(local)
+                ? ProcessLaunchInfo.FromPath(local, arguments)
+                : new ProcessLaunchInfo(command, arguments);
+            _workbench.LanguageServers.Register(new Languages.LanguageServiceDescriptor(server.Id, server.Name ?? plugin.DisplayName, [], null, Launch)
+            {
+                Languages = server.Languages,
+                InitializationOptions = server.InitializationOptions,
+                SettingsSection = server.SettingsSection,
+                Source = source,
+            });
         }
     }
 
@@ -296,6 +376,12 @@ public sealed class PluginManager : IAsyncDisposable
         if (!plugin.IsUsable)
         {
             return false;
+        }
+
+        if (plugin.IsDeclarative)
+        {
+            plugin.State = PluginState.Active;
+            return true;
         }
 
         var gate = _activationLocks.GetOrAdd(plugin.Id, _ => new SemaphoreSlim(1, 1));
@@ -527,7 +613,7 @@ public sealed class PluginManager : IAsyncDisposable
 
         public JsonRpcConnection Connection => _process.Connection;
 
-        private IEnumerable<PluginDescription> Members => _manager.Plugins.Where(p => p.HostGroup == _group);
+        private IEnumerable<PluginDescription> Members => _manager.Plugins.Where(p => p.HostGroup == _group && !p.IsDeclarative);
 
         public Task EnsureStartedAsync(CancellationToken cancellationToken) => _process.StartAsync(cancellationToken);
 
@@ -557,7 +643,7 @@ public sealed class PluginManager : IAsyncDisposable
             var members = Members.Where(p => p.IsUsable).ToList();
             var load = await connection.InvokeAsync(
                 PluginMethods.LoadPlugins,
-                new LoadPluginsParams([.. members.Select(p => new PluginLoadEntry(p.Id, p.Manifest!.Version, p.InstallPath, p.Manifest.Entry.Assembly, p.Manifest.Entry.Type, p.Manifest.EnableProposedApi))]),
+                new LoadPluginsParams([.. members.Select(p => new PluginLoadEntry(p.Id, p.Manifest!.Version, p.InstallPath, p.Manifest.Entry!.Assembly, p.Manifest.Entry.Type, p.Manifest.EnableProposedApi))]),
                 json.LoadPluginsParams, json.LoadPluginsResult, cancellationToken).ConfigureAwait(false);
             foreach (var result in load.Results.Where(r => !r.Loaded))
             {

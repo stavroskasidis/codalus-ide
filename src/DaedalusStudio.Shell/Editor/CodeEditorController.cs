@@ -134,6 +134,7 @@ public sealed class CodeEditorController : IDisposable
         _multiCaret.Changed += (_, _) => OnCaretChanged(this, EventArgs.Empty);
 
         UpdateDiagnostics();
+        UpdateGrammar();
         RefreshAll();
         _attached = attach;
         if (attach)
@@ -238,6 +239,69 @@ public sealed class CodeEditorController : IDisposable
 
     private void OnThemeChanged(object? sender, EventArgs e) => ApplyTheme();
 
+    private AvaloniaEdit.TextMate.TextMate.Installation? _textMate;
+
+    /// <summary>The TextMate grammar scope coloring this document, or null (tests).</summary>
+    public string? GrammarScope { get; private set; }
+
+    /// <summary>The TextMate model of a grammar-colored document (tests).</summary>
+    internal AvaloniaEdit.TextMate.TextMate.Installation? TextMate => _textMate;
+
+    /// <summary>The distinct text colors on a rendered line (smoke test, benchmarks).</summary>
+    internal int LineColors(int line)
+    {
+        var view = Editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        return view.GetVisualLine(line) is { } visual ? Colors(visual) : 0;
+    }
+
+    /// <summary>Whether the grammar has colored a visible line yet (benchmarks: the TextMate equivalent of <see cref="TokensApplied"/>).</summary>
+    internal bool GrammarColored()
+    {
+        var view = Editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        return GrammarScope is not null && view.VisualLinesValid && view.VisualLines.Any(l => Colors(l) >= 2);
+    }
+
+    private static int Colors(VisualLine line) =>
+        line.Elements.Select(e => e.TextRunProperties.ForegroundBrush is Avalonia.Media.ISolidColorBrush brush ? brush.Color : default).Distinct().Count();
+
+    /// <summary>Colors the document with its language's TextMate grammar (ADR 0016), if it has one.</summary>
+    private void UpdateGrammar()
+    {
+        var scope = _services.TextMate.ScopeFor(Model.LanguageId);
+        if (scope == GrammarScope)
+        {
+            return;
+        }
+
+        GrammarScope = scope;
+        if (scope is null)
+        {
+            _textMate?.Dispose();
+            _textMate = null;
+            return;
+        }
+
+        try
+        {
+            if (_textMate is null)
+            {
+                _textMate = AvaloniaEdit.TextMate.TextMate.InstallTextMate(Editor, _services.TextMate, initCurrentDocument: true, ex => _services.Log("TextMate: " + ex.Message));
+                _textMate.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
+            }
+
+            _textMate.SetGrammar(scope);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _services.Log($"TextMate: {Model.Name}: {ex.Message}");
+            _textMate?.Dispose();
+            _textMate = null;
+            GrammarScope = null;
+        }
+    }
+
     private void ApplyTheme()
     {
         var theme = _services.Theme;
@@ -247,6 +311,7 @@ public sealed class CodeEditorController : IDisposable
         Editor.TextArea.SelectionBrush = theme.Selection;
         Editor.TextArea.TextView.CurrentLineBackground = theme.CurrentLine;
         Editor.TextArea.TextView.CurrentLineBorder = new Avalonia.Media.Pen(Avalonia.Media.Brushes.Transparent, 0);
+        _textMate?.SetTheme(_services.TextMate.ThemeFor(theme.Id));
         Editor.TextArea.TextView.Redraw();
     }
 
@@ -273,6 +338,7 @@ public sealed class CodeEditorController : IDisposable
     {
         if (e.PropertyName == nameof(CodeDocument.LanguageId))
         {
+            UpdateGrammar();
             RefreshAll();
         }
     }
@@ -354,6 +420,13 @@ public sealed class CodeEditorController : IDisposable
 
             if (Client is not { } client)
             {
+                AfterTokens(); // no semantic tokens: folding and options still need their turn
+                return;
+            }
+
+            if (client.Capabilities?.SemanticTokensProvider is not { } provider)
+            {
+                AfterTokens(); // a server without semantic tokens (the TextMate grammar colors the file)
                 return;
             }
 
@@ -361,14 +434,19 @@ public sealed class CodeEditorController : IDisposable
             var (first, last) = VisibleLines();
             var start = Math.Max(0, first - TokenMarginLines);
             var end = Math.Min(Model.Text.LineCount, last + TokenMarginLines);
+            if (!provider.Range)
+            {
+                (start, end) = (0, Model.Text.LineCount);
+            }
+
             var range = new LanguageServices.Protocol.Range(new Position(start, 0), new Position(end, 0));
-            var tokens = await client.SemanticTokensAsync(Model.Uri, range, cancellationToken).ConfigureAwait(true);
+            var tokens = await client.SemanticTokensAsync(Model.Uri, provider.Range ? range : null, cancellationToken).ConfigureAwait(true);
             if (cancellationToken.IsCancellationRequested || version != Model.Version || _disposed)
             {
                 return; // stale: a newer edit is on its way
             }
 
-            _colorizer.Apply(start, end, tokens.Data);
+            _colorizer.Apply(start, end, SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes));
             Editor.TextArea.TextView.Redraw();
             TokensApplied?.Invoke(this, EventArgs.Empty);
             AfterTokens();
@@ -407,8 +485,19 @@ public sealed class CodeEditorController : IDisposable
                 await Task.Delay(delay, cancellationToken).ConfigureAwait(true);
             }
 
-            if (Client is not { } client)
+            if (Client is not { Capabilities.FoldingRangeProvider: true } client)
             {
+                // No language server folding: XML elements, markers and indentation (ADR 0016).
+                var version0 = Model.Version;
+                var snapshot = Model.Text.CreateSnapshot();
+                var configuration = Configuration;
+                var languageId = Model.LanguageId;
+                var local = await Task.Run(() => LanguageFeatures.Foldings(new AvaloniaEdit.Document.TextDocument(snapshot), languageId, configuration), cancellationToken).ConfigureAwait(true);
+                if (!cancellationToken.IsCancellationRequested && version0 == Model.Version && !_disposed)
+                {
+                    _folding.UpdateFoldings(local, -1);
+                }
+
                 return;
             }
 
@@ -551,11 +640,201 @@ public sealed class CodeEditorController : IDisposable
         {
             _multiCaret.Type(text);
             e.Handled = true;
+            return;
         }
+
+        // Typing the closing character of an auto-closed pair moves over it.
+        if (e.Text is { Length: 1 } typed && _services.Options.AutoClosingBrackets && Editor.SelectionLength == 0
+            && Editor.CaretOffset < Model.Text.TextLength && Model.Text.GetCharAt(Editor.CaretOffset) == typed[0]
+            && Configuration?.AutoClosingPairs.Any(p => p.Close == typed && (p.Open != p.Close || _autoClosed?.Offset == Editor.CaretOffset)) == true)
+        {
+            Editor.CaretOffset++;
+            _autoClosed = null;
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>The last auto-inserted closing quote (typing it moves over it), following edits.</summary>
+    private AvaloniaEdit.Document.TextAnchor? _autoClosed;
+
+    /// <summary>The document's language configuration (comments, brackets, folding markers).</summary>
+    public Workbench.Languages.LanguageConfiguration? Configuration => _services.TextMate.ConfigurationFor(Model.LanguageId);
+
+    /// <summary>After an opening character of an auto-closing pair, inserts its closing one (VS Code's "languageDefined").</summary>
+    private void AutoClose(string text)
+    {
+        if (!_services.Options.AutoClosingBrackets || _multiCaret.ExtraCarets.Count > 0 || Configuration is not { } configuration
+            || configuration.AutoClosingPairs.FirstOrDefault(p => p.Open.Length == 1 && p.Open == text) is not { } pair)
+        {
+            return;
+        }
+
+        var caret = Editor.CaretOffset;
+        var document = Model.Text;
+        var next = caret < document.TextLength ? document.GetCharAt(caret) : '\n';
+        if (!(char.IsWhiteSpace(next) || ")]};,>".Contains(next, StringComparison.Ordinal)))
+        {
+            return; // only before whitespace, the end of the line or a closing character
+        }
+
+        if (pair.Open == pair.Close)
+        {
+            // Quotes: not after a word character (it's an apostrophe), not inside a string or comment.
+            var previous = caret >= 2 ? document.GetCharAt(caret - 2) : ' ';
+            var line = document.GetLineByOffset(caret);
+            var before = document.GetText(line.Offset, caret - 1 - line.Offset);
+            if (char.IsLetterOrDigit(previous) || before.Count(c => c == pair.Open[0]) % 2 == 1)
+            {
+                return;
+            }
+        }
+
+        if (pair.NotIn.Contains("comment") && configuration.LineComment is { Length: > 0 } comment)
+        {
+            var line = document.GetLineByOffset(caret);
+            if (document.GetText(line.Offset, caret - line.Offset).Contains(comment, StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        document.Insert(caret, pair.Close);
+        Editor.CaretOffset = caret;
+        _autoClosed = document.CreateAnchor(caret);
+    }
+
+    /// <summary>Comments or uncomments the selected lines (or the caret's line) with the language's comment syntax.</summary>
+    public void Comment(CommentAction action)
+    {
+        if (Model.IsReadOnly)
+        {
+            return;
+        }
+
+        var document = Model.Text;
+        var start = document.GetLineByOffset(Editor.SelectionStart).LineNumber;
+        var endOffset = Editor.SelectionStart + Editor.SelectionLength;
+        var end = document.GetLineByOffset(endOffset).LineNumber;
+        if (Editor.SelectionLength > 0 && end > start && document.GetLineByNumber(end).Offset == endOffset)
+        {
+            end--; // a selection ending at the start of a line doesn't include it
+        }
+
+        if (!LanguageFeatures.CommentLines(document, start, end, Configuration, action))
+        {
+            _services.ShowMessage("This language has no comments.");
+        }
+    }
+
+    private string WordBeforeCaret()
+    {
+        var caret = Editor.CaretOffset;
+        var start = caret;
+        while (start > 0 && (char.IsLetterOrDigit(Model.Text.GetCharAt(start - 1)) || Model.Text.GetCharAt(start - 1) is '_' or '-'))
+        {
+            start--;
+        }
+
+        return Model.Text.GetText(start, caret - start);
+    }
+
+    /// <summary>
+    /// Word completion from the document, for languages without a language server's completion. The words are
+    /// counted off the UI thread (<see cref="WordIndex"/>, refreshed at most every two seconds while typing) and
+    /// completed with the words of the caret's line, so typing in large files stays within budget.
+    /// </summary>
+    public void CompleteWords() => _ = CompleteWordsAsync(Restart(ref _wordsCts).Token);
+
+    private static readonly TimeSpan WordIndexRefresh = TimeSpan.FromSeconds(2);
+    private CancellationTokenSource? _wordsCts;
+    private volatile WordIndex? _wordIndex;
+    private volatile Task<WordIndex>? _wordIndexTask;
+    private long _wordIndexBuilt;
+
+    private async Task CompleteWordsAsync(CancellationToken cancellationToken)
+    {
+        var caret = Editor.CaretOffset;
+        var document = Model.Text;
+        var start = caret;
+        while (start > 0 && (char.IsLetterOrDigit(document.GetCharAt(start - 1)) || document.GetCharAt(start - 1) is '_' or '-'))
+        {
+            start--;
+        }
+
+        var prefix = document.GetText(start, caret - start);
+        if (prefix.Length == 0)
+        {
+            return;
+        }
+
+        var version = Model.Version;
+        var index = _wordIndex;
+        if (index is null || (index.Version != version && _wordIndexTask is null && System.Diagnostics.Stopwatch.GetElapsedTime(_wordIndexBuilt) > WordIndexRefresh))
+        {
+            // Rebuilt in the background; until then the stale index plus the current line answer.
+            var snapshot = document.CreateSnapshot();
+            var build = _wordIndexTask = Task.Run(() => WordIndex.Build(snapshot, version, CancellationToken.None), CancellationToken.None);
+            _ = build.ContinueWith(t =>
+            {
+                if (t.IsCompletedSuccessfully)
+                {
+                    _wordIndex = t.Result;
+                }
+
+                _wordIndexBuilt = System.Diagnostics.Stopwatch.GetTimestamp();
+                _wordIndexTask = null;
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            index ??= await build.ConfigureAwait(true);
+        }
+
+        var line = document.GetLineByOffset(caret);
+        var words = index.Complete(prefix, document.GetText(line.Offset, line.Length).Remove(start - line.Offset, caret - start));
+        if (words.Count == 0 || _completion is not null || _disposed || cancellationToken.IsCancellationRequested
+            || Model.Version != version || Editor.CaretOffset != caret)
+        {
+            return;
+        }
+
+        var window = new CompletionWindow(Editor.TextArea) { StartOffset = start, EndOffset = caret, CloseAutomatically = true };
+        foreach (var word in words)
+        {
+            window.CompletionList.CompletionData.Add(new CompletionData(
+                new LanguageServices.Protocol.CompletionItem(word) { Kind = LanguageServices.Protocol.CompletionItemKind.Text },
+                Task.FromResult,
+                (data, segment) => document.Replace(segment.Offset, segment.Length, data.Item.Label)));
+        }
+
+        window.Closed += (_, _) =>
+        {
+            if (_completion == window)
+            {
+                _completion = null;
+            }
+        };
+        _completion = window;
+        window.Show();
+        window.CompletionList.SelectItem(prefix);
     }
 
     private void OnTextEntered(object? sender, TextInputEventArgs e)
     {
+        if (e.Text is { Length: 1 } entered)
+        {
+            AutoClose(entered);
+        }
+
+        if (e.Text is { Length: > 0 } wordStart && Client?.Capabilities?.CompletionProvider is null && _completion is null
+            && (char.IsLetter(wordStart[^1]) || wordStart[^1] == '_') && Model.LanguageId is not (null or "plaintext"))
+        {
+            // No language server completion: offer the document's words once a word is three letters long.
+            var caret = Editor.CaretOffset;
+            if (caret >= 3 && char.IsLetter(Model.Text.GetCharAt(caret - 2)) && char.IsLetter(Model.Text.GetCharAt(caret - 3))
+                && (caret == 3 || !char.IsLetterOrDigit(Model.Text.GetCharAt(caret - 4))))
+            {
+                CompleteWords();
+            }
+        }
+
         if (e.Text is not { Length: 1 } text || Client is not { Capabilities: { } capabilities })
         {
             return;
@@ -584,9 +863,25 @@ public sealed class CodeEditorController : IDisposable
         if (capabilities.CompletionProvider is { } completion)
         {
             var isTrigger = completion.TriggerCharacters.Contains(text);
-            if (_completion is null && (isTrigger || char.IsLetter(c) || c == '_'))
+            if (_completion is null && isTrigger)
             {
-                ShowCompletion(isTrigger ? text : null);
+                ShowCompletion(text);
+            }
+            else if (_completion is null && (char.IsLetter(c) || c == '_'))
+            {
+                // A server that had nothing complete for this word isn't asked again while it grows (as VS Code).
+                if (WordStart(Editor.CaretOffset) != _noCompletionWordStart || Model.Version != _noCompletionVersion + 1)
+                {
+                    ShowCompletion();
+                }
+                else
+                {
+                    _noCompletionVersion = Model.Version;
+                    if (WordBeforeCaret().Length >= 3)
+                    {
+                        CompleteWords();
+                    }
+                }
             }
             else if (_completion is not null && c == '.')
             {
@@ -633,6 +928,21 @@ public sealed class CodeEditorController : IDisposable
     public event EventHandler? LightbulbChanged;
 
     /// <summary>Opens completion at the caret (Ctrl+Space, or a typed trigger character).</summary>
+    private int _noCompletionWordStart = -1;
+    private int _noCompletionVersion;
+
+    /// <summary>The start of the identifier that ends at <paramref name="offset"/>.</summary>
+    private int WordStart(int offset)
+    {
+        var document = Model.Text;
+        while (offset > 0 && (char.IsLetterOrDigit(document.GetCharAt(offset - 1)) || document.GetCharAt(offset - 1) == '_'))
+        {
+            offset--;
+        }
+
+        return offset;
+    }
+
     public void ShowCompletion(string? triggerCharacter = null) => _ = CompletionAsync(triggerCharacter, Restart(ref _completionCts).Token);
 
     private async Task CompletionAsync(string? triggerCharacter, CancellationToken cancellationToken)
@@ -654,6 +964,20 @@ public sealed class CodeEditorController : IDisposable
             if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalSeconds: > 2 } slow)
             {
                 _services.Log($"{Model.Name}: completion took {slow.TotalSeconds:0.0} s");
+            }
+
+            if (list.Items.Length == 0 && !list.IsIncomplete && triggerCharacter is null && Model.LanguageId != ShellHost.CSharpLanguageId)
+            {
+                _noCompletionWordStart = WordStart(requestedAt);
+                _noCompletionVersion = Model.Version;
+            }
+
+            if (list.Items.Length == 0 && !cancellationToken.IsCancellationRequested && !_disposed && _completion is null
+                && Model.LanguageId != ShellHost.CSharpLanguageId && WordBeforeCaret().Length >= 3)
+            {
+                // The server has nothing here (e.g. YAML without a schema): the document's words (ADR 0016).
+                CompleteWords();
+                return;
             }
 
             if (cancellationToken.IsCancellationRequested || _disposed || list.Items.Length == 0 || _completion is not null)
@@ -1190,6 +1514,7 @@ public sealed class CodeEditorController : IDisposable
         }
 
         _disposed = true;
+        _textMate?.Dispose();
         _gitTimer.Stop();
         _gitCts?.Cancel();
         _gitCts?.Dispose();
@@ -1205,7 +1530,7 @@ public sealed class CodeEditorController : IDisposable
         {
             _dockable.Detach(this);
         }
-        foreach (var cts in new[] { _tokensCts, _foldingCts, _highlightCts, _completionCts, _signatureCts, _hoverCts })
+        foreach (var cts in new[] { _tokensCts, _foldingCts, _highlightCts, _completionCts, _signatureCts, _hoverCts, _wordsCts })
         {
             cts?.Cancel();
             cts?.Dispose();

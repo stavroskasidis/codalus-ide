@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>daedalus-markuphost</AssemblyName>
+    <RootNamespace>DaedalusStudio.Markup.Host</RootNamespace>
+    <Description>Language server for JSON, XML and MSBuild, YAML and .editorconfig (ADR 0016), speaking LSP over stdio.</Description>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DaedalusStudio.Rpc\DaedalusStudio.Rpc.csproj" />
+    <ProjectReference Include="..\DaedalusStudio.LanguageServices.Protocol\DaedalusStudio.LanguageServices.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Schemas\*.json" LogicalName="Schemas.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DaedalusStudio.Workbench.Tests" />
+  </ItemGroup>
+</Project>

@@ -27,13 +27,16 @@ public sealed class LanguageService : IAsyncDisposable
     private readonly ConcurrentDictionary<string, ProjectData> _projects = new(SolutionService.PathComparer);
     private readonly ConcurrentDictionary<string, WorkspaceStatusParams> _status = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly LanguageRegistry? _languages;
     private JsonElement? _settings;
 
-    public LanguageService(LanguageServiceRegistry registry, SolutionService solutions, SupervisionPolicy? policy = null)
+    /// <param name="languages">The language of a file (ADR 0016); without it, files map to services by extension.</param>
+    public LanguageService(LanguageServiceRegistry registry, SolutionService solutions, SupervisionPolicy? policy = null, LanguageRegistry? languages = null)
     {
         _registry = registry;
         _solutions = solutions;
         _policy = policy;
+        _languages = languages;
         _solutions.CompilerInputsChanged += OnCompilerInputs;
         _solutions.SolutionChanged += OnSolutionChanged;
     }
@@ -58,18 +61,30 @@ public sealed class LanguageService : IAsyncDisposable
     public int? HostProcessId(string languageId) =>
         _clients.TryGetValue(languageId, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result?.ProcessId : null;
 
-    public string? LanguageIdOf(string path) => _registry.ForFile(path)?.LanguageId;
+    public string? LanguageIdOf(string path) =>
+        _languages?.ForFile(path, () => LanguageRegistry.ReadFirstLine(path))?.Id ?? _registry.ForFile(path)?.LanguageId;
+
+    /// <summary>A project's evaluated property and where it is set (MSBuild hover in the markup host).</summary>
+    public Func<string, string, CancellationToken, Task<(string? Value, string? Origin)?>>? PropertyEvaluator { get; set; }
+
+    /// <summary>Settings for <c>workspace/configuration</c> of servers that declare a settings section.</summary>
+    public Func<string?, JsonElement?>? SettingsProvider { get; set; }
+
+    /// <summary>The service (server) id of a document language, or null when no server serves it.</summary>
+    private string? ServerOf(string languageId) => (_registry.ForLanguage(languageId) ?? _registry.Get(languageId))?.LanguageId;
 
     /// <summary>The compiler inputs of a project from its last design-time build, or null.</summary>
     public ProjectData? Project(string path) => _projects.GetValueOrDefault(path);
 
     /// <summary>The client of a language's service, starting it if needed; null when it can't be started.</summary>
     public Task<LanguageHostClient?> ClientAsync(string languageId) =>
-        _clients.GetOrAdd(languageId, id => new Lazy<Task<LanguageHostClient?>>(() => StartAsync(id))).Value;
+        ServerOf(languageId) is { } server
+            ? _clients.GetOrAdd(server, id => new Lazy<Task<LanguageHostClient?>>(() => StartAsync(id))).Value
+            : Task.FromResult<LanguageHostClient?>(null);
 
     /// <summary>The running client of a language's service, without starting it.</summary>
     public LanguageHostClient? RunningClient(string languageId) =>
-        _clients.TryGetValue(languageId, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result : null;
+        ServerOf(languageId) is { } server && _clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result : null;
 
     /// <summary>Server settings for every language service (e.g. <c>{ "analysisScope": "solution" }</c>).</summary>
     public async Task ConfigureAsync(JsonElement settings)
@@ -95,7 +110,11 @@ public sealed class LanguageService : IAsyncDisposable
         var client = new LanguageHostClient(descriptor.DisplayName + " language service", launch, policy: _policy)
         {
             ProjectsProvider = () => [.. _projects.Values.Where(p => p.Language == descriptor.ProjectLanguage)],
-            OpenDocumentsProvider = () => [.. _documents.Values.Where(d => d.LanguageId == languageId).Select(State)],
+            OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.Serves(d.LanguageId)).Select(State)],
+            InitializationOptions = descriptor.InitializationOptions,
+            RootUri = _solutions.Solution?.Path is { } solution ? DocumentUris.FromPath(Path.GetDirectoryName(solution)!) : null,
+            ConfigurationProvider = section => SettingsProvider?.Invoke(section ?? descriptor.SettingsSection),
+            PropertyEvaluator = (project, name, ct) => PropertyEvaluator?.Invoke(project, name, ct) ?? Task.FromResult<(string?, string?)?>(null),
         };
         client.Diagnostics += (_, p) =>
         {
@@ -171,9 +190,18 @@ public sealed class LanguageService : IAsyncDisposable
     public Task ChangeAsync(string path, int version, TextDocumentContentChangeEvent[] changes)
     {
         DocumentChanged?.Invoke(this, path);
-        return _documents.TryGetValue(path, out var document) && RunningClient(document.LanguageId) is { } client
-            ? client.DidChangeAsync(DocumentUris.FromPath(path), version, changes, _lifetime.Token)
-            : Task.CompletedTask;
+        if (!_documents.TryGetValue(path, out var document) || RunningClient(document.LanguageId) is not { } client)
+        {
+            return Task.CompletedTask;
+        }
+
+        // Servers that sync whole documents (LSP's TextDocumentSyncKind.Full) get the text, not the edits.
+        return client.Capabilities?.TextDocumentSync switch
+        {
+            TextDocumentSyncKind.None => Task.CompletedTask,
+            TextDocumentSyncKind.Full => client.DidChangeAsync(DocumentUris.FromPath(path), version, [new TextDocumentContentChangeEvent(null, document.Text().Text)], _lifetime.Token),
+            _ => client.DidChangeAsync(DocumentUris.FromPath(path), version, changes, _lifetime.Token),
+        };
     }
 
     public Task SavedAsync(string path)

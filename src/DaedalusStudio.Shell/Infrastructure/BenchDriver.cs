@@ -77,6 +77,19 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
         {
             highlighted.TrySetResult();
         }
+        else if (controller.GrammarScope is not null)
+        {
+            // TextMate grammars tokenize on a background thread and raise no event: check each frame.
+            DispatcherTimer.Run(() =>
+            {
+                if (controller.GrammarColored())
+                {
+                    highlighted.TrySetResult();
+                }
+
+                return !highlighted.Task.IsCompleted;
+            }, TimeSpan.FromMilliseconds(5));
+        }
 
         await highlighted.Task.ConfigureAwait(true);
         await RenderedAsync(window).ConfigureAwait(true);

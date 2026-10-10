@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/plugins/HelloWorld/HelloWorld.csproj" />
+    <Project Path="samples/plugins/TodoLanguage/TodoLanguage.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/DaedalusStudio.Debugging/DaedalusStudio.Debugging.csproj" />
@@ -14,6 +15,7 @@
     <Project Path="src/DaedalusStudio.LanguageServices.Client/DaedalusStudio.LanguageServices.Client.csproj" />
     <Project Path="src/DaedalusStudio.LanguageServices.Host/DaedalusStudio.LanguageServices.Host.csproj" />
     <Project Path="src/DaedalusStudio.LanguageServices.Protocol/DaedalusStudio.LanguageServices.Protocol.csproj" />
+    <Project Path="src/DaedalusStudio.Markup.Host/DaedalusStudio.Markup.Host.csproj" />
     <Project Path="src/DaedalusStudio.Platform/DaedalusStudio.Platform.csproj" />
     <Project Path="src/DaedalusStudio.Plugins.Abstractions/DaedalusStudio.Plugins.Abstractions.csproj" />
     <Project Path="src/DaedalusStudio.Plugins.Host/DaedalusStudio.Plugins.Host.csproj" />
@@ -34,6 +36,7 @@
     <Project Path="tests/DaedalusStudio.Benchmarks.Harness.Tests/DaedalusStudio.Benchmarks.Harness.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Debugging.Tests/DaedalusStudio.Debugging.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.LanguageServices.Host.Tests/DaedalusStudio.LanguageServices.Host.Tests.csproj" />
+    <Project Path="tests/DaedalusStudio.LspConformance.Server/DaedalusStudio.LspConformance.Server.csproj" />
     <Project Path="tests/DaedalusStudio.Plugins.Tests/DaedalusStudio.Plugins.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Projects.Tests/DaedalusStudio.Projects.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Rpc.Tests/DaedalusStudio.Rpc.Tests.csproj" />

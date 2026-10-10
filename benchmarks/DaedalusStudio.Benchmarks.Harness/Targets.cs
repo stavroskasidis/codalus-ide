@@ -80,7 +80,7 @@ internal static class TargetCatalog
         },
         dir,
         "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
-        HelperDirectories: ["pluginhost", "buildhost", "lshost", "replhost", "plugins"]);
+        HelperDirectories: ["pluginhost", "buildhost", "lshost", "replhost", "markuphost", "plugins"]);
 
     /// <summary>
     /// VS Code with a throwaway profile: no extensions (C# tooling is not used; the editor runs on TextMate
