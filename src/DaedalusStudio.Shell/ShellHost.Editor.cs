@@ -165,6 +165,12 @@ public sealed partial class ShellHost : IEditorServices
     public async Task<CodeEditorDocument?> OpenFileAsync(string path, bool preview = false, Position? at = null, string? initialContent = null)
     {
         path = Path.GetFullPath(path);
+        if (initialContent is null && Views.ImageDocument.IsImage(path) && File.Exists(path))
+        {
+            OpenImage(path, preview);
+            return null;
+        }
+
         if (Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, path) && e.Owner is not null) is { } open)
         {
             Layout.OpenDocument(open, preview, focus: !preview);
@@ -528,7 +534,9 @@ public sealed partial class ShellHost : IEditorServices
     {
         try
         {
+            await BeforeSaveAsync(model).ConfigureAwait(true);
             await model.SaveAsync(CancellationToken.None).ConfigureAwait(true);
+            AfterSave(model);
             StatusBar.ShowMessage($"Saved {model.Name}", TimeSpan.FromSeconds(3));
             return true;
         }
@@ -583,6 +591,7 @@ public sealed partial class ShellHost : IEditorServices
         var unsaved = _models.Values.Where(m => m.IsModified).ToList();
         if (unsaved.Count == 0)
         {
+            DeleteAllBackups();
             return true;
         }
 
@@ -595,10 +604,22 @@ public sealed partial class ShellHost : IEditorServices
                 await SaveAsync(model).ConfigureAwait(true);
             }
 
-            return unsaved.All(m => !m.IsModified);
+            if (unsaved.All(m => !m.IsModified))
+            {
+                DeleteAllBackups();
+                return true;
+            }
+
+            return false;
         }
 
-        return choice == "Exit Without Saving";
+        if (choice == "Exit Without Saving")
+        {
+            DeleteAllBackups();
+            return true;
+        }
+
+        return false;
     }
 
     // ------------------------------------------------------------------ session (open documents per solution)
@@ -745,6 +766,7 @@ public sealed partial class ShellHost : IEditorServices
     {
         ErrorList.OnActiveDocumentChanged();
         OnNavigationEditorChanged();
+        TrackCopies(ActiveEditor?.Controller);
         Workbench.Context.Set("editorLanguageId", ActiveEditor?.Model.LanguageId);
         if (ActiveEditor is { Controller: { } controller } editor)
         {

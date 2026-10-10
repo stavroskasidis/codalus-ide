@@ -26,7 +26,11 @@ internal sealed class CodeActionsFeature(DiagnosticsService diagnostics, Action<
 
     private sealed record Cached(long ResultId, Document Document, IReadOnlyList<RoslynCodeAction> Actions);
 
-    internal sealed record ActionData(long ResultId, int Index);
+    /// <summary>Which listed action; for a refactoring with a dialog, the user's answers (ADR 0018).</summary>
+    internal sealed record ActionData(long ResultId, int Index)
+    {
+        public CodeActionChoices? Choices { get; init; }
+    }
 
     public async Task<LspCodeAction[]> ActionsAsync(Document document, TextSpan span, CancellationToken cancellationToken)
     {
@@ -54,6 +58,16 @@ internal sealed class CodeActionsFeature(DiagnosticsService diagnostics, Action<
             }
         }
 
+        // Suppress or configure the warnings and suggestions there (M12b): after the fixes, never preferred.
+        var configuration = new List<RoslynCodeAction>();
+        foreach (var diagnostic in found.Where(d => !d.IsSuppressed).DistinctBy(d => d.Id))
+        {
+            configuration.AddRange(SuppressionActions.For(document, diagnostic, text));
+        }
+
+        // Our refactorings with a dialog (Generate constructor…, Extract interface…, Change signature…), first.
+        refactorings.AddRange(await OptionsRefactorings.ForAsync(document, span, cancellationToken).ConfigureAwait(false));
+
         // Refactorings at the caret or selection.
         foreach (var provider in ProviderCatalog.Refactorings)
         {
@@ -77,6 +91,11 @@ internal sealed class CodeActionsFeature(DiagnosticsService diagnostics, Action<
         foreach (var action in refactorings)
         {
             Flatten(action, null, CodeActionKind.Refactor, false, flat);
+        }
+
+        foreach (var action in configuration)
+        {
+            Flatten(action, null, CodeActionKind.QuickFix, false, flat);
         }
 
         var unique = flat.DistinctBy(a => a.Title).ToList();
@@ -114,14 +133,39 @@ internal sealed class CodeActionsFeature(DiagnosticsService diagnostics, Action<
         }
 
         var solution = cached.Document.Project.Solution;
-        var operations = await cached.Actions[key.Index].GetOperationsAsync(cancellationToken).ConfigureAwait(false);
-        var changed = operations.OfType<ApplyChangesOperation>().LastOrDefault()?.ChangedSolution;
+        Solution? changed;
+        if (cached.Actions[key.Index] is OptionsCodeAction withOptions && key.Choices is { } choices)
+        {
+            changed = await withOptions.ApplyAsync(choices, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            var operations = await cached.Actions[key.Index].GetOperationsAsync(cancellationToken).ConfigureAwait(false);
+            changed = operations.OfType<ApplyChangesOperation>().LastOrDefault()?.ChangedSolution;
+        }
+
         if (changed is null)
         {
             return action with { Edit = new WorkspaceEdit([]) };
         }
 
         return action with { Edit = await WorkspaceEdits.ComputeAsync(solution, changed, versionOf, cancellationToken).ConfigureAwait(false) };
+    }
+
+    /// <summary>The dialog a listed action needs before it is resolved, or null (<c>daedalus/codeActionOptions</c>).</summary>
+    public CodeActionOptions? Options(LspCodeAction action)
+    {
+        if (action.Data is not { } data || data.Deserialize(CodeActionJsonContext.Default.ActionData) is not { } key)
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            return _last is { } cached && cached.ResultId == key.ResultId && key.Index < cached.Actions.Count && cached.Actions[key.Index] is OptionsCodeAction withOptions
+                ? withOptions.Options
+                : null;
+        }
     }
 
     private static void Flatten(RoslynCodeAction action, string? parent, string kind, bool preferred, List<(RoslynCodeAction, string, string, bool)> into)

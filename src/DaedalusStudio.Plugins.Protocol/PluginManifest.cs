@@ -65,7 +65,13 @@ public sealed record ManifestContributions
 
     /// <summary>LSP servers the shell starts and supervises for the plugin's languages (no plugin code is loaded).</summary>
     public ManifestLanguageServer[]? LanguageServers { get; init; }
+
+    /// <summary>Snippet files in VS Code's format, for a language (API 0.2.5, M12b).</summary>
+    public ManifestSnippets[]? Snippets { get; init; }
 }
+
+/// <summary>A snippet file, as in VS Code's <c>contributes.snippets</c>: <c>{ language, path }</c>, the path relative to the plugin's folder.</summary>
+public sealed record ManifestSnippets(string Language, string Path);
 
 /// <summary>A language, as in VS Code's <c>contributes.languages</c>. Paths are relative to the plugin's folder.</summary>
 public sealed record ManifestLanguage(string Id)

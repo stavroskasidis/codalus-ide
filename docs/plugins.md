@@ -196,6 +196,18 @@ Since 0.2.4 a plugin can add a language without any code ([ADR 0016](adr/0016-la
 - `initializationOptions` are sent in `initialize`. `workspace/configuration` requests are answered with the settings under `settingsSection`.
 - The server's results go through the same editor features as C#: completion, hover, signature help, definition, references, rename, code actions, formatting, folding, semantic tokens and diagnostics ([protocol.md](protocol.md#other-language-servers-adr-0016)).
 
+## Snippets
+
+Since 0.2.5 a plugin can contribute code snippets ([ADR 0018](adr/0018-editing-refactoring-ui-and-analysis.md)), in VS Code's format:
+
+```json
+"contributes": {
+  "snippets": [ { "language": "csharp", "path": "snippets/csharp.json" } ]
+}
+```
+
+The file maps names to `{ "prefix", "body", "description" }`; `prefix` and `body` may be strings or arrays (a body array is joined with line breaks). Bodies use TextMate snippet syntax: `$1`, `${1:default}`, `${1|a,b|}`, `$0`, `$TM_SELECTED_TEXT`, `$TM_FILENAME_BASE` and the other variables VS Code defines. Snippets show in completion by prefix, in Insert Snippet, and (when the body uses the selection) in Surround With. The user's snippets with the same name win. A plugin whose only contributions are declarative (snippets, languages, grammars, language servers, settings) needs no `entry`.
+
 ## Proposed APIs
 
 Proposed APIs are not covered by the versioning policy (ADR 0003): they may change in any release, and are meant to be proved by built-in plugins before plugin API 1.0. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `DaedalusStudio.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. Since 0.2.1:
@@ -218,6 +230,12 @@ The built-in .NET test plugin (`src/Plugins/DaedalusStudio.Plugins.DotNetTest`) 
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 0.2.5 (M12b)
+
+Additive (plugins built for 0.2.0–0.2.4 keep working):
+- `contributes.snippets` ([above](#snippets)); snippets are declarative contributions.
+- Shell commands `editor.action.insertSnippet`, `editor.action.surroundWithSnippet`, `editor.action.codeCleanup`, `editor.action.duplicateSelection`, `editor.action.moveLinesUpAction`/`DownAction`, `editor.action.smartSelect.expand`/`shrink`, `bookmarks.toggle`/`next`/`previous`/`clearAll`, `workbench.compareFiles`, `analysis.syntaxVisualizer`, `analysis.codeMetrics.solution`/`project`; the settings `editor.formatOnSave`, `files.autoRecover`, `codeCleanup.fixes`, `codeCleanup.onSave` and `taskList.tokens`.
 
 ### 0.2.4 (M11)
 

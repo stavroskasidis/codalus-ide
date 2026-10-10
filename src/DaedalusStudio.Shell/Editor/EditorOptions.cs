@@ -176,4 +176,10 @@ public interface IEditorServices
 
     /// <summary>Runs a command on the active editor (CodeLens).</summary>
     void RunCommand(string commandId);
+
+    /// <summary>Bookmarks (M12b): the editor's margin shows and moves them.</summary>
+    DaedalusStudio.Workbench.Bookmarks.BookmarkService Bookmarks { get; }
+
+    /// <summary>Code snippets by language (M12b).</summary>
+    DaedalusStudio.Workbench.Snippets.SnippetRegistry Snippets { get; }
 }

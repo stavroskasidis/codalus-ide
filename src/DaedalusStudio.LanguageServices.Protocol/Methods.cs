@@ -46,6 +46,7 @@ public static class Methods
     public const string InlayHint = "textDocument/inlayHint";
     public const string CodeLens = "textDocument/codeLens";
     public const string CodeLensResolve = "codeLens/resolve";
+    public const string SelectionRange = "textDocument/selectionRange";
 
     // server → client
     public const string PublishDiagnostics = "textDocument/publishDiagnostics";
@@ -64,4 +65,9 @@ public static class Methods
     public const string GoToBase = "daedalus/base";
     public const string InheritanceMargin = "daedalus/inheritanceMargin";
     public const string SymbolInfo = "daedalus/symbolInfo";
+    public const string DocCommentTemplate = "daedalus/docCommentTemplate";
+    public const string CodeCleanup = "daedalus/codeCleanup";
+    public const string CodeActionOptions = "daedalus/codeActionOptions";
+    public const string SyntaxTree = "daedalus/syntaxTree";
+    public const string CodeMetrics = "daedalus/codeMetrics";
 }

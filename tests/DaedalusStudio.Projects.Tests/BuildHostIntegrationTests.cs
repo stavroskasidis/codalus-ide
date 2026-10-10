@@ -10,7 +10,7 @@ namespace DaedalusStudio.Projects.Tests;
 public sealed class BuildHostIntegrationTests : IAsyncLifetime
 {
     private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(90);
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "daedalus-projects-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(DaedalusStudio.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-projects-" + Guid.NewGuid().ToString("N"));
     private SolutionService _service = null!;
 
     internal static string RepoRoot => Metadata("DaedalusRepoRoot");
@@ -89,10 +89,10 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
     {
-        var deadline = DateTime.UtcNow + (timeout ?? s_timeout);
+        var started = System.Diagnostics.Stopwatch.StartNew(); // monotonic: immune to the machine sleeping
         while (!condition())
         {
-            Assert.True(DateTime.UtcNow < deadline, "Timed out.");
+            Assert.True(started.Elapsed < (timeout ?? s_timeout), "Timed out.");
             await Task.Delay(25, TestContext.Current.CancellationToken);
         }
     }

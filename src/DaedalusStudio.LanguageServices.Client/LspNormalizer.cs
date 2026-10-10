@@ -17,7 +17,7 @@ public static class LspNormalizer
     [
         "hoverProvider", "definitionProvider", "implementationProvider", "documentHighlightProvider", "foldingRangeProvider",
         "referencesProvider", "codeActionProvider", "documentFormattingProvider", "documentRangeFormattingProvider",
-        "workspaceSymbolProvider", "documentSymbolProvider", "callHierarchyProvider", "typeHierarchyProvider", "inlayHintProvider",
+        "workspaceSymbolProvider", "documentSymbolProvider", "callHierarchyProvider", "typeHierarchyProvider", "inlayHintProvider", "selectionRangeProvider",
     ];
 
     /// <summary>Normalizes the result of <paramref name="method"/>; returns the input when nothing needs changing.</summary>
@@ -175,19 +175,7 @@ public static class LspNormalizer
             item["textEdit"] = new JsonObject { ["range"] = replace.DeepClone(), ["newText"] = edit["newText"]?.DeepClone() };
         }
 
-        // Snippets aren't supported yet: keep the text without tab stops.
-        if (item["insertTextFormat"] is JsonValue format && format.TryGetValue<int>(out var f) && f == 2)
-        {
-            if (item["insertText"] is JsonValue insert && insert.TryGetValue<string>(out var text))
-            {
-                item["insertText"] = StripSnippet(text);
-            }
-
-            if (item["textEdit"] is JsonObject snippetEdit && snippetEdit["newText"] is JsonValue newText && newText.TryGetValue<string>(out var t))
-            {
-                snippetEdit["newText"] = StripSnippet(t);
-            }
-        }
+        // Snippets (insertTextFormat 2) keep their tab stops: the editor inserts them with its snippet engine (M12b).
 
         return item;
     }

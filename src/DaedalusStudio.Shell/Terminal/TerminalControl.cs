@@ -842,7 +842,7 @@ public sealed class TerminalControl : Control
         }
 
         string text;
-        int[] columns;
+        (int Row, int Column)[] cells;
         lock (session.Terminal.SyncRoot)
         {
             if (row < 0 || row >= session.Terminal.TotalRows)
@@ -856,15 +856,17 @@ public sealed class TerminalControl : Control
                 return new TerminalLinkActivation(TerminalLinkKind.Url, uri, 0, 0);
             }
 
-            text = terminalRow.GetText();
-            columns = terminalRow.TextColumns();
+            // The whole logical line: a long path wraps over several rows.
+            (text, cells) = session.Terminal.LogicalLine(row);
         }
 
+        static int Order((int Row, int Column) cell) => (cell.Row * 100_000) + cell.Column;
+        var target = Order((row, column));
         foreach (var link in TerminalLinks.Find(text))
         {
-            var start = link.Start < columns.Length ? columns[link.Start] : int.MaxValue;
-            var end = link.Start + link.Length - 1 < columns.Length ? columns[link.Start + link.Length - 1] : int.MaxValue;
-            if (column >= start && column <= end)
+            var start = link.Start < cells.Length ? Order(cells[link.Start]) : int.MaxValue;
+            var end = link.Start + link.Length - 1 < cells.Length ? Order(cells[link.Start + link.Length - 1]) : int.MaxValue;
+            if (target >= start && target <= end)
             {
                 if (link.Kind == TerminalLinkKind.Url)
                 {

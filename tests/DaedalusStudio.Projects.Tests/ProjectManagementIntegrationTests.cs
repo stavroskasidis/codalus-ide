@@ -11,7 +11,7 @@ namespace DaedalusStudio.Projects.Tests;
 public sealed class ProjectManagementIntegrationTests : IAsyncLifetime
 {
     private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(120);
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "daedalus-projmgmt-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(DaedalusStudio.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-projmgmt-" + Guid.NewGuid().ToString("N"));
     private SolutionService _service = null!;
     private ProjectManagementService _management = null!;
 
@@ -265,8 +265,11 @@ public sealed class ProjectManagementIntegrationTests : IAsyncLifetime
         Assert.Equal(ProjectStates.Unloaded, _service.Projects[Tests].State);
         Assert.Equal(ProjectStates.Loaded, _service.Projects[App].State);
 
+        var output = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        _service.BuildOutput += (_, line) => output.Enqueue(line);
+        _service.BuildDiagnostic += (_, d) => output.Enqueue($"{d.Severity} {d.Code}: {d.Message} ({d.File})");
         var build = await _service.BuildAsync(BuildTargets.Build, null, Timeout());
-        Assert.True(build.Succeeded);
+        Assert.True(build.Succeeded, "The build failed:\n" + string.Join("\n", output.TakeLast(60)));
         Assert.True(Directory.Exists(Path.Combine(Fixture, "src", "App", "bin")));
         Assert.False(Directory.Exists(Path.Combine(Fixture, "tests", "Core.Tests", "bin")));
 

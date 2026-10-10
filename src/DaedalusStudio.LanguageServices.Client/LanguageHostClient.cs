@@ -108,7 +108,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
           "workspace": { "configuration": true, "workspaceFolders": true, "symbol": {}, "workspaceEdit": { "documentChanges": true } },
           "textDocument": {
             "synchronization": { "didSave": true, "dynamicRegistration": false },
-            "completion": { "completionItem": { "snippetSupport": false, "documentationFormat": ["markdown", "plaintext"], "resolveSupport": { "properties": ["documentation", "detail", "textEdit", "additionalTextEdits"] }, "insertReplaceSupport": false }, "contextSupport": true },
+            "completion": { "completionItem": { "snippetSupport": true, "documentationFormat": ["markdown", "plaintext"], "resolveSupport": { "properties": ["documentation", "detail", "textEdit", "additionalTextEdits"] }, "insertReplaceSupport": false }, "contextSupport": true },
             "hover": { "contentFormat": ["markdown", "plaintext"] },
             "signatureHelp": { "signatureInformation": { "documentationFormat": ["markdown", "plaintext"], "parameterInformation": { "labelOffsetSupport": true } }, "contextSupport": true },
             "definition": { "linkSupport": false },
@@ -376,6 +376,29 @@ public sealed class LanguageHostClient : IAsyncDisposable
 
     public async Task<InheritanceMarginItem[]> InheritanceMarginAsync(string uri, Protocol.Range range, CancellationToken cancellationToken) =>
         await InvokeNullable(Methods.InheritanceMargin, new InheritanceMarginParams(new TextDocumentIdentifier(uri), range), ProtocolJsonContext.Default.InheritanceMarginParams, ProtocolJsonContext.Default.InheritanceMarginItemArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<SelectionRange[]> SelectionRangesAsync(string uri, Position[] positions, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.SelectionRange, new SelectionRangeParams(new TextDocumentIdentifier(uri), positions), ProtocolJsonContext.Default.SelectionRangeParams, ProtocolJsonContext.Default.SelectionRangeArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    /// <summary>The options a refactoring asks for before it runs (our C# host only), or null when it needs none.</summary>
+    public Task<CodeActionOptions?> CodeActionOptionsAsync(CodeAction action, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.CodeActionOptions, new CodeActionOptionsParams(action), ProtocolJsonContext.Default.CodeActionOptionsParams, ProtocolJsonContext.Default.CodeActionOptions, cancellationToken);
+
+    /// <summary>The syntax tree around a position and the semantics of the node there (the Syntax Visualizer).</summary>
+    public Task<SyntaxTreeResult?> SyntaxTreeAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.SyntaxTree, new SyntaxTreeParams(new TextDocumentIdentifier(uri), position), ProtocolJsonContext.Default.SyntaxTreeParams, ProtocolJsonContext.Default.SyntaxTreeResult, cancellationToken);
+
+    /// <summary>Code Metrics for the project of a document (by URI), or for every project (null).</summary>
+    public Task<CodeMetricsResult?> CodeMetricsAsync(string? uri, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.CodeMetrics, new CodeMetricsParams(uri is null ? null : new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.CodeMetricsParams, ProtocolJsonContext.Default.CodeMetricsResult, cancellationToken);
+
+    /// <summary>Code Cleanup of a document (our C# host only): the edit, or null.</summary>
+    public Task<WorkspaceEdit?> CodeCleanupAsync(string uri, string[]? fixes, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.CodeCleanup, new CodeCleanupParams(new TextDocumentIdentifier(uri), fixes, null, null), ProtocolJsonContext.Default.CodeCleanupParams, ProtocolJsonContext.Default.WorkspaceEdit, cancellationToken);
+
+    /// <summary>The documentation comment template after typing <c>///</c> (our C# host only), or null.</summary>
+    public Task<DocCommentTemplate?> DocCommentTemplateAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.DocCommentTemplate, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.DocCommentTemplate, cancellationToken);
 
     public Task<SymbolDetails?> SymbolDetailsAsync(string uri, Position position, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.SymbolInfo, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.SymbolDetails, cancellationToken);

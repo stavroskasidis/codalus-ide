@@ -170,10 +170,10 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
     private void OnFontChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        foreach (var editor in new[] { _primary?.Editor, _split?.Editor }.OfType<TextEditor>())
+        foreach (var parts in new[] { _primary, _split }.OfType<EditorParts>())
         {
-            editor.FontFamily = _font.Family;
-            editor.FontSize = _font.Size;
+            parts.Editor.FontFamily = _font.Family;
+            parts.Editor.FontSize = _font.Size * parts.Controller.Zoom;
         }
     }
 
@@ -220,6 +220,11 @@ public sealed class CodeEditorView : UserControl, IPaneView
         editor.Bind(TextEditor.LineNumbersForegroundProperty, this.GetResourceObservable("Shell.Editor.LineNumbers"));
         AutomationProperties.SetName(editor, _document.Model.Path);
         var controller = new CodeEditorController(editor, _document, _services, _hover, attach: primary);
+        controller.ZoomChanged += (_, _) =>
+        {
+            editor.FontSize = _font.Size * controller.Zoom;
+            _services.ShowMessage($"Zoom {controller.Zoom:P0}");
+        };
         var minimap = new Minimap(editor, controller.Colorizer) { IsVisible = _services.Options.Minimap };
         minimap.Bind(BackgroundProperty, this.GetResourceObservable("Shell.Editor.Background"));
         minimap.Bind(Minimap.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));

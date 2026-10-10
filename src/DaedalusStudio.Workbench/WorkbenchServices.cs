@@ -34,6 +34,7 @@ public sealed class WorkbenchServices : IDisposable
         StatusBar = new StatusBarService();
         ToolWindows = new ToolWindowRegistry();
         LanguageDefinitions = new Languages.LanguageRegistry();
+        Snippets = new Snippets.SnippetRegistry();
         LanguageServers = new Languages.LanguageServiceRegistry();
         if (watchFiles)
         {
@@ -68,6 +69,9 @@ public sealed class WorkbenchServices : IDisposable
 
     /// <summary>Languages and TextMate grammars (ADR 0016).</summary>
     public Languages.LanguageRegistry LanguageDefinitions { get; }
+
+    /// <summary>Code snippets: built in, from plugins (<c>contributes.snippets</c>) and the user's (M12b).</summary>
+    public Snippets.SnippetRegistry Snippets { get; }
 
     /// <summary>Language servers (C# and the ones plugins contribute).</summary>
     public Languages.LanguageServiceRegistry LanguageServers { get; }

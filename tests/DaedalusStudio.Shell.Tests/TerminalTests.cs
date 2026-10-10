@@ -81,8 +81,9 @@ public sealed class TerminalTests
         await File.WriteAllTextAsync(file, "line 1\nline 2\nline 3\n", TestContext.Current.CancellationToken);
         session.Terminal.Feed($"\r\n{file}(3,2): error XX0001: boom\r\n");
         ShellFixture.Pump();
+        // The logical line: a long temp path (macOS) wraps over several rows.
         var row = Enumerable.Range(0, session.Terminal.TotalRows).Last(i => session.Terminal.GetRow(i).GetText().Contains("XX0001", StringComparison.Ordinal));
-        Assert.Contains(DaedalusStudio.Terminal.TerminalLinks.Find(session.Terminal.GetRow(row).GetText()), l => l.Kind == DaedalusStudio.Terminal.TerminalLinkKind.File && l.Line == 3);
+        Assert.Contains(DaedalusStudio.Terminal.TerminalLinks.Find(session.Terminal.LogicalLine(row).Text), l => l.Kind == DaedalusStudio.Terminal.TerminalLinkKind.File && l.Line == 3);
         f.Shell.TerminalWindow.OpenLink(new TerminalLinkActivation(DaedalusStudio.Terminal.TerminalLinkKind.File, file, 3, 2));
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == file);
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller?.Editor.TextArea.Caret.Line == 3);

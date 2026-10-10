@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.BookmarksView"
+             x:DataType="vm:BookmarksViewModel">
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" TextWrapping="Wrap" IsVisible="{Binding IsEmpty}"
+               Text="No bookmarks. Ctrl+K Ctrl+K adds one on the caret's line." />
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Bookmarks">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:BookmarkRowViewModel">
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          <Setter Property="Padding" Value="6,2" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:BookmarkRowViewModel">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" IsVisible="{Binding HasName}" />
+            <TextBlock Text="{Binding Location}" />
+            <TextBlock Classes="muted" FontSize="11" Text="{Binding Folder}" VerticalAlignment="Center" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

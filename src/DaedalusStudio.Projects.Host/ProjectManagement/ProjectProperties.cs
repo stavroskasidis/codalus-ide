@@ -60,6 +60,8 @@ internal static class ProjectProperties
     {
         using var collection = new ProjectCollection();
         var xml = ProjectRootElement.Open(path, collection, preserveFormatting: true);
+        xml.Reload(throwIfUnsavedChanges: false, preserveFormatting: true); // always the file on disk
+        var before = xml.RawXml; // Reload marks the element dirty, so a change is a different text, not HasUnsavedChanges
         var existing = InScope(xml, name, scope).ToList();
         if (value is null)
         {
@@ -106,7 +108,7 @@ internal static class ProjectProperties
             group.AddProperty(name, value);
         }
 
-        if (!xml.HasUnsavedChanges)
+        if (xml.RawXml == before)
         {
             return false;
         }

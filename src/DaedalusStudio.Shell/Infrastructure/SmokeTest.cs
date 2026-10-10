@@ -296,6 +296,44 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             shell.Layout.CloseToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId);
         }, "language.ready").ConfigureAwait(true);
 
+        await StepAsync("editor.editing", "M12", "Snippets, Duplicate Line, Expand Selection, the Syntax Visualizer and Code Metrics", async () =>
+        {
+            var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
+            var original = greeter.Model.Text.Text;
+            try
+            {
+                MoveCaret(greeter, "Greet(string", 2);
+                await greeter.ExpandSelectionAsync().ConfigureAwait(true);
+                await WaitAsync(() => greeter.Editor.SelectedText == "Greet", "Expand Selection selects the identifier", 30).ConfigureAwait(true);
+                await greeter.ExpandSelectionAsync().ConfigureAwait(true);
+                Check(greeter.Editor.SelectedText.Length > "Greet".Length, "Expand Selection grows to the enclosing node");
+
+                greeter.Editor.TextArea.ClearSelection(); // with a selection, Duplicate copies the selection instead
+                var lines = greeter.Model.Text.LineCount;
+                var length = greeter.Model.Text.TextLength;
+                var selection = greeter.Editor.SelectionLength;
+                greeter.DuplicateLines();
+                Check(greeter.Model.Text.LineCount > lines, $"Duplicate Line adds the selected lines again (lines {lines} → {greeter.Model.Text.LineCount}, length {length} → {greeter.Model.Text.TextLength}, selection {selection}, read-only {greeter.Model.IsReadOnly}, caret line {greeter.Model.Text.GetLineByOffset(greeter.Editor.CaretOffset).LineNumber})");
+
+                greeter.Editor.CaretOffset = greeter.Model.Text.TextLength;
+                greeter.InsertSnippet("// ${1:snippet} works$0", surround: false);
+                Check(greeter.Model.Text.Text.Contains("// snippet works", StringComparison.Ordinal), "a snippet expands with its placeholder");
+
+                MoveCaret(greeter, "Greet(string", 2);
+                shell.ShowSyntaxVisualizer();
+                await WaitAsync(() => shell.SyntaxVisualizer.Selected?.Item.Text == "Greet", "the Syntax Visualizer shows the identifier at the caret", 60).ConfigureAwait(true);
+                shell.Layout.CloseToolWindow(ViewModels.SyntaxVisualizerViewModel.ToolWindowId);
+
+                await shell.CalculateCodeMetricsAsync(projectOnly: false).ConfigureAwait(true);
+                Check(shell.CodeMetrics.Roots.Count >= 2 && shell.CodeMetrics.Roots.All(r => r.Item.SourceLines > 0), "Code Metrics measure every project:\n" + shell.CodeMetrics.ToTable());
+                shell.Layout.CloseToolWindow(ViewModels.CodeMetricsViewModel.ToolWindowId);
+            }
+            finally
+            {
+                greeter.Model.Text.Text = original;
+            }
+        }, "language.ready").ConfigureAwait(true);
+
         await StepAsync("editor.refactoring", "M3", "Rename across projects and Format Document", async () =>
         {
             var greeter = await OpenAsync(Greeter).ConfigureAwait(true);

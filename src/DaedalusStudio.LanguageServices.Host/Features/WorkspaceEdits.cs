@@ -34,6 +34,38 @@ internal static class WorkspaceEdits
                 }
             }
 
+            // .editorconfig files (Configure severity, M12b).
+            foreach (var id in project.GetChangedAnalyzerConfigDocuments())
+            {
+                var oldDocument = oldSolution.GetAnalyzerConfigDocument(id)!;
+                var newDocument = newSolution.GetAnalyzerConfigDocument(id)!;
+                if (oldDocument.FilePath is not { } path)
+                {
+                    continue;
+                }
+
+                var oldText = await oldDocument.GetTextAsync(cancellationToken).ConfigureAwait(false);
+                var newText = await newDocument.GetTextAsync(cancellationToken).ConfigureAwait(false);
+                var textEdits = newText.GetTextChanges(oldText).Select(c => new Protocol.TextEdit(Positions.ToRange(oldText, c.Span), c.NewText ?? string.Empty)).ToArray();
+                if (textEdits.Length > 0)
+                {
+                    edits.Add(new TextDocumentEdit(new OptionalVersionedTextDocumentIdentifier(DocumentUris.FromPath(path), versionOf(path)), textEdits));
+                }
+            }
+
+            foreach (var id in project.GetAddedAnalyzerConfigDocuments())
+            {
+                var added = newSolution.GetAnalyzerConfigDocument(id)!;
+                if (added.FilePath is not { } path)
+                {
+                    continue;
+                }
+
+                var text = await added.GetTextAsync(cancellationToken).ConfigureAwait(false);
+                var start = new Position(0, 0);
+                edits.Add(new TextDocumentEdit(new OptionalVersionedTextDocumentIdentifier(DocumentUris.FromPath(path), null), [new Protocol.TextEdit(new Protocol.Range(start, start), text.ToString())]));
+            }
+
             foreach (var id in project.GetAddedDocuments())
             {
                 var added = newSolution.GetDocument(id)!;

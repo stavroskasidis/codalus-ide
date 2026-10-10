@@ -159,6 +159,52 @@ public sealed class VirtualTerminal : IVtHandler
     /// <summary>A row of the active buffer: 0 is the oldest scrollback row.</summary>
     public TerminalRow GetRow(int index) => Buffer[index];
 
+    /// <summary>
+    /// The logical line containing <paramref name="row"/>: the rows joined across soft wraps, with each character's row
+    /// and column (link detection: a long path printed by a program wraps). Call under <see cref="SyncRoot"/>.
+    /// </summary>
+    public (string Text, (int Row, int Column)[] Cells) LogicalLine(int row)
+    {
+        var first = row;
+        while (first > 0 && first - 1 < TotalRows && Buffer[first - 1].Wrapped)
+        {
+            first--;
+        }
+
+        var last = row;
+        while (last < TotalRows - 1 && Buffer[last].Wrapped)
+        {
+            last++;
+        }
+
+        var text = new System.Text.StringBuilder();
+        var cells = new List<(int Row, int Column)>();
+        for (var r = first; r <= last; r++)
+        {
+            var current = Buffer[r];
+            var rowText = current.GetText();
+            var columns = current.TextColumns();
+
+            // A wrapped row is full width: keep its trailing spaces, which GetText trims, so the join is exact.
+            if (current.Wrapped && columns.Length > 0 && columns[^1] < current.Cells.Length - 1)
+            {
+                for (var c = columns[^1] + 1; c < current.Cells.Length; c++)
+                {
+                    rowText += ' ';
+                    columns = [.. columns, c];
+                }
+            }
+
+            text.Append(rowText);
+            for (var i = 0; i < rowText.Length; i++)
+            {
+                cells.Add((r, i < columns.Length ? columns[i] : columns.Length > 0 ? columns[^1] : 0));
+            }
+        }
+
+        return (text.ToString(), [.. cells]);
+    }
+
     /// <summary>A row of the screen (0 is the top).</summary>
     public TerminalRow ScreenRow(int y) => Buffer[Buffer.Count - Rows + y];
 

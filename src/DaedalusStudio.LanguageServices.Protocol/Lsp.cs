@@ -92,6 +92,8 @@ public sealed record ServerCapabilities
     public bool InlayHintProvider { get; init; }
 
     public CodeLensOptions? CodeLensProvider { get; init; }
+
+    public bool SelectionRangeProvider { get; init; }
 }
 
 public sealed record CodeLensOptions(bool ResolveProvider);
@@ -208,6 +210,9 @@ public sealed record CompletionItem(string Label)
 
     public string? InsertText { get; init; }
 
+    /// <summary><see cref="LanguageServices.Protocol.InsertTextFormat.Snippet"/>: the text has tab stops (M12b).</summary>
+    public int? InsertTextFormat { get; init; }
+
     public TextEdit? TextEdit { get; init; }
 
     public TextEdit[]? AdditionalTextEdits { get; init; }
@@ -217,6 +222,12 @@ public sealed record CompletionItem(string Label)
     public bool? Preselect { get; init; }
 
     public JsonElement? Data { get; init; }
+}
+
+public static class InsertTextFormat
+{
+    public const int PlainText = 1;
+    public const int Snippet = 2;
 }
 
 public sealed record CompletionItemDefaults(Range? EditRange);
@@ -469,5 +480,15 @@ public sealed record CodeLens(Range Range)
     public Command? Command { get; init; }
 
     public JsonElement? Data { get; init; }
+}
+
+// ------------------------------------------------------------------ selection ranges (M12b)
+
+public sealed record SelectionRangeParams(TextDocumentIdentifier TextDocument, Position[] Positions);
+
+/// <summary>A range and the range containing it (Expand Selection goes outwards through <see cref="Parent"/>).</summary>
+public sealed record SelectionRange(Range Range)
+{
+    public SelectionRange? Parent { get; init; }
 }
 

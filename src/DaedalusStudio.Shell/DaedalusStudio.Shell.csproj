@@ -58,6 +58,8 @@
 
   <ItemGroup>
     <AvaloniaResource Include="..\..\assets\logo\daedalus.ico" Link="Assets\daedalus.ico" />
+    <!-- Built-in snippets, one file per language (M12b). -->
+    <EmbeddedResource Include="Editor\Snippets\*.json" LogicalName="DaedalusStudio.Shell.Snippets.%(Filename).json" />
   </ItemGroup>
 
   <!-- Terminal shell integration scripts (ADR 0014), next to the shell in terminal/. Dotfiles are listed explicitly. -->

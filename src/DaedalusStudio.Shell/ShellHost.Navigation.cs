@@ -26,6 +26,7 @@ public sealed partial class ShellHost
     {
         Hierarchy = new HierarchyViewModel(OpenLocationWithHistoryAsync);
         CodeDefinition = new CodeDefinitionViewModel(OpenLocationWithHistoryAsync, this, EditorFont);
+        InitializeAnalysis();
     }
 
     private Task OpenLocationWithHistoryAsync(Location location)
@@ -38,6 +39,7 @@ public sealed partial class ShellHost
     {
         var controller = ActiveEditor?.Controller;
         DocumentOutline.SetEditor(controller);
+        SyntaxVisualizer.SetEditor(controller);
         if (_editTracked != controller)
         {
             if (_editTracked is not null)

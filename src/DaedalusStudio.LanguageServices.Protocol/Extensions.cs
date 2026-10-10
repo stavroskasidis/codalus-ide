@@ -167,3 +167,119 @@ public sealed record InheritanceMarginItem(int Line, string DisplayName, string[
 /// </summary>
 public sealed record SymbolDetails(string DisplayName, string Kind, string? DocumentationId, string? AssemblyName, bool InSource, string? HelpUrl);
 
+// ------------------------------------------------------------------ M12b editing extensions
+
+/// <summary><c>daedalus/docCommentTemplate</c>: typing <c>///</c> above a member; the edit completes the comment.</summary>
+public sealed record DocCommentTemplate(TextEdit Edit, Position Caret);
+
+/// <summary>
+/// <c>daedalus/codeCleanup</c> (M12b): the fixes to apply to the whole document (diagnostic ids; null: the default
+/// profile), then sorting usings and formatting (both on unless false). The result is a <see cref="WorkspaceEdit"/>.
+/// </summary>
+public sealed record CodeCleanupParams(TextDocumentIdentifier TextDocument, string[]? Fixes, bool? SortUsings, bool? Format);
+
+/// <summary>A choice of a refactoring's options dialog: a member, a parameter or a flag.</summary>
+public sealed record OptionItem(string Id, string Label, bool Checked)
+{
+    public string? Detail { get; init; }
+}
+
+/// <summary>
+/// <c>daedalus/codeActionOptions</c> (M12b, ADR 0018): what a refactoring needs to ask before it runs (Generate
+/// Constructor's members, Extract Interface's name and members, Change Signature's parameters). The client shows a
+/// dialog and resolves the action with the answers in its data (<see cref="CodeActionChoices"/>).
+/// </summary>
+public sealed record CodeActionOptions(string Title, OptionItem[] Items)
+{
+    /// <summary>A name to enter (the interface name…), with its label; null: none.</summary>
+    public string? NameLabel { get; init; }
+
+    public string? Name { get; init; }
+
+    /// <summary>The items can be reordered (Change Signature).</summary>
+    public bool Reorderable { get; init; }
+
+    /// <summary>A short text above the items.</summary>
+    public string? Message { get; init; }
+}
+
+public sealed record CodeActionOptionsParams(CodeAction Action);
+
+/// <summary>The answers: the entered name and the checked items' ids in their order.</summary>
+public sealed record CodeActionChoices(string? Name, string[] Selected)
+{
+    /// <summary>The action with these answers added to its data (<c>choices</c>), ready for <c>codeAction/resolve</c>.</summary>
+    public CodeAction AttachTo(CodeAction action)
+    {
+        var data = action.Data is { ValueKind: System.Text.Json.JsonValueKind.Object } existing
+            ? System.Text.Json.Nodes.JsonNode.Parse(existing.GetRawText())!.AsObject()
+            : new System.Text.Json.Nodes.JsonObject();
+        data["choices"] = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(this, ProtocolJsonContext.Default.CodeActionChoices));
+        using var document = System.Text.Json.JsonDocument.Parse(data.ToJsonString());
+        return action with { Data = document.RootElement.Clone() };
+    }
+}
+
+
+// ------------------------------------------------------------------ M12b analysis extensions
+
+/// <summary>
+/// <c>daedalus/syntaxTree</c> (M12b, the Syntax Visualizer): the document's syntax tree around a position, and what the
+/// compiler knows about the node there.
+/// </summary>
+public sealed record SyntaxTreeParams(TextDocumentIdentifier TextDocument, Position Position);
+
+/// <summary>
+/// A node, token or trivia (<see cref="Category"/>: <c>node</c>, <c>token</c>, <c>trivia</c>). Large trees are cut off
+/// away from the position: <see cref="Truncated"/> nodes have children that were not sent.
+/// </summary>
+public sealed record SyntaxNodeItem(string Kind, string Category, Range Range, SyntaxNodeItem[] Children)
+{
+    /// <summary>The token or trivia text (shortened).</summary>
+    public string? Text { get; init; }
+
+    public bool Truncated { get; init; }
+
+    /// <summary>On the path from the root to the innermost item at the position.</summary>
+    public bool OnPath { get; init; }
+}
+
+/// <summary>An operation of the <c>IOperation</c> tree.</summary>
+public sealed record OperationItem(string Kind, string? Type, string Syntax, OperationItem[] Children);
+
+/// <summary>The semantic information about the innermost node at the position.</summary>
+public sealed record SyntaxSemantics(string NodeKind)
+{
+    public string? Symbol { get; init; }
+
+    public string? SymbolKind { get; init; }
+
+    public string? Type { get; init; }
+
+    public string? ConvertedType { get; init; }
+
+    public string? Conversion { get; init; }
+
+    public string? ConstantValue { get; init; }
+
+    public OperationItem? Operation { get; init; }
+}
+
+public sealed record SyntaxTreeResult(SyntaxNodeItem Root, SyntaxSemantics? Semantics);
+
+/// <summary>
+/// <c>daedalus/codeMetrics</c> (M12b): metrics for the project of a document, or for every project when it is null.
+/// </summary>
+public sealed record CodeMetricsParams(TextDocumentIdentifier? TextDocument);
+
+/// <summary>
+/// The metrics of a project, namespace, type or member (<see cref="Kind"/>), as Visual Studio's Code Metrics reports them:
+/// the maintainability index (0–100), the cyclomatic complexity, the depth of inheritance, the class coupling, and the
+/// lines of source and executable code.
+/// </summary>
+public sealed record CodeMetricsItem(string Name, string Kind, int MaintainabilityIndex, int CyclomaticComplexity, int DepthOfInheritance, int ClassCoupling, int SourceLines, int ExecutableLines, CodeMetricsItem[] Children)
+{
+    public Location? Location { get; init; }
+}
+
+public sealed record CodeMetricsResult(CodeMetricsItem[] Projects);

@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.TaskListView"
+             x:DataType="vm:TaskListViewModel">
+  <DockPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="6,4">
+      <TextBox Text="{Binding Filter}" PlaceholderText="Filter tasks" AutomationProperties.Name="Filter tasks" />
+      <Button Grid.Column="1" x:Name="RefreshButton" Classes="toolbar" Content="Refresh" Margin="4,0,0,0" AutomationProperties.Name="Refresh the task list" />
+    </Grid>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="10,2" Text="{Binding Summary}" AutomationProperties.LiveSetting="Polite" />
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Tasks">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:TaskRow">
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          <Setter Property="Padding" Value="6,1" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:TaskRow">
+          <Grid ColumnDefinitions="70,*,Auto">
+            <TextBlock Text="{Binding Token}" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="{Binding Text}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Classes="muted" Margin="12,0,0,0">
+              <Run Text="{Binding File}" /><Run Text=":" /><Run Text="{Binding Line}" />
+            </TextBlock>
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

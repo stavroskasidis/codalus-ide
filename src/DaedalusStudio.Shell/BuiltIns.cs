@@ -116,6 +116,10 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(ViewModels.DocumentOutlineViewModel.ToolWindowId, "Document Outline", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
         yield return new ToolWindowDescriptor(ViewModels.HierarchyViewModel.ToolWindowId, "Hierarchy", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "method" };
         yield return new ToolWindowDescriptor(ViewModels.CodeDefinitionViewModel.ToolWindowId, "Code Definition", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "file-code" };
+        yield return new ToolWindowDescriptor(ViewModels.BookmarksViewModel.ToolWindowId, "Bookmarks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "star" };
+        yield return new ToolWindowDescriptor(ViewModels.TaskListViewModel.ToolWindowId, "Task List", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "check" };
+        yield return new ToolWindowDescriptor(ViewModels.SyntaxVisualizerViewModel.ToolWindowId, "Syntax Visualizer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "namespace" };
+        yield return new ToolWindowDescriptor(ViewModels.CodeMetricsViewModel.ToolWindowId, "Code Metrics Results", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "beaker" };
     }
 
     public static void RegisterCommands(ShellHost shell)

@@ -215,10 +215,10 @@ public sealed class PluginHostIntegrationTests : IAsyncLifetime
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
-        var deadline = DateTime.UtcNow + s_timeout;
+        var started = System.Diagnostics.Stopwatch.StartNew(); // monotonic: immune to the machine sleeping
         while (!condition())
         {
-            Assert.True(DateTime.UtcNow < deadline, "Timed out.");
+            Assert.True(started.Elapsed < s_timeout, "Timed out.");
             await Task.Delay(25, TestContext.Current.CancellationToken);
         }
     }

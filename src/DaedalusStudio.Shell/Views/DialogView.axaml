@@ -24,6 +24,25 @@
                Text="{Binding InputText}"
                IsVisible="{Binding HasInput}"
                AutomationProperties.Name="{Binding Title}" />
+      <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasChoices}">
+        <Border BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="320">
+          <ListBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" Background="Transparent" AutomationProperties.Name="Choices">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:DialogChoiceViewModel">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <CheckBox IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Label}" />
+                  <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" />
+                  <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Border>
+        <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0" IsVisible="{Binding Reorderable}">
+          <Button Content="Up" Command="{Binding MoveUpCommand}" MinWidth="64" AutomationProperties.Name="Move up" />
+          <Button Content="Down" Command="{Binding MoveDownCommand}" MinWidth="64" AutomationProperties.Name="Move down" />
+        </StackPanel>
+      </Grid>
       <Border IsVisible="{Binding HasDetails}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="420">
         <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Preview">
           <ItemsControl ItemsSource="{Binding Details}" Margin="6,4">

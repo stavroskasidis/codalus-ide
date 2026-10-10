@@ -13,7 +13,7 @@
     "engines": {
       "type": "object",
       "required": [ "daedalus" ],
-      "properties": { "daedalus": { "type": "string", "description": "The plugin API versions it supports, e.g. `^0.2.4`." } }
+      "properties": { "daedalus": { "type": "string", "description": "The plugin API versions it supports, e.g. `^0.2.5`." } }
     },
     "entry": {
       "type": "object",
@@ -62,6 +62,15 @@
             "type": "object",
             "required": [ "scopeName", "path" ],
             "properties": { "language": { "type": "string" }, "scopeName": { "type": "string" }, "path": { "type": "string" }, "embeddedLanguages": { "type": "object", "additionalProperties": { "type": "string" } } }
+          }
+        },
+        "snippets": {
+          "type": "array",
+          "description": "Snippet files in VS Code's format (API 0.2.5).",
+          "items": {
+            "type": "object",
+            "required": [ "language", "path" ],
+            "properties": { "language": { "type": "string" }, "path": { "type": "string", "description": "A JSON snippet file, relative to the plugin folder." } }
           }
         },
         "languageServers": {

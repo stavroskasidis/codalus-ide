@@ -24,6 +24,38 @@ public class SolutionTests
 
     private static ExplorerRowViewModel Row(ShellFixture f, string name) => f.Shell.Explorer.Rows.Single(r => r.Name == name);
 
+    /// <summary>
+    /// A solution reached through a symbolic link (as macOS's <c>/var</c> → <c>/private/var</c>) is opened under its
+    /// real path, so MSBuild nodes and the file watcher, which report real paths, see each project under one spelling:
+    /// otherwise restores of the same project race and re-evaluations load it twice.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_solution_opened_through_a_symbolic_link_uses_its_real_path_and_builds()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Symbolic links need extra privileges on Windows.");
+        await using var f = ShellFixture.Create();
+        var solution = f.CopyFixture();
+        var real = Path.GetDirectoryName(Path.GetDirectoryName(solution))!;
+        var link = Path.Combine(f.UserData, "linked");
+        Directory.CreateSymbolicLink(link, real);
+        f.Shell.Trust.Trust(real);
+
+        await f.Shell.OpenSolutionAsync(Path.Combine(link, "ProjectSystem", "ProjectSystem.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.Projects.Count == 3, seconds: 90);
+        Assert.Equal(solution, f.Shell.Solutions.Solution!.Path);
+        Assert.All(f.Shell.Solutions.Projects.Keys, p => Assert.StartsWith(real, p, StringComparison.Ordinal));
+
+        // Touching a project file re-evaluates it under the same spelling; then the solution builds.
+        var app = f.Shell.Solutions.Projects.Keys.Single(p => p.EndsWith("App.csproj", StringComparison.Ordinal));
+        File.SetLastWriteTimeUtc(app, DateTime.UtcNow);
+        await Task.Delay(1000);
+        var before = f.Shell.Builds.LastBuild;
+        f.Shell.Run("build.buildSolution");
+        await ShellFixture.PumpUntil(() => f.Shell.Builds.LastBuild is { } b && b != before, seconds: 300);
+        Assert.True(f.Shell.Builds.LastBuild!.Result.Succeeded, f.Shell.Builds.Channel.GetText());
+        Assert.Equal(3, f.Shell.Solutions.Projects.Count);
+    }
+
     [AvaloniaFact]
     public async Task A_trusted_solution_opens_in_the_solution_explorer()
     {

@@ -30,7 +30,7 @@ public sealed record CaretInfo(int Line, int Column, int SelectionLength, int Ca
 /// carets, find/replace and navigation. Language features go through the document's language service client; all of
 /// it is asynchronous and cancellable, and responses for an older document version are dropped. UI thread only.
 /// </summary>
-public sealed class CodeEditorController : IDisposable
+public sealed partial class CodeEditorController : IDisposable
 {
     private const int TokenMarginLines = 60;
     private static readonly TimeSpan s_editDelay = TimeSpan.FromMilliseconds(120);
@@ -54,6 +54,7 @@ public sealed class CodeEditorController : IDisposable
     private readonly TestMargin _testMargin;
     private readonly CoverageMargin _coverageMargin;
     private readonly EditorInsights _insights;
+    private readonly BookmarkMargin _bookmarkMargin;
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private BlameMargin? _blameMargin;
     private string? _indexText;
@@ -93,6 +94,8 @@ public sealed class CodeEditorController : IDisposable
         editor.TextArea.LeftMargins.Insert(0, _breakpointMargin);
         _testMargin = new TestMargin(() => Model.Path, services.Tests, services.ShowTestMenu);
         editor.TextArea.LeftMargins.Insert(1, _testMargin);
+        _bookmarkMargin = new BookmarkMargin(document, () => Model.Path, services.Bookmarks);
+        editor.TextArea.LeftMargins.Insert(1, _bookmarkMargin);
         editor.TextArea.ContextRequested += OnContextRequested;
         _debugLines = new DebugLineRenderer(() => Model.Path, services.Debugger.Breakpoints, CurrentDebugLine);
         view.BackgroundRenderers.Insert(0, _debugLines);
@@ -131,6 +134,7 @@ public sealed class CodeEditorController : IDisposable
         editor.TextArea.TextEntered += OnTextEntered;
         // Tunnel: with extra carets, Backspace/Delete/Enter must be seen before AvaloniaEdit handles them.
         editor.TextArea.AddHandler(InputElement.KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        editor.AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         view.PointerMoved += OnPointerMoved;
         view.PointerExited += OnPointerExited;
         view.PointerPressed += OnPointerPressed;
@@ -156,6 +160,9 @@ public sealed class CodeEditorController : IDisposable
 
     /// <summary>The Git changes of the gutter (the overview ruler).</summary>
     internal IReadOnlyList<Workbench.Git.LineChange> GitChanges => _gitMargin.Changes;
+
+    /// <summary>The bookmark glyphs (tests).</summary>
+    public BookmarkMargin BookmarkMargin => _bookmarkMargin;
 
     /// <summary>Inlay hints, CodeLens, the inheritance margin, guides and bracket colors (M12a).</summary>
     public EditorInsights Insights => _insights;
@@ -834,6 +841,11 @@ public sealed class CodeEditorController : IDisposable
         if (e.Text is { Length: 1 } entered)
         {
             AutoClose(entered);
+            if (entered == "/" && AtDocCommentStart())
+            {
+                _ = DocCommentAsync();
+                return;
+            }
         }
 
         if (e.Text is { Length: > 0 } wordStart && Client?.Capabilities?.CompletionProvider is null && _completion is null
@@ -979,27 +991,30 @@ public sealed class CodeEditorController : IDisposable
                 _services.Log($"{Model.Name}: completion took {slow.TotalSeconds:0.0} s");
             }
 
-            if (list.Items.Length == 0 && !list.IsIncomplete && triggerCharacter is null && Model.LanguageId != ShellHost.CSharpLanguageId)
+            // Snippets whose prefix starts with the typed word count too: they show even when the server has nothing.
+            var typed = WordBeforeCaret();
+            var snippets = SnippetItems(triggerCharacter).Where(s => typed.Length == 0 || s.Label.StartsWith(typed, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (list.Items.Length == 0 && snippets.Count == 0 && !list.IsIncomplete && triggerCharacter is null && Model.LanguageId != ShellHost.CSharpLanguageId)
             {
                 _noCompletionWordStart = WordStart(requestedAt);
                 _noCompletionVersion = Model.Version;
             }
 
-            if (list.Items.Length == 0 && !cancellationToken.IsCancellationRequested && !_disposed && _completion is null
-                && Model.LanguageId != ShellHost.CSharpLanguageId && WordBeforeCaret().Length >= 3)
+            if (list.Items.Length == 0 && snippets.Count == 0 && !cancellationToken.IsCancellationRequested && !_disposed && _completion is null
+                && Model.LanguageId != ShellHost.CSharpLanguageId && typed.Length >= 3)
             {
                 // The server has nothing here (e.g. YAML without a schema): the document's words (ADR 0016).
                 CompleteWords();
                 return;
             }
 
-            if (cancellationToken.IsCancellationRequested || _disposed || list.Items.Length == 0 || _completion is not null)
+            if (cancellationToken.IsCancellationRequested || _disposed || (list.Items.Length == 0 && snippets.Count == 0) || _completion is not null)
             {
                 _services.Log($"{Model.Name}: completion not shown ({list.Items.Length} items, cancelled {cancellationToken.IsCancellationRequested}, open {_completion is not null})");
                 return;
             }
 
-            var start = list.ItemDefaults?.EditRange is { } range ? Model.OffsetAt(range.Start) : requestedAt;
+            var start = list.ItemDefaults?.EditRange is { } range ? Model.OffsetAt(range.Start) : WordStart(requestedAt);
             var caret = Editor.CaretOffset;
             if (caret < start || caret - start > 200)
             {
@@ -1013,8 +1028,11 @@ public sealed class CodeEditorController : IDisposable
                 CloseWhenCaretAtBeginning = triggerCharacter is null || triggerCharacter == ".",
                 CloseAutomatically = true,
             };
-            Task<LanguageServices.Protocol.CompletionItem> Resolve(LanguageServices.Protocol.CompletionItem item) => client.ResolveCompletionAsync(item, CancellationToken.None);
-            foreach (var item in list.Items.OrderBy(i => i.SortText ?? i.Label, StringComparer.Ordinal))
+            Task<LanguageServices.Protocol.CompletionItem> Resolve(LanguageServices.Protocol.CompletionItem item) =>
+                item.Data is null && item.Kind == CompletionItemKind.Snippet && item.InsertTextFormat == InsertTextFormat.Snippet
+                    ? Task.FromResult(item) // our snippets: nothing to resolve
+                    : client.ResolveCompletionAsync(item, CancellationToken.None);
+            foreach (var item in list.Items.OrderBy(i => i.SortText ?? i.Label, StringComparer.Ordinal).Concat(SnippetItems(triggerCharacter)))
             {
                 window.CompletionList.CompletionData.Add(new CompletionData(item, Resolve, Commit));
             }
@@ -1046,9 +1064,62 @@ public sealed class CodeEditorController : IDisposable
     }
 
     /// <summary>Applies a completion item: the resolved edit (or the label), then additional edits such as a using.</summary>
+    /// <summary>The language's snippets as completion items (not after a trigger character such as <c>.</c>).</summary>
+    private IEnumerable<LanguageServices.Protocol.CompletionItem> SnippetItems(string? triggerCharacter)
+    {
+        if (triggerCharacter is not null && triggerCharacter != " ")
+        {
+            return [];
+        }
+
+        return _services.Snippets.For(Model.LanguageId).SelectMany(s => s.Prefixes.Select(prefix => new LanguageServices.Protocol.CompletionItem(prefix)
+        {
+            Kind = CompletionItemKind.Snippet,
+            Detail = s.Name,
+            InsertText = s.Body,
+            InsertTextFormat = InsertTextFormat.Snippet,
+            FilterText = prefix,
+            SortText = prefix,
+            Documentation = MarkupContent.Markdown((s.Description is { Length: > 0 } d ? d + "\n\n" : string.Empty) + "```\n" + DaedalusStudio.Workbench.Snippets.SnippetParser.ToPlainText(s.Body) + "\n```"),
+        }));
+    }
+
+    /// <summary>Inserts a snippet at the caret, or around the selection (Surround With).</summary>
+    public void InsertSnippet(string body, bool surround)
+    {
+        if (Model.IsReadOnly)
+        {
+            return;
+        }
+
+        var configuration = Configuration;
+        var caret = Editor.CaretOffset;
+        SnippetEngine.Insert(Editor.TextArea, body, caret, 0, SnippetVariables(configuration), keepSelection: surround);
+        Editor.TextArea.Focus();
+    }
+
+    private Func<string, string?> SnippetVariables(Workbench.Languages.LanguageConfiguration? configuration) =>
+        SnippetEngine.Variables(Model.Path, Editor.TextArea, configuration?.LineComment, configuration?.BlockComment is { } block ? (block.Start, block.End) : null);
+
     private void Commit(CompletionData data, ISegment segment)
     {
         var resolved = data.ResolvedWithin(TimeSpan.FromMilliseconds(300));
+        if ((resolved ?? data.Item) is { InsertTextFormat: InsertTextFormat.Snippet } snippet)
+        {
+            // A snippet (ours, or a server's): its text goes through the snippet engine, with tab stops (M12b).
+            var body = snippet.TextEdit?.NewText ?? snippet.InsertText ?? snippet.Label;
+            var start = segment.Offset;
+            var length = segment.Length;
+            if (snippet.TextEdit is { } edit)
+            {
+                start = Model.OffsetAt(edit.Range.Start);
+                length = Math.Max(0, Math.Max(segment.EndOffset, Model.OffsetAt(edit.Range.End)) - start);
+            }
+
+            SnippetEngine.Insert(Editor.TextArea, body, start, length, SnippetVariables(Configuration));
+            return;
+        }
+
         var document = Model.Text;
         using (document.RunUpdate())
         {
@@ -1125,6 +1196,7 @@ public sealed class CodeEditorController : IDisposable
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        TrackCopy(e);
         if (e.Key == Key.Escape)
         {
             if (_hoverPopup.IsOpen)
@@ -1573,6 +1645,7 @@ public sealed class CodeEditorController : IDisposable
         _breakpointMargin.Detach();
         Editor.TextArea.LeftMargins.Remove(_testMargin);
         _testMargin.Detach();
+        _bookmarkMargin.Detach();
         Editor.TextArea.LeftMargins.Remove(_coverageMargin);
         _coverageMargin.Detach();
         Editor.TextArea.ContextRequested -= OnContextRequested;

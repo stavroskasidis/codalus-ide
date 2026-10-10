@@ -114,10 +114,11 @@ internal sealed class ShellFixture : IAsyncDisposable
 
     public static async Task PumpUntil(Func<bool> condition, int seconds = 30)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(seconds);
+        // A monotonic clock: a machine that sleeps during the wait (a Mac with the display off) doesn't time out at once.
+        var started = System.Diagnostics.Stopwatch.StartNew();
         while (!condition())
         {
-            Assert.True(DateTime.UtcNow < deadline, "Timed out waiting for the shell.");
+            Assert.True(started.Elapsed < TimeSpan.FromSeconds(seconds), "Timed out waiting for the shell.");
             Pump();
             await Task.Delay(15);
         }

@@ -45,6 +45,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private readonly ISessionEvents _events;
     private readonly string _dotnet;
     private readonly ProjectCollection _collection = new();
+
+    /// <summary>Project files being edited are loaded here, never in <see cref="_collection"/>, which evaluations share.</summary>
+    private readonly ProjectCollection _editCollection = new();
     private readonly ProjectEvaluator _evaluator;
     private readonly ProjectFileEditor _editor;
     private readonly DesignTimeBuilder _designTime;
@@ -58,6 +61,13 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private CancellationTokenSource _designTimeBatch = new();
     private readonly ConcurrentDictionary<string, EvaluatedProject> _evaluated = new(s_pathComparer);
     private readonly SemaphoreSlim _solutionLock = new(1, 1);
+
+    /// <summary>
+    /// One evaluation batch at a time: batches started by an edit, the file watcher and a finished restore would
+    /// otherwise load the same project twice into the shared collection ("an equivalent project is already present") or
+    /// reload a project file while another batch evaluates it (MSB0001 "Should not be dirty now").
+    /// </summary>
+    private readonly SemaphoreSlim _evaluationLock = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
     private ProjectWatcher? _watcher;
     private SolutionModel? _model;
@@ -71,7 +81,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         _events = events;
         _dotnet = dotnet;
         _evaluator = new ProjectEvaluator(_collection);
-        _editor = new ProjectFileEditor(_collection);
+        _editor = new ProjectFileEditor(_editCollection);
         _designTime = new DesignTimeBuilder(_collection, _builder.Gate);
 
         // The SDK's tasks (Csc among them) and RunCommand find the dotnet host through this, as under `dotnet build`.
@@ -236,6 +246,19 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     /// </summary>
     private async Task EvaluateAsync(IReadOnlyList<string> projects, CancellationToken cancellationToken, DesignTimeMode designTime = DesignTimeMode.Always)
     {
+        await _evaluationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EvaluateLockedAsync(projects, designTime, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _evaluationLock.Release();
+        }
+    }
+
+    private async Task EvaluateLockedAsync(IReadOnlyList<string> projects, DesignTimeMode designTime, CancellationToken cancellationToken)
+    {
         var started = Stopwatch.GetTimestamp();
         var context = EvaluationContext.Create(EvaluationContext.SharingPolicy.Shared);
         var done = 0;
@@ -249,7 +272,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 var (configuration, platform) = ProjectConfiguration(project);
                 var result = IsUnloaded(project)
                     ? new EvaluatedProject(UnloadedInfo(project), [])
-                    : _evaluator.Evaluate(project, configuration, platform, context);
+                    : EvaluateWithRetry(project, configuration, platform, context);
                 if (result.Info.State != ProjectStates.Unloaded && IsUnloaded(project))
                 {
                     result = new EvaluatedProject(UnloadedInfo(project), []); // unloaded while it was being evaluated
@@ -269,6 +292,27 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         ScheduleDesignTimeBuilds(designTime == DesignTimeMode.Always
             ? projects
             : [.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]);
+    }
+
+    /// <summary>
+    /// Evaluates a project, once more when MSBuild reports that its file changed under the evaluation (a design-time
+    /// build or an editor saving it at that moment).
+    /// </summary>
+    private EvaluatedProject EvaluateWithRetry(string project, string configuration, string platform, EvaluationContext context)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return _evaluator.Evaluate(project, configuration, platform, context);
+            }
+            catch (Exception ex) when (attempt < 3 && (ex.GetType().Name == "InternalErrorException"
+                                                      || (ex is InvalidOperationException && ex.Message.Contains("equivalent project", StringComparison.Ordinal))))
+            {
+                Thread.Sleep(50 * attempt);
+                context = EvaluationContext.Create(EvaluationContext.SharingPolicy.Shared); // the shared one may have cached the old file
+            }
+        }
     }
 
     /// <summary>The project configuration the active solution configuration maps to (MSBuild spells "Any CPU" "AnyCPU").</summary>
@@ -1026,5 +1070,6 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         _lifetime.Dispose();
         _solutionLock.Dispose();
         _collection.Dispose();
+        _editCollection.Dispose();
     }
 }

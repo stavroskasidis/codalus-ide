@@ -23,6 +23,35 @@ public sealed record DialogRequest(string Title, string Message, IReadOnlyList<s
 
     /// <summary>Monospace lines shown in a scrollable box (previews of changes, colored by <see cref="DetailLine.Kind"/>).</summary>
     public IReadOnlyList<DetailLine>? Details { get; init; }
+
+    /// <summary>A checklist (members to generate, parameters to keep…); null: none (M12b refactoring options).</summary>
+    public IReadOnlyList<DialogChoice>? Choices { get; init; }
+
+    /// <summary>The checklist's items can be moved up and down (Change Signature).</summary>
+    public bool Reorderable { get; init; }
+}
+
+/// <summary>An item of a dialog's checklist.</summary>
+public sealed record DialogChoice(string Id, string Label, bool Checked, string? Detail = null);
+
+/// <summary>A checklist row in the dialog.</summary>
+public sealed class DialogChoiceViewModel(DialogChoice choice) : ObservableObject
+{
+    private bool _isChecked = choice.Checked;
+
+    public string Id { get; } = choice.Id;
+
+    public string Label { get; } = choice.Label;
+
+    public string? Detail { get; } = choice.Detail;
+
+    public bool HasDetail => Detail is { Length: > 0 };
+
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set => SetField(ref _isChecked, value);
+    }
 }
 
 /// <summary>A line of a dialog's details. <see cref="Kind"/> is <c>added</c>, <c>removed</c>, <c>header</c> or null.</summary>
@@ -35,8 +64,11 @@ public sealed record DetailLine(string Text, string? Kind = null)
     public bool IsHeader => Kind == "header";
 }
 
-/// <summary>The choice (null: cancelled) and the entered text.</summary>
-public sealed record DialogResult(string? Button, string? Input);
+/// <summary>The choice (null: cancelled), the entered text, and the checked checklist items' ids in their order.</summary>
+public sealed record DialogResult(string? Button, string? Input)
+{
+    public IReadOnlyList<string> Checked { get; init; } = [];
+}
 
 public sealed class DialogButtonViewModel(string label, bool isDefault, ICommand command)
 {
@@ -89,6 +121,42 @@ public sealed class DialogViewModel : ObservableObject
     public bool HasDetails => _request?.Details is { Count: > 0 };
 
     public ObservableCollection<DialogButtonViewModel> Buttons { get; } = [];
+
+    /// <summary>The checklist (refactoring options).</summary>
+    public ObservableCollection<DialogChoiceViewModel> Choices { get; } = [];
+
+    public bool HasChoices => Choices.Count > 0;
+
+    public bool Reorderable => _request?.Reorderable == true;
+
+    private DialogChoiceViewModel? _selectedChoice;
+
+    public DialogChoiceViewModel? SelectedChoice
+    {
+        get => _selectedChoice;
+        set => SetField(ref _selectedChoice, value);
+    }
+
+    /// <summary>Moves the selected checklist item up (-1) or down (+1).</summary>
+    public void MoveChoice(int direction)
+    {
+        if (_selectedChoice is not { } choice)
+        {
+            return;
+        }
+
+        var index = Choices.IndexOf(choice);
+        var target = index + direction;
+        if (index >= 0 && target >= 0 && target < Choices.Count)
+        {
+            Choices.Move(index, target);
+            SelectedChoice = choice;
+        }
+    }
+
+    public ICommand MoveUpCommand => new RelayCommand(() => MoveChoice(-1));
+
+    public ICommand MoveDownCommand => new RelayCommand(() => MoveChoice(1));
 
     public string InputText
     {
@@ -143,6 +211,15 @@ public sealed class DialogViewModel : ObservableObject
             Buttons.Add(new DialogButtonViewModel(label, label == DefaultButton, new RelayCommand(() => Choose(label))));
         }
 
+        Choices.Clear();
+        foreach (var choice in request.Choices ?? [])
+        {
+            Choices.Add(new DialogChoiceViewModel(choice));
+        }
+
+        SelectedChoice = Choices.FirstOrDefault();
+        OnPropertyChanged(nameof(HasChoices));
+        OnPropertyChanged(nameof(Reorderable));
         Opened?.Invoke(this, EventArgs.Empty);
         return await _pending.Task.ConfigureAwait(true);
     }
@@ -167,7 +244,7 @@ public sealed class DialogViewModel : ObservableObject
             return;
         }
 
-        Close(new DialogResult(button, HasInput ? _input : null));
+        Close(new DialogResult(button, HasInput ? _input : null) { Checked = [.. Choices.Where(c => c.IsChecked).Select(c => c.Id)] });
     }
 
     private void Close(DialogResult result)
@@ -180,6 +257,8 @@ public sealed class DialogViewModel : ObservableObject
         _pending = null;
         Request = null;
         Buttons.Clear();
+        Choices.Clear();
+        OnPropertyChanged(nameof(HasChoices));
         Closed?.Invoke(this, EventArgs.Empty);
         pending.TrySetResult(result);
     }

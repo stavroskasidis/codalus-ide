@@ -271,12 +271,15 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     private string? SourceFilter => _selectedSource == AllSources ? null : _selectedSource;
 
+    /// <summary>True while the list is rebuilt: the list control clears its selection, which must not clear the details.</summary>
+    private bool _rebuildingRows;
+
     public PackageRowViewModel? Selected
     {
         get => _selected;
         set
         {
-            if (value is { IsHeader: true })
+            if (value is { IsHeader: true } || (value is null && _rebuildingRows))
             {
                 return;
             }
@@ -568,9 +571,20 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
         {
             var result = await _packages.SearchAsync(_search, _includePrerelease, 0, PageSize, SourceFilter, token, refresh).ConfigureAwait(true);
             token.ThrowIfCancellationRequested();
-            Rows.Clear();
-            _browseSkip = PageSize;
-            AddBrowseRows(result);
+            var selectedId = _selected?.Id;
+            _rebuildingRows = true;
+            try
+            {
+                Rows.Clear();
+                _browseSkip = PageSize;
+                AddBrowseRows(result);
+            }
+            finally
+            {
+                _rebuildingRows = false;
+            }
+
+            Reselect(selectedId);
             PageLoaded?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException)
@@ -657,6 +671,35 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
     private void BuildLocalRows()
     {
         var selectedId = _selected?.Id;
+        _rebuildingRows = true;
+        try
+        {
+            BuildLocalRowsCore();
+        }
+        finally
+        {
+            _rebuildingRows = false;
+        }
+
+        Reselect(selectedId);
+    }
+
+    /// <summary>After a rebuild: the row of the package that was selected (its details stay), or none.</summary>
+    private void Reselect(string? selectedId)
+    {
+        if (selectedId is not null && Rows.FirstOrDefault(r => !r.IsHeader && r.Id.Equals(selectedId, StringComparison.OrdinalIgnoreCase)) is { } again)
+        {
+            _selected = again;
+            OnPropertyChanged(nameof(Selected));
+        }
+        else if (selectedId is not null)
+        {
+            Selected = null;
+        }
+    }
+
+    private void BuildLocalRowsCore()
+    {
         Rows.Clear();
         var groups = InstalledGroups();
         bool Matches(string id) => _search.Length == 0 || id.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase);
@@ -713,11 +756,6 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(EmptyText));
         OnPropertyChanged(nameof(SelectAllUpdates));
-        if (selectedId is not null && Rows.FirstOrDefault(r => !r.IsHeader && r.Id.Equals(selectedId, StringComparison.OrdinalIgnoreCase)) is { } again)
-        {
-            _selected = again;
-            OnPropertyChanged(nameof(Selected));
-        }
     }
 
     private static string VersionText(List<(ProjectPackages Project, InstalledPackage Package)> uses)

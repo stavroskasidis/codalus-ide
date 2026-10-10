@@ -97,6 +97,9 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeEditor();
         InitializeRefactoring();
         InitializeNavigation();
+        LoadSnippets();
+        InitializeEditingSafety();
+        InitializeBookmarks();
         InitializeTesting();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -244,6 +247,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// <summary>Called once the window is interactive: deferred work that must not delay the first frame.</summary>
     public void OnInteractive()
     {
+        _ = OfferRecoveryAsync();
         foreach (var error in Options.Errors)
         {
             Workbench.Notifications.Warning(error);
@@ -303,6 +307,10 @@ public sealed partial class ShellHost : IAsyncDisposable
             DocumentOutlineViewModel.ToolWindowId => DocumentOutline,
             HierarchyViewModel.ToolWindowId => Hierarchy,
             CodeDefinitionViewModel.ToolWindowId => CodeDefinition,
+            BookmarksViewModel.ToolWindowId => BookmarkList,
+            TaskListViewModel.ToolWindowId => TaskList,
+            SyntaxVisualizerViewModel.ToolWindowId => SyntaxVisualizer,
+            CodeMetricsViewModel.ToolWindowId => CodeMetrics,
             VariablesViewModel.LocalsWindowId => Locals,
             VariablesViewModel.AutosWindowId => Autos,
             WatchViewModel.ToolWindowId => Watch,

@@ -285,4 +285,21 @@ public sealed class TerminalEmulatorTests
         Assert.Contains(unix, l => l is { Target: "Program.cs", Line: 3, Column: 9 });
         Assert.DoesNotContain(TerminalLinks.Find("version 1.2.3 of nuget.org"), l => l.Kind == TerminalLinkKind.File);
     }
+
+    [Fact]
+    public void Logical_lines_join_soft_wrapped_rows_for_links()
+    {
+        var terminal = Term(columns: 20);
+        terminal.Feed("> \r\n/var/folders/jg/abc/T/Linked.cs(3,2): error XX0001: boom\r\nnext"u8);
+
+        var row = Enumerable.Range(0, terminal.TotalRows).First(i => terminal.GetRow(i).GetText().Contains("XX0001", StringComparison.Ordinal));
+        var (text, cells) = terminal.LogicalLine(row);
+        Assert.Equal("/var/folders/jg/abc/T/Linked.cs(3,2): error XX0001: boom", text);
+        var link = Assert.Single(TerminalLinks.Find(text), l => l.Kind == TerminalLinkKind.File);
+        Assert.Equal(("/var/folders/jg/abc/T/Linked.cs", 3), (link.Target, link.Line));
+        var first = Enumerable.Range(0, terminal.TotalRows).First(i => terminal.GetRow(i).GetText().StartsWith("/var/", StringComparison.Ordinal));
+        Assert.True(first < row);
+        Assert.Equal((first, 0), cells[0]); // the path starts rows above the one with the error code
+        Assert.Equal("next", terminal.LogicalLine(row + 1).Text);
+    }
 }

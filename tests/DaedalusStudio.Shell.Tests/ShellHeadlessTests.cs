@@ -29,7 +29,7 @@ public class ShellHeadlessTests
         var menus = PlatformInfo.Current == PlatformKind.MacOS
             ? NativeMenu.GetMenu(f.Window)!.Items.OfType<NativeMenuItem>().Select(m => m.Header).ToList()
             : f.Window.MenuBar.Items.OfType<MenuItem>().Select(m => AutomationProperties.GetName(m)).ToList();
-        Assert.Equal(["File", "Edit", "View", "Git", "Project", "Build", "Debug", "Test", "Tools", "Window", "Help"], menus);
+        Assert.Equal(["File", "Edit", "View", "Git", "Project", "Build", "Debug", "Test", "Analyze", "Tools", "Window", "Help"], menus);
         Assert.Equal(PlatformInfo.Current != PlatformKind.MacOS, f.Window.MenuBar.IsVisible);
         Assert.True(f.Shell.Layout.IsVisible(BuiltIns.OutputWindow));
         Assert.Contains(f.Shell.StatusBar.Right, i => i.Item.Id == "daedalus.notifications");

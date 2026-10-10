@@ -15,7 +15,7 @@ public class LanguageFixture : IAsyncLifetime
 {
     public static readonly TimeSpan Timeout = TimeSpan.FromMinutes(3);
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "daedalus-language-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(DaedalusStudio.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-language-" + Guid.NewGuid().ToString("N"));
     private readonly Dictionary<string, (string Text, int Version)> _texts = new(StringComparer.OrdinalIgnoreCase);
 
     public string Fixture { get; private set; } = null!;
@@ -82,10 +82,10 @@ public class LanguageFixture : IAsyncLifetime
 
     public static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
     {
-        var deadline = DateTime.UtcNow + (timeout ?? Timeout);
+        var started = System.Diagnostics.Stopwatch.StartNew(); // monotonic: immune to the machine sleeping
         while (!condition())
         {
-            Assert.True(DateTime.UtcNow < deadline, "Timed out.");
+            Assert.True(started.Elapsed < (timeout ?? Timeout), "Timed out.");
             await Task.Delay(50);
         }
     }

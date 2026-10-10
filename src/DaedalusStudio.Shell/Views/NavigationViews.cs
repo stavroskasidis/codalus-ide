@@ -152,3 +152,129 @@ public sealed class CodeDefinitionView : UserControl, IPaneView
 
     public void FocusPrimary() => _viewer.Editor.TextArea.Focus();
 }
+
+/// <summary>The Bookmarks window (M12b): Enter or double-click goes to a bookmark, F2 renames, Delete removes.</summary>
+public sealed partial class BookmarksView : UserControl, IPaneView
+{
+    public BookmarksView()
+    {
+        InitializeComponent();
+        List.DoubleTapped += (_, _) => Open();
+        List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
+    }
+
+    public void FocusPrimary() => List.Focus();
+
+    private void Open()
+    {
+        if (List.SelectedItem is BookmarkRowViewModel row && DataContext is BookmarksViewModel vm)
+        {
+            vm.Open(row);
+        }
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (List.SelectedItem is not BookmarkRowViewModel row || DataContext is not BookmarksViewModel vm)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Enter:
+                vm.Open(row);
+                e.Handled = true;
+                break;
+            case Key.F2:
+                _ = vm.RenameAsync(row);
+                e.Handled = true;
+                break;
+            case Key.Delete:
+                vm.Remove(row);
+                e.Handled = true;
+                break;
+        }
+    }
+}
+
+/// <summary>The Task List (M12b): scans when first shown; Enter or double-click opens a task's line.</summary>
+public sealed partial class TaskListView : UserControl, IPaneView
+{
+    public TaskListView()
+    {
+        InitializeComponent();
+        List.DoubleTapped += (_, _) => Open();
+        List.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                Open();
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Bubble);
+        RefreshButton.Click += (_, _) => _ = (DataContext as TaskListViewModel)?.RefreshAsync();
+    }
+
+    public void FocusPrimary() => List.Focus();
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        (DataContext as TaskListViewModel)?.EnsureScanned();
+    }
+
+    private void Open()
+    {
+        if (List.SelectedItem is TaskRow row && DataContext is TaskListViewModel vm)
+        {
+            _ = vm.OpenAsync(row);
+        }
+    }
+}
+
+public sealed partial class SyntaxVisualizerView : UserControl, IPaneView
+{
+    public SyntaxVisualizerView()
+    {
+        InitializeComponent();
+
+        // Opened from the View menu: show the tree for the active document now.
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (DataContext is SyntaxVisualizerViewModel vm)
+            {
+                _ = vm.RefreshAsync(force: true);
+            }
+        };
+    }
+
+    public void FocusPrimary() => Tree.Focus();
+}
+
+public sealed partial class CodeMetricsView : UserControl, IPaneView
+{
+    public CodeMetricsView()
+    {
+        InitializeComponent();
+        Tree.DoubleTapped += (_, _) => Open();
+        Tree.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                Open();
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Bubble);
+    }
+
+    public void FocusPrimary() => Tree.Focus();
+
+    private void Open()
+    {
+        if (Tree.SelectedItem is MetricsNodeViewModel node && DataContext is CodeMetricsViewModel vm)
+        {
+            _ = vm.OpenAsync(node);
+        }
+    }
+}

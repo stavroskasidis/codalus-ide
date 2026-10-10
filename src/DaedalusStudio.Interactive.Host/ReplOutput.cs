@@ -68,21 +68,23 @@ internal sealed class ReplOutput : TextWriter
     /// <summary>Sends whatever is buffered.</summary>
     public override async Task FlushAsync()
     {
-        string text;
-        lock (_gate)
-        {
-            if (_buffer.Length == 0)
-            {
-                return;
-            }
-
-            text = _buffer.ToString();
-            _buffer.Clear();
-        }
-
+        // The buffer is taken under the send lock: a flush at the end of a submission then waits for a timer's flush
+        // that is still sending, so output always reaches the shell before the submission's result.
         await _send.WaitAsync().ConfigureAwait(false);
         try
         {
+            string text;
+            lock (_gate)
+            {
+                if (_buffer.Length == 0)
+                {
+                    return;
+                }
+
+                text = _buffer.ToString();
+                _buffer.Clear();
+            }
+
             await _connection.NotifyAsync(
                 InteractiveMethods.Output,
                 new OutputParams(_submission(), text, _isError),

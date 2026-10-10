@@ -54,6 +54,21 @@ internal static partial class BuiltIns
           { "key": "primary+k primary+f", "command": "editor.action.formatSelection", "when": "editorTextFocus" },
           { "key": "primary+t", "command": "workbench.action.gotoAll" },
           { "key": "alt+home", "command": "editor.action.goToBase", "when": "editorTextFocus" },
+          { "key": "primary+k primary+x", "command": "editor.action.insertSnippet", "when": "editorTextFocus" },
+          { "key": "primary+d", "command": "editor.action.duplicateSelection", "when": "editorTextFocus" },
+          { "key": "primary+k primary+e", "command": "editor.action.codeCleanup", "when": "editorTextFocus" },
+          { "key": "primary+k primary+k", "command": "bookmarks.toggle", "when": "editorTextFocus" },
+          { "key": "primary+k primary+n", "command": "bookmarks.next" },
+          { "key": "primary+k primary+p", "command": "bookmarks.previous" },
+          { "key": "primary+k primary+l", "command": "bookmarks.clearAll" },
+          { "key": "alt+up", "command": "editor.action.moveLinesUpAction", "when": "editorTextFocus" },
+          { "key": "alt+down", "command": "editor.action.moveLinesDownAction", "when": "editorTextFocus" },
+          { "key": "shift+alt+=", "command": "editor.action.smartSelect.expand", "when": "editorTextFocus" },
+          { "key": "shift+alt+-", "command": "editor.action.smartSelect.shrink", "when": "editorTextFocus" },
+          { "key": "primary+shift+v", "command": "editor.action.pasteFromClipboardRing", "when": "editorTextFocus" },
+          { "key": "primary+shift+.", "command": "editor.action.fontZoomIn", "when": "editorTextFocus" },
+          { "key": "primary+shift+,", "command": "editor.action.fontZoomOut", "when": "editorTextFocus" },
+          { "key": "primary+k primary+shift+s", "command": "editor.action.surroundWithSnippet", "when": "editorTextFocus" },
           { "key": "alt+f12", "command": "editor.action.peekDefinition", "when": "editorTextFocus" },
           { "key": "shift+alt+h", "command": "editor.action.showCallHierarchy", "when": "editorTextFocus" },
           { "key": "shift+f1", "command": "editor.action.showHelp", "when": "editorTextFocus" },
@@ -97,6 +112,31 @@ internal static partial class BuiltIns
             Setting(EditorOptions.StickyScrollKey, "true", SettingType.Boolean, "Sticky Scroll", "Keep the headers of the enclosing scopes at the top of the editor while scrolling.", 20),
             Setting(EditorOptions.OverviewRulerKey, "true", SettingType.Boolean, "Overview Ruler", "Mark errors, warnings, changes, breakpoints, find results and the caret beside the scroll bar.", 21),
             Setting(EditorOptions.NavigationBarKey, "true", SettingType.Boolean, "Navigation Bar", "Show the type and member drop-downs above the editor.", 22),
+            Setting(ShellHost.FormatOnSaveSetting, "false", SettingType.Boolean, "Format on Save", "Format the document with its language service before saving.", 23),
+            SettingDescriptor.Create(ShellHost.CodeCleanupFixesSetting, "[]", SettingType.StringArray, shell) with
+            {
+                Title = "Code Cleanup Fixes",
+                Category = "Code Cleanup",
+                Description = "Diagnostic ids whose fixes Code Cleanup applies (empty: unused usings, simplified names, braces, accessibility modifiers, readonly fields, new(), file-scoped namespaces). Then it sorts usings and formats.",
+            },
+            SettingDescriptor.Create(ShellHost.CodeCleanupOnSaveSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "Run Code Cleanup on Save",
+                Category = "Code Cleanup",
+                Description = "Run Code Cleanup on C# files before they are saved.",
+            },
+            SettingDescriptor.Create(ShellHost.TaskListTokensSetting, "[\"TODO\", \"HACK\", \"UNDONE\"]", SettingType.StringArray, shell) with
+            {
+                Title = "Task List Tokens",
+                Category = "Task List",
+                Description = "Comment tokens the Task List collects (a comment starting with one of them).",
+            },
+            SettingDescriptor.Create(ShellHost.AutoRecoverSetting, "true", SettingType.Boolean, shell) with
+            {
+                Title = "AutoRecover",
+                Category = "Files",
+                Description = "Back up unsaved changes every 30 seconds and offer to restore them after a crash.",
+            },
             SettingDescriptor.Create("navigation.sourceLink", "false", SettingType.Boolean, shell) with
             {
                 Title = "Source Link",
@@ -146,6 +186,26 @@ internal static partial class BuiltIns
         Add("editor.action.goToImplementation", "Go to Implementation", "Editor", OnEditorAsync(c => c.GoToImplementationAsync()), Editor);
         Add("editor.action.goToDerived", "Go to Derived Types", "Editor", OnEditorAsync(c => c.GoToImplementationAsync()), Editor);
         Add("editor.action.goToBase", "Go to Base", "Editor", Ui(shell.GoToBaseAsync), Editor);
+        Add("editor.action.insertSnippet", "Insert Snippet", "Snippets", Ui(shell.InsertSnippetAsync), Editor);
+        Add("bookmarks.toggle", "Toggle Bookmark", "Bookmarks", Ui(shell.ToggleBookmark), Editor);
+        Add("bookmarks.next", "Next Bookmark", "Bookmarks", Ui(() => shell.NextBookmarkAsync(1)));
+        Add("bookmarks.previous", "Previous Bookmark", "Bookmarks", Ui(() => shell.NextBookmarkAsync(-1)));
+        Add("bookmarks.clearAll", "Clear All Bookmarks", "Bookmarks", Ui(() => shell.Bookmarks.Clear()));
+        Add("editor.action.codeCleanup", "Code Cleanup", "Editor", Ui(shell.CodeCleanupAsync), Editor);
+        Add("editor.action.duplicateSelection", "Duplicate Selection or Line", "Editor", OnEditor(c => c.DuplicateLines()), Editor);
+        Add("editor.action.moveLinesUpAction", "Move Line Up", "Editor", OnEditor(c => c.MoveLines(-1)), Editor);
+        Add("editor.action.moveLinesDownAction", "Move Line Down", "Editor", OnEditor(c => c.MoveLines(1)), Editor);
+        Add("editor.action.smartSelect.expand", "Expand Selection", "Editor", OnEditorAsync(c => c.ExpandSelectionAsync()), Editor);
+        Add("editor.action.smartSelect.shrink", "Shrink Selection", "Editor", OnEditor(c => c.ShrinkSelection()), Editor);
+        Add("editor.action.pasteFromClipboardRing", "Paste from Clipboard Ring", "Editor", Ui(shell.PasteFromClipboardRingAsync), Editor);
+        Add("editor.action.pasteJsonAsClasses", "Paste JSON as Classes", "Editor", Ui(shell.PasteJsonAsClassesAsync), Editor);
+        Add("editor.action.fontZoomIn", "Zoom In (Editor)", "Editor", OnEditor(c => c.Zoom *= 1.1), Editor);
+        Add("editor.action.fontZoomOut", "Zoom Out (Editor)", "Editor", OnEditor(c => c.Zoom /= 1.1), Editor);
+        Add("editor.action.fontZoomReset", "Reset Zoom (Editor)", "Editor", OnEditor(c => c.Zoom = 1), Editor);
+        Add("workbench.action.localHistory", "Show Local History", "File", Ui(shell.ShowLocalHistoryAsync), Editor);
+        Add("editor.action.surroundWithSnippet", "Surround With", "Snippets", Ui(shell.SurroundWithAsync), Editor);
+        Add("workbench.action.openSnippets", "Configure User Snippets", "Snippets", Ui(shell.OpenUserSnippetsAsync));
+        Add("snippets.importVisualStudio", "Import Visual Studio Snippets…", "Snippets", Ui(shell.ImportVisualStudioSnippetsAsync));
         Add("editor.action.peekDefinition", "Peek Definition", "Editor", Ui(shell.PeekDefinitionAsync), Editor);
         Add("editor.action.showCallHierarchy", "Show Call Hierarchy", "Editor", Ui(shell.ShowCallHierarchyAsync), Editor);
         Add("editor.action.showTypeHierarchy", "Show Type Hierarchy", "Editor", Ui(shell.ShowTypeHierarchyAsync), Editor);
@@ -193,6 +253,12 @@ internal static partial class BuiltIns
         }), "activeDocumentKind");
         Add("workbench.closeAllDocuments", "Close All Documents", "Window", Ui(() => shell.CloseAllDocuments(exceptActive: false)), "activeDocumentKind");
         Add("workbench.closeOtherDocuments", "Close All But This", "Window", Ui(() => shell.CloseAllDocuments(exceptActive: true)), "activeDocumentKind");
+        Add("workbench.closeDocumentsToTheRight", "Close All to the Right", "Window", Ui(shell.CloseDocumentsToTheRight), "activeDocumentKind");
+        Add("workbench.compareFiles", "Compare Files…", "File", Ui(() => shell.CompareFilesAsync(withActive: false)));
+        Add("workbench.compareActiveWith", "Compare Active File With…", "File", Ui(() => shell.CompareFilesAsync(withActive: true)), Editor);
+        Add("analysis.syntaxVisualizer", "Syntax Visualizer", "View", Ui(shell.ShowSyntaxVisualizer));
+        Add("analysis.codeMetrics.solution", "Calculate Code Metrics for Solution", "Analyze", Ui(() => shell.CalculateCodeMetricsAsync(projectOnly: false)));
+        Add("analysis.codeMetrics.project", "Calculate Code Metrics for Project", "Analyze", Ui(() => shell.CalculateCodeMetricsAsync(projectOnly: true)), Editor);
         Add("workbench.splitEditorRight", "Split Editor Right", "Window", Ui(() => shell.SplitActiveEditor(below: false)), Editor);
         Add("workbench.splitEditorDown", "Split Editor Down", "Window", Ui(() => shell.SplitActiveEditor(below: true)), Editor);
         Add("workbench.toggleEditorSplit", "Split", "Window", Ui(shell.ToggleEditorSplit), Editor);
@@ -234,6 +300,7 @@ internal static partial class BuiltIns
     {
         menus.AddMenuBarMenu(new MenuBarMenu("edit", "_Edit", 20));
         menus.AddMenuBarMenu(new MenuBarMenu("window", "_Window", 80));
+        menus.AddMenuBarMenu(new MenuBarMenu("analyze", "_Analyze", 67));
         var shell = ContributionSource.Shell;
         MenuItemRule Item(string location, string command, string group, int order = 0) =>
             new(location, command, shell) { Group = group, Order = order };
@@ -285,6 +352,24 @@ internal static partial class BuiltIns
             Item(Edit, "editor.action.foldAll", "5-outlining", 2),
             Item(Edit, "editor.action.unfoldAll", "5-outlining", 3),
             Item(Edit, "editor.action.changeEndOfLine", "6-advanced", 1),
+            Item(Edit, "editor.action.codeCleanup", "3-intellisense", 8),
+            Item(Edit, "editor.action.duplicateSelection", "6-advanced", 2),
+            Item(Edit, "editor.action.moveLinesUpAction", "6-advanced", 3),
+            Item(Edit, "editor.action.moveLinesDownAction", "6-advanced", 4),
+            Item(Edit, "editor.action.smartSelect.expand", "6-advanced", 5),
+            Item(Edit, "editor.action.smartSelect.shrink", "6-advanced", 6),
+            Item(Edit, "editor.action.pasteFromClipboardRing", "7-paste", 1),
+            Item(Edit, "editor.action.pasteJsonAsClasses", "7-paste", 2),
+            Item(Edit, "editor.action.insertSnippet", "8-snippets", 1),
+            Item(Edit, "editor.action.surroundWithSnippet", "8-snippets", 2),
+            Item(File, "workbench.action.localHistory", "history", 1),
+            Item(File, "workbench.compareFiles", "history", 2),
+            Item(File, "workbench.compareActiveWith", "history", 3),
+            Item(Window, "workbench.closeDocumentsToTheRight", "3-close", 3),
+            Item(MenuLocations.MenuBar("analyze"), "analysis.codeMetrics.solution", "1-metrics", 1),
+            Item(MenuLocations.MenuBar("analyze"), "analysis.codeMetrics.project", "1-metrics", 2),
+            Item(MenuLocations.MenuBar("analyze"), "editor.action.codeCleanup", "2-cleanup", 1),
+            Item(MenuLocations.MenuBar("analyze"), "analysis.syntaxVisualizer", "3-roslyn", 1),
             Item(Window, "workbench.toggleEditorSplit", "1-split", 1),
             Item(Window, "workbench.splitEditorRight", "1-split", 2),
             Item(Window, "workbench.splitEditorDown", "1-split", 3),

@@ -77,3 +77,57 @@ Settings under **Text Editor** turn each of these on or off.
 - **Inline diagnostics** (off by default): error and warning messages at the end of their lines.
 
 Language services from plugins provide the outline, navigation bar, sticky scroll, hierarchies, inlay hints and CodeLens when they support them.
+
+## Editing commands
+
+| Command | Shortcut | Notes |
+|---|---|---|
+| Duplicate Selection or Line | `Ctrl+D` | |
+| Move Line Up and Down | `Alt+Up`, `Alt+Down` | The selected lines. |
+| Expand and Shrink Selection | `Shift+Alt+=`, `Shift+Alt+-` | Word, expression, statement, block… from the language service. |
+| Paste from Clipboard Ring | `Ctrl+Shift+V` | The last 15 copies and cuts. |
+| Paste JSON as Classes | (Edit menu) | C# classes for the JSON on the clipboard. |
+| Zoom In, Out and Reset | `Ctrl+Shift+.`, `Ctrl+Shift+,`, `Ctrl+Wheel` | Per editor. |
+| XML documentation comment | type `///` | Above a member: the comment with its `param` and `returns` tags. |
+| Code Cleanup | `Ctrl+K Ctrl+E` | Removes unnecessary usings, applies the code style fixes, sorts usings and formats. Settings: **Code Cleanup → Fixes** (diagnostic ids) and **Code Cleanup → On Save**. |
+
+**Format on save** (setting **Text Editor → Format On Save**) formats each document before saving it.
+
+## Snippets
+
+- Type a snippet's prefix (`prop`, `ctor`, `for`, `try`…) and pick it in completion, or use **Insert Snippet** (`Ctrl+K Ctrl+X`). `Tab` moves between the placeholders; linked placeholders change together.
+- **Surround With** (`Ctrl+K Ctrl+Shift+S`) wraps the selection (`if`, `try`, `#region`, `using`…).
+- **Configure User Snippets** opens your snippets for the current language, in VS Code's JSON format. Yours replace built-in snippets with the same name.
+- **Import Visual Studio Snippets…** converts `.snippet` files into your snippets.
+- Plugins can contribute snippets ([plugins.md](../plugins.md#snippets)).
+
+## Refactorings that ask first
+
+Quick actions whose title ends with `…` open a dialog before they run:
+- **Generate constructor…**, **Generate Equals and GetHashCode…**: pick the fields and properties.
+- **Generate overrides…**: pick the members to override.
+- **Extract interface…**: name the interface and pick its members. It goes into a new file.
+- **Change signature…**: reorder parameters (**Up**, **Down**) and uncheck the ones to remove. Calls are updated.
+
+The light bulb also offers, for each diagnostic, **Suppress with #pragma** and **Configure severity**, which writes the rule's severity to the nearest `.editorconfig`.
+
+## Safety nets
+
+- **AutoRecover**: unsaved changes are backed up every 30 seconds. After a crash, Daedalus Studio offers to restore them when it starts again (setting **Files → Auto Recover**).
+- **Local History** (File → Show Local History): every save keeps the previous version of the file, independent of Git (the last 50). Pick a version to compare it with the file, then restore it if you want.
+
+## Bookmarks and the Task List
+
+- **Bookmarks**: `Ctrl+K Ctrl+K` toggles one on the caret's line; `Ctrl+K Ctrl+N` and `Ctrl+K Ctrl+P` go to the next and previous; `Ctrl+K Ctrl+L` clears them. The Bookmarks window (View menu) lists them with their folder; `F2` names one and `Delete` removes it.
+- **Task List** (View menu): the `TODO`, `HACK` and `UNDONE` comments in the solution's files, unsaved edits included. **Refresh** scans again; type to filter. The tokens are a setting (**Task List → Tokens**).
+
+## Analysis
+
+- **Code Metrics** (Analyze → Calculate Code Metrics for Solution or for Project): the maintainability index, cyclomatic complexity, depth of inheritance, class coupling and lines of code of each project, namespace, type and member. A maintainability index under 10 is shown in red. Double-click a row to go to it; **Copy** copies the results as tab-separated text.
+- **Syntax Visualizer** (View or Analyze menu), for writing analyzers and source generators: the C# syntax tree of the active document, with its tokens (green) and trivia, following the caret. Selecting a node selects its text. Below the tree: the node's kind and span, the symbol, type, converted type, conversion and constant value at the caret, and its `IOperation` tree.
+
+## Files and tabs
+
+- **Compare Files…** and **Compare Active File With…** (File menu) open two files in the diff viewer.
+- **Close All to the Right** and **Close All But This** (Window menu, and the tab's context menu).
+- **Images** (PNG, JPEG, GIF, BMP, ICO, WebP) open in an image viewer: zoom with `Ctrl+Wheel`, `Ctrl+=` and `Ctrl+-`, `Ctrl+0` for the actual size, or **Fit**. SVG files open as XML.

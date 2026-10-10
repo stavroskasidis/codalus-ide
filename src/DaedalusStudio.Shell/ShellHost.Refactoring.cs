@@ -160,6 +160,24 @@ public sealed partial class ShellHost
             return;
         }
 
+        // Refactorings that ask first (Generate constructor…, Extract interface…, Change signature…; ADR 0018).
+        if (await client.CodeActionOptionsAsync(picked, CancellationToken.None).ConfigureAwait(true) is { } options)
+        {
+            var answer = await Dialogs.ShowAsync(new DialogRequest(options.Title, options.Message ?? (options.NameLabel ?? string.Empty), ["OK", "Cancel"])
+            {
+                Input = options.NameLabel is null ? null : options.Name ?? string.Empty,
+                Validate = options.NameLabel is null ? null : name => IsIdentifier(name) ? null : "Not a valid C# identifier.",
+                Choices = [.. options.Items.Select(i => new DialogChoice(i.Id, i.Label, i.Checked, i.Detail))],
+                Reorderable = options.Reorderable,
+            }).ConfigureAwait(true);
+            if (answer.Button != "OK")
+            {
+                return;
+            }
+
+            picked = new CodeActionChoices(answer.Input, [.. answer.Checked]).AttachTo(picked);
+        }
+
         var resolved = await client.ResolveCodeActionAsync(picked, CancellationToken.None).ConfigureAwait(true);
         if (resolved.Edit is not { DocumentChanges.Length: > 0 } edit)
         {

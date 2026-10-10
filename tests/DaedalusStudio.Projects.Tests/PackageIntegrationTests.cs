@@ -13,7 +13,7 @@ namespace DaedalusStudio.Projects.Tests;
 public sealed class PackageIntegrationTests : IAsyncLifetime
 {
     private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(120);
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "daedalus-packages-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(DaedalusStudio.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-packages-" + Guid.NewGuid().ToString("N"));
     private SolutionService _service = null!;
     private PackageService _packages = null!;
 

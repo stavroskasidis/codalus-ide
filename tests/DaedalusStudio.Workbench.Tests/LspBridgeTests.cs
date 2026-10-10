@@ -93,7 +93,8 @@ public sealed class LspBridgeTests : IAsyncLifetime
         await WaitUntil(() => _service.Diagnostics.For(path).Any(d => d.Code == "42"), ct);
 
         // Completion: an array becomes a list; plain documentation becomes Markdown; insert/replace becomes a range;
-        // snippets lose their tab stops; the server's workspace/configuration request was answered.
+        // snippets keep their tab stops (the editor's snippet engine inserts them); the server's workspace/configuration
+        // request was answered.
         CompletionList completion = null!;
         await WaitUntil(() =>
         {
@@ -103,7 +104,8 @@ public sealed class LspBridgeTests : IAsyncLifetime
         var alpha = completion.Items.Single(i => i.Label == "alpha");
         Assert.Equal("The first key.", alpha.Documentation?.Value);
         Assert.Equal(new Position(1, 0), alpha.TextEdit!.Range.Start);
-        Assert.Equal("beta(value)", completion.Items.Single(i => i.Label == "beta").InsertText);
+        var beta = completion.Items.Single(i => i.Label == "beta");
+        Assert.Equal(("beta(${1:value})$0", InsertTextFormat.Snippet), (beta.InsertText, beta.InsertTextFormat));
 
         // Hover: marked strings become Markdown.
         var hover = await client.HoverAsync(uri, new Position(0, 1), ct);

@@ -29,7 +29,19 @@ internal static partial class Program
         }
 
         App.Options = options;
-        return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        try
+        {
+            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        catch (InvalidOperationException ex) when (ex.StackTrace?.Contains("AppBuilder.Setup", StringComparison.Ordinal) == true)
+        {
+            // The windowing system couldn't start: no display (an SSH session, a Mac with its display asleep, Linux
+            // without X or Wayland). Say so instead of crashing with a stack trace.
+            AttachToParentConsole();
+            Console.Error.WriteLine($"Daedalus Studio needs a display and could not start its windowing system: {ex.Message}");
+            Console.Error.WriteLine(OperatingSystem.IsLinux() ? "Set DISPLAY or WAYLAND_DISPLAY, or run it under xvfb-run." : "Run it in a desktop session with an active display.");
+            return 3;
+        }
     }
 
     // Also used by the Avalonia previewer and headless tests.

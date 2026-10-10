@@ -312,6 +312,24 @@ public sealed class PluginManager : IAsyncDisposable
             });
         }
 
+        var snippets = new List<Snippets.Snippet>();
+        foreach (var file in contributions?.Snippets ?? [])
+        {
+            try
+            {
+                snippets.AddRange(Snippets.SnippetRegistry.ParseJson(File.ReadAllText(Path.Combine(folder, Resolve(file.Path))), file.Language, plugin.Id));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                PluginLog.AppendLine($"[{plugin.Id}] snippets '{file.Path}': {ex.Message}");
+            }
+        }
+
+        if (snippets.Count > 0)
+        {
+            _workbench.Snippets.Set(plugin.Id, snippets);
+        }
+
         foreach (var server in contributions?.LanguageServers ?? [])
         {
             if (string.IsNullOrWhiteSpace(server.Id) || server.Languages is not { Length: > 0 } || string.IsNullOrWhiteSpace(server.Command)
