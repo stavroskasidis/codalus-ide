@@ -65,9 +65,12 @@ jobs:
           global-json-file: global.json
           # The smoke test's .NET 11 step (M30): keep it in step with samples/Net11/global.json.
           dotnet-version: 11.0.100-rc.1.26425.128
-      - name: Linux prerequisites (Native AOT, AppImage, rpm, Xvfb)
+      - name: Linux prerequisites (Native AOT, AppImage, rpm, delta packages, Xvfb)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev squashfs-tools rpm xvfb
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev squashfs-tools rpm zstd xvfb
+      - name: macOS prerequisites (delta packages)
+        if: runner.os == 'macOS'
+        run: command -v zstd || brew install zstd
       - name: The previous release of this channel (Velopack delta packages)
         if: inputs.previous != ''
         shell: bash
@@ -85,6 +88,8 @@ jobs:
         env:
           DAEDALUS_PREVIOUS_RELEASE: ${{ github.workspace }}/previous-release
           DAEDALUS_RELEASE_NOTES: ${{ github.workspace }}/release-notes.md
+          # The update feed's signature (M32): installed builds refuse a feed without it.
+          DAEDALUS_FEED_KEY: ${{ secrets.FEED_SIGNING_KEY }}
           # Code signing (D19) waits behind these until the repository is public.
           DAEDALUS_CODESIGN_IDENTITY: ${{ secrets.DAEDALUS_CODESIGN_IDENTITY }}
         run: |
@@ -108,3 +113,11 @@ jobs:
           name: packages-${{ matrix.rid }}
           path: artifacts/packages/
           if-no-files-found: error
+      # Self-update end to end (M32): version N and N+1 of the installer, N installed, a tampered feed refused, then N
+      # updated to N+1 through a signed local feed. After the upload, in its own folder.
+      - name: Self-update test
+        shell: bash
+        timeout-minutes: 45
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
+          bash eng/test-update.sh "$RUNNER_TEMP/update-test"

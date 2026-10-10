@@ -63,7 +63,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings()]);
+        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
@@ -106,6 +106,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeWebLanguages();
         InitializeNpm();
         InitializeHotReload();
+        InitializeUpdates();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -256,6 +257,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     public void OnInteractive()
     {
         _ = OfferRecoveryAsync();
+        StartUpdates();
         foreach (var error in Options.Errors)
         {
             Workbench.Notifications.Warning(error);
@@ -733,6 +735,13 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        ApplyUpdateOnExit();
+        if (SelfUpdate is not null)
+        {
+            await SelfUpdate.DisposeAsync().ConfigureAwait(false);
+        }
+
+        _updateHttp.Dispose();
         _instance?.Dispose();
         Terminals?.Dispose();
         if (Interactive is not null)

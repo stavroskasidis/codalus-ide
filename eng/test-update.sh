@@ -16,6 +16,7 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 work="${1:-$repo/artifacts/update-test}"
 base="$(tr -d '[:space:]' < "$repo/VERSION")"
 old="$base-test.1"
+rid="$(dotnet --info | awk '/RID:/ {print $2; exit}')"
 new="$base-test.2"
 fail() { echo "error: $*" >&2; exit 1; }
 native() { if command -v cygpath > /dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
@@ -27,14 +28,16 @@ openssl ecparam -name prime256v1 -genkey -noout -out "$work/key.pem" 2> /dev/nul
 public_key="$(openssl pkey -in "$work/key.pem" -pubout -outform DER | openssl base64 -A)"
 DAEDALUS_FEED_KEY="$(cat "$work/key.pem")"
 export DAEDALUS_FEED_KEY
+# Its own output folder: the release packages in artifacts/packages stay as they are.
+export DAEDALUS_PACKAGES_OUT="$work/out"
 
 echo "== Building $old"
 bash "$repo/eng/package.sh" "$old" test > "$work/package-old.log" 2>&1 || { tail -40 "$work/package-old.log"; fail "packaging $old failed"; }
-cp -R "$repo/artifacts/packages" "$work/old"
+cp -R "$work/out" "$work/old"
 echo "== Building $new (with a delta against $old)"
 DAEDALUS_PREVIOUS_RELEASE="$work/old/velopack" bash "$repo/eng/package.sh" "$new" test > "$work/package-new.log" 2>&1 \
   || { tail -40 "$work/package-new.log"; fail "packaging $new failed"; }
-cp -R "$repo/artifacts/packages" "$work/new"
+cp -R "$work/out" "$work/new"
 feed="$work/new/velopack"
 ls "$feed"
 ls "$feed"/*-delta.nupkg > /dev/null 2>&1 || echo "warning: no delta package was built" >&2
@@ -50,7 +53,7 @@ echo "== Installing $old"
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*)
     root="$work/install"
-    "$(ls "$work/old"/*-setup.exe)" --silent --installto "$(native "$root")"
+    "$work/old/daedalus-studio-$old-$rid-setup.exe" --silent --installto "$(native "$root")"
     powershell -NoProfile -Command "Get-Process daedalus -ErrorAction SilentlyContinue | Where-Object { \$_.Path -like '$(native "$root")*' } | Stop-Process -Force" || true
     app="$root/current/daedalus.exe"
     uninstall() { "$root/Update.exe" --uninstall --silent > /dev/null 2>&1 || true; }
@@ -58,7 +61,7 @@ case "$(uname -s)" in
   Darwin)
     bundle="$HOME/Applications/Daedalus Studio.app"
     [ ! -e "$bundle" ] || fail "$bundle exists already: this test installs there"
-    installer -pkg "$(ls "$work/old"/*.pkg)" -target CurrentUserHomeDirectory
+    installer -pkg "$work/old/daedalus-studio-$old-$rid.pkg" -target CurrentUserHomeDirectory
     pkill -f "$bundle/Contents/MacOS/daedalus" || true
     app="$bundle/Contents/MacOS/daedalus"
     uninstall() { rm -rf "$bundle"; pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i daedalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true; }
@@ -66,7 +69,7 @@ case "$(uname -s)" in
   Linux)
     mkdir -p "$work/install"
     app="$work/install/daedalus-studio.AppImage"
-    cp "$(ls "$work/old"/*.AppImage)" "$app"
+    cp "$work/old/daedalus-studio-$old-$rid.AppImage" "$app"
     chmod +x "$app"
     export APPIMAGE_EXTRACT_AND_RUN=1 # no FUSE in CI runners and containers
     uninstall() { rm -f "$app"; }

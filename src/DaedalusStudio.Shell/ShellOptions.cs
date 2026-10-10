@@ -51,6 +51,13 @@ public sealed record ShellOptions
     /// <summary><c>--wait file</c>: edit the file and exit (or answer) when its tab closes.</summary>
     public string? WaitFile { get; init; }
 
+    /// <summary>
+    /// <c>--update-now</c>: check the update channel, download what it has and have it applied once this process exits,
+    /// without a window (M32; the update test script, eng/test-update.sh). Exit codes: 0 updated, 3 up to date,
+    /// 2 failed, 4 not an install that updates itself.
+    /// </summary>
+    public bool UpdateNow { get; init; }
+
     /// <summary>A file to open in the editor (<c>--open</c>).</summary>
     public string? OpenFile { get; init; }
 
@@ -160,6 +167,9 @@ public sealed record ShellOptions
                     break;
                 case "--screenshot":
                     options = options with { Screenshot = Value() };
+                    break;
+                case "--update-now":
+                    options = options with { UpdateNow = true };
                     break;
                 case "--smoke-test":
                     options = options with { SmokeTest = Value() is { } samples ? System.IO.Path.GetFullPath(samples) : null };

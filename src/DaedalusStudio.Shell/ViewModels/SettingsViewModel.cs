@@ -234,7 +234,7 @@ public sealed class SettingsViewModel : ObservableObject
         string Prefix() => name.Split('.')[0];
         return name switch
         {
-            "appearance" or "keyboard" or "view" or "notifications" or "privacy" or "output" or "files" or "welcome" or "general" => "Environment",
+            "appearance" or "keyboard" or "view" or "notifications" or "privacy" or "output" or "files" or "welcome" or "general" or "updates" => "Environment",
             "text editor" or "navigation" or "code cleanup" or "task list" or "language services" or "json" => "Text Editor",
             "projects" or "build and run" or "nuget" => "Projects and Solutions",
             "debugging" or "debug" => "Debugging",

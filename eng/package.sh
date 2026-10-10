@@ -12,7 +12,9 @@
 #   DAEDALUS_PREVIOUS_RELEASE  a folder with the previous release of this channel (its releases.<channel>.json and
 #                              full .nupkg): Velopack then also builds a delta package
 #   DAEDALUS_RELEASE_NOTES     a Markdown file with the release notes, shown by the update feed
-# Output: artifacts/packages/ (the Velopack feed and packages in artifacts/packages/velopack/), with SHA256SUMS-<rid>.txt
+#   DAEDALUS_FEED_KEY          the feed signing key (PEM; the FEED_SIGNING_KEY secret): signs releases.<channel>.json
+# Output: artifacts/packages/ (the Velopack feed and packages in artifacts/packages/velopack/), with SHA256SUMS-<rid>.txt;
+#         DAEDALUS_PACKAGES_OUT names another folder (eng/test-update.sh builds into its own)
 # Prerequisites: the .NET SDK (Native AOT toolchain), zip; vswhere on PATH on Windows; mksquashfs on Linux; rpmbuild
 # for the .rpm.
 set -euo pipefail
@@ -28,7 +30,7 @@ esac
 kind="${2:-$default_kind}"
 rid="$(dotnet --info | awk '/RID:/ {print $2; exit}')"
 channel="$rid-$kind"
-out="$repo/artifacts/packages"
+out="${DAEDALUS_PACKAGES_OUT:-$repo/artifacts/packages}"
 feed="$out/velopack"
 stage="$repo/artifacts/package-stage/$rid"
 app="$stage/daedalus-studio"
@@ -40,8 +42,9 @@ native() { if command -v cygpath > /dev/null; then cygpath -w "$1"; else printf 
 sha256() { (sha256sum "$1" 2> /dev/null || shasum -a 256 "$1") | cut -d' ' -f1; }
 
 rm -rf "$stage" "$feed"
+# This platform's earlier packages go, so versions never mix in the output (other platforms' stay, for CI artifacts).
+rm -rf "$out"/daedalus-studio-*-"$rid".* "$out"/daedalus-studio-*-"$rid"-* "$out"/winget-* "$out/SHA256SUMS-$rid.txt"
 mkdir -p "$app" "$out" "$feed"
-rm -f "$out/SHA256SUMS-$rid.txt"
 
 # Native AOT links with the selected Xcode's clang and ld; use that Xcode's SDK too. Otherwise clang may pick a newer
 # Command Line Tools SDK whose .tbd files that ld can't read ("tapi error: … unknown architecture").
@@ -73,8 +76,14 @@ if [ -n "${DAEDALUS_PREVIOUS_RELEASE:-}" ] && [ -d "$DAEDALUS_PREVIOUS_RELEASE" 
   echo "== Previous release of $channel (for a delta package)"
   cp "$DAEDALUS_PREVIOUS_RELEASE"/* "$feed/" 2> /dev/null || true
 fi
+# Delta packages need zstd on macOS and Linux (vpk brings its own on Windows): without it, full packages only.
+delta=BestSpeed
+if [[ "$rid" != win-* ]] && ! command -v zstd > /dev/null; then
+  echo "warning: no zstd on the PATH: no delta package (sudo apt install zstd, brew install zstd)" >&2
+  delta=None
+fi
 vpk_args=(--packId DaedalusStudio --packVersion "$version" --packTitle "Daedalus Studio" --packAuthors "Daedalus Studio contributors"
-  --runtime "$rid" --channel "$channel" --outputDir "$(native "$feed")" --delta BestSpeed)
+  --runtime "$rid" --channel "$channel" --outputDir "$(native "$feed")" --delta "$delta")
 if [ -n "${DAEDALUS_RELEASE_NOTES:-}" ] && [ -f "$DAEDALUS_RELEASE_NOTES" ]; then
   vpk_args+=(--releaseNotes "$(native "$DAEDALUS_RELEASE_NOTES")")
 fi
@@ -168,6 +177,21 @@ if [ -n "${DAEDALUS_PREVIOUS_RELEASE:-}" ] && [ -d "$DAEDALUS_PREVIOUS_RELEASE" 
   for previous in "$DAEDALUS_PREVIOUS_RELEASE"/*.nupkg; do
     [ -e "$previous" ] && rm -f "$feed/$(basename "$previous")"
   done
+fi
+
+# The feed signature (M32, ADR 0029): base64 of an ECDSA P-256 / SHA-256 signature over the feed's bytes, which the app
+# checks with the project's public key (eng/packaging/update-feed-key.pub.pem) before it trusts the feed's hashes.
+if [ -n "${DAEDALUS_FEED_KEY:-}" ]; then
+  echo "== Signing the update feed"
+  key_file="$(mktemp)"
+  trap 'rm -f "$key_file"' EXIT
+  printf '%s\n' "$DAEDALUS_FEED_KEY" > "$key_file"
+  for file in "$feed"/releases.*.json; do
+    openssl dgst -sha256 -sign "$key_file" "$file" | openssl base64 -A > "$file.sig"
+  done
+  rm -f "$key_file"
+else
+  echo "DAEDALUS_FEED_KEY isn't set: the update feed is unsigned, and installed builds will refuse it." >&2
 fi
 
 echo "== Checksums"

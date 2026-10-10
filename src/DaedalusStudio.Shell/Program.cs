@@ -19,6 +19,12 @@ internal static partial class Program
             return 0;
         }
 
+        if (options.UpdateNow)
+        {
+            AttachToParentConsole();
+            return Infrastructure.Updates.UpdateNow(Console.Out);
+        }
+
         // daedalus diff: hand it to the running shell of this user-data folder, if there is one.
         if (options.Diff is { } diff)
         {

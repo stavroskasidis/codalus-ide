@@ -178,6 +178,9 @@ internal static partial class BuiltIns
         Add("workbench.quit", PlatformInfo.Current == PlatformKind.Windows ? "Exit" : "Quit", "File", Ui(() => shell.Window?.RequestClose()));
         Add("help.about", "About Daedalus Studio", "Help", Ui(shell.ShowAbout));
         Add("help.openCrashReports", "Open Crash Reports Folder", "Help", Ui(shell.OpenCrashReports));
+        Add("update.check", "Check for Updates", "Help", Ui(() => _ = shell.CheckForUpdatesAsync()));
+        Add("update.whatsNew", "What's New", "Help", Ui(() => shell.ShowWhatsNew()));
+        Add("update.restart", "Restart to Update", "Help", Ui(shell.RestartToUpdate));
 
         // Helpers for plugins (not in the palette): plugins reach shell features through commands.
         Add("workbench.openExternal", "Open URL", "Developer", async (args, _) =>
@@ -276,8 +279,31 @@ internal static partial class BuiltIns
             Item("help", "workbench.showLogs", "help", 1),
             Item("help", "help.openCrashReports", "help", 2),
             Item("help", "help.about", "help", 3),
+            Item("help", "update.check", "updates", 1),
+            Item("help", "update.whatsNew", "updates", 2),
         ]);
     }
+
+    /// <summary>Self-update (M32, ADR 0029): Options → Environment → Updates.</summary>
+    public static IReadOnlyList<SettingDescriptor> UpdateSettings() =>
+    [
+        SettingDescriptor.Create(Workbench.Updates.UpdateService.ModeSetting, "\"auto\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Updates",
+            Category = "Updates",
+            Description = "Installed builds keep themselves up to date: download new releases in the background and apply them when the IDE restarts, only say that one is available, or don't check at all (no update traffic; Help → Check for Updates still works). Development builds never check.",
+            Enum = ["auto", "notify", "off"],
+            EnumDescriptions = ["Download in the background and update at the next restart", "Say that a release is available", "Don't check"],
+        },
+        SettingDescriptor.Create(Workbench.Updates.UpdateService.ChannelSetting, "\"\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Update Channel",
+            Category = "Updates",
+            Description = "Stable releases, or nightly builds of the next version. Empty: the channel the installed build came from. Moving from nightly builds to stable releases installs the newest stable release, even when it is older, after a confirmation.",
+            Enum = ["", "stable", "nightly"],
+            EnumDescriptions = ["The installed build's channel", "Stable releases", "Nightly builds"],
+        },
+    ];
 
     public static IReadOnlyList<KeybindingRule> ParseDefaultKeybindings(PlatformKind platform) =>
         [
