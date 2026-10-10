@@ -6,7 +6,10 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 
 ## Lifecycle
 
-1. `initialize` `{processId, clientName, protocolVersion}` → `{serverName, serverVersion, protocolVersion, msbuildVersion, sdkPath}`.
+1. `initialize` `{processId, clientName, protocolVersion}` → `{serverName, serverVersion, protocolVersion, msbuildVersion, sdkPath, sdkWarning?}`.
+   - The host loads the SDK that `dotnet` resolves for `--solution-dir`, `global.json` included ([ADR 0025](adr/0025-hosts-and-the-users-sdk.md)).
+   - The shell starts the host with `DOTNET_ROLL_FORWARD=LatestMajor` when that SDK belongs to a newer .NET than the host's, so the host can load it. It adds `DOTNET_ROLL_FORWARD_TO_PRERELEASE=1` for a preview SDK.
+   - `sdkWarning` says why the resolved SDK couldn't be loaded and which one is used instead.
 2. `solution/open` `{path, trusted, configuration?, platform?, restore, activeFrameworks?}` → `SolutionInfo`, read from the solution file only. A `.csproj` (or `.fsproj`, `.vbproj`) opened on its own becomes an in-memory solution with format `project`.
 3. When trusted, projects are evaluated in parallel and each arrives as a `project/evaluated` notification, with `solution/evaluationProgress` `{evaluated, total, completed}` after each one. Design-time builds follow (below). With `restore`, a restore follows; afterwards only projects whose assets file changed get a new design-time build.
 4. `shutdown` / `exit`. If the host crashes, the shell restarts it and repeats `initialize` and `solution/open` with the user's latest choices (trust, configuration, active frameworks), without restoring again.

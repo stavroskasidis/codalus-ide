@@ -42,6 +42,12 @@ public sealed partial class TemplatesPlugin : IDaedalusPlugin
             return null;
         }
 
+        var (framework, canceled) = await AskFrameworkAsync(template, location, cancellationToken).ConfigureAwait(false);
+        if (canceled)
+        {
+            return null;
+        }
+
         var directory = Path.Combine(location, name);
         var arguments = new List<string> { "new", template.ShortName, "--name", name, "--output", directory };
         if (template.Languages.Contains(',', StringComparison.Ordinal))
@@ -49,7 +55,13 @@ public sealed partial class TemplatesPlugin : IDaedalusPlugin
             arguments.AddRange(["--language", "C#"]);
         }
 
-        if (!await RunDotnetAsync(arguments, cancellationToken).ConfigureAwait(false))
+        if (framework is not null)
+        {
+            arguments.AddRange(["--framework", framework]);
+        }
+
+        // In the location, so a global.json there picks the SDK, as on the command line.
+        if (!await RunDotnetAsync(arguments, cancellationToken, location).ConfigureAwait(false))
         {
             return null;
         }
@@ -63,6 +75,25 @@ public sealed partial class TemplatesPlugin : IDaedalusPlugin
 
         await Context.Commands.ExecuteAsync(solution is null ? "workbench.openSolution" : "solution.addProjectFile", cancellationToken, project).ConfigureAwait(false);
         return project;
+    }
+
+    /// <summary>
+    /// The template's target framework, when it offers a choice (<c>--framework</c>): the frameworks of the SDK that
+    /// the location resolves to, the template's default first. Null without a choice; canceled when dismissed.
+    /// </summary>
+    private async Task<(string? Framework, bool Canceled)> AskFrameworkAsync(ProjectTemplate template, string location, CancellationToken cancellationToken)
+    {
+        var (exitCode, help) = await Dotnet.RunAsync(["new", template.ShortName, "--help"], cancellationToken, location, english: true).ConfigureAwait(false);
+        var frameworks = exitCode == 0 ? TemplateFrameworks.Parse(help) : [];
+        if (frameworks.Count < 2)
+        {
+            return (null, false);
+        }
+
+        var items = frameworks.Select(f => new QuickPickItem(TemplateFrameworks.Display(f.Framework)) { Description = f.Framework, Detail = f.IsDefault ? "Default" : null, Tag = f.Framework }).ToList();
+        return await Context.Window.ShowQuickPickAsync(items, "Target framework", cancellationToken).ConfigureAwait(false) is { Tag: string framework }
+            ? (framework, false)
+            : (null, true);
     }
 
     private async Task<object?> NewSolutionAsync(CancellationToken cancellationToken)
@@ -146,9 +177,9 @@ public sealed partial class TemplatesPlugin : IDaedalusPlugin
         return name;
     }
 
-    private async Task<bool> RunDotnetAsync(List<string> arguments, CancellationToken cancellationToken)
+    private async Task<bool> RunDotnetAsync(List<string> arguments, CancellationToken cancellationToken, string? workingDirectory = null)
     {
-        var (exitCode, output) = await Dotnet.RunAsync(arguments, cancellationToken).ConfigureAwait(false);
+        var (exitCode, output) = await Dotnet.RunAsync(arguments, cancellationToken, workingDirectory).ConfigureAwait(false);
         Context.Log.Info($"dotnet {string.Join(' ', arguments)} → {exitCode}\n{output}");
         if (exitCode == 0)
         {
@@ -267,7 +298,8 @@ internal static class TemplateCatalog
 /// <summary>Runs the <c>dotnet</c> CLI of the runtime this host runs on.</summary>
 internal static class Dotnet
 {
-    public static async Task<(int ExitCode, string Output)> RunAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    /// <param name="english">The CLI's messages in English, for output that is parsed by its words.</param>
+    public static async Task<(int ExitCode, string Output)> RunAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken, string? workingDirectory = null, bool english = false)
     {
         var psi = new ProcessStartInfo(Executable())
         {
@@ -276,6 +308,16 @@ internal static class Dotnet
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        if (workingDirectory is not null && Directory.Exists(workingDirectory))
+        {
+            psi.WorkingDirectory = workingDirectory;
+        }
+
+        if (english)
+        {
+            psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
+        }
+
         foreach (var argument in arguments)
         {
             psi.ArgumentList.Add(argument);
@@ -308,4 +350,58 @@ internal static class Dotnet
         var root = runtime is null ? null : Directory.GetParent(runtime)?.Parent?.Parent?.FullName;
         return root is not null && File.Exists(Path.Combine(root, exe)) ? Path.Combine(root, exe) : exe;
     }
+}
+
+/// <summary>A template's target frameworks, from <c>dotnet new &lt;template&gt; --help</c> (in English).</summary>
+internal static partial class TemplateFrameworks
+{
+    /// <summary>
+    /// The choices of <c>-f, --framework</c>: the default first, then the newest .NET first, then .NET Standard. Empty
+    /// when the template has no framework option. The choices are listed under the option ("Type: choice"); a wide
+    /// console also puts them in the option's placeholder (<c>&lt;net10.0|net11.0&gt;</c>), a narrow one says
+    /// <c>&lt;choice&gt;</c>.
+    /// </summary>
+    public static IReadOnlyList<(string Framework, bool IsDefault)> Parse(string help)
+    {
+        var lines = help.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var option = Array.FindIndex(lines, l => FrameworkOption().IsMatch(l));
+        if (option < 0)
+        {
+            return [];
+        }
+
+        var block = lines.Skip(option + 1).TakeWhile(l => !l.TrimStart().StartsWith('-')).ToList();
+        var listed = block
+            .SkipWhile(l => !l.Trim().Equals("Type: choice", StringComparison.Ordinal))
+            .Skip(1)
+            .TakeWhile(l => !DefaultValue().IsMatch(l))
+            .Select(l => l.Trim().Split(' ', 2)[0])
+            .Where(c => c.Length > 0)
+            .ToList();
+        var choices = FrameworkOption().Match(lines[option]).Groups[1].Value
+            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(c => c != "choice")
+            .Union(listed, StringComparer.Ordinal);
+        var @default = block.Select(l => DefaultValue().Match(l)).FirstOrDefault(m => m.Success)?.Groups[1].Value;
+        return [.. choices
+            .OrderByDescending(c => c == @default)
+            .ThenBy(c => c.StartsWith("netstandard", StringComparison.Ordinal))
+            .ThenByDescending(c => Version.TryParse(VersionOf(c), out var v) ? v : new Version())
+            .Select(c => (c, c == @default))];
+    }
+
+    /// <summary><c>net11.0</c> → ".NET 11.0", <c>netstandard2.1</c> → ".NET Standard 2.1".</summary>
+    public static string Display(string framework) =>
+        framework.StartsWith("netstandard", StringComparison.Ordinal) ? ".NET Standard " + VersionOf(framework)
+        : framework.StartsWith("netcoreapp", StringComparison.Ordinal) ? ".NET Core " + VersionOf(framework)
+        : framework.StartsWith("net", StringComparison.Ordinal) && Version.TryParse(VersionOf(framework), out _) ? ".NET " + VersionOf(framework)
+        : framework;
+
+    private static string VersionOf(string framework) => framework.TrimStart("netstandardcorep".ToCharArray());
+
+    [GeneratedRegex(@"--framework <([^>]+)>")]
+    private static partial Regex FrameworkOption();
+
+    [GeneratedRegex(@"^\s*Default:\s*(\S+)")]
+    private static partial Regex DefaultValue();
 }

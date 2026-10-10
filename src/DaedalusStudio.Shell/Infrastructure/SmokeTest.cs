@@ -793,6 +793,28 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         }).ConfigureAwait(true);
 
         await StepAsync("web.languages", "M16", "Node.js and the web language servers install on demand and serve TypeScript and HTML", WebLanguagesStepAsync).ConfigureAwait(true);
+
+        await StepAsync("dotnet.net11", "M30", "A .NET 11 solution opens with the .NET 11 SDK, builds, and runs on .NET 11", async () =>
+        {
+            await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+            Check(File.Exists(Path.Combine(samples, "Net11", "Net11.slnx")), $"the samples folder {samples} has Net11");
+            var target = Path.Combine(_work, "Net11");
+            Copy(Path.Combine(samples, "Net11"), target);
+            await shell.OpenSolutionAsync(Path.Combine(target, "Net11.slnx")).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 5 && shell.Solutions.Progress is { Completed: true }, "the .NET 11 solution is open", 300).ConfigureAwait(true);
+            var sdk = Path.GetFileName(Path.TrimEndingDirectorySeparator(shell.Solutions.SdkPath ?? string.Empty));
+            Check(sdk.StartsWith("11.0.", StringComparison.Ordinal), $"the build host loaded the .NET 11 SDK (it has {sdk}; {shell.Solutions.SdkWarning})");
+
+            shell.Runs.SetStartupProject(Path.Combine(target, "src", "App", "App.csproj"));
+            var before = shell.Builds.LastBuild;
+            shell.Run("build.buildSolution");
+            await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 420).ConfigureAwait(true);
+            Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+            shell.Run("run.startWithoutDebugging");
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: App")?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("has exited with code 0", StringComparison.Ordinal), "App runs and exits with 0", 300).ConfigureAwait(true);
+            Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
+        }).ConfigureAwait(true);
     }
 
     /// <summary>The web language servers (M16b): Node.js and the servers install, then serve TypeScript and HTML files.</summary>

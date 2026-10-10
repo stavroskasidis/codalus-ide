@@ -20,6 +20,7 @@ internal static class RepoPaths
         var samples = Path.Combine(Root, "samples");
         Directory.CreateDirectory(root);
         File.Copy(Path.Combine(samples, "Directory.Build.props"), Path.Combine(root, "Directory.Build.props"));
+        DaedalusStudio.Tests.FixtureSdk.Pin(root);
         File.Copy(Path.Combine(samples, "Directory.Packages.props"), Path.Combine(root, "Directory.Packages.props"));
         var target = Path.Combine(root, fixture);
         Copy(Path.Combine(samples, fixture), target);

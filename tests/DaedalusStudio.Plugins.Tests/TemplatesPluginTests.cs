@@ -40,6 +40,56 @@ public class TemplateCatalogTests
     public void Garbage_parses_to_nothing() => Assert.Empty(TemplateCatalog.Parse("dotnet: command failed"));
 }
 
+public class TemplateFrameworksTests
+{
+    private const string Help = """
+        Console App (C#)
+        Options:
+          -f, --framework <net10.0|net11.0|net6.0|net7.0|net8.0|net9.0>  The target framework for the project.
+                                                                         Type: choice
+                                                                           net11.0  Target net11.0
+                                                                           net10.0  Target net10.0
+                                                                         Default: net10.0
+          --langVersion <langVersion>                                    Sets the LangVersion property in the created project file
+                                                                         Type: text
+        """;
+
+    [Fact]
+    public void The_default_comes_first_then_the_newest()
+    {
+        var frameworks = TemplateFrameworks.Parse(Help);
+        Assert.Equal(["net10.0", "net11.0", "net9.0", "net8.0", "net7.0", "net6.0"], frameworks.Select(f => f.Framework));
+        Assert.Equal([true, false, false, false, false, false], frameworks.Select(f => f.IsDefault));
+    }
+
+    [Fact]
+    public void A_narrow_console_lists_the_choices_only_under_the_option()
+    {
+        const string help = """
+            Template options:
+              -f, --framework <choice>     The target framework for the project.
+                                           Type: choice
+                                             net11.0  Target net11.0
+                                             net10.0  Target net10.0
+                                           Default: net11.0
+              --langVersion <langVersion>  Sets the LangVersion property in the created
+            """;
+        Assert.Equal([("net11.0", true), ("net10.0", false)], TemplateFrameworks.Parse(help));
+    }
+
+    [Fact]
+    public void Net_standard_comes_after_net_and_templates_without_the_option_have_none()
+    {
+        var frameworks = TemplateFrameworks.Parse("  -f, --framework <net10.0|netstandard2.0|netstandard2.1|net11.0>  The target framework.\n");
+        Assert.Equal(["net11.0", "net10.0", "netstandard2.1", "netstandard2.0"], frameworks.Select(f => f.Framework));
+        Assert.Empty(TemplateFrameworks.Parse("Solution File (C#)\nOptions:\n  --format <sln|slnx>\n"));
+        Assert.Equal(".NET 11.0", TemplateFrameworks.Display("net11.0"));
+        Assert.Equal(".NET Standard 2.1", TemplateFrameworks.Display("netstandard2.1"));
+        Assert.Equal(".NET Core 3.1", TemplateFrameworks.Display("netcoreapp3.1"));
+        Assert.Equal("net48x", TemplateFrameworks.Display("net48x"));
+    }
+}
+
 /// <summary>End-to-end: the Templates plugin in a real plugin host, answering its prompts from the test.</summary>
 public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
 {
@@ -95,7 +145,8 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
     {
         Assert.Equal(PluginState.Ready, _manager.Plugins.Single().State);
         var location = Path.Combine(_root, "repos");
-        var prompts = new ScriptedPrompts(new Queue<string>(["console", location, "1nvalid", "Hello.App"]));
+        // The framework: one every SDK from 10 on offers, not necessarily the default.
+        var prompts = new ScriptedPrompts(new Queue<string>(["console", location, "1nvalid", "Hello.App", "net10.0"]));
         _manager.Prompts = prompts;
         var opened = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         _workbench.Commands.Register(new CommandDescriptor("solution.getInfo", "info", ContributionSource.Shell), (_, _) => Task.FromResult<JsonElement?>(null));
@@ -113,6 +164,7 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
         Assert.Equal(Path.Combine(location, "Hello.App", "Hello.App.csproj"), project);
         Assert.Equal(project, result!.Value.GetString());
         Assert.True(File.Exists(Path.Combine(location, "Hello.App", "Program.cs")));
-        Assert.Equal(["Select a project template", "Location", "Project name", "Project name"], prompts.Asked); // the invalid name was asked again
+        Assert.Equal(["Select a project template", "Location", "Project name", "Project name", "Target framework"], prompts.Asked); // the invalid name was asked again
+        Assert.Contains("<TargetFramework>net10.0</TargetFramework>", File.ReadAllText(project), StringComparison.Ordinal);
     }
 }

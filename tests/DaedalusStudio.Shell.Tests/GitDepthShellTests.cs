@@ -142,7 +142,7 @@ public sealed class GitDepthShellTests
         f.Shell.Run("git.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Operation: null });
         Assert.Contains("Merge branch 'feature'", Git(folder, "log", "-1", "--format=%s"), StringComparison.Ordinal);
-        Assert.False(f.Shell.GitChanges.HasOperation);
+        await ShellFixture.PumpUntil(() => !f.Shell.GitChanges.HasOperation); // the view model follows through Ui.Post
     }
 
     [AvaloniaFact]

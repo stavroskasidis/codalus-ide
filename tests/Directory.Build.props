@@ -10,7 +10,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Fixtures copied out of the repository keep its SDK (M30). -->
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/FixtureSdk.cs" Link="Shared/FixtureSdk.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="xunit.v3.mtp-v2" />
+    <PackageReference Include="Microsoft.Testing.Extensions.HangDump" />
     <Using Include="Xunit" />
   </ItemGroup>
 

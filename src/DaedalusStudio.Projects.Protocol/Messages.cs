@@ -65,7 +65,8 @@ public sealed record EmptyResult;
 
 public sealed record InitializeParams(int ProcessId, string ClientName, string ProtocolVersion);
 
-public sealed record InitializeResult(string ServerName, string ServerVersion, string ProtocolVersion, string MSBuildVersion, string SdkPath);
+/// <param name="SdkWarning">Why the SDK the solution's folder resolves to isn't the one in use (ADR 0025), or null.</param>
+public sealed record InitializeResult(string ServerName, string ServerVersion, string ProtocolVersion, string MSBuildVersion, string SdkPath, string? SdkWarning = null);
 
 // ------------------------------------------------------------------ solution
 

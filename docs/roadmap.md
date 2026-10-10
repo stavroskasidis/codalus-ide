@@ -48,8 +48,8 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M27 | Data and Entity Framework Core tooling | planned |
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
-| M30 | .NET 11 and following .NET releases | planned, **next** (.NET 11 GA is expected in November 2026) |
-| M31 | Automated release cycle and installers | planned, after M30 |
+| M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Daedalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
+| M31 | Automated release cycle and installers | planned, **next** (after M30a; M30b follows at .NET 11 GA) |
 | M32 | Self-update | planned, after M31 |
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | planned, after M32; then M16c continues |
 | M34 | UI polish | planned, the last milestone before Visual Basic and F# |
@@ -825,6 +825,10 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 ### M30 — .NET 11 and following .NET releases
 
 **Goal.** Daedalus runs on .NET 11. On the day .NET 11 is released (GA is expected in November 2026), it fully supports .NET 11 projects. After that, Daedalus moves to every new .NET release (D22).
+
+**Split (ADR 0025, [checkpoint](checkpoints/m30a.md)).**
+- **M30a** (done, on the first release candidate): the hosts on any SDK, and .NET 11 projects while Daedalus still runs on .NET 10.
+- **M30b** (at GA): Daedalus on .NET 11, and Roslyn 5.11 in the language host and C# Interactive, which brings C# 15 and the .NET 11 SDK's Razor generator. Also the `net11.0` targets in the regular fixtures.
 
 **Depends on.** Nothing new, but it touches every host.
 
@@ -1933,7 +1937,7 @@ The "Daedalus" column uses these terms:
 | Open Folder (no solution) | M26 |
 | Docker Compose projects (`.dcproj`) | M17 |
 | SQL database projects (`.sqlproj`) | M27 |
-| Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET); M33 (.NET Core 2.0 to .NET 10) |
+| Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10) |
 | Non-SDK-style projects, .NET Framework-only scenarios | Non-goal |
 | WinForms, WPF, UWP and WinUI project types and designers | Non-goal |
 | C++, Python and Node.js workloads | Not first-party: plugins over the M11 LSP bridge (C++/CLI is a non-goal) |
@@ -2307,3 +2311,8 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **New and decided:** D26 (Windows 10 22H2 and 11), D27 (Linux ARM64 added; no Windows ARM64 or Intel Mac builds), D28 (the proposed budgets approved; Rider dropped as a reference), D29 (go public after M32), D30 (candidates reviewed after the last milestone).
   - **MAUI (M20)** moves to a new phase 10 (Mobile), after M28 and before M34. Polish and VB/F# become phases 11 and 12.
   - **Elsewhere:** ADR 0002 is amended to match D28, and `benchmarks/budgets.json` labels the M8–M11 budgets as approved and budget 4 as final.
+- 2026-10-10: M30a built and at its checkpoint, on the .NET 11 SDK's first release candidate (ADR 0025):
+  - **Hosts:** they roll forward. The build host uses the SDK that `dotnet` resolves for the solution's folder, `global.json` included, and runs on the .NET 11 runtime for the .NET 11 SDK.
+  - **.NET 11 projects:** they open, build, run, debug, test (VSTest and MTP, with coverage) and Hot Reload. Razor uses the .NET 10 SDK's generator until the language host's Roslyn catches up.
+  - **The rest:** New Project's framework choice; `net11.0` and C# 15 in the lists; each SDK's support status in the .NET SDKs panel; `samples/Net11`; the checklist `docs/release/dotnet-upgrade.md`.
+  - **M30b** (Daedalus on .NET 11, Roslyn 5.11) waits for .NET 11 GA in November 2026. M31 is next.

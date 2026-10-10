@@ -55,7 +55,7 @@ public sealed class DebugDepthTests
         await f.Shell.RunToLineAsync(depth, Line(depth, "depth-end"));
         await ShellFixture.PumpUntil(() => f.Shell.Debugger is { State: DebugState.Stopped, CurrentStop.Reason: not "exception" } && f.Shell.ActiveEditor?.Controller?.CurrentDebugLine() == Line(depth, "depth-end"), seconds: 60);
         Assert.NotNull(PerfTipRenderer.Text(f.Shell.Debugger.CurrentStop!.Elapsed));
-        Assert.False(controller.IsExceptionHelperOpen);
+        await ShellFixture.PumpUntil(() => !controller.IsExceptionHelperOpen); // closes through Ui.Post
 
         controller = f.Shell.ActiveEditor!.Controller!;
         var endLine = controller.Editor.Document.GetLineByNumber(Line(depth, "depth-end"));

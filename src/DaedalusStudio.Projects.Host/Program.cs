@@ -16,28 +16,40 @@ var stdin = Console.OpenStandardInput();
 var stdout = Console.OpenStandardOutput();
 Console.SetOut(Console.Error);
 
-var instance = MSBuildLocator.QueryVisualStudioInstances(new VisualStudioInstanceQueryOptions
+// The SDK `dotnet` resolves for the solution's folder (global.json included) comes first, then the others, newest
+// first (ADR 0025). The shell starts the host on a runtime that can load it; if this one still can't, the newest SDK
+// it can load is used, and the shell is told which SDK the solution asked for.
+var instances = MSBuildLocator.QueryVisualStudioInstances(new VisualStudioInstanceQueryOptions
     {
         DiscoveryTypes = DiscoveryType.DotNetSdk,
         WorkingDirectory = Directory.GetCurrentDirectory(),
+        AllowAllRuntimeVersions = true,
     })
-    .OrderByDescending(i => i.Version)
-    .FirstOrDefault();
+    .ToList();
+var instance = instances.FirstOrDefault(i => SdkSelection.CanLoad(i.Version, Environment.Version));
 if (instance is null)
 {
-    await Console.Error.WriteLineAsync("No .NET SDK was found. Install the .NET SDK to open solutions.").ConfigureAwait(false);
+    await Console.Error.WriteLineAsync(instances.Count == 0
+        ? "No .NET SDK was found. Install the .NET SDK to open solutions."
+        : SdkSelection.Unloadable(instances[0].Version, null, Environment.Version)).ConfigureAwait(false);
     return 3;
 }
 
+var sdkWarning = instance == instances[0] ? null : SdkSelection.Unloadable(instances[0].Version, instance.Version, Environment.Version);
+if (sdkWarning is not null)
+{
+    await Console.Error.WriteLineAsync(sdkWarning).ConfigureAwait(false);
+}
+
 MSBuildLocator.RegisterInstance(instance);
-return await RunAsync(stdin, stdout, instance.MSBuildPath).ConfigureAwait(false);
+return await RunAsync(stdin, stdout, instance.MSBuildPath, sdkWarning).ConfigureAwait(false);
 
 // Separate method: Microsoft.Build types must not be loaded before RegisterInstance.
 [MethodImpl(MethodImplOptions.NoInlining)]
-static async Task<int> RunAsync(Stream input, Stream output, string msbuildPath)
+static async Task<int> RunAsync(Stream input, Stream output, string msbuildPath, string? sdkWarning)
 {
     await using var connection = new JsonRpcConnection(input, output);
-    await using var server = new BuildHostServer(connection, msbuildPath);
+    await using var server = new BuildHostServer(connection, msbuildPath) { SdkWarning = sdkWarning };
     server.RegisterHandlers();
     connection.Start();
     await Task.WhenAny(connection.Completion, server.ExitRequested).ConfigureAwait(false);

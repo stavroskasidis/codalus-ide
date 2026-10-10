@@ -43,6 +43,7 @@ public sealed class DebuggeeFixture : IAsyncLifetime
     {
         Copy(Path.Combine(RepoRoot, "samples", "Debugging"), Path.Combine(_root, "Debugging"));
         File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Build.props"), Path.Combine(_root, "Directory.Build.props"));
+        DaedalusStudio.Tests.FixtureSdk.Pin(_root);
         File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(_root, "Directory.Packages.props"));
         var start = new ProcessStartInfo("dotnet", ["build", Path.Combine(_root, "Debugging", "Debugging.slnx"), "-nologo", "-v", "quiet"])
         {

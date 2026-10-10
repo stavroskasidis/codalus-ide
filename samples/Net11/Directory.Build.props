@@ -1,0 +1,9 @@
+<Project>
+  <!-- Standalone fixture (see README.md): nothing is inherited from the repository. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

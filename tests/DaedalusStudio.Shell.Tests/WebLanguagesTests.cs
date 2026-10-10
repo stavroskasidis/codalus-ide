@@ -57,10 +57,10 @@ public sealed class WebLanguagesTests
 
             var ts = f.Shell.Languages.RunningClient("typescript")!;
             var text = editor!.Model.Text.Text;
-            var hover = await ts.HoverAsync(editor.Model.Uri, editor.Model.PositionAt(text.IndexOf("greet(\"web", StringComparison.Ordinal) + 2), CancellationToken.None);
+            var hover = await ts.HoverAsync(editor.Model.Uri, editor.Model.PositionAt(text.IndexOf("greet(\"web", StringComparison.Ordinal) + 2), ShellFixture.RequestTimeout());
             Assert.Contains("greet(name: string): string", hover?.Contents.Value, StringComparison.Ordinal);
             var members = await ts.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(text.IndexOf("console.log", StringComparison.Ordinal) + "console.".Length),
-                new CompletionContext(CompletionTriggerKind.Invoked, null), CancellationToken.None);
+                new CompletionContext(CompletionTriggerKind.Invoked, null), ShellFixture.RequestTimeout());
             Assert.Contains(members!.Items, i => i.Label == "log");
 
             // HTML: element completion.
@@ -68,7 +68,7 @@ public sealed class WebLanguagesTests
             await ShellFixture.PumpUntil(() => html?.Controller is not null && f.Shell.Languages.RunningClient("html") is not null, seconds: 120);
             var htmlClient = f.Shell.Languages.RunningClient("html")!;
             var elements = await htmlClient.CompletionAsync(html!.Model.Uri, html.Model.PositionAt(html.Model.Text.Text.IndexOf("<di", StringComparison.Ordinal) + 3),
-                new CompletionContext(CompletionTriggerKind.Invoked, null), CancellationToken.None);
+                new CompletionContext(CompletionTriggerKind.Invoked, null), ShellFixture.RequestTimeout());
             Assert.Contains(elements!.Items, i => i.Label == "div");
 
             // CSS: property completion.
@@ -76,7 +76,7 @@ public sealed class WebLanguagesTests
             await ShellFixture.PumpUntil(() => css?.Controller is not null && f.Shell.Languages.RunningClient("css") is not null, seconds: 120);
             var cssClient = f.Shell.Languages.RunningClient("css")!;
             var properties = await cssClient.CompletionAsync(css!.Model.Uri, css.Model.PositionAt(css.Model.Text.Text.IndexOf("col", StringComparison.Ordinal) + 3),
-                new CompletionContext(CompletionTriggerKind.Invoked, null), CancellationToken.None);
+                new CompletionContext(CompletionTriggerKind.Invoked, null), ShellFixture.RequestTimeout());
             Assert.Contains(properties!.Items, i => i.Label == "color");
         }
         finally

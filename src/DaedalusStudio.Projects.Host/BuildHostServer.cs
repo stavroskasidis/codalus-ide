@@ -27,6 +27,9 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
 
     public Task ExitRequested => _exit.Task;
 
+    /// <summary>Why the SDK the solution's folder resolves to isn't the one in use (ADR 0025), or null.</summary>
+    public string? SdkWarning { get; init; }
+
     /// <summary><c>&lt;dotnet root&gt;/sdk/&lt;version&gt;/</c> → <c>&lt;dotnet root&gt;/dotnet</c>.</summary>
     private string DotnetExecutable
     {
@@ -47,7 +50,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         {
             var version = typeof(BuildHostServer).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
             var msbuild = typeof(Microsoft.Build.Evaluation.Project).Assembly.GetName().Version?.ToString() ?? "?";
-            return Task.FromResult(new InitializeResult("daedalus-buildhost", version, ProjectMethods.ProtocolVersion, msbuild, _msbuildPath));
+            return Task.FromResult(new InitializeResult("daedalus-buildhost", version, ProjectMethods.ProtocolVersion, msbuild, _msbuildPath, SdkWarning));
         });
         _connection.OnRequest(ProjectMethods.OpenSolution, json.OpenSolutionParams, json.SolutionInfo, async (p, ct) =>
         {
@@ -56,7 +59,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
                 await previous.DisposeAsync().ConfigureAwait(false);
             }
 
-            _session = new SolutionSession(this, DotnetExecutable) { SdkPath = _msbuildPath };
+            _session = new SolutionSession(this, DotnetExecutable) { SdkPath = _msbuildPath, SdkWarning = SdkWarning };
             return await Guard(() => _session.OpenAsync(p, ct)).ConfigureAwait(false);
         });
         _connection.OnRequest(ProjectMethods.CloseSolution, json.EmptyParams, json.EmptyResult, async (_, _) =>

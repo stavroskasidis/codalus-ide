@@ -37,6 +37,34 @@ public sealed class ProjectManagementTests
     }
 
     [AvaloniaFact]
+    public async Task The_sdk_panel_shows_the_sdk_in_use_and_each_sdks_support_status()
+    {
+        var (f, _) = await OpenAsync();
+        await using var _ = f;
+        var sdks = f.Shell.OpenSdks()!;
+        await ShellFixture.PumpUntil(() => sdks.Sdks.Count > 0, seconds: 60);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<SdkView>().Any());
+
+        // M30: the fixture's copy pins the repository's SDK; every SDK says how long it is supported.
+        var inUse = Assert.Single(sdks.Sdks, s => s.IsResolved);
+        Assert.Equal(Path.GetFileName(Path.TrimEndingDirectorySeparator(f.Shell.Solutions.SdkPath!)), inUse.Version);
+        Assert.StartsWith("Supported until ", inUse.Support, StringComparison.Ordinal);
+        Assert.All(sdks.Sdks, s => Assert.NotEmpty(s.Support));
+        Assert.All(sdks.Sdks.Where(s => s.IsOutOfSupport), s => Assert.StartsWith("Out of support since ", s.Support, StringComparison.Ordinal));
+        Assert.False(sdks.HasWarning);
+        NavigationDepthTests.Screenshot(f, "m30-sdks");
+
+        // The oldest SDKs (out of support on most machines) for the screenshot review.
+        var list = f.Window.GetVisualDescendants().OfType<Avalonia.Controls.ListBox>().Single(l => Avalonia.Automation.AutomationProperties.GetName(l) == "Installed SDKs");
+        list.ScrollIntoView(sdks.Sdks.Count - 1);
+        ShellFixture.Pump();
+        NavigationDepthTests.Screenshot(f, "m30-sdks-oldest");
+        await f.Shell.Workbench.Settings.SetAsync(Theming.ThemeService.SettingKey, "dark", Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+        ShellFixture.Pump();
+        NavigationDepthTests.Screenshot(f, "m30-sdks-dark");
+    }
+
+    [AvaloniaFact]
     public async Task Property_pages_show_provenance_and_write_the_project_file()
     {
         var (f, folder) = await OpenAsync();

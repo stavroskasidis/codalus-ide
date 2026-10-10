@@ -42,6 +42,7 @@ public sealed class SolutionService : IAsyncDisposable
     private static readonly TimeSpan s_operationTimeout = TimeSpan.FromMinutes(2);
 
     private readonly Func<string?> _resolveHost;
+    private readonly Func<string, CancellationToken, Task<IReadOnlyDictionary<string, string>?>> _hostEnvironment;
     private readonly SupervisionPolicy? _policy;
     private readonly ConcurrentDictionary<string, ProjectInfo> _projects = new(PathComparer);
     private readonly ConcurrentDictionary<string, CompilerInputsInfo> _compilerInputs = new(PathComparer);
@@ -51,10 +52,12 @@ public sealed class SolutionService : IAsyncDisposable
     private SolutionInfo? _solution;
     private OpenSolutionParams? _openParams;
 
-    public SolutionService(Func<string?> resolveHost, SupervisionPolicy? policy = null)
+    /// <param name="hostEnvironment">The build host's environment for a solution folder; by default <see cref="BuildHostRuntime.EnvironmentAsync"/>.</param>
+    public SolutionService(Func<string?> resolveHost, SupervisionPolicy? policy = null, Func<string, CancellationToken, Task<IReadOnlyDictionary<string, string>?>>? hostEnvironment = null)
     {
         _resolveHost = resolveHost;
         _policy = policy;
+        _hostEnvironment = hostEnvironment ?? BuildHostRuntime.EnvironmentAsync;
     }
 
     public static StringComparer PathComparer { get; } =
@@ -81,6 +84,9 @@ public sealed class SolutionService : IAsyncDisposable
 
     /// <summary>The .NET SDK folder the build host's MSBuild comes from, once it started.</summary>
     public string? SdkPath { get; private set; }
+
+    /// <summary>Why the SDK the solution's folder resolves to isn't the one in use (ADR 0025), or null.</summary>
+    public string? SdkWarning { get; private set; }
 
     /// <summary>A solution was opened, closed (null) or its structure changed.</summary>
     public event EventHandler? SolutionChanged;
@@ -128,7 +134,15 @@ public sealed class SolutionService : IAsyncDisposable
             var full = Path.GetFullPath(path);
             var hostPath = _resolveHost() ?? throw new InvalidOperationException("The build host (daedalus-buildhost) was not found.");
             _openParams = new OpenSolutionParams(full, trusted, configuration, platform, restore);
-            var host = new SupervisedProcess("build host", ProcessLaunchInfo.FromPath(hostPath, "--solution-dir", Path.GetDirectoryName(full)!), _policy)
+            var directory = Path.GetDirectoryName(full)!;
+            var environment = await _hostEnvironment(directory, cancellationToken).ConfigureAwait(false);
+            if (environment is not null)
+            {
+                Log?.Invoke(this, "[info] The solution's SDK is newer than .NET " + BuildHostRuntime.HostMajor + ": the build host rolls forward (" + string.Join(", ", environment.Select(e => e.Key + "=" + e.Value)) + ").");
+            }
+
+            var launch = ProcessLaunchInfo.FromPath(hostPath, "--solution-dir", directory) with { Environment = environment };
+            var host = new SupervisedProcess("build host", launch, _policy)
             {
                 ConfigureConnection = Configure,
                 Initialize = InitializeAsync,
@@ -235,6 +249,12 @@ public sealed class SolutionService : IAsyncDisposable
             ProjectMethods.Initialize, new InitializeParams(Environment.ProcessId, "daedalus", ProjectMethods.ProtocolVersion),
             json.InitializeParams, json.InitializeResult, cancellationToken).ConfigureAwait(false);
         SdkPath = host.SdkPath;
+        SdkWarning = host.SdkWarning;
+        if (host.SdkWarning is { } warning && !isRestart)
+        {
+            Log?.Invoke(this, "[warning] " + warning);
+        }
+
         if (_openParams is not { } open)
         {
             return;

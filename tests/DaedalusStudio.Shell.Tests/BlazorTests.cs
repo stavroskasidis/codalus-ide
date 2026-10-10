@@ -39,7 +39,7 @@ public sealed class BlazorTests
         Hover? hover = null;
         await ShellFixture.PumpUntil(() =>
         {
-            hover = client.HoverAsync(editor.Model.Uri, editor.Model.PositionAt(text.IndexOf("@currentCount", StringComparison.Ordinal) + 3), CancellationToken.None).GetAwaiter().GetResult();
+            hover = client.HoverAsync(editor.Model.Uri, editor.Model.PositionAt(text.IndexOf("@currentCount", StringComparison.Ordinal) + 3), ShellFixture.RequestTimeout()).GetAwaiter().GetResult();
             return hover is not null;
         }, seconds: 60);
         Assert.Contains("currentCount", hover!.Contents.Value, StringComparison.Ordinal);

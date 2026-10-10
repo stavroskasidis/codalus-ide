@@ -55,6 +55,7 @@ The plugin ships Coverlet's VSTest data collector (`coverage/collector`, from `c
 |---|---|---|
 | xunit.v3.mtp-v2 and its xunit.v3.* / xunit.analyzers dependencies | 3.2.2 / 1.27.0 | Apache-2.0 |
 | Microsoft.Testing.Platform (transitive) | 2.x | MIT |
+| Microsoft.Testing.Extensions.HangDump (CI's hang dumps) and its Microsoft.Diagnostics.NETCore.Client dependency | 2.0.2 / 0.2.x | MIT |
 
 
 ## Debugger (downloaded by `eng/get-netcoredbg.sh`; not committed; bundled by installers from M7)

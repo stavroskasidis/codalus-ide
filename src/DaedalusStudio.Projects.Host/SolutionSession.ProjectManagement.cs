@@ -17,6 +17,9 @@ internal sealed partial class SolutionSession
     /// <summary>The MSBuild folder of the SDK this host runs (set by the server).</summary>
     public string? SdkPath { get; set; }
 
+    /// <summary>Why the SDK the solution's folder resolves to isn't the one in use (ADR 0025), or null.</summary>
+    public string? SdkWarning { get; set; }
+
     /// <summary>The solution filter the solution was opened through, if any.</summary>
     public string? FilterPath { get; private set; }
 
@@ -463,7 +466,8 @@ internal sealed partial class SolutionSession
             rollForward,
             sdks,
             workloads,
-            error ?? (sdksOk ? null : "dotnet --list-sdks failed: " + sdksOutput));
+            error ?? (sdksOk ? null : "dotnet --list-sdks failed: " + sdksOutput),
+            SdkWarning);
     }
 
     public void SetGlobalJson(SetGlobalJsonParams parameters)

@@ -36,6 +36,7 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
     {
         Copy(Path.Combine(BuildHostIntegrationTests.RepoRoot, "samples", "BuildAndRun"), Fixture);
         File.WriteAllText(Path.Combine(_root, "Directory.Build.props"), "<Project />");
+        DaedalusStudio.Tests.FixtureSdk.Pin(_root);
         File.WriteAllText(Path.Combine(_root, "Directory.Packages.props"), "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
         _solutions = new SolutionService(() => BuildHostIntegrationTests.HostAssemblyPath);
         _solutions.Log += (_, line) => Console.Error.WriteLine("[host] " + line);

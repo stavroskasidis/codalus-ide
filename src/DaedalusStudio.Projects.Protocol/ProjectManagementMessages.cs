@@ -141,7 +141,8 @@ public sealed record SdkInfoResult(
     string? RollForward,
     DotnetSdk[] Sdks,
     DotnetWorkload[] Workloads,
-    string? Error);
+    string? Error,
+    string? Warning = null);
 
 public sealed record DotnetSdk(string Version, string Path);
 

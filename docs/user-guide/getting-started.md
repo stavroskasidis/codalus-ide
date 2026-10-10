@@ -2,7 +2,8 @@
 
 ## Prerequisites
 
-- **The .NET SDK** (8.0 or newer; 10.0 recommended). Daedalus Studio loads and builds solutions with the SDK's MSBuild, so it must be installed for any solution you open, and must match the version a `global.json` asks for.
+- **The .NET SDK**, 10.0 or newer; .NET 11 works too, release candidates included. Daedalus Studio loads and builds solutions with the SDK's MSBuild, so it must be installed for any solution you open. It must also match the version a `global.json` asks for.
+  - Older SDKs (8.0, 9.0) work for solutions that pin them in `global.json`, as long as .NET 10 or newer is also installed: Daedalus' helper processes run on it.
 - **git** (2.30 or newer) on the `PATH`, for the Git features.
 - A 64-bit OS: Windows 10 22H2 or Windows 11 (x64); macOS 15 or newer on Apple silicon (the macOS versions .NET supports); or a current Linux distribution (x64 or arm64) with X11, or Wayland through XWayland. The packages are x64 on Linux for now; arm64 builds from source.
 

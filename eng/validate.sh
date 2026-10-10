@@ -34,6 +34,14 @@ if ! dotnet --list-runtimes | grep -q '^Microsoft.NETCore.App 9\.'; then
   curl -fsSL https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
   bash "${TMPDIR:-/tmp}/dotnet-install.sh" --runtime dotnet --channel 9.0 --install-dir "$root" --no-path
 fi
+# samples/Net11 needs the .NET 11 SDK (M30). It goes next to the SDK in use, so the build host can roll forward to
+# its runtime (ADR 0025).
+if ! dotnet --list-sdks | grep -q '^11\.0\.'; then
+  root="$(dirname "$(readlink -f "$(command -v dotnet)")")"
+  echo "== install the .NET 11 SDK (samples/Net11/global.json) into $root"
+  curl -fsSL https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
+  bash "${TMPDIR:-/tmp}/dotnet-install.sh" --jsonfile samples/Net11/global.json --install-dir "$root" --no-path
+fi
 echo "== $(uname -sm), .NET SDK $(dotnet --version), $(git --version)"
 
 echo "== netcoredbg"

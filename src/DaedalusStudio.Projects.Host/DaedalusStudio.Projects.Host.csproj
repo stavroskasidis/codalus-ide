@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!-- On .NET 10 when installed, else the next newer .NET (ADR 0025). -->
+    <RollForward>Major</RollForward>
     <AssemblyName>daedalus-buildhost</AssemblyName>
     <RootNamespace>DaedalusStudio.Projects.Host</RootNamespace>
     <Description>Out-of-process build host (ADR 0004): solution files, MSBuild evaluation, file watching, restore and project-file edits, over JSON-RPC on stdio.</Description>

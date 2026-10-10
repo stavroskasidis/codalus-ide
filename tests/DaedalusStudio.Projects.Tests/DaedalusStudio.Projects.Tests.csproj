@@ -4,4 +4,8 @@
     <!-- Built so the tests can launch it; not referenced as an assembly. -->
     <ProjectReference Include="..\..\src\DaedalusStudio.Projects.Host\DaedalusStudio.Projects.Host.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Host code without MSBuild types, tested on its own. -->
+    <Compile Include="..\..\src\DaedalusStudio.Projects.Host\SdkSelection.cs" Link="Host\SdkSelection.cs" />
+  </ItemGroup>
 </Project>

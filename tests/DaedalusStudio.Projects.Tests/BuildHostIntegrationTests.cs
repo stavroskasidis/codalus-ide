@@ -41,6 +41,7 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
         // The fixture inherits nothing from the repository, as in samples/.
         File.WriteAllText(Path.Combine(_root, "Directory.Build.props"), "<Project />");
+        DaedalusStudio.Tests.FixtureSdk.Pin(_root);
         File.WriteAllText(Path.Combine(_root, "Directory.Packages.props"), "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
         Environment.SetEnvironmentVariable("DAEDALUS_TRASH_DIR", Path.Combine(_root, ".trash"));
         _service = new SolutionService(() => HostAssembly, new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) });

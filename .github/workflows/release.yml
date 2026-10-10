@@ -31,6 +31,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+          # The smoke test's .NET 11 step (M30): keep it in step with samples/Net11/global.json.
+          dotnet-version: 11.0.100-rc.1.26425.128
       - name: Native AOT prerequisites (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev

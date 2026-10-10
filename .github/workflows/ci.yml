@@ -58,8 +58,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-          # samples/Testing has a multi-targeted test project (net9.0;net10.0).
-          dotnet-version: 9.0.x
+          # samples/Testing has a multi-targeted test project (net9.0;net10.0). samples/Net11 needs the .NET 11 SDK
+          # (M30): keep it in step with samples/Net11/global.json (docs/release/dotnet-upgrade.md).
+          dotnet-version: |
+            9.0.x
+            11.0.100-rc.1.26425.128
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
@@ -77,7 +80,9 @@ jobs:
       - name: Build
         run: dotnet build DaedalusStudio.slnx -c Release --no-restore
       - name: Test (unit, integration, headless UI)
-        run: dotnet test --solution DaedalusStudio.slnx -c Release --no-build
+        # A test process still running after 25 minutes (Shell.Tests normally takes 13) is dumped, and the tests that
+        # were running are named, instead of the job timing out without a word.
+        run: dotnet test --solution DaedalusStudio.slnx -c Release --no-build --hangdump --hangdump-timeout 25m --hangdump-type Mini
       - name: Native AOT publish must stay warning-free in our code
         shell: bash
         run: |

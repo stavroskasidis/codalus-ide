@@ -78,6 +78,7 @@ public sealed class DotNetTestFixture : IAsyncLifetime
         Copy(Path.Combine(PluginHostIntegrationTests.RepoRoot, "samples", "Testing"), Folder);
         System.IO.File.Copy(Path.Combine(PluginHostIntegrationTests.RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(_root, "Directory.Packages.props"));
         System.IO.File.WriteAllText(Path.Combine(_root, "Directory.Build.props"), "<Project />");
+        DaedalusStudio.Tests.FixtureSdk.Pin(_root);
         await DotnetAsync(timeout.Token, "build", Path.Combine(Folder, "Testing.slnx"), "-nologo", "-v", "quiet");
 
         var paths = AppPaths.Resolve(PlatformInfo.Current, _ => null, Path.Combine(_root, ".userdata"));

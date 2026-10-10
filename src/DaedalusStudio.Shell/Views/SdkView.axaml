@@ -10,23 +10,27 @@
       <TextBlock Classes="heading" Text=".NET SDKs" />
       <TextBlock TextWrapping="Wrap" Text="{Binding ResolvedText}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding GlobalJsonText}" />
+      <TextBlock Foreground="{DynamicResource Shell.Warning}" TextWrapping="Wrap" Text="{Binding Warning}" IsVisible="{Binding HasWarning}" />
       <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <Grid ColumnDefinitions="*,16,*">
       <DockPanel>
         <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="Installed SDKs" />
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+        <!-- Wraps rather than clipping when the column is narrow (M34's checklist). -->
+        <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" Margin="0,8,0,0">
           <Button Content="Use This SDK" Command="{Binding PinCommand}" ToolTip.Tip="Writes global.json next to the solution and reloads it" />
           <TextBlock VerticalAlignment="Center" Text="Roll forward:" />
           <ComboBox MinWidth="130" ItemsSource="{x:Static vm:SdkViewModel.RollForwardOptions}" SelectedItem="{Binding RollForward}" AutomationProperties.Name="Roll forward" />
           <Button Content="Remove Pin" Command="{Binding UnpinCommand}" />
           <Button Classes="link" Content="Refresh" Command="{Binding RefreshCommand}" />
-        </StackPanel>
+        </WrapPanel>
         <ListBox ItemsSource="{Binding Sdks}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Installed SDKs">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:SdkRow">
               <StackPanel>
                 <TextBlock Text="{Binding Display}" />
+                <TextBlock Classes="muted" FontSize="11" Text="{Binding Support}" IsVisible="{Binding !IsOutOfSupport}" />
+                <TextBlock Foreground="{DynamicResource Shell.Warning}" FontSize="11" Text="{Binding Support}" IsVisible="{Binding IsOutOfSupport}" />
                 <TextBlock Classes="muted" FontSize="11" Text="{Binding Path}" />
               </StackPanel>
             </DataTemplate>

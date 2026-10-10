@@ -146,6 +146,8 @@ public sealed class MarkupHostTests : IAsyncLifetime
 
         var outputTypes = await client.CompletionAsync(uri, At(text, "<OutputType>"), null, ct);
         Assert.Contains(outputTypes.Items, i => i.Label == "Exe");
+        var frameworks = await client.CompletionAsync(uri, At(text, "<TargetFramework>"), null, ct);
+        Assert.Contains(frameworks.Items, i => i.Label == "net11.0"); // M30
         var assets = await client.CompletionAsync(uri, At(text, "PrivateAssets=\""), null, ct);
         Assert.Contains(assets.Items, i => i.Label == "all");
         var attributes = await client.CompletionAsync(uri, At(text, "<PackageReference ") with { Character = At(text, "<PackageReference ").Character }, null, ct);

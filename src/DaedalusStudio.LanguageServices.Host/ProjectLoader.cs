@@ -63,7 +63,8 @@ internal sealed class ProjectLoader
             .DistinctBy(r => r.Item1, Paths.Comparer)
             .ToList();
         var analyzers = args.AnalyzerReferences
-            .Select(a => Path.GetFullPath(Path.Combine(directory, a.FilePath)))
+            .Select(a => SdkAnalyzers.Resolve(Path.GetFullPath(Path.Combine(directory, a.FilePath)), message => Log?.Invoke(this, message)))
+            .OfType<string>()
             .Distinct(Paths.Comparer)
             .Where(File.Exists)
             .Select(Analyzer)
@@ -109,9 +110,19 @@ internal sealed class ProjectLoader
     private AnalyzerFileReference Analyzer(string path) => _analyzers.GetOrAdd(path, p =>
     {
         var reference = new AnalyzerFileReference(p, _analyzerLoader);
-        reference.AnalyzerLoadFailed += (_, e) => Log?.Invoke(this, $"Analyzer {Path.GetFileName(p)}: {e.Message}");
+        reference.AnalyzerLoadFailed += (_, e) => Log?.Invoke(this, AnalyzerFailure(Path.GetFileName(p), e));
         return reference;
     });
+
+    /// <summary>
+    /// Why an analyzer or source generator didn't load. One built for a newer compiler than the host's Roslyn (a new
+    /// SDK's Razor generator, ADR 0025) loads only once Daedalus catches up: its diagnostics and code are missing.
+    /// </summary>
+    internal static string AnalyzerFailure(string file, AnalyzerLoadFailureEventArgs e) =>
+        e.ErrorCode == AnalyzerLoadFailureEventArgs.FailureErrorCode.ReferencesNewerCompiler && e.ReferencedCompilerVersion is { } needed
+            ? $"Analyzer {file} needs version {needed} of the C# compiler, and this version of Daedalus has {typeof(Compilation).Assembly.GetName().Version}. "
+                + "Its diagnostics and generated code are missing until Daedalus is updated."
+            : $"Analyzer {file}: {e.Message}";
 
     /// <summary>Folders of a source file relative to the project directory (none for files outside it).</summary>
     private static string[] Folders(string projectDirectory, string file)

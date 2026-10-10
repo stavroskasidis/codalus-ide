@@ -85,8 +85,13 @@ public sealed class PluginTerminalTests : IDisposable
         Assert.Empty(_shown);
 
         await _api.TerminalSendTextAsync(terminal.TerminalId, OperatingSystem.IsWindows() ? "set /a 6*7\r" : "echo $((6*7))\r", ct);
-        while (!string.Concat(output).Split('\n').Any(l => l.Trim() == "42"))
+
+        // The output is raw: ConPTY repaints with escape sequences, which can share the result's line on a busy machine.
+        static string Plain(string text) => System.Text.RegularExpressions.Regex.Replace(text, @"\x1b(\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)|[()][0-9A-Za-z])", string.Empty);
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        while (!Plain(string.Concat(output)).Split('\n').Any(l => l.Trim() == "42"))
         {
+            Assert.True(started.Elapsed < TimeSpan.FromSeconds(25), "No 42 in the terminal's output: " + string.Concat(output));
             await Task.Delay(20, ct);
         }
 

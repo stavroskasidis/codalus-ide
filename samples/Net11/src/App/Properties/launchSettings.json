@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "App": {
+      "commandName": "Project"
+    },
+    "Watch": {
+      "commandName": "Project",
+      "commandLineArgs": "--watch"
+    }
+  }
+}

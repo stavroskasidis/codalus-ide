@@ -1,0 +1,8 @@
+@using Shapes
+
+<p>A circle of radius @Circle.Radius has an area of @Circle.Area.</p>
+
+@code {
+    [Parameter]
+    public Circle Circle { get; set; } = new(1);
+}

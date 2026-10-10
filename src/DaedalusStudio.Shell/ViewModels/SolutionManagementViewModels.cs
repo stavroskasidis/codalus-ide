@@ -664,7 +664,14 @@ public sealed class ProjectDependenciesViewModel : ObservableObject, ILoadable
 
 public sealed record SdkRow(string Version, string Path, bool IsResolved)
 {
+    private readonly (string Text, bool OutOfSupport) _support = Workbench.Projects.DotnetSupport.Status(Version, DateOnly.FromDateTime(DateTime.Today));
+
     public string Display => IsResolved ? $"{Version}  (in use)" : Version;
+
+    /// <summary>"Supported until …", "Out of support since …" or "Preview of .NET 11".</summary>
+    public string Support => _support.Text;
+
+    public bool IsOutOfSupport => _support.OutOfSupport;
 }
 
 /// <summary>The SDK in use, the <c>global.json</c> that picks it, the installed SDKs and workloads; pin an SDK.</summary>
@@ -740,6 +747,11 @@ public sealed class SdkViewModel : ObservableObject, ILoadable
 
     public bool HasError => _error is not null;
 
+    /// <summary>Why the SDK the solution's folder resolves to isn't the one in use (ADR 0025).</summary>
+    public string? Warning => _info?.Warning;
+
+    public bool HasWarning => _info?.Warning is not null;
+
     public async Task LoadAsync()
     {
         try
@@ -759,7 +771,7 @@ public sealed class SdkViewModel : ObservableObject, ILoadable
 
             _rollForward = _info.RollForward ?? _rollForward;
             Error = _info.Error;
-            foreach (var name in new[] { nameof(ResolvedText), nameof(GlobalJsonText), nameof(HasWorkloads), nameof(RollForward) })
+            foreach (var name in new[] { nameof(ResolvedText), nameof(GlobalJsonText), nameof(HasWorkloads), nameof(RollForward), nameof(Warning), nameof(HasWarning) })
             {
                 OnPropertyChanged(name);
             }

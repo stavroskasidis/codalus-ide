@@ -59,6 +59,7 @@ internal sealed class ShellFixture : IAsyncDisposable
         var target = Path.Combine(UserData, "fixture");
         Copy(Path.Combine(RepoRoot, "samples", "ProjectSystem"), Path.Combine(target, "ProjectSystem"));
         File.WriteAllText(Path.Combine(target, "Directory.Build.props"), "<Project />");
+        DaedalusStudio.Tests.FixtureSdk.Pin(target);
         File.WriteAllText(Path.Combine(target, "Directory.Packages.props"), "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
         return Path.Combine(target, "ProjectSystem", "ProjectSystem.slnx");
     }
@@ -70,6 +71,7 @@ internal sealed class ShellFixture : IAsyncDisposable
         Directory.CreateDirectory(target);
         File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Build.props"), Path.Combine(target, "Directory.Build.props"), overwrite: true);
         File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(target, "Directory.Packages.props"), overwrite: true);
+        DaedalusStudio.Tests.FixtureSdk.Pin(target);
         Copy(Path.Combine(RepoRoot, "samples", name), Path.Combine(target, name));
         return Path.Combine(target, name);
     }
@@ -123,6 +125,13 @@ internal sealed class ShellFixture : IAsyncDisposable
             await Task.Delay(15);
         }
     }
+
+    /// <summary>
+    /// A token for one language request: canceled after <paramref name="seconds"/>, so a server that never answers
+    /// fails the test instead of hanging it (a blocked UI thread never reaches PumpUntil's own timeout).
+    /// </summary>
+    public static CancellationToken RequestTimeout(int seconds = 30) =>
+        CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromSeconds(seconds)).Token).Token;
 
     public void Press(Key key, RawInputModifiers modifiers = RawInputModifiers.None)
     {
