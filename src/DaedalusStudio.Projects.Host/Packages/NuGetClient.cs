@@ -176,9 +176,15 @@ internal sealed class NuGetClient(string root, Func<string, string, Task> log)
                 : $"No package source has {parameters.Id}.");
         }
 
+        // A project's frameworks (M33): each version says whether it supports them, and the newest one that does is
+        // offered first.
+        var frameworks = FrameworkCompatibility.Parse(parameters.TargetFrameworks);
+        var newestFirst = all.OrderByDescending(v => v.Metadata.Identity.Version).ToList();
         var chosen = requested is not null
             ? all.FirstOrDefault(v => v.Metadata.Identity.Version == requested)
-            : all.OrderByDescending(v => v.Metadata.Identity.Version).First();
+            : newestFirst.FirstOrDefault(v => frameworks.Count > 0 && FrameworkCompatibility.Supports(v.Metadata.DependencySets.Select(s => s.TargetFramework), frameworks) == true
+                                              && (parameters.Prerelease || !v.Metadata.Identity.Version.IsPrerelease))
+              is { Metadata: not null } compatible ? compatible : newestFirst[0];
         if (chosen.Metadata is null)
         {
             throw new InvalidOperationException($"No package source has {parameters.Id} {parameters.Version}.");
@@ -192,7 +198,8 @@ internal sealed class NuGetClient(string root, Func<string, string, Task> log)
                 group.Key.ToNormalizedString(),
                 metadata.DownloadCount,
                 await SafeDeprecationAsync(metadata).ConfigureAwait(false) is not null,
-                Severity(metadata.Vulnerabilities)));
+                Severity(metadata.Vulnerabilities),
+                frameworks.Count == 0 ? null : FrameworkCompatibility.Supports(metadata.DependencySets.Select(s => s.TargetFramework), frameworks)));
         }
 
         var m = chosen.Metadata;

@@ -53,8 +53,12 @@ public sealed record PackageSourceError(string Source, string Message);
 
 // ------------------------------------------------------------------ details
 
-/// <summary>Details of one version (<see cref="Version"/>, or the latest one), and every version for the picker.</summary>
-public sealed record PackageDetailsParams(string Id, bool Prerelease, string? Version = null, string? Source = null, bool Offline = false);
+/// <summary>
+/// Details of one version (<see cref="Version"/>, or the latest one), and every version for the picker. With
+/// <see cref="TargetFrameworks"/> (a project's, M33), each version says whether it supports them, and without a
+/// <see cref="Version"/> the details are of the newest version that does.
+/// </summary>
+public sealed record PackageDetailsParams(string Id, bool Prerelease, string? Version = null, string? Source = null, bool Offline = false, string[]? TargetFrameworks = null);
 
 public sealed record PackageDetails(
     string Id,
@@ -76,8 +80,12 @@ public sealed record PackageDetails(
     PackageVulnerability[] Vulnerabilities,
     string Source);
 
-/// <summary>A version for the version picker, newest first.</summary>
-public sealed record PackageVersionInfo(string Version, long? Downloads, bool Deprecated, int VulnerabilitySeverity);
+/// <summary>
+/// A version for the version picker, newest first. <see cref="Compatible"/> says whether it supports every framework of
+/// <see cref="PackageDetailsParams.TargetFrameworks"/>, from its dependency groups (null: not asked, or the package
+/// lists no frameworks).
+/// </summary>
+public sealed record PackageVersionInfo(string Version, long? Downloads, bool Deprecated, int VulnerabilitySeverity, bool? Compatible = null);
 
 /// <summary>Dependencies for one target framework (short folder name, e.g. <c>net8.0</c>; <c>any</c> for none).</summary>
 public sealed record PackageDependencyGroup(string TargetFramework, PackageDependency[] Dependencies);

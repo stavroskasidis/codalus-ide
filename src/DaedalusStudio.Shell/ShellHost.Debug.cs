@@ -152,7 +152,7 @@ public sealed partial class ShellHost
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
             var profile = Runs.ResolveProfile(project, profiles);
-            var plan = Runs.Adjust(LaunchPlanner.Plan(info, profile));
+            var plan = Runs.Adjust(LaunchPlanner.Plan(info, profile), info);
             DebugLog.Clear();
             if (error is not null)
             {
@@ -168,6 +168,11 @@ public sealed partial class ShellHost
             }
 
             DebugLog.AppendLine($"> {plan.FileName} {plan.Arguments}".TrimEnd());
+            foreach (var note in plan.Notes)
+            {
+                DebugLog.AppendLine(note);
+            }
+
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             if (LaunchPlanner.PageDebugTarget(profile, Workbench.Settings.GetBoolean(JavaScriptDebugSetting, true)) is { } page)

@@ -99,7 +99,14 @@ public sealed record LaunchPlan(
     string Arguments,
     string WorkingDirectory,
     IReadOnlyDictionary<string, string> Environment,
-    string? BrowserUrl);
+    string? BrowserUrl)
+{
+    /// <summary>The program runs as x64 on an Arm64 machine (M33, <see cref="RuntimeSelection"/>): it needs the x64 debugger.</summary>
+    public bool RunsAsX64 { get; init; }
+
+    /// <summary>What Daedalus Studio changed about the launch and why (M33, <see cref="RuntimeSelection"/>), for the program's output.</summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+}
 
 /// <summary>Turns a project's run information and a launch profile into a <see cref="LaunchPlan"/> (ADR 0006).</summary>
 public static class LaunchPlanner

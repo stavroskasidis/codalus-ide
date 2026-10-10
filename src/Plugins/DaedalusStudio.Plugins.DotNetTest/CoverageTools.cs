@@ -14,6 +14,15 @@ internal static class CoverageTools
 
     public static string CollectorPath => Path.Combine(PluginFolder, "coverage", "collector", "coverlet.collector.dll");
 
+    /// <summary>
+    /// The collector's folder for test hosts of <paramref name="targetFramework"/>: the current one (net8.0) from .NET 8,
+    /// the last netstandard2.0 one before (M33, ADR 0030), which loads into .NET Core 2.0 to .NET 7 test hosts.
+    /// </summary>
+    public static string CollectorFolder(string? targetFramework) =>
+        OlderFrameworks.NetCoreVersion(targetFramework) is { Major: < 8 }
+            ? Path.Combine(PluginFolder, "coverage", "collector-netstandard2.0")
+            : Path.GetDirectoryName(CollectorPath)!;
+
     public static string ConsolePath => Path.Combine(PluginFolder, "coverage", "console", "coverlet.console.dll");
 
     /// <summary>No include filter by default: Coverlet instruments the assemblies next to the tests that have symbols.</summary>

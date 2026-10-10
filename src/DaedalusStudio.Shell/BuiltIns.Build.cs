@@ -82,7 +82,8 @@ internal static partial class BuiltIns
             return Task.CompletedTask;
         }, "buildRunning");
         Add("run.startWithoutDebugging", "Start Without Debugging", "Debug", p => shell.StartWithoutDebuggingAsync(p), Idle);
-        Add("run.startWithHotReload", "Start with Hot Reload", "Debug", shell.StartWithHotReloadAsync, Idle);
+        // From .NET 6 (M33): for an older startup project the command is disabled, and the menu says why.
+        Add("run.startWithHotReload", "Start with Hot Reload", "Debug", shell.StartWithHotReloadAsync, Idle + " && hotReloadSupported");
         Add("run.applyCodeChanges", "Apply Code Changes (Hot Reload)", "Debug", _ => shell.ApplyCodeChangesAsync(), "hotReloadRunning");
         Add("run.stop", "Stop Running Programs", "Debug", _ =>
         {
@@ -122,7 +123,8 @@ internal static partial class BuiltIns
             Item(MenuLocations.MenuBar("build"), "build.cancel", "3-cancel", 1),
             Item(MenuLocations.MenuBar("build"), "solution.selectConfiguration", "4-configuration", 1, title: "Configuration…"),
             Item(MenuLocations.MenuBar("debug"), "run.startWithoutDebugging", "1-run", 1),
-            Item(MenuLocations.MenuBar("debug"), "run.startWithHotReload", "1-run", 2),
+            Item(MenuLocations.MenuBar("debug"), "run.startWithHotReload", "1-run", 2, "hotReloadSupported"),
+            Item(MenuLocations.MenuBar("debug"), "run.startWithHotReload", "1-run", 2, "!hotReloadSupported", "Start with Hot Reload (needs .NET 6 or later)"),
             Item(MenuLocations.MenuBar("debug"), "run.applyCodeChanges", "1-run", 3),
             Item(MenuLocations.MenuBar("debug"), "run.stop", "1-run", 2),
             Item(MenuLocations.MenuBar("debug"), "run.selectStartupProject", "2-startup", 1),

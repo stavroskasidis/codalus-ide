@@ -17,19 +17,23 @@
   <!--
     Coverlet (ADR 0011), shipped in the plugin folder rather than referenced: coverage/collector is the VSTest data
     collector (its net8.0 build, which loads into test hosts of .NET 8 and later) and coverage/console the console tool
-    that wraps Microsoft.Testing.Platform applications (net10.0, run on the SDK's runtime).
+    that wraps Microsoft.Testing.Platform applications (net10.0, run on the SDK's runtime). Test hosts of older
+    frameworks (.NET Core 2.0 to .NET 7) get coverage/collector-netstandard2.0, the last collector built for
+    netstandard2.0 (M33, ADR 0030).
   -->
   <ItemGroup>
-    <PackageDownload Include="coverlet.collector" Version="[$(CoverletVersion)]" />
+    <PackageDownload Include="coverlet.collector" Version="[$(CoverletVersion)];[$(CoverletLegacyCollectorVersion)]" />
     <PackageDownload Include="coverlet.console" Version="[$(CoverletVersion)]" />
   </ItemGroup>
   <Target Name="DaedalusBundleCoverlet" AfterTargets="Build">
     <ItemGroup>
       <_DaedalusCoverletCollector Include="$(NuGetPackageRoot)coverlet.collector/$(CoverletVersion)/build/net8.0/**/*" Exclude="$(NuGetPackageRoot)coverlet.collector/$(CoverletVersion)/build/net8.0/*.targets" />
+      <_DaedalusCoverletLegacyCollector Include="$(NuGetPackageRoot)coverlet.collector/$(CoverletLegacyCollectorVersion)/build/netstandard2.0/**/*" Exclude="$(NuGetPackageRoot)coverlet.collector/$(CoverletLegacyCollectorVersion)/build/netstandard2.0/*.targets" />
       <_DaedalusCoverletConsole Include="$(NuGetPackageRoot)coverlet.console/$(CoverletVersion)/tools/net10.0/any/**/*" />
     </ItemGroup>
-    <Error Condition="'@(_DaedalusCoverletCollector)' == '' or '@(_DaedalusCoverletConsole)' == ''" Text="Coverlet $(CoverletVersion) was not restored into $(NuGetPackageRoot)." />
+    <Error Condition="'@(_DaedalusCoverletCollector)' == '' or '@(_DaedalusCoverletLegacyCollector)' == '' or '@(_DaedalusCoverletConsole)' == ''" Text="Coverlet $(CoverletVersion) (and the collector $(CoverletLegacyCollectorVersion)) was not restored into $(NuGetPackageRoot)." />
     <Copy SourceFiles="@(_DaedalusCoverletCollector)" DestinationFiles="@(_DaedalusCoverletCollector->'$(OutDir)coverage/collector/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_DaedalusCoverletLegacyCollector)" DestinationFiles="@(_DaedalusCoverletLegacyCollector->'$(OutDir)coverage/collector-netstandard2.0/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_DaedalusCoverletConsole)" DestinationFiles="@(_DaedalusCoverletConsole->'$(OutDir)coverage/console/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <ItemGroup>

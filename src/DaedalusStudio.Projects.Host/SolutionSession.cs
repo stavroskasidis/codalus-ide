@@ -687,7 +687,8 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private async Task RestoreAsync(string target)
     {
         await _events.RestoreStateAsync("running", null).ConfigureAwait(false);
-        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--nologo", "--verbosity", "minimal"]);
+        // No --nologo: SDKs before 5.0 hand it to MSBuild, which rejects it (MSB1001). DOTNET_NOLOGO does the same.
+        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--verbosity", "minimal"]);
         try
         {
             using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet restore did not start.");

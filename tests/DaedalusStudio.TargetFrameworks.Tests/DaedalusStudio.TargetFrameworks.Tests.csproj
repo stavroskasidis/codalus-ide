@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The target framework matrix (M33, ADR 0030): samples/TargetFrameworks on .NET Core 2.0 to .NET 10, and global.json
+    pins of older SDKs, on the dotnet root that eng/get-runtimes.sh installs (.work/dotnet-compat). This test process
+    points PATH, DOTNET_ROOT and DOTNET_HOST_PATH at that root, so everything it starts (the hosts, the programs, the
+    debugger's debuggees) uses it. Without the root the tests skip, unless DAEDALUS_DOTNET_COMPAT names one.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DaedalusStudio.Shell\DaedalusStudio.Shell.csproj" />
+    <!-- Built so the tests can launch them; not referenced as assemblies. -->
+    <ProjectReference Include="..\..\src\DaedalusStudio.Plugins.Host\DaedalusStudio.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.Welcome\DaedalusStudio.Plugins.Welcome.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.DotNetTest\DaedalusStudio.Plugins.DotNetTest.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\DaedalusStudio.Projects.Host\DaedalusStudio.Projects.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\DaedalusStudio.LanguageServices.Host\DaedalusStudio.LanguageServices.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\DaedalusStudio.Markup.Host\DaedalusStudio.Markup.Host.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The headless shell, as in the shell's own UI tests. -->
+    <Compile Include="..\DaedalusStudio.Shell.Tests\ShellFixture.cs" Link="Shell\ShellFixture.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless.XUnit" />
+  </ItemGroup>
+</Project>

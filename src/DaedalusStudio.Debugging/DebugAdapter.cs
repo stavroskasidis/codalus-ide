@@ -32,6 +32,71 @@ public static class DebugAdapterLocator
 
         return candidates.FirstOrDefault(File.Exists);
     }
+
+    /// <summary>
+    /// Whether <paramref name="program"/> runs as x64 on this Arm64 Mac: a Mach-O executable for x86-64 only (the x64
+    /// <c>dotnet</c>, or the apphost of .NET 5 and earlier). Such a process needs the x64 debugger (M33, ADR 0030).
+    /// </summary>
+    public static bool RunsAsX64OnArm64Mac(string program)
+    {
+        if (!OperatingSystem.IsMacOS() || System.Runtime.InteropServices.RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.Arm64)
+        {
+            return false;
+        }
+
+        try
+        {
+            Span<byte> header = stackalloc byte[8];
+            using var file = File.OpenRead(program);
+            return file.Read(header) == 8 && IsMachOX64(header);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>A thin 64-bit Mach-O header (<c>MH_MAGIC_64</c>, little-endian) whose CPU type is x86-64.</summary>
+    public static bool IsMachOX64(ReadOnlySpan<byte> header) =>
+        header.Length >= 8
+        && System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(header) == 0xFEEDFACF
+        && System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(header[4..]) == 0x01000007;
+
+    /// <summary>Points at the x64 netcoredbg (a folder or the executable), on an Arm64 machine.</summary>
+    public const string X64EnvironmentVariable = "DAEDALUS_NETCOREDBG_X64";
+
+    /// <summary>
+    /// The x64 netcoredbg for programs that run as x64 on an Arm64 machine (M33, ADR 0030: .NET Core 2.x to .NET 5 on
+    /// Apple silicon): <c>DAEDALUS_NETCOREDBG_X64</c>, then <c>debugger/x64/</c> next to the shell, then
+    /// <c>.work/netcoredbg-x64</c> in a source checkout (<c>eng/get-netcoredbg.sh --x64</c>). On an x64 machine it is the
+    /// regular one.
+    /// </summary>
+    public static string? ResolveX64()
+    {
+        if (System.Runtime.InteropServices.RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.Arm64)
+        {
+            return Resolve();
+        }
+
+        var exe = OperatingSystem.IsWindows() ? "netcoredbg.exe" : "netcoredbg";
+        var candidates = new List<string>();
+        if (Environment.GetEnvironmentVariable(X64EnvironmentVariable) is { Length: > 0 } fromEnv)
+        {
+            candidates.Add(Directory.Exists(fromEnv) ? Path.Combine(fromEnv, exe) : fromEnv);
+        }
+
+        candidates.Add(Path.Combine(AppContext.BaseDirectory, "debugger", "x64", exe));
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "DaedalusStudio.slnx")))
+            {
+                candidates.Add(Path.Combine(directory.FullName, ".work", "netcoredbg-x64", exe));
+                break;
+            }
+        }
+
+        return candidates.FirstOrDefault(File.Exists);
+    }
 }
 
 /// <summary>

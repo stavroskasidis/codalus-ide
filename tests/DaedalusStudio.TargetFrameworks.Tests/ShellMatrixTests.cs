@@ -1,0 +1,141 @@
+using Avalonia.Headless.XUnit;
+using DaedalusStudio.Debugging;
+using DaedalusStudio.LanguageServices.Protocol;
+using DaedalusStudio.Shell;
+using DaedalusStudio.Shell.Tests;
+using DaedalusStudio.Workbench.Debugging;
+using DaedalusStudio.Workbench.Testing;
+
+namespace DaedalusStudio.TargetFrameworks.Tests;
+
+/// <summary>
+/// samples/TargetFrameworks in the headless shell (M33, ADR 0030): the editor's C# version per framework, tests and
+/// coverage on every framework's test host, Hot Reload from .NET 6, and F5 on .NET Core 2.1.
+/// </summary>
+public sealed class ShellMatrixTests
+{
+    private static async Task<string> OpenAsync(ShellFixture f)
+    {
+        CompatRoot.Require();
+        var folder = f.CopySample("TargetFrameworks");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "TargetFrameworks.sln"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 38 && f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.RestoreState is "succeeded" or "failed", seconds: 600);
+        Assert.Equal("succeeded", f.Shell.Solutions.RestoreState);
+        return folder;
+    }
+
+    private static string AppProgram(string folder, Framework framework) => Path.Combine(folder, framework.Id, framework.App, "Program.cs");
+
+    [AvaloniaFact]
+    public async Task The_editor_reports_what_each_frameworks_csharp_version_lacks_as_the_compiler_does()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = await OpenAsync(f);
+        await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: >= 38 }, seconds: 600);
+
+        foreach (var framework in Matrix.All.Where(m => m.NextFeature is not null))
+        {
+            // The program uses its framework's newest C# feature and compiles; the next version's feature doesn't.
+            var file = AppProgram(folder, framework);
+            var editor = await f.Shell.OpenFileAsync(file, preview: false, null);
+            await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+            var text = editor!.Model.Text.Text;
+            var marker = text.IndexOf("// [next]", StringComparison.Ordinal);
+            editor.Model.Text.Replace(marker, "// [next]".Length, framework.NextFeature!);
+            var expected = $"not available in C# {framework.CSharp}";
+            await ShellFixture.PumpUntil(() => f.Shell.Languages.Diagnostics.For(file).Any(d => d.Message.Contains(expected, StringComparison.Ordinal)), seconds: 180);
+            var errors = f.Shell.Languages.Diagnostics.For(file).Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+            var line = Matrix.Line(file, "next") - 1;
+            Assert.True(errors.All(e => e.Range.Start.Line == line), $"{framework.Tfm}: errors elsewhere than on the edited line: " + string.Join("; ", errors.Select(e => $"{e.Range.Start.Line + 1}: {e.Message}")));
+            editor.Model.Text.Replace(marker, framework.NextFeature!.Length, "// [next]");
+            ShellFixture.Pump();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Tests_run_and_cover_on_every_frameworks_test_host()
+    {
+        await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("DaedalusStudio.Plugins.DotNetTest"));
+        await OpenAsync(f);
+        var projects = Matrix.All.Select(m => m.Tests).ToHashSet(StringComparer.Ordinal);
+        await ShellFixture.PumpUntil(() => f.Shell.Tests.Read(roots => roots.Count(r => projects.Contains(r.Label) && r.Leaves().Any()) == projects.Count), seconds: 600);
+
+        var covered = new List<string>();
+        f.Shell.Tests.CoverageReported += (_, report) =>
+        {
+            lock (covered)
+            {
+                covered.AddRange(report.Files.Where(file => file.Lines.Any(l => l.Hits > 0)).Select(file => file.Uri.Replace('\\', '/')));
+            }
+        };
+        var keys = f.Shell.Tests.Read(roots => roots.Where(r => projects.Contains(r.Label)).Select(r => r.Key).ToList());
+        await f.Shell.RunTestsAsync(TestRunKind.Coverage, keys);
+        await ShellFixture.PumpUntil(() => !f.Shell.Tests.IsRunning, seconds: 900);
+        var outcomes = f.Shell.Tests.Read(roots => roots.Where(r => projects.Contains(r.Label))
+            .ToDictionary(r => r.Label, r => r.Leaves().Select(l => l.Outcome).ToList()));
+        Assert.All(projects, p => Assert.True(outcomes[p] is [TestOutcome.Passed, TestOutcome.Passed], $"{p}: {string.Join(", ", outcomes[p])}"));
+
+        // Each framework's library was measured through its own test host (coverlet's netstandard2.0 collector before
+        // .NET 8, the current one after).
+        await ShellFixture.PumpUntil(() =>
+        {
+            lock (covered)
+            {
+                return Matrix.All.All(m => covered.Any(u => u.EndsWith($"/{m.Lib}/Greeter.cs", StringComparison.OrdinalIgnoreCase)));
+            }
+        }, seconds: 120);
+    }
+
+    [AvaloniaFact]
+    public async Task Hot_reload_is_disabled_before_net6_with_its_reason_and_applies_an_edit_on_net6()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = await OpenAsync(f);
+        var core31 = Path.Combine(folder, "Core31", "Core31.App", "Core31.App.csproj");
+        var net60 = Path.Combine(folder, "Net60", "Net60.App", "Net60.App.csproj");
+
+        f.Shell.Runs.SetStartupProject(core31);
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Context.GetValue("hotReloadSupported") is false);
+        Assert.Equal("Hot Reload needs .NET 6 or later: Core31.App targets netcoreapp3.1.", f.Shell.HotReloadUnsupportedReason());
+        await f.Shell.StartWithHotReloadAsync();
+        Assert.Null(f.Shell.HotReloadProgram);
+        Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("Hot Reload needs .NET 6 or later: Core31.App targets netcoreapp3.1.", StringComparison.Ordinal));
+
+        f.Shell.Runs.SetStartupProject(net60);
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Context.GetValue("hotReloadSupported") is true);
+        await f.Shell.StartWithHotReloadAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.HotReloadProgram is not null, seconds: 240);
+        var program = f.Shell.HotReloadProgram!;
+        try
+        {
+            await ShellFixture.PumpUntil(() => program.HotReload!.State == Workbench.Build.HotReloadState.Watching, seconds: 240);
+            Assert.Contains("runtime=6.0.", program.Channel!.GetText(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            f.Shell.StopRunning();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task F5_on_a_netcoreapp21_app_stops_at_its_breakpoint()
+    {
+        Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && !CompatRoot.Required, "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        await using var f = ShellFixture.Create();
+        var folder = await OpenAsync(f);
+        var framework = Matrix.Get("Core21");
+        f.Shell.Runs.SetStartupProject(Path.Combine(folder, framework.Id, framework.App, framework.App + ".csproj"));
+        var program = AppProgram(folder, framework);
+        var stop = Matrix.Line(program, "break");
+        f.Shell.Debugger.Breakpoints.Toggle(program, stop);
+        f.Shell.Run("debug.start");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 300);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == stop);
+        await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "pair"));
+        f.Shell.Debugger.Breakpoints.Clear();
+        f.Shell.Run("debug.continue");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
+        Assert.Contains("runtime=2.1.", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
+    }
+}
