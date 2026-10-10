@@ -143,11 +143,20 @@ public sealed partial class ShellHost
         try
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
-            var plan = Runs.Adjust(LaunchPlanner.Plan(info, Runs.ResolveProfile(project, profiles)));
+            var profile = Runs.ResolveProfile(project, profiles);
+            var plan = Runs.Adjust(LaunchPlanner.Plan(info, profile));
             DebugLog.Clear();
             if (error is not null)
             {
                 DebugLog.AppendLine("Ignoring the launch settings: " + error);
+            }
+
+            if (LaunchPlanner.BrowserDebugTarget(info, profile) is { } target)
+            {
+                // A Blazor WebAssembly app runs in the browser: debug it there (ADR 0026).
+                Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
+                await StartBrowserDebuggingAsync(project, target).ConfigureAwait(true);
+                return;
             }
 
             DebugLog.AppendLine($"> {plan.FileName} {plan.Arguments}".TrimEnd());

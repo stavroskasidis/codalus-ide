@@ -14,7 +14,8 @@ public sealed record LaunchProfile(
     string? ApplicationUrl = null,
     bool LaunchBrowser = false,
     string? LaunchUrl = null,
-    IReadOnlyDictionary<string, string>? EnvironmentVariables = null)
+    IReadOnlyDictionary<string, string>? EnvironmentVariables = null,
+    string? InspectUri = null)
 {
     public bool IsRunnable => CommandName is "Project" or "Executable";
 }
@@ -61,7 +62,8 @@ public static class LaunchSettings
                 String(value, "applicationUrl"),
                 value.TryGetProperty("launchBrowser", out var browser) && browser.ValueKind == JsonValueKind.True,
                 String(value, "launchUrl"),
-                environment));
+                environment,
+                String(value, "inspectUri")));
         }
 
         return result;
@@ -170,6 +172,18 @@ public static class LaunchPlanner
 
         return new LaunchPlan(fileName, arguments.ToString(), workingDirectory, environment, browser);
     }
+
+    /// <summary>
+    /// The browser debugging target of a Blazor WebAssembly app (ADR 0026): the URL to open and the debugging proxy's
+    /// <c>inspectUri</c> template, when the project runs on the WebAssembly dev server and the profile has one. Null
+    /// for everything else, which debugs with netcoredbg.
+    /// </summary>
+    public static (string Url, string InspectUri)? BrowserDebugTarget(RunInfo info, LaunchProfile? profile) =>
+        profile is { InspectUri: { } inspectUri, ApplicationUrl: { } urls }
+            && info.RunArguments?.Contains("blazor-devserver", StringComparison.OrdinalIgnoreCase) == true
+            && BrowserUrl(urls, profile.LaunchUrl) is { } url
+            ? (url, inspectUri)
+            : null;
 
     /// <summary>The first application URL with <paramref name="launchUrl"/> appended (an absolute launch URL wins).</summary>
     public static string? BrowserUrl(string? applicationUrl, string? launchUrl)

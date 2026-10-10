@@ -41,6 +41,7 @@ public sealed partial class ShellHost
         var cache = Environment.GetEnvironmentVariable(NodeCacheVariable) is { Length: > 0 } shared ? shared : Paths.Cache;
         Node = new NodeRuntime(cache);
         WebServers = new WebLanguageServers(Node, Path.Combine(AppContext.BaseDirectory, "web-servers"), cache);
+        InitializeBrowserDebugging(cache);
         foreach (var (server, name, extensions, languages) in s_webServers)
         {
             Workbench.LanguageServers.Register(new LanguageServiceDescriptor(server, name, extensions, null, () => WebServerLaunch(server))

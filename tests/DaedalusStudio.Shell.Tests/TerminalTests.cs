@@ -37,7 +37,15 @@ public sealed class TerminalTests
         // Ctrl+C reaches the program (an interrupt, not the IDE's copy).
         f.Type(OperatingSystem.IsWindows() ? "ping -n 30 127.0.0.1" : "sleep 30");
         f.Press(Key.Enter);
-        await Task.Delay(500, TestContext.Current.CancellationToken);
+        if (OperatingSystem.IsWindows())
+        {
+            // Interrupt only once ping runs: on a busy machine it can take longer than a moment to start.
+            await ShellFixture.PumpUntil(() => Screen(control).Contains("127.0.0.1", StringComparison.Ordinal) && Screen(control).Split('\n').Count(l => l.Contains("127.0.0.1", StringComparison.Ordinal)) >= 2, seconds: 20);
+        }
+        else
+        {
+            await Task.Delay(1000, TestContext.Current.CancellationToken);
+        }
         f.Press(Key.C, RawInputModifiers.Control);
         f.Type(OperatingSystem.IsWindows() ? "echo after" : "echo after");
         f.Press(Key.Enter);

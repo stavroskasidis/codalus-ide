@@ -51,10 +51,13 @@ public sealed class DebugService : IAsyncDisposable
     private readonly Dictionary<string, DebugModule> _modules = new(StringComparer.Ordinal);
     private RunTarget? _runTo;
     private long _resumedAt;
-    private DebugAdapter? _adapter;
+    private IDebugAdapter? _adapter;
     private bool _attached;
     private int _exitCode;
     private CancellationTokenSource _session = new();
+
+    /// <summary>Completes when the current session has ended (and when there is none).</summary>
+    private TaskCompletionSource _ended = Completed();
     private TaskCompletionSource<int> _process = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>A Run to Cursor in progress: where to, and whether other breakpoints are skipped (Force Run to Cursor).</summary>
@@ -131,21 +134,28 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Starts <paramref name="plan"/> under the debugger. Throws when no adapter is installed or the launch fails.</summary>
     public Task LaunchAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
-        StartAsync(adapter => adapter.LaunchAsync(
+        StartAsync(StartNetcoredbgAsync, adapter => adapter.LaunchAsync(
             new LaunchArguments(plan.FileName, [.. CommandLine.Split(plan.Arguments)], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: JustMyCode),
             cancellationToken), attached: false, cancellationToken);
 
     /// <summary>Starts <paramref name="program"/> with arguments that are already split (no command-line parsing).</summary>
     public Task LaunchAsync(string program, IReadOnlyList<string> arguments, string workingDirectory, IReadOnlyDictionary<string, string> environment, CancellationToken cancellationToken) =>
-        StartAsync(adapter => adapter.LaunchAsync(
+        StartAsync(StartNetcoredbgAsync, adapter => adapter.LaunchAsync(
             new LaunchArguments(program, [.. arguments], workingDirectory, new Dictionary<string, string>(environment), JustMyCode: JustMyCode, EnableStepFiltering: JustMyCode),
             cancellationToken), attached: false, cancellationToken);
 
     public async Task AttachAsync(int processId, CancellationToken cancellationToken)
     {
-        await StartAsync(adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode), cancellationToken), attached: true, cancellationToken).ConfigureAwait(false);
+        await StartAsync(StartNetcoredbgAsync, adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode), cancellationToken), attached: true, cancellationToken).ConfigureAwait(false);
         OnProcess(processId);
     }
+
+    /// <summary>
+    /// Debugs a page in a browser through vscode-js-debug (ADR 0026): <paramref name="start"/> starts the adapter,
+    /// which launches the browser with <paramref name="arguments"/>. Stopping the session closes the browser.
+    /// </summary>
+    public Task LaunchBrowserAsync(Func<CancellationToken, Task<JsDebugAdapter>> start, BrowserLaunchArguments arguments, CancellationToken cancellationToken) =>
+        StartAsync(start, adapter => adapter.LaunchAsync(arguments, cancellationToken), attached: false, cancellationToken);
 
     /// <summary>The debuggee's process id: completes when the adapter reports it; cancelled when the session ends first.</summary>
     public Task<int> WaitForProcessIdAsync(CancellationToken cancellationToken) => _process.Task.WaitAsync(cancellationToken);
@@ -156,17 +166,24 @@ public sealed class DebugService : IAsyncDisposable
         _process.TrySetResult(processId);
     }
 
-    private async Task StartAsync(Func<DebugAdapter, Task> start, bool attached, CancellationToken cancellationToken)
+    private Task<DebugAdapter> StartNetcoredbgAsync(CancellationToken cancellationToken)
+    {
+        var path = _resolveAdapter() ?? throw new InvalidOperationException(
+            "The debugger (netcoredbg) was not found. Install it next to Daedalus Studio (debugger/), set DAEDALUS_NETCOREDBG, or run eng/get-netcoredbg.sh in a source checkout.");
+        return DebugAdapter.StartAsync(path, cancellationToken);
+    }
+
+    private async Task StartAsync<TAdapter>(Func<CancellationToken, Task<TAdapter>> create, Func<TAdapter, Task> start, bool attached, CancellationToken cancellationToken)
+        where TAdapter : class, IDebugAdapter
     {
         if (IsActive)
         {
             throw new InvalidOperationException("A debug session is already running.");
         }
 
-        var path = _resolveAdapter() ?? throw new InvalidOperationException(
-            "The debugger (netcoredbg) was not found. Install it next to Daedalus Studio (debugger/), set DAEDALUS_NETCOREDBG, or run eng/get-netcoredbg.sh in a source checkout.");
         SetState(DebugState.Starting);
         _session = new CancellationTokenSource();
+        _ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _attached = attached;
         _exitCode = 0;
         ProcessId = null;
@@ -184,16 +201,24 @@ public sealed class DebugService : IAsyncDisposable
 
         ModulesChanged?.Invoke(this, EventArgs.Empty);
         _resumedAt = System.Diagnostics.Stopwatch.GetTimestamp();
-        DebugAdapter? adapter = null;
+        TAdapter? adapter = null;
         try
         {
-            adapter = await DebugAdapter.StartAsync(path, cancellationToken).ConfigureAwait(false);
+            adapter = await create(cancellationToken).ConfigureAwait(false);
             adapter.EventReceived += OnEventAsync;
             adapter.Log += (_, line) => Output?.Invoke(this, new DebugOutput("console", line + "\n"));
             _adapter = adapter;
             _ = adapter.Closed.ContinueWith(_ => EndAsync(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
 
-            await start(adapter).ConfigureAwait(false);
+            // DAP's order: launch, and configure while it runs. Some adapters (js-debug) answer the launch only after
+            // configurationDone.
+            var launching = start(adapter);
+            await Task.WhenAny(launching, adapter.Initialized.WaitAsync(cancellationToken)).ConfigureAwait(false);
+            if (launching.IsFaulted || launching.IsCanceled)
+            {
+                await launching.ConfigureAwait(false);
+            }
+
             await adapter.Initialized.WaitAsync(cancellationToken).ConfigureAwait(false);
             foreach (var file in Breakpoints.Files)
             {
@@ -213,16 +238,23 @@ public sealed class DebugService : IAsyncDisposable
             }
 
             await adapter.ConfigurationDoneAsync(cancellationToken).ConfigureAwait(false);
+            await launching.ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException or System.ComponentModel.Win32Exception or IOException)
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
             if (adapter is not null)
             {
                 await adapter.DisconnectAsync(terminateDebuggee: !attached, CancellationToken.None).ConfigureAwait(false);
+                await EndAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                // The adapter didn't start (not installed, or it failed): there is no session to end.
+                SetState(DebugState.Idle);
+                _ended.TrySetResult();
             }
 
-            await EndAsync().ConfigureAwait(false);
-            throw ex is OperationCanceledException ? ex : new InvalidOperationException(ex.Message, ex);
+            throw ex is OperationCanceledException or InvalidOperationException ? ex : new InvalidOperationException(ex.Message, ex);
         }
     }
 
@@ -231,6 +263,8 @@ public sealed class DebugService : IAsyncDisposable
     {
         if (_adapter is not { } adapter)
         {
+            // Ending already (the adapter reported it terminated): done when that is.
+            await _ended.Task.ConfigureAwait(false);
             return;
         }
 
@@ -240,7 +274,7 @@ public sealed class DebugService : IAsyncDisposable
 
     private async Task EndAsync()
     {
-        DebugAdapter? adapter;
+        IDebugAdapter? adapter;
         lock (_gate)
         {
             adapter = _adapter;
@@ -249,6 +283,7 @@ public sealed class DebugService : IAsyncDisposable
 
         if (adapter is null)
         {
+            await _ended.Task.ConfigureAwait(false);
             return;
         }
 
@@ -270,6 +305,14 @@ public sealed class DebugService : IAsyncDisposable
         Breakpoints.ClearStates();
         SetState(DebugState.Idle);
         Ended?.Invoke(this, _exitCode);
+        _ended.TrySetResult();
+    }
+
+    private static TaskCompletionSource Completed()
+    {
+        var done = new TaskCompletionSource();
+        done.SetResult();
+        return done;
     }
 
     // ------------------------------------------------------------------ execution control
@@ -320,7 +363,7 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     /// <summary>Ends a Run to Cursor: removes its hidden breakpoint.</summary>
-    private async Task EndRunToCursorAsync(DebugAdapter adapter)
+    private async Task EndRunToCursorAsync(IDebugAdapter adapter)
     {
         if (_runTo is not { } target)
         {
@@ -338,7 +381,7 @@ public sealed class DebugService : IAsyncDisposable
         }
     }
 
-    private async Task ResumeAsync(Func<DebugAdapter, Task> resume)
+    private async Task ResumeAsync(Func<IDebugAdapter, Task> resume)
     {
         if (_adapter is not { } adapter || State != DebugState.Stopped)
         {
@@ -492,7 +535,7 @@ public sealed class DebugService : IAsyncDisposable
         }
     }
 
-    private async Task SendBreakpointsAsync(DebugAdapter adapter, string path, CancellationToken cancellationToken)
+    private async Task SendBreakpointsAsync(IDebugAdapter adapter, string path, CancellationToken cancellationToken)
     {
         var specs = Breakpoints.For(path).Where(b => b.Enabled).ToList();
         var sent = specs.Select(b => new SourceBreakpoint(b.Line, Condition: b.Condition)).ToList();
@@ -559,7 +602,7 @@ public sealed class DebugService : IAsyncDisposable
         }
     }
 
-    private async Task SendFunctionBreakpointsAsync(DebugAdapter adapter, CancellationToken cancellationToken)
+    private async Task SendFunctionBreakpointsAsync(IDebugAdapter adapter, CancellationToken cancellationToken)
     {
         var specs = Breakpoints.Functions.Where(f => f.Enabled).ToList();
         var result = await adapter.SetFunctionBreakpointsAsync([.. specs.Select(f => new FunctionBreakpoint(f.Name, f.Condition))], cancellationToken).ConfigureAwait(false);
@@ -597,7 +640,7 @@ public sealed class DebugService : IAsyncDisposable
                 }
 
                 break;
-            case DapEvents.Output when DebugAdapter.Read(e.Body, DapJsonContext.Default.OutputEvent) is { } output:
+            case DapEvents.Output when DebugAdapter.Read(e.Body, DapJsonContext.Default.OutputEvent) is { Category: not "telemetry" } output:
                 Output?.Invoke(this, new DebugOutput(output.Category ?? "console", output.Output));
                 break;
             case DapEvents.Exited when DebugAdapter.Read(e.Body, DapJsonContext.Default.ExitedEvent) is { } exited:
@@ -759,7 +802,7 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     /// <summary>Client-side dependencies, hit counts and logpoints: whether this hit shows as a stop.</summary>
-    private async Task<bool> ShouldBreakAsync(DebugAdapter adapter, BreakpointSpec breakpoint, StackFrame[] frames, int threadId)
+    private async Task<bool> ShouldBreakAsync(IDebugAdapter adapter, BreakpointSpec breakpoint, StackFrame[] frames, int threadId)
     {
         int hits;
         lock (_gate)
@@ -789,7 +832,7 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     /// <summary>Replaces <c>{expression}</c> with its value, <c>$FUNCTION</c> and <c>$TID</c> with the frame and thread.</summary>
-    internal async Task<string> FormatLogMessageAsync(DebugAdapter adapter, string message, StackFrame? frame, int threadId)
+    internal async Task<string> FormatLogMessageAsync(IDebugAdapter adapter, string message, StackFrame? frame, int threadId)
     {
         var result = new StringBuilder();
         for (var i = 0; i < message.Length; i++)

@@ -12,6 +12,7 @@ public sealed class RunningProgram : IDisposable
 {
     private readonly Process _process;
     private readonly TaskCompletionSource<int> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource<string> _listening = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     internal RunningProgram(string project, string name, Process process, OutputChannel? channel)
     {
@@ -37,6 +38,19 @@ public sealed class RunningProgram : IDisposable
     /// <summary>Completes with the exit code.</summary>
     public Task<int> Exited => _exited.Task;
 
+    /// <summary>Completes with the first URL a server reports ("Now listening on: http://localhost:5045").</summary>
+    public Task<string> Listening => _listening.Task;
+
+    internal void OnLine(string line)
+    {
+        const string marker = "Now listening on:";
+        var at = line.IndexOf(marker, StringComparison.Ordinal);
+        if (at >= 0)
+        {
+            _listening.TrySetResult(line[(at + marker.Length)..].Trim());
+        }
+    }
+
     public bool HasExited => _exited.Task.IsCompleted;
 
     internal void OnExited(bool waitForOutput)
@@ -58,6 +72,7 @@ public sealed class RunningProgram : IDisposable
         }
 
         _exited.TrySetResult(code);
+        _listening.TrySetCanceled();
     }
 
     /// <summary>Ends the program and every process it started.</summary>
@@ -277,7 +292,8 @@ public sealed class RunService : IDisposable
     /// <paramref name="externalConsole"/> (Windows console apps) gives it a console window of its own. With
     /// <paramref name="hotReload"/>, it runs under <c>dotnet watch</c>: saved edits are applied to the running program.
     /// </summary>
-    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken, bool hotReload = false)
+    /// <param name="openBrowser">False keeps the launch profile's browser closed (browser debugging opens its own, ADR 0026).</param>
+    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken, bool hotReload = false, bool openBrowser = true)
     {
         var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken).ConfigureAwait(false);
         var name = Path.GetFileNameWithoutExtension(projectPath);
@@ -289,6 +305,11 @@ public sealed class RunService : IDisposable
 
         var profile = ResolveProfile(projectPath, profiles);
         var plan = Adjust(LaunchPlanner.Plan(info, profile));
+        if (!openBrowser)
+        {
+            plan = plan with { BrowserUrl = null };
+        }
+
         if (hotReload)
         {
             plan = HotReloadPlan(projectPath, plan, profile?.CommandLineArgs);
@@ -339,6 +360,7 @@ public sealed class RunService : IDisposable
                 }
 
                 channel.AppendLine(line);
+                program.OnLine(line);
                 program.HotReload?.OnLine(line);
                 if (!browserOpened && s_listeningMarkers.Any(m => line.Contains(m, StringComparison.Ordinal)))
                 {

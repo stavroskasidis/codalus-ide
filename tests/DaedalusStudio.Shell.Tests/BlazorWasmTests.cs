@@ -1,0 +1,135 @@
+using System.Net;
+using System.Net.Sockets;
+using Avalonia.Headless.XUnit;
+using DaedalusStudio.Workbench.Debugging;
+using DaedalusStudio.Workbench.Node;
+
+namespace DaedalusStudio.Shell.Tests;
+
+/// <summary>
+/// M16c (ADR 0026): F5 on samples/BlazorWasm debugs the app in a headless Chromium browser through vscode-js-debug and
+/// the dev server's debugging proxy. Needs Chrome, Edge or Chromium: skipped without one locally, failing in CI.
+/// </summary>
+public sealed class BlazorWasmTests
+{
+    /// <summary>The Node.js and js-debug downloads, shared by test runs on this machine (as in WebLanguagesTests).</summary>
+    private static string SharedCache => Path.Combine(Path.GetTempPath(), "daedalus-test-node-cache");
+
+    private static int Line(string file, string marker) =>
+        Array.FindIndex(File.ReadAllLines(file), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
+
+    private static int FreePort()
+    {
+        using var socket = new TcpListener(IPAddress.Loopback, 0);
+        socket.Start();
+        return ((IPEndPoint)socket.LocalEndpoint).Port;
+    }
+
+    [AvaloniaFact]
+    public async Task F5_debugs_the_webassembly_app_in_the_browser()
+    {
+        Assert.SkipWhen(NodeRuntime.Platform is null, "No Node.js build for this platform.");
+        Assert.SkipWhen(Browsers.Find() is null && Environment.GetEnvironmentVariable("CI") != "true", "No Chrome, Edge or Chromium is installed.");
+        Environment.SetEnvironmentVariable(ShellHost.NodeCacheVariable, SharedCache);
+        Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, "1");
+        try
+        {
+            await using var f = ShellFixture.Create();
+            var folder = f.CopySample("BlazorWasm");
+            var settings = Path.Combine(folder, "BlazorWasm", "Properties", "launchSettings.json");
+            await File.WriteAllTextAsync(settings, (await File.ReadAllTextAsync(settings, TestContext.Current.CancellationToken))
+                .Replace("5045", FreePort().ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal), TestContext.Current.CancellationToken);
+            f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+            await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BlazorWasm.slnx"));
+            await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+
+            // A breakpoint in the component's C#, which runs in the browser.
+            var counter = Path.Combine(folder, "BlazorWasm", "Pages", "Counter.razor");
+            var initialized = Line(counter, "initialized");
+            f.Shell.Debugger.Breakpoints.Toggle(counter, initialized);
+
+            f.Shell.Run("debug.start");
+            try
+            {
+                await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 600);
+            }
+            catch (Xunit.Sdk.XunitException)
+            {
+                Assert.Fail("The browser session didn't stop at the breakpoint. Debug Console:\n" + f.Shell.DebugLog.GetText()
+                    + "\nRun output:\n" + string.Concat(f.Shell.Workbench.Output.Channels.Where(c => c.Name.StartsWith("Run:", StringComparison.Ordinal)).Select(c => c.GetText())));
+            }
+
+            Assert.Equal("breakpoint", f.Shell.Debugger.CurrentStop!.Reason);
+            await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0);
+            Assert.Contains("Counter.OnInitialized", f.Shell.CallStack.Frames[0].Name, StringComparison.Ordinal);
+            await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == initialized
+                && string.Equals(f.Shell.ActiveEditor.Model.Path, counter, StringComparison.OrdinalIgnoreCase));
+            await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "this"));
+            Assert.Single(f.Shell.Runs.Running); // the dev server
+
+            // Stopping the session closes the browser and the dev server.
+            f.Shell.Debugger.Breakpoints.Clear();
+            await f.Shell.Debugger.StopAsync();
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle && f.Shell.Runs.Running.Count == 0, seconds: 60);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, null);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Hot_reload_applies_a_razor_edit_to_the_page_in_the_browser()
+    {
+        var browser = Browsers.Find();
+        Assert.SkipWhen(browser is null && Environment.GetEnvironmentVariable("CI") != "true", "No Chrome, Edge or Chromium is installed.");
+        await using var f = ShellFixture.Create();
+        var folder = f.CopySample("BlazorWasm");
+        var port = FreePort().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var settings = Path.Combine(folder, "BlazorWasm", "Properties", "launchSettings.json");
+        await File.WriteAllTextAsync(settings, (await File.ReadAllTextAsync(settings, TestContext.Current.CancellationToken)).Replace("5045", port, StringComparison.Ordinal), TestContext.Current.CancellationToken);
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BlazorWasm.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+
+        await f.Shell.StartWithHotReloadAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.HotReloadProgram is not null, seconds: 180);
+        var program = f.Shell.HotReloadProgram!;
+        System.Diagnostics.Process? page = null;
+        var profile = Path.Combine(f.UserData, "browser-profile");
+        try
+        {
+            await ShellFixture.PumpUntil(() => program.HotReload!.State == Workbench.Build.HotReloadState.Watching
+                && program.Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true, seconds: 240);
+
+            // WebAssembly runs the components in the browser: Hot Reload needs the page open there.
+            page = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(browser!.Path)
+            {
+                ArgumentList = { "--headless=new", "--disable-gpu", "--no-first-run", $"--user-data-dir={profile}", $"http://localhost:{port}/counter" },
+                UseShellExecute = false,
+            });
+            await Task.Delay(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken); // the page loads the runtime and connects
+
+            var counter = Path.Combine(folder, "BlazorWasm", "Pages", "Counter.razor");
+            var editor = await f.Shell.OpenFileAsync(counter, preview: false, null);
+            await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+            var offset = editor!.Model.Text.Text.IndexOf("<h1>Counter</h1>", StringComparison.Ordinal);
+            editor.Model.Text.Replace(offset, "<h1>Counter</h1>".Length, "<h1>Counter, reloaded</h1>");
+            f.Shell.Run("run.applyCodeChanges");
+            await ShellFixture.PumpUntil(() => program.HotReload!.Applied >= 1, seconds: 120);
+        }
+        finally
+        {
+            try
+            {
+                page?.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            page?.Dispose();
+            f.Shell.StopRunning();
+        }
+    }
+}

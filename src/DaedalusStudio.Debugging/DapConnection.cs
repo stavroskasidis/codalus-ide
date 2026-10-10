@@ -19,10 +19,13 @@ public sealed class DapConnectionLostException(string message, Exception? inner 
 /// <summary>An event from the adapter: its name and body (default when it has none).</summary>
 public sealed record DapEvent(string Name, JsonElement Body);
 
+/// <summary>A reverse request from the adapter that the client accepted (<see cref="DapConnection.Accept"/>).</summary>
+public sealed record DapReverseRequest(string Command, JsonElement Arguments);
+
 /// <summary>
 /// A Debug Adapter Protocol client over a pair of streams (<c>Content-Length</c> framing, like LSP). Requests are
 /// answered in any order; events are delivered in arrival order on one background loop. Reverse requests from the
-/// adapter (<c>runInTerminal</c>…) are refused. All serialization is source-generated (AOT-safe).
+/// adapter are refused, except those accepted with <see cref="Accept"/>. All serialization is source-generated (AOT-safe).
 /// </summary>
 public sealed class DapConnection : IAsyncDisposable
 {
@@ -30,7 +33,8 @@ public sealed class DapConnection : IAsyncDisposable
     private readonly Stream _output;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
-    private readonly Channel<DapEvent> _events = Channel.CreateUnbounded<DapEvent>(new UnboundedChannelOptions { SingleReader = true });
+    private readonly Channel<object> _events = Channel.CreateUnbounded<object>(new UnboundedChannelOptions { SingleReader = true });
+    private readonly HashSet<string> _accepted = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _shutdown = new();
     private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _seq;
@@ -46,8 +50,18 @@ public sealed class DapConnection : IAsyncDisposable
     /// <summary>Raised for each adapter event, in order, on the event loop. Handlers must not block for long.</summary>
     public event Func<DapEvent, Task>? EventReceived;
 
+    /// <summary>Raised for each accepted reverse request, on the event loop, in order with the events.</summary>
+    public event Func<DapReverseRequest, Task>? ReverseRequestReceived;
+
     /// <summary>Completes when the adapter's output ends (it exited or closed the stream).</summary>
     public Task Closed => _closed.Task;
+
+    /// <summary>
+    /// Accepts the reverse request <paramref name="command"/> (<c>startDebugging</c>): it is answered with success at
+    /// once and raised as <see cref="ReverseRequestReceived"/>, so its handler can't hold up this connection. Call
+    /// before <see cref="Start"/>.
+    /// </summary>
+    public void Accept(string command) => _accepted.Add(command);
 
     public void Start()
     {
@@ -161,8 +175,12 @@ public sealed class DapConnection : IAsyncDisposable
                         var name = message.TryGetProperty("event", out var e) ? e.GetString() ?? string.Empty : string.Empty;
                         _events.Writer.TryWrite(new DapEvent(name, message.TryGetProperty("body", out var body) ? body : default));
                         break;
+                    case "request" when message.TryGetProperty("command", out var command) && command.GetString() is { } accepted && _accepted.Contains(accepted):
+                        await AnswerAsync(message, success: true).ConfigureAwait(false);
+                        _events.Writer.TryWrite(new DapReverseRequest(accepted, message.TryGetProperty("arguments", out var arguments) ? arguments : default));
+                        break;
                     case "request":
-                        await RefuseAsync(message).ConfigureAwait(false);
+                        await AnswerAsync(message, success: false).ConfigureAwait(false);
                         break;
                 }
             }
@@ -184,31 +202,39 @@ public sealed class DapConnection : IAsyncDisposable
         _closed.TrySetResult();
     }
 
-    /// <summary>Reverse requests (runInTerminal, startDebugging) aren't supported: answer them with an error.</summary>
-    private Task RefuseAsync(JsonElement request) => WriteAsync(writer =>
+    /// <summary>Answers a reverse request: accepted ones with success, the rest (runInTerminal…) with an error.</summary>
+    private Task AnswerAsync(JsonElement request, bool success) => WriteAsync(writer =>
     {
         writer.WriteNumber("seq", Interlocked.Increment(ref _seq));
         writer.WriteString("type", "response");
         writer.WriteNumber("request_seq", request.TryGetProperty("seq", out var seq) ? seq.GetInt32() : 0);
-        writer.WriteBoolean("success", false);
+        writer.WriteBoolean("success", success);
         writer.WriteString("command", request.TryGetProperty("command", out var command) ? command.GetString() : string.Empty);
-        writer.WriteString("message", "Not supported by Daedalus Studio.");
+        if (!success)
+        {
+            writer.WriteString("message", "Not supported by Daedalus Studio.");
+        }
     }, _shutdown.Token);
 
     private async Task EventLoopAsync()
     {
-        await foreach (var e in _events.Reader.ReadAllAsync().ConfigureAwait(false))
+        await foreach (var item in _events.Reader.ReadAllAsync().ConfigureAwait(false))
         {
-            if (EventReceived is { } handler)
+            try
             {
-                try
+                switch (item)
                 {
-                    await handler(e).ConfigureAwait(false);
+                    case DapEvent e when EventReceived is { } handler:
+                        await handler(e).ConfigureAwait(false);
+                        break;
+                    case DapReverseRequest r when ReverseRequestReceived is { } handler:
+                        await handler(r).ConfigureAwait(false);
+                        break;
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    HandlerFailed?.Invoke(this, ex);
-                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                HandlerFailed?.Invoke(this, ex);
             }
         }
     }

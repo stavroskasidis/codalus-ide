@@ -1454,7 +1454,9 @@ public sealed partial class CodeEditorController : IDisposable
             return;
         }
 
-        if (_services.Debugger.State != DebugState.Stopped && _exceptionPopup is { } popup)
+        // Closed once the program moves on, even when it stopped again before this ran (Run to Cursor, a step).
+        if (_exceptionPopup is { IsOpen: true } popup
+            && (_services.Debugger.State != DebugState.Stopped || !ReferenceEquals(_services.Debugger.CurrentStop, _exceptionShownFor)))
         {
             popup.IsOpen = false;
         }

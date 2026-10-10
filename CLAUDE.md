@@ -47,7 +47,7 @@ The integrated terminal (ADR 0014) is our own VT engine (`src/DaedalusStudio.Ter
 
 ## Debugging
 
-The shell debugs through netcoredbg (Samsung, MIT) over DAP (ADR 0007; client in `src/DaedalusStudio.Debugging`, sessions in `DebugService` in `src/DaedalusStudio.Workbench/Debugging`). Get it with `eng/get-netcoredbg.sh` (pinned, checksummed, into `.work/netcoredbg`); `DAEDALUS_NETCOREDBG` points at another one, and installed builds look in `debugger/` next to the shell. Debugger tests skip without it locally and fail without it in CI. Fixture: `samples/Debugging`.
+The shell debugs through netcoredbg (Samsung, MIT) over DAP (ADR 0007; client in `src/DaedalusStudio.Debugging`, sessions in `DebugService` in `src/DaedalusStudio.Workbench/Debugging`). Get it with `eng/get-netcoredbg.sh` (pinned, checksummed, into `.work/netcoredbg`); `DAEDALUS_NETCOREDBG` points at another one, and installed builds look in `debugger/` next to the shell. Debugger tests skip without it locally and fail without it in CI. Fixture: `samples/Debugging`. Blazor WebAssembly apps debug in the browser instead (ADR 0026): vscode-js-debug (`JsDebugAdapter`, downloaded on demand into the Node cache like the web language servers) drives Chrome, Edge or Chromium through the dev server's debugging proxy. `DAEDALUS_BROWSER_HEADLESS=1` runs the browser headless (tests, `eng/smoke-test.sh`); browser tests skip without a Chromium browser locally and fail without one in CI. Fixture: `samples/BlazorWasm`.
 
 ## Git
 

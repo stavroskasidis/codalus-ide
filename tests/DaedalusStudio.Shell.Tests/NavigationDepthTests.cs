@@ -131,14 +131,17 @@ public class NavigationDepthTests
 
         // Peek Definition: the definition in a popup, without leaving the file.
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("Circle(2)", StringComparison.Ordinal) + 1;
-        var view = f.Shell.ActiveEditor!.View!;
+
+        // The editor's view, read each time: it can be attached (or replaced) after the document opened, and Peek opens
+        // in the one that is current.
+        CodeEditorView? View() => f.Shell.ActiveEditor?.View;
 
         // Again every few seconds: while design-time builds reload the projects, the definition can be briefly unknown.
         // CI's two-core runners can take minutes, as for loading the projects. Messages last 5 s, so keep the last one.
         string? lastMessage = null;
         f.Shell.StatusBar.PropertyChanged += (_, e) => lastMessage = e.PropertyName == nameof(f.Shell.StatusBar.Message) && f.Shell.StatusBar.Message is { } m ? m : lastMessage;
         var started = System.Diagnostics.Stopwatch.StartNew();
-        while (view.Peek?.IsOpen != true)
+        while (View()?.Peek?.IsOpen != true)
         {
             if (started.Elapsed > TimeSpan.FromSeconds(180))
             {
@@ -149,7 +152,7 @@ public class NavigationDepthTests
             f.Shell.Run("editor.action.peekDefinition");
             try
             {
-                await ShellFixture.PumpUntil(() => view.Peek?.IsOpen == true, seconds: 10);
+                await ShellFixture.PumpUntil(() => View()?.Peek?.IsOpen == true, seconds: 10);
             }
             catch (Xunit.Sdk.XunitException)
             {
@@ -157,8 +160,9 @@ public class NavigationDepthTests
             }
         }
 
+        var view = View()!;
         Assert.Contains("class Circle", view.Peek!.Viewer.Editor.Document.Text, StringComparison.Ordinal);
-        Assert.Equal(program, f.Shell.ActiveEditor.Controller);
+        Assert.Equal(program, f.Shell.ActiveEditor!.Controller);
         view.Peek.Close();
 
         // The Code Definition window follows the caret.

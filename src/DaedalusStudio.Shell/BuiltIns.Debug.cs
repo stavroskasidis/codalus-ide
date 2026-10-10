@@ -60,6 +60,13 @@ internal static partial class BuiltIns
             Description = "Step through and break in your own code only (optimized and framework code is stepped over).",
             Order = 1,
         },
+        SettingDescriptor.Create(Workbench.Debugging.Browsers.SettingKey, "\"auto\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Browser",
+            Category = "Debugging",
+            Description = "The browser for debugging Blazor WebAssembly apps: auto (Chrome, then Edge, then Chromium), chrome, edge, chromium, or the path of a Chromium browser.",
+            Order = 3,
+        },
         SettingDescriptor.Create(DaedalusStudio.Shell.Editor.EditorOptions.PerfTipsKey, "true", SettingType.Boolean, ContributionSource.Shell) with
         {
             Title = "PerfTips",

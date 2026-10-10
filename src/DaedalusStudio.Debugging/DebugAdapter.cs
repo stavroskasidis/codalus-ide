@@ -38,7 +38,7 @@ public static class DebugAdapterLocator
 /// One debug adapter process (netcoredbg <c>--interpreter=vscode</c>) and its DAP connection, with typed requests.
 /// The adapter's stderr goes to <see cref="Log"/>.
 /// </summary>
-public sealed class DebugAdapter : IAsyncDisposable
+public sealed class DebugAdapter : IDebugAdapter
 {
     private readonly Process _process;
     private readonly DapConnection _connection;

@@ -16,7 +16,8 @@ public sealed record InitializeArguments(
     bool SupportsVariableType = true,
     bool SupportsVariablePaging = false,
     bool SupportsRunInTerminalRequest = false,
-    string Locale = "en-US")
+    string Locale = "en-US",
+    bool SupportsStartDebuggingRequest = false)
 {
     [JsonPropertyName("clientID")]
     public string ClientId { get; init; } = ClientId;
@@ -68,6 +69,26 @@ public sealed record LaunchArguments(
     string Request = "launch");
 
 public sealed record AttachArguments(int ProcessId, bool JustMyCode = true, string Name = ".NET Attach", string Type = "coreclr", string Request = "attach");
+
+/// <summary>
+/// vscode-js-debug's browser <c>launch</c> arguments (ADR 0026). <see cref="Type"/> is <c>pwa-chrome</c> or
+/// <c>pwa-msedge</c>; <see cref="InspectUri"/> routes the connection through the Blazor WebAssembly debugging proxy;
+/// <see cref="UserDataDir"/> true gives the browser a temporary profile.
+/// </summary>
+public sealed record BrowserLaunchArguments(
+    string Type,
+    string Url,
+    string WebRoot,
+    string? InspectUri = null,
+    string? RuntimeExecutable = null,
+    string[]? RuntimeArgs = null,
+    bool UserDataDir = true,
+    int Timeout = 60000,
+    string Name = "Browser",
+    string Request = "launch");
+
+/// <summary>The <c>startDebugging</c> reverse request: start a child session with <see cref="Configuration"/>.</summary>
+public sealed record StartDebuggingArguments(string Request, JsonElement Configuration);
 
 public sealed record Source(string? Name = null, string? Path = null, int? SourceReference = null);
 
@@ -192,6 +213,9 @@ public static class DapEvents
 [JsonSerializable(typeof(Capabilities))]
 [JsonSerializable(typeof(LaunchArguments))]
 [JsonSerializable(typeof(AttachArguments))]
+[JsonSerializable(typeof(BrowserLaunchArguments))]
+[JsonSerializable(typeof(StartDebuggingArguments))]
+[JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(SetBreakpointsArguments))]
 [JsonSerializable(typeof(SetBreakpointsResponse))]
 [JsonSerializable(typeof(SetFunctionBreakpointsArguments))]

@@ -18,6 +18,8 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 node_cache="$repo/.work/node-cache"
 command -v cygpath > /dev/null && node_cache="$(cygpath -w "$node_cache")" # Git Bash on Windows: a Windows path for the app
 export DAEDALUS_NODE_CACHE="${DAEDALUS_NODE_CACHE:-$node_cache}"
+# Browser debugging (M16c) runs Chrome or Edge headless, so the test opens no browser window.
+export DAEDALUS_BROWSER_HEADLESS=1
 
 # Runs one app: --version, then the smoke test. $1: executable; $2: results dir; $3: whether to run the full smoke test.
 test_app() {

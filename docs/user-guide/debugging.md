@@ -64,6 +64,8 @@ The program's output and the debugger's messages appear in the **Debug Console**
 
 ## Known limitations
 
+Blazor WebAssembly apps are debugged in the browser (see [Web development](web.md#blazor-webassembly)). There, function breakpoints, the Modules window and the .NET exception settings don't apply.
+
 These come from netcoredbg:
 - no Edit and Continue or hot reload
 - no data breakpoints

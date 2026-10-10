@@ -76,38 +76,7 @@ public sealed class NodeRuntime(string cacheFolder, HttpClient? http = null) : I
             var name = $"node-v{Version}-{platform}";
             var url = new Uri($"https://nodejs.org/dist/v{Version}/{name}");
             var download = Path.Combine(cacheFolder, "node", name + ".partial");
-            Directory.CreateDirectory(Path.GetDirectoryName(download)!);
-            progress?.Report($"Downloading Node.js {Version} from {url.Host}…");
-            var client = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-            try
-            {
-                using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
-                {
-                    response.EnsureSuccessStatusCode();
-                    await using var file = File.Create(download);
-                    await response.Content.CopyToAsync(file, cancellationToken).ConfigureAwait(false);
-                }
-            }
-            finally
-            {
-                if (http is null)
-                {
-                    client.Dispose();
-                }
-            }
-
-            progress?.Report("Verifying the download…");
-            string actual;
-            await using (var stream = File.OpenRead(download))
-            {
-                actual = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
-            }
-
-            if (!string.Equals(actual, s_checksums[platform], StringComparison.Ordinal))
-            {
-                File.Delete(download);
-                throw new InvalidDataException($"The Node.js download doesn't match its published checksum (got {actual}).");
-            }
+            await VerifiedDownload.FetchAsync(http, url, download, s_checksums[platform], $"Node.js {Version}", progress, cancellationToken).ConfigureAwait(false);
 
             progress?.Report("Unpacking Node.js…");
             var staging = Folder + ".staging";

@@ -815,6 +815,58 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => Output().Contains("has exited with code 0", StringComparison.Ordinal), "App runs and exits with 0", 300).ConfigureAwait(true);
             Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
         }).ConfigureAwait(true);
+
+        const string wasmTitle = "F5 debugs a Blazor WebAssembly app in the browser: a breakpoint in a .razor file stops";
+        if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null && Environment.GetEnvironmentVariable("CI") != "true")
+        {
+            Report("blazor.wasmDebug", "M16", wasmTitle, "skipped", 0, "No Chrome, Edge or Chromium is installed.");
+        }
+        else
+        {
+            await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Browser debugging (M16c, ADR 0026): F5 on samples/BlazorWasm starts the dev server and a Chromium browser through
+    /// vscode-js-debug, and a breakpoint in Counter.razor's C# stops. Stopping the session stops the dev server.
+    /// </summary>
+    private async Task WasmDebugStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "BlazorWasm", "BlazorWasm.slnx")), $"the samples folder {samples} has BlazorWasm");
+        var target = Path.Combine(_work, "BlazorWasm");
+        Copy(Path.Combine(samples, "BlazorWasm"), target);
+        using (var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
+        {
+            socket.Start();
+            var port = ((System.Net.IPEndPoint)socket.LocalEndpoint).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            socket.Stop();
+            var settings = Path.Combine(target, "BlazorWasm", "Properties", "launchSettings.json");
+            File.WriteAllText(settings, File.ReadAllText(settings).Replace("5045", port, StringComparison.Ordinal));
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "BlazorWasm.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the WebAssembly solution is open", 300).ConfigureAwait(true);
+        var counter = Path.Combine(target, "BlazorWasm", "Pages", "Counter.razor");
+        var line = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [initialized]", StringComparison.Ordinal)) + 1;
+        shell.Debugger.Breakpoints.Toggle(counter, line);
+        shell.Run("debug.start");
+        try
+        {
+            // The first session downloads vscode-js-debug (and Node.js, if M16b's step didn't).
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the browser session stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
+            await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the call stack", 60).ConfigureAwait(true);
+            Check(shell.CallStack.Frames[0].Name.Contains("Counter.OnInitialized", StringComparison.Ordinal), "the top frame is Counter.OnInitialized, in the browser: " + shell.CallStack.Frames[0].Name);
+            Screenshot("smoke-test-blazor-wasm-debug.png");
+        }
+        finally
+        {
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.StopAsync().ConfigureAwait(true);
+        }
+
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the dev server stops with the session", 60).ConfigureAwait(true);
     }
 
     /// <summary>The web language servers (M16b): Node.js and the servers install, then serve TypeScript and HTML files.</summary>

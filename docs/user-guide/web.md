@@ -39,6 +39,22 @@ Run, Debug and Hot Reload work as for other ASP.NET Core apps: with Hot Reload, 
 
 Not available in Razor files yet: rename, quick actions, formatting and folding. Errors that the Razor compiler itself reports (`RZ…`) appear after a build.
 
+## Blazor WebAssembly
+
+A standalone Blazor WebAssembly app (`dotnet new blazorwasm`) runs on the WebAssembly dev server, and its components run in the browser.
+- **Run** (`Ctrl+F5`) starts the dev server; the launch profile's `launchBrowser` opens the page.
+- **Debug** (`F5`) debugs the app in the browser:
+  - Daedalus starts the dev server, then opens the page in Chrome, Edge or Chromium through the dev server's debugging proxy (the profile's `inspectUri`, which `dotnet new` puts there).
+  - Breakpoints in `.razor` and `.cs` files stop the component's C# in the browser, with the call stack, locals, watches and stepping, as in any session. Breakpoints in the app's JavaScript files work in the same session.
+  - The browser gets a temporary profile, so your own browser, its tabs and its extensions aren't touched. Stopping the session closes it and stops the dev server.
+  - The first session downloads the browser debugger, vscode-js-debug (about 1.2 MB), and Node.js if the web language servers haven't already. The Debug Console shows the progress.
+  - The setting **Browser** (`debug.browser`) picks the browser: `auto` (Chrome, then Edge, then Chromium), `chrome`, `edge`, `chromium`, or a path.
+- **Hot Reload** works once the page is open in a browser, because the components run there: start with Hot Reload, open the page (or let `launchBrowser` open it), then save. The status bar says when the change was applied.
+
+Not available yet:
+- debugging an app's server and its WebAssembly client in one session (a Blazor Web App with interactive WebAssembly components, or an ASP.NET Core app's scripts): debug the server with F5 as usual;
+- Firefox and Safari, which the browser debugger doesn't support.
+
 ## The Endpoints Explorer
 
 View → Endpoints Explorer lists every endpoint of the solution's ASP.NET Core projects, by project:
