@@ -52,7 +52,8 @@ jobs:
       matrix:
         os: ${{ fromJSON(needs.matrix.outputs.os) }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # The manual matrix run also installs and runs the target framework matrix (M33).
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 100 || 60 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -75,6 +76,15 @@ jobs:
       - name: Debugger (netcoredbg, pinned and checksummed)
         shell: bash
         run: eng/get-netcoredbg.sh
+      - name: Target framework matrix (M33, ADR 0030; manual runs only)
+        # .NET Core 2.0 to .NET 9 and older SDKs in .work/dotnet-compat: slow to install, so only in the matrix run.
+        # Without it the DaedalusStudio.TargetFrameworks.Tests suite skips; with DAEDALUS_DOTNET_COMPAT it must pass.
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          bash eng/get-runtimes.sh
+          echo "DAEDALUS_DOTNET_COMPAT=${{ github.workspace }}/.work/dotnet-compat" >> "$GITHUB_ENV"
+          bash eng/get-netcoredbg.sh --x64
       - name: Restore
         run: dotnet restore DaedalusStudio.slnx
       - name: Build
@@ -112,6 +122,11 @@ jobs:
         env:
           DAEDALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
         run: bash eng/smoke-test.sh artifacts/shell/daedalus artifacts/smoke-test
+      - name: Old runtimes in containers of their distributions (M33, ADR 0030; manual runs only)
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 20
+        run: bash eng/compat-containers.sh
       - uses: actions/upload-artifact@v4
         if: failure() || cancelled()
         with:

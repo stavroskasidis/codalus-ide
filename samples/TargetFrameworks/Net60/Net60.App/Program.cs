@@ -23,9 +23,21 @@ public static class Program
             Console.WriteLine("sha256=" + System.Security.Cryptography.SHA256.Create().ComputeHash(new byte[] { 1 }).Length);
         }
 
+        if (args.Length > 0 && args[0] == "--watch")
+        {
+            // Hot Reload from .NET 6 (the Watch launch profile): an edit to Message() shows while this runs.
+            for (var i = 0; i < 2400; i++)
+            {
+                Console.WriteLine(Message());
+                System.Threading.Thread.Sleep(250);
+            }
+        }
+
         // [next]
         return 0;
     }
+
+    private static string Message() => "message: before";
 
     private static string Framework(Type type) => type.GetTypeInfo().Assembly.GetCustomAttribute<TargetFrameworkAttribute>()?.FrameworkName;
 }

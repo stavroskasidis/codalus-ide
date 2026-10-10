@@ -37,6 +37,10 @@ if "$repo/eng/get-netcoredbg.sh" "$stage/netcoredbg"; then
 else
   echo "netcoredbg is not available for $rid; the package has no debugger." >&2
 fi
+# The x64 debugger, for the programs of .NET 5 and earlier that run as x64 under Rosetta 2 (M33, ADR 0030).
+if [ "$rid" = osx-arm64 ] && [ -d "$app/debugger" ] && "$repo/eng/get-netcoredbg.sh" --x64 "$stage/netcoredbg-x64"; then
+  cp -R "$stage/netcoredbg-x64" "$app/debugger/x64"
+fi
 
 cp "$repo/LICENSE" "$repo/THIRD-PARTY-NOTICES.md" "$repo/README.md" "$app/"
 

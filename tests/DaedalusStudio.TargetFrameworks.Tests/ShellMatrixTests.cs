@@ -103,14 +103,24 @@ public sealed class ShellMatrixTests
         Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("Hot Reload needs .NET 6 or later: Core31.App targets netcoreapp3.1.", StringComparison.Ordinal));
 
         f.Shell.Runs.SetStartupProject(net60);
+        f.Shell.Runs.SetProfile(net60, "Watch");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Context.GetValue("hotReloadSupported") is true);
         await f.Shell.StartWithHotReloadAsync();
         await ShellFixture.PumpUntil(() => f.Shell.HotReloadProgram is not null, seconds: 240);
         var program = f.Shell.HotReloadProgram!;
         try
         {
-            await ShellFixture.PumpUntil(() => program.HotReload!.State == Workbench.Build.HotReloadState.Watching, seconds: 240);
+            await ShellFixture.PumpUntil(() => program.Channel?.GetText().Contains("message: before", StringComparison.Ordinal) == true, seconds: 300);
             Assert.Contains("runtime=6.0.", program.Channel!.GetText(), StringComparison.Ordinal);
+            await ShellFixture.PumpUntil(() => program.HotReload!.State == Workbench.Build.HotReloadState.Watching, seconds: 120);
+
+            var file = Path.Combine(folder, "Net60", "Net60.App", "Program.cs");
+            var editor = await f.Shell.OpenFileAsync(file, preview: false, null);
+            await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+            var offset = editor!.Model.Text.Text.IndexOf("message: before", StringComparison.Ordinal);
+            editor.Model.Text.Replace(offset, "message: before".Length, "message: after");
+            f.Shell.Run("run.applyCodeChanges");
+            await ShellFixture.PumpUntil(() => program.Channel!.GetText().Contains("message: after", StringComparison.Ordinal), seconds: 180);
         }
         finally
         {
