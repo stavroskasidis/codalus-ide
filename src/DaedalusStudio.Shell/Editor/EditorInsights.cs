@@ -249,6 +249,7 @@ public sealed class EditorInsights : IDisposable
     private void OnDocumentChanged(object? sender, DocumentChangeEventArgs e)
     {
         _hintRange = (-1, -1);
+        _emptyHints = 0;
         Margin.Invalidate();
         Restart(_hintTimer);
         Restart(_lensTimer);
@@ -313,6 +314,20 @@ public sealed class EditorInsights : IDisposable
             _hints.Disconnect(_editor.Document);
             _hints = collection;
             _hintRange = (first, last);
+            if (hints.Length == 0 && client?.Capabilities?.InlayHintProvider == true && _emptyHints < 3)
+            {
+                // Asked before the language service had the document's semantics (it just opened, the project is
+                // still loading): ask again a few times rather than wait for the next edit or diagnostics.
+                _emptyHints++;
+                DispatcherTimer.RunOnce(() =>
+                {
+                    if (!_disposed && _hints.Count == 0)
+                    {
+                        _hintRange = (-1, -1);
+                        Restart(_hintTimer);
+                    }
+                }, TimeSpan.FromSeconds(_emptyHints));
+            }
             if (margin is not null)
             {
                 Margin.Set(margin, first, last);
@@ -412,6 +427,9 @@ public sealed class EditorInsights : IDisposable
     }
 
     private int _failures;
+
+    /// <summary>Hint requests in a row that came back empty (reset by an edit).</summary>
+    private int _emptyHints;
 
     /// <summary>
     /// A request failed (the service restarting, or not ready yet): try again later, a few times, so the editor doesn't
