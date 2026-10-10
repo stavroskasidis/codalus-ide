@@ -58,6 +58,12 @@ public sealed class LanguageService : IAsyncDisposable
 
     public WorkspaceStatusParams? Status(string languageId) => _status.GetValueOrDefault(languageId);
 
+    /// <summary>Each started service's process and what its connection waits for (diagnostics).</summary>
+    public IReadOnlyList<string> Describe() =>
+        [.. _clients.Where(c => c.Value.IsValueCreated).Select(c => c.Value.Value.IsCompletedSuccessfully && c.Value.Value.Result is { } client
+            ? $"{c.Key}: process {client.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"}, {(client.IsRunning ? "running" : "not running")}; {client.Describe()}"
+            : $"{c.Key}: {(c.Value.Value.IsCompleted ? "not started" : "starting")}")];
+
     /// <summary>The process id of a running host (tests, diagnostics).</summary>
     public int? HostProcessId(string languageId) =>
         _clients.TryGetValue(languageId, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result?.ProcessId : null;

@@ -1091,12 +1091,68 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
                     Console.Out.WriteLine(Tail(channel.GetText(), 4000));
                 }
 
+                Console.Out.WriteLine("  --- Language services ---");
+                foreach (var line in shell.Languages.Describe())
+                {
+                    Console.Out.WriteLine("  " + line);
+                }
+
+                PrintHostDiagnostics();
                 Console.Out.Flush();
             }
         }
         finally
         {
             WriteReport();
+        }
+    }
+
+    /// <summary>
+    /// On Linux and macOS: the busiest processes, and the C# host's managed stacks when <c>dotnet-stack</c> is installed
+    /// (CI installs it), so a host that stopped answering says where it is.
+    /// </summary>
+    private void PrintHostDiagnostics()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        static string Run(string program, params string[] arguments)
+        {
+            try
+            {
+                var start = new ProcessStartInfo(program) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+                foreach (var argument in arguments)
+                {
+                    start.ArgumentList.Add(argument);
+                }
+
+                using var process = Process.Start(start)!;
+                var output = process.StandardOutput.ReadToEndAsync();
+                var error = process.StandardError.ReadToEndAsync();
+                if (!process.WaitForExit(TimeSpan.FromSeconds(60)))
+                {
+                    process.Kill(entireProcessTree: true);
+                    return "(timed out)";
+                }
+
+                return output.GetAwaiter().GetResult() + error.GetAwaiter().GetResult();
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+            {
+                return $"({program}: {ex.Message})";
+            }
+        }
+
+        Console.Out.WriteLine("  --- Processes (by CPU) ---");
+        Console.Out.WriteLine(string.Join('\n', Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu").Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
+        var tool = new[] { Environment.GetEnvironmentVariable("HOME") is { } home ? Path.Combine(home, ".dotnet", "tools", "dotnet-stack") : null }
+            .OfType<string>().FirstOrDefault(File.Exists);
+        if (tool is not null && shell.Languages.HostProcessId(ShellHost.CSharpLanguageId) is { } pid)
+        {
+            Console.Out.WriteLine($"  --- The C# host's stacks (process {pid}) ---");
+            Console.Out.WriteLine(Tail(Run(tool, "report", "-p", pid.ToString(System.Globalization.CultureInfo.InvariantCulture)), 20000));
         }
     }
 

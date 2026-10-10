@@ -48,6 +48,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     /// <summary>Messages being written: what, when it started, and whether it got the write lock (stuck-write reports).</summary>
     private readonly ConcurrentDictionary<long, (string What, long Started, bool Locked)> _writing = new();
     private readonly ConcurrentDictionary<long, bool> _reportedWrites = new();
+    private readonly ConcurrentDictionary<long, (string Method, long Started)> _outgoing = new();
+
+    /// <summary>The notification the dispatch loop is handling (every later message waits for it), or null.</summary>
+    private (string Method, long Started)? _notification;
+    private long _reportedNotification;
     private long _nextWrite;
     private Timer? _watchdog;
 
@@ -102,6 +107,12 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             }
         }
 
+        if (_notification is var (notification, since) && System.Diagnostics.Stopwatch.GetElapsedTime(since, now) is var running
+            && running > SlowRequest && Interlocked.Exchange(ref _reportedNotification, since) != since)
+        {
+            Slow?.Invoke(this, $"Notification {notification} has been running for {running.TotalSeconds:0} s; {QueuedMessages} message(s) wait behind it.");
+        }
+
         foreach (var (id, (what, started, locked)) in _writing)
         {
             var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started, now);
@@ -112,6 +123,33 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                     : $"Writing {what} has waited {elapsed.TotalSeconds:0} s for the write lock; {_writing.Count} write(s) pending.");
             }
         }
+    }
+
+    private int QueuedMessages => _inbox.Reader.CanCount ? _inbox.Reader.Count : -1;
+
+    /// <summary>
+    /// What the connection is waiting for, for diagnosing a peer that stopped answering: requests sent and not answered
+    /// (the oldest), incoming requests running, the notification being handled, queued messages and pending writes.
+    /// </summary>
+    public string Describe()
+    {
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        string Age(long started) => $"{System.Diagnostics.Stopwatch.GetElapsedTime(started, now).TotalSeconds:0} s";
+        var parts = new List<string> { $"{_outgoing.Count} request(s) awaiting a reply" };
+        if (_outgoing.Values.OrderBy(o => o.Started).FirstOrDefault() is { Method: not null } oldest)
+        {
+            parts[0] += $" (the oldest: {oldest.Method}, {Age(oldest.Started)})";
+        }
+
+        parts.Add($"{_running.Count} incoming request(s) running" + (_running.Values.OrderBy(r => r.Started).FirstOrDefault() is { Method: not null } longest ? $" (the longest: {longest.Method}, {Age(longest.Started)})" : string.Empty));
+        if (_notification is var (notification, since))
+        {
+            parts.Add($"handling notification {notification} for {Age(since)}");
+        }
+
+        parts.Add($"{QueuedMessages} message(s) queued");
+        parts.Add($"{_writing.Count} write(s) pending");
+        return string.Join("; ", parts);
     }
 
     // ------------------------------------------------------------------ incoming
@@ -197,6 +235,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         var id = Interlocked.Increment(ref _nextId);
         var completion = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[id] = completion;
+        _outgoing[id] = (method, System.Diagnostics.Stopwatch.GetTimestamp());
         try
         {
             await WriteMessageAsync(writer =>
@@ -221,6 +260,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         finally
         {
             _pending.TryRemove(id, out _);
+            _outgoing.TryRemove(id, out _);
         }
     }
 
@@ -394,6 +434,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             else if (_notificationHandlers.TryGetValue(method, out var handler))
             {
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                _notification = (method, started);
                 try
                 {
                     await handler(parameters).ConfigureAwait(false);
@@ -406,6 +447,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     HandlerFailed?.Invoke(this, ex);
+                }
+                finally
+                {
+                    _notification = null;
                 }
             }
         }

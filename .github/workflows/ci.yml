@@ -100,6 +100,10 @@ jobs:
       - name: Display for the smoke test (Xvfb)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
+      - name: Stack traces for a smoke test failure (dotnet-stack)
+        # The smoke test prints the C# host's stacks when a step fails: a host that stopped answering says where it is.
+        if: runner.os != 'Windows'
+        run: dotnet tool install -g dotnet-stack || true
       # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the
       # in-process headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform).
       - name: End-to-end smoke test of the published app

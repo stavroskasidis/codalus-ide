@@ -64,6 +64,19 @@ public sealed class LanguageHostClient : IAsyncDisposable
 
     public bool IsRunning => _process.IsRunning;
 
+    /// <summary>What the connection waits for (diagnostics of a host that stopped answering).</summary>
+    public string Describe()
+    {
+        try
+        {
+            return _process.Connection.Describe();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ex.Message;
+        }
+    }
+
     /// <summary>Open documents with their current text, replayed after a restart.</summary>
     public Func<IReadOnlyList<OpenDocumentState>>? OpenDocumentsProvider { get; set; }
 
