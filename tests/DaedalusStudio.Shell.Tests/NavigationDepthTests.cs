@@ -134,10 +134,18 @@ public class NavigationDepthTests
         var view = f.Shell.ActiveEditor!.View!;
 
         // Again every few seconds: while design-time builds reload the projects, the definition can be briefly unknown.
+        // CI's two-core runners can take minutes, as for loading the projects. Messages last 5 s, so keep the last one.
+        string? lastMessage = null;
+        f.Shell.StatusBar.PropertyChanged += (_, e) => lastMessage = e.PropertyName == nameof(f.Shell.StatusBar.Message) && f.Shell.StatusBar.Message is { } m ? m : lastMessage;
         var started = System.Diagnostics.Stopwatch.StartNew();
         while (view.Peek?.IsOpen != true)
         {
-            Assert.True(started.Elapsed < TimeSpan.FromSeconds(90), "Peek Definition did not open: " + f.Shell.StatusBar.Message);
+            if (started.Elapsed > TimeSpan.FromSeconds(180))
+            {
+                var log = f.Shell.LanguageLog.GetText();
+                Assert.Fail($"Peek Definition did not open. Last message: {lastMessage}. Language log: {log[Math.Max(0, log.Length - 4000)..]}");
+            }
+
             f.Shell.Run("editor.action.peekDefinition");
             try
             {
