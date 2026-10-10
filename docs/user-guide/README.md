@@ -58,6 +58,7 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `Ctrl+Alt+E` | Exception Settings |
 | | `Ctrl+Alt+B`, `Ctrl+Alt+C`, `Ctrl+Alt+H`, `Ctrl+Alt+U` | Breakpoints, Call Stack, Threads, Modules |
 | Web | `Ctrl+Alt+R` | Send the .http request at the caret |
+| | `Alt+F10` | Apply code changes (Hot Reload) |
 | Testing | `Ctrl+E T` | Test Explorer |
 | | `Ctrl+R A`, `Ctrl+R Ctrl+A` | Run, debug all tests |
 | | `Ctrl+R T`, `Ctrl+R Ctrl+T` | Run, debug the tests at the cursor |

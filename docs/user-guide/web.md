@@ -2,6 +2,15 @@
 
 Daedalus Studio runs ASP.NET Core projects with Kestrel, using their launch profiles: `applicationUrl` becomes the app's URLs, and `launchBrowser` opens your browser. Start with `F5` (debugging) or `Ctrl+F5`.
 
+## Hot Reload
+
+Debug → **Start with Hot Reload** runs the startup project under `dotnet watch`, with its launch profile. Save a file, or press `Alt+F10` (Apply Code Changes, which saves every modified file), and the change is applied to the running app:
+- **Web apps:** the browser refreshes, including after CSS changes.
+- **Edits that can't be applied** to a running app (a *rude edit*, such as a changed method signature): the app restarts, and a notification says so.
+- **Edits that don't compile:** they wait until they do.
+
+The status bar shows the state (watching, applied in N ms, compile errors, restarting); click it to see the output. The **Hot Reload on Start Without Debugging** setting (`run.hotReload`) makes `Ctrl+F5` start with Hot Reload. Hot Reload isn't available while debugging: the debugger can't apply changes to a paused program, so restart the session instead.
+
 ## The Endpoints Explorer
 
 View → Endpoints Explorer lists every endpoint of the solution's ASP.NET Core projects, by project:

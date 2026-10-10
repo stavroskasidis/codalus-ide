@@ -16,6 +16,7 @@ internal static partial class BuiltIns
           { "key": "primary+shift+b", "command": "build.buildSolution" },
           { "key": "ctrl+pause", "command": "build.cancel", "when": "buildRunning" },
           { "key": "ctrl+f5", "mac": "cmd+f5", "command": "run.startWithoutDebugging" },
+          { "key": "alt+f10", "command": "run.applyCodeChanges", "when": "hotReloadRunning" },
           { "key": "shift+f5", "command": "run.stop", "when": "programRunning && !debugActive" }
         ]
         """;
@@ -38,6 +39,13 @@ internal static partial class BuiltIns
                 Category = "Build and Run",
                 Description = "Windows only: start console apps in a console window of their own (so they can read input) instead of showing their output in the Output window.",
                 Order = 2,
+            },
+            SettingDescriptor.Create(ShellHost.HotReloadSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "Hot Reload on Start Without Debugging",
+                Category = "Build and Run",
+                Description = "Run under dotnet watch on Ctrl+F5: saved edits are applied to the running app, which restarts when an edit can't be applied.",
+                Order = 3,
             },
         ];
     }
@@ -73,7 +81,9 @@ internal static partial class BuiltIns
             shell.CancelBuild();
             return Task.CompletedTask;
         }, "buildRunning");
-        Add("run.startWithoutDebugging", "Start Without Debugging", "Debug", shell.StartWithoutDebuggingAsync, Idle);
+        Add("run.startWithoutDebugging", "Start Without Debugging", "Debug", p => shell.StartWithoutDebuggingAsync(p), Idle);
+        Add("run.startWithHotReload", "Start with Hot Reload", "Debug", shell.StartWithHotReloadAsync, Idle);
+        Add("run.applyCodeChanges", "Apply Code Changes (Hot Reload)", "Debug", _ => shell.ApplyCodeChangesAsync(), "hotReloadRunning");
         Add("run.stop", "Stop Running Programs", "Debug", _ =>
         {
             shell.StopRunning();
@@ -112,6 +122,8 @@ internal static partial class BuiltIns
             Item(MenuLocations.MenuBar("build"), "build.cancel", "3-cancel", 1),
             Item(MenuLocations.MenuBar("build"), "solution.selectConfiguration", "4-configuration", 1, title: "Configuration…"),
             Item(MenuLocations.MenuBar("debug"), "run.startWithoutDebugging", "1-run", 1),
+            Item(MenuLocations.MenuBar("debug"), "run.startWithHotReload", "1-run", 2),
+            Item(MenuLocations.MenuBar("debug"), "run.applyCodeChanges", "1-run", 3),
             Item(MenuLocations.MenuBar("debug"), "run.stop", "1-run", 2),
             Item(MenuLocations.MenuBar("debug"), "run.selectStartupProject", "2-startup", 1),
             Item(MenuLocations.MenuBar("debug"), "run.selectLaunchProfile", "2-startup", 2),

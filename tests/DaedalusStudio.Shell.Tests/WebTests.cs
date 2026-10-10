@@ -90,4 +90,63 @@ public sealed class WebTests
         await f.Shell.SelectAspNetEnvironmentAsync(string.Empty);
         Assert.Null(f.Shell.Runs.EnvironmentOverride);
     }
+
+    [AvaloniaFact]
+    public async Task Hot_reload_applies_a_saved_edit_to_the_running_app()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = f.CopySample("Web");
+        var project = Path.Combine(folder, "WebApi");
+        var port = FreePort();
+        var settings = Path.Combine(project, "Properties", "launchSettings.json");
+        await File.WriteAllTextAsync(settings, (await File.ReadAllTextAsync(settings, TestContext.Current.CancellationToken)).Replace("5248", port.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal), TestContext.Current.CancellationToken);
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "Web.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 120);
+
+        await f.Shell.StartWithHotReloadAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.HotReloadProgram is not null, seconds: 180);
+        var program = f.Shell.HotReloadProgram!;
+        using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{port}") };
+        try
+        {
+            await ShellFixture.PumpUntil(() => program.Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true, seconds: 180);
+            await ShellFixture.PumpUntil(() => program.HotReload!.State == Workbench.Build.HotReloadState.Watching, seconds: 120);
+            Assert.Equal("Hello from the Web fixture", await http.GetStringAsync("/", TestContext.Current.CancellationToken));
+            Assert.Contains("dotnet", program.Channel!.GetText().Split('\n')[0], StringComparison.Ordinal); // "> dotnet watch run …"
+            Assert.True(Equals(f.Shell.Workbench.Context.GetValue("hotReloadRunning"), true));
+
+            // Edit the handler in the editor and save: dotnet watch applies it to the running app.
+            var file = Path.Combine(project, "Program.cs");
+            var editor = await f.Shell.OpenFileAsync(file, preview: false, null);
+            await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+            var text = editor!.Model.Text.Text;
+            var offset = text.IndexOf("Hello from the Web fixture", StringComparison.Ordinal);
+            editor.Model.Text.Replace(offset, "Hello from the Web fixture".Length, "Hello from Hot Reload");
+            f.Shell.Run("run.applyCodeChanges");
+            await ShellFixture.PumpUntil(() => program.HotReload!.Applied >= 1 || program.HotReload.Restarts >= 1,
+                seconds: 120);
+            var answer = string.Empty;
+            await ShellFixture.PumpUntil(() =>
+            {
+                try
+                {
+                    answer = http.GetStringAsync("/").GetAwaiter().GetResult();
+                }
+                catch (HttpRequestException)
+                {
+                    // Restarting.
+                }
+
+                return answer == "Hello from Hot Reload";
+            }, seconds: 120);
+            Assert.Contains(f.Shell.StatusBar.Left, i => i.Item.Id == "daedalus.hotReload");
+        }
+        finally
+        {
+            f.Shell.StopRunning();
+        }
+
+        await ShellFixture.PumpUntil(() => f.Shell.HotReloadProgram is null, seconds: 60);
+    }
 }

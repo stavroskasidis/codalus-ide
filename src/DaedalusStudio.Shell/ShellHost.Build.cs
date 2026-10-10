@@ -149,9 +149,13 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ run
 
-    /// <summary>Builds the startup project, then starts it with its launch profile (Ctrl+F5).</summary>
-    public async Task StartWithoutDebuggingAsync(string? argument = null)
+    /// <summary>
+    /// Builds the startup project, then starts it with its launch profile (Ctrl+F5). With <paramref name="hotReload"/>,
+    /// or the <c>run.hotReload</c> setting, it runs under <c>dotnet watch</c> (M15b).
+    /// </summary>
+    public async Task StartWithoutDebuggingAsync(string? argument = null, bool hotReload = false)
     {
+        hotReload |= Workbench.Settings.GetBoolean(HotReloadSetting, false);
         var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
         if (project is null)
         {
@@ -175,13 +179,14 @@ public sealed partial class ShellHost
         try
         {
             var console = Workbench.Settings.GetString(RunConsoleSetting, "outputWindow");
-            if (console == "integratedTerminal" && Runs.IsExecutable(project))
+            if (console == "integratedTerminal" && Runs.IsExecutable(project) && !hotReload)
             {
                 await RunInTerminalAsync(project).ConfigureAwait(true);
                 return;
             }
 
-            var program = await Runs.StartAsync(project, console == "externalConsole" || Workbench.Settings.GetBoolean(ExternalConsoleSetting, false), CancellationToken.None).ConfigureAwait(true);
+            var program = await Runs.StartAsync(project, console == "externalConsole" || Workbench.Settings.GetBoolean(ExternalConsoleSetting, false), CancellationToken.None, hotReload).ConfigureAwait(true);
+            OnHotReloadStarted(program);
             if (program.Channel is { } channel)
             {
                 Workbench.Output.Show(channel);

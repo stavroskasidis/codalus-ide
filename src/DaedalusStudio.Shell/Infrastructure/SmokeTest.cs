@@ -716,6 +716,46 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
                 shell.StopRunning();
             }
         }).ConfigureAwait(true);
+
+        await StepAsync("web.hotReload", "M15", "Hot Reload applies a saved edit to the running web app (dotnet watch)", async () =>
+        {
+            await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+            var programFile = Path.Combine(_work, "Web", "WebApi", "Program.cs");
+            var urls = (await shell.Runs.PlanAsync(Path.Combine(_work, "Web", "WebApi", "WebApi.csproj"), CancellationToken.None).ConfigureAwait(true)).Plan.Environment["ASPNETCORE_URLS"];
+            await shell.StartWithHotReloadAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.HotReloadProgram is not null, "the app runs under dotnet watch", 240).ConfigureAwait(true);
+            var program = shell.HotReloadProgram!;
+            using var client = new System.Net.Http.HttpClient { BaseAddress = new Uri(urls.Split(';')[0]), Timeout = TimeSpan.FromSeconds(10) };
+            try
+            {
+                await WaitAsync(() => program.HotReload!.State == Workbench.Build.HotReloadState.Watching && program.Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true,
+                    "dotnet watch waits for changes: " + Tail(program.Channel?.GetText() ?? string.Empty, 1500), 240).ConfigureAwait(true);
+                var editor = await OpenAsync(programFile).ConfigureAwait(true);
+                var offset = editor.Model.Text.Text.IndexOf("Hello from the Web fixture", StringComparison.Ordinal);
+                editor.Model.Text.Replace(offset, "Hello from the Web fixture".Length, "Hello from Hot Reload");
+                shell.Run("run.applyCodeChanges");
+                var answer = string.Empty;
+                await WaitAsync(() =>
+                {
+                    try
+                    {
+                        answer = client.GetStringAsync("/").GetAwaiter().GetResult();
+                    }
+                    catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException)
+                    {
+                        // Restarting.
+                    }
+
+                    return answer == "Hello from Hot Reload";
+                }, "the running app answers with the edited text (got '" + answer + "'): " + Tail(program.Channel?.GetText() ?? string.Empty, 1500), 120).ConfigureAwait(true);
+                // dotnet watch reports the update after the app already serves it.
+                await WaitAsync(() => program.HotReload!.Applied + program.HotReload.Restarts >= 1, "dotnet watch reports the update: " + Tail(program.Channel?.GetText() ?? string.Empty, 1500), 60).ConfigureAwait(true);
+            }
+            finally
+            {
+                shell.StopRunning();
+            }
+        }, "web.http").ConfigureAwait(true);
     }
 
     /// <summary>samples/Web with a free port in its launch profile and .http file.</summary>

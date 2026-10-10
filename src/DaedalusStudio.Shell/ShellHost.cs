@@ -103,6 +103,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeBookmarks();
         InitializeTesting();
         InitializeWeb();
+        InitializeHotReload();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)

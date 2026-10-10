@@ -31,6 +31,9 @@ public sealed class RunningProgram : IDisposable
     /// <summary>The channel with the program's output; null when it runs in a console window of its own.</summary>
     public OutputChannel? Channel { get; }
 
+    /// <summary>The Hot Reload state when the program runs under <c>dotnet watch</c> (M15b); null otherwise.</summary>
+    public HotReloadSession? HotReload { get; init; }
+
     /// <summary>Completes with the exit code.</summary>
     public Task<int> Exited => _exited.Task;
 
@@ -242,11 +245,39 @@ public sealed class RunService : IDisposable
         return (Adjust(LaunchPlanner.Plan(info, profile)), profile, error);
     }
 
+    /// <summary>The folder of the <c>dotnet</c> the solution builds with (null: the one on PATH), for Hot Reload.</summary>
+    public string? DotnetRoot { get; set; }
+
+    /// <summary>
+    /// The plan of a Hot Reload run (ADR 0022): <c>dotnet watch run</c> on the project, with the launch profile already
+    /// applied (so <c>--no-launch-profile</c>), restarting on rude edits instead of asking, and plain-text messages.
+    /// </summary>
+    public LaunchPlan HotReloadPlan(string projectPath, LaunchPlan plan, string? commandLineArgs)
+    {
+        var dotnet = DotnetRoot is { } root && File.Exists(Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"))
+            ? Path.Combine(root, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")
+            : "dotnet";
+        var arguments = $"watch run --project \"{projectPath}\" --no-launch-profile --non-interactive";
+        if (!string.IsNullOrWhiteSpace(commandLineArgs))
+        {
+            arguments += " -- " + commandLineArgs;
+        }
+
+        var environment = new Dictionary<string, string>(plan.Environment, StringComparer.Ordinal)
+        {
+            ["DOTNET_WATCH_SUPPRESS_EMOJIS"] = "1",
+            ["DOTNET_WATCH_RESTART_ON_RUDE_EDIT"] = "true",
+            ["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "1",
+        };
+        return plan with { FileName = dotnet, Arguments = arguments.TrimEnd(), Environment = environment };
+    }
+
     /// <summary>
     /// Starts a (built) project with its launch profile. Output goes to a "Run: name" channel, unless
-    /// <paramref name="externalConsole"/> (Windows console apps) gives it a console window of its own.
+    /// <paramref name="externalConsole"/> (Windows console apps) gives it a console window of its own. With
+    /// <paramref name="hotReload"/>, it runs under <c>dotnet watch</c>: saved edits are applied to the running program.
     /// </summary>
-    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken)
+    public async Task<RunningProgram> StartAsync(string projectPath, bool externalConsole, CancellationToken cancellationToken, bool hotReload = false)
     {
         var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken).ConfigureAwait(false);
         var name = Path.GetFileNameWithoutExtension(projectPath);
@@ -258,6 +289,12 @@ public sealed class RunService : IDisposable
 
         var profile = ResolveProfile(projectPath, profiles);
         var plan = Adjust(LaunchPlanner.Plan(info, profile));
+        if (hotReload)
+        {
+            plan = HotReloadPlan(projectPath, plan, profile?.CommandLineArgs);
+            externalConsole = false;
+        }
+
         var console = externalConsole && OperatingSystem.IsWindows() && string.Equals(info.OutputType, "Exe", StringComparison.OrdinalIgnoreCase);
         var start = CreateStartInfo(plan, console);
 
@@ -272,7 +309,7 @@ public sealed class RunService : IDisposable
             throw new InvalidOperationException($"{plan.FileName} did not start.");
         }
 
-        var program = new RunningProgram(projectPath, name, process, console ? null : channel);
+        var program = new RunningProgram(projectPath, name, process, console ? null : channel) { HotReload = hotReload ? new HotReloadSession() : null };
         var browserOpened = plan.BrowserUrl is null;
         void OpenBrowserOnce()
         {
@@ -302,6 +339,7 @@ public sealed class RunService : IDisposable
                 }
 
                 channel.AppendLine(line);
+                program.HotReload?.OnLine(line);
                 if (!browserOpened && s_listeningMarkers.Any(m => line.Contains(m, StringComparison.Ordinal)))
                 {
                     OpenBrowserOnce();
