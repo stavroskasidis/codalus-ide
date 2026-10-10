@@ -246,6 +246,7 @@ internal static partial class BuiltIns
             .. KeybindingService.ParseRules(ProjectManagementKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(TerminalKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(InteractiveKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+            .. KeybindingService.ParseRules(WebKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         ];
 
     private static CommandHandler Ui(Action action) => async (_, _) =>

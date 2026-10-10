@@ -8,11 +8,12 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 4. [Editing and navigating code](editing.md)
 5. [Building and running](build-and-run.md)
 6. [Debugging](debugging.md)
-7. [Testing](testing.md)
-8. [Git](git.md)
-9. [Terminal and C# Interactive](terminal.md)
-10. [The window, settings, themes and keyboard shortcuts](settings.md)
-11. [Troubleshooting, logs and crash reports](troubleshooting.md)
+7. [Web development: endpoints, .http files, certificates and secrets](web.md)
+8. [Testing](testing.md)
+9. [Git](git.md)
+10. [Terminal and C# Interactive](terminal.md)
+11. [The window, settings, themes and keyboard shortcuts](settings.md)
+12. [Troubleshooting, logs and crash reports](troubleshooting.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 
@@ -56,6 +57,7 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `Shift+F9` | QuickWatch |
 | | `Ctrl+Alt+E` | Exception Settings |
 | | `Ctrl+Alt+B`, `Ctrl+Alt+C`, `Ctrl+Alt+H`, `Ctrl+Alt+U` | Breakpoints, Call Stack, Threads, Modules |
+| Web | `Ctrl+Alt+R` | Send the .http request at the caret |
 | Testing | `Ctrl+E T` | Test Explorer |
 | | `Ctrl+R A`, `Ctrl+R Ctrl+A` | Run, debug all tests |
 | | `Ctrl+R T`, `Ctrl+R Ctrl+T` | Run, debug the tests at the cursor |

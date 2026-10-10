@@ -55,6 +55,7 @@ public sealed partial class CodeEditorController : IDisposable
     private StopInfo? _exceptionShownFor;
     private readonly GitChangeMargin _gitMargin = new();
     private readonly TestMargin _testMargin;
+    private readonly HttpRequestMargin _httpMargin;
     private readonly CoverageMargin _coverageMargin;
     private readonly EditorInsights _insights;
     private readonly BookmarkMargin _bookmarkMargin;
@@ -102,6 +103,8 @@ public sealed partial class CodeEditorController : IDisposable
         editor.TextArea.LeftMargins.Insert(0, _breakpointMargin);
         _testMargin = new TestMargin(() => Model.Path, services.Tests, services.ShowTestMenu);
         editor.TextArea.LeftMargins.Insert(1, _testMargin);
+        _httpMargin = new HttpRequestMargin(() => Model.LanguageId == "http", line => services.SendHttpRequestAsync(Model.Path, Model.Text.Text, line));
+        editor.TextArea.LeftMargins.Insert(1, _httpMargin);
         _bookmarkMargin = new BookmarkMargin(document, () => Model.Path, services.Bookmarks);
         editor.TextArea.LeftMargins.Insert(1, _bookmarkMargin);
         editor.TextArea.ContextRequested += OnContextRequested;
@@ -165,6 +168,9 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>The test margin (tests and the headless UI test).</summary>
     public TestMargin TestMargin => _testMargin;
+
+    /// <summary>The send glyphs of a .http file (M15a).</summary>
+    public HttpRequestMargin HttpMargin => _httpMargin;
 
     /// <summary>The coverage coloring (tests and the headless UI test).</summary>
     public CoverageMargin CoverageMargin => _coverageMargin;
@@ -368,6 +374,7 @@ public sealed partial class CodeEditorController : IDisposable
         {
             UpdateGrammar();
             RefreshAll();
+            _httpMargin.Refresh();
         }
     }
 

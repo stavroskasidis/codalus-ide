@@ -299,6 +299,7 @@ public sealed partial class ShellHost : IEditorServices
             _ = Languages.ChangeAsync(model.Path, e.Version, e.Changes);
         };
         model.Saved += (_, _) => _ = Languages.SavedAsync(model.Path);
+        model.Saved += (_, _) => Ui.Post(() => OnWebDocumentSaved(model.Path));
         model.ConflictDetected += (_, _) => _ = ResolveConflictAsync(model);
         if (model.LanguageId is { } languageId)
         {
@@ -658,6 +659,7 @@ public sealed partial class ShellHost : IEditorServices
             Breakpoints = Debugger.Breakpoints.All.Count == 0 ? null : [.. Debugger.Breakpoints.All.Select(ToSession)],
             FunctionBreakpoints = Debugger.Breakpoints.Functions.Count == 0 ? null : [.. Debugger.Breakpoints.Functions.Select(ToSession)],
             BreakOnOtherExceptions = Debugger.ExceptionSettings.BreakOnOthers ? true : null,
+            AspNetEnvironment = Runs.EnvironmentOverride,
             ExceptionTypes = Debugger.ExceptionSettings.Changes() is { Count: > 0 } exceptionTypes ? exceptionTypes : null,
             Watches = Watch.Expressions.Count == 0 ? null : Watch.Expressions,
             LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
@@ -672,6 +674,7 @@ public sealed partial class ShellHost : IEditorServices
             Runs.Load(null, null);
             Debugger.Breakpoints.Clear();
             Debugger.ExceptionSettings.Reset();
+            Runs.EnvironmentOverride = null;
             Watch.Load(null);
             return;
         }
@@ -679,6 +682,7 @@ public sealed partial class ShellHost : IEditorServices
         Runs.Load(session.StartupProject, session.LaunchProfiles);
         Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(FromSession), (session.FunctionBreakpoints ?? []).Select(FromSession));
         Debugger.ExceptionSettings.Load(session.BreakOnOtherExceptions ?? false, session.ExceptionTypes);
+        Runs.EnvironmentOverride = session.AspNetEnvironment;
         Watch.Load(session.Watches);
 
         foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))

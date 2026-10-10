@@ -65,6 +65,8 @@ public sealed class ReferenceManagerViewModel : ObservableObject, ILoadable
     private string _filter = string.Empty;
     private string? _error;
     private FileReferenceRow? _selectedFile;
+    private long _watchUntil;
+    private bool _watching;
 
     public ReferenceManagerViewModel(ProjectManagementService management, SolutionService solutions, string project, Func<string, string, string[], Task<string?>> pickFile)
     {
@@ -171,6 +173,7 @@ public sealed class ReferenceManagerViewModel : ObservableObject, ILoadable
     /// <summary>Adds and removes project references to match the checkboxes.</summary>
     public async Task ApplyAsync()
     {
+        WatchEvaluations();
         try
         {
             foreach (var project in Projects.Where(p => p.IsChecked != p.WasChecked))
@@ -201,6 +204,7 @@ public sealed class ReferenceManagerViewModel : ObservableObject, ILoadable
             return;
         }
 
+        WatchEvaluations();
         try
         {
             await _management.AddReferenceAsync(Project, kind, file, CancellationToken.None).ConfigureAwait(true);
@@ -220,6 +224,7 @@ public sealed class ReferenceManagerViewModel : ObservableObject, ILoadable
             return;
         }
 
+        WatchEvaluations();
         try
         {
             await _management.RemoveReferenceAsync(Project, row.Kind, path, CancellationToken.None).ConfigureAwait(true);
@@ -230,6 +235,42 @@ public sealed class ReferenceManagerViewModel : ObservableObject, ILoadable
         {
             Error = ex.Message;
         }
+    }
+
+    /// <summary>
+    /// For the next two minutes, every evaluation of the project reloads the lists: an edit's evaluation can arrive
+    /// before the wait below starts, or after it gives up (a busy host), and an earlier evaluation can end it too soon.
+    /// </summary>
+    private void WatchEvaluations()
+    {
+        _watchUntil = Environment.TickCount64 + 120_000;
+        if (_watching)
+        {
+            return;
+        }
+
+        _watching = true;
+        _solutions.ProjectChanged += OnEvaluated;
+    }
+
+    private void OnEvaluated(object? sender, ProjectInfo info)
+    {
+        if (!SolutionService.PathComparer.Equals(info.Path, Project))
+        {
+            return;
+        }
+
+        Ui.Post(() =>
+        {
+            if (Environment.TickCount64 > _watchUntil)
+            {
+                _solutions.ProjectChanged -= OnEvaluated;
+                _watching = false;
+                return;
+            }
+
+            _ = LoadAsync();
+        });
     }
 
     /// <summary>The host re-evaluates after the file changes; refresh once the project's new evaluation arrives.</summary>

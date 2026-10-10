@@ -72,7 +72,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -102,6 +102,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeEditingSafety();
         InitializeBookmarks();
         InitializeTesting();
+        InitializeWeb();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -117,6 +118,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterEditorCommands(this);
         BuiltIns.RegisterBuildCommands(this);
         BuiltIns.RegisterDebugCommands(this);
+        BuiltIns.RegisterWebCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterPackageCommands(this);
@@ -126,6 +128,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterEditorMenus(Workbench.Menus);
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
         BuiltIns.RegisterDebugMenus(Workbench.Menus);
+        BuiltIns.RegisterWebMenus(Workbench.Menus);
         BuiltIns.RegisterGitMenus(Workbench.Menus);
         BuiltIns.RegisterTestingMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
@@ -366,6 +369,8 @@ public sealed partial class ShellHost : IAsyncDisposable
             BreakpointsViewModel.ToolWindowId => BreakpointList,
             DebugConsoleViewModel.ToolWindowId => DebugConsole,
             QuickWatchViewModel.ToolWindowId => QuickWatch,
+            EndpointsExplorerViewModel.ToolWindowId => Endpoints,
+            HttpResponseViewModel.ToolWindowId => HttpResponse,
             ThreadsViewModel.ToolWindowId => ThreadList,
             ModulesViewModel.ToolWindowId => ModuleList,
             ExceptionSettingsViewModel.ToolWindowId => ExceptionSettingsWindow,

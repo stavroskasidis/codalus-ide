@@ -55,9 +55,17 @@ public static class BuiltInLanguages
             L("ruby", "Ruby", [".rb", ".gemspec"], ["Gemfile", "Rakefile"]),
             L("php", "PHP", [".php"]),
             L("razor", "Razor", [".cshtml", ".razor"]),
+            L("http", "HTTP", [".http", ".rest"]),
         })
         {
             registry.Register(language);
+        }
+
+        // .http files (M15a): our own grammar, shipped next to the shell.
+        var http = Path.Combine(AppContext.BaseDirectory, "grammars", "http.tmLanguage.json");
+        if (File.Exists(http))
+        {
+            registry.RegisterGrammar(new GrammarDefinition("source.http", "http", http));
         }
     }
 }

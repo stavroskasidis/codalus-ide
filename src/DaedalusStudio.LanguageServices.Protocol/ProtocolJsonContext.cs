@@ -83,6 +83,8 @@ namespace DaedalusStudio.LanguageServices.Protocol;
 [JsonSerializable(typeof(SyntaxTreeResult))]
 [JsonSerializable(typeof(CodeMetricsParams))]
 [JsonSerializable(typeof(CodeMetricsResult))]
+[JsonSerializable(typeof(AspNetEndpointsParams))]
+[JsonSerializable(typeof(AspNetEndpointsResult))]
 [JsonSerializable(typeof(CodeActionChoices))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(string[]))]

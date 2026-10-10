@@ -205,6 +205,28 @@ public sealed class RunService : IDisposable
         return (info, profiles, error);
     }
 
+    /// <summary>
+    /// The ASP.NET Core environment every run and debug session uses (M15a), over the launch profile's
+    /// (<c>ASPNETCORE_ENVIRONMENT</c> and <c>DOTNET_ENVIRONMENT</c>); null keeps the profile's.
+    /// </summary>
+    public string? EnvironmentOverride { get; set; }
+
+    /// <summary>Applies <see cref="EnvironmentOverride"/> to a plan.</summary>
+    public LaunchPlan Adjust(LaunchPlan plan)
+    {
+        if (EnvironmentOverride is not { Length: > 0 } environment)
+        {
+            return plan;
+        }
+
+        var variables = new Dictionary<string, string>(plan.Environment, StringComparer.Ordinal)
+        {
+            ["ASPNETCORE_ENVIRONMENT"] = environment,
+            ["DOTNET_ENVIRONMENT"] = environment,
+        };
+        return plan with { Environment = variables };
+    }
+
     /// <summary>The profile a run of <paramref name="projectPath"/> uses: the chosen one, else the first runnable one.</summary>
     public LaunchProfile? ResolveProfile(string projectPath, IReadOnlyList<LaunchProfile> profiles) =>
         profiles.FirstOrDefault(p => p.Name == ChosenProfile(projectPath)) ?? profiles.FirstOrDefault(p => p.IsRunnable);
@@ -217,7 +239,7 @@ public sealed class RunService : IDisposable
     {
         var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken).ConfigureAwait(false);
         var profile = ResolveProfile(projectPath, profiles);
-        return (LaunchPlanner.Plan(info, profile), profile, error);
+        return (Adjust(LaunchPlanner.Plan(info, profile)), profile, error);
     }
 
     /// <summary>
@@ -235,7 +257,7 @@ public sealed class RunService : IDisposable
         }
 
         var profile = ResolveProfile(projectPath, profiles);
-        var plan = LaunchPlanner.Plan(info, profile);
+        var plan = Adjust(LaunchPlanner.Plan(info, profile));
         var console = externalConsole && OperatingSystem.IsWindows() && string.Equals(info.OutputType, "Exe", StringComparison.OrdinalIgnoreCase);
         var start = CreateStartInfo(plan, console);
 

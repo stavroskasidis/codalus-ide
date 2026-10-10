@@ -167,6 +167,9 @@ public interface IEditorServices
     /// <summary>Breakpoints, the current statement and data tips (ADR 0007).</summary>
     DaedalusStudio.Workbench.Debugging.DebugService Debugger { get; }
 
+    /// <summary>Sends the request of a .http file at a line (1-based) and shows the response (M15a).</summary>
+    Task SendHttpRequestAsync(string path, string text, int line);
+
     /// <summary>QuickWatch on an expression (the exception helper's View Details, ADR 0021).</summary>
     void ShowQuickWatch(string expression);
 

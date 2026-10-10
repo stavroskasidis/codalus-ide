@@ -171,6 +171,7 @@ public sealed partial class ShellHost
             return;
         }
 
+        _ = OfferDevCertificateAsync(project);
         try
         {
             var console = Workbench.Settings.GetString(RunConsoleSetting, "outputWindow");

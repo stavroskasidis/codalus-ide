@@ -283,3 +283,15 @@ public sealed record CodeMetricsItem(string Name, string Kind, int Maintainabili
 }
 
 public sealed record CodeMetricsResult(CodeMetricsItem[] Projects);
+
+/// <summary><c>daedalus/aspnet/endpoints</c>: every project's endpoints, or one project's (by the path of its project file).</summary>
+public sealed record AspNetEndpointsParams(string? Project = null);
+
+/// <summary>
+/// An endpoint. <see cref="HttpMethod"/> is <c>GET</c>, <c>POST</c>… or <c>*</c> (any). <see cref="Route"/> is the
+/// full route template with group and controller prefixes; <see cref="Kind"/> is <c>minimal</c> or <c>controller</c>.
+/// <see cref="Location"/> is the handler (a method, or the lambda).
+/// </summary>
+public sealed record AspNetEndpoint(string HttpMethod, string Route, string Handler, string Kind, string Project, string ProjectPath, Location Location);
+
+public sealed record AspNetEndpointsResult(AspNetEndpoint[] Endpoints);

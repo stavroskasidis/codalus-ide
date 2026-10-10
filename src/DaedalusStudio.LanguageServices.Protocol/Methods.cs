@@ -70,4 +70,7 @@ public static class Methods
     public const string CodeActionOptions = "daedalus/codeActionOptions";
     public const string SyntaxTree = "daedalus/syntaxTree";
     public const string CodeMetrics = "daedalus/codeMetrics";
+
+    /// <summary>ASP.NET Core endpoints in the solution: minimal API routes and controller actions (M15a).</summary>
+    public const string AspNetEndpoints = "daedalus/aspnet/endpoints";
 }

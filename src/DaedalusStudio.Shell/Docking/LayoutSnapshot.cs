@@ -76,6 +76,9 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
     /// <summary>Whether exception types that aren't listed break when thrown (ADR 0021).</summary>
     public bool? BreakOnOtherExceptions { get; init; }
 
+    /// <summary>The ASP.NET Core environment chosen for runs (M15a); null: the launch profile's.</summary>
+    public string? AspNetEnvironment { get; init; }
+
     /// <summary>Exception types whose setting differs from the defaults: type → break when thrown.</summary>
     public Dictionary<string, bool>? ExceptionTypes { get; init; }
 

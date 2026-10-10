@@ -238,6 +238,8 @@ internal sealed class LanguageServer : IAsyncDisposable
 
             return await CodeMetricsFeature.MetricsAsync(solution, project, _workspace.MiscellaneousProjectId, ct).ConfigureAwait(false);
         });
+        _connection.OnRequest(Methods.AspNetEndpoints, json.AspNetEndpointsParams, json.AspNetEndpointsResult,
+            (p, ct) => AspNetEndpointsFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
     }
 
     private void ApplySettings(JsonElement settings)

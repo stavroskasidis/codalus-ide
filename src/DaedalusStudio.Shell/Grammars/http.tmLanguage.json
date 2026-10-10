@@ -1,0 +1,88 @@
+{
+  "$comment": "Daedalus Studio's grammar for .http files (M15a): requests, headers, variables and comments. Written for this project (MIT).",
+  "name": "HTTP",
+  "scopeName": "source.http",
+  "fileTypes": [ "http", "rest" ],
+  "patterns": [
+    { "include": "#separator" },
+    { "include": "#name" },
+    { "include": "#comment" },
+    { "include": "#variableDefinition" },
+    { "include": "#requestLine" },
+    { "include": "#queryLine" },
+    { "include": "#header" },
+    { "include": "#json" },
+    { "include": "#variable" }
+  ],
+  "repository": {
+    "separator": {
+      "match": "^\\s*(###)(.*)$",
+      "captures": {
+        "1": { "name": "keyword.control.separator.http" },
+        "2": { "name": "comment.line.separator.http" }
+      }
+    },
+    "name": {
+      "match": "^\\s*(#|//)\\s*(@name)\\s+(\\S+)",
+      "captures": {
+        "1": { "name": "comment.line.http" },
+        "2": { "name": "keyword.other.name.http" },
+        "3": { "name": "entity.name.function.request.http" }
+      }
+    },
+    "comment": {
+      "match": "^\\s*(#|//).*$",
+      "name": "comment.line.http"
+    },
+    "variableDefinition": {
+      "match": "^\\s*(@)([A-Za-z_][\\w.\\-]*)\\s*(=)\\s*(.*)$",
+      "captures": {
+        "1": { "name": "keyword.operator.variable.http" },
+        "2": { "name": "variable.other.declaration.http" },
+        "3": { "name": "keyword.operator.assignment.http" },
+        "4": { "patterns": [ { "include": "#variable" }, { "match": ".+", "name": "string.unquoted.value.http" } ] }
+      }
+    },
+    "requestLine": {
+      "match": "(?i)^\\s*(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|TRACE|CONNECT)\\s+(\\S+)(?:\\s+(HTTP/[\\d.]+))?\\s*$",
+      "captures": {
+        "1": { "name": "keyword.control.method.http" },
+        "2": { "patterns": [ { "include": "#variable" }, { "match": "[^{}]+", "name": "markup.underline.link.http" } ] },
+        "3": { "name": "constant.language.version.http" }
+      }
+    },
+    "queryLine": {
+      "match": "^\\s*([?&])([^=\\s]+)(=)?(.*)$",
+      "captures": {
+        "1": { "name": "keyword.operator.query.http" },
+        "2": { "name": "variable.parameter.query.http" },
+        "3": { "name": "keyword.operator.assignment.http" },
+        "4": { "patterns": [ { "include": "#variable" }, { "match": ".+", "name": "string.unquoted.query.http" } ] }
+      }
+    },
+    "header": {
+      "match": "^\\s*([A-Za-z][\\w\\-]*)\\s*(:)\\s*(.*)$",
+      "captures": {
+        "1": { "name": "support.type.property-name.header.http" },
+        "2": { "name": "punctuation.separator.key-value.http" },
+        "3": { "patterns": [ { "include": "#variable" }, { "match": ".+", "name": "string.unquoted.header.http" } ] }
+      }
+    },
+    "json": {
+      "patterns": [
+        { "match": "(\")((?:[^\"\\\\]|\\\\.)*)(\")\\s*(?=:)", "name": "support.type.property-name.json" },
+        { "match": "\"(?:[^\"\\\\]|\\\\.)*\"", "name": "string.quoted.double.json" },
+        { "match": "-?\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b", "name": "constant.numeric.json" },
+        { "match": "\\b(?:true|false|null)\\b", "name": "constant.language.json" }
+      ]
+    },
+    "variable": {
+      "match": "(\\{\\{)\\s*([^}]+?)\\s*(\\}\\})",
+      "captures": {
+        "1": { "name": "punctuation.definition.variable.begin.http" },
+        "2": { "name": "variable.other.http" },
+        "3": { "name": "punctuation.definition.variable.end.http" }
+      }
+    }
+  }
+}

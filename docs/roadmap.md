@@ -35,7 +35,7 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
 | M12 | Editor and code-navigation depth | at checkpoint: M12a (navigation and inline information, ADR 0017) and M12b (editing, refactoring UI and analysis, ADR 0018) |
 | M13 | Git depth and hosting integration | M13a at checkpoint: history, merge editor, operations, ADR 0020; M13b (hosting integration) planned |
 | M14 | Debugger depth | M14a at checkpoint: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b (companion host, dumps) and M14c (remote sessions) planned |
-| M15 | ASP.NET Core and Hot Reload | planned |
+| M15 | ASP.NET Core and Hot Reload | M15a at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, ADR 0022; M15b (Hot Reload through `dotnet watch`) and M15c (scaffolding, service references) planned |
 | M16 | Razor, Blazor and web front-end | planned |
 | M17 | Containers, Aspire and publishing | planned |
 | M18 | Profiling and diagnostics tools | planned |
@@ -791,6 +791,8 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 ### M15 — ASP.NET Core and Hot Reload
 
 **Goal.** A productive ASP.NET Core loop: run, browse, call endpoints, change code, and see the change without a restart.
+
+**Split (ADR 0022).** **M15a** (done): the Endpoints Explorer (`daedalus/aspnet/endpoints`), `.http` files with environments, request variables and an HTTP Response window, the environment selector, the HTTPS development certificate and user secrets. **M15b**: Hot Reload through `dotnet watch` (Roslyn's hot-reload packages aren't on nuget.org), with browser refresh. **M15c**: scaffolding and service references.
 
 **Depends on.** M4, M5, M14 (only for the Hot-Reload-while-debugging result), M11 (JSON schemas).
 
@@ -1824,3 +1826,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-10: M29 built and at its checkpoint (ADR 0019): the menu, a search box (Ctrl+Q) and the solution's name in the title row (the window's title bar on Windows), a standard toolbar (configuration, platform, startup project, Start; the debug commands while debugging), Blue, Light and Dark themes with Dock's tabs and captions mapped onto them, a status bar colored by state, the classic keyboard scheme by default with VS Code's as an option, the Solution Explorer on the right with a toolbar and search, an Options tree, and 9 pt UI text. Deferred: Blue's dark inactive tabs, pinned and colored tabs, inactive caption colors, file-type icons, customizable toolbars (M23) (`TODO(issue)` in the checkpoint).
 - 2026-10-10: M13a built and at its checkpoint (ADR 0020): a paged history graph with filters, file and line history, revision comparisons, a 3-way merge editor working from git's conflict markers, continue/skip/abort for merges, rebases, cherry-picks and reverts, interactive rebase without an editor, stash, cherry-pick, revert, reset, tags, remotes, per-line staging, clone, init, Add to .gitignore, commit templates, submodule updates, and `daedalus merge`/`--wait` as git's merge tool and editor. M13b (hosting integration, askpass, worktrees, LFS) follows.
 - 2026-10-10: M14a built and at its checkpoint (ADR 0021): exception settings per type (conditions on netcoredbg's `all` filter), an exception helper with the inner-exception chain, Run to Cursor, Force Run to Cursor and Run to Click, function, temporary and dependent breakpoints, breakpoint labels, search, import and export, QuickWatch, editing values in Watch, QuickWatch and data tips (`setExpression`), data tips as trees, Text, JSON, XML and HTML visualizers, PerfTips, the Threads and Modules windows, and Reattach to Process. M14 is split into M14a, M14b (companion host, dumps) and M14c (remote and special sessions).
+- 2026-10-10: M15a built and at its checkpoint (ADR 0022): an Endpoints Explorer from Roslyn (minimal APIs with `MapGroup` prefixes, controller attribute and conventional routes) with Generate Request, `.http` files (grammar, send glyphs, file, environment and request variables, dynamic variables, `< file` bodies) run in the shell with an HTTP Response window and history, an ASP.NET Core environment selector for Run and Debug, the HTTPS development certificate (check, trust, an offer before the first https run), and user secrets. Hot Reload (M15b) will use `dotnet watch` instead of Roslyn's unpublished hot-reload API.

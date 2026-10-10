@@ -30,13 +30,16 @@ public class LanguageFixture : IAsyncLifetime
 
     protected virtual bool Trusted => true;
 
+    /// <summary>The sample under samples/ and its solution file.</summary>
+    protected virtual (string Sample, string Solution, int Projects) Sample => ("LanguageFeatures", "LanguageFeatures.slnx", 2);
+
     public string File(params string[] relative) => Path.Combine([Fixture, .. relative]);
 
     public async ValueTask InitializeAsync()
     {
         Assert.True(System.IO.File.Exists(RepoPaths.HostAssembly), $"Language host not built: {RepoPaths.HostAssembly}");
         Assert.True(System.IO.File.Exists(RepoPaths.BuildHostAssembly), $"Build host not built: {RepoPaths.BuildHostAssembly}");
-        Fixture = RepoPaths.CopyFixture("LanguageFeatures", _root);
+        Fixture = RepoPaths.CopyFixture(Sample.Sample, _root);
         var policy = new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) };
         Solutions = new SolutionService(() => RepoPaths.BuildHostAssembly, policy);
         var registry = new LanguageServiceRegistry();
@@ -46,11 +49,12 @@ public class LanguageFixture : IAsyncLifetime
         Languages.Log += (_, line) => Record("[lang] " + line);
 
         using var cts = new CancellationTokenSource(Timeout);
-        await Solutions.OpenAsync(File("LanguageFeatures.slnx"), Trusted, restore: Trusted, cts.Token);
+        await Solutions.OpenAsync(File(Sample.Solution), Trusted, restore: Trusted, cts.Token);
         if (Trusted)
         {
-            await WaitUntilAsync(() => Solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) == 2
-                                       && Languages.Status("csharp") is { State: WorkspaceStates.Ready, Projects: 2 });
+            var projects = Sample.Projects;
+            await WaitUntilAsync(() => Solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) == projects
+                                       && Languages.Status("csharp") is { State: WorkspaceStates.Ready } status && status.Projects == projects);
         }
         else
         {

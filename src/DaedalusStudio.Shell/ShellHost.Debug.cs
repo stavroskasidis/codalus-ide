@@ -139,10 +139,11 @@ public sealed partial class ShellHost
             return;
         }
 
+        _ = OfferDevCertificateAsync(project);
         try
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
-            var plan = LaunchPlanner.Plan(info, Runs.ResolveProfile(project, profiles));
+            var plan = Runs.Adjust(LaunchPlanner.Plan(info, Runs.ResolveProfile(project, profiles)));
             DebugLog.Clear();
             if (error is not null)
             {

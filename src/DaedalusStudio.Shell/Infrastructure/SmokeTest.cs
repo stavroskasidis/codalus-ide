@@ -687,6 +687,54 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(project.Model.LanguageId == "msbuild" && project.GrammarScope == "text.xml", "the project file is MSBuild with the XML grammar");
             await WaitAsync(() => project.LineColors(1) >= 2, "the XML grammar colors the project file").ConfigureAwait(true);
         }, "packages.manage").ConfigureAwait(true);
+
+        await StepAsync("web.http", "M15", "The Endpoints Explorer, and a .http request to the running web app", async () =>
+        {
+            var (solution, http) = PrepareWebFixture();
+            await shell.OpenSolutionAsync(solution).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Web solution is open", 300).ConfigureAwait(true);
+            await shell.ShowEndpointsAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.Endpoints.Endpoints.Any(e => e.Route == "/api/todos/{id:int}") && shell.Endpoints.Endpoints.Any(e => e.Route == "/api/Orders/{id}"),
+                "the Endpoints Explorer lists the minimal API and controller routes: " + (shell.Endpoints.Status ?? string.Join(", ", shell.Endpoints.Endpoints.Select(e => e.Route))), 240).ConfigureAwait(true);
+
+            var editor = await OpenAsync(http).ConfigureAwait(true);
+            Check(editor.Model.LanguageId == ShellHost.HttpLanguageId && editor.GrammarScope == "source.http", $"the .http file has its grammar (got {editor.Model.LanguageId}, {editor.GrammarScope})");
+            Check(editor.HttpMargin.RequestLines.Count == 3, "the .http file shows three send glyphs");
+
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            try
+            {
+                await WaitAsync(() => shell.Runs.Running.Count == 1 && shell.Runs.Running[0].Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true, "the web app listens", 240).ConfigureAwait(true);
+                await shell.SendHttpRequestAsync(http, editor.Model.Text.Text, editor.HttpMargin.RequestLines[0]).ConfigureAwait(true);
+                Check(shell.HttpResponse.Selected?.Exchange.Response?.Body == "Hello from the Web fixture",
+                    "the request gets the app's answer: " + (shell.HttpResponse.Selected?.Exchange.Error ?? shell.HttpResponse.Selected?.Exchange.Response?.Body));
+                await WaitAsync(() => window.GetVisualDescendants().OfType<HttpResponseView>().Any(), "the HTTP Response window renders").ConfigureAwait(true);
+                Screenshot("smoke-test-web-http.png");
+            }
+            finally
+            {
+                shell.StopRunning();
+            }
+        }).ConfigureAwait(true);
+    }
+
+    /// <summary>samples/Web with a free port in its launch profile and .http file.</summary>
+    private (string Solution, string Http) PrepareWebFixture()
+    {
+        Check(File.Exists(Path.Combine(samples, "Web", "Web.slnx")), $"the samples folder {samples} has Web");
+        var target = Path.Combine(_work, "Web");
+        Copy(Path.Combine(samples, "Web"), target);
+        using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        socket.Start();
+        var port = ((System.Net.IPEndPoint)socket.LocalEndpoint).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        socket.Stop();
+        var http = Path.Combine(target, "WebApi", "WebApi.http");
+        foreach (var file in new[] { Path.Combine(target, "WebApi", "Properties", "launchSettings.json"), http })
+        {
+            File.WriteAllText(file, File.ReadAllText(file).Replace("5248", port, StringComparison.Ordinal));
+        }
+
+        return (Path.Combine(target, "Web.slnx"), http);
     }
 
     private Workbench.Testing.TestNode? TestClass(string project) =>

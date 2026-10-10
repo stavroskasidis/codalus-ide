@@ -131,9 +131,24 @@ public class NavigationDepthTests
 
         // Peek Definition: the definition in a popup, without leaving the file.
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("Circle(2)", StringComparison.Ordinal) + 1;
-        f.Shell.Run("editor.action.peekDefinition");
         var view = f.Shell.ActiveEditor!.View!;
-        await ShellFixture.PumpUntil(() => view.Peek?.IsOpen == true, seconds: 60);
+
+        // Again every few seconds: while design-time builds reload the projects, the definition can be briefly unknown.
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        while (view.Peek?.IsOpen != true)
+        {
+            Assert.True(started.Elapsed < TimeSpan.FromSeconds(90), "Peek Definition did not open: " + f.Shell.StatusBar.Message);
+            f.Shell.Run("editor.action.peekDefinition");
+            try
+            {
+                await ShellFixture.PumpUntil(() => view.Peek?.IsOpen == true, seconds: 10);
+            }
+            catch (Xunit.Sdk.XunitException)
+            {
+                // Not yet: ask again.
+            }
+        }
+
         Assert.Contains("class Circle", view.Peek!.Viewer.Editor.Document.Text, StringComparison.Ordinal);
         Assert.Equal(program, f.Shell.ActiveEditor.Controller);
         view.Peek.Close();

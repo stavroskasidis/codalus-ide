@@ -390,6 +390,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
         InvokeNullable(Methods.SyntaxTree, new SyntaxTreeParams(new TextDocumentIdentifier(uri), position), ProtocolJsonContext.Default.SyntaxTreeParams, ProtocolJsonContext.Default.SyntaxTreeResult, cancellationToken);
 
     /// <summary>Code Metrics for the project of a document (by URI), or for every project (null).</summary>
+    /// <summary>The ASP.NET Core endpoints of the solution, or of one project (M15a).</summary>
+    public Task<AspNetEndpointsResult?> AspNetEndpointsAsync(string? projectPath, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.AspNetEndpoints, new AspNetEndpointsParams(projectPath), ProtocolJsonContext.Default.AspNetEndpointsParams, ProtocolJsonContext.Default.AspNetEndpointsResult, cancellationToken);
+
     public Task<CodeMetricsResult?> CodeMetricsAsync(string? uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.CodeMetrics, new CodeMetricsParams(uri is null ? null : new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.CodeMetricsParams, ProtocolJsonContext.Default.CodeMetricsResult, cancellationToken);
 

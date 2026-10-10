@@ -1,0 +1,20 @@
+@WebApi_HostAddress = http://localhost:5248
+
+GET {{WebApi_HostAddress}}/
+Accept: text/plain
+
+###
+
+GET {{WebApi_HostAddress}}/api/todos/1
+Accept: application/json
+
+###
+
+# @name create
+POST {{WebApi_HostAddress}}/api/todos/
+Content-Type: application/json
+
+{
+  "id": 3,
+  "title": "From the .http file"
+}

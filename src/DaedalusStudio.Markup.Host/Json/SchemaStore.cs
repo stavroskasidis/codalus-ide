@@ -23,6 +23,7 @@ internal sealed class SchemaStore(string? cacheDirectory, bool allowDownloads, A
         (new Regex(@"^global\.json$", RegexOptions.IgnoreCase), "global.json"),
         (new Regex(@"^launchSettings\.json$", RegexOptions.IgnoreCase), "launchSettings.json"),
         (new Regex(@"^appsettings(\.[^.]+)*\.json$", RegexOptions.IgnoreCase), "appsettings.json"),
+        (new Regex(@"^secrets\.json$", RegexOptions.IgnoreCase), "appsettings.json"), // user secrets (M15a)
         (new Regex(@"^dotnet-tools\.json$", RegexOptions.IgnoreCase), "dotnet-tools.json"),
         (new Regex(@"^daedalus-plugin\.json$", RegexOptions.IgnoreCase), "daedalus-plugin.json"),
         (new Regex(@"^runtimeconfig\.template\.json$", RegexOptions.IgnoreCase), "runtimeconfig.template.json"),
