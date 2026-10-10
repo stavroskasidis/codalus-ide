@@ -80,6 +80,7 @@ public sealed partial class ShellHost : IEditorServices
         {
             SettingsProvider = section => section is { Length: > 0 } ? Workbench.Settings.GetSection(section) : null,
             PropertyEvaluator = EvaluatePropertyAsync,
+            ApplyEditHandler = edit => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ApplyWorkspaceEditAsync(edit)),
         };
         ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position));
     }
@@ -330,6 +331,12 @@ public sealed partial class ShellHost : IEditorServices
             {
                 editor.Controller?.RefreshAll();
             }
+
+            if (languageId == RazorLanguageId)
+            {
+                // HTML and CSS in Razor files come from the HTML server (ADR 0027).
+                await OfferWebLanguagesAsync("html").ConfigureAwait(true);
+            }
         }
         else
         {
@@ -355,6 +362,7 @@ public sealed partial class ShellHost : IEditorServices
         if (!model.IsReadOnly && model.LanguageId is not null)
         {
             _ = Languages.CloseAsync(model.Path);
+            CloseRazorHtml(model.Path);
         }
 
         model.Dispose();

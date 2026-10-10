@@ -34,7 +34,8 @@ public sealed record DebugOutput(string Category, string Text);
 
 /// <summary>
 /// Debug sessions on netcoredbg (ADR 0007): launch or attach, breakpoints (with client-side hit counts and logpoints),
-/// stepping, threads, frames, variables and evaluation. One session at a time. Events may be raised on any thread.
+/// stepping, threads, frames, variables and evaluation. One session at a time, which may span a server and its page
+/// in the browser (a compound session, ADR 0027). Events may be raised on any thread.
 /// </summary>
 public sealed class DebugService : IAsyncDisposable
 {
@@ -134,9 +135,48 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Starts <paramref name="plan"/> under the debugger. Throws when no adapter is installed or the launch fails.</summary>
     public Task LaunchAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
-        StartAsync(StartNetcoredbgAsync, adapter => adapter.LaunchAsync(
-            new LaunchArguments(plan.FileName, [.. CommandLine.Split(plan.Arguments)], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: JustMyCode),
-            cancellationToken), attached: false, cancellationToken);
+        StartAsync(StartNetcoredbgAsync, adapter => adapter.LaunchAsync(Arguments(plan), cancellationToken), attached: false, cancellationToken);
+
+    private LaunchArguments Arguments(LaunchPlan plan) =>
+        new(plan.FileName, [.. CommandLine.Split(plan.Arguments)], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: JustMyCode);
+
+    /// <summary>
+    /// Starts <paramref name="plan"/> (a web server) under netcoredbg as the first adapter of a compound session
+    /// (ADR 0027). Its page joins with <see cref="AddBrowserAsync"/> once the server listens.
+    /// </summary>
+    public Task LaunchCompoundAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
+        StartAsync(
+            async ct => new CompoundDebugAdapter(await StartNetcoredbgAsync(ct).ConfigureAwait(false), "Server"),
+            adapter => ((DebugAdapter)adapter.Primary).LaunchAsync(Arguments(plan), cancellationToken),
+            attached: false,
+            cancellationToken);
+
+    /// <summary>Whether the session is a compound one that a browser can join.</summary>
+    public bool IsCompound => _adapter is CompoundDebugAdapter;
+
+    /// <summary>
+    /// The browser joins the running compound session: <paramref name="start"/> starts vscode-js-debug, which opens
+    /// the page with <paramref name="arguments"/>. The session's breakpoints bind in both. Closing the browser ends
+    /// the session, as in a browser-only one.
+    /// </summary>
+    public async Task AddBrowserAsync(Func<CancellationToken, Task<JsDebugAdapter>> start, BrowserLaunchArguments arguments, CancellationToken cancellationToken)
+    {
+        if (_adapter is not CompoundDebugAdapter compound)
+        {
+            throw new InvalidOperationException("No debug session that a browser can join is running.");
+        }
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        var browser = await start(linked.Token).ConfigureAwait(false);
+        try
+        {
+            await compound.AddAsync(browser, "Browser", adapter => ((JsDebugAdapter)adapter).LaunchAsync(arguments, linked.Token), linked.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException)
+        {
+            throw new InvalidOperationException(ex.Message, ex);
+        }
+    }
 
     /// <summary>Starts <paramref name="program"/> with arguments that are already split (no command-line parsing).</summary>
     public Task LaunchAsync(string program, IReadOnlyList<string> arguments, string workingDirectory, IReadOnlyDictionary<string, string> environment, CancellationToken cancellationToken) =>

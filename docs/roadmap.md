@@ -36,7 +36,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M13 | Git depth and hosting integration | M13a at checkpoint: history, merge editor, operations, ADR 0020; M13b (hosting integration) planned |
 | M14 | Debugger depth | M14a at checkpoint: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b (companion host, dumps) and M14c (remote sessions) planned |
 | M15 | ASP.NET Core and Hot Reload | M15a and M15b at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch`, ADR 0022; M15c (scaffolding, service references) deferred until after M16 |
-| M16 | Razor, Blazor and web front-end | M16a and M16b at checkpoint: Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023), HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); M16c at checkpoint: Blazor WebAssembly debugging in the browser through vscode-js-debug, and Hot Reload (ADR 0026); M16d (compound sessions, scoped CSS, npm scripts, HTML and CSS inside Razor) planned, **next** |
+| M16 | Razor, Blazor and web front-end | done (M16a–M16d at checkpoint): Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023); HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); Blazor WebAssembly debugging in the browser through vscode-js-debug (ADR 0026); compound server-and-page debugging, Debug a Web Page, HTML and CSS inside Razor, scoped CSS, npm scripts in the Task Runner Explorer, ESLint and Prettier (ADR 0027) |
 | M17 | Containers, Aspire and publishing | planned |
 | M18 | Profiling and diagnostics tools | planned |
 | M19 | Avalonia XAML editing and live previewer | planned |
@@ -49,7 +49,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
 | M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Daedalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
-| M31 | Automated release cycle and installers | planned, after M16c (M30b follows at .NET 11 GA) |
+| M31 | Automated release cycle and installers | planned, **next**, after M16 (M30b follows at .NET 11 GA) |
 | M32 | Self-update | planned, after M31 |
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | planned, after M32 |
 | M34 | UI polish | planned, the last milestone before Visual Basic and F# |
@@ -1165,7 +1165,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Goal.** Rich editing for `.razor` and `.cshtml`, Blazor run, debug and hot reload, and good HTML, CSS and JavaScript editing.
 
-**Split (ADR 0023).** **M16a** (done): Razor through the Razor source generator in the C# host (C# features mapped through the generated code, component, parameter and directive completion, diagnostics), Blazor Web App run and Hot Reload. **M16b** (done): HTML, CSS and JavaScript/TypeScript language services on a pinned, on-demand Node runtime (D3, ADR 0024). **M16c** (done, ADR 0026): Blazor WebAssembly run and Hot Reload, and WebAssembly and JavaScript debugging through `vscode-js-debug`. **M16d**: compound sessions (server and browser together), debugging a URL, npm scripts as tasks, scoped CSS, HTML and CSS inside Razor, ESLint and Prettier.
+**Split (ADR 0023).** **M16a** (done): Razor through the Razor source generator in the C# host (C# features mapped through the generated code, component, parameter and directive completion, diagnostics), Blazor Web App run and Hot Reload. **M16b** (done): HTML, CSS and JavaScript/TypeScript language services on a pinned, on-demand Node runtime (D3, ADR 0024). **M16c** (done, ADR 0026): Blazor WebAssembly run and Hot Reload, and WebAssembly and JavaScript debugging through `vscode-js-debug`. **M16d** (done, ADR 0027): compound sessions (server and browser together), debugging a URL, npm scripts as tasks, scoped CSS, HTML and CSS inside Razor, ESLint and Prettier.
 
 **Depends on.** M15, M11, F1 (generated and virtual documents), F4 (Node policy).
 
@@ -2319,3 +2319,10 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-10: the maintainer moved M16c (Blazor WebAssembly, browser debugging) ahead of M31–M33, so it comes next.
 - 2026-10-10: D26 changed to Windows 11 only. .NET 10 supports Windows 10 only in its LTSC and IoT editions. The macOS app bundle now requires macOS 15 (`Info.plist`), which matches .NET's supported macOS versions. The winget manifest requires Windows 11 (build 22000).
 - 2026-10-10: M16c built and at its checkpoint (ADR 0026): Blazor WebAssembly debugging in Chrome, Edge or Chromium through vscode-js-debug 1.140.0 (on the M16b Node.js) and the dev server's debugging proxy, with JavaScript breakpoints in the same session; Hot Reload for WebAssembly with the page open; `samples/BlazorWasm`. M16d (compound sessions, scoped CSS, npm scripts, HTML and CSS inside Razor) is next. M31 follows.
+- 2026-10-10: M16d built and at its checkpoint (ADR 0027), which completes M16:
+  - **Debugging:** a Blazor Web App's server and page in one session (netcoredbg and vscode-js-debug behind one composite adapter), ASP.NET Core pages' scripts (`debug.javaScript`), and Debug a Web Page.
+  - **Razor and CSS:** HTML and CSS inside Razor files from the HTML server, through the file's HTML; scoped CSS completion.
+  - **npm:** the Task Runner Explorer (scripts in terminals, restore, `-vs-binding` bindings).
+  - **Linting and formatting:** ESLint as a linter service with pull diagnostics; Prettier for Format Document.
+  - **Fixtures:** `samples/BlazorHosted`, `samples/WebScripts` and `samples/WebLint`.
+  - **Next:** M31 (the release cycle), which publishes, so the maintainer confirms it first.

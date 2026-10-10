@@ -72,6 +72,9 @@ public sealed class LanguageHostClient : IAsyncDisposable
 
     public event EventHandler<PublishDiagnosticsParams>? Diagnostics;
 
+    /// <summary>A server with pull diagnostics asked for them again (<c>workspace/diagnostic/refresh</c>).</summary>
+    public event EventHandler? DiagnosticsRefreshRequested;
+
     public event EventHandler<WorkspaceStatusParams>? WorkspaceStatus;
 
     /// <summary>Server log messages and process output.</summary>
@@ -94,6 +97,18 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Func<string?, JsonElement?>? ConfigurationProvider { get; set; }
 
     /// <summary>
+    /// Answers <c>workspace/configuration</c> for a section and a document (its <c>scopeUri</c>), before
+    /// <see cref="ConfigurationProvider"/>: servers whose settings depend on the file (ESLint's working folder).
+    /// </summary>
+    public Func<string?, string?, JsonElement?>? ScopedConfigurationProvider { get; set; }
+
+    /// <summary>Applies an edit the server asks for (<c>workspace/applyEdit</c>, after a command); returns whether it was applied.</summary>
+    public Func<WorkspaceEdit, Task<bool>>? ApplyEditHandler { get; set; }
+
+    /// <summary>The server's own requests this client answers with null (ESLint's <c>eslint/noLibrary</c>), set before it starts.</summary>
+    public IReadOnlyList<string> AcceptedRequests { get; set; } = [];
+
+    /// <summary>
     /// Answers the markup host's <c>daedalus/msbuild/property</c> (a project's evaluated property, ADR 0016):
     /// <c>{ project, name }</c> → <c>{ value, origin }</c>, or null when unknown.
     /// </summary>
@@ -105,7 +120,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
     /// <summary>What this client supports, so servers built for any LSP client send results it can use.</summary>
     private const string ClientCapabilities = """
         {
-          "workspace": { "configuration": true, "workspaceFolders": true, "symbol": {}, "workspaceEdit": { "documentChanges": true } },
+          "workspace": { "configuration": true, "workspaceFolders": true, "symbol": {}, "workspaceEdit": { "documentChanges": true }, "applyEdit": true, "executeCommand": {} },
           "textDocument": {
             "synchronization": { "didSave": true, "dynamicRegistration": false },
             "completion": { "completionItem": { "snippetSupport": true, "documentationFormat": ["markdown", "plaintext"], "resolveSupport": { "properties": ["documentation", "detail", "textEdit", "additionalTextEdits"] }, "insertReplaceSupport": false }, "contextSupport": true },
@@ -122,6 +137,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
             "rangeFormatting": {},
             "onTypeFormatting": {},
             "publishDiagnostics": { "relatedInformation": false, "tagSupport": { "valueSet": [1, 2] }, "codeDescriptionSupport": true },
+            "diagnostic": { "dynamicRegistration": false, "relatedDocumentSupport": false },
             "semanticTokens": {
               "requests": { "full": true, "range": true },
               "tokenTypes": ["namespace", "type", "class", "enum", "interface", "struct", "typeParameter", "parameter", "variable", "property", "enumMember", "event", "function", "method", "macro", "keyword", "modifier", "comment", "string", "number", "regexp", "operator", "decorator"],
@@ -132,6 +148,13 @@ public sealed class LanguageHostClient : IAsyncDisposable
           "window": { "workDoneProgress": true, "showMessage": {} }
         }
         """;
+
+    /// <summary>Requests any LSP client may get, answered with null.</summary>
+    private static readonly string[] s_acceptedRequests =
+    [
+        "client/registerCapability", "client/unregisterCapability", "window/workDoneProgress/create", "workspace/semanticTokens/refresh",
+        "workspace/codeLens/refresh", "workspace/inlayHint/refresh",
+    ];
 
     private void Configure(JsonRpcConnection connection)
     {
@@ -153,7 +176,8 @@ public sealed class LanguageHostClient : IAsyncDisposable
             foreach (var item in items.ValueKind == JsonValueKind.Array ? items.EnumerateArray() : default)
             {
                 var section = item.ValueKind == JsonValueKind.Object && item.TryGetProperty("section", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null;
-                values.Add(ConfigurationProvider?.Invoke(section) is { } value ? value.GetRawText() : "null");
+                var scope = item.ValueKind == JsonValueKind.Object && item.TryGetProperty("scopeUri", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() : null;
+                values.Add((ScopedConfigurationProvider?.Invoke(section, scope) ?? ConfigurationProvider?.Invoke(section)) is { } value ? value.GetRawText() : "null");
             }
 
             using var document = JsonDocument.Parse("[" + string.Join(',', values) + "]");
@@ -173,9 +197,37 @@ public sealed class LanguageHostClient : IAsyncDisposable
             using var document = JsonDocument.Parse(node.ToJsonString());
             return document.RootElement.Clone();
         });
-        foreach (var accepted in new[] { "client/registerCapability", "client/unregisterCapability", "window/workDoneProgress/create", "workspace/semanticTokens/refresh", "workspace/codeLens/refresh", "workspace/inlayHint/refresh", "workspace/diagnostic/refresh" })
+        foreach (var accepted in s_acceptedRequests)
         {
             connection.OnRequest(accepted, (_, _) => Task.FromResult<JsonElement?>(null));
+        }
+
+        connection.OnRequest("workspace/applyEdit", async (parameters, _) =>
+        {
+            var applied = false;
+            if (parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty("edit", out var raw) && raw.ValueKind == JsonValueKind.Object
+                && LspNormalizer.WorkspaceEdit(raw).Deserialize(json.WorkspaceEdit) is { } edit && ApplyEditHandler is { } apply)
+            {
+                applied = await apply(edit).ConfigureAwait(false);
+            }
+
+            using var result = JsonDocument.Parse(applied ? """{"applied":true}""" : """{"applied":false}""");
+            return result.RootElement.Clone();
+        });
+        connection.OnRequest("workspace/diagnostic/refresh", (_, _) =>
+        {
+            DiagnosticsRefreshRequested?.Invoke(this, EventArgs.Empty);
+            return Task.FromResult<JsonElement?>(null);
+        });
+
+        foreach (var accepted in AcceptedRequests)
+        {
+            // A server's own requests (ESLint: no library, no configuration) say what it couldn't do: logged.
+            connection.OnRequest(accepted, (parameters, _) =>
+            {
+                Log?.Invoke(this, $"{accepted}: {(parameters.ValueKind == JsonValueKind.Undefined ? string.Empty : parameters.GetRawText())}");
+                return Task.FromResult<JsonElement?>(null);
+            });
         }
 
         connection.OnRequest("window/showMessageRequest", (parameters, _) =>
@@ -424,6 +476,38 @@ public sealed class LanguageHostClient : IAsyncDisposable
         var raw = await _process.Connection.InvokeRawAsync(method, JsonSerializer.SerializeToElement(parameters, paramsInfo), cancellationToken).ConfigureAwait(false);
         var normalized = LspNormalizer.Result(method, raw);
         return normalized.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? null : normalized.Deserialize(resultInfo);
+    }
+
+    /// <summary>Runs a server's command (<c>workspace/executeCommand</c>, a code action's); its edits come back through <see cref="ApplyEditHandler"/>.</summary>
+    public async Task ExecuteCommandAsync(Command command, CancellationToken cancellationToken)
+    {
+        var parameters = new System.Text.Json.Nodes.JsonObject
+        {
+            ["command"] = command.CommandId,
+            ["arguments"] = new System.Text.Json.Nodes.JsonArray([.. (command.Arguments ?? []).Select(a => System.Text.Json.Nodes.JsonNode.Parse(a.GetRawText()))]),
+        };
+        using var document = JsonDocument.Parse(parameters.ToJsonString());
+        await _process.Connection.InvokeRawAsync("workspace/executeCommand", document.RootElement.Clone(), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A document's diagnostics from a server with pull diagnostics (<c>textDocument/diagnostic</c>, LSP 3.17); null when
+    /// the server reports them unchanged.
+    /// </summary>
+    public async Task<Diagnostic[]?> PullDiagnosticsAsync(string uri, CancellationToken cancellationToken)
+    {
+        var json = ProtocolJsonContext.Default;
+        using var parameters = JsonDocument.Parse(new System.Text.Json.Nodes.JsonObject { ["textDocument"] = new System.Text.Json.Nodes.JsonObject { ["uri"] = uri } }.ToJsonString());
+        var report = await _process.Connection.InvokeRawAsync("textDocument/diagnostic", parameters.RootElement.Clone(), cancellationToken).ConfigureAwait(false);
+        if (report.ValueKind != JsonValueKind.Object || !report.TryGetProperty("kind", out var kind) || kind.GetString() != "full"
+            || !report.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        // The items are publishDiagnostics' diagnostics: normalized the same way.
+        using var wrapped = JsonDocument.Parse($$"""{"uri":{{JsonSerializer.Serialize(uri, json.String)}},"diagnostics":{{items.GetRawText()}}}""");
+        return LspNormalizer.PublishDiagnostics(wrapped.RootElement).Deserialize(json.PublishDiagnosticsParams)?.Diagnostics;
     }
 
     public ValueTask DisposeAsync() => _process.DisposeAsync();

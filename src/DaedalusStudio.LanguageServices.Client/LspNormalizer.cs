@@ -18,6 +18,7 @@ public static class LspNormalizer
         "hoverProvider", "definitionProvider", "implementationProvider", "documentHighlightProvider", "foldingRangeProvider",
         "referencesProvider", "codeActionProvider", "documentFormattingProvider", "documentRangeFormattingProvider",
         "workspaceSymbolProvider", "documentSymbolProvider", "callHierarchyProvider", "typeHierarchyProvider", "inlayHintProvider", "selectionRangeProvider",
+        "diagnosticProvider",
     ];
 
     /// <summary>Normalizes the result of <paramref name="method"/>; returns the input when nothing needs changing.</summary>
@@ -363,6 +364,9 @@ public static class LspNormalizer
 
         return new JsonObject { ["documentChanges"] = changes };
     }
+
+    /// <summary>Normalizes a workspace edit a server sends (<c>workspace/applyEdit</c>): <c>changes</c> become <c>documentChanges</c>.</summary>
+    public static JsonElement WorkspaceEdit(JsonElement edit) => Element(WorkspaceEdit(JsonNode.Parse(edit.GetRawText())));
 
     private static JsonArray CodeActions(JsonNode? node) =>
         new JsonArray([.. (node as JsonArray ?? []).OfType<JsonObject>()

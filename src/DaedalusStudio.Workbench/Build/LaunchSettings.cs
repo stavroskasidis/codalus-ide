@@ -185,6 +185,27 @@ public static class LaunchPlanner
             ? (url, inspectUri)
             : null;
 
+    /// <summary>
+    /// The page of a web app to debug with its server in one session (ADR 0027): with the WebAssembly debugging
+    /// proxy's <c>inspectUri</c> when the profile has one (a Blazor Web App with WebAssembly components, whose page
+    /// opens even when the profile doesn't launch a browser), else, with <paramref name="javaScript"/>, the page a
+    /// profile that launches a browser opens. Null otherwise: the server debugs alone.
+    /// </summary>
+    public static (string Url, string? InspectUri)? PageDebugTarget(LaunchProfile? profile, bool javaScript)
+    {
+        if (profile is not { ApplicationUrl: { } urls } || BrowserUrl(urls, profile.LaunchUrl) is not { } url)
+        {
+            return null;
+        }
+
+        if (profile.InspectUri is { } inspectUri)
+        {
+            return (url, inspectUri);
+        }
+
+        return javaScript && profile.LaunchBrowser ? (url, null) : null;
+    }
+
     /// <summary>The first application URL with <paramref name="launchUrl"/> appended (an absolute launch URL wins).</summary>
     public static string? BrowserUrl(string? applicationUrl, string? launchUrl)
     {

@@ -177,8 +177,17 @@ public sealed partial class ShellHost
             }
         }
 
-        if (!Workbench.Settings.GetBoolean(FormatOnSaveSetting) || model.IsReadOnly
-            || ((IEditorServices)this).Client(model) is not { Capabilities.DocumentFormattingProvider: true } client)
+        if (!Workbench.Settings.GetBoolean(FormatOnSaveSetting) || model.IsReadOnly)
+        {
+            return;
+        }
+
+        if (await FormatWithPrettierAsync(model).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        if (((IEditorServices)this).Client(model) is not { Capabilities.DocumentFormattingProvider: true } client)
         {
             return;
         }

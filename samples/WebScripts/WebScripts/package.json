@@ -1,0 +1,16 @@
+{
+  "name": "web-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "hello": "node -e \"console.log('hello from npm')\"",
+    "stamp": "node scripts/stamp.js",
+    "greet": "node -e \"console.log(require('local-greeting')('npm'))\""
+  },
+  "-vs-binding": {
+    "BeforeBuild": ["stamp"]
+  },
+  "dependencies": {
+    "local-greeting": "file:./local-greeting"
+  }
+}

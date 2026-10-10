@@ -75,7 +75,14 @@ public sealed partial class ShellHost
         }
 
         Workbench.Output.Show(Builds.Channel);
+        if (!await BeforeBuildBindingsAsync(target, project).ConfigureAwait(true))
+        {
+            StatusBar.ShowMessage("An npm script bound to the build failed, so the build didn't run (see Output → npm).", TimeSpan.FromSeconds(8));
+            return false;
+        }
+
         var result = await Builds.BuildAsync(target, project, CancellationToken.None).ConfigureAwait(true);
+        await AfterBuildBindingsAsync(target, project, result.Succeeded).ConfigureAwait(true);
         return result.Succeeded;
     }
 

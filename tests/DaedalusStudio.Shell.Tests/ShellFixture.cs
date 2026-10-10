@@ -94,7 +94,7 @@ internal sealed class ShellFixture : IAsyncDisposable
             File.Copy(file, Path.Combine(target, Path.GetFileName(file)));
         }
 
-        foreach (var directory in Directory.EnumerateDirectories(source).Where(d => Path.GetFileName(d) is not ("bin" or "obj")))
+        foreach (var directory in Directory.EnumerateDirectories(source).Where(d => Path.GetFileName(d) is not ("bin" or "obj" or "node_modules")))
         {
             Copy(directory, Path.Combine(target, Path.GetFileName(directory)));
         }

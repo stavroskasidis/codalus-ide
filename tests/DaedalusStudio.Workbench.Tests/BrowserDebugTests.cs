@@ -108,6 +108,23 @@ public sealed class BrowserDebugTests : IDisposable
         Assert.Null(LaunchPlanner.BrowserDebugTarget(wasm, profile with { InspectUri = null }));
     }
 
+    [Fact]
+    public void A_web_apps_page_debugs_with_its_server_for_webassembly_or_when_javascript_debugging_is_on()
+    {
+        // M16d (ADR 0027): a Blazor Web App's profile has the debugging proxy's inspectUri: its page always debugs.
+        const string inspect = "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}";
+        var hosted = new LaunchProfile("http", "Project", ApplicationUrl: "https://localhost:7174;http://localhost:5274", LaunchUrl: "counter", InspectUri: inspect);
+        Assert.Equal(("https://localhost:7174/counter", inspect), LaunchPlanner.PageDebugTarget(hosted, javaScript: false));
+
+        // Other web apps: their page, when the profile opens one and JavaScript debugging is on.
+        var web = new LaunchProfile("http", "Project", LaunchBrowser: true, ApplicationUrl: "http://localhost:5000");
+        Assert.Equal(("http://localhost:5000/", (string?)null), LaunchPlanner.PageDebugTarget(web, javaScript: true));
+        Assert.Null(LaunchPlanner.PageDebugTarget(web, javaScript: false));
+        Assert.Null(LaunchPlanner.PageDebugTarget(web with { LaunchBrowser = false }, javaScript: true));
+        Assert.Null(LaunchPlanner.PageDebugTarget(new LaunchProfile("console", "Project"), javaScript: true));
+        Assert.Null(LaunchPlanner.PageDebugTarget(null, javaScript: true));
+    }
+
     private static async Task WaitAsync(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(90);

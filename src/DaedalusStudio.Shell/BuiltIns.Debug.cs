@@ -64,8 +64,15 @@ internal static partial class BuiltIns
         {
             Title = "Browser",
             Category = "Debugging",
-            Description = "The browser for debugging Blazor WebAssembly apps: auto (Chrome, then Edge, then Chromium), chrome, edge, chromium, or the path of a Chromium browser.",
+            Description = "The browser for debugging in the browser (Blazor WebAssembly, JavaScript): auto (Chrome, then Edge, then Chromium), chrome, edge, chromium, or the path of a Chromium browser.",
             Order = 3,
+        },
+        SettingDescriptor.Create(ShellHost.JavaScriptDebugSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "JavaScript debugging for ASP.NET Core",
+            Category = "Debugging",
+            Description = "Start Debugging opens an ASP.NET Core app's page in Chrome or Edge under the debugger, when its launch profile opens a browser, so breakpoints in its scripts bind too. Blazor WebAssembly components always debug in the browser.",
+            Order = 4,
         },
         SettingDescriptor.Create(DaedalusStudio.Shell.Editor.EditorOptions.PerfTipsKey, "true", SettingType.Boolean, ContributionSource.Shell) with
         {
@@ -109,6 +116,7 @@ internal static partial class BuiltIns
         Add("debug.stepOut", "Step Out", _ => shell.Debugger.StepOutAsync(), "debugStopped");
         Add("debug.pause", "Break All", _ => shell.Debugger.PauseAsync(), "debugRunning");
         Add("debug.attach", "Attach to Process…", shell.AttachToProcessAsync, "!debugActive");
+        Add("debug.webPage", "Debug a Web Page…", shell.DebugWebPageAsync, "!debugActive");
         Add("debug.toggleBreakpoint", "Toggle Breakpoint", Sync(shell.ToggleBreakpoint), "activeDocumentKind == textFile");
         Add("debug.toggleBreakpointEnabled", "Enable or Disable Breakpoint", Sync(shell.ToggleBreakpointEnabled), "activeDocumentKind == textFile");
         Add("debug.editBreakpoint", "Breakpoint Conditions and Actions…", _ => shell.EditBreakpointAsync(), "activeDocumentKind == textFile");
@@ -140,6 +148,7 @@ internal static partial class BuiltIns
             Item("debug.pause", "0-debug", 5),
             Item("debug.attach", "0-debug", 6),
             Item("debug.reattach", "0-debug", 7),
+            Item("debug.webPage", "0-debug", 8),
             Item("debug.stepOver", "3-step", 1),
             Item("debug.stepInto", "3-step", 2),
             Item("debug.stepOut", "3-step", 3),

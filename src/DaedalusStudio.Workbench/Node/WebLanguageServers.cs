@@ -37,6 +37,9 @@ public sealed class WebLanguageServers(NodeRuntime node, string manifestFolder, 
 
     public string CssServer => Path.Combine(Modules, "vscode-langservers-extracted", "bin", "vscode-css-language-server");
 
+    /// <summary>vscode-eslint's server (ADR 0027); it runs the project's own ESLint.</summary>
+    public string EslintServer => Path.Combine(Modules, "vscode-langservers-extracted", "bin", "vscode-eslint-language-server");
+
     public string TypeScriptServer => Path.Combine(Modules, "typescript-language-server", "lib", "cli.mjs");
 
     /// <summary>TypeScript's library folder (the <c>tsserver</c> the TypeScript server runs).</summary>

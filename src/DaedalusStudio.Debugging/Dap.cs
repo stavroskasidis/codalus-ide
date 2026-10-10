@@ -85,7 +85,11 @@ public sealed record BrowserLaunchArguments(
     bool UserDataDir = true,
     int Timeout = 60000,
     string Name = "Browser",
-    string Request = "launch");
+    string Request = "launch",
+    JsDebugTrace? Trace = null);
+
+/// <summary>js-debug's own log (<c>trace</c>): written to <see cref="LogFile"/>, for diagnosing a browser session.</summary>
+public sealed record JsDebugTrace(string LogFile);
 
 /// <summary>The <c>startDebugging</c> reverse request: start a child session with <see cref="Configuration"/>.</summary>
 public sealed record StartDebuggingArguments(string Request, JsonElement Configuration);

@@ -1,0 +1,27 @@
+@page "/counter"
+@rendermode InteractiveWebAssembly
+
+<PageTitle>Counter</PageTitle>
+
+<h1>Counter</h1>
+
+<p role="status">Current count: @currentCount</p>
+
+<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+
+@code {
+    private int currentCount;
+
+    protected override void OnInitialized()
+    {
+        // Prerendered on the server first, then run again in the browser.
+        currentCount = Start(); // [initialized]
+    }
+
+    private static int Start() => OperatingSystem.IsBrowser() ? 1 : 0;
+
+    private void IncrementCount()
+    {
+        currentCount++; // [increment]
+    }
+}

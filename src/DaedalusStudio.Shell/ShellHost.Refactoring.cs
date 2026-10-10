@@ -142,21 +142,51 @@ public sealed partial class ShellHost
         var line = range.Start.Line;
         var diagnostics = Languages.Diagnostics.For(model.Path).Where(d => d.Range.Start.Line <= line && d.Range.End.Line >= line).ToArray();
         StatusBar.ShowMessage("Looking for code actions…");
-        var actions = await client.CodeActionsAsync(model.Uri, range, diagnostics, CancellationToken.None).ConfigureAwait(true);
+        var actions = (await client.CodeActionsAsync(model.Uri, range, diagnostics, CancellationToken.None).ConfigureAwait(true)).Select(a => (Action: a, Client: client)).ToList();
+
+        // A linter's quick fixes (ESLint, ADR 0027): its edits come with the action.
+        foreach (var linter in Languages.RunningLinters(model.Path))
+        {
+            try
+            {
+                actions.AddRange((await linter.CodeActionsAsync(model.Uri, range, diagnostics, CancellationToken.None).ConfigureAwait(true)).Where(a => a.Edit is not null || a.Command is not null).Select(a => (a, linter)));
+            }
+            catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or OperationCanceledException)
+            {
+                LanguageLog.AppendLine($"[code actions] a linter failed: {ex.Message}");
+            }
+        }
+
         StatusBar.ClearMessage();
-        if (actions.Length == 0)
+        if (actions.Count == 0)
         {
             ShowMessage("No code actions here.");
             return;
         }
 
         var items = actions
-            .OrderBy(a => a.Kind == CodeActionKind.QuickFix ? 0 : 1)
-            .ThenBy(a => a.IsPreferred == true ? 0 : 1)
-            .Select(a => new QuickPickItem(a.Title) { Detail = a.Kind == CodeActionKind.QuickFix ? "Fix" : "Refactoring", Tag = a })
+            .OrderBy(a => a.Action.Kind == CodeActionKind.QuickFix ? 0 : 1)
+            .ThenBy(a => a.Action.IsPreferred == true ? 0 : 1)
+            .Select(a => new QuickPickItem(a.Action.Title) { Detail = a.Action.Kind == CodeActionKind.QuickFix ? "Fix" : "Refactoring", Tag = a })
             .ToList();
-        if (await Palette.ShowAsync(items, "Quick actions and refactorings").ConfigureAwait(true) is not { Tag: CodeAction picked })
+        if (await Palette.ShowAsync(items, "Quick actions and refactorings").ConfigureAwait(true) is not { Tag: (CodeAction picked, LanguageServices.Client.LanguageHostClient owner) })
         {
+            return;
+        }
+
+        if (owner != client)
+        {
+            // A linter's fix: its edit, then its command (whose edit the server sends back, applied as it comes).
+            if (picked.Edit is { DocumentChanges.Length: > 0 } linterEdit)
+            {
+                await ApplyWorkspaceEditAsync(linterEdit).ConfigureAwait(true);
+            }
+
+            if (picked.Command is { } command)
+            {
+                await owner.ExecuteCommandAsync(command, CancellationToken.None).ConfigureAwait(true);
+            }
+
             return;
         }
 
@@ -192,6 +222,11 @@ public sealed partial class ShellHost
 
     public async Task FormatAsync(bool selectionOnly)
     {
+        if (!selectionOnly && ActiveEditor is { Model: { IsReadOnly: false } document } && await FormatWithPrettierAsync(document).ConfigureAwait(true))
+        {
+            return;
+        }
+
         if (ActiveLanguageEditor() is not var (editor, controller, client) || editor.Model.IsReadOnly)
         {
             return;

@@ -50,7 +50,20 @@ public sealed partial class ShellHost
                 InitializationOptions = WebServerOptions(server),
             });
         }
+
+        // ESLint (ADR 0027): a linter next to the TypeScript server, for files under an ESLint configuration.
+        Workbench.LanguageServers.Register(new LanguageServiceDescriptor(EslintServerId, "ESLint", [], null,
+            () => WebServers.IsInstalled ? new ProcessLaunchInfo(WebServers.NodePath, [WebServers.EslintServer, "--stdio"]) : null)
+        {
+            Languages = s_webServers.Single(s => s.Server == "typescript").Languages,
+            IsLinter = true,
+            Accepts = path => Workbench.Settings.GetBoolean(Eslint.Setting, true) && Eslint.ConfigFolder(path) is not null,
+            ScopedConfiguration = (_, scope) => Eslint.Settings(scope),
+            AcceptedRequests = Eslint.ServerRequests,
+        });
     }
+
+    public const string EslintServerId = "eslint";
 
     /// <summary>How a web server starts, or null while it isn't installed (the service tries again after the install).</summary>
     private ProcessLaunchInfo? WebServerLaunch(string server)
@@ -147,6 +160,8 @@ public sealed partial class ShellHost
             {
                 await Languages.RetryAsync(server).ConfigureAwait(true);
             }
+
+            await Languages.RetryAsync(EslintServerId).ConfigureAwait(true);
 
             RefreshEditors();
         }

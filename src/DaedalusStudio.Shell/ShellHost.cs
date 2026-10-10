@@ -104,6 +104,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeTesting();
         InitializeWeb();
         InitializeWebLanguages();
+        InitializeNpm();
         InitializeHotReload();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -372,6 +373,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             DebugConsoleViewModel.ToolWindowId => DebugConsole,
             QuickWatchViewModel.ToolWindowId => QuickWatch,
             EndpointsExplorerViewModel.ToolWindowId => Endpoints,
+            TaskRunnerViewModel.ToolWindowId => TaskRunner,
             HttpResponseViewModel.ToolWindowId => HttpResponse,
             ThreadsViewModel.ToolWindowId => ThreadList,
             ModulesViewModel.ToolWindowId => ModuleList,

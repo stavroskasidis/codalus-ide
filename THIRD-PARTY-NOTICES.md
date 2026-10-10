@@ -73,7 +73,7 @@ The shell ships only `web-servers/package.json` and `package-lock.json` (our own
 | Component | Version | License | Used for |
 |---|---|---|---|
 | Node.js (OpenJS Foundation; bundles npm, Artistic-2.0, and other components under their own permissive licenses, listed in its LICENSE file) | 24.21.0 | MIT | runs the web language servers |
-| vscode-langservers-extracted (VS Code's HTML and CSS servers) | 4.10.0 | MIT | HTML, CSS, SCSS and Less |
+| vscode-langservers-extracted (VS Code's HTML and CSS servers, and vscode-eslint's server) | 4.10.0 | MIT | HTML, CSS, SCSS and Less; ESLint, running the project's own ESLint (M16d) |
 | typescript-language-server | 6.0.2 | Apache-2.0 | JavaScript and TypeScript |
 | TypeScript (tsserver) | 5.9.3 | Apache-2.0 | JavaScript and TypeScript |
 | Their dependencies, per the lockfile: Apache-2.0: typescript 5.9.3, typescript 4.9.5, typescript-language-server 6.0.2; BSD-2-Clause: css-select 5.2.2, css-what 6.2.2, domelementtype 2.3.0, domhandler 5.0.3, domutils 3.2.2, entities 4.5.0, nth-check 2.1.1; ISC: boolbase 1.0.0, semver 7.8.5; MIT: @vscode/l10n 0.0.18, core-js 3.50.0, dom-serializer 2.0.0, he 1.2.0, jsonc-parser 3.3.1, node-html-parser 6.1.13, picomatch 2.3.2, regenerator-runtime 0.13.11, request-light 0.7.0, vscode-css-languageservice 6.3.10, vscode-html-languageservice 5.6.2, vscode-json-languageservice 5.7.2, vscode-jsonrpc 9.0.3, vscode-langservers-extracted 4.10.0, vscode-languageserver 10.1.2, vscode-languageserver-protocol 3.18.4, vscode-languageserver-textdocument 1.0.15, vscode-languageserver-types 3.17.5, vscode-languageserver-types 3.18.4, vscode-markdown-languageservice 0.5.0, vscode-nls 5.2.0, vscode-uri 3.2.0 | | | |

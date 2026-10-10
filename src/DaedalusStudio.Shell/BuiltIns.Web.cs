@@ -14,7 +14,8 @@ internal static partial class BuiltIns
 {
     public const string WebKeybindings = """
         [
-          { "key": "ctrl+alt+r", "command": "http.sendRequest", "when": "editorTextFocus && editorLanguageId == http" }
+          { "key": "ctrl+alt+r", "command": "http.sendRequest", "when": "editorTextFocus && editorLanguageId == http" },
+          { "key": "ctrl+alt+backspace", "command": "npm.taskRunner", "when": "keyboardScheme != vscode" }
         ]
         """;
 
@@ -28,6 +29,36 @@ internal static partial class BuiltIns
             Enum = ["ask", "install", "off"],
             EnumDescriptions = ["Ask the first time a web file opens", "Download without asking", "Don't use them"],
         },
+        SettingDescriptor.Create(Workbench.Node.Eslint.Setting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "ESLint",
+            Category = "Web",
+            Description = "Lint JavaScript and TypeScript files with the project's own ESLint, where an ESLint configuration covers them (with the web language servers).",
+        },
+        SettingDescriptor.Create(Workbench.Node.Prettier.Setting, "\"auto\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Prettier",
+            Category = "Web",
+            Description = "Format Document and format on save use the project's own Prettier when it is installed (node_modules) and configured (.prettierrc, prettier.config.js or package.json).",
+            Enum = ["auto", "off"],
+            EnumDescriptions = ["When the project uses Prettier", "Never; the language servers format"],
+        },
+        SettingDescriptor.Create(Workbench.Node.Npm.RuntimeSetting, "\"auto\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "npm",
+            Category = "Web",
+            Description = "The npm that runs scripts and restores packages: yours (on PATH), else the built-in Node.js; or always the built-in Node.js.",
+            Enum = ["auto", "builtIn"],
+            EnumDescriptions = ["The npm on PATH, else the built-in Node.js", "The built-in Node.js"],
+        },
+        SettingDescriptor.Create(Workbench.Node.Npm.RestoreOnOpenSetting, "\"ask\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Restore npm Packages on Open",
+            Category = "Web",
+            Description = "When a trusted solution opens with a package.json whose packages aren't installed: ask, restore (npm install), or do nothing.",
+            Enum = ["ask", "always", "never"],
+            EnumDescriptions = ["Ask", "Restore without asking", "Do nothing"],
+        },
     ];
 
     public static IEnumerable<ToolWindowDescriptor> WebToolWindows()
@@ -35,6 +66,7 @@ internal static partial class BuiltIns
         var shell = ContributionSource.Shell;
         yield return new ToolWindowDescriptor(EndpointsExplorerViewModel.ToolWindowId, "Endpoints Explorer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
         yield return new ToolWindowDescriptor(HttpResponseViewModel.ToolWindowId, "HTTP Response", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(TaskRunnerViewModel.ToolWindowId, "Task Runner Explorer", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
     }
 
     public static void RegisterWebCommands(ShellHost shell)
@@ -57,6 +89,10 @@ internal static partial class BuiltIns
         Add("web.trustDevCertificate", "Trust the HTTPS Development Certificate", "ASP.NET Core", _ => shell.TrustDevCertificateAsync());
         Add("web.manageUserSecrets", "Manage User Secrets", "ASP.NET Core", shell.ManageUserSecretsAsync, "solutionOpen && solutionTrusted");
         Add("web.installLanguageServers", "Install the Web Language Servers (Node.js)", "Web", _ => shell.InstallWebLanguagesAsync());
+        Add("npm.taskRunner", "Task Runner Explorer", "npm", _ => shell.ShowTaskRunnerAsync());
+        Add("npm.runScript", "Run npm Script…", "npm", _ => shell.PickNpmScriptAsync(), "solutionOpen");
+        Add("npm.restore", "Restore npm Packages", "npm", async path => await shell.RestoreNpmAsync(path ?? shell.SelectedPackageJson()).ConfigureAwait(false), "solutionOpen && solutionTrusted");
+        Add("debug.webPageFile", "Debug in Browser", "Debug", path => shell.DebugWebPageAsync(path ?? shell.Explorer.Selected?.Node.Path), "!debugActive");
         Add("http.sendRequest", "Send Request", "HTTP", _ => shell.SendHttpRequestAtCaretAsync(), "editorLanguageId == http");
         Add("http.selectEnvironment", "Select the Environment for .http Requests…", "HTTP", _ => shell.SelectHttpEnvironmentAsync(), "editorLanguageId == http");
         Add("http.showResponse", "HTTP Response", "HTTP", _ =>
@@ -80,6 +116,10 @@ internal static partial class BuiltIns
             Item(MenuLocations.MenuBar("debug"), "web.checkDevCertificate", "6-web", 2),
             Item(MenuLocations.MenuBar("debug"), "web.trustDevCertificate", "6-web", 3),
             Item(SolutionExplorerView.ContextMenuLocation, "web.manageUserSecrets", "3-web", 1, "explorerItemKind == project"),
+            Item(OtherWindowsMenu, "npm.taskRunner", "windows", AlphabeticalOrder("Task Runner Explorer")),
+            Item(MenuLocations.MenuBar("project"), "npm.restore", "web", 2),
+            Item(SolutionExplorerView.ContextMenuLocation, "npm.restore", "3-web", 2, "explorerItemName == 'package.json'", "Restore Packages"),
+            Item(SolutionExplorerView.ContextMenuLocation, "debug.webPageFile", "3-web", 3, "explorerItemName =~ /(?i)\\.html?$/"),
             Item(MenuLocations.EditorContext, "http.sendRequest", "0-http", 0, "editorLanguageId == http"),
             Item(MenuLocations.EditorContext, "http.selectEnvironment", "0-http", 1, "editorLanguageId == http"),
         ]);

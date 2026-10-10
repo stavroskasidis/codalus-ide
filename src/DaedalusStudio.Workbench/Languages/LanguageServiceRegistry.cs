@@ -25,6 +25,21 @@ public sealed record LanguageServiceDescriptor(
     /// <summary>Who registered it: <c>shell</c> or a plugin id.</summary>
     public string Source { get; init; } = "shell";
 
+    /// <summary>
+    /// A linter (ESLint, ADR 0027): it serves its languages' documents next to their language service, for diagnostics
+    /// and quick fixes, and never answers completion, hover or navigation.
+    /// </summary>
+    public bool IsLinter { get; init; }
+
+    /// <summary>Which documents a linter takes (those its configuration covers); null: all of its languages'.</summary>
+    public Func<string, bool>? Accepts { get; init; }
+
+    /// <summary>Settings by section and document (<c>scopeUri</c>), for servers whose settings depend on the file.</summary>
+    public Func<string?, string?, System.Text.Json.JsonElement?>? ScopedConfiguration { get; init; }
+
+    /// <summary>The server's own requests the client answers with null.</summary>
+    public IReadOnlyList<string> AcceptedRequests { get; init; } = [];
+
     public bool Serves(string languageId) => (Languages ?? [LanguageId]).Contains(languageId, StringComparer.Ordinal);
 }
 
@@ -62,16 +77,25 @@ public sealed class LanguageServiceRegistry
         var extension = Path.GetExtension(path);
         lock (_gate)
         {
-            return _services.FirstOrDefault(s => s.FileExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase));
+            return _services.FirstOrDefault(s => !s.IsLinter && s.FileExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase));
         }
     }
 
-    /// <summary>The service of a language id (a document's language), or null.</summary>
+    /// <summary>The service of a language id (a document's language), or null. Linters aren't.</summary>
     public LanguageServiceDescriptor? ForLanguage(string languageId)
     {
         lock (_gate)
         {
-            return _services.LastOrDefault(s => s.Serves(languageId));
+            return _services.LastOrDefault(s => !s.IsLinter && s.Serves(languageId));
+        }
+    }
+
+    /// <summary>The linters of a language id.</summary>
+    public IReadOnlyList<LanguageServiceDescriptor> LintersFor(string languageId)
+    {
+        lock (_gate)
+        {
+            return [.. _services.Where(s => s.IsLinter && s.Serves(languageId))];
         }
     }
 

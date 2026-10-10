@@ -93,6 +93,7 @@ public sealed partial class ShellHost
     private void OnDebugOutput(DebugOutput output)
     {
         DebugLog.Append(output.Text);
+        OnServerOutput(output);
         if (_pendingBrowserUrl is { } url && output.Category == "stdout"
             && (output.Text.Contains("Now listening on:", StringComparison.Ordinal) || output.Text.Contains("Application started.", StringComparison.Ordinal)))
         {
@@ -121,6 +122,13 @@ public sealed partial class ShellHost
         }
 
         var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
+        if (project is null && ActiveEditor?.Model.Path is { } htmlFile && IsHtmlFile(htmlFile) && File.Exists(htmlFile))
+        {
+            // Nothing to build: a page debugs in the browser (ADR 0027).
+            await DebugWebPageAsync(htmlFile).ConfigureAwait(true);
+            return;
+        }
+
         if (project is null)
         {
             Workbench.Notifications.Warning(Solutions.IsOpen
@@ -160,9 +168,16 @@ public sealed partial class ShellHost
             }
 
             DebugLog.AppendLine($"> {plan.FileName} {plan.Arguments}".TrimEnd());
-            _pendingBrowserUrl = plan.BrowserUrl;
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
+            if (LaunchPlanner.PageDebugTarget(profile, Workbench.Settings.GetBoolean(JavaScriptDebugSetting, true)) is { } page)
+            {
+                // The server and its page in one session (ADR 0027).
+                await StartCompoundDebuggingAsync(project, plan, page).ConfigureAwait(true);
+                return;
+            }
+
+            _pendingBrowserUrl = plan.BrowserUrl;
             await Debugger.LaunchAsync(plan, CancellationToken.None).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException)

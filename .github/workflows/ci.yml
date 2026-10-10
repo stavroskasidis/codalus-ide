@@ -52,7 +52,7 @@ jobs:
       matrix:
         os: ${{ fromJSON(needs.matrix.outputs.os) }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -83,6 +83,15 @@ jobs:
         # A test process still running after 25 minutes (Shell.Tests normally takes 13) is dumped, and the tests that
         # were running are named, instead of the job timing out without a word.
         run: dotnet test --solution DaedalusStudio.slnx -c Release --no-build --hangdump --hangdump-timeout 25m --hangdump-type Mini
+      - name: Processes the tests left running
+        # The smoke test needs the machine to itself: what the tests left behind is listed (a leak to fix), then ended.
+        if: always() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          ps -eo pid,ppid,etime,pcpu,rss,args --sort=-pcpu | head -25 | cut -c1-240
+          df -h / /tmp | uniq
+          dotnet build-server shutdown > /dev/null 2>&1 || true
+          pkill -f 'chrome|chromium|msedge|dapDebugServer|blazor-devserver|BrowserDebugHost|dotnet-watch' || true
       - name: Native AOT publish must stay warning-free in our code
         shell: bash
         run: |
@@ -95,11 +104,12 @@ jobs:
       # in-process headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform).
       - name: End-to-end smoke test of the published app
         shell: bash
+        timeout-minutes: 25
         env:
           DAEDALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
         run: bash eng/smoke-test.sh artifacts/shell/daedalus artifacts/smoke-test
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: failure() || cancelled()
         with:
           name: smoke-test-${{ runner.os }}
           path: artifacts/smoke-test/

@@ -207,6 +207,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 _shell.Workbench.Context.Set("explorerItemKind", value is null ? null : KindKey(value.Node.Kind));
                 _shell.Workbench.Context.Set("explorerItemIsProjectReference", value?.Node is { Kind: ExplorerNodeKind.Dependency } n && n.Id.Contains("|project|", StringComparison.Ordinal));
                 _shell.Workbench.Context.Set("explorerProjectUnloaded", value?.Node.IsUnloaded == true);
+                _shell.Workbench.Context.Set("explorerItemName", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } file } ? System.IO.Path.GetFileName(file) : null);
             }
         }
     }

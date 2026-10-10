@@ -94,6 +94,9 @@ public sealed record ServerCapabilities
     public CodeLensOptions? CodeLensProvider { get; init; }
 
     public bool SelectionRangeProvider { get; init; }
+
+    /// <summary>The server answers <c>textDocument/diagnostic</c> (pull diagnostics, LSP 3.17) instead of publishing them.</summary>
+    public bool DiagnosticProvider { get; init; }
 }
 
 public sealed record CodeLensOptions(bool ResolveProvider);
@@ -346,6 +349,9 @@ public sealed record CodeAction(string Title)
     public bool? IsPreferred { get; init; }
 
     public WorkspaceEdit? Edit { get; init; }
+
+    /// <summary>A command the server runs for the action (<c>workspace/executeCommand</c>), after its edit if it has one.</summary>
+    public Command? Command { get; init; }
 
     public JsonElement? Data { get; init; }
 }

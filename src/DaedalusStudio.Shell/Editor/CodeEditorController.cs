@@ -905,7 +905,7 @@ public sealed partial class CodeEditorController : IDisposable
 
         if (capabilities.CompletionProvider is { } completion)
         {
-            var isTrigger = completion.TriggerCharacters.Contains(text);
+            var isTrigger = completion.TriggerCharacters.Contains(text) || (Model.LanguageId == ShellHost.RazorLanguageId && text is "<" or "\"" or "/" or "=");
             if (_completion is null && isTrigger)
             {
                 ShowCompletion(text);
@@ -1003,7 +1003,24 @@ public sealed partial class CodeEditorController : IDisposable
             var context = triggerCharacter is null
                 ? new CompletionContext(CompletionTriggerKind.Invoked, null)
                 : new CompletionContext(CompletionTriggerKind.TriggerCharacter, triggerCharacter);
-            var list = await client.CompletionAsync(Model.Uri, Model.PositionAt(requestedAt), context, cancellationToken).ConfigureAwait(true);
+            var position = Model.PositionAt(requestedAt);
+            var request = client.CompletionAsync(Model.Uri, position, context, cancellationToken);
+            var (embedded, embeddedList) = await EmbeddedCompletionAsync(requestedAt, position, context, cancellationToken).ConfigureAwait(true);
+            var list = await request.ConfigureAwait(true);
+            var embeddedItems = new HashSet<LanguageServices.Protocol.CompletionItem>(ReferenceEqualityComparer.Instance);
+            if (embeddedList is { Items.Length: > 0 })
+            {
+                // HTML in Razor (ADR 0027): the HTML server's elements and attributes replace the same names from the C# host.
+                var labels = embeddedList.Items.Select(i => i.Label).ToHashSet(StringComparer.Ordinal);
+                embeddedItems.UnionWith(embeddedList.Items);
+                list = list with { IsIncomplete = list.IsIncomplete || embeddedList.IsIncomplete, Items = [.. list.Items.Where(i => !labels.Contains(i.Label)), .. embeddedList.Items] };
+            }
+
+            if (_services.ExtraCompletions(Model, requestedAt) is { Count: > 0 } extra)
+            {
+                var labels = extra.Select(i => i.Label).ToHashSet(StringComparer.Ordinal);
+                list = list with { Items = [.. list.Items.Where(i => !labels.Contains(i.Label)), .. extra] };
+            }
             if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalSeconds: > 2 } slow)
             {
                 _services.Log($"{Model.Name}: completion took {slow.TotalSeconds:0.0} s");
@@ -1049,7 +1066,9 @@ public sealed partial class CodeEditorController : IDisposable
             Task<LanguageServices.Protocol.CompletionItem> Resolve(LanguageServices.Protocol.CompletionItem item) =>
                 item.Data is null && item.Kind == CompletionItemKind.Snippet && item.InsertTextFormat == InsertTextFormat.Snippet
                     ? Task.FromResult(item) // our snippets: nothing to resolve
-                    : client.ResolveCompletionAsync(item, CancellationToken.None);
+                    : embedded is not null && embeddedItems.Contains(item)
+                        ? embedded.Client.ResolveCompletionAsync(item, CancellationToken.None)
+                        : client.ResolveCompletionAsync(item, CancellationToken.None);
             foreach (var item in list.Items.OrderBy(i => i.SortText ?? i.Label, StringComparer.Ordinal).Concat(SnippetItems(triggerCharacter)))
             {
                 window.CompletionList.CompletionData.Add(new CompletionData(item, Resolve, Commit));
@@ -1081,7 +1100,25 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    /// <summary>Applies a completion item: the resolved edit (or the label), then additional edits such as a using.</summary>
+    /// <summary>The embedded language's completion at the caret (HTML at a Razor file's markup); nothing elsewhere or when it fails.</summary>
+    private async Task<(EmbeddedRequest? Request, LanguageServices.Protocol.CompletionList? List)> EmbeddedCompletionAsync(int offset, Position position, CompletionContext context, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (await _services.EmbeddedAsync(Model, offset).ConfigureAwait(true) is not { } embedded)
+            {
+                return (null, null);
+            }
+
+            return (embedded, await embedded.Client.CompletionAsync(embedded.Uri, position, context, cancellationToken).ConfigureAwait(true));
+        }
+        catch (Exception ex) when (IsTransient(ex))
+        {
+            _services.Log($"{Model.Name}: embedded completion failed ({ex.Message})");
+            return (null, null);
+        }
+    }
+
     /// <summary>The language's snippets as completion items (not after a trigger character such as <c>.</c>).</summary>
     private IEnumerable<LanguageServices.Protocol.CompletionItem> SnippetItems(string? triggerCharacter)
     {
@@ -1141,9 +1178,20 @@ public sealed partial class CodeEditorController : IDisposable
         var document = Model.Text;
         using (document.RunUpdate())
         {
-            var text = resolved?.TextEdit?.NewText ?? data.Item.InsertText ?? data.Item.Label;
-            document.Replace(segment.Offset, segment.Length, text);
-            var caretAfter = segment.Offset + text.Length;
+            // The item's edit replaces its range, which may start before the word being typed (CSS's "::after" over
+            // "::af"), through what was typed since the request.
+            var textEdit = resolved?.TextEdit ?? data.Item.TextEdit;
+            var text = textEdit?.NewText ?? data.Item.InsertText ?? data.Item.Label;
+            var replaceStart = segment.Offset;
+            var replaceLength = segment.Length;
+            if (textEdit is { } itemEdit && Model.OffsetAt(itemEdit.Range.Start) is var editStart && editStart <= segment.Offset)
+            {
+                replaceStart = editStart;
+                replaceLength = Math.Max(segment.EndOffset, Model.OffsetAt(itemEdit.Range.End)) - editStart;
+            }
+
+            document.Replace(replaceStart, replaceLength, text);
+            var caretAfter = replaceStart + text.Length;
 
             // Additional edits refer to the text when completion was requested; they sit before the completed span
             // (usings at the top), so applying them last-first from the end keeps their positions valid.
@@ -1288,6 +1336,12 @@ public sealed partial class CodeEditorController : IDisposable
             if (dataTip is null && Client is { } client)
             {
                 var hover = await client.HoverAsync(Model.Uri, Model.PositionAt(offset), cancellationToken).ConfigureAwait(true);
+                if (hover?.Contents.Value is not { Length: > 0 } && Model.LanguageId == ShellHost.RazorLanguageId
+                    && await _services.EmbeddedAsync(Model, Math.Min(offset + 1, Model.Text.TextLength)).ConfigureAwait(true) is { } embedded)
+                {
+                    hover = await embedded.Client.HoverAsync(embedded.Uri, Model.PositionAt(offset), cancellationToken).ConfigureAwait(true);
+                }
+
                 if (hover?.Contents.Value is { Length: > 0 } markdown)
                 {
                     parts.Insert(0, markdown);

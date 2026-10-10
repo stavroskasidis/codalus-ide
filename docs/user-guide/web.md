@@ -13,7 +13,36 @@ They run on Node.js. The first time you open such a file, Daedalus Studio offers
 - The **Web Language Servers** setting (`web.languageServers`) chooses between asking (the default), downloading without asking, and off.
 - **Install the Web Language Servers** in the command palette downloads them at any time.
 
-HTML and CSS inside Razor files aren't served by these servers yet.
+The HTML server also serves the markup of Razor files: see [Razor and Blazor](#razor-and-blazor).
+
+### ESLint
+
+When a JavaScript or TypeScript file is under an ESLint configuration (`eslint.config.js`, `.mjs`, `.cjs` or `.ts`, or an older `.eslintrc*`), Daedalus Studio lints it with the project's own ESLint (from its `node_modules`), as you type:
+- **Problems** appear in the editor and the Error List next to TypeScript's, with the rule as the code (`no-unused-vars`).
+- **Quick actions** (`Ctrl+.`) offer the rule's fix when it has one, and disabling the rule for the line or the file.
+- **No ESLint installed** (`npm install` not run yet): nothing is linted, and the Language Services output says why.
+- **The ESLint setting** (`web.eslint`) turns it off.
+
+### Prettier
+
+When a project uses Prettier (installed in its `node_modules`, with a `.prettierrc*` or `prettier.config.*` file, or a `"prettier"` key in `package.json`), **Format Document** (`Ctrl+K, Ctrl+D`) and format on save run it, with the project's configuration, for the files it formats: JavaScript, TypeScript, CSS, HTML, JSON, Markdown, YAML and more. Otherwise the language servers format. The **Prettier** setting (`web.prettier`) turns it off.
+
+### npm
+
+**View → Other Windows → Task Runner Explorer** (`Ctrl+Alt+Backspace`) lists the scripts of the solution's `package.json` files (the solution's folder and its projects', not `node_modules`).
+- **Run a script:** double-click it. It runs as `npm run <script>` in a terminal of its own. **Run npm Script…** in the command palette picks one too.
+- **Restore Packages** (the Task Runner Explorer's button, a `package.json`'s context menu, or Project → Restore npm Packages) runs `npm install`, with its output in the npm output.
+- **Packages not installed when a solution opens:** Daedalus Studio offers to restore them. The **Restore npm Packages on Open** setting (`npm.restoreOnOpen`) can make it restore without asking, or never.
+- **Bindings** in `package.json` run scripts on IDE events, in the format other IDEs' Task Runner Explorer writes:
+
+  ```json
+  "-vs-binding": { "BeforeBuild": ["lint"], "AfterBuild": ["copy"], "Clean": ["clean"], "ProjectOpen": ["watch"] }
+  ```
+
+  A Before Build script that fails stops the build. The Task Runner Explorer shows a script's bindings.
+- **Which npm:** yours, on `PATH`. Without one, or with the **npm** setting (`npm.runtime`) set to `builtIn`, the built-in Node.js's npm runs them (downloaded once, as for the language servers).
+
+Scripts and installs run the project's code, so packages are restored only in trusted folders.
 
 ## Hot Reload
 
@@ -34,6 +63,8 @@ The status bar shows the state (watching, applied in N ms, compile errors, resta
   - after `@` at the start of a line: directives (`@page`, `@inject`, `@code`…).
 - **Hover and Go to Definition** work on a component's tag and on its parameters.
 - **Navigating to a component** from a `.cs` file opens its `.razor` file.
+- **HTML and CSS** (with the web language servers): in markup, the HTML server completes elements, attributes and their values, and describes them on hover. CSS in `<style>` blocks gets CSS completion. The C# and the Razor syntax are left out of what it sees, so these work between them, in `@if` and `@foreach` blocks too.
+- **Scoped CSS:** `Counter.razor.css` styles `Counter.razor` only, and Solution Explorer shows it under the component. In its selectors, completion offers the class names and ids of the component's markup, and Blazor's `::deep`.
 
 Run, Debug and Hot Reload work as for other ASP.NET Core apps: with Hot Reload, saving a component applies markup and code changes to the running app.
 
@@ -51,8 +82,24 @@ A standalone Blazor WebAssembly app (`dotnet new blazorwasm`) runs on the WebAss
   - The setting **Browser** (`debug.browser`) picks the browser: `auto` (Chrome, then Edge, then Chromium), `chrome`, `edge`, `chromium`, or a path.
 - **Hot Reload** works once the page is open in a browser, because the components run there: start with Hot Reload, open the page (or let `launchBrowser` open it), then save. The status bar says when the change was applied.
 
-Not available yet:
-- debugging an app's server and its WebAssembly client in one session (a Blazor Web App with interactive WebAssembly components, or an ASP.NET Core app's scripts): debug the server with F5 as usual;
+## Debugging the server and the page together
+
+A **Blazor Web App with WebAssembly components** (its launch profile has `inspectUri`, as `dotnet new blazor --interactivity WebAssembly` or `Auto` writes it) debugs as one session: `F5` starts the server under the .NET debugger and, once it listens, opens the page in the browser under the browser debugger.
+- **A breakpoint in a component's C#** stops on the server while it prerenders the page, then again in the browser when the component runs there. The Call Stack and Threads windows say which: the browser's threads are named `Browser: …`.
+- **Breakpoints in the page's scripts** stop in the browser too.
+- **One stop shows at a time.** If the server and the browser both stop, the second shows when you continue the first. **Break All** pauses both.
+- **Ending:** stopping the session closes the browser and stops the server. Closing the browser ends the session.
+
+**Other ASP.NET Core apps** whose launch profile opens a browser (`launchBrowser`) debug their page's scripts the same way. The **JavaScript debugging for ASP.NET Core** setting (`debug.javaScript`, on by default) controls it; off, the profile's browser opens as a plain browser.
+
+Without Chrome, Edge or Chromium, the server is debugged alone.
+
+## Debugging a web page
+
+**Debug → Debug a Web Page…** opens any page in the browser under the browser debugger, with no .NET server: an `http` or `https` URL (a site served by something else), or an HTML file. `F5` with an HTML file open and no startup project does the same for that file, and so does **Debug in Browser** on an HTML file in Solution Explorer. Breakpoints in its scripts stop as in any session.
+
+Not available:
+- breakpoints in scripts referenced through `@Assets["…"]`, which are served under fingerprinted names (`app.abc123.js`): reference the plain path (`app.js`) to debug them;
 - Firefox and Safari, which the browser debugger doesn't support.
 
 ## The Endpoints Explorer

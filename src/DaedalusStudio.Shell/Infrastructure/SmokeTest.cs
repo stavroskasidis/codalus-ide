@@ -793,6 +793,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         }).ConfigureAwait(true);
 
         await StepAsync("web.languages", "M16", "Node.js and the web language servers install on demand and serve TypeScript and HTML", WebLanguagesStepAsync).ConfigureAwait(true);
+        await StepAsync("web.razorHtml", "M16", "HTML and CSS inside a Razor file come from the HTML server", RazorHtmlStepAsync, "web.languages").ConfigureAwait(true);
+        await StepAsync("web.npm", "M16", "The Task Runner Explorer restores npm packages, runs a script, and a build runs its Before Build script", NpmStepAsync).ConfigureAwait(true);
+        await StepAsync("web.eslint", "M16", "The project's ESLint lints a script and its Prettier formats it", EslintStepAsync, "web.languages").ConfigureAwait(true);
 
         await StepAsync("dotnet.net11", "M30", "A .NET 11 solution opens with the .NET 11 SDK, builds, and runs on .NET 11", async () =>
         {
@@ -824,7 +827,125 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         else
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
+            await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
         }
+    }
+
+    /// <summary>
+    /// HTML and CSS in Razor (M16d, ADR 0027): at a markup position of Counter.razor (samples/Blazor, opened by
+    /// blazor.razor) the HTML server completes elements, through the file's HTML.
+    /// </summary>
+    private async Task RazorHtmlStepAsync()
+    {
+        var counter = Path.Combine(_work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
+        var editor = await OpenAsync(counter).ConfigureAwait(true);
+        var heading = editor.Model.Text.Text.IndexOf("<h1>Counter</h1>", StringComparison.Ordinal) + "<h1>Counter</h1>".Length;
+        editor.Model.Text.Insert(heading, "\n<blockq");
+        var offset = heading + "\n<blockq".Length;
+        var embedded = await ((Editor.IEditorServices)shell).EmbeddedAsync(editor.Model, offset).ConfigureAwait(true);
+        Check(embedded is not null, "the HTML server serves the Razor file's markup");
+        var completion = await embedded!.Client.CompletionAsync(embedded.Uri, editor.Model.PositionAt(offset),
+            new LanguageServices.Protocol.CompletionContext(LanguageServices.Protocol.CompletionTriggerKind.Invoked, null), CancellationToken.None).ConfigureAwait(true);
+        Check(completion?.Items.Any(i => i.Label == "blockquote") == true, "HTML completion in Razor offers blockquote");
+        editor.Model.Text.Remove(heading, "\n<blockq".Length);
+    }
+
+    /// <summary>
+    /// npm (M16d, ADR 0027): samples/WebScripts' package restores (a local dependency), a script runs in a terminal, and
+    /// Build runs the script bound to Before Build.
+    /// </summary>
+    private async Task NpmStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "WebScripts", "WebScripts.slnx")), $"the samples folder {samples} has WebScripts");
+        var target = Path.Combine(_work, "WebScripts");
+        Copy(Path.Combine(samples, "WebScripts"), target);
+        await shell.OpenSolutionAsync(Path.Combine(target, "WebScripts.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the WebScripts solution is open", 300).ConfigureAwait(true);
+        var project = Path.Combine(target, "WebScripts");
+        shell.Run("npm.taskRunner");
+        await WaitAsync(() => shell.TaskRunner.Rows.Any(r => r.Label == "greet"), "the Task Runner Explorer lists the scripts", 60).ConfigureAwait(true);
+        Check(await shell.RestoreNpmAsync(Path.Combine(project, "package.json")).ConfigureAwait(true), "npm install succeeded: " + Tail(shell.NpmLog.GetText(), 1500));
+        Check(Directory.Exists(Path.Combine(project, "node_modules", "local-greeting")), "the local dependency is installed");
+
+        await shell.RunNpmScriptAsync(Path.Combine(project, "package.json"), "greet").ConfigureAwait(true);
+        var session = shell.Terminals.Sessions.Last(s => s.Name == "npm: greet");
+        string Text() => string.Join("\n", Enumerable.Range(0, session.Terminal.TotalRows).Select(i => session.Terminal.GetRow(i).GetText()));
+        await WaitAsync(() => Text().Contains("Hello, npm!", StringComparison.Ordinal), "the script prints its greeting in the terminal", 120).ConfigureAwait(true);
+
+        var before = shell.Builds.LastBuild;
+        shell.Run("build.buildSolution");
+        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 300).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(project, "stamp.txt")), "the Before Build script ran: " + Tail(shell.NpmLog.GetText(), 1500));
+    }
+
+    /// <summary>
+    /// ESLint and Prettier (M16d, ADR 0027): samples/WebLint gets its tools (npm ci), then ESLint reports src/app.js's
+    /// problems next to TypeScript, and Format Document runs Prettier.
+    /// </summary>
+    private async Task EslintStepAsync()
+    {
+        Check(File.Exists(Path.Combine(samples, "WebLint", "package-lock.json")), $"the samples folder {samples} has WebLint");
+        var target = Path.Combine(_work, "WebLint");
+        Copy(Path.Combine(samples, "WebLint"), target);
+        var npm = Workbench.Node.Npm.UserNpm() ?? Workbench.Node.Npm.BuiltIn(shell.Node);
+        var log = new System.Text.StringBuilder();
+        var code = await Workbench.Node.Npm.RunAsync(npm, ["ci", "--no-audit", "--no-fund"], target, line => log.AppendLine(line), CancellationToken.None).ConfigureAwait(true);
+        Check(code == 0, "npm ci installed ESLint and Prettier:\n" + Tail(log.ToString(), 1500));
+
+        var app = Path.Combine(target, "src", "app.js");
+        var editor = await OpenAsync(app).ConfigureAwait(true);
+        await WaitAsync(() => shell.Languages.Diagnostics.For(app) is var d && d.Any(x => x.Code == "no-unused-vars") && d.Any(x => x.Code == "eqeqeq"),
+            "ESLint reports no-unused-vars and eqeqeq: " + Tail(shell.LanguageLog.GetText(), 1500), 180).ConfigureAwait(true);
+        shell.Run("editor.action.formatDocument");
+        await WaitAsync(() => editor.Model.Text.Text.Contains("let sum = 0;", StringComparison.Ordinal), "Prettier formats the file: " + Tail(shell.LanguageLog.GetText(), 1500), 60).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Compound debugging (M16d, ADR 0027): F5 on samples/BlazorHosted stops in Counter.razor on the server (netcoredbg,
+    /// prerendering), then in the browser (js-debug and the WebAssembly debugging proxy). Stopping ends both.
+    /// </summary>
+    private async Task CompoundDebugStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous session has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "BlazorHosted", "BlazorHosted.slnx")), $"the samples folder {samples} has BlazorHosted");
+        var target = Path.Combine(_work, "BlazorHosted");
+        Copy(Path.Combine(samples, "BlazorHosted"), target);
+        using (var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
+        {
+            socket.Start();
+            var port = ((System.Net.IPEndPoint)socket.LocalEndpoint).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            socket.Stop();
+            var settings = Path.Combine(target, "BlazorHosted", "Properties", "launchSettings.json");
+            File.WriteAllText(settings, File.ReadAllText(settings).Replace("5274", port, StringComparison.Ordinal));
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "BlazorHosted.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Blazor Web App is open", 300).ConfigureAwait(true);
+        shell.Runs.SetStartupProject(Path.Combine(target, "BlazorHosted", "BlazorHosted.csproj"));
+        var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
+        var line = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [initialized]", StringComparison.Ordinal)) + 1;
+        shell.Debugger.Breakpoints.Toggle(counter, line);
+        string Thread() => shell.Debugger.Threads.FirstOrDefault(t => t.Id == shell.Debugger.CurrentStop?.ThreadId)?.Name ?? string.Empty;
+        shell.Run("debug.start");
+        try
+        {
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, "the server stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
+            Check(shell.Debugger.IsCompound && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's: " + Thread());
+            var first = shell.Debugger.CurrentStop;
+            await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.CurrentStop != first && shell.Debugger.Frames.Count > 0,
+                "the page stops at the breakpoint in WebAssembly (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 300).ConfigureAwait(true);
+            Check(Thread().StartsWith("Browser:", StringComparison.Ordinal), "the second stop is the browser's: " + Thread());
+            Screenshot("smoke-test-blazor-compound-debug.png");
+        }
+        finally
+        {
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.StopAsync().ConfigureAwait(true);
+        }
+
+        await WaitAsync(() => !shell.Debugger.IsActive, "the session ends", 60).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -951,15 +1072,38 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         var start = Stopwatch.GetTimestamp();
         try
         {
-            await body().ConfigureAwait(true);
+            // A step that hangs (a request without a timeout) fails on its own instead of using up the run.
+            await body().WaitAsync(s_stepLimit).ConfigureAwait(true);
             Report(id, milestone, title, "passed", Stopwatch.GetElapsedTime(start).TotalSeconds, null);
         }
         catch (Exception ex)
         {
-            Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, ex is SmokeFailure ? ex.Message : ex.ToString());
+            var error = ex is SmokeFailure ? ex.Message : ex is TimeoutException ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes." : ex.ToString();
+            Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, error);
             Screenshot($"smoke-test-{id}.png");
+            if (!_logsShown)
+            {
+                // The first failure prints the hosts' logs, so CI's log says why even when the run is cut short.
+                _logsShown = true;
+                foreach (var channel in shell.Workbench.Output.Channels.Where(c => c.Name is "Language Services" or "Build Host" or "Log"))
+                {
+                    Console.Out.WriteLine($"  --- {channel.Name} (the end) ---");
+                    Console.Out.WriteLine(Tail(channel.GetText(), 4000));
+                }
+
+                Console.Out.Flush();
+            }
+        }
+        finally
+        {
+            WriteReport();
         }
     }
+
+    /// <summary>The longest a step may take (the first browser and Node.js downloads included).</summary>
+    private static readonly TimeSpan s_stepLimit = TimeSpan.FromMinutes(12);
+
+    private bool _logsShown;
 
     private void Report(string id, string milestone, string title, string outcome, double seconds, string? error)
     {

@@ -125,6 +125,9 @@ public sealed class EditorOptions : ObservableObject
 /// <summary>The project a file belongs to, when it has several target frameworks (the editor's project-context picker).</summary>
 public sealed record ProjectContext(string ProjectPath, string ProjectName, IReadOnlyList<string> Frameworks, string Active);
 
+/// <summary>A language embedded in a document, at a position: the client to ask and the document's URI there (HTML in Razor, ADR 0027).</summary>
+public sealed record EmbeddedRequest(LanguageHostClient Client, string Uri);
+
 /// <summary>What an editor view needs from the shell.</summary>
 public interface IEditorServices
 {
@@ -139,6 +142,15 @@ public interface IEditorServices
 
     /// <summary>The running language service client of a document's language, or null.</summary>
     LanguageHostClient? Client(CodeDocument document);
+
+    /// <summary>
+    /// The language embedded at <paramref name="offset"/> (a caret) of <paramref name="document"/>, to ask too: HTML at
+    /// a Razor file's markup. Null elsewhere, and when its server isn't running.
+    /// </summary>
+    Task<EmbeddedRequest?> EmbeddedAsync(CodeDocument document, int offset);
+
+    /// <summary>Completion items the shell adds at <paramref name="offset"/> (scoped CSS's class names and <c>::deep</c>, ADR 0027).</summary>
+    IReadOnlyList<CompletionItem> ExtraCompletions(CodeDocument document, int offset);
 
     /// <summary>The theme changed (token and highlight colors).</summary>
     event EventHandler? ThemeChanged;

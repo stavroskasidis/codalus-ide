@@ -80,6 +80,7 @@ public sealed class ViewLocator : IDataTemplate
         WatchViewModel vm => new WatchView { DataContext = vm },
         QuickWatchViewModel vm => new QuickWatchView { DataContext = vm },
         EndpointsExplorerViewModel vm => new EndpointsExplorerView { DataContext = vm },
+        TaskRunnerViewModel vm => new TaskRunnerView { DataContext = vm },
         HttpResponseViewModel vm => new HttpResponseView { DataContext = vm },
         ThreadsViewModel vm => new ThreadsView { DataContext = vm },
         ModulesViewModel vm => new ModulesView { DataContext = vm },

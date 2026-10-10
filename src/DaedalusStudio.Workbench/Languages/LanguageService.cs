@@ -27,6 +27,7 @@ public sealed class LanguageService : IAsyncDisposable
     private readonly ConcurrentDictionary<string, ProjectData> _projects = new(SolutionService.PathComparer);
     private readonly ConcurrentDictionary<string, WorkspaceStatusParams> _status = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly ConcurrentDictionary<(string Server, string Path), CancellationTokenSource> _pulls = new();
     private readonly LanguageRegistry? _languages;
     private JsonElement? _settings;
 
@@ -67,6 +68,9 @@ public sealed class LanguageService : IAsyncDisposable
     /// <summary>A project's evaluated property and where it is set (MSBuild hover in the markup host).</summary>
     public Func<string, string, CancellationToken, Task<(string? Value, string? Origin)?>>? PropertyEvaluator { get; set; }
 
+    /// <summary>Applies an edit a server asks for (<c>workspace/applyEdit</c>), e.g. after a linter's quick fix runs.</summary>
+    public Func<WorkspaceEdit, Task<bool>>? ApplyEditHandler { get; set; }
+
     /// <summary>Settings for <c>workspace/configuration</c> of servers that declare a settings section.</summary>
     public Func<string?, JsonElement?>? SettingsProvider { get; set; }
 
@@ -103,13 +107,24 @@ public sealed class LanguageService : IAsyncDisposable
             return false;
         }
 
-        foreach (var document in _documents.Values.Where(d => ServerOf(d.LanguageId) == server))
+        var descriptor = _registry.Get(server);
+        foreach (var document in _documents.Values.Where(d => descriptor is { IsLinter: true } ? Takes(descriptor, d) : ServerOf(d.LanguageId) == server))
         {
             await client.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
         }
 
         return true;
     }
+
+    /// <summary>Whether a linter takes a document: one of its languages, and a file its configuration covers.</summary>
+    private static bool Takes(LanguageServiceDescriptor linter, LanguageDocument document) =>
+        linter.Serves(document.LanguageId) && (linter.Accepts?.Invoke(document.Path) ?? true);
+
+    /// <summary>The running linters (ADR 0027) of an open document, for its quick fixes.</summary>
+    public IReadOnlyList<LanguageHostClient> RunningLinters(string path) =>
+        _documents.TryGetValue(path, out var document)
+            ? [.. _registry.LintersFor(document.LanguageId).Where(l => Takes(l, document)).Select(l => RunningClient(l.LanguageId)).OfType<LanguageHostClient>()]
+            : [];
 
     /// <summary>The running client of a language's service, without starting it.</summary>
     public LanguageHostClient? RunningClient(string languageId) =>
@@ -139,17 +154,28 @@ public sealed class LanguageService : IAsyncDisposable
         var client = new LanguageHostClient(descriptor.DisplayName + " language service", launch, policy: _policy)
         {
             ProjectsProvider = () => [.. _projects.Values.Where(p => p.Language == descriptor.ProjectLanguage)],
-            OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.Serves(d.LanguageId)).Select(State)],
+            OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : descriptor.Serves(d.LanguageId)).Select(State)],
             InitializationOptions = descriptor.InitializationOptions,
+            ScopedConfigurationProvider = descriptor.ScopedConfiguration,
+            AcceptedRequests = descriptor.AcceptedRequests,
+            ApplyEditHandler = edit => ApplyEditHandler?.Invoke(edit) ?? Task.FromResult(false),
             RootUri = _solutions.Solution?.Path is { } solution ? DocumentUris.FromPath(Path.GetDirectoryName(solution)!) : null,
             ConfigurationProvider = section => SettingsProvider?.Invoke(section ?? descriptor.SettingsSection),
             PropertyEvaluator = (project, name, ct) => PropertyEvaluator?.Invoke(project, name, ct) ?? Task.FromResult<(string?, string?)?>(null),
         };
         client.Diagnostics += (_, p) =>
         {
-            if (DocumentUris.ToPath(p.Uri) is { } path)
+            // The HTML of a Razor file (ADR 0027) has blanks where its C# was: its diagnostics would be false alarms.
+            if (DocumentUris.ToPath(p.Uri) is { } path && !path.EndsWith(RazorHtmlProjection.VirtualSuffix, StringComparison.Ordinal))
             {
                 Diagnostics.Set(path, languageId, p.Version, p.Diagnostics);
+            }
+        };
+        client.DiagnosticsRefreshRequested += (_, _) =>
+        {
+            foreach (var document in _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : ServerOf(d.LanguageId) == languageId))
+            {
+                SchedulePull(languageId, client, document.Path);
             }
         };
         client.WorkspaceStatus += (_, status) =>
@@ -211,47 +237,156 @@ public sealed class LanguageService : IAsyncDisposable
     public async Task<bool> OpenAsync(LanguageDocument document)
     {
         _documents[document.Path] = document;
+        foreach (var linter in _registry.LintersFor(document.LanguageId).Where(l => Takes(l, document)))
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (await ClientAsync(linter.LanguageId).ConfigureAwait(false) is { } lint && _documents.ContainsKey(document.Path))
+                    {
+                        await lint.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
+                        SchedulePull(linter.LanguageId, lint, document.Path);
+                    }
+                }
+                catch (Exception ex) when (ex is JsonRpcConnectionLostException or OperationCanceledException or InvalidOperationException or IOException)
+                {
+                    Log?.Invoke(this, $"[{linter.LanguageId}] {document.Path}: {ex.Message}");
+                }
+            });
+        }
+
         if (await ClientAsync(document.LanguageId).ConfigureAwait(false) is not { } client)
         {
             return false;
         }
 
         await client.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
+        if (ServerOf(document.LanguageId) is { } server)
+        {
+            SchedulePull(server, client, document.Path);
+        }
+
         return true;
+    }
+
+    /// <summary>The running clients a document is open in: its language's service and its linters, with their ids.</summary>
+    private IEnumerable<(string Server, LanguageHostClient Client)> ClientsOf(LanguageDocument document)
+    {
+        if (ServerOf(document.LanguageId) is { } server && RunningClient(document.LanguageId) is { } client)
+        {
+            yield return (server, client);
+        }
+
+        foreach (var linter in _registry.LintersFor(document.LanguageId).Where(l => Takes(l, document)))
+        {
+            if (RunningClient(linter.LanguageId) is { } lint)
+            {
+                yield return (linter.LanguageId, lint);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pull diagnostics (LSP 3.17, ESLint's server): a server that doesn't publish is asked for a document's diagnostics
+    /// a moment after it opened or changed (the next change cancels the request).
+    /// </summary>
+    private void SchedulePull(string server, LanguageHostClient client, string path)
+    {
+        if (client.Capabilities?.DiagnosticProvider != true)
+        {
+            return;
+        }
+
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        if (_pulls.TryGetValue((server, path), out var previous))
+        {
+            previous.Cancel();
+        }
+
+        _pulls[(server, path)] = cancellation;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(250), cancellation.Token).ConfigureAwait(false);
+                if (!_documents.TryGetValue(path, out var document))
+                {
+                    return;
+                }
+
+                var version = document.Text().Version;
+                if (await client.PullDiagnosticsAsync(DocumentUris.FromPath(path), cancellation.Token).ConfigureAwait(false) is { } items
+                    && !cancellation.IsCancellationRequested && _documents.ContainsKey(path))
+                {
+                    Diagnostics.Set(path, server, version, items);
+                }
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or JsonRpcConnectionLostException or JsonRpcRemoteException or InvalidOperationException)
+            {
+            }
+            finally
+            {
+                _pulls.TryRemove(KeyValuePair.Create((server, path), cancellation));
+                cancellation.Dispose();
+            }
+        });
     }
 
     /// <summary>An open document was edited or saved (for consumers that follow source, like test discovery).</summary>
     public event EventHandler<string>? DocumentChanged;
 
-    public Task ChangeAsync(string path, int version, TextDocumentContentChangeEvent[] changes)
+    public async Task ChangeAsync(string path, int version, TextDocumentContentChangeEvent[] changes)
     {
         DocumentChanged?.Invoke(this, path);
-        if (!_documents.TryGetValue(path, out var document) || RunningClient(document.LanguageId) is not { } client)
+        if (!_documents.TryGetValue(path, out var document))
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        // Servers that sync whole documents (LSP's TextDocumentSyncKind.Full) get the text, not the edits.
-        return client.Capabilities?.TextDocumentSync switch
+        foreach (var (server, client) in ClientsOf(document).ToList())
         {
-            TextDocumentSyncKind.None => Task.CompletedTask,
-            TextDocumentSyncKind.Full => client.DidChangeAsync(DocumentUris.FromPath(path), version, [new TextDocumentContentChangeEvent(null, document.Text().Text)], _lifetime.Token),
-            _ => client.DidChangeAsync(DocumentUris.FromPath(path), version, changes, _lifetime.Token),
-        };
+            // Servers that sync whole documents (LSP's TextDocumentSyncKind.Full) get the text, not the edits.
+            await (client.Capabilities?.TextDocumentSync switch
+            {
+                TextDocumentSyncKind.None => Task.CompletedTask,
+                TextDocumentSyncKind.Full => client.DidChangeAsync(DocumentUris.FromPath(path), version, [new TextDocumentContentChangeEvent(null, document.Text().Text)], _lifetime.Token),
+                _ => client.DidChangeAsync(DocumentUris.FromPath(path), version, changes, _lifetime.Token),
+            }).ConfigureAwait(false);
+            SchedulePull(server, client, path);
+        }
     }
 
-    public Task SavedAsync(string path)
+    public async Task SavedAsync(string path)
     {
         DocumentChanged?.Invoke(this, path);
-        return _documents.TryGetValue(path, out var document) && RunningClient(document.LanguageId) is { } client
-            ? client.DidSaveAsync(DocumentUris.FromPath(path), _lifetime.Token)
-            : Task.CompletedTask;
+        if (_documents.TryGetValue(path, out var document))
+        {
+            foreach (var (server, client) in ClientsOf(document).ToList())
+            {
+                await client.DidSaveAsync(DocumentUris.FromPath(path), _lifetime.Token).ConfigureAwait(false);
+                SchedulePull(server, client, path);
+            }
+        }
     }
 
-    public Task CloseAsync(string path) =>
-        _documents.TryRemove(path, out var document) && RunningClient(document.LanguageId) is { } client
-            ? client.DidCloseAsync(DocumentUris.FromPath(path), _lifetime.Token)
-            : Task.CompletedTask;
+    public async Task CloseAsync(string path)
+    {
+        if (_documents.TryGetValue(path, out var document))
+        {
+            var clients = ClientsOf(document).ToList();
+            _documents.TryRemove(path, out _);
+            foreach (var (server, client) in clients)
+            {
+                await client.DidCloseAsync(DocumentUris.FromPath(path), _lifetime.Token).ConfigureAwait(false);
+                if (client.Capabilities?.DiagnosticProvider == true)
+                {
+                    // Pulled diagnostics belong to the open document.
+                    Diagnostics.Set(path, server, null, []);
+                }
+            }
+        }
+    }
 
     public bool IsOpen(string path) => _documents.ContainsKey(path);
 

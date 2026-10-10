@@ -32,6 +32,15 @@ public static class Browsers
 
     public static bool Headless => Environment.GetEnvironmentVariable(HeadlessVariable) == "1";
 
+    /// <summary>A folder for vscode-js-debug's logs, one per session (diagnostics).</summary>
+    public const string TraceVariable = "DAEDALUS_JSDEBUG_TRACE";
+
+    /// <summary>The log file of a new browser session when <see cref="TraceVariable"/> names a folder; else null.</summary>
+    public static string? TraceFile() =>
+        Environment.GetEnvironmentVariable(TraceVariable) is { Length: > 0 } folder
+            ? Path.Combine(Directory.CreateDirectory(folder).FullName, $"js-debug-{DateTime.Now:yyyyMMdd-HHmmss-fff}.log")
+            : null;
+
     /// <summary>The browser for <paramref name="setting"/>, or null when none is installed.</summary>
     public static Browser? Find(string? setting = "auto")
     {
