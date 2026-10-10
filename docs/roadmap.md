@@ -404,7 +404,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - Memory per terminal with 10k scrollback lines: ≤ 30 MB.
 
 **Risks.**
-- ConPTY differences between Windows versions. The supported floor is Windows 10 22H2 (D26).
+- ConPTY differences between Windows versions. The supported floor is Windows 11 (D26).
 - The macOS login-shell environment.
 - IME in a custom-drawn control.
 - Screen-reader support for a live buffer.
@@ -1816,7 +1816,7 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
   - Windows ARM64 waits for a netcoredbg build. Intel Macs aren't supported.
   - Linux runs on X11, and on Wayland through XWayland. It moves to Avalonia's native Wayland backend once that is stable.
   - Each milestone lists any OS-specific behaviour.
-- **OS versions** (D26): Windows 10 22H2 and Windows 11. macOS and Linux versions follow what the .NET that Daedalus runs on supports.
+- **OS versions** (D26): Windows 11 only. macOS and Linux versions follow what the .NET that Daedalus runs on supports: macOS 15 or newer today, which the app bundle's `Info.plist` requires.
 - **.NET versions** (D22, D23):
   - Daedalus itself runs on the newest .NET. It moves to each new major version when it ships, following M30's checklist.
   - User projects are supported from `netcoreapp2.0` to the newest .NET, on every OS where their runtime installs. M33 has the support table.
@@ -2251,7 +2251,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D23 | How far to validate older versions of .NET | M33 | Every target framework from 2.0 to 10.0 with the current SDK; older SDKs pinned by `global.json` only opened and built | decided 2026-10-10: as recommended. |
 | D24 | Icon sets | M34 | Fluent UI System Icons (MIT) for commands, and Material Icon Theme (MIT) for file types | decided 2026-10-10: as recommended. Check both licences again at M34. |
 | D25 | What "polished" means | M34 | A written checklist per surface, and a screenshot gallery that the maintainer approves | decided 2026-10-10: as recommended. Every milestone reviews its own panels against the checklist until M34. |
-| D26 | Supported OS versions | M30 | Windows 10 22H2 and Windows 11; macOS and Linux as the .NET that Daedalus runs on supports | decided 2026-10-10: as recommended. |
+| D26 | Supported OS versions | M30 | Windows 10 22H2 and Windows 11; macOS and Linux as the .NET that Daedalus runs on supports | decided 2026-10-10: Windows 11 only. That changed the same day from "Windows 10 22H2 and 11", because .NET 10 supports Windows 10 only in its LTSC and IoT editions. macOS and Linux follow what the .NET that Daedalus runs on supports: macOS 15 or newer today, which `Info.plist` requires. |
 | D27 | Which builds ship: architectures and Wayland | M31 | Add Linux ARM64. Windows ARM64 waits for a netcoredbg build | decided 2026-10-10: Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. There are no Windows ARM64 or Intel Mac builds for now. Linux runs on X11 and on Wayland through XWayland, and moves to Avalonia's native Wayland backend once it is stable (the Wayland part settled without a separate question). |
 | D28 | Approving the proposed budgets, and the Rider comparison of ADR 0002 | Now | Approve them, and the maintainer measures Rider once | decided 2026-10-10: the budgets proposed at M8–M16 are approved as gates, and budget 4 is final as it stands. Rider is no longer a reference. Where a milestone says "compare with Rider", it sets an absolute target instead. |
 | D29 | When the repository goes public | M32 | After M32 | decided 2026-10-10: after M32's checkpoint, through the go-public checklist. Changing the visibility stays the maintainer's action. |
@@ -2316,3 +2316,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **.NET 11 projects:** they open, build, run, debug, test (VSTest and MTP, with coverage) and Hot Reload. Razor uses the .NET 10 SDK's generator until the language host's Roslyn catches up.
   - **The rest:** New Project's framework choice; `net11.0` and C# 15 in the lists; each SDK's support status in the .NET SDKs panel; `samples/Net11`; the checklist `docs/release/dotnet-upgrade.md`.
   - **M30b** (Daedalus on .NET 11, Roslyn 5.11) waits for .NET 11 GA in November 2026. M31 is next.
+- 2026-10-10: D26 changed to Windows 11 only. .NET 10 supports Windows 10 only in its LTSC and IoT editions. The macOS app bundle now requires macOS 15 (`Info.plist`), which matches .NET's supported macOS versions. The winget manifest requires Windows 11 (build 22000).

@@ -6,6 +6,8 @@ NestedInstallerType: portable
 NestedInstallerFiles:
   - RelativeFilePath: daedalus-studio\daedalus.exe
     PortableCommandAlias: daedalus
+# Windows 11 only (roadmap D26).
+MinimumOSVersion: 10.0.22000.0
 Dependencies:
   PackageDependencies:
     - PackageIdentifier: Microsoft.DotNet.SDK.10
