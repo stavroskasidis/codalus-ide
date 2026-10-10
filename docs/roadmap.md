@@ -36,7 +36,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M13 | Git depth and hosting integration | M13a at checkpoint: history, merge editor, operations, ADR 0020; M13b (hosting integration) planned |
 | M14 | Debugger depth | M14a at checkpoint: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b (companion host, dumps) and M14c (remote sessions) planned |
 | M15 | ASP.NET Core and Hot Reload | M15a and M15b at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch`, ADR 0022; M15c (scaffolding, service references) deferred until after M16 |
-| M16 | Razor, Blazor and web front-end | M16a and M16b at checkpoint: Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023), HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); M16c (Blazor WebAssembly, browser debugging) planned, after M30–M33 |
+| M16 | Razor, Blazor and web front-end | M16a and M16b at checkpoint: Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023), HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); M16c (Blazor WebAssembly, browser debugging) planned, **next**: the maintainer moved it ahead of M31–M33 on 2026-10-10, after M30a |
 | M17 | Containers, Aspire and publishing | planned |
 | M18 | Profiling and diagnostics tools | planned |
 | M19 | Avalonia XAML editing and live previewer | planned |
@@ -49,9 +49,9 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
 | M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Daedalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
-| M31 | Automated release cycle and installers | planned, **next** (after M30a; M30b follows at .NET 11 GA) |
+| M31 | Automated release cycle and installers | planned, after M16c (M30b follows at .NET 11 GA) |
 | M32 | Self-update | planned, after M31 |
-| M33 | Older .NET: .NET Core 2.0 to .NET 10 | planned, after M32; then M16c continues |
+| M33 | Older .NET: .NET Core 2.0 to .NET 10 | planned, after M32 |
 | M34 | UI polish | planned, the last milestone before Visual Basic and F# |
 | M35 | Visual Basic | planned, always second to last |
 | M36 | F# | planned, always last |
@@ -135,7 +135,7 @@ All seven are settled:
 | 11. Polish | M34 | Every panel, window and feature brought to one finished standard. |
 | 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
-Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. Work continues with M16c once phase 4 is done.
+Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. After M30a, the maintainer moved M16c ahead of the rest of phase 4 (M31–M33).
 
 **Why this order.**
 - Tests, NuGet and a terminal are what stop people from using the IDE every day.
@@ -2238,7 +2238,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D10 | F# host: FsAutoComplete or our own FCS host | M36 | FsAutoComplete through the LSP bridge | decided 2026-10-10: FsAutoComplete through the LSP bridge. |
 | D11 | Translation platform for localization | M23 | Decide at M23 | decided 2026-10-10: hosted Weblate (free for open-source projects), once the repository is public. |
 | D12 | Licence of Aspire's orchestrator (DCP), and the IDE's relationship to it | M17 | Integrate through the IDE execution protocol only, never redistribute | decided 2026-10-10: as recommended, without a separate question. M17 still checks DCP's licence. |
-| D13 | Phase order | Each phase start | As listed in this document | decided 2026-10-10. Phase 4 (M30–M33) comes next. Then M16c, and the rest in the phase table's order. The list ends with M28, then M20 (MAUI), M34 (polish), and VB and F# (M35, M36), which always stay last. |
+| D13 | Phase order | Each phase start | As listed in this document | decided 2026-10-10. Phase 4 (M30–M33) comes next. Then M16c, and the rest in the phase table's order. Amended the same day: M16c comes right after M30a, before M31–M33. The list ends with M28, then M20 (MAUI), M34 (polish), and VB and F# (M35, M36), which always stay last. |
 | D14 | Product 1.0 criteria (as opposed to preview releases) | After Phase 2 | Phases 1–2 complete, and plugin API 1.0 frozen early (pulled ahead of the marketplace work) | decided 2026-10-10: there are no criteria. Releases stay 0.x, even after the repository goes public, until the maintainer says otherwise. Plugin API 1.0 (M22) is separate from the product's version. |
 | D15 | Data tooling scope: which database engines first, the T-SQL language service (SQL Tools Service or our own on ScriptDom), and whether DacFx's licence allows schema compare and publish | M27 | SQL Server, PostgreSQL, SQLite and MySQL; SQL Tools Service through the LSP bridge; DacFx only if its licence is OSI-approved | decided 2026-10-10: as recommended. SQL Server, PostgreSQL, SQLite and MySQL/MariaDB come first. M27 checks DacFx's licence. |
 | D16 | Self-update mechanism and release channels | M32 | An updater for the direct-download builds, with stable, preview and nightly channels; package-manager builds update through their own channel | decided 2026-10-10: Velopack, with two channels, stable (`master`) and nightly (`develop`). Updates download silently in the background and are applied at the next restart, with a "Restart to update" status bar item and a setting to switch to notify-only or off. apt and dnf installs update through the package manager. |
@@ -2315,5 +2315,6 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Hosts:** they roll forward. The build host uses the SDK that `dotnet` resolves for the solution's folder, `global.json` included, and runs on the .NET 11 runtime for the .NET 11 SDK.
   - **.NET 11 projects:** they open, build, run, debug, test (VSTest and MTP, with coverage) and Hot Reload. Razor uses the .NET 10 SDK's generator until the language host's Roslyn catches up.
   - **The rest:** New Project's framework choice; `net11.0` and C# 15 in the lists; each SDK's support status in the .NET SDKs panel; `samples/Net11`; the checklist `docs/release/dotnet-upgrade.md`.
-  - **M30b** (Daedalus on .NET 11, Roslyn 5.11) waits for .NET 11 GA in November 2026. M31 is next.
+  - **M30b** (Daedalus on .NET 11, Roslyn 5.11) waits for .NET 11 GA in November 2026.
+- 2026-10-10: the maintainer moved M16c (Blazor WebAssembly, browser debugging) ahead of M31–M33, so it comes next.
 - 2026-10-10: D26 changed to Windows 11 only. .NET 10 supports Windows 10 only in its LTSC and IoT editions. The macOS app bundle now requires macOS 15 (`Info.plist`), which matches .NET's supported macOS versions. The winget manifest requires Windows 11 (build 22000).
