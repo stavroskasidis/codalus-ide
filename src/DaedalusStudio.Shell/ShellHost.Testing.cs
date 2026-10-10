@@ -442,7 +442,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (await Window.PickFileAsync("Import Playlist", "Visual Studio playlists", ["*.playlist"]).ConfigureAwait(true) is not { } file)
+        if (await Window.PickFileAsync("Import Playlist", "Test playlists (.playlist)", ["*.playlist"]).ConfigureAwait(true) is not { } file)
         {
             return;
         }

@@ -156,7 +156,19 @@ public class EditorTests
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.HasInput);
         f.Shell.Dialogs.InputText = "Size";
         f.Shell.Dialogs.Accept();
-        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.HasDetails, seconds: 60);
+        try
+        {
+            await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.HasDetails, seconds: 60);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Seen twice under load (Windows, macOS): say what the shell and the language service did instead.
+            var log = f.Shell.Workbench.Output.GetOrCreate("daedalus.languages").GetText();
+            throw new InvalidOperationException(
+                $"No rename preview. Rename task: {renaming.Status} {renaming.Exception?.GetBaseException().Message}; status bar: '{f.Shell.StatusBar.Message}'; " +
+                $"dialog open: {f.Shell.Dialogs.IsOpen}; language status: {f.Shell.Languages.Status(ShellHost.CSharpLanguageId)}. Log:\n{log[Math.Max(0, log.Length - 4000)..]}", ex);
+        }
+
         Assert.Contains(f.Shell.Dialogs.Details, l => l.IsAdded && l.Text.Contains("Size * Size", StringComparison.Ordinal));
         f.Shell.Dialogs.Accept();
         await renaming;

@@ -30,6 +30,14 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     public SolutionExplorerView()
     {
         InitializeComponent();
+        DataContextChanged += (_, _) =>
+        {
+            if (ViewModel is { } vm)
+            {
+                vm.SearchRequested -= OnSearchRequested;
+                vm.SearchRequested += OnSearchRequested;
+            }
+        };
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
         List.DoubleTapped += (_, e) =>
         {
@@ -244,4 +252,10 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
         _dropTarget = item;
         _dropTarget?.Classes.Add("dropTarget");
     }
+
+    private void OnSearchRequested(object? sender, EventArgs e) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+    {
+        SearchBox.Focus();
+        SearchBox.SelectAll();
+    }, Avalonia.Threading.DispatcherPriority.Loaded);
 }

@@ -83,7 +83,7 @@ internal static partial class BuiltIns
         Add("testing.exportTrx", "Export Test Results (TRX)…", shell.ExportTrxAsync, "solutionOpen");
         Add("testing.importTrx", "Import Test Results (TRX)…", shell.ImportTrxAsync, "solutionOpen");
         Add("testing.newPlaylist", "New Playlist…", () => shell.AddToPlaylistAsync(shell.TestExplorer.SelectedKeys), "solutionOpen");
-        Add("testing.importPlaylist", "Import Visual Studio Playlist…", shell.ImportVisualStudioPlaylistAsync, "solutionOpen");
+        Add("testing.importPlaylist", "Import Test Playlist (.playlist)…", shell.ImportVisualStudioPlaylistAsync, "solutionOpen");
         Add("testing.deletePlaylist", "Delete Playlist…", shell.DeletePlaylistAsync, "solutionOpen");
         Add("testing.toggleCoverageColoring", "Toggle Coverage Coloring", () =>
         {

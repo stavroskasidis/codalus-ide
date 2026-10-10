@@ -109,6 +109,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private string? _pendingReveal;
     private (IReadOnlyList<string> Paths, bool Cut)? _clipboard;
     private string? _startupProject;
+    private string _filter = string.Empty;
 
     public SolutionExplorerViewModel(ShellHost shell)
     {
@@ -118,12 +119,81 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         solutions.ProjectChanged += (_, _) => QueueRefresh();
         solutions.CompilerInputsChanged += (_, _) => QueueRefresh();
         OpenSolutionCommand = new RelayCommand(() => shell.Run("workbench.openSolution"));
+        HomeCommand = new RelayCommand(Home);
+        SyncCommand = new RelayCommand(SyncWithActiveDocument);
+        CollapseAllCommand = new RelayCommand(CollapseAll);
+        PropertiesCommand = new RelayCommand(() => shell.Run("project.properties"));
         Refresh();
     }
 
     public ObservableCollection<ExplorerRowViewModel> Rows { get; } = [];
 
     public RelayCommand OpenSolutionCommand { get; }
+
+    public RelayCommand HomeCommand { get; }
+
+    public RelayCommand SyncCommand { get; }
+
+    public RelayCommand CollapseAllCommand { get; }
+
+    public RelayCommand PropertiesCommand { get; }
+
+    /// <summary>Filters the tree to the items whose names contain the text, with their parents (the search box, M29).</summary>
+    public string Filter
+    {
+        get => _filter;
+        set
+        {
+            if (SetField(ref _filter, value ?? string.Empty))
+            {
+                Refresh();
+            }
+        }
+    }
+
+    /// <summary>Raised to focus the search box (Ctrl+;).</summary>
+    public event EventHandler? SearchRequested;
+
+    public void RequestSearch() => SearchRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Home: back to the solution node, collapsed to its projects.</summary>
+    public void Home()
+    {
+        Filter = string.Empty;
+        CollapseAll();
+        Selected = Rows.FirstOrDefault();
+    }
+
+    /// <summary>Sync with Active Document: selects the active document's file in the tree.</summary>
+    public void SyncWithActiveDocument()
+    {
+        if (_shell.ActiveEditor?.Model.Path is not { } path || _root is null || FindByPath(_root, path) is not { } node)
+        {
+            _shell.StatusBar.ShowMessage("The active document isn't in the solution.", TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        Filter = string.Empty;
+        Reveal(node.Id);
+    }
+
+    private static ExplorerNode? FindByPath(ExplorerNode node, string path)
+    {
+        if (node.Kind is not ExplorerNodeKind.Solution and not ExplorerNodeKind.Project && node.Path is { } nodePath && SolutionService.PathComparer.Equals(nodePath, path))
+        {
+            return node;
+        }
+
+        foreach (var child in node.Children)
+        {
+            if (FindByPath(child, path) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
 
     public bool HasSolution => _shell.Solutions.IsOpen;
 
@@ -195,7 +265,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return;
         }
         var rows = new List<(ExplorerNode Node, int Depth)>();
-        if (_root is not null)
+        if (_root is not null && _filter.Trim() is { Length: > 0 } filter)
+        {
+            FlattenMatching(_root, 0, filter, rows);
+        }
+        else if (_root is not null)
         {
             Flatten(_root, 0, rows);
         }
@@ -218,6 +292,25 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 Flatten(child, depth + 1, rows);
             }
         }
+    }
+
+    /// <summary>The nodes whose names contain <paramref name="filter"/>, with their ancestors, all expanded.</summary>
+    private static bool FlattenMatching(ExplorerNode node, int depth, string filter, List<(ExplorerNode, int)> rows)
+    {
+        var at = rows.Count;
+        var any = false;
+        foreach (var child in node.Children)
+        {
+            any |= FlattenMatching(child, depth + 1, filter, rows);
+        }
+
+        if (any || depth == 0 || node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+        {
+            rows.Insert(at, (node, depth));
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>Updates <see cref="Rows"/> in place: only the changed middle part is replaced, so scrolling is kept.</summary>

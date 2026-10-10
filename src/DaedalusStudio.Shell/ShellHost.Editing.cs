@@ -109,7 +109,7 @@ public sealed partial class ShellHost
     /// <summary>Imports Visual Studio <c>.snippet</c> files into the user's snippets (by language).</summary>
     public async Task ImportVisualStudioSnippetsAsync()
     {
-        if (Window is null || await Window.PickFileAsync("Import Visual Studio Snippets", "Code snippets", ["*.snippet"]).ConfigureAwait(true) is not { } path)
+        if (Window is null || await Window.PickFileAsync("Import Snippets", "Code snippets (.snippet)", ["*.snippet"]).ConfigureAwait(true) is not { } path)
         {
             return;
         }

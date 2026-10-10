@@ -35,6 +35,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         DataContext = shell;
         ApplyPlacement(shell.InitialPlacement);
         MenuBuilder.Attach(this, MenuBar, shell);
+        SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         AddHandler(GotFocusEvent, (_, e) => OnFocusChanged(e.Source as Visual), RoutingStrategies.Bubble);
@@ -73,6 +74,42 @@ public sealed partial class MainWindow : Window, IShellWindow
             }
         });
         DragDrop.AddDropHandler(this, OnFileDrop);
+    }
+
+    // ------------------------------------------------------------------ title bar
+
+    /// <summary>Width kept free for the system's minimize, maximize and close buttons in the extended title bar.</summary>
+    private const double CaptionButtonsWidth = 138;
+
+    /// <summary>
+    /// On Windows the title row is the window's title bar (M29): the client area extends into it, the empty part drags
+    /// the window and a double click maximizes it. Elsewhere the system keeps its title bar and the row sits below it.
+    /// </summary>
+    private void SetUpTitleBar()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        ExtendClientAreaToDecorationsHint = true;
+        ExtendClientAreaTitleBarHeightHint = 32;
+        TitleIcon.IsVisible = true;
+        CaptionButtonsSpace.Width = CaptionButtonsWidth;
+        TitleDragArea.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                if (e.ClickCount == 2)
+                {
+                    WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                }
+                else
+                {
+                    BeginMoveDrag(e);
+                }
+            }
+        };
     }
 
     // ------------------------------------------------------------------ startup and shutdown

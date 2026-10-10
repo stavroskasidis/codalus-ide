@@ -28,11 +28,33 @@
   </Window.Resources>
 
   <DockPanel>
-    <Menu x:Name="MenuBar" DockPanel.Dock="Top" AutomationProperties.Name="Menu bar" />
+    <!-- The title row (M29): the menu, the search box and the solution's name. On Windows it is the window's title
+         bar (the client area extends into it); elsewhere it sits under the system's title bar. -->
+    <Border x:Name="TitleBar" DockPanel.Dock="Top" Classes="titleBar">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+        <Image x:Name="TitleIcon" Width="16" Height="16" Margin="10,0,2,0" VerticalAlignment="Center" IsVisible="False"
+               Source="avares://daedalus/Assets/daedalus.ico" />
+        <Menu Grid.Column="1" x:Name="MenuBar" VerticalAlignment="Center" AutomationProperties.Name="Menu bar" />
+        <Button Grid.Column="2" x:Name="SearchBox" Classes="searchBox" Command="{Binding Toolbar.SearchCommand}" Margin="8,3"
+                ToolTip.Tip="Search commands, settings, files and code (Ctrl+Q)" AutomationProperties.Name="Search (Ctrl+Q)">
+          <Grid ColumnDefinitions="Auto,*">
+            <controls:Icon Kind="search" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Classes="muted" Text="Search (Ctrl+Q)" Margin="6,0,0,0" VerticalAlignment="Center" />
+          </Grid>
+        </Button>
+        <Border Grid.Column="3" Classes="solutionName" IsVisible="{Binding Toolbar.HasSolution}" VerticalAlignment="Center">
+          <TextBlock Text="{Binding Toolbar.SolutionName}" AutomationProperties.Name="Solution name" />
+        </Border>
+        <Panel Grid.Column="4" x:Name="TitleDragArea" Background="Transparent" />
+        <Panel Grid.Column="5" x:Name="CaptionButtonsSpace" Width="0" />
+      </Grid>
+    </Border>
+    <views:StandardToolbar DockPanel.Dock="Top" DataContext="{Binding Toolbar}" />
 
     <Border x:Name="StatusBarHost"
             DockPanel.Dock="Bottom"
-            Background="{DynamicResource Shell.StatusBar}"
+            Classes.empty="{Binding StatusBar.IsEmptyState}"
+            Classes.debugging="{Binding StatusBar.IsDebugging}"
             BorderBrush="{DynamicResource Shell.StatusBar.Border}"
             BorderThickness="0,1,0,0"
             MinHeight="24"
@@ -47,7 +69,7 @@
           </ItemsControl.ItemsPanel>
         </ItemsControl>
         <TextBlock Grid.Column="1"
-                   Text="{Binding StatusBar.Message}"
+                   Text="{Binding StatusBar.DisplayMessage}"
                    Foreground="{DynamicResource Shell.StatusBar.Foreground}"
                    FontSize="12"
                    Margin="12,0"

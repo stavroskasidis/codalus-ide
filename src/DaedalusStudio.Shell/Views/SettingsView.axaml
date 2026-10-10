@@ -67,17 +67,25 @@
       </StackPanel>
     </Border>
     <Grid ColumnDefinitions="210,*">
-      <ListBox ItemsSource="{Binding Categories}"
-               SelectedItem="{Binding SelectedCategory}"
-               Background="Transparent"
-               Margin="0,8,0,0"
-               AutomationProperties.Name="Setting categories">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:SettingCategoryViewModel">
+      <!-- The Options tree (M29): groups as a classic IDE arranges them, with their categories. -->
+      <TreeView ItemsSource="{Binding Categories}"
+                SelectedItem="{Binding SelectedCategory}"
+                Background="Transparent"
+                Margin="0,8,0,0"
+                AutomationProperties.Name="Setting categories">
+        <TreeView.Styles>
+          <Style Selector="TreeViewItem" x:DataType="vm:SettingCategoryViewModel">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=OneTime}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
+            <Setter Property="MinHeight" Value="24" />
+          </Style>
+        </TreeView.Styles>
+        <TreeView.ItemTemplate>
+          <TreeDataTemplate x:DataType="vm:SettingCategoryViewModel" ItemsSource="{Binding Children}">
             <TextBlock Text="{Binding Label}" />
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+          </TreeDataTemplate>
+        </TreeView.ItemTemplate>
+      </TreeView>
       <ScrollViewer Grid.Column="1">
         <StackPanel Margin="16,8,16,16">
           <TextBlock Classes="muted" Text="No settings found." IsVisible="{Binding IsEmpty}" Margin="0,8" />

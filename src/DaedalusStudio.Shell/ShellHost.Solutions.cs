@@ -298,6 +298,7 @@ public sealed partial class ShellHost
     {
         var solution = Solutions.Solution;
         Workbench.Context.Set("solutionOpen", solution is not null);
+        StatusBar.HasSolution = solution is not null;
         Workbench.Context.Set("solutionTrusted", solution?.Trusted ?? false);
         if (solution is not null && !_structureReported)
         {
@@ -360,16 +361,13 @@ public sealed partial class ShellHost
         {
             Workbench.StatusBar.Remove(ConfigurationItem);
             Workbench.StatusBar.Remove(ProgressItem);
+            UpdateToolbarSolution();
             return;
         }
 
-        var active = solution.Active?.Name ?? "Debug|Any CPU";
-        Workbench.StatusBar.Set(new StatusBarItem(ConfigurationItem, "$(layout) " + active.Replace("|", " | ", StringComparison.Ordinal), StatusBarAlignment.Left, 50, source)
-        {
-            Tooltip = "Solution configuration (click to change)",
-            AccessibleName = "Solution configuration: " + active,
-            Command = "solution.selectConfiguration",
-        });
+        // The configuration and platform are in the toolbar (M29).
+        Workbench.StatusBar.Remove(ConfigurationItem);
+        UpdateToolbarSolution();
 
         string? progress = null;
         string? command = null;

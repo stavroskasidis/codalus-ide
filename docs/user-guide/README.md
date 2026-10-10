@@ -11,20 +11,22 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 7. [Testing](testing.md)
 8. [Git](git.md)
 9. [Terminal and C# Interactive](terminal.md)
-10. [Settings, themes and keyboard shortcuts](settings.md)
+10. [The window, settings, themes and keyboard shortcuts](settings.md)
 11. [Troubleshooting, logs and crash reports](troubleshooting.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 
 ## Keyboard shortcuts at a glance
 
-`Ctrl` means `Cmd` on macOS. Every command is also in the command palette (`Ctrl+Shift+P` or `F1`), and every shortcut can be changed (`Ctrl+K Ctrl+S`).
+`Ctrl` means `Cmd` on macOS. These are the default keyboard scheme's; the VS Code scheme differs where [settings.md](settings.md#keyboard-shortcuts) says. Every command is also in the search box (`Ctrl+Q`) and the command palette (`Ctrl+Shift+P`), and every shortcut can be changed (Tools → Keyboard Shortcuts).
 
 | Area | Shortcut | Command |
 |---|---|---|
-| General | `Ctrl+Shift+P`, `F1` | Command palette |
-| | `Ctrl+,` | Settings |
-| | `F6`, `Shift+F6` | Move focus between panes |
+| General | `Ctrl+Q` | Search commands, settings, files and code |
+| | `Ctrl+Shift+P` | Command palette |
+| | `Ctrl+,` | Go to all |
+| | `Alt+F6`, `Alt+Shift+F6` | Move focus between panes |
+| | `Ctrl+Alt+L`, `Ctrl+;` | Solution Explorer, search it |
 | | `Ctrl+Shift+O` | Open solution or project |
 | | `Ctrl+K Ctrl+R` | Open recent |
 | Editing | `Ctrl+Space` | Completion |
@@ -41,7 +43,7 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `Ctrl+T` | Go to all (types, members, files) |
 | | `Ctrl+Shift+F` | Find in files |
 | | `Ctrl+-`, `Ctrl+Shift+-` | Navigate back, forward |
-| Build and run | `Ctrl+Shift+B` | Build solution |
+| Build and run | `Ctrl+Shift+B`, `F6` | Build solution |
 | | `Ctrl+Break` | Cancel the build |
 | | `Ctrl+F5` | Start without debugging |
 | Debugging | `F5` | Start debugging, continue |

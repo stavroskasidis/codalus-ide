@@ -63,7 +63,8 @@ public class SolutionTests
 
         Assert.Equal(["Solution 'ProjectSystem'", "Solution Items", "Directory.Build.props", "README.md", "src", "libs", "Core", "App", "tests", "Core.Tests"],
             f.Shell.Explorer.Rows.Select(r => r.Name));
-        Assert.Contains(f.Shell.StatusBar.Left, i => i.Text == "Debug | Any CPU");
+        Assert.Equal(("Debug", "Any CPU"), (f.Shell.Toolbar.Configuration, f.Shell.Toolbar.Platform));
+        Assert.Equal("ProjectSystem", f.Shell.Toolbar.SolutionName);
         Assert.Equal(f.Shell.Solutions.Solution!.Path, f.Shell.Recent.Items[0]);
         Assert.EndsWith(Path.Combine(".daedalus", "settings.json"), f.Shell.Workbench.Settings.WorkspaceFile, StringComparison.Ordinal);
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("solutionOpen"));
@@ -176,7 +177,7 @@ public class SolutionTests
         f.Shell.Palette.Query = "Release|Any";
         f.Shell.Palette.Accept();
 
-        await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Left.Any(i => i.Text == "Release | Any CPU"));
+        await ShellFixture.PumpUntil(() => f.Shell.Toolbar.Configuration == "Release" && f.Shell.Toolbar.Platform == "Any CPU");
         var app = f.Shell.Solutions.Solution!.Projects.Single(p => p.Name == "App").Path;
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects[app].Items.Any(i => i.Path.EndsWith("ReleaseOnly.cs", StringComparison.Ordinal)), seconds: 60);
     }

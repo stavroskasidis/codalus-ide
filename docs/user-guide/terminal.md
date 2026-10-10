@@ -39,7 +39,7 @@
 - Hold `Shift` to select text while a program uses the mouse.
 
 **Keys**
-- Most keys go to the shell while a terminal has focus. A short list stays with the IDE: the command palette (`F1`, `Ctrl+Shift+P`), build, debug and run, focus movement and the terminal's own commands.
+- Most keys go to the shell while a terminal has focus. A short list stays with the IDE: the search box (`Ctrl+Q`) and the command palette (`Ctrl+Shift+P`), build, debug and run, focus movement and the terminal's own commands.
 - Change that list with `terminal.commandsToSkipShell`.
 
 **Appearance**

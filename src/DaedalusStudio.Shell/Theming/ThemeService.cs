@@ -9,8 +9,8 @@ namespace DaedalusStudio.Shell.Theming;
 public sealed record ThemeChoice(string Id, string Title);
 
 /// <summary>
-/// Applies <c>workbench.colorTheme</c>: Light, Dark, High Contrast, or Follow System, which tracks the OS
-/// light/dark preference and its high-contrast setting. Switching is live. The resolved theme is exposed as
+/// Applies <c>workbench.colorTheme</c>: Visual Studio's Blue, Light and Dark (M29), High Contrast, or Follow System, which
+/// tracks the OS light/dark preference and its high-contrast setting. Switching is live. The resolved theme is exposed as
 /// the <c>theme</c> context key.
 /// </summary>
 public sealed class ThemeService
@@ -24,9 +24,13 @@ public sealed class ThemeService
     /// </summary>
     public static readonly ThemeVariant HighContrast = new("HighContrast", ThemeVariant.Dark);
 
+    /// <summary>Visual Studio's Blue theme: Light's Fluent colors, its own chrome tokens.</summary>
+    public static readonly ThemeVariant Blue = new("Blue", ThemeVariant.Light);
+
     public static IReadOnlyList<ThemeChoice> Choices { get; } =
     [
         new(FollowSystem, "Follow System"),
+        new("blue", "Blue"),
         new("light", "Light"),
         new("dark", "Dark"),
         new("highContrast", "High Contrast"),
@@ -55,7 +59,7 @@ public sealed class ThemeService
         Apply();
     }
 
-    /// <summary>The resolved theme: <c>light</c>, <c>dark</c> or <c>highContrast</c>.</summary>
+    /// <summary>The resolved theme: <c>blue</c>, <c>light</c>, <c>dark</c> or <c>highContrast</c>.</summary>
     public string ActiveTheme { get; private set; } = string.Empty;
 
     /// <summary>The configured choice (may be <see cref="FollowSystem"/>).</summary>
@@ -76,6 +80,7 @@ public sealed class ThemeService
         _app.RequestedThemeVariant = resolved switch
         {
             "light" => ThemeVariant.Light,
+            "blue" => Blue,
             "highContrast" => HighContrast,
             _ => ThemeVariant.Dark,
         };
@@ -88,9 +93,12 @@ public sealed class ThemeService
         }
     }
 
+    /// <summary>Whether a resolved theme has light surfaces (Blue and Light): the editor, grammar and terminal colors follow.</summary>
+    public static bool IsLight(string theme) => theme is "light" or "blue";
+
     internal static string Resolve(string setting, PlatformColorValues? system) => setting switch
     {
-        "light" or "dark" or "highContrast" => setting,
+        "blue" or "light" or "dark" or "highContrast" => setting,
         _ when system?.ContrastPreference == ColorContrastPreference.High => "highContrast",
         _ when system?.ThemeVariant == PlatformThemeVariant.Light => "light",
         _ => "dark",

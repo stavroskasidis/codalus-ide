@@ -18,7 +18,7 @@ M12b is the second half of M12 (ADR 0017 covers M12a): editing, the refactorings
 **Snippets: VS Code's format, Visual Studio's imported**
 - Snippets use VS Code's JSON (`{ "name": { "prefix", "body", "description" } }`) and TextMate snippet syntax (`$1`, `${1:default}`, `${1|a,b|}`, `$0`, `$TM_SELECTED_TEXT`). Plugins and users can reuse existing snippet files unchanged.
 - **Sources, later ones winning on the same name:** built in (`csharp.json`, embedded in the shell), plugins (`contributes.snippets`: `{ language, path }`, plugin API 0.2.5), and the user's (`<user data>/config/snippets/<language>.json`, opened by Configure User Snippets).
-- Visual Studio's `.snippet` XML is imported, not read in place: Import Visual Studio Snippets converts literals and `$end$`/`$selected$` and merges them into the user's files, by language.
+- Visual Studio's `.snippet` XML is imported, not read in place: Import Snippets (.snippet)… (named "Import Visual Studio Snippets" until M29) converts literals and `$end$`/`$selected$` and merges them into the user's files, by language.
 - The expansion uses AvaloniaEdit's snippet engine. Placeholders with the same number are linked; Tab moves between them.
 - Snippets show in completion (by prefix, even when the language server returns nothing) and in Insert Snippet (Ctrl+K Ctrl+X) and Surround With (Ctrl+K Ctrl+Shift+S, snippets that use the selection). The client announces `snippetSupport`, so server items with `insertTextFormat: 2` expand the same way.
 

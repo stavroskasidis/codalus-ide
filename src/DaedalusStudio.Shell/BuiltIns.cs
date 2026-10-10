@@ -26,20 +26,33 @@ internal static partial class BuiltIns
     public const string DefaultKeybindings = """
         [
           { "key": "primary+shift+p", "command": "workbench.showCommandPalette" },
-          { "key": "f1", "command": "workbench.showCommandPalette" },
-          { "key": "primary+,", "command": "workbench.openSettings" },
-          { "key": "primary+k primary+s", "command": "workbench.openKeyboardShortcuts" },
+          { "key": "ctrl+q", "command": "workbench.action.featureSearch", "when": "keyboardScheme != vscode" },
+          { "key": "f1", "command": "workbench.showCommandPalette", "when": "keyboardScheme == vscode" },
+          { "key": "f1", "command": "editor.action.showHelp", "when": "keyboardScheme != vscode && editorTextFocus" },
+          { "key": "primary+,", "command": "workbench.openSettings", "when": "keyboardScheme == vscode" },
+          { "key": "primary+,", "command": "workbench.action.gotoAll", "when": "keyboardScheme != vscode" },
+          { "key": "primary+k primary+s", "command": "workbench.openKeyboardShortcuts", "when": "keyboardScheme == vscode" },
+          { "key": "primary+k primary+s", "command": "editor.action.surroundWithSnippet", "when": "keyboardScheme != vscode && editorTextFocus" },
           { "key": "primary+k primary+t", "command": "workbench.selectTheme" },
           { "key": "primary+shift+u", "command": "workbench.view.output" },
-          { "key": "f6", "command": "workbench.focusNextPane" },
-          { "key": "shift+f6", "command": "workbench.focusPreviousPane" },
+          { "key": "ctrl+alt+o", "command": "workbench.view.output", "when": "keyboardScheme != vscode" },
+          { "key": "ctrl+alt+l", "command": "workbench.view.solutionExplorer", "when": "keyboardScheme != vscode" },
+          { "key": "f6", "command": "workbench.focusNextPane", "when": "keyboardScheme == vscode" },
+          { "key": "shift+f6", "command": "workbench.focusPreviousPane", "when": "keyboardScheme == vscode" },
+          { "key": "f6", "command": "build.buildSolution", "when": "keyboardScheme != vscode" },
+          { "key": "alt+f6", "command": "workbench.focusNextPane", "when": "keyboardScheme != vscode" },
+          { "key": "alt+shift+f6", "command": "workbench.focusPreviousPane", "when": "keyboardScheme != vscode" },
           { "key": "primary+s", "command": "file.save", "when": "activeDocumentKind == textFile" },
-          { "key": "primary+w", "command": "workbench.closeActiveDocument", "when": "activeDocumentKind" },
-          { "win": "ctrl+f4", "linux": "ctrl+f4", "command": "workbench.closeActiveDocument", "when": "activeDocumentKind" },
-          { "mac": "cmd+q", "linux": "ctrl+q", "command": "workbench.quit" },
+          { "key": "primary+w", "command": "workbench.closeActiveDocument", "when": "activeDocumentKind && keyboardScheme == vscode" },
+          { "win": "ctrl+f4", "linux": "ctrl+f4", "mac": "cmd+f4", "command": "workbench.closeActiveDocument", "when": "activeDocumentKind" },
+          { "mac": "cmd+q", "command": "workbench.quit" },
+          { "linux": "ctrl+q", "command": "workbench.quit", "when": "keyboardScheme == vscode" },
           { "key": "escape", "command": "workbench.hideToasts", "when": "toastsVisible && !inCommandPalette" }
         ]
         """;
+
+    /// <summary>The keyboard scheme (M29): the <c>keyboardScheme</c> context key the default bindings depend on.</summary>
+    public const string KeyboardSchemeSetting = "keyboard.scheme";
 
     public static IReadOnlyList<SettingDescriptor> Settings()
     {
@@ -51,6 +64,16 @@ internal static partial class BuiltIns
                 Title = "Save Crash Reports",
                 Category = "Privacy",
                 Description = "When Daedalus Studio crashes, save a report (version, OS, the error and recent log lines) in the logs folder on this computer. Nothing is sent anywhere.",
+            },
+            SettingDescriptor.Create(KeyboardSchemeSetting, "\"default\"", SettingType.String, shell) with
+            {
+                Title = "Keyboard Scheme",
+                Category = "Keyboard",
+                Description = "Default: the classic IDE shortcuts (F6 builds, Ctrl+Q searches, Ctrl+, goes to anything, F1 is help). VS Code: VS Code's (F1 is the command palette, Ctrl+, opens Settings, Ctrl+W closes). Your own key bindings apply on top of either.",
+                Enum = ["default", "vscode"],
+                EnumDescriptions = ["Default", "VS Code"],
+                Scope = SettingScope.User,
+                Order = 2,
             },
             SettingDescriptor.Create(ThemeService.SettingKey, "\"followSystem\"", SettingType.String, shell) with
             {
@@ -110,7 +133,7 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(OutputWindow, "Output", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "output", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(NotificationsWindow, "Notifications", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "bell" };
         yield return new ToolWindowDescriptor(PluginsWindow, "Plugins", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "extensions" };
-        yield return new ToolWindowDescriptor(ViewModels.SolutionExplorerViewModel.ToolWindowId, "Solution Explorer", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "solution", VisibleByDefault = true };
+        yield return new ToolWindowDescriptor(ViewModels.SolutionExplorerViewModel.ToolWindowId, "Solution Explorer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "solution", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(ViewModels.ErrorListViewModel.ToolWindowId, "Error List", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "error", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(ViewModels.FindResultsViewModel.ToolWindowId, "Find Results", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
         yield return new ToolWindowDescriptor(ViewModels.DocumentOutlineViewModel.ToolWindowId, "Document Outline", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
@@ -136,7 +159,9 @@ internal static partial class BuiltIns
                 handler);
 
         Add("workbench.showCommandPalette", "Show All Commands", "View", Ui(shell.ShowCommandPalette));
+        Add("workbench.action.featureSearch", "Search", "View", Ui(shell.FeatureSearchAsync));
         Add("workbench.openSettings", "Open Settings", "Preferences", Ui(shell.OpenSettings));
+        Add("workbench.openOptions", "Options…", string.Empty, Ui(shell.OpenSettings), palette: false);
         Add("workbench.openSettingsJson", "Open User Settings (JSON)", "Preferences", Ui(shell.OpenSettingsJsonAsync));
         Add("workbench.openKeyboardShortcuts", "Open Keyboard Shortcuts", "Preferences", Ui(shell.OpenKeyboardShortcuts));
         Add("workbench.openKeybindingsJson", "Open Keyboard Shortcuts (JSON)", "Preferences", Ui(shell.OpenKeybindingsJsonAsync));
@@ -193,9 +218,10 @@ internal static partial class BuiltIns
         [
             Item("file", "file.save", "file", 1),
             Item("file", "workbench.closeActiveDocument", "file", 2),
-            Item("file", "workbench.openSettings", "preferences", 1),
-            Item("file", "workbench.openKeyboardShortcuts", "preferences", 2),
-            Item("file", "workbench.selectTheme", "preferences", 3),
+            // Preferences live in the Tools menu, ending with Options… (M29).
+            Item("tools", "workbench.selectTheme", "preferences", 1),
+            Item("tools", "workbench.openKeyboardShortcuts", "preferences", 2),
+            Item("tools", "workbench.openOptions", "preferences", 3),
             Item("file", "workbench.quit", "exit"),
             Item("view", "workbench.showCommandPalette", "navigation"),
             Item("view", "workbench.resetLayout", "layout", 1),

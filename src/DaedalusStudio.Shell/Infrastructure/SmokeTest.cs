@@ -32,7 +32,10 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     private const string Branch = "main";
     private static readonly TimeSpan s_watchdog = TimeSpan.FromMinutes(25);
     private static readonly string[] s_commands = ["workbench.showCommandPalette", "build.buildSolution", "debug.start", "git.commit"];
-    private static readonly string[] s_themes = ["light", "highContrast", "dark"];
+    private static readonly string[] s_themes = ["blue", "light", "highContrast", "dark"];
+
+    /// <summary>The themes the M29 step photographs.</summary>
+    private static readonly string[] s_chromeThemes = ["blue", "light", "dark"];
 
     private readonly List<StepResult> _results = [];
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -134,7 +137,8 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         {
             Check(window.IsVisible && window.Bounds.Width > 0, "the main window is visible");
             Check(shell.StatusBar.Right.Any(i => i.Item.Id == "daedalus.notifications"), "the notifications status item");
-            Check(shell.StatusBar.Right.Any(i => i.Item.Id == "daedalus.theme"), "the theme status item");
+            Check(shell.StatusBar is { DisplayMessage: "Ready", IsEmptyState: true }, "the status bar says Ready, in its no-solution color");
+            Check(window.GetVisualDescendants().OfType<StandardToolbar>().Any(t => t.IsEffectivelyVisible), "the standard toolbar");
             foreach (var id in s_commands)
             {
                 Check(shell.Workbench.Commands.Find(id) is not null, $"the command {id}");
@@ -296,6 +300,26 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             shell.Layout.CloseToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId);
         }, "language.ready").ConfigureAwait(true);
 
+        await StepAsync("shell.chrome", "M29", "The title bar, toolbar and status bar, in the Blue, Light and Dark themes", async () =>
+        {
+            await WaitAsync(() => shell.Toolbar is { HasSolution: true, Configuration: not null, Platform: not null }, "the toolbar shows the solution configuration", 60).ConfigureAwait(true);
+            await WaitAsync(() => shell.Toolbar.StartupProject is { Name: "Hello" }, "the toolbar shows the startup project", 60).ConfigureAwait(true);
+            Check(shell.Toolbar.SolutionName == "BuildAndRun", "the title bar shows the solution's name");
+            Check(shell.StatusBar is { HasSolution: true, IsEmptyState: false }, "the status bar is in its solution color");
+            Check(shell.Workbench.Commands.Find("workbench.action.featureSearch") is not null, "the search box's command is registered");
+            var before = shell.Theme.Setting;
+            await OpenAsync(Program).ConfigureAwait(true);
+            foreach (var theme in s_chromeThemes)
+            {
+                await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                await WaitAsync(() => shell.Theme.ActiveTheme == theme, $"the {theme} theme applies").ConfigureAwait(true);
+                await RenderedAsync().ConfigureAwait(true);
+                Screenshot($"smoke-test-theme-{theme}.png");
+            }
+
+            await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }, "language.ready").ConfigureAwait(true);
+
         await StepAsync("editor.editing", "M12", "Snippets, Duplicate Line, Expand Selection, the Syntax Visualizer and Code Metrics", async () =>
         {
             var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
@@ -447,7 +471,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         {
             await shell.Git.RefreshAsync().ConfigureAwait(true);
             await WaitAsync(() => shell.Git.Status is { Branch: Branch } s && s.Files.Any(f => f.Path == Greeter) && s.Files.Any(f => f.Path == Program), "Git lists the edited files on main", 60).ConfigureAwait(true);
-            await WaitAsync(() => shell.StatusBar.Left.Any(i => i.Item.Id == "daedalus.git.branch" && i.Text.Contains(Branch, StringComparison.Ordinal)), "the status bar shows the branch").ConfigureAwait(true);
+            await WaitAsync(() => shell.StatusBar.Right.Any(i => i.Item.Id == "daedalus.git.branch" && i.Text.Contains(Branch, StringComparison.Ordinal)), "the status bar shows the branch").ConfigureAwait(true);
 
             Check(await shell.OpenDiffAsync(Greeter, staged: false).ConfigureAwait(true) is not null, "a diff document opens");
             await WaitAsync(() => window.GetVisualDescendants().OfType<DiffView>().Any(), "the diff view renders").ConfigureAwait(true);

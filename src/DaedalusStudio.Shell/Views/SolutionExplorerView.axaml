@@ -4,6 +4,26 @@
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
              x:Class="DaedalusStudio.Shell.Views.SolutionExplorerView"
              x:DataType="vm:SolutionExplorerViewModel">
+  <DockPanel>
+  <!-- The toolbar and search box of a classic IDE's Solution Explorer (M29). -->
+  <StackPanel DockPanel.Dock="Top" IsVisible="{Binding HasSolution}">
+    <StackPanel Orientation="Horizontal" Margin="4,2" Spacing="1">
+      <Button Classes="toolbar" Command="{Binding HomeCommand}" ToolTip.Tip="Home" AutomationProperties.Name="Home">
+        <controls:Icon Kind="home" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding SyncCommand}" ToolTip.Tip="Sync with Active Document" AutomationProperties.Name="Sync with Active Document">
+        <controls:Icon Kind="link" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="Collapse All" AutomationProperties.Name="Collapse All">
+        <controls:Icon Kind="collapse-all" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding PropertiesCommand}" ToolTip.Tip="Properties (Alt+Enter)" AutomationProperties.Name="Properties">
+        <controls:Icon Kind="gear" />
+      </Button>
+    </StackPanel>
+    <TextBox x:Name="SearchBox" Text="{Binding Filter}" Margin="4,0,4,4" PlaceholderText="Search Solution Explorer (Ctrl+;)"
+             AutomationProperties.Name="Search Solution Explorer" />
+  </StackPanel>
   <Grid>
     <StackPanel Margin="12" Spacing="10" IsVisible="{Binding !HasSolution}">
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="No solution is open." />
@@ -50,4 +70,5 @@
       </ListBox.ItemTemplate>
     </ListBox>
   </Grid>
+  </DockPanel>
 </UserControl>

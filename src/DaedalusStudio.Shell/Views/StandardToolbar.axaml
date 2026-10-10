@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.StandardToolbar"
+             x:DataType="vm:ToolbarViewModel">
+  <Border Classes="standardToolbar">
+    <WrapPanel Orientation="Horizontal" Margin="4,2" AutomationProperties.Name="Standard toolbar">
+      <Button Classes="toolbar" Command="{Binding BackCommand}" ToolTip.Tip="Navigate Backward (Ctrl+-)" AutomationProperties.Name="Navigate Backward">
+        <controls:Icon Kind="arrow-left" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding ForwardCommand}" ToolTip.Tip="Navigate Forward (Ctrl+Shift+-)" AutomationProperties.Name="Navigate Forward">
+        <controls:Icon Kind="arrow-right" />
+      </Button>
+      <Border Classes="toolbarSeparator" />
+      <Button Classes="toolbar" Command="{Binding OpenCommand}" ToolTip.Tip="Open Solution or Project (Ctrl+Shift+O)" AutomationProperties.Name="Open Solution or Project">
+        <controls:Icon Kind="folder" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding SaveCommand}" ToolTip.Tip="Save (Ctrl+S)" AutomationProperties.Name="Save">
+        <controls:Icon Kind="save" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding SaveAllCommand}" ToolTip.Tip="Save All (Ctrl+Shift+S)" AutomationProperties.Name="Save All">
+        <controls:Icon Kind="save-all" />
+      </Button>
+      <Border Classes="toolbarSeparator" />
+      <Button Classes="toolbar" Command="{Binding UndoCommand}" ToolTip.Tip="Undo (Ctrl+Z)" AutomationProperties.Name="Undo">
+        <controls:Icon Kind="undo" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding RedoCommand}" ToolTip.Tip="Redo (Ctrl+Y)" AutomationProperties.Name="Redo">
+        <controls:Icon Kind="redo" />
+      </Button>
+      <Border Classes="toolbarSeparator" IsVisible="{Binding HasSolution}" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding Configurations}" SelectedItem="{Binding Configuration}" MinWidth="90"
+                IsVisible="{Binding HasSolution}" ToolTip.Tip="Solution Configurations" AutomationProperties.Name="Solution Configurations" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding Platforms}" SelectedItem="{Binding Platform}" MinWidth="90"
+                IsVisible="{Binding HasSolution}" ToolTip.Tip="Solution Platforms" AutomationProperties.Name="Solution Platforms" />
+      <Border Classes="toolbarSeparator" IsVisible="{Binding HasSolution}" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding StartupProjects}" SelectedItem="{Binding StartupProject}" MinWidth="120"
+                IsVisible="{Binding HasSolution}" ToolTip.Tip="Startup Project" AutomationProperties.Name="Startup Project" PlaceholderText="Startup project" />
+      <Button x:Name="StartButton" Classes="toolbar start" Command="{Binding StartCommand}" IsVisible="{Binding CanStart}"
+              ToolTip.Tip="Start Debugging (F5)" AutomationProperties.Name="Start Debugging">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="play" Classes="start" />
+          <TextBlock Text="{Binding StartLabel}" VerticalAlignment="Center" />
+        </StackPanel>
+      </Button>
+      <Button Classes="toolbar" Command="{Binding StartWithoutDebuggingCommand}" IsVisible="{Binding CanStart}"
+              ToolTip.Tip="Start Without Debugging (Ctrl+F5)" AutomationProperties.Name="Start Without Debugging">
+        <controls:Icon Kind="play-outline" Classes="start" />
+      </Button>
+      <!-- While debugging: the debug toolbar. -->
+      <Button Classes="toolbar" Command="{Binding StartCommand}" IsVisible="{Binding IsStopped}" ToolTip.Tip="Continue (F5)" AutomationProperties.Name="Continue">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="play" Classes="start" />
+          <TextBlock Text="Continue" VerticalAlignment="Center" />
+        </StackPanel>
+      </Button>
+      <Button Classes="toolbar" Command="{Binding BreakAllCommand}" IsVisible="{Binding CanBreak}" ToolTip.Tip="Break All (Ctrl+Alt+Break)" AutomationProperties.Name="Break All">
+        <controls:Icon Kind="pause" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding StopCommand}" IsVisible="{Binding CanStop}" ToolTip.Tip="Stop (Shift+F5)" AutomationProperties.Name="Stop">
+        <controls:Icon Kind="stop" Classes="stop" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding RestartCommand}" IsVisible="{Binding IsDebugging}" ToolTip.Tip="Restart (Ctrl+Shift+F5)" AutomationProperties.Name="Restart">
+        <controls:Icon Kind="restart" />
+      </Button>
+      <Border Classes="toolbarSeparator" IsVisible="{Binding IsStopped}" />
+      <Button Classes="toolbar" Command="{Binding StepIntoCommand}" IsVisible="{Binding IsStopped}" ToolTip.Tip="Step Into (F11)" AutomationProperties.Name="Step Into">
+        <controls:Icon Kind="step-into" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding StepOverCommand}" IsVisible="{Binding IsStopped}" ToolTip.Tip="Step Over (F10)" AutomationProperties.Name="Step Over">
+        <controls:Icon Kind="step-over" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding StepOutCommand}" IsVisible="{Binding IsStopped}" ToolTip.Tip="Step Out (Shift+F11)" AutomationProperties.Name="Step Out">
+        <controls:Icon Kind="step-out" />
+      </Button>
+    </WrapPanel>
+  </Border>
+</UserControl>

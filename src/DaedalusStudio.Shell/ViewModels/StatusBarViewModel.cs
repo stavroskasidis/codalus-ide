@@ -75,6 +75,8 @@ public sealed class StatusBarViewModel : ObservableObject
     private readonly Func<string, ICommand> _commandFor;
     private string? _message;
     private bool _isVisible = true;
+    private bool _hasSolution;
+    private bool _isDebugging;
     private int _messageVersion;
 
     public StatusBarViewModel(StatusBarService service, Func<string, ICommand> commandFor)
@@ -98,11 +100,44 @@ public sealed class StatusBarViewModel : ObservableObject
             if (SetField(ref _message, value))
             {
                 OnPropertyChanged(nameof(HasMessage));
+                OnPropertyChanged(nameof(DisplayMessage));
             }
         }
     }
 
     public bool HasMessage => !string.IsNullOrEmpty(_message);
+
+    /// <summary>The message, or "Ready" when there is none (as the status bar of a classic IDE shows).</summary>
+    public string DisplayMessage => string.IsNullOrEmpty(_message) ? "Ready" : _message;
+
+    /// <summary>A solution is open: the bar is the accent color; without one it is purple (M29).</summary>
+    public bool HasSolution
+    {
+        get => _hasSolution;
+        set
+        {
+            if (SetField(ref _hasSolution, value))
+            {
+                OnPropertyChanged(nameof(IsEmptyState));
+            }
+        }
+    }
+
+    /// <summary>A debug session is active: the bar is orange.</summary>
+    public bool IsDebugging
+    {
+        get => _isDebugging;
+        set
+        {
+            if (SetField(ref _isDebugging, value))
+            {
+                OnPropertyChanged(nameof(IsEmptyState));
+            }
+        }
+    }
+
+    /// <summary>No solution and no debug session.</summary>
+    public bool IsEmptyState => !_hasSolution && !_isDebugging;
 
     public bool IsVisible
     {

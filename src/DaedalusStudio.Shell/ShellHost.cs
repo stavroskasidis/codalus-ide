@@ -86,6 +86,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Palette = new QuickPickViewModel();
         Dialogs = new DialogViewModel();
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
+        InitializeToolbar();
         InitializeSolutions();
         InitializeBuild();
         InitializePackages();
@@ -145,6 +146,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             Output.Selected = channel;
             Layout.ShowToolWindow(BuiltIns.OutputWindow, focus: false);
         });
+        ApplyKeyboardScheme();
         Workbench.Settings.Changed += (_, e) => Ui.Post(() => OnSettingsChanged(e));
         Layout.ActiveDocumentChanged += (_, document) => Workbench.Context.Set("activeDocumentKind", document?.Kind);
         Notifications.Changed += (_, _) => UpdateStatusItems();
@@ -582,20 +584,23 @@ public sealed partial class ShellHost : IAsyncDisposable
             Command = BuiltIns.ViewCommandPrefix + BuiltIns.NotificationsWindow,
         });
 
-        var theme = ThemeService.Choices.FirstOrDefault(c => c.Id == Theme.ActiveTheme)?.Title ?? Theme.ActiveTheme;
-        Workbench.StatusBar.Set(new StatusBarItem("daedalus.theme", "$(color-mode) " + theme, StatusBarAlignment.Right, 1000, ContributionSource.Shell.Id)
-        {
-            Tooltip = $"Color theme: {theme}" + (Theme.Setting == ThemeService.FollowSystem ? " (following the system)" : string.Empty),
-            Command = "workbench.selectTheme",
-        });
         Workbench.Context.Set("toastsVisible", Notifications.HasToasts);
     }
+
+    /// <summary>The <c>keyboardScheme</c> context key, which the default key bindings depend on (M29).</summary>
+    private void ApplyKeyboardScheme() =>
+        Workbench.Context.Set("keyboardScheme", Workbench.Settings.GetString(BuiltIns.KeyboardSchemeSetting, "default") == "vscode" ? "vscode" : "default");
 
     private void OnSettingsChanged(SettingsChangedEventArgs e)
     {
         if (e.Affects("workbench.statusBar.visible"))
         {
             StatusBar.IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true);
+        }
+
+        if (e.Affects(BuiltIns.KeyboardSchemeSetting))
+        {
+            ApplyKeyboardScheme();
         }
 
         if (e.Affects("languageServices.analysisScope") || e.Affects("navigation.sourceLink"))

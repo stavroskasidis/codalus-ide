@@ -18,7 +18,8 @@ public sealed class BuildTests
         var hello = Path.Combine(folder, "src", "Hello", "Hello.csproj");
         Assert.Equal(hello, f.Shell.Runs.StartupProject);
         await ShellFixture.PumpUntil(() => f.Shell.Explorer.Rows.Any(r => r is { Name: "Hello", IsStartup: true }));
-        Assert.Contains(f.Shell.StatusBar.Left, i => i.Item.Id == "daedalus.startup" && i.Text.Contains("Hello", StringComparison.Ordinal));
+        Assert.Equal("Hello", f.Shell.Toolbar.StartupProject?.Name);
+        Assert.StartsWith("Hello", f.Shell.Toolbar.StartLabel, StringComparison.Ordinal);
 
         // A compile error: the build fails and the Error List shows it, with navigation.
         var greeter = Path.Combine(folder, "src", "Greetings", "Greeter.cs");

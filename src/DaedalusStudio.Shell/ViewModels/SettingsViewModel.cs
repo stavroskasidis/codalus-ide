@@ -24,9 +24,23 @@ public sealed class SettingsDocument : ShellDocument
     public SettingsViewModel ViewModel { get; }
 }
 
+/// <summary>
+/// A node of the Options tree (M29): All Settings, a group (Environment, Text Editor…) or a category in it. A group
+/// shows the settings of all its categories.
+/// </summary>
 public sealed record SettingCategoryViewModel(string Name, int Count, bool IsAll = false)
 {
     public string Label => $"{Name} ({Count})";
+
+    public IReadOnlyList<SettingCategoryViewModel> Children { get; init; } = [];
+
+    /// <summary>For a group: its categories.</summary>
+    public IReadOnlySet<string>? Categories { get; init; }
+
+    public bool IsExpanded => Children.Count > 0;
+
+    public bool Includes(string category) =>
+        IsAll || (Categories is { } categories ? categories.Contains(category) : string.Equals(Name, category, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>
@@ -191,15 +205,54 @@ public sealed class SettingsViewModel : ObservableObject
         var selected = _selectedCategory?.Name;
         Categories.Clear();
         Categories.Add(new SettingCategoryViewModel("All Settings", _all.Count, IsAll: true));
-        foreach (var group in _all.GroupBy(i => i.Category, StringComparer.OrdinalIgnoreCase))
+        foreach (var group in _all.GroupBy(i => OptionsGroup(i.Category), StringComparer.Ordinal).OrderBy(g => Array.IndexOf(s_groups, g.Key)))
         {
-            Categories.Add(new SettingCategoryViewModel(group.Key, group.Count()));
+            var categories = group.GroupBy(i => i.Category, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(c => c.Key, StringComparer.CurrentCultureIgnoreCase)
+                .Select(c => new SettingCategoryViewModel(c.Key, c.Count()))
+                .ToList();
+            Categories.Add(new SettingCategoryViewModel(group.Key, group.Count())
+            {
+                Children = categories,
+                Categories = categories.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase),
+            });
         }
 
-        _selectedCategory = Categories.FirstOrDefault(c => c.Name == selected) ?? Categories[0];
+        _selectedCategory = Categories.SelectMany(c => c.Children.Prepend(c)).FirstOrDefault(c => c.Name == selected) ?? Categories[0];
         OnPropertyChanged(nameof(SelectedCategory));
         UpdateDiagnostics();
         Filter();
+    }
+
+    private static readonly string[] s_groups =
+        ["Environment", "Text Editor", "Projects and Solutions", "Debugging", "Source Control", "Testing", "Terminal and Interactive", "Other"];
+
+    /// <summary>The Options group of a category (or of a key prefix, for settings without one), as a classic IDE arranges them.</summary>
+    internal static string OptionsGroup(string category)
+    {
+        var name = category.ToLowerInvariant();
+        string Prefix() => name.Split('.')[0];
+        return name switch
+        {
+            "appearance" or "keyboard" or "view" or "notifications" or "privacy" or "output" or "files" or "welcome" or "general" => "Environment",
+            "text editor" or "navigation" or "code cleanup" or "task list" or "language services" or "json" => "Text Editor",
+            "projects" or "build and run" or "nuget" => "Projects and Solutions",
+            "debugging" or "debug" => "Debugging",
+            "git" => "Source Control",
+            "testing" or "test" => "Testing",
+            "terminal" or "c# interactive" => "Terminal and Interactive",
+            _ => Prefix() switch
+            {
+                "workbench" or "files" or "window" or "keyboard" or "telemetry" => "Environment",
+                "editor" or "languageservices" or "json" or "yaml" or "xml" or "markdown" or "codecleanup" or "tasklist" or "navigation" => "Text Editor",
+                "projects" or "build" or "run" or "nuget" or "solution" => "Projects and Solutions",
+                "debug" or "debugger" => "Debugging",
+                "git" => "Source Control",
+                "testing" or "test" => "Testing",
+                "terminal" or "interactive" => "Terminal and Interactive",
+                _ => "Other",
+            },
+        };
     }
 
     private void UpdateDiagnostics()
@@ -216,7 +269,7 @@ public sealed class SettingsViewModel : ObservableObject
         Items.Clear();
         foreach (var item in _all)
         {
-            if ((_selectedCategory is null or { IsAll: true } || item.Category == _selectedCategory.Name)
+            if ((_selectedCategory is null || _selectedCategory.Includes(item.Category))
                 && (!modifiedOnly || item.IsModified)
                 && words.All(item.Matches))
             {

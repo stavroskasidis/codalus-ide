@@ -51,12 +51,12 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 | Find All References | `Shift+F12` | In the Find Results window. For C#: each reference is marked read, write or declaration with its containing member; group by file, project or none, show only reads, writes or declarations, and go back to earlier results from the drop-down. |
 | Call Hierarchy | `Shift+Alt+H` | Calls to and calls from a method or property, expanding recursively, in the Hierarchy window. |
 | Type Hierarchy | (Edit menu, palette) | Base and derived types, in the Hierarchy window. |
-| Go To All | `Ctrl+T` | Types and members; type `f ` first to search file names. |
+| Go To All | `Ctrl+T`, `Ctrl+,` | Types and members; type `f ` first to search file names. |
 | Find in Files | `Ctrl+Shift+F` | Case, whole word, regex and a file filter. |
 | Navigate Back and Forward | `Ctrl+-`, `Ctrl+Shift+-` | |
 | Go to Last Edit Location | `Ctrl+Shift+Backspace` | |
 | Next and Previous Problem | `F8`, `Shift+F8` | Errors and warnings in the document, with the message in the status bar. |
-| Help on Symbol | `Shift+F1` | The API reference page of a framework symbol, or the package's site. |
+| Help on Symbol | `F1`, `Shift+F1` | The API reference page of a framework symbol, or the package's site. |
 
 **Tool windows** (View menu)
 - **Document Outline**: the document's types and members. It follows the caret; click a symbol to go there, or type to filter.
@@ -96,9 +96,9 @@ Language services from plugins provide the outline, navigation bar, sticky scrol
 ## Snippets
 
 - Type a snippet's prefix (`prop`, `ctor`, `for`, `try`…) and pick it in completion, or use **Insert Snippet** (`Ctrl+K Ctrl+X`). `Tab` moves between the placeholders; linked placeholders change together.
-- **Surround With** (`Ctrl+K Ctrl+Shift+S`) wraps the selection (`if`, `try`, `#region`, `using`…).
+- **Surround With** (`Ctrl+K Ctrl+S`, or `Ctrl+K Ctrl+Shift+S` in either keyboard scheme) wraps the selection (`if`, `try`, `#region`, `using`…).
 - **Configure User Snippets** opens your snippets for the current language, in VS Code's JSON format. Yours replace built-in snippets with the same name.
-- **Import Visual Studio Snippets…** converts `.snippet` files into your snippets.
+- **Import Snippets (.snippet)…** converts Visual Studio `.snippet` files into your snippets.
 - Plugins can contribute snippets ([plugins.md](../plugins.md#snippets)).
 
 ## Refactorings that ask first

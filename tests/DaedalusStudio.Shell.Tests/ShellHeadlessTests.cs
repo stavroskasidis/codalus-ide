@@ -68,6 +68,9 @@ public class ShellHeadlessTests
     {
         await using var f = ShellFixture.Create();
 
+        // Ctrl+K Ctrl+S opens the keyboard shortcuts in the VS Code scheme (in the default one it is Surround With).
+        await f.Shell.Workbench.Settings.SetAsync(BuiltIns.KeyboardSchemeSetting, "vscode", DaedalusStudio.Workbench.Settings.SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("keyboardScheme"), "vscode"));
         f.Press(Key.K, s_primary);
         Assert.Contains("Waiting for the next key", f.Shell.StatusBar.Message, StringComparison.Ordinal);
         f.Press(Key.S, s_primary);
@@ -225,7 +228,7 @@ public class ShellHeadlessTests
         var visited = new HashSet<object>();
         for (var i = 0; i < PaneHost.VisiblePanes(f.Window).Count; i++)
         {
-            f.Press(Key.F6);
+            f.Press(Key.F6, RawInputModifiers.Alt); // Window.NextPane in the default scheme (F6 builds)
             PaneHost? focused = null;
             await ShellFixture.PumpUntil(() => (focused = PaneHost.Of(f.Window.FocusManager?.GetFocusedElement() as Visual)) is not null, seconds: 5);
             Assert.NotNull(focused);

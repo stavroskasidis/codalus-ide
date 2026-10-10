@@ -140,7 +140,7 @@ public sealed class TextMateSupport : IRegistryOptions
     {
         _theme = themeId switch
         {
-            "light" => ThemeName.LightPlus,
+            "light" or "blue" => ThemeName.LightPlus,
             "highContrast" => ThemeName.HighContrastDark,
             _ => ThemeName.DarkPlus,
         };

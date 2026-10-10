@@ -205,7 +205,7 @@ internal static partial class BuiltIns
         Add("workbench.action.localHistory", "Show Local History", "File", Ui(shell.ShowLocalHistoryAsync), Editor);
         Add("editor.action.surroundWithSnippet", "Surround With", "Snippets", Ui(shell.SurroundWithAsync), Editor);
         Add("workbench.action.openSnippets", "Configure User Snippets", "Snippets", Ui(shell.OpenUserSnippetsAsync));
-        Add("snippets.importVisualStudio", "Import Visual Studio Snippets…", "Snippets", Ui(shell.ImportVisualStudioSnippetsAsync));
+        Add("snippets.importVisualStudio", "Import Snippets (.snippet)…", "Snippets", Ui(shell.ImportVisualStudioSnippetsAsync));
         Add("editor.action.peekDefinition", "Peek Definition", "Editor", Ui(shell.PeekDefinitionAsync), Editor);
         Add("editor.action.showCallHierarchy", "Show Call Hierarchy", "Editor", Ui(shell.ShowCallHierarchyAsync), Editor);
         Add("editor.action.showTypeHierarchy", "Show Type Hierarchy", "Editor", Ui(shell.ShowTypeHierarchyAsync), Editor);

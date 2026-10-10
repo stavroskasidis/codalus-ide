@@ -273,8 +273,11 @@ public sealed partial class ShellHost
         Workbench.Context.Set("programRunning", running.Count > 0);
         var startup = Runs.StartupProject;
         Workbench.Context.Set("hasStartupProject", startup is not null);
+        Toolbar?.SetDebugState(Debugger?.State is { } debug && debug != DaedalusStudio.Workbench.Debugging.DebugState.Idle, Debugger?.State == DaedalusStudio.Workbench.Debugging.DebugState.Stopped, running.Count > 0);
+        UpdateToolbarStartup();
         Explorer.SetStartupProject(startup);
-        if (startup is null || Solutions.Solution is not { Trusted: true })
+        // The startup project and its profile are in the toolbar (M29); the status bar shows a running program.
+        if (startup is null || Solutions.Solution is not { Trusted: true } || running.Count == 0)
         {
             Workbench.StatusBar.Remove(StartupStatusItem);
             return;

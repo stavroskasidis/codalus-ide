@@ -70,8 +70,8 @@ public sealed class TerminalTests
         var control = f.Window.GetVisualDescendants().OfType<TerminalControl>().First(c => c.Session == session);
         control.Focus();
 
-        // F1 (the palette) stays with the IDE.
-        f.Press(Key.F1);
+        // Ctrl+Q (the search box) stays with the IDE.
+        f.Press(Key.Q, RawInputModifiers.Control);
         Assert.True(f.Shell.Palette.IsOpen);
         f.Press(Key.Escape);
         await ShellFixture.PumpUntil(() => !f.Shell.Palette.IsOpen);

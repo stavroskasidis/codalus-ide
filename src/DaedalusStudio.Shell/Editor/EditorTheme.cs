@@ -55,7 +55,7 @@ public sealed class EditorTheme
 
     public static EditorTheme For(string themeId) => themeId switch
     {
-        "light" => Light,
+        "light" or "blue" => Light,
         "highContrast" => HighContrast,
         _ => Dark,
     };

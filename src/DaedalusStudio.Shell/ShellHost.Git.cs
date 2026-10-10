@@ -112,7 +112,7 @@ public sealed partial class ShellHost
         var branch = status.Branch ?? "(detached)";
         var sync = status.Upstream is null ? string.Empty : $" ↑{status.Ahead.ToString(CultureInfo.InvariantCulture)} ↓{status.Behind.ToString(CultureInfo.InvariantCulture)}";
         var changes = status.Files.Count;
-        Workbench.StatusBar.Set(new StatusBarItem(BranchStatusItem, $"$(branch) {branch}{sync}{(changes > 0 ? "  •" + changes.ToString(CultureInfo.InvariantCulture) : string.Empty)}", StatusBarAlignment.Left, 60, ContributionSource.Shell.Id)
+        Workbench.StatusBar.Set(new StatusBarItem(BranchStatusItem, $"$(branch) {branch}{sync}{(changes > 0 ? "  •" + changes.ToString(CultureInfo.InvariantCulture) : string.Empty)}", StatusBarAlignment.Right, 950, ContributionSource.Shell.Id)
         {
             Command = "git.switchBranch",
             Tooltip = $"Branch {branch}{(status.Upstream is { } upstream ? $" (tracking {upstream})" : " (not published)")}; {changes.ToString(CultureInfo.InvariantCulture)} changed file(s). Click to switch branches.",

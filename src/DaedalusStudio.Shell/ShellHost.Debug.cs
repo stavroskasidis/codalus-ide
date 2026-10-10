@@ -324,8 +324,10 @@ public sealed partial class ShellHost
     {
         var state = Debugger.State;
         Workbench.Context.Set("debugActive", state != DebugState.Idle);
+        StatusBar.IsDebugging = state != DebugState.Idle;
         Workbench.Context.Set("debugStopped", state == DebugState.Stopped);
         Workbench.Context.Set("debugRunning", state == DebugState.Running);
+        Toolbar.SetDebugState(state != DebugState.Idle, state == DebugState.Stopped, Runs.Running.Count > 0);
         if (state == DebugState.Idle)
         {
             Workbench.StatusBar.Remove(DebugStatusItem);

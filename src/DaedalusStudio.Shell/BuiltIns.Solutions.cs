@@ -15,6 +15,8 @@ internal static partial class BuiltIns
     public const string SolutionKeybindings = """
         [
           { "key": "primary+shift+o", "command": "workbench.openSolution" },
+          { "key": "ctrl+;", "command": "explorer.search", "when": "solutionOpen" },
+          { "key": "primary+[ s", "command": "explorer.syncWithActiveDocument", "when": "solutionOpen" },
           { "key": "primary+k primary+r", "command": "workbench.openRecent" },
           { "key": "f2", "command": "explorer.rename", "when": "focusedView == solutionExplorer" },
           { "key": "delete", "command": "explorer.delete", "when": "focusedView == solutionExplorer" },
@@ -75,6 +77,16 @@ internal static partial class BuiltIns
         Add("explorer.copyPath", "Copy Path", "Explorer", Ui(explorer.CopyPathAsync), Open, palette: false);
         Add("explorer.reveal", OperatingSystem.IsMacOS() ? "Reveal in Finder" : OperatingSystem.IsWindows() ? "Reveal in File Explorer" : "Reveal in File Manager", "Explorer", Ui(explorer.RevealInFileManager), Open, palette: false);
         Add("explorer.collapseAll", "Collapse All", "Explorer", Ui(explorer.CollapseAll), Open);
+        Add("explorer.syncWithActiveDocument", "Sync with Active Document", "Explorer", Ui(() =>
+        {
+            shell.Layout.ShowToolWindow(ViewModels.SolutionExplorerViewModel.ToolWindowId, focus: true);
+            explorer.SyncWithActiveDocument();
+        }), Open);
+        Add("explorer.search", "Search Solution Explorer", "Explorer", Ui(() =>
+        {
+            shell.Layout.ShowToolWindow(ViewModels.SolutionExplorerViewModel.ToolWindowId, focus: true);
+            explorer.RequestSearch();
+        }), Open);
 
         // For plugins (Templates): the open solution, and adding a project to it.
         commands.Register(
