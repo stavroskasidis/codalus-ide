@@ -1,0 +1,62 @@
+name: Linux repositories
+
+# Rebuilds the apt and dnf repositories on GitHub Pages from the newest stable release and the newest nightly
+# (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret), checks that apt and dnf install from them with
+# their signatures verified (eng/test-linux-repos.sh), then deploys them (M31, D18). Called after each release.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: sudo apt-get update && sudo apt-get install -y apt-utils createrepo-c rpm
+      - name: The newest stable and nightly packages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          stable="$(gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -rV | head -n 1 || true)"
+          nightly="$(gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- '-nightly\.' | sort -rV | head -n 1 || true)"
+          [ -n "$stable" ] && gh release download "$stable" -D packages/stable -p '*.deb' -p '*.rpm'
+          [ -n "$nightly" ] && gh release download "$nightly" -D packages/nightly -p '*.deb' -p '*.rpm'
+          ls -R packages
+      - name: Build the signed repositories
+        shell: bash
+        env:
+          PACKAGES_GPG_PRIVATE_KEY: ${{ secrets.PACKAGES_GPG_PRIVATE_KEY }}
+        run: |
+          args=(--out site --base-url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}")
+          [ -d packages/stable ] && args+=(--stable packages/stable)
+          [ -d packages/nightly ] && args+=(--nightly packages/nightly)
+          bash eng/linux-repos.sh "${args[@]}"
+      - name: Install from them (apt and dnf, signatures checked)
+        shell: bash
+        run: |
+          [ -d site/rpm/stable ] && bash eng/test-linux-repos.sh site stable
+          [ -d site/rpm/nightly ] && bash eng/test-linux-repos.sh site nightly
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

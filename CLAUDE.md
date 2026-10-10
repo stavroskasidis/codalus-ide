@@ -27,7 +27,7 @@ Arguments: an optional solution, project or folder to open. Options: `--user-dat
 
 ## Packaging
 
-`eng/package.sh <version>` builds the release package for the current OS into `artifacts/packages` (ADR 0009): a zip and winget manifests on Windows, a `.app` in a `.dmg` on macOS (signed with `DAEDALUS_CODESIGN_IDENTITY`), and a tar.gz, `.deb` and AppImage on Linux. `release.yml` runs it on all three (manual dispatch).
+Releases are automatic (M31, ADR 0028). `VERSION` holds the next release's version, and `eng/DaedalusStudio.Release` (`daedalus-release version|check-tag|bump|notes`) holds the rules: nightlies are `X.Y.Z-nightly.YYYYMMDD.N` from `develop`, stable releases `X.Y.Z` from `master`. `eng/package.sh [version] [stable|nightly|dev]` builds the current platform's packages into `artifacts/packages` with Velopack's `vpk` (pinned with the `Velopack` library): a per-user `Setup.exe` and a zip on Windows, a `.pkg` and an `.app` zip on macOS, an AppImage, `.deb`, `.rpm` and `.tar.gz` on Linux, plus the update channel `<rid>-<kind>` (feed and packages in `velopack/`) and `SHA256SUMS-<rid>.txt`. `eng/smoke-test.sh --packages` installs them as a user would, runs the smoke test, uninstalls and checks nothing is left; the shell's `Installation` hook (first thing in `Main`) handles Velopack's install events and puts `daedalus` on the Windows PATH. Workflows: `packages.yml` (reusable, every platform), `nightly.yml` and `release.yml` (manual dispatch while the repository is private, dry run by default; they publish through `eng/publish-release.sh`), and `linux-repos.yml` (signed apt and dnf repositories on Pages, `eng/linux-repos.sh` and `eng/test-linux-repos.sh`, once public).
 
 ## Language services
 
@@ -77,7 +77,8 @@ The development machine is Windows. Validate on Linux and macOS locally, and lea
 
 ## Git
 
-- Commit directly to `develop`, the default branch (M31, D21); no pull requests and no feature branches for now (the repo is private and pre-public). `master` only receives merges from `develop`, each one a stable release, and hotfixes; `release.yml` merges a hotfix back into `develop`.
+- Commit directly to `develop`, the default branch (M31, D21); no pull requests for now (the repo is private and pre-public).
+- **Parallel milestones** (the maintainer's go-ahead, 2026-10-11): a session may build a milestone on its own branch in a git worktree. It lands on `develop` by merging `origin/develop` into the branch, re-running the affected tests, and pushing a fast-forward (`git push origin HEAD:develop`); never force-push `develop` or touch `master`. Each worktree validates with its own WSL mirror (`DAEDALUS_WSL_DIR`) and its own Mac snapshot branch (`eng/push-snapshot.sh validate-<name>`). `master` only receives merges from `develop`, each one a stable release, and hotfixes; `release.yml` merges a hotfix back into `develop`.
 - Commit messages carry **no** AI co-author or "Generated with" trailers.
 - CI minutes are limited (private repo, free plan). Every push to `develop` or `master` builds and tests on Linux (documentation-only pushes are skipped); the full Windows/macOS/Linux matrix and the benchmarks run only on manual dispatch, once per milestone checkpoint. Test locally first, push in batches, and don't push while a matrix run is in progress (it gets cancelled).
 

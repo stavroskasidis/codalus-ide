@@ -38,6 +38,9 @@
     <PackageVersion Include="NuGet.Credentials" Version="6.11.2" />
     <PackageVersion Include="NuGet.Protocol" Version="6.11.2" />
   </ItemGroup>
+  <ItemGroup Label="Installers and self-update (M31, M32; keep in step with the vpk version in eng/package.sh)">
+    <PackageVersion Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
   <ItemGroup Label="Benchmarks">
     <PackageVersion Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageVersion Include="Vortice.DXGI" Version="3.8.3" />

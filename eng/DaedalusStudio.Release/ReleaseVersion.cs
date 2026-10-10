@@ -51,6 +51,15 @@ internal sealed partial record ReleaseVersion(int Major, int Minor, int Patch)
     /// <summary>What <c>develop</c> builds after a stable release: the next minor version (D21).</summary>
     public ReleaseVersion NextMinor() => new(Major, Minor + 1, 0);
 
+    /// <summary>
+    /// <c>develop</c>'s version once <paramref name="released"/> is out: the next minor version after it, unless develop is
+    /// already further (a hotfix released from <c>master</c> while develop had moved on).
+    /// </summary>
+    public ReleaseVersion After(ReleaseVersion released) => Max(this, released.NextMinor());
+
+    private static ReleaseVersion Max(ReleaseVersion a, ReleaseVersion b) =>
+        (a.Major, a.Minor, a.Patch).CompareTo((b.Major, b.Minor, b.Patch)) >= 0 ? a : b;
+
     public static string Tag(string version) => "v" + version;
 
     /// <summary>A stable release's tag: <c>vX.Y.Z</c> and nothing after it.</summary>

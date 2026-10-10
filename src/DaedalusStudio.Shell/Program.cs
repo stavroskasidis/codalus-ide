@@ -10,6 +10,7 @@ internal static partial class Program
     public static int Main(string[] args)
     {
         BenchEvents.Emit(BenchEventNames.MainEntered);
+        Infrastructure.Installation.Run();
         var options = ShellOptions.Parse(args);
         if (options.ShowVersion || options.ShowHelp)
         {

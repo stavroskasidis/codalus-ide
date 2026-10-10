@@ -9,9 +9,9 @@
   <key>CFBundleIdentifier</key>
   <string>io.github.stavroskasidis.daedalus-studio</string>
   <key>CFBundleVersion</key>
-  <string>{{VERSION}}</string>
+  <string>{{BUNDLE_VERSION}}</string>
   <key>CFBundleShortVersionString</key>
-  <string>{{VERSION}}</string>
+  <string>{{BUNDLE_VERSION}}</string>
   <key>CFBundleExecutable</key>
   <string>daedalus</string>
   <key>CFBundleIconFile</key>
