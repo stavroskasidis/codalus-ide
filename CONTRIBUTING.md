@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in Daedalus Studio. The project has reached its first feature-complete milestone (MVP, M7). These guidelines describe how changes get in.
+Thanks for your interest in Daedalus Studio. The MVP (milestones M0–M7) is done, and later work follows the [roadmap](docs/roadmap.md). These guidelines describe how changes get in.
 
 ## Ground rules
 

@@ -1,17 +1,17 @@
 # Post-MVP roadmap
 
-This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It turns the mission's one-line post-MVP list into milestones that future sessions can plan and build one at a time. It also covers the rest of the Visual Studio feature set that the mission's "parity is reachable" goal implies. The [Visual Studio parity matrix](#visual-studio-parity-matrix) maps every VS feature area to the milestone that delivers it, or records it as a gap or a non-goal. It is the checklist that keeps this plan complete.
+This is the plan for everything after the MVP, M0–M7. The MVP's milestones came from the original project brief, `ide-prompt.md`, which was removed after M7. It turns the mission's one-line post-MVP list into milestones that future sessions can plan and build one at a time. It also covers the rest of the Visual Studio feature set that the mission's "parity is reachable" goal implies. The [Visual Studio parity matrix](#visual-studio-parity-matrix) maps every VS feature area to the milestone that delivers it, or records it as a gap or a non-goal. It is the checklist that keeps this plan complete.
 
 - **Status:** written 2026-10-08 while M1 was in progress, and checked against Visual Studio 2026 on 2026-10-09. The MVP (M0–M7) is done; M8 was built on 2026-10-09 (checkpoints [M8a](checkpoints/m8a.md) and [M8b](checkpoints/m8b.md)), and M9 the same day ([M9a](checkpoints/m9a.md), [M9b](checkpoints/m9b.md)). On 2026-10-09 the maintainer gave a standing go-ahead for M9 through M16, built in order with each milestone validated on Windows, Linux and macOS. On 2026-10-10 the maintainer added a platform and release phase (M30–M33), placed next, after M16b and before M16c. The same day they added UI polish (M34) as the last milestone before Visual Basic and F#, which were renumbered M35 and M36 so that they stay last.
-- **Authority:** `ide-prompt.md` wins over this document. The fixed decisions and non-goals there still apply. ADRs win over this document once they are accepted.
+- **Authority:** the original project brief's fixed decisions and non-goals still apply. The brief (`ide-prompt.md`) was removed after M7. Its non-goals are restated under [Out of scope](#out-of-scope), and its decisions live on in the ADRs. ADRs win over this document once they are accepted.
 - **Licences:** the licences given below are what we believe them to be when this was written. Check each one again before adopting it, and record it in `THIRD-PARTY-NOTICES.md`. If a licence is ambiguous, stop and ask the maintainer.
 
 ## How future sessions use this document
 
-1. Read `ide-prompt.md`, then the latest checkpoint summary, then this document's [status table](#status).
+1. Read `CLAUDE.md`, then the latest checkpoint summary, then this document's [status table](#status).
 2. Pick the next milestone allowed by the [dependency graph](#dependency-graph) and the maintainer's instructions. The numbers are identifiers, not a strict order. The maintainer may reorder phases.
 3. Check the milestone's **Decisions** entries against the [decision register](#decision-register). Every decision there is closed as of 2026-10-10. If a new question comes up, don't start work that depends on it. Add it to the register and raise it with the maintainer.
-4. Follow the normal milestone workflow from `ide-prompt.md`:
+4. Follow the milestone workflow:
    - plan mode
    - ADRs before code
    - task breakdown
@@ -27,7 +27,7 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
 |---|---|---|
 | M0 | Scaffold and UI stack spike | done (ADR 0001, 0002) |
 | M1 | Shell and plugin foundation | done |
-| M2–M7 | MVP (`ide-prompt.md`) | done (checkpoints in `docs/checkpoints/`; M7 is the MVP) |
+| M2–M7 | MVP (the original project brief) | done (checkpoints in `docs/checkpoints/`; M7 is the MVP) |
 | M8 | Testing: Test Explorer and code coverage | at checkpoint: M8a (Test Explorer) and M8b (coverage), ADR 0010 and 0011 |
 | M9 | Packages and project management | at checkpoint: M9a (NuGet), M9b (properties and solution management), ADR 0012 and 0013 |
 | M10 | Integrated terminal and interactive windows | at checkpoint: terminal and C# Interactive, ADR 0014 and 0015 |
@@ -62,23 +62,23 @@ New milestones get the next free number and join the phase they belong to, so th
 
 ## Baseline: what the MVP is assumed to deliver
 
-This plan assumes M7 ends with what `ide-prompt.md` describes. **At the M7 checkpoint, compare this list with what was actually built, and carry any deferred `TODO(issue)` items into the right post-MVP milestone.**
+This plan assumed that M7 would end with what the original project brief described. **At the M7 checkpoint, compare this list with what was actually built, and carry any deferred `TODO(issue)` items into the right post-MVP milestone.**
 
-- **Shell** (`Daedalus.Shell`, Avalonia 12, Native AOT): docking with persisted layouts, commands, key bindings, the palette and menus, JSON settings with a UI, themes (light, dark, high contrast), status bar, Output window, notifications.
-- **Workbench services** (`Daedalus.Workbench`) and the platform layer (`Daedalus.Platform`: paths, file watching, process launching, shell integration, keys).
+- **Shell** (`DaedalusStudio.Shell`, Avalonia 12, Native AOT): docking with persisted layouts, commands, key bindings, the palette and menus, JSON settings with a UI, themes (light, dark, high contrast), status bar, Output window, notifications.
+- **Workbench services** (`DaedalusStudio.Workbench`) and the platform layer (`DaedalusStudio.Platform`: paths, file watching, process launching, shell integration, keys).
 - **Language service host** (`daedalus-lshost`): Roslyn C# with the M3 feature set (highlighting, completion, navigation, rename, code fixes with preview, formatting, Go To All, Find in Files, analyzers, source generators).
 - **Build host**: MSBuild evaluation and builds, solution and project model, file nesting, project edits, `dotnet new` templates, configurations, multi-targeting.
 - **Debugging**: a DAP client plus netcoredbg, with the M5 feature list and a documented list of known gaps.
 - **Git**: the M6 feature set, using LibGit2Sharp or the git CLI as decided in the M6 ADR.
 - **Plugins**: plugin API 0.x (ADR 0003): out-of-process hosts, declarative contributions, tree and Markdown views. The rich-UI ADR (webview or remote UI) is due by M6.
-- **Release**: installers for three OSes, local opt-in crash reporting, performance gates in CI, a public repository.
+- **Release**: installers for three OSes, local opt-in crash reporting, performance gates in CI, a public repository. M7 delivered packages rather than setup installers (installers are M31), and the repository stayed private (it goes public after M32, D29).
 
 ## Principles for post-MVP work
 
-These add to the architecture principles in `ide-prompt.md`. They don't replace them.
+These add to the architecture principles of the original project brief, which live on in the ADRs and in `CLAUDE.md`'s conventions. They don't replace them.
 
 - **Every feature names its process.** Each milestone says where its code runs: shell, an existing host, a new supervised host, or the user's process. A new host starts lazily, never at startup, so the idle-memory budget (ADR 0002, ≤ 250 MB) holds. It is supervised by `SupervisedProcess` and follows the crash-loop policy.
-- **Plugin first, where latency allows.** As ADR 0003 says, a new feature is a built-in plugin unless it sits on a latency-critical path. When a feature needs an API that doesn't exist yet, it is added under `Daedalus.Plugins.Abstractions.Proposed` first. Built-ins using proposed APIs is how the API gets proved before 1.0 (M22).
+- **Plugin first, where latency allows.** As ADR 0003 says, a new feature is a built-in plugin unless it sits on a latency-critical path. When a feature needs an API that doesn't exist yet, it is added under `DaedalusStudio.Plugins.Proposed` first. Built-ins using proposed APIs is how the API gets proved before 1.0 (M22).
 - **The shell owns generic UI, providers own data.** Examples: the shell renders Test Explorer, and test controllers supply tests. The shell renders language features, and language services (Roslyn, LSP servers) supply data. This keeps large views virtualized and AOT-clean, and lets third parties plug in.
 - **Reuse before writing.** Prefer maintained MIT, Apache-2.0 or BSD components. When a VS feature is backed by something proprietary, say so, and either build an open replacement or record a known gap.
 - **Every interactive surface gets a budget.** Each milestone adds harness scenarios, measures VS Code where relevant, and proposes absolute budgets at its checkpoint. Editor surfaces must be at least as good as VS Code (ADR 0002). Rider is no longer a reference (D28): where a milestone below says "compare with Rider", it sets an absolute target instead.
@@ -105,7 +105,7 @@ These decisions get more expensive with every milestone. **Raise them at the M7 
 | # | Decision | Why it matters | Recommendation |
 |---|---|---|---|
 | F1 | **Document identity: file paths or URIs.** The M0–M3 protocols identify documents by file path. | Remote development (M21), decompiled and Source Link documents (M12), Git revisions in diff views (M13), virtual and generated documents (Razor, M16), and untitled buffers all need non-file documents. LSP uses URIs. | Switch every shell↔host and plugin contract to URIs (`file:`, `untitled:`, `daedalus-decompiled:`, `daedalus-git:`, `daedalus-remote:`) before the plugin API reaches 1.0, ideally before going public. Keep path helpers in the SDK. |
-| F2 | **Virtual file system.** `Daedalus.Platform` has a file watcher, but there is no file-system abstraction. | The same features as F1. Without this, remote development becomes a rewrite. | Add `IFileSystemProvider`, chosen by URI scheme, in `Daedalus.Platform`. Route every editor, Solution Explorer and search read through it. |
+| F2 | **Virtual file system.** `DaedalusStudio.Platform` has a file watcher, but there is no file-system abstraction. | The same features as F1. Without this, remote development becomes a rewrite. | Add `IFileSystemProvider`, chosen by URI scheme, in `DaedalusStudio.Platform`. Route every editor, Solution Explorer and search read through it. |
 | F3 | **Rich plugin UI.** ADR 0003 requires a webview or remote-UI ADR by M6. | NuGet UI (if built as a plugin), test result details, profiler views, the previewer, and third-party tools. | Follow the M6 ADR. This plan assumes some rich surface exists by M9. If it doesn't, those UIs are built into the shell and move later. |
 | F4 | **Node.js policy.** | The best open web language servers (HTML, CSS, JSON, TypeScript) and debuggers (`vscode-js-debug`, which also bridges Blazor WebAssembly debugging) run on Node. So do the Dockerfile language server and the Dev Containers CLI. | Download a pinned, checksum-verified Node runtime on demand, the first time a feature needs it. Don't bundle it, and don't require a user install. This needs an ADR (D3). |
 | F5 | **Language host topology.** | VB, F#, Razor and LSP servers need a home. | Roslyn C# and VB share `daedalus-lshost`. Razor is cohosted in the same Roslyn host. F# runs in its own process (FsAutoComplete or our own FCS host). Everything else goes through the generic LSP bridge (M11). |
@@ -240,7 +240,7 @@ A dashed edge means "better with", not "blocked by".
 **Architecture.**
 - **Shell:** owns the Test Explorer view, the gutter glyphs, the result details view and the coverage overlay (generic, AOT-clean, virtualized).
 - **New plugin API (proposed):** a **test controller** API, modelled on VS Code's `TestController`, to report items, run requests, results and output. Test providers are plugins.
-- **Built-in plugin `Daedalus.Plugins.DotNetTest`:**
+- **Built-in plugin `DaedalusStudio.Plugins.DotNetTest`:**
   - implements the controller with the VSTest translation layer and an MTP client
   - runs in a **dedicated** plugin host, because it can be heavy
   - gets two other new plugin APIs (proposed): `IBuild` to request builds, and `IDebug` to start a debug session with a launch configuration
@@ -383,7 +383,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - "Initialize Interactive with Project" and "Send selection to Interactive".
 
 **Architecture.**
-- **PTY:** lives in `Daedalus.Platform`, using ConPTY on Windows and `openpty`/`forkpty` on Unix through P/Invoke. This is AOT-safe and needs no extra host.
+- **PTY:** lives in `DaedalusStudio.Platform`, using ConPTY on Windows and `openpty` with `posix_spawn` on Unix through P/Invoke (never `forkpty`: managed code must not run in a forked child; ADR 0014). This is AOT-safe and needs no extra host.
   - **Justification to record:** terminal I/O is latency-critical but light, and child processes are already isolated from the shell.
   - If the ADR concludes that PTY handling must leave the shell (for example for crash isolation), it becomes `daedalus-ptyhost`.
 - **VT engine and renderer:** a VT parser and screen model, plus a custom Avalonia control that renders glyph runs with dirty-row invalidation and a glyph cache.
@@ -458,7 +458,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - **Samples:** a sample plugin that contributes a grammar plus an LSP server (for example PowerShell Editor Services, MIT) as an end-to-end proof, shipped under `samples/plugins/`.
 
 **Architecture.**
-- **New library `Daedalus.LanguageServices.Lsp`:** LSP types are **source-generated from the LSP `metaModel.json`** (MIT, from `vscode-languageserver-node`), which keeps them AOT-safe. It also holds the client and the adapter to the shell's language-service abstraction.
+- **New library `DaedalusStudio.LanguageServices.Lsp`:** LSP types are **source-generated from the LSP `metaModel.json`** (MIT, from `vscode-languageserver-node`), which keeps them AOT-safe. It also holds the client and the adapter to the shell's language-service abstraction.
 - **LSP servers:** supervised child processes of the shell. They are declared by manifests, so no plugin code is loaded to start a server.
 - **TextMate tokenization:** runs off the UI thread, viewport first, like semantic tokens.
 - **MSBuild language service:** lives in the **build host**, next to the evaluator. JSON, XML and YAML services run in a small `daedalus-markuphost`, or in the plugin host. The ADR decides.
@@ -654,7 +654,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - commit message templates
   - "Add to .gitignore" from Solution Explorer
   - solutions spanning several repositories
-- **Authentication:** honour the user's credential helper, such as Git Credential Manager (MIT). An IDE askpass prompt handles HTTPS and SSH passphrases. **Never store credentials ourselves.** Anything that must be stored goes through a `Daedalus.Platform` credential-store abstraction: Windows Credential Manager, macOS Keychain, or libsecret on Linux.
+- **Authentication:** honour the user's credential helper, such as Git Credential Manager (MIT). An IDE askpass prompt handles HTTPS and SSH passphrases. **Never store credentials ourselves.** Anything that must be stored goes through a `DaedalusStudio.Platform` credential-store abstraction: Windows Credential Manager, macOS Keychain, or libsecret on Linux.
 - **Hosting integration** (D8). This is a built-in plugin for GitHub, GitLab and Azure DevOps. It stays inactive until the user signs in (OAuth device flow, with the token in the OS credential store).
   - list and check out pull requests
   - review comments shown inline in the editor
@@ -1209,7 +1209,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Goal.** Replace what Visual Studio's Server Explorer, SQL Server Object Explorer, SQL editor and EF Core integration give a .NET developer, for the databases .NET developers actually use.
 
-**Depends on.** M11 (language registry, LSP bridge), M15 (scaffolding uses DbContext discovery). M13's credential store (in `Daedalus.Platform`) holds connection secrets.
+**Depends on.** M11 (language registry, LSP bridge), M15 (scaffolding uses DbContext discovery). M13's credential store (in `DaedalusStudio.Platform`) holds connection secrets.
 
 **Decisions.** D15: SQL Server, PostgreSQL, SQLite and MySQL/MariaDB first, T-SQL through SQL Tools Service, and DacFx only if its licence is OSI-approved.
 
@@ -1476,7 +1476,7 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
   - **Platform:** file-system providers, authentication providers.
 - **Developer experience:**
   - a `dotnet new daedalus-plugin` template
-  - a `Daedalus.Plugins.Testing` package for headless plugin tests
+  - a `DaedalusStudio.Plugins.Testing` package for headless plugin tests
   - "Run plugin in a development instance", with a debugger attached to its plugin host
   - an API reference generated from XML docs, plus samples
 - **Distribution (D5, decided):**
@@ -1750,7 +1750,7 @@ These two milestones are always last (see [Status](#status)).
 
 ### Plugin API evolution
 
-New APIs start in `Daedalus.Plugins.Abstractions.Proposed` and are promoted in M22.
+New APIs start in `DaedalusStudio.Plugins.Proposed` and are promoted in M22.
 
 | Milestone | API additions |
 |---|---|
@@ -1763,7 +1763,7 @@ New APIs start in `Daedalus.Plugins.Abstractions.Proposed` and are promoted in M
 | M14 | Debugger visualizers, DAP adapter contributions |
 | M15–M17 | Launch configuration providers, a port-forwarding API |
 | M21 | `runsOn` placement, a file-system provider API |
-| M22 | Freeze 1.0, permissions manifest, custom editors, themes and icon themes |
+| M22 | Freeze 1.0, declarative views (D2), permissions manifest, custom editors, themes and icon themes. Webviews come after 1.0. |
 | M26 | Custom tool (single-file generator) contributions, Properties window property providers, external-tool macros |
 | M27 | Database connection providers (more engines as plugins) |
 | M28 | AI model providers, AI context providers, MCP server contributions (all proposed, after 1.0) |
@@ -1792,7 +1792,7 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
 ### Security
 
 - **Workspace trust** (F6). Applies to MSBuild evaluation, analyzers, source generators, F# type providers, workspace plugins, Hot Reload agents and the previewer.
-- **Credential store abstraction** in `Daedalus.Platform` (M13 onward). Never store a secret in settings files.
+- **Credential store abstraction** in `DaedalusStudio.Platform` (M13 onward). Never store a secret in settings files.
 - **Downloaded tools** (Node, FsAutoComplete, netcoredbg, the server bundle, grammars, schemas):
   - pinned versions, verified checksums (and signatures where they exist)
   - an offline path
@@ -1858,7 +1858,7 @@ Each milestone updates:
 
 The fixtures to add under `samples/` are named in each milestone. Rules:
 - They stay standalone (see `CLAUDE.md`).
-- Large fixtures are generated by `Daedalus.Benchmarks.FixtureGen`.
+- Large fixtures are generated by `DaedalusStudio.Benchmarks.FixtureGen`.
 - Network-dependent tests use local mock servers (NuGet, Git hosting, HTTP).
 
 ---
@@ -1868,14 +1868,14 @@ The fixtures to add under `samples/` are named in each milestone. Rules:
 This table lists Visual Studio 2026's features by area, and says where each one is delivered. Visual Studio's own menus and tool windows were the checklist, so a feature missing here is a gap in this plan. Add it.
 
 The "Daedalus" column uses these terms:
-- **M1–M7:** the MVP, per `ide-prompt.md`.
+- **M1–M7:** the MVP, per the original project brief.
 - **M8 and later:** the milestones in this document.
 - **Candidate:** unscheduled, see [candidates](#unscheduled-candidates).
 - **Gap:** wanted, but blocked, for the reason given.
 - **Trap:** the VS version is proprietary, see [traps](#known-proprietary-traps).
 - **Non-goal:** excluded by the mission.
 
-"Verify at M7" marks MVP items that `ide-prompt.md` implies but doesn't name. If one is missing at the M7 checkpoint, it moves to the milestone named after it.
+"Verify at M7" marks MVP items that the original project brief implied but didn't name. If one is missing at the M7 checkpoint, it moves to the milestone named after it.
 
 ### Environment and shell
 
@@ -2208,7 +2208,7 @@ These are VS or Rider features, or common requests, that aren't scheduled. The m
 
 ## Out of scope
 
-Restated from `ide-prompt.md`, plus what follows from it for the areas above:
+Restated from the original project brief, plus what follows from it for the areas above:
 - **Windows-only technologies:** WinForms, WPF, UWP and WinUI, including their designers, and therefore MAUI's Windows target (see M20). IIS and IIS Express. C++/CLI and COM. Visual Studio Installer Projects. DirectX graphics debugging.
 - **Retired Visual Studio features:** load and web performance tests, Coded UI tests, and the EF6 Entity Data Model designer (.NET Framework).
 - **Legacy projects:** non-SDK-style projects and .NET Framework-only run and debug scenarios.

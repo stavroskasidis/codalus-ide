@@ -28,7 +28,7 @@ Date: 2026-10-09. Decisions: [ADR 0013](../adr/0013-project-properties-and-solut
 - **Configuration Manager**: new solution configurations map to existing project configurations; creating *project* configurations (`<Configurations>`) from it isn't offered. `TODO(issue)`.
 - **Launch profile editor**: Docker, IIS Express and WSL launch kinds are left to the JSON (M15/M17/M21).
 - **Workload management** (install, update, repair) is not offered; the list is read only. `TODO(issue)`.
-- Visual Basic and F# property page schemas: the machinery is ready; their pages come with M24/M25.
+- Visual Basic and F# property page schemas: the machinery is ready; their pages come with M35/M36 (numbered M24/M25 when this was written).
 
 ## Validation
 - **Windows 11** (development machine, 2026-10-10): `dotnet test --solution DaedalusStudio.slnx`: 387 passed, 1 skipped (symbolic links need extra privileges). Native AOT publish without warnings, and `eng/smoke-test.sh` on it passed every step (`projects.properties`).

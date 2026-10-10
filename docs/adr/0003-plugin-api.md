@@ -146,6 +146,6 @@ public interface IPluginContext
 
 ## Consequences
 - Plugins can't freeze or crash the UI, and their cost is bounded by host groups and lazy start.
-- Rich custom plugin UI is impossible in v0. Plugins use tree and Markdown views, notifications, the Output window and the status bar. A remote-UI or webview ADR must precede any richer surface, by M6 at the latest (the Git diff viewer is built-in).
+- Rich custom plugin UI is impossible in v0. Plugins use tree and Markdown views, notifications, the Output window and the status bar. A remote-UI or webview ADR must precede any richer surface, by M6 at the latest (the Git diff viewer is built-in). *Update 2026-10-10:* that ADR wasn't written by M6, so rich UI was built into the shell meanwhile (the NuGet manager, M9). The maintainer has since settled the direction (roadmap D2): declarative views first, frozen in API 1.0 (M22), and webviews after 1.0. The ADR comes with that work.
 - Built-in plugins share the `builtin` host, so a crash in one restarts the others. This is acceptable because they are first-party and tested, and any of them can move to a dedicated host.
 - The protocol and API are public contracts from M1 onward. Changes follow the policy above, and the plugin changelog becomes part of every milestone checkpoint.

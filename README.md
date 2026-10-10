@@ -7,7 +7,7 @@
 
 Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs natively on Windows, macOS and Linux: a rich semantic editor, a real project system, and integrated build, debugging and Git.
 
-> **Status: MVP (Milestone 7), pre-release.** The first preview packages are prepared but not published yet. The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
+> **Status: pre-release (0.x).** The MVP (milestones M0–M7) is done, and the post-MVP milestones are under way ([roadmap](docs/roadmap.md#status)). The first preview packages are prepared but not published yet. The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
 
 ## Features
 
@@ -30,6 +30,7 @@ Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs n
   - breakpoints with conditions, hit counts and logpoints
   - stepping and threads
   - Call Stack, Locals, Autos, Watch, data tips, a Debug Console, and exception settings
+  - Run to Cursor and Run to Click; function, temporary and dependent breakpoints with labels, import and export; QuickWatch and editing values; Text, JSON, XML and HTML visualizers; PerfTips; the Threads and Modules windows
 - **Git** through the git CLI:
   - a Changes view with per-file and per-hunk staging
   - commit and amend
@@ -41,19 +42,21 @@ Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs n
 - **Editing and analysis**: snippets (VS Code's format, Visual Studio's imported, contributed by plugins), Insert Snippet and Surround With, duplicate and move lines, Expand Selection, a clipboard ring, Paste JSON as Classes, Code Cleanup and format on save, refactorings with options (Generate Constructor, Equals and GetHashCode, Overrides, Extract Interface, Change Signature), configuring severities in `.editorconfig`, AutoRecover and local history, bookmarks, the Task List, Code Metrics, a Syntax Visualizer, Compare Files and an image viewer.
 - **A classic IDE's look and feel**: Blue, Light and Dark themes, the menu and a search box (Ctrl+Q) in the title bar, a standard toolbar with the configuration, startup project and Start, a status bar colored by state, the Solution Explorer on the right with search, an Options tree, and the classic keyboard scheme by default (VS Code's as an option).
 - **Git depth**: a history graph with filters, file and line history, a 3-way merge editor, continue/skip/abort for merges, rebases, cherry-picks and reverts, interactive rebase, stash, tags, remotes, per-line staging, clone and init, and `daedalus merge`/`--wait` as git's merge tool and editor.
+- **Web**: an Endpoints Explorer, `.http` files with environments and an HTTP Response window, the ASP.NET Core environment selector, the HTTPS development certificate and user secrets; Hot Reload through `dotnet watch`; Razor and Blazor editing with C# features inside `.razor` and `.cshtml`; and HTML, CSS, JavaScript and TypeScript language servers on a Node.js runtime downloaded on first use.
 - **Other languages**: highlighting for about forty languages from TextMate grammars; MSBuild editing with evaluated values on hover; JSON and YAML with schemas; `.editorconfig`; a Markdown preview; and any LSP language server through a plugin, without code.
 - **Extensible**: a versioned, out-of-process plugin API ([docs/plugins.md](docs/plugins.md)).
 - **Private**: no telemetry. Crash reports are local and opt-in.
 
 ## Documentation
 
-- [User guide](docs/user-guide/README.md): installing, solutions, NuGet, editing, build and run, debugging, testing, Git, terminal and C# Interactive, settings, troubleshooting.
+- [User guide](docs/user-guide/README.md): installing, solutions, NuGet, editing, build and run, debugging, web development, testing, Git, terminal and C# Interactive, settings, troubleshooting.
+- [Roadmap](docs/roadmap.md): the post-MVP milestones and the decisions behind them.
 - [Writing plugins](docs/plugins.md).
 - [Architecture decisions](docs/adr), [accessibility](docs/accessibility.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md).
 
 ## Architecture in one paragraph
 
-The UI shell (`daedalus`, Native AOT) is kept light and responsive. Heavy services run **out of process** and talk to the shell over JSON-RPC: a language service host (Roslyn), a build host (MSBuild), a debug adapter (netcoredbg over DAP) and plugin hosts. A crashing service never takes the UI down. It is restarted, and the user is notified. Contracts are LSP/DAP-shaped and extended where an IDE needs more ([docs/protocol.md](docs/protocol.md)). Plugins use a versioned, out-of-process API ([docs/plugins.md](docs/plugins.md)), and built-in features use it too where practical. Decisions are recorded as ADRs in [docs/adr](docs/adr).
+The UI shell (`daedalus`, Native AOT) is kept light and responsive. Heavy services run **out of process** and talk to the shell over JSON-RPC: a language service host (Roslyn), a build host (MSBuild), a markup host (JSON, XML and YAML), a C# Interactive host, a debug adapter (netcoredbg over DAP), plugin hosts, and language servers for other languages. A crashing service never takes the UI down. It is restarted, and the user is notified. Contracts are LSP/DAP-shaped and extended where an IDE needs more ([docs/protocol.md](docs/protocol.md)). Plugins use a versioned, out-of-process API ([docs/plugins.md](docs/plugins.md)), and built-in features use it too where practical. Decisions are recorded as ADRs in [docs/adr](docs/adr).
 
 ## Repository layout
 
@@ -65,11 +68,14 @@ The UI shell (`daedalus`, Native AOT) is kept light and responsive. Heavy servic
 | `src/DaedalusStudio.Projects.*` | The build host (`daedalus-buildhost`): solutions, MSBuild evaluation, restore and project-file edits. |
 | `src/DaedalusStudio.Rpc`, `src/DaedalusStudio.LanguageServices.*` | JSON-RPC and process supervision; the C# language service host (`daedalus-lshost`, Roslyn over LSP) and its client. |
 | `src/DaedalusStudio.Debugging` | The Debug Adapter Protocol client for netcoredbg. |
+| `src/DaedalusStudio.Markup.Host` | The markup host (`daedalus-markuphost`): JSON with schemas, XML and MSBuild, YAML and `.editorconfig`. |
+| `src/DaedalusStudio.Interactive.*` | The C# Interactive host (`daedalus-replhost`) and its protocol. |
+| `src/DaedalusStudio.Terminal` | The terminal's VT engine (the pseudo-terminals are in `DaedalusStudio.Platform`). |
 | `eng/` | Scripts: fetching netcoredbg, building release packages (`package.sh`) and their templates. |
 | `tests/` | Unit, integration and headless UI tests. |
 | `benchmarks/` | The `daedalus-bench` harness, the fixture generator and committed results. |
 | `samples/` | Fixture solutions and the HelloWorld sample plugin. Large fixtures are generated, not committed. |
-| `docs/` | ADRs and design documents. |
+| `docs/` | ADRs, protocols, the roadmap, milestone checkpoints and the user guide. |
 
 ## Building
 

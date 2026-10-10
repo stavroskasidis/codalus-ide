@@ -2,6 +2,8 @@
 
 Prepared at M7 (2026-10-09). **Changing the repository's visibility is the maintainer's call. Nothing here was done to the GitHub settings.** Work through the list, then flip the switch.
 
+**When:** after M32's checkpoint (roadmap D29). By then M31 will have replaced section 5's manual release with nightly releases from `develop`, stable releases from `master` and Velopack installers (D16–D21), and this checklist is updated to match.
+
 ## 1. Decide on the files that read as internal notes
 
 The history audit (section 6) found no secrets. A few tracked files are working notes rather than project documentation:
@@ -10,7 +12,7 @@ The history audit (section 6) found no secrets. A few tracked files are working 
 |---|---|---|
 | ~~`ide-prompt.md`~~ | The original mission and milestone brief. **Deleted and purged from the history** (after M7): history rewritten, then the GitHub repository deleted and recreated, which also removed the closed M0 PR #1 and the old commits. | Done. |
 | `CLAUDE.md` | Instructions for the AI coding assistant: build commands and conventions. | Harmless and useful to contributors who use assistants; keep, or fold the build commands into `CONTRIBUTING.md`. |
-| `docs/roadmap.md` | Your local, uncommitted roadmap edits (117 KB). It isn't in git; commit it when you are happy with it, because `CLAUDE.md` and the user guide link to it. | Review and commit. |
+| `docs/roadmap.md` | The post-MVP roadmap. | Done: committed, and kept up to date at every checkpoint. |
 | `docs/checkpoints/*.md` | Per-milestone engineering notes: deviations, gaps, `TODO(issue)` lists. | Keep (they double as a changelog), or turn the `TODO(issue)`s into GitHub issues first (item 4). |
 
 ## 2. Repository settings (after flipping to public)

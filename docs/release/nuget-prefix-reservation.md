@@ -19,8 +19,7 @@ NuGet's prefix reservation criteria say a prefix is only granted when existing p
 
 1. Reserve **`DaedalusStudio.*`**.
 2. Publish the plugin SDK as `DaedalusStudio.Plugins.Abstractions`, and later templates as `DaedalusStudio.Templates`.
-   - The C# root namespace can stay `Daedalus.*`: package IDs and namespaces don't have to match.
-   - This changes the package ID the plugin docs mention (ADR 0003). Decide before the first plugin SDK release, while nobody depends on the ID.
+   - **Done:** the SDK's assembly and package ID is `DaedalusStudio.Plugins.Abstractions`, and every namespace moved from `Daedalus.*` to `DaedalusStudio.*` too (`CLAUDE.md`'s conventions, the migration note in [plugins.md](../plugins.md)).
 3. Alternatively, ask the owner of the `Daedalus.*` packages for consent first. This is unlikely to succeed, and the prefix would still be shared.
 
 ## Request (to send to account@nuget.org once the repository is public)

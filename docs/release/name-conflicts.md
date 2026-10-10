@@ -25,6 +25,6 @@ A first pass on 2026-10-09. It is not legal advice: before announcing, have the 
 The name appears in these places, so a rename touches a known, limited set of files:
 - the product name: the shell's title, the About box, `AppPaths`' folder names, packaging metadata and docs
 - the CLI (`daedalus`)
-- the `Daedalus.*` namespaces
+- the `DaedalusStudio.*` namespaces and package IDs
 
 Namespaces don't need to change for a product rename.

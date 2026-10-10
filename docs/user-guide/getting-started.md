@@ -4,7 +4,7 @@
 
 - **The .NET SDK** (8.0 or newer; 10.0 recommended). Daedalus Studio loads and builds solutions with the SDK's MSBuild, so it must be installed for any solution you open, and must match the version a `global.json` asks for.
 - **git** (2.30 or newer) on the `PATH`, for the Git features.
-- A 64-bit OS: Windows 10 or 11 (x64), macOS 12 or newer (Apple silicon), or a current Linux distribution (x64 or arm64) with X11 or Wayland (XWayland).
+- A 64-bit OS: Windows 10 22H2 or Windows 11 (x64); macOS 15 or newer on Apple silicon (the macOS versions .NET supports); or a current Linux distribution (x64 or arm64) with X11, or Wayland through XWayland. The packages are x64 on Linux for now; arm64 builds from source.
 
 The debugger (netcoredbg) is included in the packages.
 

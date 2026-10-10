@@ -1,6 +1,6 @@
 # 0009. Packaging and release
 
-- **Status:** accepted (M7, continuing autonomously toward the MVP)
+- **Status:** accepted (M7, continuing autonomously toward the MVP). M31 replaces the packaging table with Velopack installers, nightly and stable releases and self-update (roadmap D16–D21); until then this ADR describes what ships.
 - **Date:** 2026-10-09
 - **Deciders:** maintainer (goal: "keep going until MVP is reached")
 

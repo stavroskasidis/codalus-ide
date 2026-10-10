@@ -30,7 +30,7 @@ Debugging uses netcoredbg (ADR 0007). It sends DAP's `process` event, so a launc
 |---|---|
 | Test support built into the shell (workbench service plus views) | Fast to build, but it puts VSTest's object model in the AOT shell, which is reflection-heavy and not AOT-safe. It also gives third parties nothing to plug into. Rejected. |
 | Test support in `daedalus-lshost` | Mixes Roslyn's lifetime with test runs, and a crashing adapter takes the language service down. Rejected. |
-| **A generic test controller API (proposed) that the shell renders, with a built-in `daedalus.dotnettest` plugin in a dedicated plugin host as the .NET provider** | **Chosen.** It matches VS Code's `TestController`. The shell stays AOT-clean and owns the virtualized UI. The provider can be replaced or joined by others (F# Expecto in M25, remote environments in M21). |
+| **A generic test controller API (proposed) that the shell renders, with a built-in `daedalus.dotnettest` plugin in a dedicated plugin host as the .NET provider** | **Chosen.** It matches VS Code's `TestController`. The shell stays AOT-clean and owns the virtualized UI. The provider can be replaced or joined by others (F# Expecto in M36, remote environments in M21). |
 | Driving `dotnet test` and parsing its output | Loses streaming results, test-case selection and debugging hooks. Rejected. |
 | MTP through the source-only reference client (`Microsoft.Testing.Platform.ServerMode.Client.Sources`) | Wire-compatible by construction, but it pulls the platform's serialization stack into the plugin. The protocol is small and documented, so a client of about 300 lines on our own JSON-RPC types is easier to keep AOT- and version-tolerant. We may revisit this if the protocol grows. |
 

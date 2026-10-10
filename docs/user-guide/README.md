@@ -8,7 +8,7 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 4. [Editing and navigating code](editing.md)
 5. [Building and running](build-and-run.md)
 6. [Debugging](debugging.md)
-7. [Web development: endpoints, .http files, certificates and secrets](web.md)
+7. [Web development: HTML, CSS and JavaScript, Hot Reload, Razor and Blazor, endpoints, .http files, certificates and secrets](web.md)
 8. [Testing](testing.md)
 9. [Git](git.md)
 10. [Terminal and C# Interactive](terminal.md)

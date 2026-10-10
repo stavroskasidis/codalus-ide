@@ -44,4 +44,4 @@ Constraints:
 - MSBuild is loaded once, in one process, and a crash in it never touches the UI or Roslyn.
 - M3 must feed Roslyn from the build host's evaluation (design-time builds for references and compiler options) instead of `MSBuildWorkspace`. Decided in ADR 0005.
 - Two .NET helper processes run while a solution is open (build host, and from M3 the language host), which costs memory. ADR 0002 sets no budget for an open solution yet; M3 records one.
-- Non-SDK (legacy) projects are shown from the solution file with an "unsupported project" state. `TODO(issue)`: decide on legacy project support after the MVP.
+- Non-SDK (legacy) projects are shown from the solution file with an "unsupported project" state. Legacy project support is a non-goal (the roadmap's Out of scope, from the project brief), so this state stays.
