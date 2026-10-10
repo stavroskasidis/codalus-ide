@@ -32,7 +32,7 @@ public sealed record RemoteUrl(string Host, string Path, bool IsSsh)
         {
             var hostPart = text[..colon];
             var at = hostPart.LastIndexOf('@');
-            return new RemoteUrl((at >= 0 ? hostPart[(at + 1)..] : hostPart).ToLowerInvariant(), Clean(text[(colon + 1)..]), true);
+            return new RemoteUrl((at >= 0 ? hostPart[(at + 1)..] : hostPart).ToLowerInvariant(), Clean(Uri.UnescapeDataString(text[(colon + 1)..])), true);
         }
 
         return null;
