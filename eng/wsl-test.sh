@@ -24,4 +24,11 @@ mkdir -p "$dst"
   | while IFS= read -r f; do rm -f -- "$f"; done)
 [ -d "$dst/.git" ] || git -C "$dst" init -q   # some tests expect to run inside a git work tree
 
+# A Chromium browser for the browser tests, and with --smoke a display (WSLg's, or a local Xvfb when it isn't
+# running), without root: eng/wsl-display.sh.
+display=""
+[[ " $* " == *" --smoke "* ]] && display="--display"
+# shellcheck source=wsl-display.sh
+source "$dst/eng/wsl-display.sh" $display --browser
+
 exec bash "$dst/eng/validate.sh" "$@"

@@ -25,7 +25,8 @@ namespace DaedalusStudio.Shell.Infrastructure;
 /// plugins and debugger it was installed with. It is what CI runs on the published Native AOT build and on the release packages of every OS, so it catches what
 /// the in-process headless tests cannot: trimming and AOT breaks, the installed folder layout, and the real windowing
 /// platform. Results go to <c>smoke-test.json</c>, <c>smoke-test.md</c> and screenshots in the logs folder, and to
-/// standard output; the process exits with 0 when every step passed.
+/// standard output; the process exits with 0 when no step failed. A step the machine can't run (no browser, outside CI)
+/// is skipped, not failed; a step whose prerequisite failed is skipped too, after that failure.
 /// </summary>
 internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 {
@@ -65,7 +66,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         try
         {
             await RunStepsAsync().ConfigureAwait(true);
-            exitCode = _results.All(r => r.Outcome == "passed") ? 0 : 1;
+            exitCode = Passed ? 0 : 1;
         }
         catch (Exception ex)
         {
@@ -1348,10 +1349,13 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         }
     }
 
+    /// <summary>Whether the run passed: steps ran, and none failed.</summary>
+    private bool Passed => _results.Any(r => r.Outcome == "passed") && _results.All(r => r.Outcome != "failed");
+
     private void WriteReport()
     {
         Directory.CreateDirectory(shell.Paths.Logs);
-        var passed = _results.Count > 0 && _results.All(r => r.Outcome == "passed");
+        var passed = Passed;
         var os = $"{System.Runtime.InteropServices.RuntimeInformation.OSDescription} ({System.Runtime.InteropServices.RuntimeInformation.OSArchitecture})";
 
         using (var stream = File.Create(Path.Combine(shell.Paths.Logs, "smoke-test.json")))

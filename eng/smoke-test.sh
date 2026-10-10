@@ -45,7 +45,14 @@ test_app() {
   display_number="${display_number#:}"
   display_number="${display_number%%.*}"
   local x_socket="/tmp/.X11-unix/X$display_number"
-  if [[ "$(uname -s)" == Linux && ( -z "${DISPLAY:-}" || ( "$DISPLAY" == :* && ! -S "$x_socket" ) ) ]]; then
+  # An X server listens on that file socket, or on Linux on an abstract one of the same name (Xvfb when /tmp/.X11-unix
+  # is read-only, as under WSLg).
+  local x_server=false
+  if [[ -S "$x_socket" ]] || grep -q " @$x_socket\$" /proc/net/unix 2> /dev/null; then
+    x_server=true
+  fi
+
+  if [[ "$(uname -s)" == Linux && ( -z "${DISPLAY:-}" || ( "$DISPLAY" == :* && "$x_server" == false ) ) ]]; then
     if ! command -v xvfb-run > /dev/null; then
       echo "error: no X server for DISPLAY='${DISPLAY:-}' ($x_socket is missing) and xvfb-run isn't installed." >&2
       echo "       On WSL, restart WSLg with 'wsl --shutdown' (from Windows), or install xvfb: sudo apt install xvfb" >&2
