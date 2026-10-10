@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <PackageReference Remove="xunit.v3.mtp-v2" />
+    <PackageReference Remove="Microsoft.Testing.Extensions.HangDump" />
     <Using Remove="Xunit" />
     <ProjectReference Include="..\..\src\DaedalusStudio.Rpc\DaedalusStudio.Rpc.csproj" />
   </ItemGroup>
