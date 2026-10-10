@@ -2306,4 +2306,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Closed as recommended, without a separate question:** D1 (URIs are done; the VFS comes with M21), D4 (as built, ADR 0004), D12, and native Wayland.
   - **New and decided:** D26 (Windows 10 22H2 and 11), D27 (Linux ARM64 added; no Windows ARM64 or Intel Mac builds), D28 (the proposed budgets approved; Rider dropped as a reference), D29 (go public after M32), D30 (candidates reviewed after the last milestone).
   - **MAUI (M20)** moves to a new phase 10 (Mobile), after M28 and before M34. Polish and VB/F# become phases 11 and 12.
-  - **Out of date elsewhere:** ADR 0002 still calls budget 4 provisional until Rider is measured, and `benchmarks/budgets.json` still labels the M8–M11 budgets as proposed.
+  - **Elsewhere:** ADR 0002 is amended to match D28, and `benchmarks/budgets.json` labels the M8–M11 budgets as approved and budget 4 as final.

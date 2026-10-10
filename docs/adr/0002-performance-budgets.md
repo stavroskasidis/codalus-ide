@@ -1,6 +1,6 @@
 # 0002. Performance budgets
 
-- **Status:** accepted (2026-10-08). Budgets 1–3 and 5 are final; budget 4 (solution) stays provisional until Rider has been measured.
+- **Status:** accepted (2026-10-08), amended 2026-10-10 ([see below](#amendment-2026-10-10-rider-dropped-proposed-budgets-approved)). All budgets are final. Rider is no longer a reference, so budget 4 (solution) is final as it stands, and the budgets proposed at M8–M16 are gates.
 - **Date:** 2026-10-08
 - **Deciders:** maintainer
 
@@ -39,25 +39,25 @@ The values are p50 / p99 unless noted, all measured with the same black-box proc
 
 | Scenario | VS Code 1.140 | Visual Studio 2026 (18.10) | JetBrains Rider 2026.2.1 | Prototype A (Avalonia) | Prototype B (GPUI) |
 |---|---|---|---|---|---|
-| Cold start → ready, empty window | 1517 / 1573 ms (self-reported: 1072 ms) | 921 / 1683 ms (start window) | **pending** | 346 / 404 ms | 373 / 400 ms |
-| Idle memory (process tree, private) | 1293 MB (8 processes) | 716 MB | **pending** | 194 MB | 185 MB |
-| 100k-line file → ready | 1821 / 2379 ms | 2060 / 2636 ms | **pending** | 1396 ms | 1570 ms |
-| Memory with the 100k file | 1608 MB | 1394 MB | **pending** | 390 MB | 382 MB |
-| Typing, keystroke → displayed frame | 13.2 / 20.0 ms | 17.0 / 201 ms | **pending** | 13.6 / 24.9 ms | 11.3 / 18.8 ms |
-| PageDown → displayed frame | 10.9 / 25.4 ms | 25.2 / 53.4 ms | **pending** | 11.8 / 22.7 ms | 12.2 / 18.7 ms |
-| Responses > 50 ms while scrolling | 0 | 2–3 per run | **pending** | 0 | 0 |
-| 50-project solution → usable Solution Explorer | n/a (needs C# Dev Kit) | not measurable black-box¹ | **pending** | 8.5 s² | 8.1 s² |
+| Cold start → ready, empty window | 1517 / 1573 ms (self-reported: 1072 ms) | 921 / 1683 ms (start window) | not measured | 346 / 404 ms | 373 / 400 ms |
+| Idle memory (process tree, private) | 1293 MB (8 processes) | 716 MB | not measured | 194 MB | 185 MB |
+| 100k-line file → ready | 1821 / 2379 ms | 2060 / 2636 ms | not measured | 1396 ms | 1570 ms |
+| Memory with the 100k file | 1608 MB | 1394 MB | not measured | 390 MB | 382 MB |
+| Typing, keystroke → displayed frame | 13.2 / 20.0 ms | 17.0 / 201 ms | not measured | 13.6 / 24.9 ms | 11.3 / 18.8 ms |
+| PageDown → displayed frame | 10.9 / 25.4 ms | 25.2 / 53.4 ms | not measured | 11.8 / 22.7 ms | 12.2 / 18.7 ms |
+| Responses > 50 ms while scrolling | 0 | 2–3 per run | not measured | 0 | 0 |
+| 50-project solution → usable Solution Explorer | n/a (needs C# Dev Kit) | not measurable black-box¹ | not measured | 8.5 s² | 8.1 s² |
 
 ¹ VS shows its main window after about 1.0 s and loads the solution asynchronously. A visual-stability probe can't tell when Solution Explorer becomes usable. `TODO(issue)`: detect populated tree items through UI Automation.
 ² This is bound by the M0 language host, which runs a full MSBuildWorkspace design-time load of all 50 projects before showing the tree. The UI stack doesn't affect it.
 
-**Rider is pending.** JetBrains IDEs keep an AF_UNIX `.port` socket in their system directory. A Rider launched from the harness process tree cannot take over that socket from a previous session, so every launch after the first fails with "Start Failed". Launching Rider normally works. The Rider portion therefore has to be run from a regular terminal:
+**Rider was never measured.** On 2026-10-10 the maintainer dropped it as a reference instead (see the amendment). The command below still works for anyone who wants the comparison. JetBrains IDEs keep an AF_UNIX `.port` socket in their system directory. A Rider launched from the harness process tree cannot take over that socket from a previous session, so every launch after the first fails with "Start Failed". Launching Rider normally works. The Rider portion therefore has to be run from a regular terminal:
 
 ```bash
 dotnet run --project benchmarks/DaedalusStudio.Benchmarks.Harness -c Release -- run --targets rider --scenarios cold-start,editor-100k,open-solution-50 --allow-input
 ```
 
-The editor and typing budgets below depend only on VS Code, as the mission requires, so they are final. The solution and language-service budgets stay provisional until Rider has been measured.
+The editor and typing budgets below depend only on VS Code, as the mission requires, so they are final. The solution and language-service budgets were provisional until Rider had been measured. Since the amendment, they are absolute targets.
 
 macOS and Linux: pending. VS Code and the prototypes are measured by `.github/workflows/benchmarks.yml` on GitHub-hosted runners after the first push. Rider and Visual Studio cannot be automated there (Rider needs a license; VS is Windows-only).
 
@@ -72,7 +72,7 @@ The budgets apply to **reference hardware** (the machine above, or an equivalent
 | 2b | Typing, input → rendered (in-app) | **p99 ≤ 16 ms** | (same intent) | Keeps the provisional "render within one 60 Hz frame" intent without compositor noise. A is at 18.0 today (M3), and B at 5.6. |
 | 3a | Open the 100k-line file → ready | **p50 ≤ 1.8 s** | – | VS Code 1.82 s. A is at 1.40 s. |
 | 3b | Scrolling the 100k-line file | **PageDown → display p99 ≤ 25 ms, no response > 50 ms; self-driven scroll at 230 lines/s with no frame > 50 ms and p99 ≤ 1 refresh interval + 2 ms** | no frame > 50 ms | VS Code 25.4 ms p99. Both prototypes are at about 7 ms per frame. |
-| 4 | 50-project solution → Solution Explorer | **Provisional until Rider has been measured:** tree from the solution file ≤ 1.5 s; project nodes and dependencies evaluated ≤ 5 s; language services ready in the background, with a budget set in M3 | < 5 s | The M0 host takes 8.1–8.6 s because it evaluates everything before showing anything. M2's build host (ADR 0004) shows the structure from the solution file first and evaluates in parallel: structure 0.47 s, all projects evaluated 1.19 s (p50 from launch, reference machine), 208 MB for the process tree. |
+| 4 | 50-project solution → Solution Explorer | **Final since 2026-10-10, without Rider (see the amendment):** tree from the solution file ≤ 1.5 s; project nodes and dependencies evaluated ≤ 5 s; language services ready in the background, with a budget set in M3 | < 5 s | The M0 host takes 8.1–8.6 s because it evaluates everything before showing anything. M2's build host (ADR 0004) shows the structure from the solution file first and evaluates in parallel: structure 0.47 s, all projects evaluated 1.19 s (p50 from launch, reference machine), 208 MB for the process tree. |
 | 5 | Idle memory, empty window (process tree, private) | **≤ 250 MB** | < 300 MB | VS Code 1.29 GB and VS 0.72 GB. The prototypes use 185–194 MB, including the language host. |
 | 5b | Memory with the 100k-line file open | **≤ 500 MB** | – | VS Code 1.61 GB. A uses 390 MB. |
 | 6 | Shell binary size (zipped, excluding the shared host) | regression gate only (+5%) | – | A is 18.7 MB zipped. |
@@ -94,3 +94,18 @@ Two kinds of gate are proposed, because GitHub-hosted runners are GPU-less VMs w
 **Editor budgets in the shell (M3a).** The editor budgets moved from the M0 spike to the shell (`budgets.json`, target `shell`). On the reference machine (Windows, 2026-10-09): file ready 1.72 s (≤ 1.8 s), memory with the 100k-line file 492 MB (≤ 500 MB; the shell 245 MB, the C# language service with live diagnostics most of the rest), no scroll frames over 50 ms, cold start and budget 4 unchanged. The in-app typing p99 (#2b, self-driven) is 21–23 ms against 16 ms; the spike itself measured 19.5 ms on the same machine, so this budget was never met in the self-driven measurement (p50 7.9 ms vs 7.2 ms). The black-box typing and PageDown budgets (#2, #3b) need `--allow-input` on an unattended machine and were not re-measured. The 50-project solution reaches "language services ready" (every project compiled once) after about 13 s; informational (`language_ready_ms`) until a budget is set.
 
 **CI cost (M3).** The repo is private on GitHub's free plan, so the nightly schedules were removed: the benchmark workflow (and the 3-OS test matrix) run on manual dispatch, once per milestone checkpoint, and the regression baseline is the last 10 such runs. Nightly runs come back when the repo goes public (M7) and minutes are free.
+
+## Amendment (2026-10-10): Rider dropped, proposed budgets approved
+
+The maintainer decided this on 2026-10-10 (roadmap decision D28).
+
+- **Rider is no longer a reference.** Its measurements were never taken (the socket problem above), and every milestone from M8 on deferred them.
+  - Solution and language-service budgets are now absolute targets, not "at least as good as Rider".
+  - Each milestone proposes them at its checkpoint, and the maintainer approves them.
+  - Editor budgets don't change: they still follow VS Code.
+- **Budget 4 is final** as it stands, at p50 on the reference machine:
+  - the tree from the solution file ≤ 1.5 s
+  - the projects evaluated ≤ 5 s
+- **The budgets proposed at M8–M16 are approved** and gate like the others.
+  - Those in `budgets.json` apply now: Test Explorer (M8), packages and properties (M9), the terminal (M10) and the 100k-line markup files (M11).
+  - The proposed budgets that have no harness scenario yet become gates when their scenario lands: the M13 history graph, the M14 debugger, and the M15 Endpoints Explorer and Hot Reload. Their checkpoints track them as `TODO(issue)`.
