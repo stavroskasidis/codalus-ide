@@ -64,6 +64,8 @@
 
   <!-- Terminal shell integration scripts (ADR 0014), next to the shell in terminal/. Dotfiles are listed explicitly. -->
   <ItemGroup>
+    <None Include="WebServers\package.json" Link="web-servers\package.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="WebServers\package-lock.json" Link="web-servers\package-lock.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Grammars\http.tmLanguage.json" Link="grammars\http.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="ShellIntegration\daedalus-bash.sh" Link="terminal\daedalus-bash.sh" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="ShellIntegration\daedalus.ps1" Link="terminal\daedalus.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

@@ -2,6 +2,19 @@
 
 Daedalus Studio runs ASP.NET Core projects with Kestrel, using their launch profiles: `applicationUrl` becomes the app's URLs, and `launchBrowser` opens your browser. Start with `F5` (debugging) or `Ctrl+F5`.
 
+## HTML, CSS, JavaScript and TypeScript
+
+Daedalus Studio colors these files out of the box. Completion, errors, hover, navigation and formatting come from the same open-source language servers VS Code uses:
+- VS Code's HTML and CSS servers, for HTML (with the CSS and JavaScript inside it), CSS, SCSS and Less;
+- `typescript-language-server` with TypeScript 5.9, for JavaScript, TypeScript, JSX and TSX.
+
+They run on Node.js. The first time you open such a file, Daedalus Studio offers to download Node.js and the servers once, about 70 MB, into its cache folder. It uses a pinned Node.js release, checks its checksum, and installs the servers from a lockfile. Your own Node.js installation isn't used or changed.
+- **Install** downloads them now. **Never** turns the offer off.
+- The **Web Language Servers** setting (`web.languageServers`) chooses between asking (the default), downloading without asking, and off.
+- **Install the Web Language Servers** in the command palette downloads them at any time.
+
+HTML and CSS inside Razor files aren't served by these servers yet.
+
 ## Hot Reload
 
 Debug → **Start with Hot Reload** runs the startup project under `dotnet watch`, with its launch profile. Save a file, or press `Alt+F10` (Apply Code Changes, which saves every modified file), and the change is applied to the running app:

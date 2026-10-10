@@ -82,6 +82,35 @@ public sealed class LanguageService : IAsyncDisposable
             ? _clients.GetOrAdd(server, id => new Lazy<Task<LanguageHostClient?>>(() => StartAsync(id))).Value
             : Task.FromResult<LanguageHostClient?>(null);
 
+    /// <summary>
+    /// A service that couldn't start (its launch returned null, e.g. a server not installed yet) is tried again, and the
+    /// open documents of its languages are opened in it. Returns whether it runs now.
+    /// </summary>
+    public async Task<bool> RetryAsync(string languageId)
+    {
+        if (ServerOf(languageId) is not { } server)
+        {
+            return false;
+        }
+
+        if (_clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompleted && (!lazy.Value.IsCompletedSuccessfully || lazy.Value.Result is null))
+        {
+            _clients.TryRemove(server, out _);
+        }
+
+        if (await ClientAsync(languageId).ConfigureAwait(false) is not { } client)
+        {
+            return false;
+        }
+
+        foreach (var document in _documents.Values.Where(d => ServerOf(d.LanguageId) == server))
+        {
+            await client.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
+        }
+
+        return true;
+    }
+
     /// <summary>The running client of a language's service, without starting it.</summary>
     public LanguageHostClient? RunningClient(string languageId) =>
         ServerOf(languageId) is { } server && _clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result : null;

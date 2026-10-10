@@ -791,6 +791,35 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
                 shell.StopRunning();
             }
         }).ConfigureAwait(true);
+
+        await StepAsync("web.languages", "M16", "Node.js and the web language servers install on demand and serve TypeScript and HTML", WebLanguagesStepAsync).ConfigureAwait(true);
+    }
+
+    /// <summary>The web language servers (M16b): Node.js and the servers install, then serve TypeScript and HTML files.</summary>
+    private async Task WebLanguagesStepAsync()
+    {
+        if (Workbench.Node.NodeRuntime.Platform is null)
+        {
+            throw new SmokeFailure("There is no Node.js build for this platform.");
+        }
+
+        await shell.InstallWebLanguagesAsync().ConfigureAwait(true);
+        Check(shell.WebServers.IsInstalled, "Node.js and the web language servers are installed: " + Tail(shell.LanguageLog.GetText(), 1500));
+        var folder = Path.Combine(_work, "site");
+        Directory.CreateDirectory(folder);
+        var script = Path.Combine(folder, "app.ts");
+        await File.WriteAllTextAsync(script, "const count: number = \"three\";\nconsole.log(count);\n").ConfigureAwait(true);
+        var page = Path.Combine(folder, "index.html");
+        await File.WriteAllTextAsync(page, "<!DOCTYPE html>\n<html>\n<body>\n<di\n</body>\n</html>\n").ConfigureAwait(true);
+
+        var editor = await OpenAsync(script).ConfigureAwait(true);
+        await WaitAsync(() => shell.Languages.Diagnostics.For(script).Any(d => d.Code == "2322"), "TypeScript reports the type error (TS2322): " + Tail(shell.LanguageLog.GetText(), 1500), 180).ConfigureAwait(true);
+        var html = await OpenAsync(page).ConfigureAwait(true);
+        await WaitAsync(() => shell.Languages.RunningClient("html") is not null, "the HTML server starts", 120).ConfigureAwait(true);
+        var completion = await shell.Languages.RunningClient("html")!.CompletionAsync(html.Model.Uri, html.Model.PositionAt(html.Model.Text.Text.IndexOf("<di", StringComparison.Ordinal) + 3),
+            new LanguageServices.Protocol.CompletionContext(LanguageServices.Protocol.CompletionTriggerKind.Invoked, null), CancellationToken.None).ConfigureAwait(true);
+        Check(completion?.Items.Any(i => i.Label == "div") == true, "HTML completion offers div");
+        Check(editor.Model.LanguageId == "typescript", "app.ts is TypeScript");
     }
 
     /// <summary>samples/Blazor with a free port in its launch profile.</summary>

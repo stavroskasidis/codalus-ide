@@ -14,6 +14,10 @@
 set -euo pipefail
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
+# Node.js and the web language servers (M16b) download once into the repository's .work folder, not every run.
+node_cache="$repo/.work/node-cache"
+command -v cygpath > /dev/null && node_cache="$(cygpath -w "$node_cache")" # Git Bash on Windows: a Windows path for the app
+export DAEDALUS_NODE_CACHE="${DAEDALUS_NODE_CACHE:-$node_cache}"
 
 # Runs one app: --version, then the smoke test. $1: executable; $2: results dir; $3: whether to run the full smoke test.
 test_app() {

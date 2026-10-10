@@ -12,9 +12,29 @@ public static class DocumentUris
 
     public static string FromPath(string path) => new Uri(Path.GetFullPath(path)).AbsoluteUri;
 
-    /// <summary>The file path of a <c>file://</c> URI, or null for other schemes.</summary>
-    public static string? ToPath(string uri) =>
-        Uri.TryCreate(uri, UriKind.Absolute, out var parsed) && parsed.IsFile ? parsed.LocalPath : null;
+    /// <summary>
+    /// The file path of a <c>file://</c> URI, or null for other schemes. On Windows, URIs that escape the drive's colon
+    /// (<c>file:///c%3A/…</c>, as VS Code's servers write them) give the same path as <c>file:///C:/…</c>.
+    /// </summary>
+    public static string? ToPath(string uri)
+    {
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed) || !parsed.IsFile)
+        {
+            return null;
+        }
+
+        var path = parsed.LocalPath;
+        if (OperatingSystem.IsWindows() && path.Length >= 3 && path[0] is '/' or '\\' && char.IsAsciiLetter(path[1]) && path[2] == ':')
+        {
+            path = char.ToUpperInvariant(path[1]) + path[2..].Replace('/', '\\');
+        }
+        else if (OperatingSystem.IsWindows() && path.Length >= 2 && char.IsAsciiLetterLower(path[0]) && path[1] == ':')
+        {
+            path = char.ToUpperInvariant(path[0]) + path[1..];
+        }
+
+        return path;
+    }
 
     public static bool IsMetadata(string uri) => uri.StartsWith(MetadataScheme + ":", StringComparison.Ordinal);
 

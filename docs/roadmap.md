@@ -36,7 +36,7 @@ This is the plan for everything after the MVP (M0–M7 in `ide-prompt.md`). It t
 | M13 | Git depth and hosting integration | M13a at checkpoint: history, merge editor, operations, ADR 0020; M13b (hosting integration) planned |
 | M14 | Debugger depth | M14a at checkpoint: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b (companion host, dumps) and M14c (remote sessions) planned |
 | M15 | ASP.NET Core and Hot Reload | M15a and M15b at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch`, ADR 0022; M15c (scaffolding, service references) deferred until after M16 |
-| M16 | Razor, Blazor and web front-end | M16a at checkpoint: Razor editing through the Razor source generator, Blazor run and Hot Reload, ADR 0023; M16b (HTML, CSS and JavaScript services on Node) and M16c (Blazor WebAssembly, browser debugging) planned |
+| M16 | Razor, Blazor and web front-end | M16a and M16b at checkpoint: Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023), HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); M16c (Blazor WebAssembly, browser debugging) planned, after M30–M33 |
 | M17 | Containers, Aspire and publishing | planned |
 | M18 | Profiling and diagnostics tools | planned |
 | M19 | Avalonia XAML editing and live previewer | planned |
@@ -2175,7 +2175,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 |---|---|---|---|---|
 | D1 | Switch document identity to URIs and add a VFS (F1, F2)? | M7 checkpoint | Yes, before going public and before API 1.0 | open |
 | D2 | Rich plugin UI: webview, remote UI, or both (F3)? | M6 (ADR 0003) | Per the M6 ADR | open |
-| D3 | Node.js policy (F4) | M16 (M11 if a Node LSP is wanted earlier) | Pinned, verified, on-demand download | open |
+| D3 | Node.js policy (F4) | M16 (M11 if a Node LSP is wanted earlier) | Pinned, verified, on-demand download | decided (ADR 0024): Node.js 24.21.0 from nodejs.org, SHA-256 pinned; servers from a shipped lockfile with `npm ci`; the user's consent on first use |
 | D4 | Workspace trust and restricted mode (F6) | M7 checkpoint | Yes, with the public release | open |
 | D5 | Plugin distribution channel | M22 | NuGet package type, with a plugin browser in the IDE | open |
 | D6 | MAUI go/no-go, and the scope without WinUI | Before M20 | Decide after M19 | open |
@@ -2222,6 +2222,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-10: M15a built and at its checkpoint (ADR 0022): an Endpoints Explorer from Roslyn (minimal APIs with `MapGroup` prefixes, controller attribute and conventional routes) with Generate Request, `.http` files (grammar, send glyphs, file, environment and request variables, dynamic variables, `< file` bodies) run in the shell with an HTTP Response window and history, an ASP.NET Core environment selector for Run and Debug, the HTTPS development certificate (check, trust, an offer before the first https run), and user secrets. Hot Reload (M15b) will use `dotnet watch` instead of Roslyn's unpublished hot-reload API.
 - 2026-10-10: M15b built and at its checkpoint (ADR 0022): Start with Hot Reload runs the startup project under `dotnet watch` with the plan Run would use, Apply Code Changes (`Alt+F10`), a status bar item that follows the watch's output, a notification on rude edits, and a setting for Hot Reload on `Ctrl+F5`. Not while debugging (netcoredbg can't apply updates).
 - 2026-10-10: M16a built and at its checkpoint (ADR 0023): `.razor` and `.cshtml` files served by the C# host through the Razor source generator. C# features (completion, hover, signature help, definition, references, highlights, diagnostics) are mapped through the generator's `#line` mappings; markup gets component, parameter and directive completion, plus hover and definition on components. Locations in Razor-generated code move to the Razor file. A Blazor fixture, run and Hot Reload. M15c (scaffolding, service references) is deferred until after M16; it has no dependents among M16's parts.
+- 2026-10-10: M16b built and at its checkpoint (ADR 0024, settling D3): a pinned Node.js 24.21.0 downloaded on demand from nodejs.org and verified by SHA-256, VS Code's HTML and CSS servers and `typescript-language-server` with TypeScript 5.9.3 installed with `npm ci` from a shipped lockfile, registered as LSP language services, offered on the first web file (setting `web.languageServers`). Also fixed: file URIs with an escaped drive colon from such servers now reach Windows files.
 - 2026-10-10: at the maintainer's request:
   - **New phase 4, platform and release, placed next (after M16b, before M16c):**
     - M30: .NET 11, and Daedalus following every new .NET release

@@ -151,7 +151,7 @@ public sealed partial class ShellHost : IEditorServices
         _ = ConfigureLanguagesAsync();
     }
 
-    private Workbench.Output.OutputChannel LanguageLog => Workbench.Output.GetOrCreate("daedalus.languages", "Language Services");
+    public Workbench.Output.OutputChannel LanguageLog => Workbench.Output.GetOrCreate("daedalus.languages", "Language Services");
 
     private Task ConfigureLanguagesAsync() =>
         Languages.ConfigureAsync(JsonSerializer.SerializeToElement(
@@ -330,6 +330,10 @@ public sealed partial class ShellHost : IEditorServices
             {
                 editor.Controller?.RefreshAll();
             }
+        }
+        else
+        {
+            await OfferWebLanguagesAsync(languageId).ConfigureAwait(true);
         }
     }
 

@@ -4,6 +4,7 @@ using DaedalusStudio.Shell.Views;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Context;
 using DaedalusStudio.Workbench.Menus;
+using DaedalusStudio.Workbench.Settings;
 using DaedalusStudio.Workbench.ToolWindows;
 
 namespace DaedalusStudio.Shell;
@@ -16,6 +17,18 @@ internal static partial class BuiltIns
           { "key": "ctrl+alt+r", "command": "http.sendRequest", "when": "editorTextFocus && editorLanguageId == http" }
         ]
         """;
+
+    public static IReadOnlyList<SettingDescriptor> WebSettings() =>
+    [
+        SettingDescriptor.Create(ShellHost.WebLanguageServersSetting, "\"ask\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Web Language Servers",
+            Category = "Web",
+            Description = "HTML, CSS, JavaScript and TypeScript editing uses language servers that run on Node.js, downloaded once into the cache folder: ask before downloading, download without asking, or don't use them.",
+            Enum = ["ask", "install", "off"],
+            EnumDescriptions = ["Ask the first time a web file opens", "Download without asking", "Don't use them"],
+        },
+    ];
 
     public static IEnumerable<ToolWindowDescriptor> WebToolWindows()
     {
@@ -43,6 +56,7 @@ internal static partial class BuiltIns
         Add("web.checkDevCertificate", "Check the HTTPS Development Certificate", "ASP.NET Core", _ => shell.CheckDevCertificateAsync());
         Add("web.trustDevCertificate", "Trust the HTTPS Development Certificate", "ASP.NET Core", _ => shell.TrustDevCertificateAsync());
         Add("web.manageUserSecrets", "Manage User Secrets", "ASP.NET Core", shell.ManageUserSecretsAsync, "solutionOpen && solutionTrusted");
+        Add("web.installLanguageServers", "Install the Web Language Servers (Node.js)", "Web", _ => shell.InstallWebLanguagesAsync());
         Add("http.sendRequest", "Send Request", "HTTP", _ => shell.SendHttpRequestAtCaretAsync(), "editorLanguageId == http");
         Add("http.selectEnvironment", "Select the Environment for .http Requests…", "HTTP", _ => shell.SelectHttpEnvironmentAsync(), "editorLanguageId == http");
         Add("http.showResponse", "HTTP Response", "HTTP", _ =>
