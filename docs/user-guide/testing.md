@@ -3,7 +3,7 @@
 Daedalus Studio finds, runs and debugs **xUnit** (v2 and v3), **NUnit**, **MSTest** and **TUnit** tests, on both
 test platforms: **VSTest** (the classic `Microsoft.NET.Test.Sdk` projects) and **Microsoft.Testing.Platform** (MTP:
 xUnit v3, `MSTest.Sdk`, TUnit, and projects that enable it). Each project uses the platform it is set up for. Run with
-Coverage measures code coverage with [Coverlet](https://github.com/coverlet-coverage/coverlet).
+Coverage measures code coverage with [Coverlet](https://github.com/coverlet-coverage/coverlet). Tests and coverage work on every .NET version from .NET Core 2.0, with the test SDK and adapter versions each one supports ([Older .NET versions](dotnet-versions.md)).
 
 ## The Test Explorer
 

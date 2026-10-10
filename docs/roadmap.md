@@ -51,7 +51,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Daedalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
 | M31 | Automated release cycle and installers | planned, **next**, after M16 (M30b follows at .NET 11 GA) |
 | M32 | Self-update | planned, after M31 |
-| M33 | Older .NET: .NET Core 2.0 to .NET 10 | planned, after M32 |
+| M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
 | M34 | UI polish | planned, the last milestone before Visual Basic and F# |
 | M35 | Visual Basic | planned, always second to last |
 | M36 | F# | planned, always last |
@@ -1035,6 +1035,8 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Goal.** Prove that projects targeting every version of .NET (Core) from 2.0 to 10.0 work in Daedalus. Fix what doesn't work, or document it (D23).
 
+**Status ([ADR 0030](adr/0030-older-dotnet.md), [checkpoint](checkpoints/m33.md)).** Built on 2026-10-11, in one checkpoint. The support table is [Older .NET versions](user-guide/dotnet-versions.md) in the user guide; the SDK floor is 2.1.200.
+
 **Depends on.**
 - M30 (the hosts start with any SDK)
 - It relies on M4 (build and run), M5 and M14 (debugging), and M8 (tests).
@@ -1819,7 +1821,7 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
 - **OS versions** (D26): Windows 11 only. macOS and Linux versions follow what the .NET that Daedalus runs on supports: macOS 15 or newer today, which the app bundle's `Info.plist` requires.
 - **.NET versions** (D22, D23):
   - Daedalus itself runs on the newest .NET. It moves to each new major version when it ships, following M30's checklist.
-  - User projects are supported from `netcoreapp2.0` to the newest .NET, on every OS where their runtime installs. M33 has the support table.
+  - User projects are supported from `netcoreapp2.0` to the newest .NET, on every OS where their runtime installs. The support table is in the user guide ([Older .NET versions](user-guide/dotnet-versions.md), M33).
 - **Windows:** ConPTY versions and dev-certificate trust.
 - **macOS:** the Keychain, notarization of downloaded tools, and the login-shell environment.
 - **Linux:** libsecret availability, distribution trust stores, and Flatpak sandbox restrictions on spawning processes. The Flatpak build would need `--talk-name` and host-spawn permissions for the SDK, Docker and the terminal. No Flatpak for now (D18).
@@ -1937,7 +1939,7 @@ The "Daedalus" column uses these terms:
 | Open Folder (no solution) | M26 |
 | Docker Compose projects (`.dcproj`) | M17 |
 | SQL database projects (`.sqlproj`) | M27 |
-| Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10) |
+| Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10, and SDKs down to 2.1.200 in `global.json`: at checkpoint, ADR 0030) |
 | Non-SDK-style projects, .NET Framework-only scenarios | Non-goal |
 | WinForms, WPF, UWP and WinUI project types and designers | Non-goal |
 | C++, Python and Node.js workloads | Not first-party: plugins over the M11 LSP bridge (C++/CLI is a non-goal) |
@@ -2248,7 +2250,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D20 | Releases while the repository is private | M31 | Build everything now, and switch it on when the repository goes public | decided 2026-10-10: as recommended. Manual dispatch while private; the nightly schedule and the release on push to `master` switch on automatically once public. |
 | D21 | Branches and versioning | M31 | `develop` for daily work and nightlies, `master` for stable releases; the version in a file, bumped after each release | decided 2026-10-10: as recommended. The version is in the `VERSION` file; the next minor version is committed to `develop` automatically after each stable release; nightlies are `X.Y.Z-nightly.YYYYMMDD.N`. |
 | D22 | Which .NET Daedalus itself runs on | M30 | Support .NET 11 projects, and keep Daedalus on .NET 10 LTS until .NET 12 | decided 2026-10-10: Daedalus follows the newest .NET and moves to each major version when it ships, starting with .NET 11. |
-| D23 | How far to validate older versions of .NET | M33 | Every target framework from 2.0 to 10.0 with the current SDK; older SDKs pinned by `global.json` only opened and built | decided 2026-10-10: as recommended. |
+| D23 | How far to validate older versions of .NET | M33 | Every target framework from 2.0 to 10.0 with the current SDK; older SDKs pinned by `global.json` only opened and built | decided 2026-10-10: as recommended. Built in M33 (ADR 0030): the floor is the .NET SDK 2.1.200. |
 | D24 | Icon sets | M34 | Fluent UI System Icons (MIT) for commands, and Material Icon Theme (MIT) for file types | decided 2026-10-10: as recommended. Check both licences again at M34. |
 | D25 | What "polished" means | M34 | A written checklist per surface, and a screenshot gallery that the maintainer approves | decided 2026-10-10: as recommended. Every milestone reviews its own panels against the checklist until M34. |
 | D26 | Supported OS versions | M30 | Windows 10 22H2 and Windows 11; macOS and Linux as the .NET that Daedalus runs on supports | decided 2026-10-10: Windows 11 only. That changed the same day from "Windows 10 22H2 and 11", because .NET 10 supports Windows 10 only in its LTSC and IoT editions. macOS and Linux follow what the .NET that Daedalus runs on supports: macOS 15 or newer today, which `Info.plist` requires. |
@@ -2326,3 +2328,8 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Linting and formatting:** ESLint as a linter service with pull diagnostics; Prettier for Format Document.
   - **Fixtures:** `samples/BlazorHosted`, `samples/WebScripts` and `samples/WebLint`.
   - **Next:** M31 (the release cycle), which publishes, so the maintainer confirms it first.
+- 2026-10-11: M33 built and at its checkpoint (ADR 0030, D23):
+  - **Target frameworks:** `netcoreapp2.0` to `net10.0` and .NET Standard 2.0 and 2.1 open, build, run, debug, test (with coverage) and get each framework's default C# version in the editor, with the current SDK. Hot Reload from .NET 6, disabled with its reason before. The package manager marks the versions that don't support a project's frameworks.
+  - **Older SDKs in `global.json`:** they open and build down to the .NET SDK 2.1.200; those before 6.0 build in the build host's own node, because their MSBuild can't start nodes for a host on .NET 10. Below the floor, or when the SDK isn't installed, the newest SDK stands in and the solution is told why.
+  - **Operating systems:** programs start on the SDK's runtimes (`DOTNET_ROOT` for apphosts); on Apple silicon, .NET 5 and earlier run as x64 with the x64 netcoredbg (shipped in the macOS package); on Linux, .NET Core 2.x and 3.x get the system's ICU (`CLR_ICU_VERSION_OVERRIDE`), and 2.x's need for OpenSSL 1.x is documented.
+  - **Keeping it checked:** `samples/TargetFrameworks`, `eng/get-runtimes.sh`, the `DaedalusStudio.TargetFrameworks.Tests` suite (WSL and Mac validation, and the manual CI matrix), `eng/compat-containers.sh`, and the support table in the user guide.
