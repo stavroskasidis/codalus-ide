@@ -37,6 +37,7 @@ Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs n
   - fetch, pull and push
   - side-by-side and inline diffs, gutter change markers, and blame
 - **Terminal and C# Interactive**: an integrated terminal (your shells, splits, shell integration with clickable `file:line` links, `vim`-capable emulation) that can also run your console apps, and a C# REPL with `#r "nuget:"`, Send to Interactive and Initialize Interactive with Project.
+- **Navigation and inline information**: Peek Definition, Go to Base, Call and Type Hierarchy, Find All References with read/write classification, the Document Outline, a Code Definition window, a navigation bar and sticky scroll; inlay hints, CodeLens, an inheritance margin, bracket pair colors and an overview ruler; library code shown from its embedded source or Source Link before decompiling.
 - **Other languages**: highlighting for about forty languages from TextMate grammars; MSBuild editing with evaluated values on hover; JSON and YAML with schemas; `.editorconfig`; a Markdown preview; and any LSP language server through a plugin, without code.
 - **Extensible**: a versioned, out-of-process plugin API ([docs/plugins.md](docs/plugins.md)).
 - **Private**: no telemetry. Crash reports are local and opt-in.

@@ -15,6 +15,13 @@
         <Button Content="Stop" Command="{Binding CancelCommand}" IsVisible="{Binding IsSearching}" AutomationProperties.Name="Stop searching" />
       </StackPanel>
     </Grid>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,0,6,2" IsVisible="{Binding IsReferences}">
+      <ComboBox MinWidth="220" ItemsSource="{Binding ReferenceSets}" SelectedItem="{Binding CurrentSet}" AutomationProperties.Name="Earlier results" ToolTip.Tip="Earlier results" />
+      <TextBlock Text="Group by" VerticalAlignment="Center" Classes="muted" />
+      <ComboBox MinWidth="90" ItemsSource="{x:Static vm:FindResultsViewModel.GroupByOptions}" SelectedItem="{Binding GroupBy}" AutomationProperties.Name="Group by" />
+      <TextBlock Text="Show" VerticalAlignment="Center" Classes="muted" />
+      <ComboBox MinWidth="110" ItemsSource="{x:Static vm:FindResultsViewModel.KindFilterOptions}" SelectedItem="{Binding KindFilter}" AutomationProperties.Name="Reference kind" />
+    </StackPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="10,2" Text="{Binding Summary}" AutomationProperties.LiveSetting="Polite" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Find results">
       <ListBox.Styles>

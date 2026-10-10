@@ -5,6 +5,8 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using AvaloniaEdit;
+using DaedalusStudio.LanguageServices.Protocol;
+using Location = DaedalusStudio.LanguageServices.Protocol.Location;
 using DaedalusStudio.Shell.Controls;
 using DaedalusStudio.Shell.Infrastructure;
 
@@ -25,8 +27,13 @@ public sealed class CodeEditorView : UserControl, IPaneView
     private readonly ComboBox _context = new() { MinWidth = 140, Margin = new Thickness(4, 2) };
     private readonly Border _contextBar;
     private readonly Popup _hover = new() { IsLightDismissEnabled = true };
-    private (TextEditor Editor, CodeEditorController Controller, Minimap Minimap)? _primary;
-    private (TextEditor Editor, CodeEditorController Controller, Minimap Minimap)? _split;
+    private PeekPresenter? _peek;
+    private EditorParts? _primary;
+    private EditorParts? _split;
+    private readonly NavigationBar _navigationBar = new();
+
+    /// <summary>One editor of the view (the primary, or the split above it) and its chrome.</summary>
+    private sealed record EditorParts(TextEditor Editor, CodeEditorController Controller, Minimap Minimap, StickyScroll Sticky, OverviewRuler Ruler);
     private readonly Button _lightbulb = new()
     {
         Classes = { "toolbar" },
@@ -61,7 +68,9 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
         var root = new DockPanel();
         DockPanel.SetDock(_contextBar, Avalonia.Controls.Dock.Top);
+        DockPanel.SetDock(_navigationBar, Avalonia.Controls.Dock.Top);
         root.Children.Add(_contextBar);
+        root.Children.Add(_navigationBar);
         root.Children.Add(_editors);
         root.Children.Add(_hover);
         Content = root;
@@ -75,6 +84,42 @@ public sealed class CodeEditorView : UserControl, IPaneView
     public Minimap Minimap => _primary?.Minimap ?? throw new InvalidOperationException("The view is not attached.");
 
     public bool IsSplit => _split is not null;
+
+    /// <summary>The type and member drop-downs (tests).</summary>
+    public NavigationBar NavigationBar => _navigationBar;
+
+    /// <summary>The primary editor's sticky scroll and overview ruler (tests).</summary>
+    public StickyScroll StickyScroll => _primary?.Sticky ?? throw new InvalidOperationException("The view is not attached.");
+
+    public OverviewRuler OverviewRuler => _primary?.Ruler ?? throw new InvalidOperationException("The view is not attached.");
+
+    /// <summary>The Peek Definition popup, once shown (tests).</summary>
+    public PeekPresenter? Peek => _peek;
+
+    /// <summary>Shows a definition in a popup under the caret's line (Peek Definition, Alt+F12).</summary>
+    public void ShowPeek(Location location, string title, string text, string? languageId)
+    {
+        if (_primary is not { } primary)
+        {
+            return;
+        }
+
+        if (_peek is null)
+        {
+            _peek = new PeekPresenter(primary.Editor, _services, _font, l =>
+            {
+                _services.OpenLocations([l], title);
+                return Task.CompletedTask;
+            });
+            ((Panel)Content!).Children.Add(_peek.Popup);
+        }
+
+        var view = primary.Editor.TextArea.TextView;
+        var caret = primary.Editor.TextArea.Caret;
+        var bottom = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(caret.Line, 1), AvaloniaEdit.Rendering.VisualYPosition.LineBottom) - view.ScrollOffset;
+        var origin = view.TranslatePoint(new Point(0, bottom.Y), primary.Editor) ?? new Point(0, 0);
+        _peek.Show(new Rect(origin.X, origin.Y, 1, 1), primary.Editor.Bounds.Width - origin.X - 24, location, title, text, languageId);
+    }
 
     /// <summary>The lightbulb next to the caret's line when it has diagnostics: click for code fixes (or Ctrl+.).</summary>
     private void OnLightbulbChanged(object? sender, EventArgs e)
@@ -112,8 +157,11 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _primary = CreateEditor(primary: true);
         _editors.Children.Clear();
         _editors.RowDefinitions = new RowDefinitions("0,0,*");
-        _editors.Children.Add(Row(_primary.Value.Editor, _primary.Value.Minimap, 2, _lightbulb));
-        _primary.Value.Controller.LightbulbChanged += OnLightbulbChanged;
+        _editors.Children.Add(Row(_primary, 2, _lightbulb));
+        _primary.Controller.LightbulbChanged += OnLightbulbChanged;
+        _navigationBar.Enabled = _services.Options.NavigationBar;
+        _navigationBar.Attach(_primary.Controller);
+        _services.Diagnostics.Changed += OnDiagnosticsChanged;
         _services.Options.PropertyChanged += OnOptionsChanged;
         _services.ProjectContextsChanged += OnProjectContextsChanged;
         _font.PropertyChanged += OnFontChanged;
@@ -138,16 +186,26 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
         _services.Options.PropertyChanged -= OnOptionsChanged;
         _services.ProjectContextsChanged -= OnProjectContextsChanged;
+        _services.Diagnostics.Changed -= OnDiagnosticsChanged;
         _font.PropertyChanged -= OnFontChanged;
+        _navigationBar.Detach();
         primary.Controller.LightbulbChanged -= OnLightbulbChanged;
         primary.Controller.Dispose();
         _split?.Controller.Dispose();
+        _peek?.Release();
+        _peek = null;
         _primary = null;
         _split = null;
         _editors.Children.Clear();
     }
 
-    private (TextEditor, CodeEditorController, Minimap) CreateEditor(bool primary)
+    private void OnDiagnosticsChanged(object? sender, string path) => Ui.Post(() =>
+    {
+        _primary?.Ruler.Invalidate();
+        _split?.Ruler.Invalidate();
+    });
+
+    private EditorParts CreateEditor(bool primary)
     {
         var editor = new TextEditor
         {
@@ -165,21 +223,26 @@ public sealed class CodeEditorView : UserControl, IPaneView
         var minimap = new Minimap(editor, controller.Colorizer) { IsVisible = _services.Options.Minimap };
         minimap.Bind(BackgroundProperty, this.GetResourceObservable("Shell.Editor.Background"));
         minimap.Bind(Minimap.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
-        return (editor, controller, minimap);
+        var sticky = new StickyScroll(editor, () => controller.Insights.Symbols, () => controller.Folding) { Enabled = _services.Options.StickyScroll };
+        controller.Insights.SymbolsChanged += (_, _) => sticky.Update();
+        var ruler = new OverviewRuler(editor, _services, () => _document.Model.Path, () => controller.GitChanges, () => controller.Search) { IsVisible = _services.Options.OverviewRuler };
+        return new EditorParts(editor, controller, minimap, sticky, ruler);
     }
 
-    private static Grid Row(TextEditor editor, Minimap minimap, int row, Control? overlay = null)
+    private static Grid Row(EditorParts parts, int row, Control? overlay = null)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto") };
         Grid.SetRow(grid, row);
-        grid.Children.Add(editor);
+        grid.Children.Add(parts.Editor);
         if (overlay is not null)
         {
             grid.Children.Add(new Canvas { Children = { overlay }, IsHitTestVisible = true, ClipToBounds = true, Background = null });
         }
 
-        Grid.SetColumn(minimap, 1);
-        grid.Children.Add(minimap);
+        Grid.SetColumn(parts.Ruler, 1);
+        grid.Children.Add(parts.Ruler);
+        Grid.SetColumn(parts.Minimap, 2);
+        grid.Children.Add(parts.Minimap);
         return grid;
     }
 
@@ -201,10 +264,11 @@ public sealed class CodeEditorView : UserControl, IPaneView
             return;
         }
 
-        var (editor, controller, minimap) = CreateEditor(primary: false);
-        _split = (editor, controller, minimap);
+        var parts = CreateEditor(primary: false);
+        var editor = parts.Editor;
+        _split = parts;
         _editors.RowDefinitions = new RowDefinitions("*,4,*");
-        _editors.Children.Add(Row(editor, minimap, 0));
+        _editors.Children.Add(Row(parts, 0));
         var splitter = new GridSplitter { ResizeDirection = GridResizeDirection.Rows };
         Grid.SetRow(splitter, 1);
         _editors.Children.Add(splitter);
@@ -213,9 +277,18 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
     private void OnOptionsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        foreach (var minimap in new[] { _primary?.Minimap, _split?.Minimap }.OfType<Minimap>())
+        foreach (var parts in new[] { _primary, _split }.OfType<EditorParts>())
         {
-            minimap.IsVisible = _services.Options.Minimap;
+            parts.Minimap.IsVisible = _services.Options.Minimap;
+            parts.Ruler.IsVisible = _services.Options.OverviewRuler;
+            parts.Sticky.Enabled = _services.Options.StickyScroll;
+            parts.Sticky.Update();
+        }
+
+        if (_primary is { } primary && _navigationBar.Enabled != _services.Options.NavigationBar)
+        {
+            _navigationBar.Enabled = _services.Options.NavigationBar;
+            _navigationBar.Attach(primary.Controller);
         }
     }
 

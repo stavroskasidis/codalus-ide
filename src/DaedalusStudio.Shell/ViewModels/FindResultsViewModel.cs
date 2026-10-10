@@ -6,12 +6,36 @@ using DaedalusStudio.Shell.Infrastructure;
 
 namespace DaedalusStudio.Shell.ViewModels;
 
-/// <summary>A row of the Find Results: a file header, or a match (line number and the line's text).</summary>
+/// <summary>
+/// A row of the Find Results: a group header (file or project), or a match (line number and the line's text). For
+/// references (M12a), <see cref="Kind"/> is read, write, declaration or reference and <see cref="Container"/> the member
+/// containing it.
+/// </summary>
 public sealed record FindResultRow(string Path, int Line, int Column, int Length, string Text, bool IsHeader)
 {
-    public string Display => IsHeader ? Text : $"{Line,6}:  {Text}";
+    public string? Kind { get; init; }
 
-    public string AccessibleName => IsHeader ? Text : $"Line {Line}: {Text}";
+    public string? Container { get; init; }
+
+    public string Display => IsHeader ? Text
+        : Kind is null ? $"{Line,6}:  {Text}"
+        : $"{Line,6}:  {Text}    [{KindTitle(Kind)}{(Container is null ? string.Empty : " in " + Container)}]";
+
+    public string AccessibleName => IsHeader ? Text : Kind is null ? $"Line {Line}: {Text}" : $"Line {Line}, {KindTitle(Kind)}: {Text}";
+
+    public static string KindTitle(string kind) => kind switch
+    {
+        ReferenceItemKinds.Declaration => "declaration",
+        ReferenceItemKinds.Write => "write",
+        ReferenceItemKinds.Read => "read",
+        _ => "reference",
+    };
+}
+
+/// <summary>One Find All References result, kept so earlier searches can be shown again.</summary>
+public sealed record ReferenceSet(string Title, IReadOnlyList<ReferenceItem> Items)
+{
+    public override string ToString() => Title;
 }
 
 /// <summary>
@@ -49,6 +73,117 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<FindResultRow> Rows { get; } = [];
+
+    // ------------------------------------------------------------------ references: grouping, filters, kept results (M12a)
+
+    private const int MaxReferenceSets = 10;
+    private ReferenceSet? _currentSet;
+    private string _groupBy = "File";
+    private string _kindFilter = "All";
+
+    /// <summary>Earlier Find All References results, newest first.</summary>
+    public ObservableCollection<ReferenceSet> ReferenceSets { get; } = [];
+
+    public static IReadOnlyList<string> GroupByOptions { get; } = ["File", "Project", "None"];
+
+    public static IReadOnlyList<string> KindFilterOptions { get; } = ["All", "Read", "Write", "Declaration"];
+
+    /// <summary>True while references (not Find in Files results) are shown: the grouping and filter apply.</summary>
+    public bool IsReferences => _currentSet is not null;
+
+    public ReferenceSet? CurrentSet
+    {
+        get => _currentSet;
+        set
+        {
+            if (SetField(ref _currentSet, value))
+            {
+                OnPropertyChanged(nameof(IsReferences));
+                if (value is not null)
+                {
+                    _ = ShowSetAsync(value);
+                }
+            }
+        }
+    }
+
+    public string GroupBy
+    {
+        get => _groupBy;
+        set
+        {
+            if (SetField(ref _groupBy, value ?? "File") && _currentSet is { } set)
+            {
+                _ = ShowSetAsync(set);
+            }
+        }
+    }
+
+    public string KindFilter
+    {
+        get => _kindFilter;
+        set
+        {
+            if (SetField(ref _kindFilter, value ?? "All") && _currentSet is { } set)
+            {
+                _ = ShowSetAsync(set);
+            }
+        }
+    }
+
+    /// <summary>Shows classified references (<c>daedalus/references</c>) and keeps them in <see cref="ReferenceSets"/>.</summary>
+    public async Task ShowReferencesAsync(string title, IReadOnlyList<ReferenceItem> items)
+    {
+        _search?.Cancel();
+        var set = new ReferenceSet(title, items);
+        ReferenceSets.Insert(0, set);
+        while (ReferenceSets.Count > MaxReferenceSets)
+        {
+            ReferenceSets.RemoveAt(ReferenceSets.Count - 1);
+        }
+
+        _currentSet = set;
+        OnPropertyChanged(nameof(CurrentSet));
+        OnPropertyChanged(nameof(IsReferences));
+        await ShowSetAsync(set).ConfigureAwait(true);
+    }
+
+    private async Task ShowSetAsync(ReferenceSet set)
+    {
+        Rows.Clear();
+        var items = set.Items.Where(i => _kindFilter switch
+        {
+            "Read" => i.Kind == ReferenceItemKinds.Read,
+            "Write" => i.Kind == ReferenceItemKinds.Write,
+            "Declaration" => i.Kind == ReferenceItemKinds.Declaration,
+            _ => true,
+        }).ToList();
+        var rows = items.Select(i => (Path: DocumentUris.ToPath(i.Location.Uri) ?? DocumentUris.GeneratedPath(i.Location.Uri) ?? i.Location.Uri, Item: i)).ToList();
+        IEnumerable<IGrouping<string, (string Path, ReferenceItem Item)>> groups = _groupBy switch
+        {
+            "Project" => rows.GroupBy(r => r.Item.Project ?? "(no project)", StringComparer.Ordinal),
+            "None" => rows.GroupBy(_ => string.Empty, StringComparer.Ordinal),
+            _ => rows.GroupBy(r => r.Path, DaedalusStudio.Workbench.Projects.SolutionService.PathComparer),
+        };
+        foreach (var group in groups)
+        {
+            if (_groupBy != "None")
+            {
+                Rows.Add(new FindResultRow(group.First().Path, 0, 0, 0, $"{group.Key} ({group.Count()})", true));
+            }
+
+            foreach (var (path, item) in group.OrderBy(r => r.Path, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Item.Location.Range.Start.Line))
+            {
+                var start = item.Location.Range.Start;
+                var text = _groupBy == "File" ? item.LineText : $"{System.IO.Path.GetFileName(path)}: {item.LineText}";
+                Rows.Add(new FindResultRow(path, start.Line + 1, start.Character, 0, text, false) { Kind = item.Kind, Container = item.ContainingMember });
+            }
+        }
+
+        var counts = string.Join(", ", set.Items.GroupBy(i => i.Kind).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => $"{g.Count()} {FindResultRow.KindTitle(g.Key)}"));
+        Summary = $"{set.Title}: {set.Items.Count} result(s) ({counts}){(items.Count < set.Items.Count ? $", {items.Count} shown" : string.Empty)}.";
+        await Task.CompletedTask.ConfigureAwait(true);
+    }
 
     public RelayCommand SearchCommand { get; }
 
@@ -130,6 +265,9 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
         _search?.Cancel();
         _search?.Dispose();
         var cts = _search = new CancellationTokenSource();
+        _currentSet = null;
+        OnPropertyChanged(nameof(CurrentSet));
+        OnPropertyChanged(nameof(IsReferences));
         Rows.Clear();
         if (_query.Length == 0)
         {
@@ -266,6 +404,9 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
     public async Task ShowLocationsAsync(string title, IReadOnlyList<Location> locations)
     {
         _search?.Cancel();
+        _currentSet = null;
+        OnPropertyChanged(nameof(CurrentSet));
+        OnPropertyChanged(nameof(IsReferences));
         Rows.Clear();
         var byFile = locations
             .Select(l => (Path: DocumentUris.ToPath(l.Uri), Location: l))

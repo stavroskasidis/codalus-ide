@@ -4,7 +4,7 @@ using DaedalusStudio.Workbench.Languages;
 namespace DaedalusStudio.LanguageServices.Host.Tests;
 
 /// <summary>End-to-end C# features on samples/LanguageFeatures, through the real build host and language host.</summary>
-public sealed class LanguageServiceTests(LanguageFixture fixture) : IClassFixture<LanguageFixture>
+public sealed partial class LanguageServiceTests(LanguageFixture fixture) : IClassFixture<LanguageFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

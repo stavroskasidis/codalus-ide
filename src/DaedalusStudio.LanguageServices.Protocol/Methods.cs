@@ -36,6 +36,16 @@ public static class Methods
     public const string RangeFormatting = "textDocument/rangeFormatting";
     public const string OnTypeFormatting = "textDocument/onTypeFormatting";
     public const string WorkspaceSymbol = "workspace/symbol";
+    public const string DocumentSymbol = "textDocument/documentSymbol";
+    public const string PrepareCallHierarchy = "textDocument/prepareCallHierarchy";
+    public const string CallHierarchyIncomingCalls = "callHierarchy/incomingCalls";
+    public const string CallHierarchyOutgoingCalls = "callHierarchy/outgoingCalls";
+    public const string PrepareTypeHierarchy = "textDocument/prepareTypeHierarchy";
+    public const string TypeHierarchySupertypes = "typeHierarchy/supertypes";
+    public const string TypeHierarchySubtypes = "typeHierarchy/subtypes";
+    public const string InlayHint = "textDocument/inlayHint";
+    public const string CodeLens = "textDocument/codeLens";
+    public const string CodeLensResolve = "codeLens/resolve";
 
     // server → client
     public const string PublishDiagnostics = "textDocument/publishDiagnostics";
@@ -50,4 +60,8 @@ public static class Methods
     public const string WorkspaceStatus = "daedalus/workspaceStatus";
     public const string TestCandidates = "daedalus/testCandidates";
     public const string TypeOutline = "daedalus/typeOutline";
+    public const string ReferenceItems = "daedalus/references";
+    public const string GoToBase = "daedalus/base";
+    public const string InheritanceMargin = "daedalus/inheritanceMargin";
+    public const string SymbolInfo = "daedalus/symbolInfo";
 }

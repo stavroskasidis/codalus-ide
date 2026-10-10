@@ -35,6 +35,12 @@
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#6E7681" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F3F3F3" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#E0E0E0" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#319331" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#7B3814" />
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="Dark">
@@ -65,6 +71,12 @@
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#969696" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#2A2A2A" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#404040" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#179FFF" />
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="{x:Static theming:ThemeService.HighContrast}">
@@ -114,6 +126,12 @@
       <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D0D0D0" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#87CEFA" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The metadata navigation tests read this assembly's own sources from its embedded PDB. -->
+    <DebugType>embedded</DebugType>
+    <EmbedAllSources>true</EmbedAllSources>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\DaedalusStudio.LanguageServices.Host\DaedalusStudio.LanguageServices.Host.csproj" />
     <ProjectReference Include="..\..\src\DaedalusStudio.Workbench\DaedalusStudio.Workbench.csproj" />

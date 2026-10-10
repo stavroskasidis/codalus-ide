@@ -348,10 +348,12 @@ public sealed class WorkbenchProposedApi : IProposedApiHost, IDisposable
         return Task.FromResult(new TerminalDto(terminalId, session.ProcessId));
     }
 
-    public Task TerminalSendTextAsync(string terminalId, string text, CancellationToken cancellationToken)
+    public async Task TerminalSendTextAsync(string terminalId, string text, CancellationToken cancellationToken)
     {
-        Terminal(terminalId).Write(text);
-        return Task.CompletedTask;
+        // A plugin often sends a command right after creating the terminal: wait for the shell's first output.
+        var session = Terminal(terminalId);
+        await session.WhenStartedAsync(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+        session.Write(text);
     }
 
     public Task TerminalKillAsync(string terminalId, CancellationToken cancellationToken)

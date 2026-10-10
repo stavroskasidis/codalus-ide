@@ -17,7 +17,7 @@ public static class LspNormalizer
     [
         "hoverProvider", "definitionProvider", "implementationProvider", "documentHighlightProvider", "foldingRangeProvider",
         "referencesProvider", "codeActionProvider", "documentFormattingProvider", "documentRangeFormattingProvider",
-        "workspaceSymbolProvider",
+        "workspaceSymbolProvider", "documentSymbolProvider", "callHierarchyProvider", "typeHierarchyProvider", "inlayHintProvider",
     ];
 
     /// <summary>Normalizes the result of <paramref name="method"/>; returns the input when nothing needs changing.</summary>
@@ -42,6 +42,8 @@ public static class LspNormalizer
             Methods.CodeAction => CodeActions(JsonNode.Parse(result.GetRawText())),
             Methods.CodeActionResolve => CodeAction(JsonNode.Parse(result.GetRawText())),
             Methods.WorkspaceSymbol => Symbols(JsonNode.Parse(result.GetRawText())),
+            Methods.DocumentSymbol => DocumentSymbols(JsonNode.Parse(result.GetRawText())),
+            Methods.InlayHint => InlayHints(JsonNode.Parse(result.GetRawText())),
             _ => null,
         };
         return node is null ? result : Element(node);
@@ -106,6 +108,11 @@ public static class LspNormalizer
         {
             completion["triggerCharacters"] ??= new JsonArray();
             completion["resolveProvider"] ??= false;
+        }
+
+        if (capabilities["codeLensProvider"] is JsonObject lens)
+        {
+            lens["resolveProvider"] ??= false;
         }
 
         if (capabilities["signatureHelpProvider"] is JsonObject signature)
@@ -413,6 +420,86 @@ public static class LspNormalizer
         }
 
         return symbols;
+    }
+
+    // ------------------------------------------------------------------ document symbols, inlay hints (M12)
+
+    /// <summary>
+    /// <c>DocumentSymbol[]</c> stays as it is; flat <c>SymbolInformation[]</c> becomes a tree, each symbol a child of
+    /// the innermost earlier symbol whose range contains it.
+    /// </summary>
+    private static JsonNode? DocumentSymbols(JsonNode? node)
+    {
+        if (node is not JsonArray array || array.OfType<JsonObject>().All(s => s["location"] is null))
+        {
+            return node;
+        }
+
+        var flat = array.OfType<JsonObject>()
+            .Where(s => s["location"]?["range"] is JsonObject)
+            .Select(s => (Symbol: new JsonObject
+            {
+                ["name"] = s["name"]?.DeepClone(),
+                ["kind"] = s["kind"]?.DeepClone(),
+                ["range"] = s["location"]!["range"]!.DeepClone(),
+                ["selectionRange"] = s["location"]!["range"]!.DeepClone(),
+                ["detail"] = s["containerName"]?.DeepClone(),
+            }, Range: RangeOf(s["location"]!["range"]!)))
+            .OrderBy(s => s.Range.Start).ThenByDescending(s => s.Range.End)
+            .ToList();
+        var roots = new JsonArray();
+        var stack = new Stack<(JsonObject Symbol, (long Start, long End) Range)>();
+        foreach (var (symbol, range) in flat)
+        {
+            while (stack.Count > 0 && !(stack.Peek().Range.Start <= range.Start && range.End <= stack.Peek().Range.End))
+            {
+                stack.Pop();
+            }
+
+            if (stack.Count == 0)
+            {
+                roots.Add((JsonNode?)symbol);
+            }
+            else
+            {
+                var parent = stack.Peek().Symbol;
+                if (parent["children"] is not JsonArray children)
+                {
+                    parent["children"] = children = new JsonArray();
+                }
+
+                children.Add((JsonNode?)symbol);
+            }
+
+            stack.Push((symbol, range));
+        }
+
+        return roots;
+    }
+
+    private static (long Start, long End) RangeOf(JsonNode range)
+    {
+        static long Key(JsonNode? position) => ((long)(position?["line"]?.GetValue<int>() ?? 0) << 32) + (position?["character"]?.GetValue<int>() ?? 0);
+        return (Key(range["start"]), Key(range["end"]));
+    }
+
+    /// <summary>Label parts become one string; a string tooltip becomes plain-text markup.</summary>
+    private static JsonNode? InlayHints(JsonNode? node)
+    {
+        foreach (var hint in (node as JsonArray ?? []).OfType<JsonObject>())
+        {
+            if (hint["label"] is JsonArray parts)
+            {
+                hint["label"] = string.Concat(parts.Select(p => p is JsonObject part ? part["value"]?.GetValue<string>() : p?.GetValue<string>()));
+            }
+
+            if (hint["tooltip"] is JsonValue tooltip && tooltip.GetValueKind() == JsonValueKind.String)
+            {
+                hint["tooltip"] = new JsonObject { ["kind"] = "plaintext", ["value"] = tooltip.GetValue<string>() };
+            }
+        }
+
+        return node;
     }
 
     private static void Diagnostic(JsonObject diagnostic)

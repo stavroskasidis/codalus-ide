@@ -20,6 +20,16 @@ public sealed class EditorOptions : ObservableObject
     public const string HighlightCurrentLineKey = "editor.highlightCurrentLine";
     public const string FormatOnTypeKey = "editor.formatOnType";
     public const string AutoClosingBracketsKey = "editor.autoClosingBrackets";
+    public const string InlayParameterNamesKey = "editor.inlayHints.parameterNames";
+    public const string InlayTypesKey = "editor.inlayHints.types";
+    public const string CodeLensKey = "editor.codeLens";
+    public const string InlineDiagnosticsKey = "editor.inlineDiagnostics";
+    public const string InheritanceMarginKey = "editor.inheritanceMargin";
+    public const string IndentGuidesKey = "editor.guides.indentation";
+    public const string BracketPairColorizationKey = "editor.bracketPairColorization";
+    public const string StickyScrollKey = "editor.stickyScroll";
+    public const string OverviewRulerKey = "editor.overviewRuler";
+    public const string NavigationBarKey = "editor.navigationBar";
 
     private readonly SettingsService _settings;
 
@@ -61,8 +71,39 @@ public sealed class EditorOptions : ObservableObject
     /// <summary>Insert the closing bracket or quote of the language's pairs (ADR 0016).</summary>
     public bool AutoClosingBrackets { get; private set; }
 
+    // M12a: inline information and structure.
+    public bool InlayParameterNames { get; private set; }
+
+    public bool InlayTypes { get; private set; }
+
+    public bool CodeLens { get; private set; }
+
+    public bool InlineDiagnostics { get; private set; }
+
+    public bool InheritanceMargin { get; private set; }
+
+    public bool IndentGuides { get; private set; }
+
+    public bool BracketPairColorization { get; private set; }
+
+    public bool StickyScroll { get; private set; }
+
+    public bool OverviewRuler { get; private set; }
+
+    public bool NavigationBar { get; private set; }
+
     private void Read()
     {
+        InlayParameterNames = _settings.GetBoolean(InlayParameterNamesKey, true);
+        InlayTypes = _settings.GetBoolean(InlayTypesKey, false);
+        CodeLens = _settings.GetBoolean(CodeLensKey, true);
+        InlineDiagnostics = _settings.GetBoolean(InlineDiagnosticsKey, false);
+        InheritanceMargin = _settings.GetBoolean(InheritanceMarginKey, true);
+        IndentGuides = _settings.GetBoolean(IndentGuidesKey, true);
+        BracketPairColorization = _settings.GetBoolean(BracketPairColorizationKey, true);
+        StickyScroll = _settings.GetBoolean(StickyScrollKey, true);
+        OverviewRuler = _settings.GetBoolean(OverviewRulerKey, true);
+        NavigationBar = _settings.GetBoolean(NavigationBarKey, true);
         TabSize = Math.Clamp(_settings.GetInt32(TabSizeKey, 4), 1, 16);
         InsertSpaces = _settings.GetBoolean(InsertSpacesKey, true);
         WordWrap = _settings.GetBoolean(WordWrapKey);
@@ -132,4 +173,7 @@ public interface IEditorServices
 
     /// <summary>The editor's context menu (the <c>editor/context</c> menu location) at the caret.</summary>
     void ShowEditorContextMenu(CodeEditorController editor, Avalonia.Controls.Control anchor);
+
+    /// <summary>Runs a command on the active editor (CodeLens).</summary>
+    void RunCommand(string commandId);
 }

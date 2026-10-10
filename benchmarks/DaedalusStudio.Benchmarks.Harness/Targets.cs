@@ -65,6 +65,12 @@ internal static class TargetCatalog
                 File.WriteAllText(Path.Combine(userData, "config", "settings.json"), "{ \"projects.restoreOnOpen\": false }");
                 psi.ArgumentList.Add(solution);
             }
+            else if (Environment.GetEnvironmentVariable("DAEDALUS_BENCH_SETTINGS") is { Length: > 0 } settings)
+            {
+                // Comparing configurations (e.g. with inline information off): user settings for the shell.
+                Directory.CreateDirectory(Path.Combine(userData, "config"));
+                File.WriteAllText(Path.Combine(userData, "config", "settings.json"), settings);
+            }
 
             if (request.EventsFile is not null)
             {

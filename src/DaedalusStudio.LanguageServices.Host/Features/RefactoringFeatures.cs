@@ -161,7 +161,7 @@ internal static class WorkspaceSymbolsFeature
         return [.. result];
     }
 
-    private static int Kind(ISymbol symbol) => symbol switch
+    internal static int Kind(ISymbol symbol) => symbol switch
     {
         INamedTypeSymbol { TypeKind: TypeKind.Interface } => SymbolKind.Interface,
         INamedTypeSymbol { TypeKind: TypeKind.Enum } => SymbolKind.Enum,

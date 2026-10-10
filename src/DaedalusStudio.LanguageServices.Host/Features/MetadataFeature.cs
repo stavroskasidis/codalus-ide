@@ -11,9 +11,11 @@ using Location = DaedalusStudio.LanguageServices.Protocol.Location;
 namespace DaedalusStudio.LanguageServices.Host.Features;
 
 /// <summary>
-/// Go to Definition into referenced assemblies: the symbol's top-level type is decompiled with ICSharpCode.Decompiler
-/// into a read-only <c>daedalus-metadata</c> document, and the location points at the member's declaration in it.
-/// Reference assemblies (the SDK's ref packs) have no method bodies, so their members decompile as stubs.
+/// Go to Definition into referenced assemblies: a read-only <c>daedalus-metadata</c> document with the symbol's
+/// top-level type, and the location points at the member's declaration in it. The original source comes from the
+/// assembly's portable PDB when it embeds it, or through Source Link when allowed (<see cref="PdbSources"/>, M12a);
+/// otherwise the type is decompiled with ICSharpCode.Decompiler. Reference assemblies (the SDK's ref packs) have no
+/// method bodies, so their members decompile as stubs.
 /// </summary>
 internal static class MetadataFeature
 {
@@ -44,7 +46,7 @@ internal static class MetadataFeature
         }
 
         var metadataName = MetadataName(type);
-        var text = Decompile(assemblyPath, metadataName);
+        var text = PdbSources.Find(assemblyPath, metadataName)?.Text ?? Decompile(assemblyPath, metadataName);
         var uri = DocumentUris.FromMetadata(assemblyPath, metadataName);
         return [new Location(uri, Find(text, symbol))];
     }
@@ -56,7 +58,13 @@ internal static class MetadataFeature
             return null;
         }
 
-        return new MetadataText(Decompile(target.AssemblyPath, target.TypeMetadataName), Path.GetFileNameWithoutExtension(target.AssemblyPath), target.TypeMetadataName);
+        var assemblyName = Path.GetFileNameWithoutExtension(target.AssemblyPath);
+        if (PdbSources.Find(target.AssemblyPath, target.TypeMetadataName) is { } source)
+        {
+            return new MetadataText(source.Text, assemblyName, target.TypeMetadataName) { Origin = source.Origin, SourcePath = source.Path };
+        }
+
+        return new MetadataText(Decompile(target.AssemblyPath, target.TypeMetadataName), assemblyName, target.TypeMetadataName) { Origin = MetadataOrigins.Decompiled };
     }
 
     private static string Decompile(string assemblyPath, string metadataName) => s_decompiled.GetOrAdd((assemblyPath, metadataName), key =>

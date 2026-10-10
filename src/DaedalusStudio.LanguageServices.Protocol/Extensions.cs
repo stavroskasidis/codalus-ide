@@ -34,10 +34,30 @@ public sealed record SourceGeneratedTextParams(TextDocumentIdentifier TextDocume
 
 public sealed record SourceGeneratedText(string Text, string HintName, string GeneratorName);
 
-/// <summary>The text of a decompiled type from a referenced assembly (URIs with the <c>daedalus-metadata</c> scheme).</summary>
+/// <summary>
+/// The source of a type from a referenced assembly (URIs with the <c>daedalus-metadata</c> scheme): the original source
+/// when the assembly's PDB embeds it or Source Link can fetch it, otherwise decompiled C#.
+/// </summary>
 public sealed record MetadataTextParams(TextDocumentIdentifier TextDocument);
 
-public sealed record MetadataText(string Text, string AssemblyName, string TypeName);
+/// <summary><see cref="Origin"/> is one of <see cref="MetadataOrigins"/>; <see cref="SourcePath"/> is the original file's path when known.</summary>
+public sealed record MetadataText(string Text, string AssemblyName, string TypeName)
+{
+    public string? Origin { get; init; }
+
+    public string? SourcePath { get; init; }
+}
+
+public static class MetadataOrigins
+{
+    public const string Decompiled = "decompiled";
+
+    /// <summary>Embedded in the assembly's portable PDB.</summary>
+    public const string Embedded = "embedded";
+
+    /// <summary>Downloaded through the PDB's Source Link map (setting <c>navigation.sourceLink</c>).</summary>
+    public const string SourceLink = "sourceLink";
+}
 
 public static class WorkspaceStates
 {
@@ -102,3 +122,48 @@ public sealed record TypeOutline(
     bool HasParameterlessConstructor,
     MethodOutline[] Methods,
     string? SelectedMethod);
+
+// ------------------------------------------------------------------ M12 navigation extensions
+
+public static class ReferenceItemKinds
+{
+    public const string Declaration = "declaration";
+    public const string Read = "read";
+    public const string Write = "write";
+
+    /// <summary>A use that is neither a read nor a write: <c>nameof</c>, a type name, an attribute.</summary>
+    public const string Reference = "reference";
+}
+
+/// <summary>
+/// A reference with what Find All References shows besides its location (<c>daedalus/references</c>): how the symbol is
+/// used (<see cref="ReferenceItemKinds"/>), the member and project containing it, and its line's text.
+/// </summary>
+public sealed record ReferenceItem(Location Location, string Kind, string? ContainingMember, string? Project, string LineText);
+
+public sealed record ReferenceItemsResult(string SymbolName, ReferenceItem[] Items);
+
+public static class InheritanceRelations
+{
+    public const string Implements = "implements";
+    public const string ImplementedBy = "implementedBy";
+    public const string Overrides = "overrides";
+    public const string OverriddenBy = "overriddenBy";
+    public const string Inherits = "inherits";
+    public const string InheritedBy = "inheritedBy";
+}
+
+public sealed record InheritanceMarginParams(TextDocumentIdentifier TextDocument, Range Range);
+
+/// <summary>A base or derived symbol of a margin entry; <see cref="Location"/> is null for symbols without source.</summary>
+public sealed record InheritanceTarget(string Relation, string DisplayName, Location? Location);
+
+/// <summary>A type or member declared on <see cref="Line"/> (zero-based) that has bases or derived symbols.</summary>
+public sealed record InheritanceMarginItem(int Line, string DisplayName, string[] Relations, InheritanceTarget[] Targets);
+
+/// <summary>
+/// About the symbol at a position (<c>daedalus/symbolInfo</c>): F1 help and the Code Definition window's title.
+/// <see cref="HelpUrl"/> is the API reference page for framework symbols, or the package's project URL.
+/// </summary>
+public sealed record SymbolDetails(string DisplayName, string Kind, string? DocumentationId, string? AssemblyName, bool InSource, string? HelpUrl);
+

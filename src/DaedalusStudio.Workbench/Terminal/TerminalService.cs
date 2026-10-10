@@ -79,6 +79,7 @@ public sealed class TerminalSession : IDisposable
 {
     private readonly PseudoTerminal _pty;
     private readonly System.Text.Decoder _decoder = System.Text.Encoding.UTF8.GetDecoder();
+    private readonly TaskCompletionSource _firstOutput = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _disposed;
 
     internal TerminalSession(int id, string name, PseudoTerminal pty, VirtualTerminal terminal, string workingDirectory, Action<string>? outputText = null)
@@ -94,6 +95,7 @@ public sealed class TerminalSession : IDisposable
         pty.Output += data =>
         {
             Terminal.Feed(data.Span);
+            _firstOutput.TrySetResult();
             if (OutputText is { } handler)
             {
                 var chars = new char[_decoder.GetCharCount(data.Span, flush: false)];
@@ -104,7 +106,26 @@ public sealed class TerminalSession : IDisposable
                 }
             }
         };
-        pty.Exited += code => Exited?.Invoke(this, code);
+        pty.Exited += code =>
+        {
+            _firstOutput.TrySetResult();
+            Exited?.Invoke(this, code);
+        };
+    }
+
+    /// <summary>
+    /// Completes when the program has written something (a shell's prompt), or exited, or after <paramref name="timeout"/>.
+    /// Text sent before a shell is ready can be dropped: some shells flush pending input when they set up the terminal.
+    /// </summary>
+    public async Task WhenStartedAsync(TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _firstOutput.Task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+        }
     }
 
     public int Id { get; }

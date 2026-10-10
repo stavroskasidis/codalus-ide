@@ -46,9 +46,15 @@ public sealed class TextMateSupport : IRegistryOptions
     public Action<string>? Log { get; set; }
 
     /// <summary>The scope of a language's grammar, or null (C# has semantic highlighting from its language service instead).</summary>
-    public string? ScopeFor(string? languageId)
+    public string? ScopeFor(string? languageId) => languageId is "csharp" ? null : GrammarScopeFor(languageId);
+
+    /// <summary>
+    /// The scope of a language's grammar, C# included: read-only views without a language service (Peek Definition,
+    /// the Code Definition window) color C# with its TextMate grammar.
+    /// </summary>
+    public string? GrammarScopeFor(string? languageId)
     {
-        if (languageId is null or "csharp" or LanguageRegistry.PlainText)
+        if (languageId is null or LanguageRegistry.PlainText)
         {
             return null;
         }

@@ -277,6 +277,25 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => shell.FindResults.Rows.Any(r => r.IsHeader && r.Path == Program), "the references include Program.cs", 60).ConfigureAwait(true);
         }, "language.ready").ConfigureAwait(true);
 
+        await StepAsync("editor.insights", "M12", "Inlay hints, CodeLens, Peek Definition, the Document Outline and the navigation bar", async () =>
+        {
+            var program = await OpenAsync(Program).ConfigureAwait(true);
+            await WaitAsync(() => program.Insights.Hints.Any(h => h.Label == "name:"), "an inlay hint names Greet's parameter", 60).ConfigureAwait(true);
+
+            MoveCaret(program, "Greeter.Greet(", "Greeter.Gr".Length);
+            shell.Run("editor.action.peekDefinition");
+            await WaitAsync(() => shell.ActiveEditor?.View?.Peek is { IsOpen: true } peek && peek.Viewer.Editor.Document.Text.Contains("Greet(string name)", StringComparison.Ordinal), "Peek Definition shows Greeter.Greet", 60).ConfigureAwait(true);
+            shell.ActiveEditor!.View!.Peek!.Close();
+
+            var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
+            var classLine = greeter.Model.Text.GetLineByOffset(greeter.Model.Text.Text.IndexOf("class Greeter", StringComparison.Ordinal)).LineNumber;
+            await WaitAsync(() => greeter.Insights.EndOfLineText(classLine)?.Contains("reference", StringComparison.Ordinal) == true, "CodeLens counts Greeter's references", 60).ConfigureAwait(true);
+            await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 30).ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
+            await WaitAsync(() => shell.DocumentOutline.Roots.Any(), "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
+            shell.Layout.CloseToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId);
+        }, "language.ready").ConfigureAwait(true);
+
         await StepAsync("editor.refactoring", "M3", "Rename across projects and Format Document", async () =>
         {
             var greeter = await OpenAsync(Greeter).ConfigureAwait(true);

@@ -63,6 +63,11 @@ internal sealed class LanguageServer : IAsyncDisposable
                     DocumentRangeFormattingProvider = true,
                     DocumentOnTypeFormattingProvider = FormattingFeature.OnTypeOptions,
                     WorkspaceSymbolProvider = true,
+                    DocumentSymbolProvider = true,
+                    CallHierarchyProvider = true,
+                    TypeHierarchyProvider = true,
+                    InlayHintProvider = true,
+                    CodeLensProvider = new CodeLensOptions(ResolveProvider: true),
                 },
                 new ServerInfo("daedalus-lshost", version)));
         });
@@ -168,6 +173,42 @@ internal sealed class LanguageServer : IAsyncDisposable
             TestCandidatesFeature.FindAsync(_workspace.CurrentSolution, p.TextDocuments, ct));
         _connection.OnRequest(Methods.TypeOutline, json.TypeOutlineParams, json.TypeOutline, async (p, ct) =>
             (await TypeOutlineFeature.OutlineAsync(_workspace.CurrentSolution, p.TextDocument.Uri, p.Position, ct).ConfigureAwait(false))!);
+
+        // ------------------------------------------------------------ M12: structure, hierarchies, inline information
+
+        OnDocument(Methods.DocumentSymbol, json.DocumentSymbolParams, json.DocumentSymbolArray, p => p.TextDocument,
+            async (document, _, ct) => await DocumentSymbolsFeature.SymbolsAsync(document, ct).ConfigureAwait(false), []);
+        OnPosition(Methods.PrepareCallHierarchy, json.TextDocumentPositionParams, json.CallHierarchyItemArray, p => (p.TextDocument, p.Position),
+            async (document, offset, _, ct) => await HierarchyFeature.PrepareCallsAsync(document, offset, ct).ConfigureAwait(false), []);
+        _connection.OnRequest(Methods.CallHierarchyIncomingCalls, json.CallHierarchyCallsParams, json.CallHierarchyIncomingCallArray, (p, ct) =>
+            HierarchyFeature.IncomingAsync(_workspace.CurrentSolution, p.Item, ct));
+        _connection.OnRequest(Methods.CallHierarchyOutgoingCalls, json.CallHierarchyCallsParams, json.CallHierarchyOutgoingCallArray, (p, ct) =>
+            HierarchyFeature.OutgoingAsync(_workspace.CurrentSolution, p.Item, ct));
+        OnPosition(Methods.PrepareTypeHierarchy, json.TextDocumentPositionParams, json.TypeHierarchyItemArray, p => (p.TextDocument, p.Position),
+            async (document, offset, _, ct) => await HierarchyFeature.PrepareTypesAsync(document, offset, ct).ConfigureAwait(false), []);
+        _connection.OnRequest(Methods.TypeHierarchySupertypes, json.TypeHierarchyParams, json.TypeHierarchyItemArray, (p, ct) =>
+            HierarchyFeature.SupertypesAsync(_workspace.CurrentSolution, p.Item, ct));
+        _connection.OnRequest(Methods.TypeHierarchySubtypes, json.TypeHierarchyParams, json.TypeHierarchyItemArray, (p, ct) =>
+            HierarchyFeature.SubtypesAsync(_workspace.CurrentSolution, p.Item, ct));
+        OnPosition(Methods.GoToBase, json.TextDocumentPositionParams, json.LocationArray, p => (p.TextDocument, p.Position),
+            async (document, offset, _, ct) => await HierarchyFeature.BaseAsync(document, offset, ct).ConfigureAwait(false), []);
+        OnDocument(Methods.InheritanceMargin, json.InheritanceMarginParams, json.InheritanceMarginItemArray, p => p.TextDocument, async (document, p, ct) =>
+        {
+            var text = await document.GetTextAsync(ct).ConfigureAwait(false);
+            return await HierarchyFeature.MarginAsync(document, Positions.ToSpan(text, p.Range), ct).ConfigureAwait(false);
+        }, []);
+        OnPosition(Methods.SymbolInfo, json.TextDocumentPositionParams, json.SymbolDetails, p => (p.TextDocument, p.Position),
+            (document, offset, _, ct) => HierarchyFeature.InfoAsync(document, offset, ct), null);
+        OnDocument(Methods.InlayHint, json.InlayHintParams, json.InlayHintArray, p => p.TextDocument, async (document, p, ct) =>
+        {
+            var text = await document.GetTextAsync(ct).ConfigureAwait(false);
+            return await InlayHintsFeature.HintsAsync(document, Positions.ToSpan(text, p.Range), ct).ConfigureAwait(false);
+        }, []);
+        OnDocument(Methods.CodeLens, json.CodeLensParams, json.CodeLensArray, p => p.TextDocument,
+            async (document, _, ct) => await CodeLensFeature.LensesAsync(document, ct).ConfigureAwait(false), []);
+        _connection.OnRequest(Methods.CodeLensResolve, json.CodeLens, json.CodeLens, (lens, ct) => CodeLensFeature.ResolveAsync(_workspace.CurrentSolution, lens, ct));
+        OnPosition(Methods.ReferenceItems, json.TextDocumentPositionParams, json.ReferenceItemsResult, p => (p.TextDocument, p.Position),
+            (document, offset, _, ct) => ReferenceItemsFeature.ReferencesAsync(document, offset, ct), null);
     }
 
     private void ApplySettings(JsonElement settings)
@@ -175,6 +216,11 @@ internal sealed class LanguageServer : IAsyncDisposable
         if (settings.TryGetProperty("analysisScope", out var scope) && scope.GetString() is DiagnosticsService.ScopeSolution or DiagnosticsService.ScopeOpenDocuments)
         {
             _diagnostics.AnalysisScope = scope.GetString()!;
+        }
+
+        if (settings.TryGetProperty("sourceLink", out var sourceLink))
+        {
+            PdbSources.AllowSourceLink = sourceLink.ValueKind == JsonValueKind.True || sourceLink.GetString() == "true";
         }
     }
 

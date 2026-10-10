@@ -82,7 +82,19 @@ public sealed record ServerCapabilities
     public DocumentOnTypeFormattingOptions? DocumentOnTypeFormattingProvider { get; init; }
 
     public bool WorkspaceSymbolProvider { get; init; }
+
+    public bool DocumentSymbolProvider { get; init; }
+
+    public bool CallHierarchyProvider { get; init; }
+
+    public bool TypeHierarchyProvider { get; init; }
+
+    public bool InlayHintProvider { get; init; }
+
+    public CodeLensOptions? CodeLensProvider { get; init; }
 }
+
+public sealed record CodeLensOptions(bool ResolveProvider);
 
 public sealed record CompletionOptions(string[] TriggerCharacters, string[]? AllCommitCharacters, bool ResolveProvider);
 
@@ -344,7 +356,9 @@ public sealed record DocumentOnTypeFormattingOptions(string FirstTriggerCharacte
 public static class SymbolKind
 {
     public const int File = 1;
+    public const int Module = 2;
     public const int Namespace = 3;
+    public const int Package = 4;
     public const int Class = 5;
     public const int Method = 6;
     public const int Property = 7;
@@ -355,6 +369,13 @@ public static class SymbolKind
     public const int Function = 12;
     public const int Variable = 13;
     public const int Constant = 14;
+    public const int String = 15;
+    public const int Number = 16;
+    public const int Boolean = 17;
+    public const int Array = 18;
+    public const int Object = 19;
+    public const int Key = 20;
+    public const int Null = 21;
     public const int EnumMember = 22;
     public const int Struct = 23;
     public const int Event = 24;
@@ -368,3 +389,85 @@ public sealed record SymbolInformation(string Name, int Kind, Location Location)
 {
     public string? ContainerName { get; init; }
 }
+
+// ------------------------------------------------------------------ document symbols (M12)
+
+public sealed record DocumentSymbolParams(TextDocumentIdentifier TextDocument);
+
+/// <summary>
+/// A symbol in a document, with its children (members of a type, types of a namespace). Always the hierarchical form
+/// here: flat <c>SymbolInformation[]</c> results from other servers are nested by range (<c>LspNormalizer</c>).
+/// </summary>
+public sealed record DocumentSymbol(string Name, int Kind, Range Range, Range SelectionRange)
+{
+    public string? Detail { get; init; }
+
+    public DocumentSymbol[]? Children { get; init; }
+}
+
+// ------------------------------------------------------------------ call and type hierarchy (M12)
+
+/// <summary><see cref="Data"/> lets the server find the symbol again; clients send items back unchanged.</summary>
+public sealed record CallHierarchyItem(string Name, int Kind, string Uri, Range Range, Range SelectionRange)
+{
+    public string? Detail { get; init; }
+
+    public JsonElement? Data { get; init; }
+}
+
+public sealed record CallHierarchyCallsParams(CallHierarchyItem Item);
+
+/// <summary><see cref="FromRanges"/> are the calls, in <see cref="From"/>'s document.</summary>
+public sealed record CallHierarchyIncomingCall(CallHierarchyItem From, Range[] FromRanges);
+
+/// <summary><see cref="FromRanges"/> are the calls, in the caller's document.</summary>
+public sealed record CallHierarchyOutgoingCall(CallHierarchyItem To, Range[] FromRanges);
+
+public sealed record TypeHierarchyItem(string Name, int Kind, string Uri, Range Range, Range SelectionRange)
+{
+    public string? Detail { get; init; }
+
+    public JsonElement? Data { get; init; }
+}
+
+public sealed record TypeHierarchyParams(TypeHierarchyItem Item);
+
+// ------------------------------------------------------------------ inlay hints, CodeLens (M12)
+
+public static class InlayHintKind
+{
+    public const int Type = 1;
+    public const int Parameter = 2;
+}
+
+public sealed record InlayHintParams(TextDocumentIdentifier TextDocument, Range Range);
+
+/// <summary><see cref="Label"/> is a string here (LSP also allows label parts; they are joined).</summary>
+public sealed record InlayHint(Position Position, string Label)
+{
+    public int? Kind { get; init; }
+
+    public bool? PaddingLeft { get; init; }
+
+    public bool? PaddingRight { get; init; }
+
+    /// <summary>Always <see cref="MarkupContent"/> here (LSP also allows a string).</summary>
+    public MarkupContent? Tooltip { get; init; }
+}
+
+/// <summary>LSP's <c>Command</c>: <see cref="CommandId"/> is its <c>command</c> property.</summary>
+public sealed record Command(string Title, [property: System.Text.Json.Serialization.JsonPropertyName("command")] string CommandId)
+{
+    public JsonElement[]? Arguments { get; init; }
+}
+
+public sealed record CodeLensParams(TextDocumentIdentifier TextDocument);
+
+/// <summary>Listed without <see cref="Command"/>; <c>codeLens/resolve</c> fills it (only for lenses in view).</summary>
+public sealed record CodeLens(Range Range)
+{
+    public Command? Command { get; init; }
+
+    public JsonElement? Data { get; init; }
+}
+

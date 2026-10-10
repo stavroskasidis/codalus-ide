@@ -113,6 +113,9 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(ViewModels.SolutionExplorerViewModel.ToolWindowId, "Solution Explorer", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "solution", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(ViewModels.ErrorListViewModel.ToolWindowId, "Error List", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "error", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(ViewModels.FindResultsViewModel.ToolWindowId, "Find Results", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
+        yield return new ToolWindowDescriptor(ViewModels.DocumentOutlineViewModel.ToolWindowId, "Document Outline", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(ViewModels.HierarchyViewModel.ToolWindowId, "Hierarchy", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "method" };
+        yield return new ToolWindowDescriptor(ViewModels.CodeDefinitionViewModel.ToolWindowId, "Code Definition", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "file-code" };
     }
 
     public static void RegisterCommands(ShellHost shell)

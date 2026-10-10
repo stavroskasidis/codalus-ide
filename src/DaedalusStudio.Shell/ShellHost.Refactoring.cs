@@ -42,6 +42,20 @@ public sealed partial class ShellHost
 
         var offset = controller.Editor.CaretOffset;
         var name = WordAt(editor.Model.Text.Text, offset);
+        if (editor.Model.LanguageId == CSharpLanguageId)
+        {
+            // Our host classifies references (read, write, declaration) for grouping and filtering (M12a).
+            if (await client.ReferenceItemsAsync(editor.Model.Uri, editor.Model.PositionAt(offset), CancellationToken.None).ConfigureAwait(true) is not { Items.Length: > 0 } classified)
+            {
+                ShowMessage("No references found.");
+                return;
+            }
+
+            Layout.ShowToolWindow(FindResultsViewModel.ToolWindowId, focus: false);
+            await FindResults.ShowReferencesAsync($"References to '{classified.SymbolName}'", classified.Items).ConfigureAwait(true);
+            return;
+        }
+
         var locations = await client.ReferencesAsync(editor.Model.Uri, editor.Model.PositionAt(offset), includeDeclaration: true, CancellationToken.None).ConfigureAwait(true);
         if (locations.Length == 0)
         {

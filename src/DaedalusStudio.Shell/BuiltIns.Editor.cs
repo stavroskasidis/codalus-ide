@@ -53,6 +53,13 @@ internal static partial class BuiltIns
           { "key": "shift+alt+f", "command": "editor.action.formatDocument", "when": "editorTextFocus" },
           { "key": "primary+k primary+f", "command": "editor.action.formatSelection", "when": "editorTextFocus" },
           { "key": "primary+t", "command": "workbench.action.gotoAll" },
+          { "key": "alt+home", "command": "editor.action.goToBase", "when": "editorTextFocus" },
+          { "key": "alt+f12", "command": "editor.action.peekDefinition", "when": "editorTextFocus" },
+          { "key": "shift+alt+h", "command": "editor.action.showCallHierarchy", "when": "editorTextFocus" },
+          { "key": "shift+f1", "command": "editor.action.showHelp", "when": "editorTextFocus" },
+          { "key": "f8", "command": "editor.action.marker.next", "when": "editorTextFocus" },
+          { "key": "shift+f8", "command": "editor.action.marker.prev", "when": "editorTextFocus" },
+          { "key": "primary+shift+backspace", "command": "workbench.action.navigateToLastEditLocation" },
           { "key": "primary+shift+f", "command": "workbench.action.findInFiles" }
         ]
         """;
@@ -80,6 +87,22 @@ internal static partial class BuiltIns
                 Description = "Download schemas from SchemaStore.org (cached for a week) for JSON and YAML files without a bundled schema. Takes effect after a restart.",
             },
             Setting(EditorOptions.AutoClosingBracketsKey, "true", SettingType.Boolean, "Auto Closing Brackets", "Insert the closing bracket or quote after typing an opening one, as the language defines them.", 12),
+            Setting(EditorOptions.InlayParameterNamesKey, "true", SettingType.Boolean, "Inlay Hints: Parameter Names", "Show parameter names before literal and new arguments.", 13),
+            Setting(EditorOptions.InlayTypesKey, "false", SettingType.Boolean, "Inlay Hints: Types", "Show the inferred types of var declarations and lambda parameters.", 14),
+            Setting(EditorOptions.CodeLensKey, "true", SettingType.Boolean, "CodeLens", "Show reference and implementation counts at the end of declarations.", 15),
+            Setting(EditorOptions.InlineDiagnosticsKey, "false", SettingType.Boolean, "Inline Diagnostics", "Show error and warning messages at the end of their line.", 16),
+            Setting(EditorOptions.InheritanceMarginKey, "true", SettingType.Boolean, "Inheritance Margin", "Show glyphs for members that implement, override or are overridden, with navigation.", 17),
+            Setting(EditorOptions.IndentGuidesKey, "true", SettingType.Boolean, "Indentation Guides", "Draw vertical lines at indentation levels.", 18),
+            Setting(EditorOptions.BracketPairColorizationKey, "true", SettingType.Boolean, "Bracket Pair Colorization", "Color matching brackets by nesting depth.", 19),
+            Setting(EditorOptions.StickyScrollKey, "true", SettingType.Boolean, "Sticky Scroll", "Keep the headers of the enclosing scopes at the top of the editor while scrolling.", 20),
+            Setting(EditorOptions.OverviewRulerKey, "true", SettingType.Boolean, "Overview Ruler", "Mark errors, warnings, changes, breakpoints, find results and the caret beside the scroll bar.", 21),
+            Setting(EditorOptions.NavigationBarKey, "true", SettingType.Boolean, "Navigation Bar", "Show the type and member drop-downs above the editor.", 22),
+            SettingDescriptor.Create("navigation.sourceLink", "false", SettingType.Boolean, shell) with
+            {
+                Title = "Source Link",
+                Category = "Navigation",
+                Description = "Download the original source of library code from its Source Link URL (GitHub and the like) on Go to Definition. Embedded sources are always used; otherwise the code is decompiled.",
+            },
             SettingDescriptor.Create("languageServices.analysisScope", "\"openDocuments\"", SettingType.String, shell) with
             {
                 Title = "Background Analysis Scope",
@@ -121,6 +144,15 @@ internal static partial class BuiltIns
         Add("editor.action.showHover", "Quick Info", "Editor", OnEditor(c => c.ShowQuickInfoAtCaret()), Editor);
         Add("editor.action.revealDefinition", "Go to Definition", "Editor", OnEditorAsync(c => c.GoToDefinitionAsync()), Editor);
         Add("editor.action.goToImplementation", "Go to Implementation", "Editor", OnEditorAsync(c => c.GoToImplementationAsync()), Editor);
+        Add("editor.action.goToDerived", "Go to Derived Types", "Editor", OnEditorAsync(c => c.GoToImplementationAsync()), Editor);
+        Add("editor.action.goToBase", "Go to Base", "Editor", Ui(shell.GoToBaseAsync), Editor);
+        Add("editor.action.peekDefinition", "Peek Definition", "Editor", Ui(shell.PeekDefinitionAsync), Editor);
+        Add("editor.action.showCallHierarchy", "Show Call Hierarchy", "Editor", Ui(shell.ShowCallHierarchyAsync), Editor);
+        Add("editor.action.showTypeHierarchy", "Show Type Hierarchy", "Editor", Ui(shell.ShowTypeHierarchyAsync), Editor);
+        Add("editor.action.showHelp", "Help on Symbol (F1 Help)", "Help", Ui(shell.ShowHelpAsync), Editor);
+        Add("editor.action.marker.next", "Go to Next Problem", "Editor", Ui(() => shell.GoToProblem(1)), Editor);
+        Add("editor.action.marker.prev", "Go to Previous Problem", "Editor", Ui(() => shell.GoToProblem(-1)), Editor);
+        Add("workbench.action.navigateToLastEditLocation", "Go to Last Edit Location", "Go", Ui(shell.GoToLastEditAsync));
         Add("editor.action.toggleFold", "Toggle Outlining Expansion", "Editor", OnEditor(c => c.ToggleFoldAtCaret()), Editor);
         Add("editor.action.foldAll", "Collapse to Definitions", "Editor", OnEditor(c => c.SetAllFolded(true)), Editor);
         Add("editor.action.unfoldAll", "Expand All Outlining", "Editor", OnEditor(c => c.SetAllFolded(false)), Editor);
@@ -219,6 +251,23 @@ internal static partial class BuiltIns
             Item(Edit, "editor.action.gotoLine", "2-go", 1),
             Item(Edit, "editor.action.revealDefinition", "2-go", 2),
             Item(Edit, "editor.action.goToImplementation", "2-go", 3),
+            Item(Edit, "editor.action.peekDefinition", "2-go", 3),
+            Item(Edit, "editor.action.goToBase", "2-go", 3),
+            Item(Edit, "editor.action.showCallHierarchy", "2-go", 7),
+            Item(Edit, "editor.action.showTypeHierarchy", "2-go", 8),
+            Item(Edit, "workbench.action.navigateToLastEditLocation", "2-go", 9),
+            Item(Edit, "editor.action.marker.next", "2-go", 10),
+            Item(Edit, "editor.action.marker.prev", "2-go", 11),
+            // The editor's context menu: navigation first, then refactoring (M12a).
+            Item(MenuLocations.EditorContext, "editor.action.revealDefinition", "1-navigation", 1),
+            Item(MenuLocations.EditorContext, "editor.action.peekDefinition", "1-navigation", 2),
+            Item(MenuLocations.EditorContext, "editor.action.goToImplementation", "1-navigation", 3),
+            Item(MenuLocations.EditorContext, "editor.action.goToBase", "1-navigation", 4) with { When = WhenClause.Parse("editorLanguageId == csharp") },
+            Item(MenuLocations.EditorContext, "editor.action.referenceSearch", "1-navigation", 5),
+            Item(MenuLocations.EditorContext, "editor.action.showCallHierarchy", "1-navigation", 6) with { When = WhenClause.Parse("editorLanguageId == csharp") },
+            Item(MenuLocations.EditorContext, "editor.action.rename", "2-refactor", 1),
+            Item(MenuLocations.EditorContext, "editor.action.quickFix", "2-refactor", 2),
+            Item(MenuLocations.EditorContext, "editor.action.formatDocument", "2-refactor", 3),
             Item(Edit, "workbench.navigateBack", "2-go", 4),
             Item(Edit, "workbench.navigateForward", "2-go", 5),
             Item(Edit, "editor.action.triggerSuggest", "3-intellisense", 1),

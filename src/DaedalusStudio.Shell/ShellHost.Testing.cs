@@ -313,6 +313,8 @@ public sealed partial class ShellHost
         menu.Open(anchor);
     }
 
+    void IEditorServices.RunCommand(string commandId) => Run(commandId);
+
     void IEditorServices.ShowEditorContextMenu(CodeEditorController editor, Control anchor)
     {
         var items = Workbench.Menus.GetItems(MenuLocations.EditorContext);

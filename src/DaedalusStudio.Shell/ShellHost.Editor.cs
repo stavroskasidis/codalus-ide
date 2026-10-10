@@ -149,7 +149,11 @@ public sealed partial class ShellHost : IEditorServices
 
     private Task ConfigureLanguagesAsync() =>
         Languages.ConfigureAsync(JsonSerializer.SerializeToElement(
-            new Dictionary<string, string> { ["analysisScope"] = Workbench.Settings.GetString("languageServices.analysisScope", "openDocuments") },
+            new Dictionary<string, string>
+            {
+                ["analysisScope"] = Workbench.Settings.GetString("languageServices.analysisScope", "openDocuments"),
+                ["sourceLink"] = Workbench.Settings.GetBoolean("navigation.sourceLink") ? "true" : "false",
+            },
             Docking.ShellJsonContext.Default.DictionaryStringString));
 
     // ------------------------------------------------------------------ opening
@@ -239,7 +243,7 @@ public sealed partial class ShellHost : IEditorServices
             }
 
             var name = metadata.TypeName[(metadata.TypeName.LastIndexOf('.') + 1)..].Split('`')[0];
-            model = CodeDocument.ReadOnly(Path.Combine(metadata.AssemblyName, name + ".cs"), uri, metadata.Text, "decompiled");
+            model = CodeDocument.ReadOnly(Path.Combine(metadata.AssemblyName, name + ".cs"), uri, metadata.Text, MetadataOriginTitle(metadata.Origin));
         }
         else if (await client.SourceGeneratedTextAsync(uri, CancellationToken.None).ConfigureAwait(true) is { } generated)
         {
@@ -740,6 +744,7 @@ public sealed partial class ShellHost : IEditorServices
     private void OnActiveEditorChanged()
     {
         ErrorList.OnActiveDocumentChanged();
+        OnNavigationEditorChanged();
         Workbench.Context.Set("editorLanguageId", ActiveEditor?.Model.LanguageId);
         if (ActiveEditor is { Controller: { } controller } editor)
         {

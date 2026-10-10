@@ -53,6 +53,7 @@ public sealed class CodeEditorController : IDisposable
     private readonly GitChangeMargin _gitMargin = new();
     private readonly TestMargin _testMargin;
     private readonly CoverageMargin _coverageMargin;
+    private readonly EditorInsights _insights;
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private BlameMargin? _blameMargin;
     private string? _indexText;
@@ -105,6 +106,8 @@ public sealed class CodeEditorController : IDisposable
         services.Git.IndexChanged += OnGitIndexChanged;
         document.TextChanged += OnGitTextChanged;
         _gitTimer.Start();
+        _insights = new EditorInsights(editor, () => Model, () => Client, services);
+        editor.TextArea.LeftMargins.Insert(2, _insights.Margin);
         _folding = FoldingManager.Install(editor.TextArea);
         _search = SearchPanel.Install(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
@@ -150,6 +153,12 @@ public sealed class CodeEditorController : IDisposable
 
     /// <summary>The coverage coloring (tests and the headless UI test).</summary>
     public CoverageMargin CoverageMargin => _coverageMargin;
+
+    /// <summary>The Git changes of the gutter (the overview ruler).</summary>
+    internal IReadOnlyList<Workbench.Git.LineChange> GitChanges => _gitMargin.Changes;
+
+    /// <summary>Inlay hints, CodeLens, the inheritance margin, guides and bracket colors (M12a).</summary>
+    public EditorInsights Insights => _insights;
 
     private void OnContextRequested(object? sender, ContextRequestedEventArgs e)
     {
@@ -292,6 +301,7 @@ public sealed class CodeEditorController : IDisposable
             }
 
             _textMate.SetGrammar(scope);
+            _insights.KeepColorizerLast();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -349,6 +359,7 @@ public sealed class CodeEditorController : IDisposable
         // Highlighting the visible lines first; folding (a walk of the whole file) and options when it's done.
         _refreshPending = true;
         ScheduleTokens(TimeSpan.Zero);
+        _insights.Refresh();
     }
 
     private bool _refreshPending;
@@ -582,7 +593,9 @@ public sealed class CodeEditorController : IDisposable
             return;
         }
 
-        _markers.Set(_services.Diagnostics.For(Model.Path), Model.OffsetAt);
+        var diagnostics = _services.Diagnostics.For(Model.Path);
+        _markers.Set(diagnostics, Model.OffsetAt);
+        _insights.UpdateDiagnostics(diagnostics);
         Editor.TextArea.TextView.Redraw();
         LightbulbChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -1515,6 +1528,7 @@ public sealed class CodeEditorController : IDisposable
 
         _disposed = true;
         _textMate?.Dispose();
+        _insights.Dispose();
         _gitTimer.Stop();
         _gitCts?.Cancel();
         _gitCts?.Dispose();

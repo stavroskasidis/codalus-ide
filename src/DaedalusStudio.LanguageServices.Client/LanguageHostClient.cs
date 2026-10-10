@@ -335,6 +335,51 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<TypeOutline?> TypeOutlineAsync(string uri, Position position, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.TypeOutline, new TypeOutlineParams(new TextDocumentIdentifier(uri), position), ProtocolJsonContext.Default.TypeOutlineParams, ProtocolJsonContext.Default.TypeOutline, cancellationToken);
 
+    // ------------------------------------------------------------------ M12: structure, hierarchies, inline information
+
+    public async Task<DocumentSymbol[]> DocumentSymbolsAsync(string uri, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.DocumentSymbol, new DocumentSymbolParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.DocumentSymbolParams, ProtocolJsonContext.Default.DocumentSymbolArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<CallHierarchyItem[]> PrepareCallHierarchyAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.PrepareCallHierarchy, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.CallHierarchyItemArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<CallHierarchyIncomingCall[]> IncomingCallsAsync(CallHierarchyItem item, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.CallHierarchyIncomingCalls, new CallHierarchyCallsParams(item), ProtocolJsonContext.Default.CallHierarchyCallsParams, ProtocolJsonContext.Default.CallHierarchyIncomingCallArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<CallHierarchyOutgoingCall[]> OutgoingCallsAsync(CallHierarchyItem item, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.CallHierarchyOutgoingCalls, new CallHierarchyCallsParams(item), ProtocolJsonContext.Default.CallHierarchyCallsParams, ProtocolJsonContext.Default.CallHierarchyOutgoingCallArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<TypeHierarchyItem[]> PrepareTypeHierarchyAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.PrepareTypeHierarchy, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.TypeHierarchyItemArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<TypeHierarchyItem[]> SupertypesAsync(TypeHierarchyItem item, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.TypeHierarchySupertypes, new TypeHierarchyParams(item), ProtocolJsonContext.Default.TypeHierarchyParams, ProtocolJsonContext.Default.TypeHierarchyItemArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<TypeHierarchyItem[]> SubtypesAsync(TypeHierarchyItem item, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.TypeHierarchySubtypes, new TypeHierarchyParams(item), ProtocolJsonContext.Default.TypeHierarchyParams, ProtocolJsonContext.Default.TypeHierarchyItemArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<InlayHint[]> InlayHintsAsync(string uri, Protocol.Range range, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.InlayHint, new InlayHintParams(new TextDocumentIdentifier(uri), range), ProtocolJsonContext.Default.InlayHintParams, ProtocolJsonContext.Default.InlayHintArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<CodeLens[]> CodeLensesAsync(string uri, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.CodeLens, new CodeLensParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.CodeLensParams, ProtocolJsonContext.Default.CodeLensArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public Task<CodeLens> ResolveCodeLensAsync(CodeLens lens, CancellationToken cancellationToken) =>
+        Invoke(Methods.CodeLensResolve, lens, ProtocolJsonContext.Default.CodeLens, ProtocolJsonContext.Default.CodeLens, cancellationToken);
+
+    /// <summary>Find All References with read/write classification (<c>daedalus/references</c>, our hosts only).</summary>
+    public Task<ReferenceItemsResult?> ReferenceItemsAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.ReferenceItems, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.ReferenceItemsResult, cancellationToken);
+
+    public async Task<Location[]> GoToBaseAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.GoToBase, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.LocationArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public async Task<InheritanceMarginItem[]> InheritanceMarginAsync(string uri, Protocol.Range range, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.InheritanceMargin, new InheritanceMarginParams(new TextDocumentIdentifier(uri), range), ProtocolJsonContext.Default.InheritanceMarginParams, ProtocolJsonContext.Default.InheritanceMarginItemArray, cancellationToken).ConfigureAwait(false) ?? [];
+
+    public Task<SymbolDetails?> SymbolDetailsAsync(string uri, Position position, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.SymbolInfo, At(uri, position), ProtocolJsonContext.Default.TextDocumentPositionParams, ProtocolJsonContext.Default.SymbolDetails, cancellationToken);
+
     private static TextDocumentPositionParams At(string uri, Position position) => new(new TextDocumentIdentifier(uri), position);
 
     private async Task<TResult> Invoke<TParams, TResult>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken)

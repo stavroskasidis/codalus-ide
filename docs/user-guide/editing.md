@@ -44,9 +44,36 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 
 | Command | Shortcut | Notes |
 |---|---|---|
-| Go to Definition | `F12`, `Ctrl+Click` | Into source-generated files and, for library types, into decompiled source (read-only). |
-| Go to Implementation | `Ctrl+F12` | |
-| Find All References | `Shift+F12` | Results in the Find Results window. |
+| Go to Definition | `F12`, `Ctrl+Click` | Into source-generated files and library code (read-only): its original source when the library's PDB embeds it, or through Source Link (setting **Navigation → Source Link**, off by default because it downloads); otherwise decompiled. The tab says which. |
+| Peek Definition | `Alt+F12` | The definition in a popup under the line. `Enter` or **Open** opens it; `Esc` closes. |
+| Go to Implementation, Go to Derived Types | `Ctrl+F12` | |
+| Go to Base | `Alt+Home` | Base types and interfaces, or the members a member overrides or implements. |
+| Find All References | `Shift+F12` | In the Find Results window. For C#: each reference is marked read, write or declaration with its containing member; group by file, project or none, show only reads, writes or declarations, and go back to earlier results from the drop-down. |
+| Call Hierarchy | `Shift+Alt+H` | Calls to and calls from a method or property, expanding recursively, in the Hierarchy window. |
+| Type Hierarchy | (Edit menu, palette) | Base and derived types, in the Hierarchy window. |
 | Go To All | `Ctrl+T` | Types and members; type `f ` first to search file names. |
 | Find in Files | `Ctrl+Shift+F` | Case, whole word, regex and a file filter. |
 | Navigate Back and Forward | `Ctrl+-`, `Ctrl+Shift+-` | |
+| Go to Last Edit Location | `Ctrl+Shift+Backspace` | |
+| Next and Previous Problem | `F8`, `Shift+F8` | Errors and warnings in the document, with the message in the status bar. |
+| Help on Symbol | `Shift+F1` | The API reference page of a framework symbol, or the package's site. |
+
+**Tool windows** (View menu)
+- **Document Outline**: the document's types and members. It follows the caret; click a symbol to go there, or type to filter.
+- **Code Definition**: the definition of the symbol at the caret, read-only, updated as the caret moves.
+- **Hierarchy**: Call Hierarchy and Type Hierarchy results.
+
+## Inline information
+
+Settings under **Text Editor** turn each of these on or off.
+
+- **Inlay hints**: parameter names before literal and `new` arguments (`radius: 2`), and optionally the inferred types of `var` declarations and lambda parameters (**Inlay Hints: Types**, off by default). The caret moves over a hint in one step.
+- **CodeLens**: reference and implementation counts at the end of each declaration's line. Click a count to find the references or go to the implementations.
+- **Inheritance margin**: arrows in the margin of members and types that implement, override or are overridden. Click an arrow to see and open the related symbols.
+- **Navigation bar**: above the editor, the document's types and the members of the type at the caret.
+- **Sticky scroll**: the lines of the enclosing namespace, type and member stay at the top while you scroll. Click one to go there.
+- **Indentation guides** and **bracket pair colors**: matching brackets share a color by nesting depth.
+- **Overview ruler**: beside the scroll bar, marks for errors, warnings, Git changes, breakpoints, find results and the caret. Click to scroll there. The square at the top is the document's health (red: errors, yellow: warnings, green: none); click it for the next problem.
+- **Inline diagnostics** (off by default): error and warning messages at the end of their lines.
+
+Language services from plugins provide the outline, navigation bar, sticky scroll, hierarchies, inlay hints and CodeLens when they support them.

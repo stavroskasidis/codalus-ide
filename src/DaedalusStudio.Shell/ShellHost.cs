@@ -96,6 +96,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeGit();
         InitializeEditor();
         InitializeRefactoring();
+        InitializeNavigation();
         InitializeTesting();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -299,6 +300,9 @@ public sealed partial class ShellHost : IAsyncDisposable
             CoverageResultsViewModel.ToolWindowId => CoverageResults,
             ErrorListViewModel.ToolWindowId => ErrorList,
             FindResultsViewModel.ToolWindowId => FindResults,
+            DocumentOutlineViewModel.ToolWindowId => DocumentOutline,
+            HierarchyViewModel.ToolWindowId => Hierarchy,
+            CodeDefinitionViewModel.ToolWindowId => CodeDefinition,
             VariablesViewModel.LocalsWindowId => Locals,
             VariablesViewModel.AutosWindowId => Autos,
             WatchViewModel.ToolWindowId => Watch,
@@ -586,7 +590,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             StatusBar.IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true);
         }
 
-        if (e.Affects("languageServices.analysisScope"))
+        if (e.Affects("languageServices.analysisScope") || e.Affects("navigation.sourceLink"))
         {
             _ = ConfigureLanguagesAsync();
         }
