@@ -33,7 +33,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M10 | Integrated terminal and interactive windows | at checkpoint: terminal and C# Interactive, ADR 0014 and 0015 |
 | M11 | Language platform: LSP bridge, grammars, file-type editing | at checkpoint: language registry, TextMate grammars, LSP bridge, markup host, ADR 0016 |
 | M12 | Editor and code-navigation depth | at checkpoint: M12a (navigation and inline information, ADR 0017) and M12b (editing, refactoring UI and analysis, ADR 0018) |
-| M13 | Git depth and hosting integration | M13a at checkpoint: history, merge editor, operations, ADR 0020; M13b (hosting integration) planned |
+| M13 | Git depth and hosting integration | done (M13a and M13b at checkpoint): history, merge editor, operations (ADR 0020); GitHub, Azure DevOps and GitLab plugins (sign-in through the OS credential store, pull requests, review comments, CI status, work items, publishing), askpass, worktrees, Git LFS, several repositories (ADR 0031) |
 | M14 | Debugger depth | M14a at checkpoint: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b (companion host, dumps) and M14c (remote sessions) planned |
 | M15 | ASP.NET Core and Hot Reload | M15a and M15b at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch`, ADR 0022; M15c (scaffolding, service references) deferred until after M16 |
 | M16 | Razor, Blazor and web front-end | done (M16a–M16d at checkpoint): Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023); HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); Blazor WebAssembly debugging in the browser through vscode-js-debug (ADR 0026); compound server-and-page debugging, Debug a Web Page, HTML and CSS inside Razor, scoped CSS, npm scripts in the Task Runner Explorer, ESLint and Prettier (ADR 0027) |
@@ -1763,7 +1763,7 @@ New APIs start in `DaedalusStudio.Plugins.Proposed` and are promoted in M22.
 | M10 | Terminals (create, send text, read output events), task-style "run command in terminal" |
 | M11 | `contributes.languages`, `grammars`, `languageConfigurations`, `languageServers`; JSON schema associations |
 | M12 | Snippet contributions, CodeLens providers (through LSP), code-action options dialogs (schema) |
-| M13 | SCM provider API (Git built-in on it), authentication providers |
+| M13 | Hosting providers and secrets (`IHosting`, `ISecrets`, `contributes.hostingProviders`, M13b, ADR 0031). Still to come: the SCM provider API (Git built-in on it) and general authentication providers |
 | M14 | Debugger visualizers, DAP adapter contributions |
 | M15–M17 | Launch configuration providers, a port-forwarding API |
 | M21 | `runsOn` placement, a file-system provider API |
@@ -2150,13 +2150,13 @@ The "Daedalus" column uses these terms:
 |---|---|
 | Changes, per-file and per-hunk staging, commit and amend, branches, fetch, pull, push | M6 |
 | Diff viewer, gutter change markers, blame | M6 |
-| Clone, create and publish repositories | M6, otherwise M13 |
+| Clone, create and publish repositories | M6, otherwise M13 (publishing to a host: M13b) |
 | Stash, cherry-pick, revert, reset, rebase, interactive rebase, tags, remotes | M13 |
 | Git Repository window, history graph, file and line history | M13 |
 | Merge conflict editor | M13 |
 | Line staging | M13 |
-| Worktrees, submodules, LFS, commit signing | M13 |
-| GitHub and Azure DevOps pull requests and work items | M13b: GitHub, Azure DevOps and GitLab (D8); other hosts as plugins |
+| Worktrees, submodules, LFS, commit signing | M13 (worktrees and LFS: M13b) |
+| GitHub and Azure DevOps pull requests and work items | M13b: GitHub, Azure DevOps and GitLab (D8): pull requests, review comments, CI status, work items, publishing; other hosts as plugins on the proposed hosting API |
 | AI commit messages and pull request descriptions | M28 |
 | Team Foundation Version Control | Not planned (plugins through the SCM API) |
 
@@ -2326,3 +2326,8 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Linting and formatting:** ESLint as a linter service with pull diagnostics; Prettier for Format Document.
   - **Fixtures:** `samples/BlazorHosted`, `samples/WebScripts` and `samples/WebLint`.
   - **Next:** M31 (the release cycle), which publishes, so the maintainer confirms it first.
+- 2026-10-11: M13b built and at its checkpoint (ADR 0031), which completes M13:
+  - **Credential store:** `DaedalusStudio.Platform` stores secrets in Windows Credential Manager, the macOS Keychain or the Secret Service (libsecret); never in a file.
+  - **Hosting:** built-in GitHub, Azure DevOps and GitLab plugins on a proposed hosting API (plugin API 0.2.6), inactive until sign-in (device flow or a personal access token): pull requests (list, details, check out, create), review comments in the editor, CI status, work items and `#` completion, publishing.
+  - **Git:** an askpass prompt behind the user's credential helper, worktrees, Git LFS awareness (pointer files, locks), solutions spanning several repositories.
+  - **Open:** the project's OAuth apps (client ids) are to be registered; until then device sign-in needs a client id in settings, and a personal access token works.

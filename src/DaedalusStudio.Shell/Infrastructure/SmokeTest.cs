@@ -574,6 +574,8 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check((await File.ReadAllTextAsync(Greeter).ConfigureAwait(true)).Contains("Theirs from", StringComparison.Ordinal), "the incoming side won");
         }, "git.changes").ConfigureAwait(true);
 
+        await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
+
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
         {
@@ -1052,6 +1054,123 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         return (Path.Combine(target, "Web.slnx"), http);
     }
 
+    /// <summary>
+    /// M13b against <see cref="Tests.MockGitHub"/> (nothing reaches GitHub): the fixture's origin is on the mock (fetched
+    /// over git's dumb HTTP protocol from a bare repository, pushed to it directly); a device-code sign-in whose token goes
+    /// to the OS credential store under this profile's own service; the pull request checked out with its review comment
+    /// in the editor and its checks; <c>#</c> completion; askpass for an HTTPS remote; a worktree; then sign-out.
+    /// </summary>
+    private async Task HostingStepAsync()
+    {
+        await using var github = new Tests.MockGitHub("daedalus-samples", "BuildAndRun");
+        var bare = Path.Combine(_work, "BuildAndRun.git");
+        Directory.CreateDirectory(bare);
+        GitIn(bare, "init", "-q", "--bare", "-b", Branch);
+        Git("remote", "add", "origin", github.RemoteUrl);
+        Git("config", "remote.origin.pushurl", bare);
+        Git("config", "credential.helper", string.Empty);
+        Git("push", "-q", "origin", "HEAD:refs/heads/main");
+        Git("switch", "-q", "-c", "smoke/pull-request");
+        await File.AppendAllTextAsync(Path.Combine(_folder, "README.md"), "\nChanged by the smoke test's pull request.\n").ConfigureAwait(true);
+        Git("commit", "-q", "-am", "Smoke pull request");
+        Git("push", "-q", "origin", "smoke/pull-request");
+        Git("switch", "-q", "smoke/branch");
+        Git("branch", "-q", "-D", "smoke/pull-request");
+        Git("update-ref", "-d", "refs/remotes/origin/smoke/pull-request");
+        GitIn(bare, "update-server-info");
+        github.GitDirectory = bare;
+        github.PullRequests.Add(new Tests.MockPullRequest(1, "Smoke pull request", "bo", "smoke/pull-request", "main") { Body = "Changes the **README**.", Reviewers = ["ada"] });
+        github.Threads[1] = [new Tests.MockReviewThread("src/Greetings/Greeter.cs", 3, [("bo", "Should this be configurable?"), ("ada", "Later.")])];
+        github.CheckRuns.Add(new Tests.MockCheckRun("build", "completed", "success"));
+        github.Issues.Add(new Tests.MockIssue(7, "Greet in French", "ada"));
+        github.PendingPolls = int.MaxValue;
+        await shell.Workbench.Settings.SetAsync("github.serverUrl", github.ServerUrl, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        await shell.Workbench.Settings.SetAsync("github.oauthClientId", Tests.MockGitHub.ClientId, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        await shell.Git.RefreshAsync().ConfigureAwait(true);
+        Check(shell.Plugins.Plugins.Any(p => p.Id == "daedalus.github" && p.State == PluginState.Ready), "the GitHub plugin is installed and not loaded before sign-in");
+
+        // Sign in with a device code: the code shows until the host approves it.
+        shell.ShowAccounts("github");
+        var row = shell.Accounts.Row("github") ?? throw new SmokeFailure("The Accounts page has no GitHub row.");
+        await WaitAsync(() => row.HasCode, "the device code shows", 60).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-hosting-signin.png");
+        github.PendingPolls = 0;
+        await WaitAsync(() => row.IsSignedIn && shell.Match is not null, "the sign-in completes and the repository's host is found", 60).ConfigureAwait(true);
+        Console.Out.WriteLine($"  (the token is in: {shell.Secrets.StoreName}, service '{shell.Secrets.ServiceName}')");
+        Check(shell.Secrets.IsPersistent || !(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()), $"the token is in the OS credential store ({shell.Secrets.StoreName})");
+
+        // The pull request: listed with its review thread, checked out over HTTP from the mock.
+        shell.Layout.ShowToolWindow(PullRequestsViewModel.ToolWindowId);
+        await WaitAsync(() => shell.PullRequests.Rows.Count == 1, "the Pull Requests window lists the pull request", 60).ConfigureAwait(true);
+        shell.PullRequests.Selected = shell.PullRequests.Rows[0];
+        await WaitAsync(() => shell.PullRequests.Threads.Count == 1, "the pull request's review thread shows", 30).ConfigureAwait(true);
+        await shell.CheckOutAsync(shell.PullRequests.Rows[0].PullRequest).ConfigureAwait(true);
+        await WaitAsync(() => shell.Git.Status is { Branch: "smoke/pull-request", Upstream: "origin/smoke/pull-request" }, "the pull request is checked out", 60).ConfigureAwait(true);
+        await WaitAsync(() => shell.ReviewThreads.Count == 1 && shell.GitChanges.CiState == "success", "the branch's review comment and checks", 60).ConfigureAwait(true);
+        var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
+        await WaitAsync(() => greeter.Insights.ReviewLines.Any(r => r.Line == 3), "the editor shows the review comment at line 3").ConfigureAwait(true);
+        Check(shell.StatusBar.Right.Any(i => i.Item.Id == "daedalus.hosting.ci" && i.Text.Contains("Checks passed", StringComparison.Ordinal)), "the status bar shows the checks");
+        var before = shell.Theme.Setting;
+        foreach (var theme in s_chromeThemes)
+        {
+            await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => shell.Theme.ActiveTheme == theme, $"the {theme} theme applies").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot($"smoke-test-hosting-{theme}.png");
+        }
+
+        await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+        // # in the commit message completes the issue.
+        var completions = await shell.GitChanges.CompleteAsync("Fixes #7", 8, CancellationToken.None).ConfigureAwait(true);
+        Check(completions.Any(c => c.Reference == "#7" && c.Title == "Greet in French"), "# completes the issue");
+
+        await AskpassCheckAsync(bare).ConfigureAwait(true);
+
+        // A worktree, listed in the Worktrees window, then removed.
+        var worktree = Path.Combine(_work, "BuildAndRun-worktree");
+        await shell.Git.AddWorktreeAsync(worktree, "smoke/worktree", null).ConfigureAwait(true);
+        shell.Layout.ShowToolWindow(WorktreesViewModel.ToolWindowId);
+        await shell.Worktrees.ReloadAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Worktrees.Rows.Count == 2, "the Worktrees window lists the new worktree").ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-worktrees.png");
+        await shell.Git.RemoveWorktreeAsync(worktree, force: true).ConfigureAwait(true);
+
+        // Sign out: the token leaves the credential store; back to the branch the later steps expect.
+        row.SignOutCommand.Execute(null);
+        await WaitAsync(() => !row.IsSignedIn && shell.Hosting.Accounts.Count == 0 && shell.Match is null, "signing out forgets the account").ConfigureAwait(true);
+        await shell.Git.SwitchAsync(new Workbench.Git.GitBranch("smoke/branch", false, false, null, string.Empty)).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Askpass in the shipped app: git, with no credential helper, asks this executable for HTTPS credentials; the
+    /// shell's dialog answers it, and git authenticates (a mock server serving the bare repository with Basic auth).
+    /// </summary>
+    private async Task AskpassCheckAsync(string bare)
+    {
+        Check(shell.Askpass is not null, "the askpass server runs (the daedalus executable was found)");
+        var expected = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("smoke:secret"));
+        await using var server = new Tests.MockHttpServer(request =>
+            request.Header("Authorization") != expected
+                ? new Tests.MockHttpResponse(401, [], "text/plain") { Headers = new Dictionary<string, string> { ["WWW-Authenticate"] = "Basic realm=\"smoke\"" } }
+                : request.Path == "/private.git/info/refs" ? Tests.MockHttpResponse.Text(File.ReadAllText(Path.Combine(bare, "info", "refs")))
+                : request.Path.StartsWith("/private.git/", StringComparison.Ordinal) ? Tests.MockHttpResponse.File(Path.Combine(bare, request.Path["/private.git/".Length..]))
+                : Tests.MockHttpResponse.NotFound());
+        var listing = Task.Run(() => shell.Git.RunAsync(_folder, ["-c", "credential.helper=", "ls-remote", server.BaseUrl + "/private.git"], CancellationToken.None, check: false));
+        await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.Title == "Git: Sign In", "askpass asks for the user name", 60).ConfigureAwait(true);
+        shell.Dialogs.InputText = "smoke";
+        shell.Dialogs.Accept();
+        await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.Title == "Git: Password" && shell.Dialogs.PasswordChar != '\0', "askpass asks for the password, masked", 60).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-askpass.png");
+        shell.Dialogs.InputText = "secret";
+        shell.Dialogs.Accept();
+        var (code, output, error) = await listing.WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code == 0 && output.Contains("refs/heads/main", StringComparison.Ordinal), $"git authenticated with what askpass gave it (exit code {code}: {error.Trim()})");
+    }
+
     private Workbench.Testing.TestNode? TestClass(string project) =>
         shell.Tests.Read(roots => roots.FirstOrDefault(r => r.Label == project)?.SelfAndDescendants().FirstOrDefault(n => n.Label == "CalculatorTests"));
 
@@ -1271,10 +1390,13 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         }
     }
 
-    private void Git(params string[] arguments)
+    private void Git(params string[] arguments) => GitIn(_folder, arguments);
+
+    private static void GitIn(string folder, params string[] arguments)
     {
         var git = Environment.GetEnvironmentVariable(Workbench.Git.GitService.EnvironmentVariable) is { Length: > 0 } custom ? custom : "git";
-        var start = new ProcessStartInfo(git) { WorkingDirectory = _folder, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        var start = new ProcessStartInfo(git) { WorkingDirectory = folder, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        start.Environment["GIT_TERMINAL_PROMPT"] = "0";
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);

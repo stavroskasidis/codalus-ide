@@ -105,6 +105,15 @@ public sealed partial class CredentialStoreTests
         var storage = new SecretStorage(store);
         await storage.StoreAsync("daedalus.azuredevops", "session", "value", Ct);
         Assert.Equal("value", await store.GetAsync(SecretStorage.Service, "daedalus.azuredevops/session", Ct));
+
+        // A --user-data-dir profile has a service of its own, the same for every spelling of its folder.
+        var profile = Path.Combine(Path.GetTempPath(), "profile-a");
+        Assert.Equal(SecretStorage.Service, SecretStorage.ServiceFor(null));
+        Assert.Matches(@"^Daedalus Studio \([0-9a-f]{8}\)$", SecretStorage.ServiceFor(profile));
+        Assert.Equal(SecretStorage.ServiceFor(profile), SecretStorage.ServiceFor(profile + Path.DirectorySeparatorChar));
+        Assert.NotEqual(SecretStorage.ServiceFor(profile), SecretStorage.ServiceFor(Path.Combine(Path.GetTempPath(), "profile-b")));
+        var isolated = new SecretStorage(store, SecretStorage.ServiceFor(profile));
+        Assert.Null(await isolated.GetAsync("daedalus.azuredevops", "session", Ct));
     }
 
     private sealed class FailingStore : ICredentialStore

@@ -77,7 +77,9 @@ public sealed partial class ShellHost : IHostingActions
     private void InitializeHosting()
     {
         Workbench.Settings.Register(BuiltIns.HostingSettings());
-        Secrets = new SecretStorage(CredentialStore.Create());
+        // A --user-data-dir profile keeps its sign-ins apart from the default profile's.
+        var userData = Options.UserDataDir ?? Environment.GetEnvironmentVariable(AppPaths.UserDataDirVariable);
+        Secrets = new SecretStorage(CredentialStore.Create(), SecretStorage.ServiceFor(userData));
         Secrets.FellBack += (_, reason) => Ui.Post(() =>
         {
             Workbench.Notifications.Warning($"The credential store can't be used ({reason}) Sign-ins last until Daedalus Studio closes.");

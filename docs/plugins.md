@@ -69,7 +69,7 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 | `version` | SemVer. |
 | `engines.daedalus` | An npm-style range over the **plugin API version** (`^0.1.0`, `~0.1.2`, `>=0.1.0 <0.3.0`, `0.1.x`, `a \|\| b`). Plugins whose range doesn't include the running API are not loaded; the user is told why. |
 | `entry` | `runtime` is `dotnet`; `assembly` is the plugin DLL next to the manifest. If it contains more than one public `IDaedalusPlugin`, name one with `type`. |
-| `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, and `onTestProjects` (the open solution has a test project; since 0.2.1). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
+| `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, `onTestProjects` (the open solution has a test project; since 0.2.1), and `onHostingProvider:<id>` (the shell needs a hosting provider the plugin declares; since 0.2.6, implicit). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
 | `isolation` | `shared` (default) or `dedicated` (a host process of its own). |
 | `enableProposedApi` | Use [proposed APIs](#proposed-apis). Honored for built-in plugins, and for others when Daedalus runs with `--enable-proposed-api`. |
 
@@ -80,10 +80,11 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 - **keybindings:** `key` plus optional `mac`, `linux` and `win` overrides, `command`, `when` and `args`. Chords are space-separated (`ctrl+k ctrl+h`). `primary` means ⌘ on macOS and Ctrl elsewhere. Users override bindings in the Keyboard Shortcuts editor; user bindings win over plugin bindings, which win over defaults.
 - **toolWindows:** `id`, `title`, `location` (`left`, `right`, `bottom`), `kind` (`tree` or `markdown`) and `icon`.
 - **settings:** `title` (the Settings UI category) and `properties`, each with `type` (`string`, `boolean`, `integer`, `number`, `string[]`), `default`, `description`, `enum` and `enumDescriptions`, `minimum`/`maximum`, `scope` (`user`, or `workspace` to allow per-workspace overrides) and `order`. Invalid values in settings.json fall back to the default and are reported in the Settings UI.
+- **hostingProviders** (since 0.2.6, proposed API): Git hosting providers, `id`, `label`, `hosts` (the remotes' hosts by default; `*.example.com` matches subdomains), `serverSetting` (a setting with an enterprise server's URL, whose host counts too) and `icon`. The shell knows them before the plugin loads, and activates the plugin only when it needs the provider: to sign in, or for a repository on a host where the user is signed in. See [Proposed APIs](#proposed-apis).
 
 ### When-clauses
 
-`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`), `explorerItemIsProjectReference`, `editorTextFocus` (an editor has keyboard focus), `editorLanguageId` (`csharp`, or absent for plain text), `editorHasSelection`, `editorHasMultipleSelections`, `buildRunning`, `programRunning` (a program started with Run Without Debugging is still running), `hasStartupProject`, `debugActive`, `debugRunning`, `debugStopped`, `hasBreakpoints`, `gitRepository` (the open solution is in a git repository), `gitMerging`, `testsRunning`, `testExplorerSelection` and `coverageAvailable` (a coverage run's results are shown). Every text document, editor tabs included, has `activeDocumentKind == textFile`. In `toolWindow/title`, `view` is the tool window's id.
+`&&`, `||`, `!`, parentheses, `==`, `!=`, `=~` (regex), `<`, `<=`, `>`, `>=`, and bare keys (truthy). Context keys the shell sets: `isWindows`, `isMac`, `isLinux`, `isDevelopment`, `theme` (`light`, `dark`, `highContrast`), `focusedView` (the focused tool window id, or the kind of the focused document), `activeDocumentKind`, `inCommandPalette`, `toastsVisible`, `solutionOpen`, `solutionTrusted`, `explorerItemKind` (`solution`, `solutionFolder`, `solutionItem`, `project`, `folder`, `file`, `dependencies`, `dependencyGroup`, `dependency`), `explorerItemIsProjectReference`, `editorTextFocus` (an editor has keyboard focus), `editorLanguageId` (`csharp`, or absent for plain text), `editorHasSelection`, `editorHasMultipleSelections`, `buildRunning`, `programRunning` (a program started with Run Without Debugging is still running), `hasStartupProject`, `debugActive`, `debugRunning`, `debugStopped`, `hasBreakpoints`, `gitRepository` (the open solution is in a git repository), `gitMerging`, `gitRepositories` (the solution spans several repositories; since 0.2.6), `gitLfs` (the repository uses Git LFS), `hostingRepository` (the repository is on a host the user is signed in to), `hostingProvider` (that provider's id), `testsRunning`, `testExplorerSelection` and `coverageAvailable` (a coverage run's results are shown). Every text document, editor tabs included, has `activeDocumentKind == textFile`. In `toolWindow/title`, `view` is the tool window's id.
 
 ## The code
 
@@ -122,7 +123,7 @@ Implement `ITreeDataProvider<T>`: `GetChildrenAsync(element)` (null means the ro
 
 ### Icons and status bar text
 
-Icons are names from the shell's set, so they follow the theme, including high contrast: `search`, `gear`, `keyboard`, `color-mode`, `history`, `extensions`, `folder`, `file`, `book`, `check`, `circle`, `home`, `info`, `warning`, `error`, `bell`, `bell-dot`, `close`, `chevron-right`, `chevron-down`, `refresh`, `output`, `list`, `play`, `link-external`, `clear-all`, `lock`, `arrow-down`, `star`, `question`, `edit`, `discard`, `trash`, `layout`, `dot`, `solution`, `project`, `package`, `link`, `file-code`, `file-data`. Status bar text may start with `$(icon)`, for example `"$(home) Start"`.
+Icons are names from the shell's set, so they follow the theme, including high contrast: `search`, `gear`, `keyboard`, `color-mode`, `history`, `extensions`, `folder`, `file`, `book`, `check`, `circle`, `home`, `info`, `warning`, `error`, `bell`, `bell-dot`, `close`, `chevron-right`, `chevron-down`, `refresh`, `output`, `list`, `play`, `link-external`, `clear-all`, `lock`, `arrow-down`, `star`, `question`, `edit`, `discard`, `trash`, `layout`, `dot`, `solution`, `project`, `package`, `link`, `file-code`, `file-data`, and since 0.2.6 `cloud`, `pull-request`, `comment`, `issue`, `worktree`, `account`, `sync`. Status bar text may start with `$(icon)`, for example `"$(home) Start"`.
 
 ### Shell commands for plugins
 
@@ -220,6 +221,16 @@ Proposed APIs are not covered by the versioning policy (ADR 0003): they may chan
 
 The built-in .NET test plugin (`src/Plugins/DaedalusStudio.Plugins.DotNetTest`) uses all of them.
 
+Since 0.2.6 ([ADR 0031](adr/0031-git-hosting-and-repository-features.md)):
+
+- **`Hosting`: Git hosting providers.** Declare the provider in the manifest (`contributes.hostingProviders`), then `RegisterProvider` an instance of your `HostingProvider` subclass when the plugin activates. The shell shows the Accounts page, the Pull Requests and Work Items windows, review comments in editors, CI status and `#` completion in commit messages; the provider talks to its host.
+  - Required: `ResolveRepository` (the repository a remote URL points to, or null when it's another host's), `GetAccountAsync` (from the stored session; no network call), `SignInAsync` (the OAuth device flow: show the code with the `IDeviceCodePrompt` the shell passes, then poll the host) and `SignOutAsync`.
+  - Optional (the defaults throw `NotSupportedException`, and the shell leaves the feature out): `SignInWithTokenAsync`, `GetRepositoryInfoAsync`, `GetPullRequestsAsync` (all, mine, review requested), `GetPullRequestAsync` (description, review threads on file lines, conversation), `GetCheckoutAsync` (a remote or a fork's URL, a ref, the local branch), `CreatePullRequestAsync`, `GetBranchStatusAsync`, `GetWorkItemsAsync` (assigned to the user, or by number or words), `GetOwnersAsync` and `PublishAsync`.
+  - Throw `HostingAuthenticationException` when the stored session is no longer valid: the shell forgets the account and asks the user to sign in again.
+- **`Secrets`: the plugin's own secrets** (`GetAsync`, `StoreAsync`, `DeleteAsync` by key), kept in the OS credential store: Windows Credential Manager, the macOS Keychain, or the Secret Service through libsecret. Never write a token anywhere else.
+
+The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/DaedalusStudio.Plugins.GitHub`, `.AzureDevOps`, `.GitLab`, on the shared `DaedalusStudio.Plugins.Hosting`) are complete examples.
+
 ## Running and debugging
 
 1. Build the plugin.
@@ -230,6 +241,15 @@ The built-in .NET test plugin (`src/Plugins/DaedalusStudio.Plugins.DotNetTest`) 
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 0.2.6 (M13b)
+
+Additive (plugins built for 0.2.0–0.2.5 keep working):
+- Proposed `IHosting` (`context.Proposed().Hosting`) with `HostingProvider`, `IDeviceCodePrompt`, `HostingAuthenticationException` and the records they use; proposed `ISecrets` (`context.Proposed().Secrets`). `IProposedApi` gained `Hosting` and `Secrets` (the host implements it, plugins don't).
+- The manifest's `contributes.hostingProviders` and the activation event `onHostingProvider:<id>` (implicit).
+- Protocol 0.2: `hosting/*` and `secrets/*` ([plugin-protocol.md](plugin-protocol.md#hosting-providers-and-secrets)) and the error codes `-33010` to `-33013`. A 0.2 host without them still works with this shell.
+- Shell commands `hosting.accounts`, `hosting.showChecks`, `hosting.refresh`, `git.pullRequests`, `git.createPullRequest`, `git.workItems`, `git.publish`, `git.worktrees`, `git.addWorktree`, `git.switchRepository`, `git.lfsLocks`, `git.lfsLock`, `git.lfsUnlock` and `git.lfsPull`; the context keys `hostingRepository`, `hostingProvider`, `gitRepositories` and `gitLfs`; the settings `hosting.enabled`, `hosting.ciStatus`, `hosting.statusRefreshSeconds`, `hosting.reviewComments` and `hosting.showResolvedComments`.
+- Icons `cloud`, `pull-request`, `comment`, `issue`, `worktree`, `account` and `sync`.
 
 ### 0.2.5 (M12b)
 

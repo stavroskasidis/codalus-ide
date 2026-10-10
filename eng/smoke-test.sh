@@ -20,6 +20,13 @@ command -v cygpath > /dev/null && node_cache="$(cygpath -w "$node_cache")" # Git
 export DAEDALUS_NODE_CACHE="${DAEDALUS_NODE_CACHE:-$node_cache}"
 # Browser debugging (M16c) runs Chrome or Edge headless, so the test opens no browser window.
 export DAEDALUS_BROWSER_HEADLESS=1
+# The hosting step (M13b) signs in to a mock GitHub. On Linux, a desktop's Secret Service may ask for the keyring's
+# password in a window, which an unattended run can't answer: keep the token in memory there (libsecret itself is
+# tested against a private keyring in CredentialStoreTests). Windows and macOS use their stores, under the profile's
+# own service name, and the step signs out at the end.
+if [ "$(uname -s)" = Linux ]; then
+  export DAEDALUS_CREDENTIAL_STORE="${DAEDALUS_CREDENTIAL_STORE:-memory}"
+fi
 
 # Runs one app: --version, then the smoke test. $1: executable; $2: results dir; $3: whether to run the full smoke test.
 test_app() {
