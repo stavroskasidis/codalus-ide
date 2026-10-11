@@ -21,7 +21,7 @@
         <TextBlock Grid.Row="2" Text="Target framework" VerticalAlignment="Center" />
         <ComboBox Grid.Row="2" Grid.Column="1" MinWidth="240" ItemsSource="{Binding Frameworks}" SelectedItem="{Binding TargetFramework}" AutomationProperties.Name="Target framework" />
         <TextBlock Grid.Row="3" Text="Target runtime" VerticalAlignment="Center" />
-        <AutoCompleteBox Grid.Row="3" Grid.Column="1" MinWidth="240" ItemsSource="{Binding Runtimes}" Text="{Binding RuntimeIdentifier}" Watermark="Portable (any runtime)" AutomationProperties.Name="Target runtime identifier" />
+        <AutoCompleteBox Grid.Row="3" Grid.Column="1" MinWidth="240" ItemsSource="{Binding Runtimes}" Text="{Binding RuntimeIdentifier}" PlaceholderText="Portable (any runtime)" AutomationProperties.Name="Target runtime identifier" />
       </Grid>
       <CheckBox Content="Self-contained (includes the .NET runtime)" IsChecked="{Binding SelfContained}" AutomationProperties.Name="Self-contained" />
       <CheckBox Content="Produce a single file" IsChecked="{Binding SingleFile}" AutomationProperties.Name="Single file" />
@@ -34,7 +34,7 @@
       </Grid>
       <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" IsVisible="{Binding IsContainer}">
         <TextBlock Text="Registry" VerticalAlignment="Center" />
-        <TextBox Grid.Column="1" Text="{Binding ContainerRegistry}" Watermark="Empty: your local Docker or Podman" AutomationProperties.Name="Container registry" />
+        <TextBox Grid.Column="1" Text="{Binding ContainerRegistry}" PlaceholderText="Empty: your local Docker or Podman" AutomationProperties.Name="Container registry" />
         <TextBlock Grid.Row="1" Text="Repository" VerticalAlignment="Center" />
         <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ContainerRepository}" AutomationProperties.Name="Image repository" />
         <TextBlock Grid.Row="2" Text="Tag" VerticalAlignment="Center" />

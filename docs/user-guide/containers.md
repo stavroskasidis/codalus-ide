@@ -38,8 +38,30 @@ Compose files are checked against the Compose Specification's schema as you type
 
 Toolbar: Start, Stop, Restart, Remove, Open in Browser (its first published port), **Open Terminal** (a shell in the container, in the integrated terminal), and **Attach Debugger** (to a .NET process in it). Debug → **Attach to a Process in a Container…** does the same from the Debug menu.
 
+## .NET Aspire
+
+Set an Aspire **AppHost** project as the startup project, then:
+- `Ctrl+F5` runs it. Its orchestrator asks Daedalus Studio to start each project of the app: they run like any program, each with its **Run** output, and their output also reaches the dashboard's console logs.
+- `F5` debugs the AppHost and every project in **one debug session**: breakpoints in any project stop, and the Processes window lists each program.
+
+**View → Other Windows → Aspire Resources** (it opens on its own when an AppHost starts) lists the app's resources: projects, containers and executables, with their state and endpoints. For the selected one: its **Console** output, **Environment** and **Details** (endpoints, properties). **Start**, **Stop** and **Restart** are the resource's own commands (a container added with `WithExplicitStart()` starts from here); **Open Endpoint** opens its address. **Open Dashboard** (also on the Debug menu) opens the Aspire dashboard, already signed in; with `launchBrowser` in the AppHost's launch profile it opens when the app starts.
+
+Aspire's orchestrator and dashboard come with your AppHost's packages; Daedalus Studio talks to them, and ships neither.
+
+## Publishing
+
+Right-click a project → **Publish…** (also on the Build menu) opens its Publish page. A project's **publish profiles** are the `.pubxml` files in `Properties/PublishProfiles` (the format `dotnet publish -p:PublishProfile=<name>` reads, and other IDEs write); the page makes a folder profile when there is none, and **New Profile…** adds one.
+
+- **Target:** a **folder**, or a **container image** (the .NET SDK's container support: to your local Docker or Podman when the registry is empty, or to the registry you name, signed in with `docker login`).
+- **Configuration**, **target framework** and **target runtime** (a runtime identifier such as `linux-x64`; empty means portable).
+- **Self-contained**, **single file**, **trimmed**, **ReadyToRun** and **Native AOT** (these need a target runtime; the page says what's missing).
+
+**Publish** saves the profile and publishes through the same build as Build: output in **Output → Build**, and errors and warnings, trimming and AOT ones included, in the Error List. When it finishes, a notification offers to open the folder.
+
 ## Limits
 
 - Linux containers only.
 - HTTPS inside the container (the development certificate) isn't set up; use HTTP ports.
 - In fast mode, static files of the project folder (`wwwroot`) aren't mounted.
+- Aspire: only project resources are started by the IDE (containers and executables by Aspire's orchestrator); a debug session holds the AppHost and up to seven projects; in a debug session a project's output goes to the Debug Console, not to the dashboard.
+- Cloud publish targets (Azure, AWS, Google Cloud) aren't built in.
