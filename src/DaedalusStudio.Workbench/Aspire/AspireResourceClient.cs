@@ -87,7 +87,9 @@ public sealed class AspireResourceClient(Uri endpoint, string? apiKey) : IDispos
     public async Task<string?> ExecuteAsync(string command, AspireResource resource, CancellationToken cancellationToken)
     {
         var request = new ProtoWriter().String(1, command).String(2, resource.Name).String(3, resource.Type).ToArray();
-        await foreach (var message in StreamAsync("ExecuteResourceCommand", request, cancellationToken).ConfigureAwait(false))
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2)); // a command that never finishes doesn't hold its caller
+        await foreach (var message in StreamAsync("ExecuteResourceCommand", request, timeout.Token).ConfigureAwait(false))
         {
             return AspireProto.ReadCommandResponse(message);
         }

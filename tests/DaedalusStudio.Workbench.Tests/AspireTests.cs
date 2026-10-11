@@ -225,7 +225,19 @@ public sealed class AspireTests : IAsyncLifetime
 
         // Stop and start a project through its commands; the IDE gets a DELETE, then a new run session.
         Assert.Contains(api.Commands, c => c.Name == "resource-stop");
-        Assert.Null(await client.ExecuteAsync("resource-stop", api, ct));
+        using var command = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        command.CancelAfter(TimeSpan.FromSeconds(90));
+        string? stopped;
+        try
+        {
+            stopped = await client.ExecuteAsync("resource-stop", api, command.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            stopped = "the stop command didn't finish";
+        }
+
+        Assert.True(stopped is null, stopped + "\n" + Log());
         deadline.Restart();
         while (requests.Count < 3 && deadline.Elapsed < TimeSpan.FromSeconds(1))
         {
