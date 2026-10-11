@@ -733,9 +733,18 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await File.WriteAllTextAsync(notes, "Smoke test notes.\n").ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.TryGetValue(PlainProject, out var p) && p.Items.Any(i => i.Path == notes), "notes.txt becomes an item", 60).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
-            shell.Explorer.Reveal("f:" + notes);
             PropertyRowViewModel? Row(string name) => shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == name);
-            await WaitAsync(() => !shell.PropertiesWindow.IsLoading && Row("Copy to Output Directory") is not null && shell.PropertiesWindow.Title.StartsWith("notes.txt", StringComparison.Ordinal), "the Properties window shows notes.txt", 60).ConfigureAwait(true);
+
+            // The Solution Explorer gets the new file once it has refreshed the project: reveal it until it is selected.
+            await WaitAsync(() =>
+            {
+                if (shell.Explorer.Selected?.Node.Path != notes)
+                {
+                    shell.Explorer.Reveal("f:" + notes);
+                }
+
+                return !shell.PropertiesWindow.IsLoading && Row("Copy to Output Directory") is not null && shell.PropertiesWindow.Title.StartsWith("notes.txt", StringComparison.Ordinal);
+            }, "the Properties window shows notes.txt", 60).ConfigureAwait(true);
             Check(Row("Build Action")?.Value == "None", "notes.txt is a None item");
             Row("Copy to Output Directory")!.SelectedOption = PropertiesWindowViewModel.CopyToOutputOptions.Single(o => o.Value == "PreserveNewest");
             await WaitAsync(() => ReadText(PlainProject).Contains("<None Update=\"notes.txt\">", StringComparison.Ordinal), "an Update item is written for the globbed file", 60).ConfigureAwait(true);
