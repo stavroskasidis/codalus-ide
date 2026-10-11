@@ -53,9 +53,22 @@ public sealed partial class ShellHost
     /// <summary>The code generator's state, and the models and contexts Roslyn knows, for the form.</summary>
     private async Task LoadScaffoldStateAsync(ScaffoldViewModel form)
     {
+        // The code generator's state first: the form needs it; the suggestions only help.
         try
         {
-            var contexts = await EntityFramework.ContextsAsync(fromTool: false, CancellationToken.None).ConfigureAwait(true);
+            using var limit = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            form.Status = await Scaffolding.StatusAsync(form.Project, limit.Token).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
+        {
+            form.Error = ex is OperationCanceledException ? "dotnet-aspnet-codegenerator didn't answer within 2 minutes; see the Scaffolding output." : ex.Message;
+        }
+
+        try
+        {
+            // Roslyn's contexts, while the C# workspace is loading too, but not for long.
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var contexts = await EntityFramework.ContextsAsync(fromTool: false, limit.Token).WaitAsync(limit.Token).ConfigureAwait(true);
             var mine = contexts.Where(c => SolutionService.PathComparer.Equals(c.Project, form.Project)).ToList();
             var offered = mine.Count > 0 ? mine : [.. contexts];
             form.SetSuggestions([.. offered.SelectMany(c => c.Entities)], [.. offered.Select(c => c.Name)]);
@@ -64,17 +77,7 @@ public sealed partial class ShellHost
         {
             // No language service yet: the fields take typed names.
         }
-
-        try
-        {
-            form.Status = await Scaffolding.StatusAsync(form.Project, CancellationToken.None).ConfigureAwait(true);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException)
-        {
-            form.Error = ex.Message;
-        }
     }
-
     private async Task RunScaffolderAsync(ScaffoldViewModel form)
     {
         if (form.Scaffolder is not { } scaffolder)
