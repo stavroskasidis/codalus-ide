@@ -35,7 +35,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M12 | Editor and code-navigation depth | at checkpoint: M12a (navigation and inline information, ADR 0017) and M12b (editing, refactoring UI and analysis, ADR 0018) |
 | M13 | Git depth and hosting integration | done (M13a and M13b at checkpoint): history, merge editor, operations (ADR 0020); GitHub, Azure DevOps and GitLab plugins (sign-in through the OS credential store, pull requests, review comments, CI status, work items, publishing), askpass, worktrees, Git LFS, several repositories (ADR 0031) |
 | M14 | Debugger depth | done (M14a–M14c at checkpoint). M14a: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b ([m14b](checkpoints/m14b.md), ADR 0032): the debug companion host, `[DebuggerDisplay]`, grid, image and plugin visualizers, pinned data tips, Parallel Stacks and Watch, Processes and Debug Location, breakpoint filters, exception module conditions, dumps; M14c ([m14c](checkpoints/m14c.md), ADR 0039 and 0040): multiple startup projects in one session, debugging in the integrated terminal (Detach All for launched programs), attach over SSH, in containers and in WSL, the WSL launch profile, Roslyn components, Just-In-Time crash dumps, the Hot Reload-while-debugging research |
-| M15 | ASP.NET Core and Hot Reload | M15a and M15b at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch`, ADR 0022; M15c (scaffolding, service references) deferred until after M16 |
+| M15 | ASP.NET Core and Hot Reload | M15a, M15b and M15c at checkpoint (done): Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch` (ADR 0022); scaffolding through the user's `dotnet-aspnet-codegenerator` and the SDK's item templates, OpenAPI and gRPC service references (ADR 0041) |
 | M16 | Razor, Blazor and web front-end | done (M16a–M16d at checkpoint): Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023); HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); Blazor WebAssembly debugging in the browser through vscode-js-debug (ADR 0026); compound server-and-page debugging, Debug a Web Page, HTML and CSS inside Razor, scoped CSS, npm scripts in the Task Runner Explorer, ESLint and Prettier (ADR 0027) |
 | M17 | Containers, Aspire and publishing | planned |
 | M18 | Profiling and diagnostics tools | planned |
@@ -1102,7 +1102,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Goal.** A productive ASP.NET Core loop: run, browse, call endpoints, change code, and see the change without a restart.
 
-**Split (ADR 0022).** **M15a** (done): the Endpoints Explorer (`daedalus/aspnet/endpoints`), `.http` files with environments, request variables and an HTTP Response window, the environment selector, the HTTPS development certificate and user secrets. **M15b**: Hot Reload through `dotnet watch` (Roslyn's hot-reload packages aren't on nuget.org), with browser refresh. **M15c**: scaffolding and service references.
+**Split (ADR 0022).** **M15a** (done): the Endpoints Explorer (`daedalus/aspnet/endpoints`), `.http` files with environments, request variables and an HTTP Response window, the environment selector, the HTTPS development certificate and user secrets. **M15b**: Hot Reload through `dotnet watch` (Roslyn's hot-reload packages aren't on nuget.org), with browser refresh. **M15c** (done, [ADR 0041](adr/0041-scaffolding-and-service-references.md)): Add New Scaffolded Item, with the Entity Framework and Identity scaffolders run by the user's `dotnet-aspnet-codegenerator` (the ADR's pick over `dotnet scaffold`) as a child of the build host, empty items from the SDK's item templates, and a form generated from each scaffolder's parameters with M27's DbContext discovery; service references as `OpenApiReference` (NSwag, the ADR's pick over Kiota) and `Protobuf` (`Grpc.Tools`) items, from a file or a URL, with Refresh.
 
 **Depends on.** M4, M5, M14 (only for the Hot-Reload-while-debugging result), M11 (JSON schemas).
 
@@ -1152,7 +1152,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - Delta applier and browser refresh (MIT, `dotnet/sdk`).
 - Kiota or NSwag (MIT).
 
-**ADRs.** "Hot Reload architecture". "HTTP file format and runner". "Service reference generation".
+**ADRs.** "Hot Reload architecture" and "HTTP file format and runner" ([ADR 0022](adr/0022-aspnet-core-loop.md)). "Service reference generation" ([ADR 0041](adr/0041-scaffolding-and-service-references.md), with scaffolding).
 
 **Fixtures.** `samples/Web/`: minimal API, MVC, Razor Pages, gRPC and worker apps. A hot-reload app with scripted edits: a method body change (supported), a signature change (rude) and a CSS change.
 
@@ -1939,7 +1939,7 @@ The "Daedalus" column uses these terms:
 | Shared projects (`.shproj`, `.projitems`) | M9 (low priority) |
 | Project, assembly and analyzer references | M9 |
 | COM references | Non-goal |
-| Connected Services, OpenAPI and gRPC service references | M15 |
+| Connected Services, OpenAPI and gRPC service references | M15c (ADR 0041): `OpenApiReference` with NSwag, `Protobuf` with `Grpc.Tools`; Kiota and other connected services (Azure, databases) are gaps |
 | Custom tools (single-file generators), T4 text templates | M26b |
 | User secrets | M15 |
 | Open Folder (no solution) | M26a |
@@ -2122,7 +2122,7 @@ The "Daedalus" column uses these terms:
 | IIS and IIS Express | Non-goal |
 | `appsettings` completion, user secrets | M15 |
 | Endpoints Explorer, `.http` files | M15 |
-| Scaffolding (controllers, Razor Pages, Identity, Blazor CRUD) | M15 |
+| Scaffolding (controllers, Razor Pages, Identity, Blazor CRUD) | M15c (ADR 0041): the user's `dotnet-aspnet-codegenerator`, SDK item templates for empty items |
 | Hot Reload with browser refresh | M15 |
 | Razor and Blazor editing, debugging and hot reload | M16 |
 | Docker files, compose, container debugging, Containers window | M17 |
@@ -2346,6 +2346,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-11: M26 split into M26a (project system) and M26b (build depth). M26a built and at its checkpoint (ADR 0033): the Properties window (F4) with Build Action, Copy to Output Directory, Custom Tool and every item metadata, written as Visual Studio writes them under globbing (`items/*` in the build host, which evaluates each edit in memory); Show All Files with Include and Exclude From Project; Add Existing Item and links; moves between projects that carry a file's items; Add New Item (a built-in set and `dotnet new`'s item templates); Export Template and the template manager; folder mode (Open Folder, an in-memory solution of the loaded projects, `.daedalus/tasks.json` and `launch.json`); External Tools with macros. Plugin API 0.2.8: `contributes.propertyProviders` and `contributes.externalToolMacros`.
 - 2026-10-11: M26b built and at its checkpoint (ADR 0034, 0035): build options with every build (verbosity, a log file, parallel projects, binary logs, code analysis on build) from settings, and what F5 does before running; the fast up-to-date check, which records each project's inputs and outputs after a build and skips MSBuild when none changed (verified against real MSBuild runs); Batch Build; Build Timings with the critical path and the slowest targets and tasks; a binary log viewer on MSBuild.StructuredLogger in the build host; the Build Events page (PreBuild/PostBuild targets); custom tools: the ResX generators, T4 templates in a new supervised host (`daedalus-t4host`, Mono.TextTemplating) and plugins' generators (`contributes.customTools`, plugin API 0.2.8), run on demand and on save; the `t4` language.
 - 2026-10-11: M27a built and at its checkpoint (ADR 0036): EF Core through the user's own `dotnet ef`, run by the build host in trusted solutions (`ef/*`), and a model agent (`daedalus-efagent`) on the app's runtime for the model view. The Entity Framework window lists the DbContexts (found by Roslyn with their provider and connection name, `daedalus/ef/contexts`) and their migrations on a chosen connection (the app's configuration, `appsettings*.json` or user secrets); Update Database and reverts show their SQL before applying it; Add and Remove Migration, scripts (idempotent, without transactions), bundles, compiled models, reverse engineering (`dbcontext scaffold`) and installing dotnet-ef as a local tool. `samples/Data`. M27b (the database explorer, the query editor, the SQL language service, `.sqlproj`) follows.
+- 2026-10-11: M15c built and at its checkpoint (ADR 0041), which completes M15: Add New Scaffolded Item (API, MVC, Razor Pages, Blazor, minimal API and Identity scaffolders; empty items from the SDK's item templates, the Entity Framework and Identity ones through the user's `dotnet-aspnet-codegenerator` in the build host, `scaffold/*`, trusted solutions only; a form generated from each scaffolder's parameters, models and contexts offered from DbContext discovery, Install for the tool and its packages), and service references (`serviceReferences/*`: `OpenApiReference` items with NSwag and `Protobuf` items with `Grpc.Tools`, from a file or a URL, with Refresh, Save and Remove; a `.proto` grammar). Fixture `samples/Scaffolding`; smoke step `web.scaffolding`.
 - 2026-10-11: M33 built and at its checkpoint (ADR 0030, D23):
   - **Target frameworks:** `netcoreapp2.0` to `net10.0` and .NET Standard 2.0 and 2.1 open, build, run, debug, test (with coverage) and get each framework's default C# version in the editor, with the current SDK. Hot Reload from .NET 6, disabled with its reason before. The package manager marks the versions that don't support a project's frameworks.
   - **Older SDKs in `global.json`:** they open and build down to the .NET SDK 2.1.200; those before 6.0 build in the build host's own node, because their MSBuild can't start nodes for a host on .NET 10. Below the floor, or when the SDK isn't installed, the newest SDK stands in and the solution is told why.

@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.ServiceReferencesView"
+             x:DataType="vm:ServiceReferencesViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="16,12" Spacing="8" MaxWidth="900" HorizontalAlignment="Left">
+      <TextBlock Classes="heading" Text="{Binding Title}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="OpenAPI references generate a client with NSwag when the project builds (OpenApiReference items); gRPC references generate clients or service bases with Grpc.Tools (Protobuf items)." />
+
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock FontWeight="SemiBold" Text="References" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Content="Reload" Command="{Binding ReloadCommand}" />
+      </Grid>
+      <TextBlock Classes="muted" Text="This project has no service references yet." IsVisible="{Binding IsEmpty}" />
+      <ListBox x:Name="ReferenceList" ItemsSource="{Binding References}" SelectedItem="{Binding Selected}" MaxHeight="220" IsVisible="{Binding !IsEmpty}" AutomationProperties.Name="Service references">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ServiceReferenceRow">
+            <Grid ColumnDefinitions="Auto,*" Margin="0,2" AutomationProperties.Name="{Binding Name}">
+              <controls:Icon Kind="{Binding Icon}" Margin="0,0,8,0" VerticalAlignment="Top" />
+              <StackPanel Grid.Column="1">
+                <TextBlock>
+                  <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                  <Run Text="{Binding Kind}" Foreground="{DynamicResource Shell.MutedForeground}" />
+                </TextBlock>
+                <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" />
+                <TextBlock Classes="muted" FontSize="11" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <TextBlock Classes="muted" FontSize="11" Text="{Binding Packages}" TextWrapping="Wrap" />
+
+      <Border Padding="10" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}" IsVisible="{Binding HasSelection}">
+        <StackPanel Spacing="6">
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+            <TextBlock Text="Namespace" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" IsVisible="{Binding SelectedIsOpenApi}" />
+            <TextBox Grid.Column="1" Text="{Binding EditNamespace}" IsVisible="{Binding SelectedIsOpenApi}" AutomationProperties.Name="Reference namespace" />
+            <TextBlock Grid.Row="1" Text="Class name" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" IsVisible="{Binding SelectedIsOpenApi}" />
+            <TextBox Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Text="{Binding EditClassName}" IsVisible="{Binding SelectedIsOpenApi}" AutomationProperties.Name="Reference class name" />
+            <TextBlock Grid.Row="2" Text="NSwag options" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" IsVisible="{Binding SelectedIsOpenApi}" />
+            <TextBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" Text="{Binding EditOptions}" PlaceholderText="/UseBaseUrl:false /GenerateClientInterfaces:true" IsVisible="{Binding SelectedIsOpenApi}" AutomationProperties.Name="NSwag options" />
+          </Grid>
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SelectedIsGrpc}">
+            <TextBlock Text="Generate" Classes="muted" VerticalAlignment="Center" />
+            <ComboBox ItemsSource="{Binding ServiceKinds}" SelectedItem="{Binding EditServices}" MinWidth="120" AutomationProperties.Name="Reference services" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Save" Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}" />
+            <Button Content="Refresh" Command="{Binding RefreshCommand}" IsEnabled="{Binding CanRefresh}" ToolTip.Tip="Download the document again from its URL" />
+            <Button Content="Open Document" Command="{Binding OpenCommand}" />
+            <Button Content="Remove" Command="{Binding RemoveCommand}" IsEnabled="{Binding !IsBusy}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <TextBlock FontWeight="SemiBold" Text="Add a service reference" Margin="0,8,0,0" />
+      <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+        <TextBlock Text="Kind" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
+        <ComboBox x:Name="KindBox" Grid.Column="1" ItemsSource="{Binding Kinds}" SelectedItem="{Binding KindLabel}" MinWidth="160" AutomationProperties.Name="Reference kind" />
+        <TextBlock Grid.Row="1" Text="Document" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Source}" PlaceholderText="A file, or https://…/swagger/v1/swagger.json" AutomationProperties.Name="Document file or URL" />
+        <Button Grid.Row="1" Grid.Column="2" Margin="6,6,0,0" Content="Browse…" Command="{Binding BrowseCommand}" />
+        <TextBlock Grid.Row="2" Text="Namespace" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" IsVisible="{Binding IsOpenApi}" />
+        <TextBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Namespace}" PlaceholderText="The project's root namespace" IsVisible="{Binding IsOpenApi}" AutomationProperties.Name="Namespace" />
+        <TextBlock Grid.Row="3" Text="Class name" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" IsVisible="{Binding IsOpenApi}" />
+        <TextBox Grid.Row="3" Grid.Column="1" Margin="0,6,0,0" Text="{Binding ClassName}" PlaceholderText="From the document's name" IsVisible="{Binding IsOpenApi}" AutomationProperties.Name="Class name" />
+        <TextBlock Grid.Row="2" Text="Generate" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" IsVisible="{Binding IsGrpc}" />
+        <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" ItemsSource="{Binding ServiceKinds}" SelectedItem="{Binding GrpcServices}" MinWidth="160" IsVisible="{Binding IsGrpc}" AutomationProperties.Name="Services to generate" />
+      </Grid>
+      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsOpenApi}">
+        <TextBlock Text="Generator" Classes="muted" VerticalAlignment="Center" />
+        <ComboBox ItemsSource="{Binding CodeGenerators}" SelectedItem="{Binding CodeGenerator}" MinWidth="160" AutomationProperties.Name="Code generator" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Classes="accent" Content="Add Reference" Command="{Binding AddCommand}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="Add service reference" />
+        <ProgressBar IsIndeterminate="True" Width="120" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Result}" IsVisible="{Binding HasResult}" FontWeight="SemiBold" TextWrapping="Wrap" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

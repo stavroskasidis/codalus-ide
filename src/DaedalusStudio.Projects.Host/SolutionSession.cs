@@ -33,6 +33,9 @@ internal interface ISessionEvents
     Task FilesChangedAsync(FilesChangedParams changes);
     /// <summary>A message of a running <c>dotnet ef</c> (ADR 0036).</summary>
     Task EfOutputAsync(EfOutputParams output);
+
+    /// <summary>A line of a running <c>dotnet aspnet-codegenerator</c> (ADR 0041).</summary>
+    Task ScaffoldOutputAsync(ScaffoldOutputParams output);
 }
 
 /// <summary>The session's events plus those of builds.</summary>

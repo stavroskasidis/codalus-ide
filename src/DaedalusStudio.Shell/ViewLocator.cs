@@ -68,6 +68,8 @@ public sealed class ViewLocator : IDataTemplate
         BatchBuildViewModel vm => new BatchBuildView { DataContext = vm },
         BuildTimingsViewModel vm => new BuildTimingsView { DataContext = vm },
         BinaryLogViewModel vm => new BinaryLogView { DataContext = vm },
+        ScaffoldViewModel vm => new ScaffoldView { DataContext = vm },
+        ServiceReferencesViewModel vm => new ServiceReferencesView { DataContext = vm },
         _ => new TextBlock { Text = "This view is not available.", Margin = new Thickness(12) },
     };
 

@@ -115,6 +115,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeNpm();
         InitializeHotReload();
         InitializeEntityFramework();
+        InitializeWebTools();
         InitializeUpdates();
 
         // A file given on the command line: start its language service now, alongside the window.

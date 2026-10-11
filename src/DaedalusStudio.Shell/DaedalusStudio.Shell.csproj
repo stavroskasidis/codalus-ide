@@ -80,6 +80,7 @@
     <None Include="WebServers\package-lock.json" Link="web-servers\package-lock.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Grammars\http.tmLanguage.json" Link="grammars\http.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Grammars\t4.tmLanguage.json" Link="grammars\t4.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Grammars\proto.tmLanguage.json" Link="grammars\proto.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="ShellIntegration\daedalus-bash.sh" Link="terminal\daedalus-bash.sh" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="ShellIntegration\daedalus.ps1" Link="terminal\daedalus.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="ShellIntegration\zsh\.zshrc" Link="terminal\zsh\.zshrc" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

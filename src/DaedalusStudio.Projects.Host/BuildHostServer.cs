@@ -109,6 +109,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         RegisterItemHandlers();
         RegisterBuildDepthHandlers();
         RegisterEntityFrameworkHandlers();
+        RegisterWebToolHandlers();
         _connection.OnRequest(ProjectMethods.Shutdown, json.EmptyParams, json.EmptyResult, async (_, _) =>
         {
             if (_session is { } session)
@@ -193,6 +194,19 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         _connection.OnRequest(EfMethods.Scaffold, json.EfScaffoldParams, json.EfFilesResult, (p, ct) => Guard(() => Session.EfScaffoldAsync(p, ct)));
         _connection.OnRequest(EfMethods.Optimize, json.EfOptimizeParams, json.EfFilesResult, (p, ct) => Guard(() => Session.EfOptimizeAsync(p, ct)));
         _connection.OnRequest(EfMethods.Model, json.EfTarget, json.EfModelResult, (p, ct) => Guard(() => Session.EfModelAsync(p, ct)));
+    }
+
+    /// <summary>Scaffolding through the user's dotnet-aspnet-codegenerator, and service references (ADR 0041).</summary>
+    private void RegisterWebToolHandlers()
+    {
+        var json = WebToolsJsonContext.Default;
+        _connection.OnRequest(ScaffoldMethods.Status, json.ScaffoldStatusParams, json.ScaffoldStatusResult, (p, ct) => Guard(() => Session.ScaffoldStatusAsync(p, ct)));
+        _connection.OnRequest(ScaffoldMethods.Install, json.ScaffoldInstallParams, json.ScaffoldStatusResult, (p, ct) => Guard(() => Session.ScaffoldInstallAsync(p, ct)));
+        _connection.OnRequest(ScaffoldMethods.Run, json.ScaffoldRunParams, json.ScaffoldRunResult, (p, ct) => Guard(() => Session.ScaffoldRunAsync(p, ct)));
+        _connection.OnRequest(ServiceReferenceMethods.List, json.ServiceReferencesParams, json.ServiceReferencesResult, (p, _) => Guard(() => Task.Run(() => Session.ServiceReferencesOf(p))));
+        _connection.OnRequest(ServiceReferenceMethods.Add, json.ServiceReferenceParams, json.ServiceReferenceEditResult, (p, ct) => Guard(() => Session.AddServiceReferenceAsync(p, ct)));
+        _connection.OnRequest(ServiceReferenceMethods.Update, json.ServiceReferenceParams, json.ServiceReferenceEditResult, (p, _) => Guard(() => Session.UpdateServiceReferenceAsync(p)));
+        _connection.OnRequest(ServiceReferenceMethods.Remove, json.ServiceReferenceRemoveParams, json.ServiceReferenceEditResult, (p, _) => Guard(() => Session.RemoveServiceReferenceAsync(p)));
     }
 
     /// <summary>NuGet packages and .NET tools (ADR 0012).</summary>
@@ -290,6 +304,8 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
     public Task BuildDiagnosticAsync(BuildDiagnosticInfo diagnostic) => Post(ProjectMethods.BuildDiagnostic, diagnostic, ProjectJsonContext.Default.BuildDiagnosticInfo);
 
     public Task EfOutputAsync(EfOutputParams output) => Post(EfMethods.Output, output, EntityFrameworkJsonContext.Default.EfOutputParams);
+
+    public Task ScaffoldOutputAsync(ScaffoldOutputParams output) => Post(ScaffoldMethods.Output, output, WebToolsJsonContext.Default.ScaffoldOutputParams);
 
     /// <summary>Completes once every notification queued so far has been sent (a response must not overtake them).</summary>
     private Task FlushAsync()

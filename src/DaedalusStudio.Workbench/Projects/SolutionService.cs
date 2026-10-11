@@ -118,6 +118,9 @@ public sealed class SolutionService : IAsyncDisposable
     /// <summary>A message of a <c>dotnet ef</c> command the build host runs (ADR 0036).</summary>
     public event EventHandler<EfOutputParams>? EfOutput;
 
+    /// <summary>A line of a <c>dotnet aspnet-codegenerator</c> run the build host runs (ADR 0041).</summary>
+    public event EventHandler<ScaffoldOutputParams>? ScaffoldOutput;
+
     /// <summary>The build host crashed; <see cref="ProcessCrashedEventArgs.WillRestart"/> tells whether it comes back.</summary>
     public event EventHandler<ProcessCrashedEventArgs>? HostCrashed;
 
@@ -246,6 +249,7 @@ public sealed class SolutionService : IAsyncDisposable
         connection.OnNotification(ProjectMethods.BuildDiagnostic, json.BuildDiagnosticInfo, d => BuildDiagnostic?.Invoke(this, d));
         connection.OnNotification(ItemMethods.FilesChanged, ItemJsonContext.Default.FilesChangedParams, p => FilesChanged?.Invoke(this, p.Directories));
         connection.OnNotification(EfMethods.Output, EntityFrameworkJsonContext.Default.EfOutputParams, o => EfOutput?.Invoke(this, o));
+        connection.OnNotification(ScaffoldMethods.Output, WebToolsJsonContext.Default.ScaffoldOutputParams, o => ScaffoldOutput?.Invoke(this, o));
     }
 
     /// <summary>Runs for the first start and after every restart: (re)opens the solution with the latest settings.</summary>

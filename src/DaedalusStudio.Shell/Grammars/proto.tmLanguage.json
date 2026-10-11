@@ -1,0 +1,60 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Protocol Buffers",
+  "scopeName": "source.proto",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#numbers" },
+    { "include": "#constants" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "begin": "/\\*", "end": "\\*/", "name": "comment.block.proto" },
+        { "match": "//.*$", "name": "comment.line.double-slash.proto" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "begin": "\"", "end": "\"", "name": "string.quoted.double.proto", "patterns": [ { "match": "\\\\.", "name": "constant.character.escape.proto" } ] },
+        { "begin": "'", "end": "'", "name": "string.quoted.single.proto", "patterns": [ { "match": "\\\\.", "name": "constant.character.escape.proto" } ] }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "\\b(message|enum|service|extend|oneof)\\s+([A-Za-z_][A-Za-z0-9_.]*)",
+          "captures": { "1": { "name": "keyword.other.proto" }, "2": { "name": "entity.name.type.proto" } }
+        },
+        {
+          "match": "\\b(rpc)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": { "1": { "name": "keyword.other.proto" }, "2": { "name": "entity.name.function.proto" } }
+        },
+        {
+          "match": "\\b(syntax|edition|package|import|option)\\b",
+          "name": "keyword.control.directive.proto"
+        }
+      ]
+    },
+    "keywords": {
+      "match": "\\b(returns|stream|repeated|optional|required|reserved|extensions|to|max|map|public|weak|group)\\b",
+      "name": "keyword.other.proto"
+    },
+    "types": {
+      "match": "\\b(double|float|int32|int64|uint32|uint64|sint32|sint64|fixed32|fixed64|sfixed32|sfixed64|bool|string|bytes)\\b",
+      "name": "storage.type.proto"
+    },
+    "numbers": {
+      "match": "\\b(0[xX][0-9a-fA-F]+|[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)\\b",
+      "name": "constant.numeric.proto"
+    },
+    "constants": {
+      "match": "\\b(true|false|inf|nan)\\b",
+      "name": "constant.language.proto"
+    }
+  }
+}

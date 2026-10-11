@@ -167,3 +167,20 @@ Project → **Manage User Secrets** (also on a project's context menu) opens the
 - **Linux and macOS:** `~/.microsoft/usersecrets/<id>/secrets.json`
 
 It is completed with the same schema as `appsettings.json`.
+
+## Scaffolding
+
+**Add New Scaffolded Item** (a project's or a folder's context menu → New Scaffolded Item, or Project → Add New Scaffolded Item) adds controllers, views, pages, components, endpoints and Identity. Pick a category (API, MVC, Razor Pages, Blazor, Minimal API, Identity) and a scaffolder; the form shows that scaffolder's options. Opened on a folder, the Folder field starts there. The first new file opens in the editor, and the Scaffolding output shows what ran.
+
+- **Empty items** (an API or MVC controller, empty or with read/write actions; a Razor Page, view or component) come from the SDK's item templates, with the folder's namespace. An empty **minimal API endpoint group** is a static class with a `Map…Endpoints` method to call from `Program.cs`.
+- **The Entity Framework scaffolders** (an API controller with actions, an MVC controller with views, a Razor view from a template, Razor Pages CRUD, Blazor CRUD, minimal API endpoints) and **Identity** run your `dotnet aspnet-codegenerator` in the project's folder; they build the project first. The model and DbContext fields offer the contexts and entity types the C# language service found, and take any name (a new DbContext name creates one). The database provider follows the project's EF Core provider.
+- The code generator needs a local or global `dotnet-aspnet-codegenerator`, and the project needs `Microsoft.VisualStudio.Web.CodeGeneration.Design` (and `Microsoft.EntityFrameworkCore.Tools` for the Entity Framework scaffolders). When something is missing the form says so; **Install** restores or installs the tool as a local tool of the solution and adds the packages, at the project's .NET version.
+- Scaffolding runs only in trusted folders: the code generator builds and loads your project.
+
+## Service references (OpenAPI and gRPC)
+
+A project's context menu → **Service References…** (or Project → Service References) lists its OpenAPI and gRPC references and adds new ones:
+- **OpenAPI:** an OpenAPI (Swagger) document, from a file or a URL. The project gets an `OpenApiReference` item and the `NSwag.ApiDescription.Client` and `Microsoft.Extensions.ApiDescription.Client` packages, and NSwag generates a C# (or TypeScript) client when the project builds. Set the namespace and class name, and NSwag options such as `/UseBaseUrl:false`.
+- **gRPC:** a `.proto` file, from a file or a URL. The project gets a `Protobuf` item and the gRPC packages (`Grpc.Net.ClientFactory`, `Google.Protobuf` and `Grpc.Tools` for a client; `Grpc.AspNetCore` for a service), and `Grpc.Tools` generates the client or the service base when the project builds. Choose Client, Server, Both or None.
+
+A document outside the project is copied into its `OpenAPIs` or `Protos` folder; a URL is downloaded there, and **Refresh** downloads it again. **Remove** removes the reference and keeps the document and the packages. These are the items `dotnet-openapi` and Visual Studio write, so the project builds the same way from the command line. `.proto` files are colored.
