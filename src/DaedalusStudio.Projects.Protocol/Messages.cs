@@ -57,6 +57,9 @@ public static class ProjectErrorCodes
     public const int NotTrusted = -33101;
     public const int InvalidOperation = -33102;
     public const int FileSystem = -33103;
+
+    /// <summary>A tool the request runs isn't installed (dotnet-ef, ADR 0036).</summary>
+    public const int ToolMissing = -33104;
 }
 
 public sealed record EmptyParams;
@@ -71,7 +74,7 @@ public sealed record InitializeResult(string ServerName, string ServerVersion, s
 // ------------------------------------------------------------------ solution
 
 /// <summary>
-/// Opens a solution (<c>.sln</c>, <c>.slnx</c>) or a single project (<c>.csproj</c>…). With <see cref="Trusted"/>
+/// Opens a solution (<c>.sln</c>, <c>.slnx</c>), a single project (<c>.csproj</c>…) or a folder (folder mode, ADR 0033). With <see cref="Trusted"/>
 /// false only the solution file is read: no MSBuild evaluation and no restore. <see cref="ActiveFrameworks"/> maps
 /// multi-targeted project paths to the framework the language service sees (default: the first one).
 /// </summary>
@@ -80,7 +83,10 @@ public sealed record OpenSolutionParams(string Path, bool Trusted, string? Confi
 // A solution filter (.slnf) opens its solution with only the filter's projects loaded (ADR 0013); SolutionInfo.Path is
 // the solution itself and SolutionInfo.FilterPath the filter.
 
-/// <summary>The structure from the solution file, sent before any evaluation.</summary>
+/// <summary>
+/// The structure from the solution file, sent before any evaluation. In folder mode (ADR 0033) <see cref="Format"/> is
+/// <c>folder</c>, <see cref="Path"/> the folder, and <see cref="Projects"/> the projects loaded from it.
+/// </summary>
 public sealed record SolutionInfo(
     string Path,
     string Format,
@@ -89,7 +95,20 @@ public sealed record SolutionInfo(
     SolutionConfigurationInfo[] Configurations,
     SolutionConfigurationInfo? Active,
     bool Trusted,
-    string? FilterPath = null);
+    string? FilterPath = null)
+{
+    /// <summary>The workspace folder: the folder itself in folder mode, else the solution (or project) file's folder.</summary>
+    [JsonIgnore]
+    public string Directory => IsFolder ? Path : System.IO.Path.GetDirectoryName(Path)!;
+
+    /// <summary>Folder mode: a folder opened without a solution file (ADR 0033).</summary>
+    [JsonIgnore]
+    public bool IsFolder => Format == SolutionFormats.Folder;
+
+    /// <summary>The name shown for the workspace: the folder's or the solution file's.</summary>
+    [JsonIgnore]
+    public string Name => IsFolder ? System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(Path)) : System.IO.Path.GetFileNameWithoutExtension(Path);
+}
 
 /// <summary>A solution folder. <see cref="Id"/> is its path inside the solution, e.g. <c>/src/tests/</c>.</summary>
 public sealed record SolutionFolderInfo(string Id, string Name, string? Parent, string[] Files);
@@ -277,11 +296,17 @@ public static class BuildTargets
 /// Builds the solution (<see cref="Project"/> null) or one project (and the projects it references) with the active
 /// configuration. <see cref="Target"/> is <c>build</c>, <c>rebuild</c> or <c>clean</c>. A restore runs first unless
 /// <see cref="Restore"/> is false (never for clean). <c>build/cancel</c> stops it; the result then says so.
+/// <see cref="Options"/> (ADR 0034) sets verbosity, logs, parallelism and the fast up-to-date check; without them the
+/// build runs as before (minimal verbosity, no up-to-date check).
 /// </summary>
-public sealed record BuildParams(string Target, string? Project, bool Restore = true);
+public sealed record BuildParams(string Target, string? Project, bool Restore = true, BuildOptions? Options = null);
 
-/// <summary>Sent once every <c>build/output</c> and <c>build/diagnostic</c> of the build has been sent.</summary>
-public sealed record BuildResultInfo(bool Succeeded, bool Canceled, int Errors, int Warnings, long ElapsedMilliseconds);
+/// <summary>
+/// Sent once every <c>build/output</c> and <c>build/diagnostic</c> of the build has been sent. <see cref="UpToDate"/>:
+/// the fast up-to-date check found nothing to build, so MSBuild didn't run. <see cref="BinaryLog"/>: the binary log
+/// the build wrote, when the options asked for one.
+/// </summary>
+public sealed record BuildResultInfo(bool Succeeded, bool Canceled, int Errors, int Warnings, long ElapsedMilliseconds, bool UpToDate = false, string? BinaryLog = null);
 
 /// <summary>A line for the Build output channel.</summary>
 public sealed record BuildOutputParams(string Line);

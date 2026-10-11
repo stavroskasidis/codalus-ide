@@ -73,4 +73,7 @@ public static class Methods
 
     /// <summary>ASP.NET Core endpoints in the solution: minimal API routes and controller actions (M15a).</summary>
     public const string AspNetEndpoints = "daedalus/aspnet/endpoints";
+
+    /// <summary>EF Core DbContext types in the solution, with their provider and connection name (M27a).</summary>
+    public const string EfContexts = "daedalus/ef/contexts";
 }

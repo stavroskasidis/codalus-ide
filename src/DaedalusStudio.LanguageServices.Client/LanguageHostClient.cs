@@ -459,6 +459,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<AspNetEndpointsResult?> AspNetEndpointsAsync(string? projectPath, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.AspNetEndpoints, new AspNetEndpointsParams(projectPath), ProtocolJsonContext.Default.AspNetEndpointsParams, ProtocolJsonContext.Default.AspNetEndpointsResult, cancellationToken);
 
+    /// <summary><c>daedalus/ef/contexts</c>: the DbContext types of every project, or of one (ADR 0036).</summary>
+    public Task<EfDiscoveredContextsResult?> EfContextsAsync(string? projectPath, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.EfContexts, new EfContextsParams(projectPath), ProtocolJsonContext.Default.EfContextsParams, ProtocolJsonContext.Default.EfDiscoveredContextsResult, cancellationToken);
+
     public Task<CodeMetricsResult?> CodeMetricsAsync(string? uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.CodeMetrics, new CodeMetricsParams(uri is null ? null : new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.CodeMetricsParams, ProtocolJsonContext.Default.CodeMetricsResult, cancellationToken);
 

@@ -152,6 +152,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
   - **Threads**: each managed thread with its exception, if it had one, and its call stack. Frames map to source lines when the program's PDBs are next to its assemblies; double-click a frame to open the line.
   - **Heap**: the objects by type, with their count and size. Pick a type to list its instances, and an instance to see its fields; follow references to other objects, and go back.
 - Dumps open on the operating system that wrote them, because the runtime's debugging library has to load on the machine reading them.
+- On macOS, writing a dump of a program paused in the debugger can stall: continue or detach it first. A dump that takes longer than 3 minutes is abandoned, with a message.
 
 ## Settings
 

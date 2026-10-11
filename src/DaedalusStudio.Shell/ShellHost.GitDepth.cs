@@ -591,7 +591,7 @@ public sealed partial class ShellHost
         }
 
         var name = Path.GetFileNameWithoutExtension(address.Trim().TrimEnd('/'));
-        var parent = Solutions.Solution is { } solution ? Path.GetDirectoryName(Path.GetDirectoryName(solution.Path))! : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos");
+        var parent = Solutions.Solution is { } solution ? Path.GetDirectoryName(solution.Directory)! : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "source", "repos");
         var target = await Dialogs.ShowAsync(new DialogRequest("Clone Repository", "Clone into:", ["Clone", "Cancel"]) { Input = Path.Combine(parent, name) }).ConfigureAwait(true);
         if (target is not { Button: "Clone", Input: { Length: > 0 } destination })
         {
@@ -633,7 +633,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        var folder = Path.GetDirectoryName(solution.Path)!;
+        var folder = solution.Directory;
         if (Git.Root is not null)
         {
             StatusBar.ShowMessage("The solution is already in a git repository.", TimeSpan.FromSeconds(4));

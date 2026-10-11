@@ -33,13 +33,16 @@ internal sealed class ProjectWatcher(Func<ProjectWatcher.Changes, Task> onChange
         public bool IsEmpty => !Solution && MSBuildFiles.Count == 0 && Directories.Count == 0;
     }
 
-    /// <summary>Watches the solution's folder and each project folder outside it.</summary>
-    public void Watch(string solution, IEnumerable<string> projects)
+    /// <summary>
+    /// Watches the workspace folder (the solution's, or the folder in folder mode) and each project folder outside it.
+    /// <paramref name="solution"/> is the solution file, or null without one.
+    /// </summary>
+    public void Watch(string workspace, string? solution, IEnumerable<string> projects)
     {
         lock (_gate)
         {
-            _solution = solution;
-            var roots = new List<string> { Path.GetDirectoryName(solution)! };
+            _solution = solution ?? string.Empty;
+            var roots = new List<string> { workspace };
             foreach (var directory in projects.Select(p => Path.GetDirectoryName(p)!))
             {
                 if (!roots.Any(r => ProjectFileEditor.IsSameOrUnder(directory, r)))

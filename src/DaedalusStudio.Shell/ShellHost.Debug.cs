@@ -142,6 +142,11 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (argument is null && await StartFolderLaunchAsync(debug: true).ConfigureAwait(true))
+        {
+            return; // a folder's launch configuration (ADR 0033)
+        }
+
         if (argument is null && Runs.MultipleStartup)
         {
             await StartStartupProjectsAsync(debug: true).ConfigureAwait(true);
@@ -164,7 +169,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (!await BuildAsync(BuildTargets.Build, project).ConfigureAwait(true))
+        if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
             {

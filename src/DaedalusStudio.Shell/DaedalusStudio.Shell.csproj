@@ -35,6 +35,7 @@
     <HelperProcess Include="..\DaedalusStudio.Interactive.Host\DaedalusStudio.Interactive.Host.csproj" Folder="replhost" />
     <HelperProcess Include="..\DaedalusStudio.Markup.Host\DaedalusStudio.Markup.Host.csproj" Folder="markuphost" />
     <HelperProcess Include="..\DaedalusStudio.Debugging.Host\DaedalusStudio.Debugging.Host.csproj" Folder="debughost" />
+    <HelperProcess Include="..\DaedalusStudio.TextTemplating.Host\DaedalusStudio.TextTemplating.Host.csproj" Folder="t4host" />
     <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Welcome\DaedalusStudio.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Templates\DaedalusStudio.Plugins.Templates.csproj" PluginId="daedalus.templates" />
@@ -78,6 +79,7 @@
     <None Include="WebServers\package.json" Link="web-servers\package.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="WebServers\package-lock.json" Link="web-servers\package-lock.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Grammars\http.tmLanguage.json" Link="grammars\http.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Grammars\t4.tmLanguage.json" Link="grammars\t4.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="ShellIntegration\daedalus-bash.sh" Link="terminal\daedalus-bash.sh" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="ShellIntegration\daedalus.ps1" Link="terminal\daedalus.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="ShellIntegration\zsh\.zshrc" Link="terminal\zsh\.zshrc" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

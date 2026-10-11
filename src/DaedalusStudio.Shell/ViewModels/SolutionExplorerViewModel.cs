@@ -27,6 +27,8 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
                 OnPropertyChanged(nameof(Icon));
                 OnPropertyChanged(nameof(IsWarning));
                 OnPropertyChanged(nameof(IsLinked));
+                OnPropertyChanged(nameof(IsExcluded));
+                OnPropertyChanged(nameof(IsDimmed));
                 OnPropertyChanged(nameof(HasChildren));
                 OnPropertyChanged(nameof(Chevron));
                 OnPropertyChanged(nameof(AccessibleName));
@@ -53,6 +55,12 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
     public bool IsLinked => _node.IsLinked;
 
     public bool IsUnloaded => _node.IsUnloaded;
+
+    /// <summary>Show All Files: on disk, not in the project (ADR 0033).</summary>
+    public bool IsExcluded => _node.IsExcluded;
+
+    /// <summary>Shown dimmed: an unloaded project, or a file that isn't in the project.</summary>
+    public bool IsDimmed => _node.IsUnloaded || _node.IsExcluded;
 
     public bool HasChildren => _node.Children.Count > 0;
 
@@ -85,7 +93,8 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
             var state = HasChildren ? (_isExpanded ? ", expanded" : ", collapsed") : string.Empty;
             var detail = _node.Detail is { } d ? " " + d : string.Empty;
             var warning = _node.IsWarning ? ", warning" : string.Empty;
-            return $"{_node.Name}{detail}{warning}{state}";
+            var excluded = _node.IsExcluded ? ", not in the project" : string.Empty;
+            return $"{_node.Name}{detail}{warning}{excluded}{state}";
         }
     }
 }
@@ -93,8 +102,8 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 /// <summary>
 /// The Solution Explorer. The tree is rebuilt from the build host's model (<see cref="SolutionTree"/>) and shown as
 /// a flattened list; expansion and selection survive rebuilds by node id. Operations act on the selected row.
-/// TODO(issue): "Show All Files" (files on disk that aren't project items; the host's fs/list is ready for it) and
-/// multi-selection. (Open documents whose files were deleted are flagged in their tabs.)
+/// Show All Files adds the files on disk that aren't items (ADR 0033), and in folder mode the folder view shows the
+/// folder as it is on disk. TODO(issue): multi-selection. (Open documents whose files were deleted are flagged in their tabs.)
 /// </summary>
 public sealed class SolutionExplorerViewModel : ObservableObject
 {
@@ -110,6 +119,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private (IReadOnlyList<string> Paths, bool Cut)? _clipboard;
     private string? _startupProject;
     private string _filter = string.Empty;
+    private bool _showAllFiles;
+    private bool _folderView;
+    private readonly Dictionary<string, IReadOnlyList<DirectoryEntry>> _disk = new(SolutionService.PathComparer);
+    private IReadOnlyList<DirectoryEntry> _folderEntries = [];
+    private int _diskGeneration;
+    private bool _diskQueued;
 
     public SolutionExplorerViewModel(ShellHost shell)
     {
@@ -118,6 +133,16 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         solutions.SolutionChanged += (_, _) => QueueRefresh();
         solutions.ProjectChanged += (_, _) => QueueRefresh();
         solutions.CompilerInputsChanged += (_, _) => QueueRefresh();
+        solutions.SolutionChanged += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(OnSolutionChangedForDisk);
+        solutions.ProjectChanged += (_, project) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (_showAllFiles && !_disk.ContainsKey(project.Path))
+            {
+                QueueDiskRefresh();
+            }
+        });
+        ShowAllFilesCommand = new RelayCommand(() => ShowAllFiles = !ShowAllFiles);
+        SwitchViewsCommand = new RelayCommand(() => SetFolderView(!_folderView), () => shell.Solutions.Solution?.IsFolder == true);
         OpenSolutionCommand = new RelayCommand(() => shell.Run("workbench.openSolution"));
         HomeCommand = new RelayCommand(Home);
         SyncCommand = new RelayCommand(SyncWithActiveDocument);
@@ -137,6 +162,154 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     public RelayCommand CollapseAllCommand { get; }
 
     public RelayCommand PropertiesCommand { get; }
+
+    public RelayCommand ShowAllFilesCommand { get; }
+
+    public RelayCommand SwitchViewsCommand { get; }
+
+    /// <summary>Show All Files: files and folders on disk that aren't in their project show dimmed (ADR 0033).</summary>
+    public bool ShowAllFiles
+    {
+        get => _showAllFiles;
+        set
+        {
+            if (SetField(ref _showAllFiles, value))
+            {
+                _shell.Workbench.Context.Set("explorerShowAllFiles", value);
+                if (value)
+                {
+                    QueueDiskRefresh();
+                }
+                else
+                {
+                    _disk.Clear();
+                    Refresh();
+                }
+            }
+        }
+    }
+
+    /// <summary>Folder mode's folder view (the disk), as opposed to its solution view (the loaded projects).</summary>
+    public bool IsFolderView => _folderView && _shell.Solutions.Solution?.IsFolder == true;
+
+    /// <summary>The switch between the folder view and the solution view (folder mode).</summary>
+    public bool CanSwitchViews => _shell.Solutions.Solution?.IsFolder == true;
+
+    public void SetFolderView(bool folderView)
+    {
+        _folderView = folderView;
+        _shell.Workbench.Context.Set("explorerFolderView", IsFolderView);
+        OnPropertyChanged(nameof(IsFolderView));
+        if (IsFolderView)
+        {
+            QueueDiskRefresh();
+        }
+        else
+        {
+            Refresh();
+        }
+    }
+
+    private void OnSolutionChangedForDisk()
+    {
+        OnPropertyChanged(nameof(CanSwitchViews));
+        OnPropertyChanged(nameof(IsFolderView));
+        SwitchViewsCommand.RaiseCanExecuteChanged();
+        _shell.Workbench.Context.Set("folderMode", _shell.Solutions.Solution?.IsFolder == true);
+        _shell.Workbench.Context.Set("explorerFolderView", IsFolderView);
+        if (_shell.Solutions.Solution is null)
+        {
+            _disk.Clear();
+            _folderEntries = [];
+            _folderView = false;
+        }
+        else if (_showAllFiles || IsFolderView)
+        {
+            QueueDiskRefresh();
+        }
+    }
+
+    /// <summary>Folders changed on disk (the build host's watcher): Show All Files and the folder view list them again.</summary>
+    public void OnFilesChanged(IReadOnlyList<string> directories)
+    {
+        if (_showAllFiles || IsFolderView)
+        {
+            QueueDiskRefresh();
+        }
+    }
+
+    /// <summary>Lists the disk again (after a build, a new tasks.json…), when Show All Files or the folder view needs it.</summary>
+    public void RefreshDisk()
+    {
+        if (_showAllFiles || IsFolderView)
+        {
+            QueueDiskRefresh();
+        }
+    }
+
+    private void QueueDiskRefresh()
+    {
+        if (_diskQueued)
+        {
+            return;
+        }
+
+        _diskQueued = true;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _diskQueued = false;
+            _ = LoadDiskAsync();
+        }, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    /// <summary>Lists each loaded project's folder (Show All Files) or the workspace folder (folder view) through the build host.</summary>
+    public async Task LoadDiskAsync()
+    {
+        var generation = ++_diskGeneration;
+        if (_shell.Solutions.Solution is not { } solution)
+        {
+            return;
+        }
+
+        try
+        {
+            if (IsFolderView)
+            {
+                var tree = await _shell.ProjectItems.ListTreeAsync(solution.Directory, CancellationToken.None).ConfigureAwait(true);
+                if (generation == _diskGeneration)
+                {
+                    _folderEntries = tree.Entries;
+                }
+            }
+
+            if (_showAllFiles)
+            {
+                foreach (var project in _shell.Solutions.Projects.Values.Where(p => p.State == ProjectStates.Loaded).ToList())
+                {
+                    var tree = await _shell.ProjectItems.ListTreeAsync(System.IO.Path.GetDirectoryName(project.Path)!, CancellationToken.None).ConfigureAwait(true);
+                    if (generation != _diskGeneration)
+                    {
+                        return;
+                    }
+
+                    _disk[project.Path] = tree.Entries;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is JsonRpcRemoteException or InvalidOperationException or JsonRpcConnectionLostException or OperationCanceledException)
+        {
+            _shell.Workbench.Log.AppendLine($"[explorer] Could not list the files on disk: {ex.Message}");
+        }
+
+        if (generation == _diskGeneration)
+        {
+            DiskLoaded?.Invoke(this, EventArgs.Empty);
+            Refresh();
+        }
+    }
+
+    /// <summary>The disk listing arrived (tests wait for it).</summary>
+    public event EventHandler? DiskLoaded;
 
     /// <summary>Filters the tree to the items whose names contain the text, with their parents (the search box, M29).</summary>
     public string Filter
@@ -208,6 +381,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 _shell.Workbench.Context.Set("explorerItemIsProjectReference", value?.Node is { Kind: ExplorerNodeKind.Dependency } n && n.Id.Contains("|project|", StringComparison.Ordinal));
                 _shell.Workbench.Context.Set("explorerProjectUnloaded", value?.Node.IsUnloaded == true);
                 _shell.Workbench.Context.Set("explorerItemName", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } file } ? System.IO.Path.GetFileName(file) : null);
+                _shell.Workbench.Context.Set("explorerItemExcluded", value?.Node.IsExcluded == true);
+                _shell.Workbench.Context.Set("explorerItemLinked", value?.Node.IsLinked == true);
+                _shell.Workbench.Context.Set("explorerItemInProject", value?.Node is { Kind: ExplorerNodeKind.File or ExplorerNodeKind.Folder, ProjectPath: not null, IsExcluded: false } n2 && !SolutionTree.IsProjectFile(n2.Path ?? string.Empty) && !IsFolderView);
+                _shell.Workbench.Context.Set("explorerItemIsProjectFile", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } projectFile } && SolutionTree.IsProjectFile(projectFile));
+                _shell.Workbench.Context.Set("explorerProjectLoaded", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } loadedFile } && _shell.Solutions.Solution?.Projects.Any(p => SolutionService.PathComparer.Equals(p.Path, loadedFile)) == true);
             }
         }
     }
@@ -258,7 +436,13 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     public void Refresh()
     {
         var solutions = _shell.Solutions;
-        _root = solutions.Solution is { } solution ? SolutionTree.Build(solution, solutions.Projects, solutions.CompilerInputs) : null;
+        _root = solutions.Solution is { } solution
+            ? SolutionTree.Build(solution, solutions.Projects, solutions.CompilerInputs, new ExplorerOptions
+            {
+                DiskEntries = _showAllFiles ? _disk : null,
+                FolderEntries = IsFolderView ? _folderEntries : null,
+            })
+            : null;
         OnPropertyChanged(nameof(HasSolution));
         if (_pendingReveal is { } pending && _root is not null && Path(_root, pending) is not null)
         {
@@ -456,6 +640,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// <summary>The folder new items go into: the selected folder or project, or the selected file's folder.</summary>
     private string? TargetDirectory => Node switch
     {
+        { Kind: ExplorerNodeKind.Solution, Path: { } root } when _shell.Solutions.Solution?.IsFolder == true => root,
         { Kind: ExplorerNodeKind.Folder, Path: { } folder } => folder,
         { Kind: ExplorerNodeKind.Project, Path: { } project } => System.IO.Path.GetDirectoryName(project),
         { Kind: ExplorerNodeKind.File, Path: { } file } => System.IO.Path.GetDirectoryName(file),
@@ -582,20 +767,84 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
     }
 
-    /// <summary>Drag and drop: moves (or with Ctrl, copies) <paramref name="paths"/> into the folder or project of <paramref name="target"/>.</summary>
+    /// <summary>The node being dragged (a linked file moves its link, not a file).</summary>
+    private ExplorerNode? _dragSource;
+
+    /// <summary>The view started dragging <paramref name="node"/>.</summary>
+    public void BeginDrag(ExplorerNode node) => _dragSource = node;
+
+    private static string? DropDirectory(ExplorerNode target) => target switch
+    {
+        { Kind: ExplorerNodeKind.Folder, Path: { } folder } => folder,
+        { Kind: ExplorerNodeKind.Project, Path: { } project } => System.IO.Path.GetDirectoryName(project),
+        { Kind: ExplorerNodeKind.File, Path: { } file, IsLinked: false } => System.IO.Path.GetDirectoryName(file),
+        { Kind: ExplorerNodeKind.Solution, Path: { } root } when Directory.Exists(root) => root,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Drag and drop: moves (or with Ctrl, copies) <paramref name="paths"/> into the folder or project of
+    /// <paramref name="target"/>. Into another project, the files' items go with them (ADR 0033); a linked file moves (or
+    /// copies) its link instead.
+    /// </summary>
     public async Task DropAsync(IReadOnlyList<string> paths, ExplorerNode target, bool copy)
     {
-        var directory = target switch
+        var directory = DropDirectory(target);
+        var source = _dragSource;
+        _dragSource = null;
+        if (directory is null)
         {
-            { Kind: ExplorerNodeKind.Folder, Path: { } folder } => folder,
-            { Kind: ExplorerNodeKind.Project, Path: { } project } => System.IO.Path.GetDirectoryName(project),
-            { Kind: ExplorerNodeKind.File, Path: { } file } => System.IO.Path.GetDirectoryName(file),
-            _ => null,
-        };
-        var moving = paths.Where(p => directory is not null && !SolutionService.PathComparer.Equals(System.IO.Path.GetDirectoryName(p), directory)).ToList();
-        if (directory is not null && moving.Count > 0)
+            return;
+        }
+
+        if (source is { IsLinked: true, Path: { } linked, ProjectPath: { } from } && target.ProjectPath is { } to && paths.Count == 1 && SolutionService.PathComparer.Equals(paths[0], linked))
+        {
+            await TryAsync(async () =>
+            {
+                if (SolutionService.PathComparer.Equals(from, to))
+                {
+                    var relative = System.IO.Path.GetRelativePath(System.IO.Path.GetDirectoryName(to)!, directory);
+                    var link = (relative == "." ? string.Empty : relative.Replace('/', '\\') + "\\") + System.IO.Path.GetFileName(linked);
+                    await _shell.ProjectItems.SetAsync(to, linked, null, new Dictionary<string, string?> { [ItemMetadataNames.Link] = link }, CancellationToken.None).ConfigureAwait(true);
+                }
+                else
+                {
+                    await _shell.ProjectItems.AddExistingAsync(to, directory, [linked], asLink: true, CancellationToken.None).ConfigureAwait(true);
+                    if (!copy)
+                    {
+                        await _shell.ProjectItems.ExcludeAsync(from, [linked], CancellationToken.None).ConfigureAwait(true);
+                    }
+                }
+            }).ConfigureAwait(true);
+            return;
+        }
+
+        var moving = paths.Where(p => !SolutionService.PathComparer.Equals(System.IO.Path.GetDirectoryName(p), directory)).ToList();
+        if (moving.Count > 0)
         {
             await TryAsync(() => _shell.Solutions.MoveAsync(moving, directory, copy, CancellationToken.None)).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Files dropped from the file manager: copied into the folder (and made items of its project).</summary>
+    public async Task DropExternalAsync(IReadOnlyList<string> paths, ExplorerNode target)
+    {
+        if (DropDirectory(target) is not { } directory)
+        {
+            return;
+        }
+
+        var files = paths.Where(File.Exists).ToList();
+        var folders = paths.Where(Directory.Exists).ToList();
+        if (target.ProjectPath is { } project && !IsFolderView && _shell.Solutions.Solution is { Trusted: true } && files.Count > 0)
+        {
+            await TryAsync(() => _shell.ProjectItems.AddExistingAsync(project, directory, files, asLink: false, CancellationToken.None)).ConfigureAwait(true);
+            files.Clear();
+        }
+
+        if (files.Count + folders.Count > 0)
+        {
+            await TryAsync(() => _shell.Solutions.MoveAsync([.. files, .. folders], directory, copy: true, CancellationToken.None)).ConfigureAwait(true);
         }
     }
 
@@ -659,7 +908,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     // ------------------------------------------------------------------ helpers
 
     private string Display(string path) =>
-        _shell.Solutions.Solution is { } solution ? System.IO.Path.GetRelativePath(System.IO.Path.GetDirectoryName(solution.Path)!, path) : path;
+        _shell.Solutions.Solution is { } solution ? System.IO.Path.GetRelativePath(solution.Directory, path) : path;
 
     private static string? ValidateName(string directory, string name, string? current = null)
     {

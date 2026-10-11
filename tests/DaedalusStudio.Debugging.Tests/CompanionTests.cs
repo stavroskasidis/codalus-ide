@@ -128,7 +128,7 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
         var dumps = new Dumps();
         try
         {
-            Dumps.Create(debug.ProcessId!.Value, dump, "full");
+            await Dumps.CreateAsync(debug.ProcessId!.Value, dump, "full", Dumps.DumpTimeout, TestContext.Current.CancellationToken);
             var summary = dumps.Open(dump);
             var main = summary.Threads.Single(t => t.Frames.Any(f => f.Method.Contains("Depth.Run", StringComparison.Ordinal)));
             var run = main.Frames.First(f => f.Method.Contains("Depth.Run", StringComparison.Ordinal));
@@ -159,11 +159,12 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
         {
             await Task.Delay(1500, TestContext.Current.CancellationToken); // in the wait loop by now
 
-            var created = Dumps.Create(process.Id, dump, "full"); // full: the JIT data that maps code to lines
+            var created = await Dumps.CreateAsync(process.Id, dump, "full", Dumps.DumpTimeout, TestContext.Current.CancellationToken); // full: the JIT data that maps code to lines
             Assert.True(created.Size > 0);
             var summary = dumps.Open(dump);
 
-            Assert.Equal(process.Id, summary.ProcessId);
+            // macOS core dumps don't record the process id.
+            Assert.Equal(OperatingSystem.IsMacOS() ? null : process.Id, summary.ProcessId);
             Assert.StartsWith(".NET 10.", summary.Runtime, StringComparison.Ordinal);
             var main = Assert.Single(summary.Threads, t => t.Frames.Any(f => f.Method.Contains("<Main>$", StringComparison.Ordinal)));
             var frame = main.Frames.First(f => f.Method.Contains("<Main>$", StringComparison.Ordinal));

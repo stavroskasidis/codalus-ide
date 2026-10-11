@@ -5,8 +5,14 @@ using DaedalusStudio.Workbench.Projects;
 
 namespace DaedalusStudio.Workbench.Build;
 
-/// <summary>A build that started: Build, Rebuild or Clean of the solution (<see cref="Project"/> null) or a project.</summary>
-public sealed record BuildRequest(string Target, string? Project);
+/// <summary>
+/// A build that started: Build, Rebuild or Clean of the solution (<see cref="Project"/> null) or a project, or a batch
+/// build (<see cref="Batch"/>: how many entries).
+/// </summary>
+public sealed record BuildRequest(string Target, string? Project)
+{
+    public int Batch { get; init; }
+}
 
 /// <summary>A build that finished.</summary>
 public sealed record BuildCompleted(BuildRequest Request, BuildResultInfo Result);
@@ -75,14 +81,35 @@ public sealed class BuildService
 
     public event EventHandler? DiagnosticsChanged;
 
+    /// <summary>How builds run (ADR 0034); the shell sets it from the build settings. Null: the host's defaults.</summary>
+    public Func<BuildOptions?> Options { get; set; } = () => null;
+
+    /// <summary>The last batch build's result, entry by entry.</summary>
+    public BatchBuildResult? LastBatch { get; private set; }
+
     /// <summary>
     /// Builds the solution or a project. Fails if a build is already running. Never throws for build failures or
     /// cancellation: the result says what happened, and host errors become a failed result with the message in the
     /// Build channel.
     /// </summary>
-    public async Task<BuildResultInfo> BuildAsync(string target, string? project, CancellationToken cancellationToken)
+    public Task<BuildResultInfo> BuildAsync(string target, string? project, CancellationToken cancellationToken) =>
+        RunAsync(new BuildRequest(target, project), token => _solutions.BuildAsync(target, project, token, Options()), cancellationToken);
+
+    /// <summary>Batch Build: each project × configuration × platform in turn (ADR 0034). Never throws for build failures.</summary>
+    public async Task<BatchBuildResult> BatchBuildAsync(string target, IReadOnlyList<BatchBuildEntry> entries, CancellationToken cancellationToken)
     {
-        var request = new BuildRequest(target, project);
+        BatchBuildResult? batch = null;
+        await RunAsync(new BuildRequest(target, null) { Batch = entries.Count }, async token =>
+        {
+            batch = await _solutions.BatchBuildAsync(new BatchBuildParams(target, [.. entries], Options()), token).ConfigureAwait(false);
+            return new BuildResultInfo(batch.Succeeded, batch.Canceled, batch.Errors, batch.Warnings, batch.ElapsedMilliseconds);
+        }, cancellationToken).ConfigureAwait(false);
+        LastBatch = batch ?? new BatchBuildResult(false, false, 0, 0, 0, []);
+        return LastBatch;
+    }
+
+    private async Task<BuildResultInfo> RunAsync(BuildRequest request, Func<CancellationToken, Task<BuildResultInfo>> build, CancellationToken cancellationToken)
+    {
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         lock (_gate)
         {
@@ -102,7 +129,7 @@ public sealed class BuildService
         BuildResultInfo result;
         try
         {
-            result = await _solutions.BuildAsync(target, project, cancellation.Token).ConfigureAwait(false);
+            result = await build(cancellation.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException)
         {

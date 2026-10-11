@@ -8,6 +8,9 @@ namespace DaedalusStudio.Shell;
 /// <summary>The standard toolbar and the search box (M29, ADR 0019).</summary>
 public sealed partial class ShellHost
 {
+    /// <summary>The startup list's value for a folder's launch configuration.</summary>
+    private const string LaunchChoicePrefix = "launch:";
+
     public ToolbarViewModel Toolbar { get; private set; } = null!;
 
     private void InitializeToolbar()
@@ -22,7 +25,18 @@ public sealed partial class ShellHost
                     _ = Solutions.SetConfigurationAsync(picked, CancellationToken.None);
                 }
             },
-            SetStartupProject,
+            path =>
+            {
+                // In folder mode the startup list holds the launch configurations (ADR 0033).
+                if (path?.StartsWith(LaunchChoicePrefix, StringComparison.Ordinal) == true)
+                {
+                    SelectLaunchConfiguration(path[LaunchChoicePrefix.Length..]);
+                }
+                else
+                {
+                    SetStartupProject(path);
+                }
+            },
             () => ActiveEditor?.Controller?.Editor.Undo(),
             () => ActiveEditor?.Controller?.Editor.Redo());
     }
@@ -44,7 +58,7 @@ public sealed partial class ShellHost
         Toolbar.SetSolution(
             [.. solution.Configurations.Select(c => (c.Configuration, c.Platform))],
             solution.Active is { } active ? (active.Configuration, active.Platform) : null,
-            Path.GetFileNameWithoutExtension(solution.Path));
+            solution.Name);
         UpdateToolbarStartup();
     }
 
@@ -58,6 +72,12 @@ public sealed partial class ShellHost
         if (Solutions?.Solution is not { } solution)
         {
             Toolbar.SetStartup([], null, null);
+            return;
+        }
+
+        if (solution.IsFolder && LaunchConfigurations() is { Count: > 0 } configurations)
+        {
+            Toolbar.SetStartup([.. configurations.Select(c => new StartupProjectChoice(c.Name, LaunchChoicePrefix + c.Name))], LaunchChoicePrefix + CurrentLaunchConfiguration!.Name, null);
             return;
         }
 

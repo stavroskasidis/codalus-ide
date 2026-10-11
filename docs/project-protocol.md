@@ -18,7 +18,7 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
-| `solution/open` | `OpenSolutionParams` | `SolutionInfo` | Untrusted: structure only, no evaluation, no restore, no watching. |
+| `solution/open` | `OpenSolutionParams` | `SolutionInfo` | Untrusted: structure only, no evaluation, no restore, no watching (a folder is still watched). `path` may be a folder (folder mode, [below](#project-items-show-all-files-folder-mode-and-item-templates)). |
 | `solution/close` | `{}` | `{}` | |
 | `solution/trust` | `{restore}` | `{}` | The user trusted the folder: evaluate (and restore). |
 | `solution/setConfiguration` | `{configuration, platform}` | `{}` | Re-evaluates every project with the mapped project configuration. |
@@ -124,6 +124,74 @@ Property pages, references, configurations, dependencies, load/unload, solution 
 
 `solution/open` also accepts a `.slnf`: the filter's solution opens with only its projects loaded, and `SolutionInfo` gains `filterPath`.
 
+## Project items, Show All Files, folder mode and item templates
+
+The Properties window, Include and Exclude, links, moves between projects, Show All Files, folder mode and `dotnet new` item templates ([ADR 0033](adr/0033-project-items-templates-and-folder-mode.md)). Contracts are in `ItemMessages.cs`; the shell side is `ProjectItemService` in `src/DaedalusStudio.Workbench/Projects`. Item requests need a trusted solution; `fs/listTree` and `folder/discover` don't.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `items/get` | `{project, path}` | `ItemInfoResult` | The file as the Properties window shows it, evaluated with the active configuration (a multi-targeted project with its first framework). |
+| `items/set` | `{project, path, itemType?, metadata?: {name: value \| null}}` | `{changed, updatedFiles}` | Changes the Build Action and metadata with the minimal edit: an `Update` item for a globbed file (metadata as child elements), `<Old Remove>` + `<New Include>` when a glob gives another type, existing metadata changed in place; a null value, or the value the project would have without its own definition, removes the definition. Imports are never edited. |
+| `items/exclude` | `{project, paths}` | `{changed, updatedFiles}` | Removes the file's explicit `Include` and `Update` items, then adds `<Type Remove>` for each type a glob still includes it as. A folder gets `Remove="Folder\**"` for each default glob type (`Compile`, `Content` in web projects, `EmbeddedResource`, `None`). A linked file loses its link. |
+| `items/include` | `{project, paths}` | `{changed, updatedFiles}` | Removes the `Remove` items that name the file or folder; whatever is still excluded gets an `Include` of the type the globs would give it. |
+| `items/addExisting` | `{project, targetFolder, files, asLink}` | `FileOperationResult` | Copies the files into the folder and makes sure they are items; with `asLink`, adds `<Type Include="..\x" Link="Folder\x" />` instead. |
+| `fs/listTree` | `{path, maxEntries?}` | `{entries: [{path, isDirectory}], truncated}` | Everything under a folder (Show All Files, the folder view) except `.git`, `.vs`, `.idea` and `node_modules`; at most 20,000 entries by default. |
+| `folder/discover` | `{}` | `{projects}` | Folder mode: the project files under the folder (not under `bin`, `obj` or those folders). |
+| `folder/setProjects` | `{projects}` | `{}` | Folder mode: the projects of the folder's in-memory solution, kept in `.daedalus/folder.json`. New ones are evaluated (and restored when the solution opened with `restore`). |
+| `templates/instantiate` | `{template, name, outputDirectory, project?, language?, arguments?}` | `{createdPaths, output}` | Runs `dotnet new <template>` with `--project`; a project that isn't restored is restored first (project-capability constraints read its assets). `DAEDALUS_TEMPLATE_HIVE` adds `--debug:custom-hive`. |
+
+| Notification | Params |
+|---|---|
+| `fs/changed` | `{directories}`: folders whose set of files changed (debounced), for Show All Files and the folder view |
+
+- **`ItemInfoResult`** `{project, path, itemType?, isLinked, link?, fromGlob, elements: [{operation (include \| update \| remove), itemType, value, line, condition?}], metadata: [{name, value, projectValue?}], itemTypes}`. `itemType` is null for a file that isn't an item. `metadata` has `CopyToOutputDirectory`, `Generator`, `CustomToolNamespace`, `Link` (linked files) and every metadata of the item; `projectValue` is what the project file sets. `itemTypes` are the Build Action choices (`None`, `Compile`, `Content`, `EmbeddedResource`, `AdditionalFiles`, then `AvailableItemName`).
+- **`fs/move` across projects:** when a file moves (or is copied) from one project's folder into another's, the source project's explicit items that name it are carried to the target project with `items/set`'s edit, and removed from the source on a move.
+- **Folder mode:** `solution/open` with a folder path answers `SolutionInfo` with `format: folder`, `path` the folder, and the loaded projects. `build/run` of the folder builds its one loaded project, or a generated `.daedalus/folder.slnx`; `solution/addProject` and `solution/removeProject` change the loaded projects; editing a solution file fails.
+
+## Build depth: options, the up-to-date check, batch builds, timings, build events and binary logs
+
+[ADR 0034](adr/0034-build-depth.md). Contracts are in `BuildDepthMessages.cs` (`BuildDepthJsonContext`); the shell side is `BuildService` and `BuildDepthService` in `src/DaedalusStudio.Workbench/Build`. Builds, the up-to-date check and build events need a trusted solution.
+
+- **`build/run`** takes `options?: BuildOptions` `{verbosity?, logFile?, logFileVerbosity?, maxParallelProjects, binaryLog?, upToDateCheck (default true), properties?}`. Verbosities are `quiet`, `minimal` (the default), `normal`, `detailed` and `diagnostic`; `properties` are extra global properties. Without options the build runs as in M4. `BuildResultInfo` gains `upToDate` (the fast up-to-date check found nothing to build, so MSBuild didn't run) and `binaryLog` (the log the build wrote).
+- **The fast up-to-date check:** after a build with options, each built project (and the projects it references) records its inputs and outputs, with sizes and write times, in `obj/<configuration>/<framework>/daedalus.uptodate.json` (or forgets them after a failure or a clean). A Build with `upToDateCheck` skips MSBuild when every project in scope (the project and its references, or every project the solution's active configuration builds) is unchanged since. The output names the first out-of-date project and why.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `build/batch` | `{target, entries: [{project, configuration, platform}], options?}` | `{succeeded, canceled, errors, warnings, elapsedMilliseconds, entries: [{project, configuration, platform, succeeded, skipped, errors, warnings, elapsedMilliseconds}]}` | Each entry in turn, in one exclusive build (one restore per project); `skipped` is the up-to-date check's. `build/output`, `build/diagnostic` and `build/cancel` work as for `build/run`. A binary log option is ignored. |
+| `build/upToDate` | `{project?}` | `{upToDate, projects: [{project, upToDate, reason}]}` | The check alone, for a project or the solution. |
+| `build/timings` | `{}` | `BuildTimingsResult` | The last build's: `{totalMilliseconds, projects: [{id, project, name, targetFramework?, node, start, duration, succeeded, targets, dependsOn}], targets: [{project, name, duration}], tasks: [{name, duration, count}], criticalPath: [id], binaryLog?}`; times in milliseconds from the build's start. Fails before the first build that ran MSBuild. |
+| `buildEvents/get` | `{project}` | `{project, preBuild, postBuild, runPostBuildEvent}` | The `PreBuild` and `PostBuild` targets' `Exec` commands, and `RunPostBuildEvent` (`OnBuildSuccess` when unset). |
+| `buildEvents/set` | `{project, preBuild?, postBuild?, runPostBuildEvent?}` | as `buildEvents/get` | A null field is left alone; an empty command removes its target; `OnBuildSuccess` removes the property. |
+| `binlog/open` | `{path}` | `{id, path, root, succeeded, durationMilliseconds, errors, warnings, nodes}` | Reads a `.binlog` with `MSBuild.StructuredLogger`. |
+| `binlog/children` | `{id, node}` | `{children: [BinaryLogNode]}` | A node's children, a level at a time. |
+| `binlog/search` | `{id, query, maxResults = 500}` | `{results: [{node, path: [id]}], truncated}` | Case-insensitive search of the nodes' text and diagnostics' files; `path` runs from the root to the node. |
+| `binlog/close` | `{id}` | `{}` | |
+
+- **`BinaryLogNode`** `{id, kind, text, hasChildren, durationMilliseconds?, file?, line, isError, isWarning}`: `kind` is the StructuredLogger type (`Build`, `Project`, `Target`, `Task`, `Message`, `Error`, `Warning`, `Property`, `Item`, `Folder`…).
+
+## Entity Framework Core
+
+EF Core ([ADR 0036](adr/0036-ef-core-integration.md)) runs the user's own `dotnet ef` as a child process of the host, in the startup project's folder, with `--json --prefix-output` (one at a time: dotnet-ef copies its own build host into the project's output on every run). The model view's data comes from `daedalus-efagent` (`buildhost/efagent/`, net8.0), started like dotnet-ef starts its `ef.dll`: `dotnet exec --depsfile <app>.deps.json --runtimeconfig <app>.runtimeconfig.json`, so it runs on the app's runtime with the app's EF Core. Every request needs a trusted solution; cancelling one kills its process tree. Contracts are in `EntityFrameworkMessages.cs`; the shell side is `EntityFrameworkService` in `src/DaedalusStudio.Workbench/Data`, which builds the startup project first and passes `noBuild`.
+
+**`EfTarget`** `{project, startupProject?, context?, connection?, noBuild}`: `--project`, `--startup-project` (default: the project), `--context` (full or short name), `--connection` (default: the app's configuration; only for the commands that take one, and never echoed in `ef/output`), `--no-build`. The startup project's configuration in the active solution configuration and its active target framework are passed too.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `ef/status` | `{project, startupProject?}` | `{toolVersion?, toolSource? (local \| global), manifest?, manifestListsTool, efCoreVersion?, providers, hasDesignPackage, message?}` | `dotnet ef --version` in the startup project's folder, the tool manifest, and the projects' EF Core package references. |
+| `ef/contexts` | `EfTarget` | `{contexts: [{name, fullName, assemblyQualifiedName?}]}` | `dbcontext list`. |
+| `ef/contextInfo` | `EfTarget` | `{type, providerName?, databaseName?, dataSource?, options?}` | `dbcontext info`. |
+| `ef/migrations` | `EfTarget` | `{migrations: [{id, name, applied?}], connectionError?}` | `migrations list`; when the database can't be reached, again with `--no-connect` (`applied` null) and the error. |
+| `ef/addMigration` | `{target, name, outputDir?, namespace?}` | `{files}` | `migrations add`; the name must be a C# identifier. |
+| `ef/removeMigration` | `{target, force}` | `{files}` | `migrations remove` (`--force` reverts an applied one first). |
+| `ef/script` | `{target, from?, to?, idempotent, noTransactions}` | `{sql}` | `migrations script` into a temporary file. `from` newer than `to` gives the Down script; the shell shows the script from the last applied migration to the target before every update. |
+| `ef/updateDatabase` | `{target, migration?}` | `{}` | `database update [migration]` (`0` reverts every migration). |
+| `ef/bundle` | `{target, output, selfContained, runtime?, force}` | `{files}` | `migrations bundle`. |
+| `ef/scaffold` | `{project, startupProject?, connection, provider, outputDir?, contextDir?, contextName?, namespace?, contextNamespace?, tables?, schemas?, dataAnnotations, noOnConfiguring, useDatabaseNames, noPluralize, force, noBuild}` | `{files}` | `dbcontext scaffold`; empty `tables` and `schemas` mean everything. |
+| `ef/optimize` | `{target, outputDir?, namespace?}` | `{files}` | `dbcontext optimize`; `files` are the files written to the output folder. |
+| `ef/model` | `EfTarget` | `{context, provider?, productVersion?, entities, debugView?}` | The design-time model from `daedalus-efagent`. Each entity: `{name, clrType?, table?, schema?, view?, isOwned, owner?, baseType?, isKeyless, properties: [{name, clrType?, nullable, isKey, isForeignKey, isShadow, column?, columnType?, maxLength?}], keys: [{properties, isPrimary}], foreignKeys: [{properties, principal, principalProperties, deleteBehavior?, isUnique, isRequired, isOwnership, dependentToPrincipal?, principalToDependent?}], navigations: [{name, target?, isCollection, isOnDependent, inverse?, isSkip}], indexes: [{properties, isUnique, name?}]}`. |
+
+Notification (host → shell): **`ef/output`** `{level: info | warn | error | verbose, line}`, the running command's messages (the command line comes first as `> dotnet ef …`).
+
 ## Errors
 
 | Code | Meaning |
@@ -132,3 +200,4 @@ Property pages, references, configurations, dependencies, load/unload, solution 
 | -33101 | The solution is not trusted. |
 | -33102 | Invalid operation (e.g. no such solution folder; editing the solution of a project opened on its own). |
 | -33103 | File system error (exists, not found, access denied); the message is meant for the user. |
+| -33104 | A tool the request runs isn't installed (`dotnet-ef` for `ef/*`): the shell offers to install or restore it. |

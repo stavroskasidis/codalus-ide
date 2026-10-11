@@ -67,7 +67,7 @@ public sealed partial class ShellHost
 
     /// <summary>The solution folder, else the user's home.</summary>
     private string TerminalDirectory() =>
-        Solutions.Solution?.Path is { } solution ? Path.GetDirectoryName(solution)! : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Solutions.Solution?.Directory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     private void ApplyTerminalSettings()
     {

@@ -443,6 +443,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(screen.Contains("args: one two words", StringComparison.Ordinal), "the launch profile's arguments arrived");
         }, "build.solution").ConfigureAwait(true);
 
+        // M26b: build depth (ADR 0034, 0035).
+        await StepAsync("build.depth", "M26", "The fast up-to-date check, a binary log in the viewer, Build Timings, Batch Build, and the ResX and T4 custom tools", BuildDepthStepAsync, "build.solution").ConfigureAwait(true);
+
         // M5: debugging (netcoredbg).
         await StepAsync("debug.session", "M5", "F5 stops at a breakpoint; locals, evaluation and continue to exit", async () =>
         {
@@ -531,21 +534,41 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => editor.PinLayer.Pins.TryGetValue(cwdLine, out var control) && control.IsVisible, "the pinned data tip floats over its line").ConfigureAwait(true);
             Screenshot("smoke-test-debug-companion.png");
 
-            // A full dump of the paused program, opened in the dump view.
-            var pid = shell.Debugger.ProcessId ?? throw new SmokeFailure("The session has no process id.");
+            // A full dump of the paused program, opened in the dump view. On macOS createdump can stall on a program the
+            // debugger holds, so there the dump is of the build host, a .NET process outside the session.
+            var dumpsDebuggee = !OperatingSystem.IsMacOS();
+            var pid = (dumpsDebuggee ? shell.Debugger.ProcessId : shell.Solutions.HostProcessId) ?? throw new SmokeFailure("There is no process id to dump.");
             var dump = Path.Combine(Path.GetTempPath(), $"daedalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
-            var created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
+            DaedalusStudio.Debugging.Companion.CreateDumpResult created;
+            try
+            {
+                created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
+            }
+            finally
+            {
+                // Ended even when the dump fails, so the steps after this one start without a session.
+                shell.Debugger.PinnedTips.Clear();
+                shell.Run("debug.stop");
+                await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            }
+
             Check(File.Exists(created.Path) && created.Size > 0, $"the companion writes a dump ({created.Size} bytes)");
-            shell.Debugger.PinnedTips.Clear();
-            shell.Run("debug.stop");
-            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
             try
             {
                 var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
                 await WaitAsync(() => window.GetVisualDescendants().OfType<DumpView>().Any(), "the dump view renders").ConfigureAwait(true);
+                if (!dumpsDebuggee)
+                {
+                    Check(document.ViewModel.Summary.Threads.Any(t => t.Frames.Count > 0), "the build host's dump has threads with managed frames");
+                }
+
                 var main = document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).FirstOrDefault(f => f.Method.Contains("Main", StringComparison.Ordinal));
-                Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
-                Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
+                if (dumpsDebuggee)
+                {
+                    Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
+                    Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
+                }
+
                 await document.ViewModel.LoadHeapAsync().ConfigureAwait(true);
                 Check(document.ViewModel.Heap.Any(r => r.Name == "System.String"), "the heap lists System.String");
                 Screenshot("smoke-test-dump.png");
@@ -726,6 +749,58 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => shell.Solutions.Projects.TryGetValue(multi, out var p) && p.State == Projects.Protocol.ProjectStates.Loaded, "Multi is loaded again", 60).ConfigureAwait(true);
         }, "packages.manage").ConfigureAwait(true);
 
+        // M26a: project items, Show All Files, Add New Item and External Tools (ADR 0033), on the same solution.
+        await StepAsync("projects.items", "M26", "The Properties window sets Copy to Output; Show All Files with Exclude and Include; Add New Item; an External Tool", async () =>
+        {
+            var plainDir = Path.GetDirectoryName(PlainProject)!;
+            var notes = Path.Combine(plainDir, "notes.txt");
+            await File.WriteAllTextAsync(notes, "Smoke test notes.\n").ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.TryGetValue(PlainProject, out var p) && p.Items.Any(i => i.Path == notes), "notes.txt becomes an item", 60).ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
+            PropertyRowViewModel? Row(string name) => shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == name);
+
+            // The Solution Explorer gets the new file once it has refreshed the project: reveal it until it is selected.
+            await WaitAsync(() =>
+            {
+                if (shell.Explorer.Selected?.Node.Path != notes)
+                {
+                    shell.Explorer.Reveal("f:" + notes);
+                }
+
+                return !shell.PropertiesWindow.IsLoading && Row("Copy to Output Directory") is not null && shell.PropertiesWindow.Title.StartsWith("notes.txt", StringComparison.Ordinal);
+            }, "the Properties window shows notes.txt", 60).ConfigureAwait(true);
+            Check(Row("Build Action")?.Value == "None", "notes.txt is a None item");
+            Row("Copy to Output Directory")!.SelectedOption = PropertiesWindowViewModel.CopyToOutputOptions.Single(o => o.Value == "PreserveNewest");
+            await WaitAsync(() => ReadText(PlainProject).Contains("<None Update=\"notes.txt\">", StringComparison.Ordinal), "an Update item is written for the globbed file", 60).ConfigureAwait(true);
+            await WaitAsync(() => !shell.PropertiesWindow.IsLoading && Row("Copy to Output Directory")?.IsSet == true, "the Properties window shows the new value", 60).ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-properties.png");
+
+            shell.Explorer.ShowAllFiles = true;
+            await shell.ProjectItems.ExcludeAsync(PlainProject, [notes], CancellationToken.None).ConfigureAwait(true);
+            Check(ReadText(PlainProject).Contains("<None Remove=\"notes.txt\" />", StringComparison.Ordinal), "Exclude From Project writes a Remove item");
+            await WaitAsync(() => shell.Explorer.Rows.Any(r => r.Node.Path == notes && r.IsExcluded), "Show All Files shows the excluded file", 60).ConfigureAwait(true);
+            shell.Explorer.Reveal("f:" + notes);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-show-all-files.png");
+            await shell.IncludeInProjectAsync(PlainProject, [notes]).ConfigureAwait(true);
+            Check(!ReadText(PlainProject).Contains("Remove=\"notes.txt\"", StringComparison.Ordinal), "Include In Project removes it");
+            shell.Explorer.ShowAllFiles = false;
+
+            var add = shell.OpenAddNewItem(PlainProject) ?? throw new SmokeFailure("Add New Item did not open.");
+            await WaitAsync(() => !add.IsLoading, "Add New Item lists its templates", 120).ConfigureAwait(true);
+            add.Selected = add.Templates.First(t => t.Template.ShortName == "class");
+            add.Name = "SmokeItem";
+            var created = await add.AddAsync().ConfigureAwait(true);
+            Check(created is not null && ReadText(created).Contains("class SmokeItem", StringComparison.Ordinal), $"Add New Item creates SmokeItem.cs ({add.Error})");
+
+            await shell.SaveExternalToolsAsync([new Workbench.ExternalTools.ExternalTool("smokesdk", "Smoke SDK Version", "dotnet", "--version", "$(SolutionDir)")]).ConfigureAwait(true);
+            shell.Run("externalTools.run.smokesdk");
+            var tools = shell.Workbench.Output.GetOrCreate("daedalus.externalTools");
+            await WaitAsync(() => tools.GetText().Contains("exited with code 0", StringComparison.Ordinal), "the external tool runs in the Output window", 60).ConfigureAwait(true);
+            await shell.SaveExternalToolsAsync([]).ConfigureAwait(true);
+        }, "packages.manage").ConfigureAwait(true);
+
         // M10: C# Interactive (ADR 0015), initialized with Plain (which references a package from the fixture feed).
         await StepAsync("interactive.repl", "M10", "C# Interactive runs code, references a project and a NuGet package", async () =>
         {
@@ -837,8 +912,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(editor.Model.LanguageId == ShellHost.RazorLanguageId, "Counter.razor is a Razor file");
             var client = shell.Languages.RunningClient(ShellHost.CSharpLanguageId)!;
             var at = editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("@currentCount", StringComparison.Ordinal) + 3);
-            string? hover = null;
-            await WaitAsync(() => (hover = client.HoverAsync(editor.Model.Uri, at, CancellationToken.None).GetAwaiter().GetResult()?.Contents.Value) is not null,
+            var hover = await WaitForAsync(async ct => (await client.HoverAsync(editor.Model.Uri, at, ct).ConfigureAwait(true))?.Contents.Value,
                 "hover on C# in the Razor file", 120).ConfigureAwait(true);
             Check(hover!.Contains("currentCount", StringComparison.Ordinal), "the hover describes the field: " + hover);
             var completion = await client.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("<button", StringComparison.Ordinal) + 1),
@@ -899,6 +973,35 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         {
             Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, "No stand-in: on Windows a WSL distribution with .NET; elsewhere sh.");
         }
+        // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
+        await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
+        {
+            await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+            var source = Path.Combine(samples, "ProjectSystem", "FolderOnly");
+            Check(Directory.Exists(source), $"the samples folder {samples} has ProjectSystem/FolderOnly");
+            var parent = Path.Combine(_work, "FolderMode");
+            Directory.CreateDirectory(parent);
+            File.Copy(Path.Combine(samples, "ProjectSystem", "Directory.Build.props"), Path.Combine(parent, "Directory.Build.props"), overwrite: true);
+            var folder = Path.Combine(parent, "FolderOnly");
+            Copy(source, folder);
+            shell.Trust.Trust(folder);
+            await shell.OpenFolderWorkspaceAsync(folder).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Solution is { IsFolder: true } && shell.Explorer.IsFolderView && shell.Explorer.Rows.Any(r => r.Name == "README.md"), "the folder view lists the folder", 120).ConfigureAwait(true);
+            shell.Explorer.Reveal("f:" + Path.Combine(folder, "src", "Tool", "Tool.csproj"));
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-folder-view.png");
+
+            await shell.LoadAllFolderProjectsAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Projects.Values.All(p => p.State == Projects.Protocol.ProjectStates.Loaded), "both projects of the folder load", 240).ConfigureAwait(true);
+            Check(await shell.RunTaskAsync("sdk version").ConfigureAwait(true) == 0, "the task 'sdk version' runs:\n" + Tail(shell.Workbench.Output.GetOrCreate("daedalus.tasks").GetText(), 1000));
+            shell.Run("run.startWithoutDebugging");
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Tool")?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("FROM LAUNCH.JSON!", StringComparison.Ordinal), "the launch configuration 'Tool' runs with its arguments", 300).ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-folder.png");
+        }).ConfigureAwait(true);
+
+        await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
 
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
@@ -1149,6 +1252,70 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     }
 
     /// <summary>
+    /// EF Core (M27a, ADR 0036) on samples/Data and SQLite: the fixture's local dotnet-ef is restored, the Entity
+    /// Framework window finds BloggingContext (Roslyn) and its pending migration (dotnet ef), Update Database shows the
+    /// SQL before it applies it, a model change becomes a migration, the model view draws the entities, and the
+    /// inventory database is reverse engineered.
+    /// </summary>
+    private async Task EfStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "Data", "Data.slnx")), $"the samples folder {samples} has Data");
+        var target = Path.Combine(_work, "Data");
+        Copy(Path.Combine(samples, "Data"), target);
+        await shell.OpenSolutionAsync(Path.Combine(target, "Data.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Data solution is open", 300).ConfigureAwait(true);
+        var restore = await shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None).ConfigureAwait(true);
+        Check(restore.Succeeded, "dotnet tool restore gets the fixture's dotnet-ef:\n" + Tail(restore.Output, 1500));
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 1 }, "the C# workspace is ready", 300).ConfigureAwait(true);
+
+        await shell.ShowEntityFrameworkAsync().ConfigureAwait(true);
+        var ef = shell.EfExplorer;
+        string Log() => Tail(shell.EntityFramework.Channel.GetText(), 2500) + "\n" + ef.Message;
+        await WaitAsync(() => ef.Context is { Name: "BloggingContext", Provider: "Microsoft.EntityFrameworkCore.Sqlite" }, "the window finds BloggingContext on SQLite", 120).ConfigureAwait(true);
+        await WaitAsync(() => ef.Migrations.Count == 1 && !ef.IsBusy, "the window lists InitialCreate", 420).ConfigureAwait(true);
+        Check(ef.Migrations[0].State == "Pending", "InitialCreate is pending: " + Log());
+
+        var update = shell.UpdateDatabaseAsync(null);
+        await WaitAsync(() => shell.Dialogs.IsOpen || update.IsCompleted, "Update Database shows the SQL", 240).ConfigureAwait(true);
+        Check(shell.Dialogs.Details.Any(l => l.Text.Contains("CREATE TABLE \"Blogs\"", StringComparison.Ordinal)), "the SQL creates the Blogs table: " + Log());
+        Check(!File.Exists(Path.Combine(target, "Blogging", "blogging.db")), "nothing is applied before Apply");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-ef-update.png");
+        shell.Dialogs.Buttons.Single(b => b.Label == "Apply").Command.Execute(null);
+        await WaitAsync(() => update.IsCompleted, "the migration is applied", 240).ConfigureAwait(true);
+        Check(update.Result && File.Exists(Path.Combine(target, "Blogging", "blogging.db")), "Update Database created the SQLite database: " + Log());
+        await WaitAsync(() => ef.Migrations.Count == 1 && ef.Migrations[0].Applied == true && !ef.IsBusy, "InitialCreate shows as applied", 240).ConfigureAwait(true);
+
+        var context = Path.Combine(target, "Blogging", "Data", "BloggingContext.cs");
+        File.WriteAllText(context, File.ReadAllText(context).Replace("public DateTime Published { get; set; }", "public DateTime Published { get; set; }\n\n    public int Rating { get; set; }", StringComparison.Ordinal));
+        shell.EntityFramework.Invalidate();
+        await shell.AddMigrationAsync("AddRating").ConfigureAwait(true);
+        await WaitAsync(() => ef.Migrations.Count == 2 && !ef.IsBusy, "AddRating is listed", 300).ConfigureAwait(true);
+        Check(ef.Migrations[1].State == "Pending", "AddRating is pending: " + Log());
+
+        var model = await shell.ShowEfModelAsync().ConfigureAwait(true);
+        Check(model is not null, "the model view opens");
+        await WaitAsync(() => model!.ViewModel.Model is not null || model.ViewModel.Message?.StartsWith("Building", StringComparison.Ordinal) == false, "the model is read", 300).ConfigureAwait(true);
+        Check(model!.ViewModel.Model?.Entities.Length == 5, "the model has 5 entity types: " + model.ViewModel.Message + "\n" + Log());
+        await WaitAsync(() => window.GetVisualDescendants().OfType<EfModelView>().Any(v => v.Diagram.Boxes.Count == 5), "the diagram draws them").ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-ef-model.png");
+
+        var scaffold = shell.OpenReverseEngineer();
+        Check(scaffold is not null, "Reverse Engineer opens");
+        var form = scaffold!.ViewModel;
+        form.ConnectionString = "Data Source=" + Path.Combine(target, "Inventory", "inventory.db");
+        form.Provider = "Microsoft.EntityFrameworkCore.Sqlite";
+        form.OutputDir = "Inventory";
+        form.ContextName = "InventoryContext";
+        await form.RunAsync().ConfigureAwait(true);
+        Check(form.Error is null && File.Exists(Path.Combine(target, "Blogging", "Inventory", "Product.cs")), "the inventory database is reverse engineered: " + form.Error + "\n" + Log());
+        shell.Layout.CloseDocument(model);
+        shell.Layout.CloseDocument(scaffold);
+    }
+
+    /// <summary>
     /// HTML and CSS in Razor (M16d, ADR 0027): at a markup position of Counter.razor (samples/Blazor, opened by
     /// blazor.razor) the HTML server completes elements, through the file's HTML.
     /// </summary>
@@ -1165,6 +1332,86 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             new LanguageServices.Protocol.CompletionContext(LanguageServices.Protocol.CompletionTriggerKind.Invoked, null), CancellationToken.None).ConfigureAwait(true);
         Check(completion?.Items.Any(i => i.Label == "blockquote") == true, "HTML completion in Razor offers blockquote");
         editor.Model.Text.Remove(heading, "\n<blockq".Length);
+    }
+
+    /// <summary>
+    /// Build depth (M26b, ADR 0034 and 0035) on BuildAndRun: Build Solution again is skipped by the fast up-to-date check;
+    /// Build with Binary Log opens the log in the viewer and its search finds CoreCompile; Build Timings shows the
+    /// projects; Batch Build builds Hello's Release configuration; the ResX and T4 custom tools (the shipped T4 host)
+    /// generate code in Greetings, which then builds. The project file and the new files are put back afterwards.
+    /// </summary>
+    private async Task BuildDepthStepAsync()
+    {
+        await WaitAsync(() => !shell.Builds.IsBuilding && shell.Runs.Running.Count == 0, "the previous build and run have finished", 120).ConfigureAwait(true);
+        var before = shell.Builds.LastBuild;
+        shell.Run("build.buildSolution");
+        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 300).ConfigureAwait(true);
+        Check(shell.Builds.LastBuild!.Result is { Succeeded: true, UpToDate: true }, "Build Solution right after a build is up to date:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+
+        // A binary log, read by the build host and browsed in the viewer.
+        shell.Run("build.buildWithBinaryLog");
+        BinaryLogViewModel? Log() => shell.Layout.Documents.OfType<PageDocument>().Select(d => d.ViewModel).OfType<BinaryLogViewModel>().FirstOrDefault();
+        await WaitAsync(() => Log() is { Roots.Count: 1 } log && log.Roots[0].Children.Count > 1, "Build with Binary Log opens the log in the viewer", 300).ConfigureAwait(true);
+        var binlog = Log()!;
+        Check(binlog.Summary?.Contains("Build succeeded", StringComparison.Ordinal) == true, $"the viewer summarizes the build ({binlog.Summary}{binlog.Error})");
+        binlog.Query = "CoreCompile";
+        await binlog.SearchAsync().ConfigureAwait(true);
+        Check(binlog.Results.Any(r => r.Kind == "Target"), "searching the log finds the CoreCompile target");
+        await binlog.RevealAsync(binlog.Results.First(r => r.Kind == "Target").Result).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-binary-log.png");
+
+        var timings = shell.OpenBuildTimings();
+        await WaitAsync(() => timings.Projects.Count > 0, "Build Timings shows the last build's projects", 60).ConfigureAwait(true);
+        Check(timings.CriticalPath.Any(p => p.StartsWith("Hello", StringComparison.Ordinal)), "the critical path ends with Hello: " + timings.CriticalPathText);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-build-timings.png");
+
+        // Batch Build: Hello's Release configuration.
+        var batch = shell.OpenBatchBuild();
+        await WaitAsync(() => batch.Rows.Any(r => r is { Name: "Hello", Configuration: "Release" }), "Batch Build lists the project configurations", 60).ConfigureAwait(true);
+        foreach (var row in batch.Rows)
+        {
+            row.IsChecked = row is { Name: "Hello", Configuration: "Release" };
+        }
+
+        await batch.RunAsync(Projects.Protocol.BuildTargets.Build).ConfigureAwait(true);
+        var release = batch.Rows.First(r => r is { Name: "Hello", Configuration: "Release" });
+        Check(release.Status?.StartsWith("succeeded", StringComparison.Ordinal) == true, $"Batch Build built Hello|Release ({release.Status}):\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-batch-build.png");
+
+        // Custom tools: a .resx and a text template in Greetings (the T4 host shipped next to the app).
+        var greetings = Path.Combine(_folder, "src", "Greetings", "Greetings.csproj");
+        var greetingsDir = Path.GetDirectoryName(greetings)!;
+        var original = await File.ReadAllTextAsync(greetings).ConfigureAwait(true);
+        var resx = Path.Combine(greetingsDir, "SmokeStrings.resx");
+        var template = Path.Combine(greetingsDir, "SmokeNumbers.tt");
+        string[] created = [resx, template, Path.Combine(greetingsDir, "SmokeStrings.Designer.cs"), Path.Combine(greetingsDir, "SmokeNumbers.cs")];
+        try
+        {
+            await File.WriteAllTextAsync(resx, "<root>\n  <data name=\"SmokeGreeting\" xml:space=\"preserve\">\n    <value>Hello from a resource</value>\n  </data>\n</root>\n").ConfigureAwait(true);
+            await File.WriteAllTextAsync(template, "<#@ template language=\"C#\" #>\n<#@ output extension=\".cs\" #>\nnamespace Greetings;\n\npublic static class SmokeNumbers\n{\n<# for (var i = 1; i <= 3; i++) { #>\n    public const int N<#= i #> = <#= i * i #>;\n<# } #>\n}\n").ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.TryGetValue(greetings, out var p) && p.Items.Any(i => i.Path == resx) && p.Items.Any(i => i.Path == template), "the new files become items", 60).ConfigureAwait(true);
+            await shell.ProjectItems.SetAsync(greetings, resx, null, new Dictionary<string, string?> { [Projects.Protocol.ItemMetadataNames.Generator] = "ResXFileCodeGenerator" }, CancellationToken.None).ConfigureAwait(true);
+            await shell.ProjectItems.SetAsync(greetings, template, null, new Dictionary<string, string?> { [Projects.Protocol.ItemMetadataNames.Generator] = "TextTemplatingFileGenerator" }, CancellationToken.None).ConfigureAwait(true);
+            var strings = await shell.RunCustomToolAsync(resx).ConfigureAwait(true);
+            Check(strings?.Succeeded == true && ReadText(created[2]).Contains("internal static string SmokeGreeting", StringComparison.Ordinal), "the ResX generator writes SmokeStrings.Designer.cs");
+            var numbers = await shell.RunCustomToolAsync(template).ConfigureAwait(true);
+            Check(numbers?.Succeeded == true && ReadText(created[3]).Contains("public const int N3 = 9;", StringComparison.Ordinal),
+                "the T4 host transforms SmokeNumbers.tt: " + string.Join("; ", numbers?.Diagnostics.Select(d => d.Message) ?? ["no result"]));
+            Check(ReadText(greetings).Contains("<DependentUpon>SmokeNumbers.tt</DependentUpon>", StringComparison.Ordinal), "the generated file is nested under its template");
+            Check(await shell.BuildAsync(Projects.Protocol.BuildTargets.Build, greetings).ConfigureAwait(true), "Greetings builds with the generated code:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+        }
+        finally
+        {
+            foreach (var file in created.Where(File.Exists))
+            {
+                File.Delete(file);
+            }
+
+            await File.WriteAllTextAsync(greetings, original).ConfigureAwait(true);
+        }
     }
 
     /// <summary>
@@ -1625,6 +1872,37 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             }
 
             await Task.Delay(50).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Asks <paramref name="probe"/> until it answers non-null, each try cut off after 10 s, without ever blocking the
+    /// UI thread: a host that stops answering fails the step instead of hanging the app.
+    /// </summary>
+    private static async Task<T> WaitForAsync<T>(Func<CancellationToken, Task<T?>> probe, string what, int seconds = 30) where T : class
+    {
+        var deadline = Stopwatch.GetTimestamp() + (seconds * Stopwatch.Frequency);
+        while (true)
+        {
+            using var attempt = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            try
+            {
+                if (await probe(attempt.Token).ConfigureAwait(true) is { } value)
+                {
+                    return value;
+                }
+            }
+            catch (OperationCanceledException) when (attempt.IsCancellationRequested)
+            {
+                // This try took too long; the deadline decides.
+            }
+
+            if (Stopwatch.GetTimestamp() > deadline)
+            {
+                throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what}.");
+            }
+
+            await Task.Delay(250).ConfigureAwait(true);
         }
     }
 

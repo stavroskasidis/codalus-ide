@@ -79,6 +79,33 @@
             }
           }
         },
+        "propertyProviders": {
+          "type": "array",
+          "description": "Rows for the Properties window (API 0.2.8): the command gets { kind, path, project } and returns [{ category, name, value, description }].",
+          "items": {
+            "type": "object",
+            "required": [ "command" ],
+            "properties": { "command": { "type": "string" }, "when": { "type": "string" } }
+          }
+        },
+        "externalToolMacros": {
+          "type": "array",
+          "description": "External Tools macros $(name) (API 0.2.8): the command returns the value as a string.",
+          "items": {
+            "type": "object",
+            "required": [ "name", "command" ],
+            "properties": { "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$" }, "command": { "type": "string" }, "description": { "type": "string" } }
+          }
+        },
+        "customTools": {
+          "type": "array",
+          "description": "Custom tools (API 0.2.8): the Generator name of project items; the command gets { path, content, namespace, project } and returns the generated text or { content, extension }.",
+          "items": {
+            "type": "object",
+            "required": [ "name", "command" ],
+            "properties": { "name": { "type": "string" }, "command": { "type": "string" }, "extension": { "type": "string", "description": "The output's extension, default .cs." }, "description": { "type": "string" } }
+          }
+        },
         "snippets": {
           "type": "array",
           "description": "Snippet files in VS Code's format (API 0.2.5).",
