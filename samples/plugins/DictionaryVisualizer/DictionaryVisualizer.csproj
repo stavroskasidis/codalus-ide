@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A sample plugin with a debugger visualizer (proposed API 0.2.7; see docs/plugins.md). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DictionaryVisualizer</AssemblyName>
+    <RootNamespace>DictionaryVisualizer</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The host provides the API at runtime, so it is not copied next to the plugin. -->
+    <ProjectReference Include="..\..\..\src\DaedalusStudio.Plugins.Abstractions\DaedalusStudio.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="daedalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

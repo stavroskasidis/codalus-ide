@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using DaedalusStudio.Shell.ViewModels;
 
 namespace DaedalusStudio.Shell.Views;
@@ -14,4 +15,6 @@ public sealed partial class DataTipView : UserControl
             (node, value) => DataContext is DataTipViewModel vm ? vm.SetValueAsync(node, value) : Task.FromResult<string?>(null),
             node => !node.IsError && (node.EvaluateName is not null || node.ParentReference is not null));
     }
+
+    private void OnPin(object? sender, RoutedEventArgs e) => (DataContext as DataTipViewModel)?.Pin();
 }

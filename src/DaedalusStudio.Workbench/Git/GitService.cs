@@ -69,6 +69,12 @@ public sealed partial class GitService : IDisposable
             start.Environment["GIT_OPTIONAL_LOCKS"] = "0";
         }
 
+        // The shell's askpass (M13b): git and ssh ask it for what no credential helper answered.
+        foreach (var (name, value) in AskpassEnvironment ?? new Dictionary<string, string>())
+        {
+            start.Environment[name] = value;
+        }
+
         foreach (var (name, value) in environment ?? new Dictionary<string, string>())
         {
             start.Environment[name] = value;

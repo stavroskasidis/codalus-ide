@@ -29,7 +29,7 @@
     "enableProposedApi": { "type": "boolean", "description": "Use proposed APIs (third-party plugins also need --enable-proposed-api)." },
     "activationEvents": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^(\\*|onStartup|onCommand:.+|onView:.+|onSettingChanged:.+|onTestProjects|onSolutionOpened|onLanguage:.+)$" },
+      "items": { "type": "string", "pattern": "^(\\*|onStartup|onCommand:.+|onView:.+|onSettingChanged:.+|onTestProjects|onSolutionOpened|onDebug|onLanguage:.+|onHostingProvider:.+)$" },
       "description": "When the plugin activates."
     },
     "contributes": {
@@ -62,6 +62,21 @@
             "type": "object",
             "required": [ "scopeName", "path" ],
             "properties": { "language": { "type": "string" }, "scopeName": { "type": "string" }, "path": { "type": "string" }, "embeddedLanguages": { "type": "object", "additionalProperties": { "type": "string" } } }
+          }
+        },
+        "hostingProviders": {
+          "type": "array",
+          "description": "Git hosting providers (API 0.2.6, proposed): known before the plugin loads; it activates when the shell needs one.",
+          "items": {
+            "type": "object",
+            "required": [ "id", "label" ],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+              "label": { "type": "string" },
+              "hosts": { "type": "array", "items": { "type": "string" }, "description": "The remotes' hosts it serves by default; *.example.com matches subdomains." },
+              "serverSetting": { "type": "string", "description": "A setting with an enterprise server's URL, whose host counts too." },
+              "icon": { "type": "string" }
+            }
           }
         },
         "snippets": {

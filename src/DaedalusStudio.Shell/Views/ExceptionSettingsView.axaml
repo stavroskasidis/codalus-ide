@@ -26,7 +26,12 @@
       </ListBox.Styles>
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:ExceptionTypeRow">
-          <CheckBox IsChecked="{Binding BreakWhenThrown}" Content="{Binding Type}" AutomationProperties.Name="{Binding Type}" />
+          <Grid ColumnDefinitions="*,220">
+            <CheckBox IsChecked="{Binding BreakWhenThrown}" Content="{Binding Type}" AutomationProperties.Name="{Binding Type}" />
+            <TextBox Grid.Column="1" Text="{Binding Condition, UpdateSourceTrigger=LostFocus}" PlaceholderText="All modules" MinHeight="22" Padding="4,1"
+                     ToolTip.Tip="Break only when thrown in these modules: names with * and ?, comma-separated; ! excludes (e.g. MyApp.dll or !System.*)"
+                     AutomationProperties.Name="{Binding Type, StringFormat=Module condition for {0}}" />
+          </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>

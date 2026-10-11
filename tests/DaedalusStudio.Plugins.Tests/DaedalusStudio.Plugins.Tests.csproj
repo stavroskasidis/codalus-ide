@@ -10,5 +10,14 @@
     <!-- Referenced for their internals and launched in the host by the integration tests. -->
     <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.Templates\DaedalusStudio.Plugins.Templates.csproj" />
     <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.DotNetTest\DaedalusStudio.Plugins.DotNetTest.csproj" />
+    <!-- The hosting plugins (ADR 0031): their providers are tested directly and in the host, against mock servers. -->
+    <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.Hosting\DaedalusStudio.Plugins.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.GitHub\DaedalusStudio.Plugins.GitHub.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.AzureDevOps\DaedalusStudio.Plugins.AzureDevOps.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.GitLab\DaedalusStudio.Plugins.GitLab.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
+    <Compile Include="..\Shared\MockGitHub.cs" Link="Shared\MockGitHub.cs" />
   </ItemGroup>
 </Project>

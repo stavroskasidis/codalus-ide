@@ -161,7 +161,7 @@ public sealed partial class PluginDescription
         var events = new HashSet<string>(StringComparer.Ordinal);
         foreach (var e in m.ActivationEvents ?? [])
         {
-            if (e is "onStartup" or "onSolutionOpened" or "onTestProjects" || ActivationEventPattern().IsMatch(e))
+            if (e is "onStartup" or "onSolutionOpened" or "onTestProjects" or "onDebug" || ActivationEventPattern().IsMatch(e))
             {
                 events.Add(e);
             }
@@ -227,6 +227,24 @@ public sealed partial class PluginDescription
             events.Add("onCommand:" + id);
         }
 
+        // Hosting providers (API 0.2.6): the shell activates the plugin when it needs the provider (ADR 0031).
+        foreach (var provider in c?.HostingProviders ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(provider.Id) || string.IsNullOrWhiteSpace(provider.Label) || !HostingIdPattern().IsMatch(provider.Id))
+            {
+                warnings.Add($"Ignoring hosting provider '{provider.Id}': it needs an id (lower case letters, digits and dashes) and a label.");
+                continue;
+            }
+
+            if (m.Entry is null)
+            {
+                warnings.Add($"Hosting provider '{provider.Id}' needs plugin code (an entry).");
+                continue;
+            }
+
+            events.Add("onHostingProvider:" + provider.Id);
+        }
+
         ActivationEvents = events;
         State = PluginState.Ready;
     }
@@ -239,8 +257,11 @@ public sealed partial class PluginDescription
     [GeneratedRegex("^[a-z0-9][a-z0-9-]*\\.[a-z0-9][a-z0-9.-]*$")]
     private static partial Regex IdPattern();
 
-    [GeneratedRegex("^(onCommand|onView|onSettingChanged):[A-Za-z0-9._/-]+$")]
+    [GeneratedRegex("^(onCommand|onView|onSettingChanged|onHostingProvider):[A-Za-z0-9._/-]+$")]
     private static partial Regex ActivationEventPattern();
+
+    [GeneratedRegex("^[a-z0-9][a-z0-9-]*$")]
+    private static partial Regex HostingIdPattern();
 }
 
 /// <summary>Finds plugins in folders: each subfolder (or the folder itself) with a daedalus-plugin.json.</summary>

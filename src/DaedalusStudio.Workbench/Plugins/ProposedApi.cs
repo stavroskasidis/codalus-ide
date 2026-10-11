@@ -30,6 +30,9 @@ public interface IProposedApiHost
 
     Task DebugStopAsync(string sessionId, CancellationToken cancellationToken);
 
+    /// <summary>Evaluates an expression in the paused program's selected frame (visualizers, API 0.2.7).</summary>
+    Task<DebugValueDto> DebugEvaluateAsync(string expression, CancellationToken cancellationToken);
+
     /// <summary>Opens a terminal; <paramref name="output"/> (with <c>ReportOutput</c>) and <paramref name="exited"/> report on it.</summary>
     Task<TerminalDto> TerminalCreateAsync(TerminalCreateParams create, Action<TerminalOutputParams> output, Action<TerminalExitedParams> exited, CancellationToken cancellationToken);
 
@@ -69,6 +72,28 @@ public interface ITestSink
     void RunCoverage(TestRunCoverageParams coverage);
 
     void RunEnded(string runId);
+}
+
+/// <summary>Receives hosting providers as their plugins register them (the shell's <c>HostingService</c>, ADR 0031).</summary>
+public interface IHostingSink
+{
+    void ProviderRegistered(string pluginId, string providerId, IHostingConnection connection);
+
+    void ProviderUnregistered(string providerId);
+
+    /// <summary>A sign-in waits for the user to enter a device code.</summary>
+    void DeviceCodeReceived(HostingDeviceCodeParams code);
+}
+
+/// <summary>Requests to a hosting provider's plugin host (<c>hosting/*</c>).</summary>
+public interface IHostingConnection
+{
+    Task<TResult> InvokeAsync<TParams, TResult>(
+        string method,
+        TParams parameters,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsInfo,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TResult> resultInfo,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>Requests to a test controller's plugin.</summary>

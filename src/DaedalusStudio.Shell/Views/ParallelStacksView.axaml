@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.ParallelStacksView"
+             x:DataType="vm:ParallelStacksViewModel">
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="The threads' call stacks appear here, merged, while the program is paused." IsVisible="{Binding IsEmpty}" />
+    <TreeView ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="Parallel Stacks">
+      <TreeView.Styles>
+        <Style Selector="TreeViewItem" x:DataType="vm:ParallelStackNodeViewModel">
+          <Setter Property="IsExpanded" Value="True" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </TreeView.Styles>
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate x:DataType="vm:ParallelStackNodeViewModel" ItemsSource="{Binding Children}">
+          <Border Margin="0,2" Padding="6,3" BorderThickness="1" CornerRadius="3" BorderBrush="{DynamicResource Shell.Border}" Background="{DynamicResource Shell.Hover}">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Text="▶" IsVisible="{Binding HasCurrentThread}" Foreground="{DynamicResource Shell.Accent}" ToolTip.Tip="The active thread is here" />
+                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+              </StackPanel>
+              <ItemsControl ItemsSource="{Binding Frames}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <TextBlock Text="{Binding}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" TextTrimming="CharacterEllipsis" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+    </TreeView>
+  </DockPanel>
+</UserControl>

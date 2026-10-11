@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Avalonia;
@@ -501,6 +502,69 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
         }, "debug.session").ConfigureAwait(true);
 
+        await StepAsync("debug.companion", "M14", "Parallel Stacks, the grid visualizer, a pinned data tip, and a dump written and opened by the debug companion", async () =>
+        {
+            var lines = File.ReadAllLines(Program);
+            var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+            var cwdLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"cwd", StringComparison.Ordinal)) + 1;
+            await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == argsLine, $"the debugger stops at line {argsLine}", 300).ConfigureAwait(true);
+
+            // Parallel Stacks: the main thread's frames, marked as the active thread's.
+            shell.Layout.ShowToolWindow(ParallelStacksViewModel.ToolWindowId);
+            await shell.ParallelStacksWindow.RefreshAsync().ConfigureAwait(true);
+            Check(Flatten(shell.ParallelStacksWindow.Roots).Any(n => n.HasCurrentThread && n.Frames.Any(f => f.Contains("Main", StringComparison.Ordinal))), "Parallel Stacks shows the active thread in Main");
+
+            // The grid visualizer on args.
+            await shell.Locals.RefreshAsync().ConfigureAwait(true);
+            var args = shell.Locals.Roots.SingleOrDefault(r => r.Name == "args") ?? throw new SmokeFailure("Locals has no args.");
+            await shell.VisualizeAsync(args, VisualizerKind.Grid).ConfigureAwait(true);
+            await WaitAsync(() => shell.ActiveEditor?.Model is { ReadOnlyLabel: "Grid Visualizer" } model && model.Text.Text.Contains("two words", StringComparison.Ordinal), "the Grid Visualizer lists args").ConfigureAwait(true);
+
+            // A pinned data tip, evaluated at the next pause.
+            var pin = shell.Debugger.PinnedTips.Pin(Program, cwdLine, "args[1]");
+            shell.Debugger.PinnedTips.SetComment(pin, "the second argument");
+            await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && pin.Value == "\"two words\"", "the pinned data tip shows args[1] at the next pause", 60).ConfigureAwait(true);
+            var editor = await OpenAsync(Program).ConfigureAwait(true);
+            await WaitAsync(() => editor.PinLayer.Pins.TryGetValue(cwdLine, out var control) && control.IsVisible, "the pinned data tip floats over its line").ConfigureAwait(true);
+            Screenshot("smoke-test-debug-companion.png");
+
+            // A full dump of the paused program, opened in the dump view.
+            var pid = shell.Debugger.ProcessId ?? throw new SmokeFailure("The session has no process id.");
+            var dump = Path.Combine(Path.GetTempPath(), $"daedalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
+            var created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
+            Check(File.Exists(created.Path) && created.Size > 0, $"the companion writes a dump ({created.Size} bytes)");
+            shell.Debugger.PinnedTips.Clear();
+            shell.Run("debug.stop");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            try
+            {
+                var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
+                await WaitAsync(() => window.GetVisualDescendants().OfType<DumpView>().Any(), "the dump view renders").ConfigureAwait(true);
+                var main = document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).FirstOrDefault(f => f.Method.Contains("Main", StringComparison.Ordinal));
+                Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
+                Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
+                await document.ViewModel.LoadHeapAsync().ConfigureAwait(true);
+                Check(document.ViewModel.Heap.Any(r => r.Name == "System.String"), "the heap lists System.String");
+                Screenshot("smoke-test-dump.png");
+                shell.Layout.CloseDocument(document);
+                await document.ViewModel.CloseAsync().ConfigureAwait(true);
+            }
+            finally
+            {
+                // Best effort: a failure above may leave the dump open, and must not be hidden by this.
+                try
+                {
+                    File.Delete(created.Path);
+                }
+                catch (IOException ex)
+                {
+                    shell.Workbench.Log.AppendLine($"[smoke] Could not delete the dump: {ex.Message}");
+                }
+            }
+        }, "debug.session").ConfigureAwait(true);
+
         // M6: Git.
         await StepAsync("git.changes", "M6", "Git status, diff, stage, commit, blame and branches", async () =>
         {
@@ -573,6 +637,8 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => shell.Git.Status is { Operation: null, Files.Count: 0 }, "the merge is committed").ConfigureAwait(true);
             Check((await File.ReadAllTextAsync(Greeter).ConfigureAwait(true)).Contains("Theirs from", StringComparison.Ordinal), "the incoming side won");
         }, "git.changes").ConfigureAwait(true);
+
+        await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
 
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
@@ -1140,6 +1206,123 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         return (Path.Combine(target, "Web.slnx"), http);
     }
 
+    /// <summary>
+    /// M13b against <see cref="Tests.MockGitHub"/> (nothing reaches GitHub): the fixture's origin is on the mock (fetched
+    /// over git's dumb HTTP protocol from a bare repository, pushed to it directly); a device-code sign-in whose token goes
+    /// to the OS credential store under this profile's own service; the pull request checked out with its review comment
+    /// in the editor and its checks; <c>#</c> completion; askpass for an HTTPS remote; a worktree; then sign-out.
+    /// </summary>
+    private async Task HostingStepAsync()
+    {
+        await using var github = new Tests.MockGitHub("daedalus-samples", "BuildAndRun");
+        var bare = Path.Combine(_work, "BuildAndRun.git");
+        Directory.CreateDirectory(bare);
+        GitIn(bare, "init", "-q", "--bare", "-b", Branch);
+        Git("remote", "add", "origin", github.RemoteUrl);
+        Git("config", "remote.origin.pushurl", bare);
+        Git("config", "credential.helper", string.Empty);
+        Git("push", "-q", "origin", "HEAD:refs/heads/main");
+        Git("switch", "-q", "-c", "smoke/pull-request");
+        await File.AppendAllTextAsync(Path.Combine(_folder, "README.md"), "\nChanged by the smoke test's pull request.\n").ConfigureAwait(true);
+        Git("commit", "-q", "-am", "Smoke pull request");
+        Git("push", "-q", "origin", "smoke/pull-request");
+        Git("switch", "-q", "smoke/branch");
+        Git("branch", "-q", "-D", "smoke/pull-request");
+        Git("update-ref", "-d", "refs/remotes/origin/smoke/pull-request");
+        GitIn(bare, "update-server-info");
+        github.GitDirectory = bare;
+        github.PullRequests.Add(new Tests.MockPullRequest(1, "Smoke pull request", "bo", "smoke/pull-request", "main") { Body = "Changes the **README**.", Reviewers = ["ada"] });
+        github.Threads[1] = [new Tests.MockReviewThread("src/Greetings/Greeter.cs", 3, [("bo", "Should this be configurable?"), ("ada", "Later.")])];
+        github.CheckRuns.Add(new Tests.MockCheckRun("build", "completed", "success"));
+        github.Issues.Add(new Tests.MockIssue(7, "Greet in French", "ada"));
+        github.PendingPolls = int.MaxValue;
+        await shell.Workbench.Settings.SetAsync("github.serverUrl", github.ServerUrl, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        await shell.Workbench.Settings.SetAsync("github.oauthClientId", Tests.MockGitHub.ClientId, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        await shell.Git.RefreshAsync().ConfigureAwait(true);
+        Check(shell.Plugins.Plugins.Any(p => p.Id == "daedalus.github" && p.State == PluginState.Ready), "the GitHub plugin is installed and not loaded before sign-in");
+
+        // Sign in with a device code: the code shows until the host approves it.
+        shell.ShowAccounts("github");
+        var row = shell.Accounts.Row("github") ?? throw new SmokeFailure("The Accounts page has no GitHub row.");
+        await WaitAsync(() => row.HasCode, "the device code shows", 60).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-hosting-signin.png");
+        github.PendingPolls = 0;
+        await WaitAsync(() => row.IsSignedIn && shell.Match is not null, "the sign-in completes and the repository's host is found", 60).ConfigureAwait(true);
+        Console.Out.WriteLine($"  (the token is in: {shell.Secrets.StoreName}, service '{shell.Secrets.ServiceName}')");
+        Check(shell.Secrets.IsPersistent || !(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()), $"the token is in the OS credential store ({shell.Secrets.StoreName})");
+
+        // The pull request: listed with its review thread, checked out over HTTP from the mock.
+        shell.Layout.ShowToolWindow(PullRequestsViewModel.ToolWindowId);
+        await WaitAsync(() => shell.PullRequests.Rows.Count == 1, "the Pull Requests window lists the pull request", 60).ConfigureAwait(true);
+        shell.PullRequests.Selected = shell.PullRequests.Rows[0];
+        await WaitAsync(() => shell.PullRequests.Threads.Count == 1, "the pull request's review thread shows", 30).ConfigureAwait(true);
+        await shell.CheckOutAsync(shell.PullRequests.Rows[0].PullRequest).ConfigureAwait(true);
+        await WaitAsync(() => shell.Git.Status is { Branch: "smoke/pull-request", Upstream: "origin/smoke/pull-request" }, "the pull request is checked out", 60).ConfigureAwait(true);
+        await WaitAsync(() => shell.ReviewThreads.Count == 1 && shell.GitChanges.CiState == "success", "the branch's review comment and checks", 60).ConfigureAwait(true);
+        var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
+        await WaitAsync(() => greeter.Insights.ReviewLines.Any(r => r.Line == 3), "the editor shows the review comment at line 3").ConfigureAwait(true);
+        Check(shell.StatusBar.Right.Any(i => i.Item.Id == "daedalus.hosting.ci" && i.Text.Contains("Checks passed", StringComparison.Ordinal)), "the status bar shows the checks");
+        var before = shell.Theme.Setting;
+        foreach (var theme in s_chromeThemes)
+        {
+            await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => shell.Theme.ActiveTheme == theme, $"the {theme} theme applies").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot($"smoke-test-hosting-{theme}.png");
+        }
+
+        await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+        // # in the commit message completes the issue.
+        var completions = await shell.GitChanges.CompleteAsync("Fixes #7", 8, CancellationToken.None).ConfigureAwait(true);
+        Check(completions.Any(c => c.Reference == "#7" && c.Title == "Greet in French"), "# completes the issue");
+
+        await AskpassCheckAsync(bare).ConfigureAwait(true);
+
+        // A worktree, listed in the Worktrees window, then removed.
+        var worktree = Path.Combine(_work, "BuildAndRun-worktree");
+        await shell.Git.AddWorktreeAsync(worktree, "smoke/worktree", null).ConfigureAwait(true);
+        shell.Layout.ShowToolWindow(WorktreesViewModel.ToolWindowId);
+        await shell.Worktrees.ReloadAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Worktrees.Rows.Count == 2, "the Worktrees window lists the new worktree").ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-worktrees.png");
+        await shell.Git.RemoveWorktreeAsync(worktree, force: true).ConfigureAwait(true);
+
+        // Sign out: the token leaves the credential store; back to the branch the later steps expect.
+        row.SignOutCommand.Execute(null);
+        await WaitAsync(() => !row.IsSignedIn && shell.Hosting.Accounts.Count == 0 && shell.Match is null, "signing out forgets the account").ConfigureAwait(true);
+        await shell.Git.SwitchAsync(new Workbench.Git.GitBranch("smoke/branch", false, false, null, string.Empty)).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Askpass in the shipped app: git, with no credential helper, asks this executable for HTTPS credentials; the
+    /// shell's dialog answers it, and git authenticates (a mock server serving the bare repository with Basic auth).
+    /// </summary>
+    private async Task AskpassCheckAsync(string bare)
+    {
+        Check(shell.Askpass is not null, "the askpass server runs (the daedalus executable was found)");
+        var expected = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("smoke:secret"));
+        await using var server = new Tests.MockHttpServer(request =>
+            request.Header("Authorization") != expected
+                ? new Tests.MockHttpResponse(401, [], "text/plain") { Headers = new Dictionary<string, string> { ["WWW-Authenticate"] = "Basic realm=\"smoke\"" } }
+                : request.Path == "/private.git/info/refs" ? Tests.MockHttpResponse.Text(File.ReadAllText(Path.Combine(bare, "info", "refs")))
+                : request.Path.StartsWith("/private.git/", StringComparison.Ordinal) ? Tests.MockHttpResponse.File(Path.Combine(bare, request.Path["/private.git/".Length..]))
+                : Tests.MockHttpResponse.NotFound());
+        var listing = Task.Run(() => shell.Git.RunAsync(_folder, ["-c", "credential.helper=", "ls-remote", server.BaseUrl + "/private.git"], CancellationToken.None, check: false));
+        await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.Title == "Git: Sign In", "askpass asks for the user name", 60).ConfigureAwait(true);
+        shell.Dialogs.InputText = "smoke";
+        shell.Dialogs.Accept();
+        await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.Title == "Git: Password" && shell.Dialogs.PasswordChar != '\0', "askpass asks for the password, masked", 60).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-askpass.png");
+        shell.Dialogs.InputText = "secret";
+        shell.Dialogs.Accept();
+        var (code, output, error) = await listing.WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(true);
+        Check(code == 0 && output.Contains("refs/heads/main", StringComparison.Ordinal), $"git authenticated with what askpass gave it (exit code {code}: {error.Trim()})");
+    }
+
     private Workbench.Testing.TestNode? TestClass(string project) =>
         shell.Tests.Read(roots => roots.FirstOrDefault(r => r.Label == project)?.SelfAndDescendants().FirstOrDefault(n => n.Label == "CalculatorTests"));
 
@@ -1359,10 +1542,13 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         }
     }
 
-    private void Git(params string[] arguments)
+    private void Git(params string[] arguments) => GitIn(_folder, arguments);
+
+    private static void GitIn(string folder, params string[] arguments)
     {
         var git = Environment.GetEnvironmentVariable(Workbench.Git.GitService.EnvironmentVariable) is { Length: > 0 } custom ? custom : "git";
-        var start = new ProcessStartInfo(git) { WorkingDirectory = _folder, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        var start = new ProcessStartInfo(git) { WorkingDirectory = folder, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        start.Environment["GIT_TERMINAL_PROMPT"] = "0";
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);
@@ -1374,6 +1560,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         process.WaitForExit();
         Check(process.ExitCode == 0, $"git {string.Join(' ', arguments)} succeeds (exit code {process.ExitCode}: {error.Result.Trim()} {output.Trim()})");
     }
+
+    private static IEnumerable<ParallelStackNodeViewModel> Flatten(IEnumerable<ParallelStackNodeViewModel> nodes) =>
+        nodes.SelectMany(n => Flatten(n.Children).Prepend(n));
 
     private async Task<CodeEditorController> OpenAsync(string path)
     {

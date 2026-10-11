@@ -21,6 +21,9 @@ public sealed partial class ShellHost
 {
     public const string JustMyCodeSetting = "debug.justMyCode";
 
+    /// <summary>Step over properties and operators (M14b).</summary>
+    public const string StepFilteringSetting = "debug.stepOverPropertiesAndOperators";
+
     private const string DebugStatusItem = "daedalus.debug";
     private bool _debugWindowsShown;
     private string? _pendingBrowserUrl;
@@ -46,6 +49,9 @@ public sealed partial class ShellHost
     private void InitializeDebugging()
     {
         Debugger = new DebugService(DebugAdapterLocator.Resolve) { JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true) };
+        // [DebuggerDisplay] and [DebuggerBrowsable] from the companion host (M14b); netcoredbg doesn't apply them.
+        Debugger.Displays = new DebuggerDisplays(async (type, modules, cancellationToken) =>
+            await Companion.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false));
         Locals = new VariablesViewModel(Debugger, autos: false, LineText);
         Autos = new VariablesViewModel(Debugger, autos: true, LineText);
         Watch = new WatchViewModel(Debugger);
@@ -60,6 +66,8 @@ public sealed partial class ShellHost
         VariableActions.AddWatch = expression => AddWatchAsync(expression);
         VariableActions.QuickWatch = expression => ShowQuickWatchAsync(expression);
         VariableActions.Visualize = VisualizeAsync;
+        VariableActions.PluginVisualizers = type => [.. Plugins.DebugVisualizers.For(type).Select(v => (v.Id, v.Title))];
+        VariableActions.VisualizeWithPlugin = VisualizeWithPluginAsync;
         VariableActions.CopyText = async text =>
         {
             if (Window?.Clipboard is { } clipboard)
@@ -174,6 +182,7 @@ public sealed partial class ShellHost
             }
 
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
+            Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             if (LaunchPlanner.PageDebugTarget(profile, Workbench.Settings.GetBoolean(JavaScriptDebugSetting, true)) is { } page)
             {
@@ -267,7 +276,7 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Sets the condition, hit count and log message of the breakpoint on the caret's line (adding one if needed).</summary>
+    /// <summary>Sets the condition, hit count, filter and log message of the breakpoint on the caret's line (adding one if needed).</summary>
     public async Task EditBreakpointAsync()
     {
         if (ActiveEditor is not { Controller: { } controller } editor)
@@ -301,6 +310,19 @@ public sealed partial class ShellHost
             return;
         }
 
+        var filter = await Dialogs.ShowAsync(new DialogRequest(
+            "Filter",
+            "Break only on these threads or processes, e.g. ThreadName = \"Worker\" || ThreadId = 12 (ThreadId, ThreadName, ProcessId, ProcessName with =, != , &, ||, !). Leave empty for all:",
+            ["Next", "Cancel"])
+        {
+            Input = breakpoint.Filter ?? string.Empty,
+            Validate = text => Clean(text) is not { } t || BreakpointFilter.TryParse(t, out _, out var error) ? null : error,
+        }).ConfigureAwait(true);
+        if (filter.Button != "Next")
+        {
+            return;
+        }
+
         var log = await Dialogs.ShowAsync(new DialogRequest(
             "Log message",
             "Make it a logpoint: write this message (with {expressions}, $FUNCTION and $TID) and continue, instead of breaking. Leave empty to break:",
@@ -310,7 +332,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        Debugger.Breakpoints.Set(breakpoint with { Condition = Clean(condition.Input), HitCondition = Clean(hits.Input), LogMessage = Clean(log.Input) });
+        Debugger.Breakpoints.Set(breakpoint with { Condition = Clean(condition.Input), HitCondition = Clean(hits.Input), Filter = Clean(filter.Input), LogMessage = Clean(log.Input) });
     }
 
     public async Task DeleteAllBreakpointsAsync()
@@ -352,10 +374,17 @@ public sealed partial class ShellHost
     {
         var state = Debugger.State;
         Workbench.Context.Set("debugActive", state != DebugState.Idle);
+        Workbench.Context.Set("debugAttached", state != DebugState.Idle && Debugger.IsAttached);
         StatusBar.IsDebugging = state != DebugState.Idle;
         Workbench.Context.Set("debugStopped", state == DebugState.Stopped);
         Workbench.Context.Set("debugRunning", state == DebugState.Running);
         Toolbar.SetDebugState(state != DebugState.Idle, state == DebugState.Stopped, Runs.Running.Count > 0);
+        if (state != DebugState.Idle)
+        {
+            // Plugins with debugger visualizers (proposed API 0.2.7) start with the first session.
+            _ = Plugins.ActivateByEventAsync("onDebug", CancellationToken.None);
+        }
+
         if (state == DebugState.Idle)
         {
             Workbench.StatusBar.Remove(DebugStatusItem);

@@ -68,6 +68,24 @@ public sealed record ManifestContributions
 
     /// <summary>Snippet files in VS Code's format, for a language (API 0.2.5, M12b).</summary>
     public ManifestSnippets[]? Snippets { get; init; }
+
+    /// <summary>Git hosting providers (API 0.2.6, ADR 0031): known to the shell before the plugin runs.</summary>
+    public ManifestHostingProvider[]? HostingProviders { get; init; }
+}
+
+/// <summary>
+/// A Git hosting provider: <see cref="Id"/> (activation event <c>onHostingProvider:&lt;id&gt;</c>), the name users see, and
+/// the hosts its remotes are on by default (enterprise hosts are known once the user signs in to them).
+/// </summary>
+public sealed record ManifestHostingProvider(string Id, string Label)
+{
+    public string[]? Hosts { get; init; }
+
+    /// <summary>A setting holding the server's URL (an enterprise server): its host counts as one of <see cref="Hosts"/>.</summary>
+    public string? ServerSetting { get; init; }
+
+    /// <summary>A built-in icon name.</summary>
+    public string? Icon { get; init; }
 }
 
 /// <summary>A snippet file, as in VS Code's <c>contributes.snippets</c>: <c>{ language, path }</c>, the path relative to the plugin's folder.</summary>
@@ -225,6 +243,12 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(DebugSessionDto))]
 [JsonSerializable(typeof(DebugSessionParams))]
 [JsonSerializable(typeof(DebugEndedParams))]
+[JsonSerializable(typeof(DebugVisualizerDto))]
+[JsonSerializable(typeof(DebugVisualizerIdParams))]
+[JsonSerializable(typeof(DebugVisualizeParams))]
+[JsonSerializable(typeof(DebugVisualizerViewDto))]
+[JsonSerializable(typeof(DebugEvaluateParams))]
+[JsonSerializable(typeof(DebugValueDto))]
 [JsonSerializable(typeof(TerminalCreateParams))]
 [JsonSerializable(typeof(TerminalDto))]
 [JsonSerializable(typeof(TerminalIdParams))]
@@ -241,4 +265,31 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(TestRunUpdateParams))]
 [JsonSerializable(typeof(TestRunCoverageParams))]
 [JsonSerializable(typeof(TestRunIdParams))]
+[JsonSerializable(typeof(HostingProviderParams))]
+[JsonSerializable(typeof(HostingDeviceCodeParams))]
+[JsonSerializable(typeof(SecretParams))]
+[JsonSerializable(typeof(SecretResult))]
+[JsonSerializable(typeof(HostingResolveParams))]
+[JsonSerializable(typeof(HostingResolveResult))]
+[JsonSerializable(typeof(HostingIdParams))]
+[JsonSerializable(typeof(HostingAccountResult))]
+[JsonSerializable(typeof(HostingSignInParams))]
+[JsonSerializable(typeof(HostingAccountDto))]
+[JsonSerializable(typeof(HostingRepositoryParams))]
+[JsonSerializable(typeof(HostingRepositoryInfoDto))]
+[JsonSerializable(typeof(HostingPullRequestsParams))]
+[JsonSerializable(typeof(PullRequestsResult))]
+[JsonSerializable(typeof(HostingPullRequestParams))]
+[JsonSerializable(typeof(PullRequestDetailsDto))]
+[JsonSerializable(typeof(HostingCheckoutParams))]
+[JsonSerializable(typeof(PullRequestCheckoutDto))]
+[JsonSerializable(typeof(HostingCreatePullRequestParams))]
+[JsonSerializable(typeof(PullRequestDto))]
+[JsonSerializable(typeof(HostingBranchStatusParams))]
+[JsonSerializable(typeof(BranchStatusDto))]
+[JsonSerializable(typeof(HostingWorkItemsParams))]
+[JsonSerializable(typeof(WorkItemsResult))]
+[JsonSerializable(typeof(HostingOwnersResult))]
+[JsonSerializable(typeof(HostingPublishParams))]
+[JsonSerializable(typeof(PublishedRepositoryDto))]
 public sealed partial class PluginJsonContext : JsonSerializerContext;

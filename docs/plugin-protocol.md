@@ -69,6 +69,10 @@ Since protocol 0.2 (API 0.2.1). Only plugins loaded with `enableProposedApi` use
 | `debug/attach` | host → shell | request | `{processId}` → `{sessionId, processId}` |
 | `debug/stop` | host → shell | request | `{sessionId}` → `{}` |
 | `debug/ended` | shell → host | notification | `{sessionId, exitCode?}` |
+| `debug/registerVisualizer` | host → shell | notification | `{visualizerId, pluginId, title, types}`; `visualizerId` is `pluginId/id`, a type ending in `*` is a prefix (API 0.2.7) |
+| `debug/unregisterVisualizer` | host → shell | notification | `{visualizerId}` (API 0.2.7) |
+| `debug/visualize` | shell → host | request | `{visualizerId, expression, type?, value}` → `{text?, languageId?, columns?, rows?}` (API 0.2.7) |
+| `debug/evaluate` | host → shell | request | `{expression}` → `{value, type?}`, in the paused program's selected frame; an error when it isn't paused or the evaluation fails (API 0.2.7) |
 | `terminal/create` | host → shell | request | `{name?, profile?, workingDirectory?, program?, arguments?, environment?, show, reportOutput}` → `{terminalId, processId}`: a shell (profile id, null for the default) or, with `program`, that program in a terminal (API 0.2.3) |
 | `terminal/sendText` | host → shell | request | `{terminalId, text}` → `{}` (as typed; `\r` runs a line) |
 | `terminal/kill` | host → shell | request | `{terminalId}` → `{}` (ends the program and closes the terminal) |
@@ -87,6 +91,34 @@ Since protocol 0.2 (API 0.2.1). Only plugins loaded with `enableProposedApi` use
 
 `tests/run` completes when the profile's handler completes and returns the runs it created. Their `tests/runEnded` may be processed after the response (notifications and responses are dispatched separately), so the shell waits for each.
 
+### Hosting providers and secrets
+
+Since API 0.2.6 (protocol 0.2), [ADR 0031](adr/0031-git-hosting-and-repository-features.md); messages in `HostingMessages.cs`. A provider is declared in the manifest (`contributes.hostingProviders`) and registered when its plugin activates (`onHostingProvider:<id>`). Every shell → host request names the provider (`providerId`); `repository` is `{id, owner, name, webUrl, host, remote?}` as the provider resolved it, and `$/cancelRequest` cancels any of them (the sign-in when the user cancels). Dates are ISO 8601.
+
+| Method | Direction | Kind | Params → Result |
+|---|---|---|---|
+| `hosting/registerProvider` | host → shell | notification | `{pluginId, providerId}` |
+| `hosting/unregisterProvider` | host → shell | notification | `{pluginId, providerId}` |
+| `hosting/deviceCode` | host → shell | notification | `{providerId, userCode, verificationUri, verificationUriComplete?, expiresAt, message?}` while a sign-in waits for the user |
+| `secrets/get` | host → shell | request | `{pluginId, key}` → `{value?}` |
+| `secrets/store` | host → shell | request | `{pluginId, key, value}` → `{}` (the OS credential store, under the account `<pluginId>/<key>`) |
+| `secrets/delete` | host → shell | request | `{pluginId, key}` → `{}` |
+| `hosting/resolve` | shell → host | request | `{providerId, remotes: [{remote, url}]}` → `{repository?}`: the first remote (in order) on the provider's host |
+| `hosting/account` | shell → host | request | `{providerId}` → `{account?: {name, host, displayName?, url?}}` from the stored session |
+| `hosting/signIn` | shell → host | request | `{providerId, token?}` → `{name, host, displayName?, url?}`: the device flow, or a personal access token |
+| `hosting/signOut` | shell → host | request | `{providerId}` → `{}` |
+| `hosting/repositoryInfo` | shell → host | request | `{providerId, repository}` → `{defaultBranch, webUrl, isPrivate}` |
+| `hosting/pullRequests` | shell → host | request | `{providerId, repository, filter: all\|mine\|reviewRequested}` → `{pullRequests: [pullRequest]}` |
+| `hosting/pullRequest` | shell → host | request | `{providerId, repository, number}` → `{pullRequest, description, threads: [{id, path, line, startLine?, isResolved, isOutdated, url?, comments: [{author, body, createdAt, url?}]}], comments: [comment]}` |
+| `hosting/checkout` | shell → host | request | `{providerId, repository, pullRequest}` → `{remote, sourceRef, localBranch, track}` |
+| `hosting/createPullRequest` | shell → host | request | `{providerId, repository, title, description, sourceBranch, targetBranch, isDraft}` → `pullRequest` |
+| `hosting/branchStatus` | shell → host | request | `{providerId, repository, branch, commit?}` → `{state: success\|failure\|pending\|none, checks: [{name, state, description?, url?}], url?}` |
+| `hosting/workItems` | shell → host | request | `{providerId, repository, assignedToMe, text?, limit}` → `{workItems: [{number, title, reference, webUrl, state?, type?, assignedTo?}]}` |
+| `hosting/owners` | shell → host | request | `{providerId}` → `{owners: [{id, name, kind: user\|organization\|group\|project}]}` |
+| `hosting/publish` | shell → host | request | `{providerId, owner, name, description?, isPrivate}` → `{cloneUrl, webUrl, sshUrl?}` |
+
+A `pullRequest` is `{number, title, author, sourceBranch, targetBranch, webUrl, reference, isDraft, state, createdAt?, updatedAt?, sourceCommit?, sourceRepository?, sourceCloneUrl?, reviewers}`; `sourceRepository` is set for a fork's pull request. Thread paths are relative to the repository, with forward slashes; lines are one-based in the pull request's version of the file.
+
 ## Errors
 
 These are JSON-RPC error codes. `-32601` means the method was not found. Daedalus-specific codes:
@@ -96,3 +128,7 @@ These are JSON-RPC error codes. `-32601` means the method was not found. Daedalu
 - `-33003`: command handler threw
 - `-33004`: no tree data provider for the view
 - `-33005`: a proposed API that the shell doesn't offer
+- `-33010`: not signed in to the hosting provider, or the session expired (API 0.2.6)
+- `-33011`: the hosting provider doesn't support the request
+- `-33012`: the host refused or failed (the message says why)
+- `-33013`: no hosting provider with that id is registered

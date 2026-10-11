@@ -1,0 +1,32 @@
+{
+  "id": "daedalus.github",
+  "version": "0.1.0",
+  "displayName": "GitHub",
+  "publisher": "daedalus",
+  "description": "Pull requests, review comments, checks, issues and publishing for GitHub and GitHub Enterprise Server. Inactive until you sign in.",
+  "engines": { "daedalus": "^0.2.6" },
+  "entry": { "runtime": "dotnet", "assembly": "DaedalusStudio.Plugins.GitHub.dll" },
+  "enableProposedApi": true,
+  "contributes": {
+    "hostingProviders": [
+      { "id": "github", "label": "GitHub", "hosts": ["github.com", "ssh.github.com"], "serverSetting": "github.serverUrl", "icon": "cloud" }
+    ],
+    "settings": {
+      "title": "GitHub",
+      "properties": {
+        "github.serverUrl": {
+          "type": "string",
+          "default": "https://github.com",
+          "description": "The GitHub server: https://github.com, or a GitHub Enterprise Server's address.",
+          "scope": "user"
+        },
+        "github.oauthClientId": {
+          "type": "string",
+          "default": "",
+          "description": "The client id of the OAuth app used to sign in with a device code. Empty: sign in with a personal access token.",
+          "scope": "user"
+        }
+      }
+    }
+  }
+}

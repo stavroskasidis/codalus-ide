@@ -7,11 +7,24 @@ using DaedalusStudio.Workbench.Git;
 namespace DaedalusStudio.Shell.ViewModels;
 
 /// <summary>A file in the Changes view.</summary>
-public sealed class GitFileRow(GitFileStatus status, bool staged)
+public sealed class GitFileRow(GitFileStatus status, bool staged, GitLfsStatus? lfs = null)
 {
     public GitFileStatus Status { get; } = status;
 
     public bool Staged { get; } = staged;
+
+    private readonly GitLfsFile? _lfsFile = lfs?.FileOf(status.Path);
+    private readonly GitLfsLock? _lock = lfs?.LockOf(status.Path);
+
+    /// <summary>Git LFS (M13b): "LFS", "LFS pointer" (not downloaded), and who holds a lock.</summary>
+    public string? Badge => _lock is { } held ? "locked: " + held.Owner : _lfsFile is { IsPointer: true } ? "LFS pointer" : _lfsFile is not null ? "LFS" : null;
+
+    public bool HasBadge => Badge is not null;
+
+    public string? BadgeTooltip => _lock is { } held
+        ? $"Locked in Git LFS by {held.Owner}{(held.LockedAt is { } at ? " since " + at.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture) : string.Empty)}"
+        : _lfsFile is { IsPointer: true } ? "Tracked by Git LFS; only its pointer is here (git-lfs isn't installed, or the content wasn't downloaded)."
+        : _lfsFile is not null ? "Tracked by Git LFS." : null;
 
     public string Name => System.IO.Path.GetFileName(Status.Path);
 
@@ -35,7 +48,21 @@ public sealed class GitFileRow(GitFileStatus status, bool staged)
 
     public bool CanUnstage => Staged;
 
-    public string AccessibleName => $"{Name} in {Folder}, {Description}{(Staged ? ", staged" : string.Empty)}";
+    public string AccessibleName => $"{Name} in {Folder}, {Description}{(Staged ? ", staged" : string.Empty)}{(Badge is { } badge ? ", " + badge : string.Empty)}";
+}
+
+/// <summary>A repository of the solution (several repositories, M13b).</summary>
+public sealed record GitRepositoryChoice(string Path)
+{
+    public string Name => System.IO.Path.GetFileName(Path.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
+
+    public override string ToString() => Name;
+}
+
+/// <summary>A completion in the commit message: an issue or work item (M13b).</summary>
+public sealed record CommitCompletion(string Reference, string Title, string? Detail)
+{
+    public string Label => $"{Reference}  {Title}";
 }
 
 /// <summary>The Git Changes tool window (ADR 0008).</summary>
@@ -165,12 +192,163 @@ public sealed class GitChangesViewModel : ObservableObject
         }
     }
 
+    // ------------------------------------------------------------------ M13b: repositories, CI status, pull request, LFS, completion
+
+    private GitLfsStatus _lfs = GitLfsStatus.None;
+    private bool _updatingRepositories;
+    private GitRepositoryChoice? _selectedRepository;
+    private string? _ciState;
+    private string _ciText = string.Empty;
+    private string? _ciTooltip;
+    private string? _pullRequestText;
+
+    /// <summary>The repository's Git LFS files and locks: the rows' badges.</summary>
+    public GitLfsStatus Lfs
+    {
+        get => _lfs;
+        set
+        {
+            _lfs = value;
+            Refresh();
+        }
+    }
+
+    /// <summary>The solution's repositories, when it spans several.</summary>
+    public ObservableCollection<GitRepositoryChoice> Repositories { get; } = [];
+
+    public bool HasSeveralRepositories => Repositories.Count > 1;
+
+    /// <summary>Opens another of the solution's repositories (set by the shell).</summary>
+    public Func<string, Task>? SwitchRepository { get; set; }
+
+    public GitRepositoryChoice? SelectedRepository
+    {
+        get => _selectedRepository;
+        set
+        {
+            if (SetField(ref _selectedRepository, value) && !_updatingRepositories && value is not null && SwitchRepository is { } switchTo)
+            {
+                _ = switchTo(value.Path);
+            }
+        }
+    }
+
+    public void SetRepositories(IReadOnlyList<string> roots, string? active)
+    {
+        _updatingRepositories = true;
+        try
+        {
+            Repositories.Clear();
+            foreach (var root in roots)
+            {
+                Repositories.Add(new GitRepositoryChoice(root));
+            }
+
+            SelectedRepository = Repositories.FirstOrDefault(r => active is not null && Workbench.Projects.SolutionService.PathComparer.Equals(r.Path, active));
+            OnPropertyChanged(nameof(HasSeveralRepositories));
+        }
+        finally
+        {
+            _updatingRepositories = false;
+        }
+    }
+
+    /// <summary>The branch's CI status: <c>success</c>, <c>failure</c>, <c>pending</c>, or null when unknown.</summary>
+    public string? CiState => _ciState;
+
+    public string CiText => _ciText;
+
+    public string? CiTooltip => _ciTooltip;
+
+    public bool HasCi => _ciState is not null and not "none";
+
+    public string CiIcon => _ciState switch { "success" => "test-passed", "failure" => "test-failed", _ => "test-running" };
+
+    public bool IsCiPassed => _ciState == "success";
+
+    public bool IsCiFailed => _ciState == "failure";
+
+    public bool IsCiPending => _ciState == "pending";
+
+    public void SetCi(string? state, string text, string? tooltip)
+    {
+        _ciState = state;
+        _ciText = text;
+        _ciTooltip = tooltip;
+        foreach (var name in new[] { nameof(CiState), nameof(CiText), nameof(CiTooltip), nameof(HasCi), nameof(CiIcon), nameof(IsCiPassed), nameof(IsCiFailed), nameof(IsCiPending) })
+        {
+            OnPropertyChanged(name);
+        }
+    }
+
+    /// <summary>"#1 Add the greeter": the open pull request of the current branch.</summary>
+    public string? PullRequestText
+    {
+        get => _pullRequestText;
+        set
+        {
+            if (SetField(ref _pullRequestText, value))
+            {
+                OnPropertyChanged(nameof(HasPullRequest));
+            }
+        }
+    }
+
+    public bool HasPullRequest => _pullRequestText is not null;
+
+    /// <summary>Searches issues and work items for <c>#</c> completion in the message (set by the shell when signed in).</summary>
+    public Func<string, CancellationToken, Task<IReadOnlyList<CommitCompletion>>>? CompletionSource { get; set; }
+
+    /// <summary>The <c>#123</c> or <c>#words</c> being typed before <paramref name="caret"/>: where its <c>#</c> is, and what follows it.</summary>
+    public static (int Start, string Query)? CompletionQuery(string text, int caret)
+    {
+        if (caret < 1 || caret > text.Length)
+        {
+            return null;
+        }
+
+        var start = caret - 1;
+        while (start >= 0 && (char.IsLetterOrDigit(text[start]) || text[start] is '_' or '-'))
+        {
+            start--;
+        }
+
+        return start >= 0 && text[start] == '#' && (start == 0 || char.IsWhiteSpace(text[start - 1]) || text[start - 1] is '(' or '[')
+            ? (start, text[(start + 1)..caret])
+            : null;
+    }
+
+    /// <summary>The completions at the caret, or none when no <c>#</c> is being typed (or nobody is signed in).</summary>
+    public async Task<IReadOnlyList<CommitCompletion>> CompleteAsync(string text, int caret, CancellationToken cancellationToken)
+    {
+        if (CompletionSource is not { } source || CompletionQuery(text, caret) is not { } query)
+        {
+            return [];
+        }
+
+        return await source(query.Query, cancellationToken).ConfigureAwait(true);
+    }
+
+    /// <summary>Replaces the <c>#…</c> before the caret with the reference and a space; returns the text and the new caret.</summary>
+    public static (string Text, int Caret) ApplyCompletion(string text, int caret, string reference)
+    {
+        if (CompletionQuery(text, caret) is not { } query)
+        {
+            return (text, caret);
+        }
+
+        // A space after it, unless one follows already; the caret goes past it.
+        var rest = text[caret..];
+        var inserted = rest.Length > 0 && char.IsWhiteSpace(rest[0]) ? reference : reference + " ";
+        return (text[..query.Start] + inserted + rest, query.Start + reference.Length + 1);
+    }
+
     public void Refresh()
     {
         var status = _git.Status;
-        Replace(Staged, status?.Staged.Select(f => new GitFileRow(f, staged: true)));
-        Replace(Changes, status?.Unstaged.Select(f => new GitFileRow(f, staged: false)));
-        Replace(Conflicts, status?.Conflicts.Select(f => new GitFileRow(f, staged: false)));
+        Replace(Staged, status?.Staged.Select(f => new GitFileRow(f, staged: true, _lfs)));
+        Replace(Changes, status?.Unstaged.Select(f => new GitFileRow(f, staged: false, _lfs)));
+        Replace(Conflicts, status?.Conflicts.Select(f => new GitFileRow(f, staged: false, _lfs)));
         foreach (var name in new[] { nameof(HasRepository), nameof(HasNoRepository), nameof(BranchText), nameof(IsMerging), nameof(HasStaged), nameof(HasChanges), nameof(HasConflicts), nameof(StagedHeader), nameof(ChangesHeader), nameof(ConflictsHeader), nameof(OperationText) })
         {
             OnPropertyChanged(name);

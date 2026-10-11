@@ -121,6 +121,20 @@ public sealed class PluginManager : IAsyncDisposable
     /// <summary>Receives test controllers (the Test Explorer's model).</summary>
     public ITestSink? TestSink { get; set; }
 
+    /// <summary>Receives hosting providers (ADR 0031).</summary>
+    public IHostingSink? HostingSink { get; set; }
+
+    /// <summary>Where plugins' secrets go (the OS credential store); without it, secret requests fail.</summary>
+    public Secrets.SecretStorage? Secrets { get; set; }
+
+    /// <summary>The hosting providers the usable plugins declare (<c>contributes.hostingProviders</c>), with their plugin.</summary>
+    public IReadOnlyList<(PluginDescription Plugin, ManifestHostingProvider Provider)> HostingProviderDeclarations =>
+        [.. Plugins.Where(p => p.IsUsable && !p.IsDeclarative)
+            .SelectMany(p => (p.Manifest!.Contributes?.HostingProviders ?? []).Where(h => p.ActivationEvents.Contains("onHostingProvider:" + h.Id)).Select(h => (p, h)))];
+
+    /// <summary>The plugins' debugger visualizers (proposed API 0.2.7).</summary>
+    public Debugging.DebugVisualizerRegistry DebugVisualizers { get; } = new();
+
     public event EventHandler<TreeViewRefreshEventArgs>? TreeViewRefreshed;
 
     public event EventHandler<string>? MarkdownChanged;
@@ -606,6 +620,10 @@ public sealed class PluginManager : IAsyncDisposable
 
         // Test controllers created by this host's plugins (disposed when the host crashes).
         private readonly ConcurrentDictionary<string, byte> _controllers = new(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, byte> _visualizers = new(StringComparer.Ordinal);
+
+        // Hosting providers registered by this host's plugins (unregistered when the host crashes).
+        private readonly ConcurrentDictionary<string, byte> _providers = new(StringComparer.Ordinal);
 
         public HostConnection(PluginManager manager, string group, ProcessLaunchInfo launch)
         {
@@ -707,6 +725,18 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 _controllers.TryRemove(controller, out _);
                 _manager.TestSink?.ControllerDisposed(controller);
+            }
+
+            foreach (var provider in _providers.Keys)
+            {
+                _providers.TryRemove(provider, out _);
+                _manager.HostingSink?.ProviderUnregistered(provider);
+            }
+
+            foreach (var visualizer in _visualizers.Keys)
+            {
+                _visualizers.TryRemove(visualizer, out _);
+                _manager.DebugVisualizers.Unregister(visualizer);
             }
 
             foreach (var plugin in Members.Where(p => p.State == PluginState.Active))
@@ -829,6 +859,20 @@ public sealed class PluginManager : IAsyncDisposable
                 Proposed.DebugLaunchAsync(p, DebugEnded, ct));
             connection.OnRequest(ProposedMethods.DebugAttach, json.DebugAttachParams, json.DebugSessionDto, (p, ct) =>
                 Proposed.DebugAttachAsync(p.ProcessId, DebugEnded, ct));
+            connection.OnRequest(ProposedMethods.DebugEvaluate, json.DebugEvaluateParams, json.DebugValueDto, (p, ct) =>
+                Proposed.DebugEvaluateAsync(p.Expression, ct));
+            connection.OnNotification(ProposedMethods.DebugRegisterVisualizer, json.DebugVisualizerDto, p =>
+            {
+                _visualizers[p.VisualizerId] = 0;
+                _manager.DebugVisualizers.Register(new Debugging.PluginDebugVisualizer(p.VisualizerId, p.PluginId, p.Title, p.Types, async (request, ct) =>
+                    await Connection.InvokeAsync(ProposedMethods.DebugVisualize, request, PluginJsonContext.Default.DebugVisualizeParams, PluginJsonContext.Default.DebugVisualizerViewDto, ct).ConfigureAwait(false)
+                    ?? throw new InvalidOperationException("The visualizer returned nothing.")));
+            });
+            connection.OnNotification(ProposedMethods.DebugUnregisterVisualizer, json.DebugVisualizerIdParams, p =>
+            {
+                _visualizers.TryRemove(p.VisualizerId, out _);
+                _manager.DebugVisualizers.Unregister(p.VisualizerId);
+            });
             connection.OnRequest(ProposedMethods.DebugStop, json.DebugSessionParams, json.EmptyResult, async (p, ct) =>
             {
                 await Proposed.DebugStopAsync(p.SessionId, ct).ConfigureAwait(false);
@@ -863,6 +907,39 @@ public sealed class PluginManager : IAsyncDisposable
             connection.OnNotification(ProposedMethods.TestsRunUpdate, json.TestRunUpdateParams, p => _manager.TestSink?.RunUpdated(p));
             connection.OnNotification(ProposedMethods.TestsRunCoverage, json.TestRunCoverageParams, p => _manager.TestSink?.RunCoverage(p));
             connection.OnNotification(ProposedMethods.TestsRunEnded, json.TestRunIdParams, p => _manager.TestSink?.RunEnded(p.RunId));
+
+            // Hosting providers and secrets (API 0.2.6, ADR 0031).
+            connection.OnNotification(HostingMethods.RegisterProvider, json.HostingProviderParams, p =>
+            {
+                _providers[p.ProviderId] = 0;
+                _manager.HostingSink?.ProviderRegistered(p.PluginId, p.ProviderId, new HostingConnection(this));
+            });
+            connection.OnNotification(HostingMethods.UnregisterProvider, json.HostingProviderParams, p =>
+            {
+                _providers.TryRemove(p.ProviderId, out _);
+                _manager.HostingSink?.ProviderUnregistered(p.ProviderId);
+            });
+            connection.OnNotification(HostingMethods.DeviceCode, json.HostingDeviceCodeParams, p => _manager.HostingSink?.DeviceCodeReceived(p));
+            connection.OnRequest(HostingMethods.SecretsGet, json.SecretParams, json.SecretResult, async (p, ct) =>
+                new SecretResult(await Secrets.GetAsync(p.PluginId, p.Key, ct).ConfigureAwait(false)));
+            connection.OnRequest(HostingMethods.SecretsStore, json.SecretParams, json.EmptyResult, async (p, ct) =>
+            {
+                await Secrets.StoreAsync(p.PluginId, p.Key, p.Value ?? throw new JsonRpcHandlerException(PluginErrorCodes.CommandFailed, "secrets/store needs a value."), ct).ConfigureAwait(false);
+                return new EmptyResult();
+            });
+            connection.OnRequest(HostingMethods.SecretsDelete, json.SecretParams, json.EmptyResult, async (p, ct) =>
+            {
+                await Secrets.DeleteAsync(p.PluginId, p.Key, ct).ConfigureAwait(false);
+                return new EmptyResult();
+            });
+        }
+
+        private Secrets.SecretStorage Secrets => _manager.Secrets ?? throw new JsonRpcHandlerException(PluginErrorCodes.ProposedApiUnavailable, "This shell has no credential store for secrets.");
+
+        private sealed class HostingConnection(HostConnection host) : IHostingConnection
+        {
+            public Task<TResult> InvokeAsync<TParams, TResult>(string method, TParams parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsInfo, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken) =>
+                host.Connection.InvokeAsync(method, parameters, paramsInfo, resultInfo, cancellationToken);
         }
 
         private void DebugEnded(DebugEndedParams ended) =>

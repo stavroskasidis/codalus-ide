@@ -21,6 +21,12 @@ public interface IProposedApi
 
     /// <summary>Integrated terminals: open a shell or run a command in one, send it text, read its output. Since API 0.2.3.</summary>
     ITerminals Terminals { get; }
+
+    /// <summary>Git hosting providers: pull requests, review comments, CI status, work items, publishing. Since API 0.2.6.</summary>
+    IHosting Hosting { get; }
+
+    /// <summary>The plugin's secrets, in the OS credential store. Since API 0.2.6.</summary>
+    ISecrets Secrets { get; }
 }
 
 /// <summary>Implemented by plugin contexts that can offer proposed APIs.</summary>

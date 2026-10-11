@@ -23,6 +23,14 @@ public sealed partial class ShellHost
 
     public ModulesViewModel ModuleList { get; private set; } = null!;
 
+    public ParallelStacksViewModel ParallelStacksWindow { get; private set; } = null!;
+
+    public ParallelWatchViewModel ParallelWatchWindow { get; private set; } = null!;
+
+    public ProcessesViewModel ProcessesWindow { get; private set; } = null!;
+
+    public DebugLocationViewModel DebugLocation { get; private set; } = null!;
+
     public ExceptionSettingsViewModel ExceptionSettingsWindow { get; private set; } = null!;
 
     private void InitializeDebugDepth()
@@ -30,6 +38,11 @@ public sealed partial class ShellHost
         QuickWatch = new QuickWatchViewModel(Debugger, AddWatchAsync);
         ThreadList = new ThreadsViewModel(Debugger);
         ModuleList = new ModulesViewModel(Debugger);
+        ParallelStacksWindow = new ParallelStacksViewModel(Debugger);
+        ParallelWatchWindow = new ParallelWatchViewModel(Debugger);
+        ProcessesWindow = new ProcessesViewModel(Debugger, Run);
+        DebugLocation = new DebugLocationViewModel(Debugger);
+        Toolbar.DebugLocation = DebugLocation;
         ExceptionSettingsWindow = new ExceptionSettingsViewModel(Debugger.ExceptionSettings);
         Debugger.ExceptionSettings.Changed += (_, _) => Ui.Post(SaveEditorSession);
         Views.BreakpointsView.RunCommand = Run;
@@ -49,12 +62,14 @@ public sealed partial class ShellHost
         DependsOnPath = b.DependsOn?.Path,
         DependsOnLine = b.DependsOn?.Line,
         Labels = b.Labels,
+        Filter = b.Filter,
     };
 
     private static BreakpointSpec FromSession(Docking.SessionBreakpoint b) => new(
         b.Path, b.Line, b.Condition, b.HitCondition, b.LogMessage, b.Enabled, b.Temporary,
         b is { DependsOnPath: { } path, DependsOnLine: { } line } ? new BreakpointLocation(path, line) : null,
-        b.Labels);
+        b.Labels,
+        b.Filter);
 
     private static Docking.SessionFunctionBreakpoint ToSession(FunctionBreakpointSpec f) => new(f.Name, f.Condition, f.Enabled, f.Labels);
 
@@ -78,6 +93,12 @@ public sealed partial class ShellHost
     /// <summary>Opens a string value in a visualizer: the whole string, evaluated again by its expression when it has one.</summary>
     public async Task VisualizeAsync(VariableNode node, VisualizerKind kind)
     {
+        if (kind is VisualizerKind.Grid or VisualizerKind.Image)
+        {
+            await VisualizeCollectionAsync(node, kind).ConfigureAwait(true);
+            return;
+        }
+
         var value = node.Value;
         if (node.EvaluateName is { } expression && Debugger.State == DebugState.Stopped)
         {
@@ -94,19 +115,95 @@ public sealed partial class ShellHost
         await OpenVisualizerAsync(node.EvaluateName ?? node.Name, Visualizers.Unquote(value), kind).ConfigureAwait(true);
     }
 
-    /// <summary>Shows <paramref name="text"/> in a read-only, colored document (JSON and XML indented).</summary>
-    public Task OpenVisualizerAsync(string name, string text, VisualizerKind kind)
+    /// <summary>The grid and image visualizers (M14b): read from the paused program by the value's expression.</summary>
+    private async Task VisualizeCollectionAsync(VariableNode node, VisualizerKind kind)
     {
-        var title = Visualizers.Title(kind);
+        if (node.EvaluateName is not { } expression || Debugger.State != DebugState.Stopped)
+        {
+            StatusBar.ShowMessage($"The {Visualizers.Title(kind)} needs the program to be paused.", TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        try
+        {
+            if (kind == VisualizerKind.Grid)
+            {
+                var grid = await CollectionVisualizers.GridAsync(Debugger, expression, node.Type).ConfigureAwait(true);
+                await OpenVisualizerAsync(expression, CollectionVisualizers.Format(grid, expression), kind).ConfigureAwait(true);
+                return;
+            }
+
+            var bytes = await CollectionVisualizers.BytesAsync(Debugger, expression).ConfigureAwait(true);
+            if (CollectionVisualizers.ImageExtension(bytes) is not { } extension)
+            {
+                StatusBar.ShowMessage($"{expression} doesn't hold a PNG, JPEG, GIF, BMP, WebP or ICO image.", TimeSpan.FromSeconds(5));
+                return;
+            }
+
+            var folder = Path.Combine(Path.GetTempPath(), "daedalus-visualizers");
+            Directory.CreateDirectory(folder);
+            var safe = string.Concat(expression.Select(c => char.IsLetterOrDigit(c) || c is '_' ? c : '_')).Trim('_');
+            var path = Path.Combine(folder, (safe.Length == 0 ? "image" : safe) + extension);
+            // An earlier image of the same expression is closed: the viewer doesn't reload a changed file.
+            if (Layout.FindDocument<Views.ImageDocument>(Views.ImageDocument.IdFor(Path.GetFullPath(path))) is { } stale)
+            {
+                Layout.CloseDocument(stale);
+            }
+
+            await File.WriteAllBytesAsync(path, bytes).ConfigureAwait(true);
+            OpenImage(path);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException or IOException or FormatException or OverflowException)
+        {
+            Workbench.Notifications.Error($"The {Visualizers.Title(kind)} couldn't read {expression}: {ex.Message}");
+        }
+    }
+
+    /// <summary>A plugin's visualizer (proposed API 0.2.7): its text in a read-only document, or its table as a grid.</summary>
+    public async Task VisualizeWithPluginAsync(VariableNode node, string visualizerId)
+    {
+        if (Plugins.DebugVisualizers.Find(visualizerId) is not { } visualizer || node.EvaluateName is not { } expression || Debugger.State != DebugState.Stopped)
+        {
+            StatusBar.ShowMessage("Visualizers need the program to be paused.", TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        try
+        {
+            var view = await visualizer.Visualize(new DaedalusStudio.Plugins.Protocol.DebugVisualizeParams(visualizerId, expression, node.Type, node.Value), CancellationToken.None).ConfigureAwait(true);
+            if (view.Columns is { } columns && view.Rows is { } rows)
+            {
+                var grid = new DebugGrid(columns, [.. rows.Select(r => (IReadOnlyList<string>)[.. r, .. Enumerable.Repeat(string.Empty, Math.Max(0, columns.Length - r.Length))])], Truncated: false);
+                await OpenVisualizerAsync(expression, CollectionVisualizers.Format(grid, expression), visualizer.Title, ".txt").ConfigureAwait(true);
+            }
+            else
+            {
+                var extension = view.LanguageId is { } language && Workbench.LanguageDefinitions.Get(language)?.Extensions is [var first, ..] ? first : ".txt";
+                await OpenVisualizerAsync(expression, view.Text ?? string.Empty, visualizer.Title, extension).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Workbench.Notifications.Error($"{visualizer.Title} couldn't show {expression}: {ex.Message}");
+        }
+    }
+
+    /// <summary>Shows <paramref name="text"/> in a read-only, colored document (JSON and XML indented).</summary>
+    public Task OpenVisualizerAsync(string name, string text, VisualizerKind kind) =>
+        OpenVisualizerAsync(name, Visualizers.Format(kind, text), Visualizers.Title(kind), Visualizers.Extension(kind));
+
+    /// <summary>Shows <paramref name="text"/> in a read-only document titled <paramref name="title"/>, colored by <paramref name="extension"/>'s language.</summary>
+    public Task OpenVisualizerAsync(string name, string text, string title, string extension)
+    {
         var safe = string.Concat(name.Select(c => char.IsLetterOrDigit(c) || c is '_' or '.' ? c : '_')).Trim('_', '.');
-        var path = Path.Combine(title, (safe.Length == 0 ? "value" : safe) + Visualizers.Extension(kind));
-        var uri = "daedalus-visualizer:///" + Uri.EscapeDataString(kind.ToString().ToLowerInvariant() + "/" + name);
+        var path = Path.Combine(title, (safe.Length == 0 ? "value" : safe) + extension);
+        var uri = "daedalus-visualizer:///" + Uri.EscapeDataString(title + "/" + name);
         if (Editors.FirstOrDefault(e => e.Model.Uri == uri) is { } open)
         {
             Layout.CloseDocument(open);
         }
 
-        var model = CodeDocument.ReadOnly(path, uri, Visualizers.Format(kind, text), title);
+        var model = CodeDocument.ReadOnly(path, uri, text, title);
         model.LanguageId = Languages.LanguageIdOf(path);
         var view = CreateView(model, primary: true);
         Layout.OpenDocument(view, focus: true);

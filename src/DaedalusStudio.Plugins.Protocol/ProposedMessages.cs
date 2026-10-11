@@ -21,8 +21,11 @@ public static class ProposedMethods
     public const string TerminalCreate = "terminal/create";
     public const string TerminalSendText = "terminal/sendText";
     public const string TerminalKill = "terminal/kill";
+    public const string DebugEvaluate = "debug/evaluate";
 
     // host → shell (notifications)
+    public const string DebugRegisterVisualizer = "debug/registerVisualizer";
+    public const string DebugUnregisterVisualizer = "debug/unregisterVisualizer";
     public const string TestsCreateController = "tests/createController";
     public const string TestsDisposeController = "tests/disposeController";
     public const string TestsUpdateItems = "tests/updateItems";
@@ -35,6 +38,7 @@ public static class ProposedMethods
     // shell → host (requests)
     public const string TestsRun = "tests/run";
     public const string TestsRefresh = "tests/refresh";
+    public const string DebugVisualize = "debug/visualize";
 
     // shell → host (notifications)
     public const string WorkspaceSolutionChanged = "workspace/solutionChanged";
@@ -118,6 +122,20 @@ public sealed record DebugSessionDto(string SessionId, int ProcessId);
 public sealed record DebugSessionParams(string SessionId);
 
 public sealed record DebugEndedParams(string SessionId, int? ExitCode);
+
+/// <summary>A plugin's visualizer; <see cref="VisualizerId"/> is <c>pluginId/id</c>. Since API 0.2.7.</summary>
+public sealed record DebugVisualizerDto(string VisualizerId, string PluginId, string Title, string[] Types);
+
+public sealed record DebugVisualizerIdParams(string VisualizerId);
+
+public sealed record DebugVisualizeParams(string VisualizerId, string Expression, string? Type, string Value);
+
+/// <summary>Text (with an optional language) or a table.</summary>
+public sealed record DebugVisualizerViewDto(string? Text, string? LanguageId, string[]? Columns, string[][]? Rows);
+
+public sealed record DebugEvaluateParams(string Expression);
+
+public sealed record DebugValueDto(string Value, string? Type);
 
 // ------------------------------------------------------------------ terminals (since API 0.2.3)
 
