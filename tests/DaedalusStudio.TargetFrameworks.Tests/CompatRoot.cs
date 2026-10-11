@@ -65,6 +65,14 @@ internal static class CompatRoot
         Environment.SetEnvironmentVariable("DOTNET_MULTILEVEL_LOOKUP", "0");
         Environment.SetEnvironmentVariable("DOTNET_NOLOGO", "1");
         Environment.SetEnvironmentVariable("DOTNET_CLI_TELEMETRY_OPTOUT", "1");
+        if (OperatingSystem.IsLinux() && File.Exists(System.IO.Path.Combine(root, "openssl1.1", "libssl.so.1.1")))
+        {
+            // OpenSSL 1.1 for .NET Core 2.1 to .NET 5 on a distribution with only OpenSSL 3 (eng/get-runtimes.sh), the
+            // way the user guide tells users to provide it.
+            Environment.SetEnvironmentVariable("LD_LIBRARY_PATH", System.IO.Path.Combine(root, "openssl1.1")
+                + (Environment.GetEnvironmentVariable("LD_LIBRARY_PATH") is { Length: > 0 } existing ? ":" + existing : string.Empty));
+        }
+
         if (Directory.Exists(System.IO.Path.Combine(root, "x64")))
         {
             // VSTest looks for the x64 dotnet here when it runs an x64 test host on Arm64.

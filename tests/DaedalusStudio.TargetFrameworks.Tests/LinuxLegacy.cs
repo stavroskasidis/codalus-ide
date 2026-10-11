@@ -1,20 +1,34 @@
 namespace DaedalusStudio.TargetFrameworks.Tests;
 
 /// <summary>
-/// What .NET Core 2.x to .NET 5 need on Linux that a current distribution doesn't have (M33, ADR 0030): OpenSSL 1.0 or
-/// 1.1, for cryptography and HTTPS (.NET 6 added OpenSSL 3). Without it the SDKs of those versions can't reach nuget.org
-/// to restore. ICU is handled by Daedalus itself (<c>CLR_ICU_VERSION_OVERRIDE</c>). Containers of the distributions
-/// they supported cover them instead: <c>eng/compat-containers.sh</c>.
+/// What .NET Core 2.x to .NET 5 need on Linux that a current distribution doesn't have (M33, ADR 0030): OpenSSL 1.x for
+/// cryptography and HTTPS (.NET 6 added OpenSSL 3), so the SDKs of those versions can reach nuget.org to restore.
+/// .NET Core 2.1 to .NET 5 load OpenSSL 1.1, which <c>eng/get-runtimes.sh</c> provides on such a distribution (the
+/// suite puts it on <c>LD_LIBRARY_PATH</c>); .NET Core 2.0, the runtime of the 2.0 and 2.1.2xx SDKs, needs OpenSSL 1.0.
+/// ICU is handled by Daedalus itself (<c>CLR_ICU_VERSION_OVERRIDE</c>). <c>eng/compat-containers.sh</c> covers the
+/// runtimes on the distributions of their time.
 /// </summary>
 internal static class LinuxLegacy
 {
-    private static readonly Lazy<bool> s_openSsl1 = new(() =>
-        new[] { "/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu", "/usr/lib64", "/lib64", "/usr/lib", "/usr/local/lib" }
-            .Any(folder => File.Exists(Path.Combine(folder, "libssl.so.1.1")) || File.Exists(Path.Combine(folder, "libssl.so.1.0.0")) || File.Exists(Path.Combine(folder, "libssl.so.1.0.2"))));
+    private static readonly string[] s_folders = ["/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu", "/usr/lib64", "/lib64", "/usr/lib", "/usr/local/lib"];
+
+    private static bool Has(params string[] names) =>
+        s_folders.Concat((Environment.GetEnvironmentVariable("LD_LIBRARY_PATH") ?? string.Empty).Split(':', StringSplitOptions.RemoveEmptyEntries))
+            .Any(folder => names.Any(name => File.Exists(Path.Combine(folder, name))));
 
     /// <summary>Why the SDK <paramref name="sdk"/> can't restore on this machine, or null when it can.</summary>
-    public static string? Missing(Version sdk) =>
-        OperatingSystem.IsLinux() && sdk.Major < 6 && !s_openSsl1.Value
-            ? $"The .NET SDK {sdk} runs on .NET {sdk.Major}.{sdk.Minor}, which needs OpenSSL 1.0 or 1.1 to reach nuget.org, and this distribution has only OpenSSL 3. eng/compat-containers.sh covers its runtime in a distribution of its time (ADR 0030)."
-            : null;
+    public static string? Missing(Version sdk)
+    {
+        if (!OperatingSystem.IsLinux() || sdk.Major >= 6)
+        {
+            return null;
+        }
+
+        // The SDKs before 2.1.300 run on .NET Core 2.0.
+        var onCore20 = sdk < new Version(2, 1, 300);
+        var found = onCore20 ? Has("libssl.so.1.0.0", "libssl.so.1.0.2", "libssl.so.10") : Has("libssl.so.1.1", "libssl.so.1.0.0", "libssl.so.1.0.2");
+        return found
+            ? null
+            : $"The .NET SDK {sdk} runs on .NET Core {(onCore20 ? "2.0, which needs OpenSSL 1.0" : $"{sdk.Major}.{sdk.Minor}, which needs OpenSSL 1.0 or 1.1")} to reach nuget.org, and this distribution doesn't have it. eng/compat-containers.sh covers its runtime in a distribution of its time (ADR 0030).";
+    }
 }

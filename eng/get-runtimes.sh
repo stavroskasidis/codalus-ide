@@ -127,6 +127,24 @@ for version in "${sdks[@]}"; do
   installed_sdks+=("$version")
 done
 
+# OpenSSL 1.1 for .NET Core 2.1 to .NET 5 on a distribution that only has OpenSSL 3: Ubuntu 20.04's libssl1.1,
+# pinned and unpacked without root into <destination>/openssl1.1. The test suite puts it on LD_LIBRARY_PATH, as the
+# user guide tells users to (ADR 0030). .NET Core 2.0 needs OpenSSL 1.0, which this doesn't provide.
+if [ "$os" = linux ] && [ "$arch" = x86_64 ] && [ ! -f "$destination/openssl1.1/libssl.so.1.1" ] \
+   && ! ls /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /lib/x86_64-linux-gnu/libssl.so.1.1 > /dev/null 2>&1; then
+  echo "== OpenSSL 1.1 (Ubuntu 20.04's libssl1.1)"
+  deb="libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb"
+  curl -fsSL -o "$work/$deb" "http://security.ubuntu.com/ubuntu/pool/main/o/openssl/$deb"
+  actual="$(sha256sum "$work/$deb" | cut -d' ' -f1)"
+  if [ "$actual" != 7cf39d70a639017d1dd7c8d36daa2258063608688e449fddf40ffdd46f992a78 ]; then
+    echo "SHA-256 mismatch for $deb: got $actual" >&2
+    exit 1
+  fi
+  mkdir -p "$work/libssl" "$destination/openssl1.1"
+  dpkg-deb -x "$work/$deb" "$work/libssl"
+  cp "$work/libssl/usr/lib/x86_64-linux-gnu/libssl.so.1.1" "$work/libssl/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1" "$destination/openssl1.1/"
+fi
+
 # A stamp the tests check, so a half-installed root fails clearly instead of in the middle of a test.
 {
   echo "sdk=$sdk"
