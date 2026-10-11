@@ -43,6 +43,7 @@ public sealed class DebugService : IAsyncDisposable
     public const string ExceptionsUserUnhandled = "user-unhandled";
 
     private readonly Func<string?> _resolveAdapter;
+    private readonly Func<string?> _resolveX64Adapter;
     private readonly Lock _gate = new();
     private readonly Dictionary<int, BreakpointSpec> _adapterBreakpoints = [];
     private readonly Dictionary<BreakpointSpec, int> _hits = [];
@@ -66,9 +67,15 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>A Run to Cursor in progress: where to, and whether other breakpoints are skipped (Force Run to Cursor).</summary>
     private sealed record RunTarget(BreakpointLocation Location, bool Force);
 
-    public DebugService(Func<string?> resolveAdapter)
+    /// <param name="resolveAdapter">Finds netcoredbg (<see cref="DebugAdapterLocator.Resolve"/>).</param>
+    /// <param name="resolveX64Adapter">
+    /// Finds the x64 netcoredbg, for programs that run as x64 on an Arm64 machine (M33, ADR 0030); by default
+    /// <see cref="DebugAdapterLocator.ResolveX64"/>.
+    /// </param>
+    public DebugService(Func<string?> resolveAdapter, Func<string?>? resolveX64Adapter = null)
     {
         _resolveAdapter = resolveAdapter;
+        _resolveX64Adapter = resolveX64Adapter ?? DebugAdapterLocator.ResolveX64;
         Breakpoints.Changed += (_, path) => _ = SyncBreakpointsAsync(path);
         Breakpoints.FunctionsChanged += (_, _) => _ = SyncFunctionBreakpointsAsync();
         ExceptionSettings.Changed += (_, _) => _ = ApplyExceptionSettingsAsync();
@@ -296,7 +303,7 @@ public sealed class DebugService : IAsyncDisposable
                     launch.Name,
                     index,
                     new DebugProcess(launch.Name, null, DebugProcess.Terminal, null),
-                    async ct => await StartNetcoredbgAsync(ct).ConfigureAwait(false),
+                    async ct => await StartForPlanAsync(launch.Plan, ct).ConfigureAwait(false),
                     async adapter =>
                     {
                         held = await HeldLaunch.StartAsync(terminal, hook, launch.Plan, launch.Name, TerminalStartTimeout, cancellationToken).ConfigureAwait(false);
@@ -328,7 +335,7 @@ public sealed class DebugService : IAsyncDisposable
             launch.Name,
             index,
             new DebugProcess(launch.Name, null, DebugProcess.Launched, null),
-            async ct => await StartNetcoredbgAsync(ct).ConfigureAwait(false),
+            async ct => await StartForPlanAsync(launch.Plan, ct).ConfigureAwait(false),
             adapter => ((DebugAdapter)adapter).LaunchAsync(Arguments(launch.Plan), cancellationToken));
     }
 
@@ -391,7 +398,7 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public Task LaunchCompoundAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
         StartAsync(
-            async ct => new CompoundDebugAdapter(await StartNetcoredbgAsync(ct).ConfigureAwait(false), "Server"),
+            async ct => new CompoundDebugAdapter(await (plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
             adapter => ((DebugAdapter)adapter.Primary).LaunchAsync(Arguments(plan), cancellationToken),
             attached: false,
             [new DebugProcess(ProgramName(plan), null, DebugProcess.Launched, null)],
@@ -437,7 +444,7 @@ public sealed class DebugService : IAsyncDisposable
         var process = new DebugProcess(name ?? ProcessName(processId), processId, DebugProcess.Attached, remote?.Target);
         if (remote is null)
         {
-            await StartAsync(StartNetcoredbgAsync, adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken), attached: true, [process], cancellationToken).ConfigureAwait(false);
+            await StartAsync(ct => StartNetcoredbgAsync(ct), adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken), attached: true, [process], cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -482,11 +489,62 @@ public sealed class DebugService : IAsyncDisposable
         UpdateProcess(0, p => p.Id is null ? p with { Id = processId } : p);
     }
 
-    private Task<DebugAdapter> StartNetcoredbgAsync(CancellationToken cancellationToken)
+    /// <summary>The netcoredbg a plan needs: the x64 one for a program that runs as x64 on Arm64 (M33), else the regular one.</summary>
+    private Task<DebugAdapter> StartForPlanAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
+        plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName) ? StartX64NetcoredbgAsync(cancellationToken, plan.Environment) : StartNetcoredbgAsync(cancellationToken, plan.Environment);
+
+    private Task<DebugAdapter> StartNetcoredbgAsync(CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? debuggee = null)
     {
         var path = _resolveAdapter() ?? throw new InvalidOperationException(
             "The debugger (netcoredbg) was not found. Install it next to Daedalus Studio (debugger/), set DAEDALUS_NETCOREDBG, or run eng/get-netcoredbg.sh in a source checkout.");
-        return DebugAdapter.StartAsync(path, cancellationToken);
+        return DebugAdapter.StartAsync(path, cancellationToken, AdapterEnvironment(debuggee));
+    }
+
+    /// <summary>
+    /// The x64 netcoredbg, under Rosetta 2 (or the Windows emulator): a debugger debugs processes of its own architecture,
+    /// and frameworks without an Arm64 runtime run as x64 (M33, ADR 0030).
+    /// </summary>
+    private Task<DebugAdapter> StartX64NetcoredbgAsync(CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? debuggee = null)
+    {
+        var path = _resolveX64Adapter() ?? throw new InvalidOperationException(
+            "This program runs as x64, which needs the x64 debugger (netcoredbg). Install it next to Daedalus Studio (debugger/x64/), set "
+            + DebugAdapterLocator.X64EnvironmentVariable + ", or run eng/get-netcoredbg.sh --x64 in a source checkout.");
+        return DebugAdapter.StartAsync(path, cancellationToken, AdapterEnvironment(debuggee));
+    }
+
+    private static IReadOnlyDictionary<string, string> AdapterEnvironment(IReadOnlyDictionary<string, string>? debuggee) =>
+        AdapterEnvironment(debuggee, DotnetFrameworks.CurrentOs, Environment.GetEnvironmentVariable, RuntimeSelection.SystemIcuMajor);
+
+    /// <summary>
+    /// What netcoredbg's own process needs on Linux (M33, ADR 0030): it reads symbols with managed code that it runs on
+    /// the debuggee's runtime, in its own process, so .NET Core 2.x to 3.1 need the system's ICU there as in the program
+    /// (<c>CLR_ICU_VERSION_OVERRIDE</c>), or the debugger stops at the program's start. The launch's choice wins
+    /// (the override, or invariant globalization); otherwise the system's ICU, which newer runtimes use anyway, so an
+    /// attach to an old program works too. Empty elsewhere.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> AdapterEnvironment(IReadOnlyDictionary<string, string>? debuggee, System.Runtime.InteropServices.OSPlatform os, Func<string, string?> getEnvironmentVariable, Func<int?> icuMajor)
+    {
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (os != System.Runtime.InteropServices.OSPlatform.Linux)
+        {
+            return environment;
+        }
+
+        foreach (var name in (string[])[RuntimeSelection.IcuOverride, RuntimeSelection.Invariant])
+        {
+            if (debuggee is not null && debuggee.TryGetValue(name, out var value))
+            {
+                environment[name] = value;
+            }
+        }
+
+        if (environment.Count == 0 && string.IsNullOrEmpty(getEnvironmentVariable(RuntimeSelection.IcuOverride))
+            && string.IsNullOrEmpty(getEnvironmentVariable(RuntimeSelection.Invariant)) && icuMajor() is { } icu)
+        {
+            environment[RuntimeSelection.IcuOverride] = icu.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return environment;
     }
 
     private async Task StartAsync<TAdapter>(

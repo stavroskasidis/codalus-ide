@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "Net60.App": {
+      "commandName": "Project"
+    },
+    "Watch": {
+      "commandName": "Project",
+      "commandLineArgs": "--watch"
+    }
+  }
+}

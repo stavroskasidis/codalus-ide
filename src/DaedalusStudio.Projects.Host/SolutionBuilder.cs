@@ -25,6 +25,13 @@ internal interface IBuildEvents
 /// </summary>
 internal sealed class SolutionBuilder : IDisposable
 {
+    /// <summary>
+    /// MSBuild before 17 (the .NET 5 SDK and older) never connects to the worker nodes it starts from a host on a
+    /// newer .NET: the build waits forever (M33, ADR 0030). Its builds run in the build host's own node instead, as its
+    /// design-time builds do. <c>DAEDALUS_BUILD_IN_PROCESS=1</c> does the same for any SDK.
+    /// </summary>
+    internal static bool InProcess { get; } = MSBuildMajorVersion() < 17 || Environment.GetEnvironmentVariable("DAEDALUS_BUILD_IN_PROCESS") == "1";
+
     private readonly BuildManager _manager = new("daedalus-build");
 
     /// <summary>One build at a time; the session also holds it to keep design-time builds out of the way.</summary>
@@ -96,9 +103,9 @@ internal sealed class SolutionBuilder : IDisposable
         {
             Loggers = loggers,
             ForwardingLoggers = forwarding,
-            MaxNodeCount = maxNodes,
+            MaxNodeCount = InProcess ? 1 : maxNodes,
             EnableNodeReuse = false,
-            DisableInProcNode = true,
+            DisableInProcNode = !InProcess,
             ShutdownInProcNodeOnBuildFinish = true,
         });
         try
@@ -149,6 +156,13 @@ internal sealed class SolutionBuilder : IDisposable
         var outcome = canceled ? "canceled" : succeeded ? "succeeded" : "failed";
         await events.BuildOutputAsync($"{msbuildTarget} {outcome}: {Count(logger.Errors, "error")}, {Count(logger.Warnings, "warning")}. Elapsed {elapsed:hh\\:mm\\:ss\\.ff}.").ConfigureAwait(false);
         return new BuildResultInfo(succeeded && !canceled, canceled, logger.Errors, logger.Warnings, (long)elapsed.TotalMilliseconds, BinaryLog: binaryLog);
+    }
+
+    /// <summary>The loaded MSBuild's version (its assembly version stays 15.1 across releases; the file version doesn't).</summary>
+    private static int MSBuildMajorVersion()
+    {
+        var location = typeof(BuildManager).Assembly.Location;
+        return location.Length > 0 && FileVersionInfo.GetVersionInfo(location) is { FileMajorPart: > 0 } version ? version.FileMajorPart : 17;
     }
 
     /// <summary>An MSBuild verbosity from its name (<see cref="BuildVerbosities"/>), or <paramref name="fallback"/>.</summary>
@@ -204,8 +218,8 @@ internal sealed class SolutionBuilder : IDisposable
 
         public void Initialize(IEventSource eventSource)
         {
-            eventSource.ErrorRaised += (_, e) => _ = ReportAsync(BuildSeverities.Error, e.Code, e.Message, e.File, e.LineNumber, e.ColumnNumber, e.ProjectFile, e.EndLineNumber, e.EndColumnNumber, e.HelpLink);
-            eventSource.WarningRaised += (_, e) => _ = ReportAsync(BuildSeverities.Warning, e.Code, e.Message, e.File, e.LineNumber, e.ColumnNumber, e.ProjectFile, e.EndLineNumber, e.EndColumnNumber, e.HelpLink);
+            eventSource.ErrorRaised += (_, e) => _ = ReportAsync(BuildSeverities.Error, e.Code, e.Message, e.File, e.LineNumber, e.ColumnNumber, e.ProjectFile, e.EndLineNumber, e.EndColumnNumber, HelpLink(e));
+            eventSource.WarningRaised += (_, e) => _ = ReportAsync(BuildSeverities.Warning, e.Code, e.Message, e.File, e.LineNumber, e.ColumnNumber, e.ProjectFile, e.EndLineNumber, e.EndColumnNumber, HelpLink(e));
             var lowest = Verbosity switch
             {
                 LoggerVerbosity.Quiet => (MessageImportance?)null,
@@ -240,6 +254,39 @@ internal sealed class SolutionBuilder : IDisposable
                 };
             }
         }
+
+        // HelpLink came with MSBuild 16.8: the MSBuild of older SDKs (M33) doesn't have it, and a logger that throws
+        // stops the build ("an unexpected logger failure"). The property is read in methods of their own, so a missing
+        // one fails at that call, where it is caught.
+        private static string? HelpLink(BuildErrorEventArgs e)
+        {
+            try
+            {
+                return ErrorHelpLink(e);
+            }
+            catch (MissingMemberException)
+            {
+                return null;
+            }
+        }
+
+        private static string? HelpLink(BuildWarningEventArgs e)
+        {
+            try
+            {
+                return WarningHelpLink(e);
+            }
+            catch (MissingMemberException)
+            {
+                return null;
+            }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static string? ErrorHelpLink(BuildErrorEventArgs e) => e.HelpLink;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static string? WarningHelpLink(BuildWarningEventArgs e) => e.HelpLink;
 
         public Task ReportAsync(string severity, string? code, string? message, string? file, int line, int column, string? project, int endLine = 0, int endColumn = 0, string? helpLink = null)
         {

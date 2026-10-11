@@ -14,7 +14,7 @@ Open it for a project with **Manage NuGet Packages…** (the project's or its De
 | **Consolidate** | (Solution only) Packages used at different versions in different projects. |
 
 The **details** pane on the right shows the selected package:
-- the version picker (the installed, latest, deprecated and vulnerable versions are marked)
+- the version picker (the installed, latest, deprecated and vulnerable versions are marked, and for a project the versions that don't support its target frameworks, from the package's dependency groups; the details open on the newest version that does)
 - **Install**, **Update** and **Uninstall** (at solution level, tick the projects first)
 - description, authors, licence, publish date, downloads, project link and source
 - dependencies per target framework

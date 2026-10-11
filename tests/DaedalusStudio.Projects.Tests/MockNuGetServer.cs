@@ -62,6 +62,7 @@ internal sealed class MockNuGetServer : IDisposable
                 "/registration/old.package/index.json" => (200, Registration(), "application/json"),
                 "/flat/old.package/1.0.0/readme" => (200, "# Old.Package\n\nDeprecated; use **New.Package**.\n", "text/markdown"),
                 "/flat/old.package/index.json" => (200, """{ "versions": [ "0.9.0", "1.0.0" ] }""", "application/json"),
+                "/registration/framework.package/index.json" => (200, FrameworkRegistration(), "application/json"),
                 _ => (404, string.Empty, "text/plain"),
             };
             var bytes = Encoding.UTF8.GetBytes(body);
@@ -150,6 +151,43 @@ internal sealed class MockNuGetServer : IDisposable
           "packageContent": "{{BaseUrl}}flat/old.package/{{version}}/old.package.{{version}}.nupkg"
         }
         """;
+
+    /// <summary>
+    /// <c>Framework.Package</c> (M33): each version for newer frameworks, as packages that drop old frameworks go. 1.0.0
+    /// is for netstandard2.0, 2.0.0 for netstandard2.1, 3.0.0 for net6.0 and 4.0.0 for net8.0.
+    /// </summary>
+    private string FrameworkRegistration()
+    {
+        string Leaf(string version, string framework) => $$"""
+            {
+              "@id": "{{BaseUrl}}registration/framework.package/{{version}}.json",
+              "catalogEntry": {
+                "@id": "{{BaseUrl}}catalog/framework.package.{{version}}.json",
+                "id": "Framework.Package",
+                "version": "{{version}}",
+                "description": "A package that moves to newer frameworks.",
+                "authors": "Someone",
+                "listed": true,
+                "dependencyGroups": [ { "targetFramework": "{{framework}}" } ]
+              },
+              "packageContent": "{{BaseUrl}}flat/framework.package/{{version}}/framework.package.{{version}}.nupkg"
+            }
+            """;
+        return $$"""
+            {
+              "count": 1,
+              "items": [
+                {
+                  "@id": "{{BaseUrl}}registration/framework.package/index.json#page/1.0.0/4.0.0",
+                  "count": 4,
+                  "lower": "1.0.0",
+                  "upper": "4.0.0",
+                  "items": [ {{Leaf("1.0.0", ".NETStandard2.0")}}, {{Leaf("2.0.0", ".NETStandard2.1")}}, {{Leaf("3.0.0", "net6.0")}}, {{Leaf("4.0.0", "net8.0")}} ]
+                }
+              ]
+            }
+            """;
+    }
 
     public void Dispose()
     {

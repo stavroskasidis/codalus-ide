@@ -168,8 +168,8 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task StartWithoutDebuggingAsync(string? argument = null, bool hotReload = false)
     {
-        hotReload |= Workbench.Settings.GetBoolean(HotReloadSetting, false);
-        if (argument is null && !hotReload && await StartFolderLaunchAsync(debug: false).ConfigureAwait(true))
+        var hotReloadSetting = Workbench.Settings.GetBoolean(HotReloadSetting, false);
+        if (argument is null && !hotReload && !hotReloadSetting && await StartFolderLaunchAsync(debug: false).ConfigureAwait(true))
         {
             return; // a folder's launch configuration (ADR 0033)
         }
@@ -188,6 +188,22 @@ public sealed partial class ShellHost
                 : "Open a solution to run it.");
             return;
         }
+
+        // Hot Reload needs .NET 6 (M33): asked for, it says why not; on by the setting, the program runs without it.
+        string? withoutHotReload = null;
+        if ((hotReload || hotReloadSetting) && HotReloadUnsupportedReason(project) is { } reason)
+        {
+            if (hotReload)
+            {
+                Workbench.Notifications.Warning(reason + " Start Without Debugging (Ctrl+F5) runs it without Hot Reload.");
+                return;
+            }
+
+            hotReloadSetting = false;
+            withoutHotReload = reason + " It runs without Hot Reload.";
+        }
+
+        hotReload |= hotReloadSetting;
 
         if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
         {
@@ -210,6 +226,11 @@ public sealed partial class ShellHost
             }
 
             var program = await Runs.StartAsync(project, console == "externalConsole" || Workbench.Settings.GetBoolean(ExternalConsoleSetting, false), CancellationToken.None, hotReload).ConfigureAwait(true);
+            if (withoutHotReload is not null)
+            {
+                program.Channel?.AppendLine(withoutHotReload);
+            }
+
             OnHotReloadStarted(program);
             if (program.Channel is { } channel)
             {
@@ -303,6 +324,7 @@ public sealed partial class ShellHost
         Workbench.Context.Set("programRunning", running.Count > 0);
         var startup = Runs.StartupProject;
         Workbench.Context.Set("hasStartupProject", startup is not null);
+        Workbench.Context.Set("hotReloadSupported", HotReloadUnsupportedReason(startup) is null);
         Toolbar?.SetDebugState(Debugger?.State is { } debug && debug != DaedalusStudio.Workbench.Debugging.DebugState.Idle, Debugger?.State == DaedalusStudio.Workbench.Debugging.DebugState.Stopped, running.Count > 0);
         UpdateToolbarStartup();
         Explorer.SetStartupProject(startup);

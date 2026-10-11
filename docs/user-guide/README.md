@@ -15,6 +15,7 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 11. [Terminal and C# Interactive](terminal.md)
 12. [The window, settings, themes and keyboard shortcuts](settings.md)
 13. [Troubleshooting, logs and crash reports](troubleshooting.md)
+14. [Older .NET versions: .NET Core 2.0 to .NET 9, and older SDKs in global.json](dotnet-versions.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 

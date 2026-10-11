@@ -32,6 +32,71 @@ public static class DebugAdapterLocator
 
         return candidates.FirstOrDefault(File.Exists);
     }
+
+    /// <summary>
+    /// Whether <paramref name="program"/> runs as x64 on this Arm64 Mac: a Mach-O executable for x86-64 only (the x64
+    /// <c>dotnet</c>, or the apphost of .NET 5 and earlier). Such a process needs the x64 debugger (M33, ADR 0030).
+    /// </summary>
+    public static bool RunsAsX64OnArm64Mac(string program)
+    {
+        if (!OperatingSystem.IsMacOS() || System.Runtime.InteropServices.RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.Arm64)
+        {
+            return false;
+        }
+
+        try
+        {
+            Span<byte> header = stackalloc byte[8];
+            using var file = File.OpenRead(program);
+            return file.Read(header) == 8 && IsMachOX64(header);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>A thin 64-bit Mach-O header (<c>MH_MAGIC_64</c>, little-endian) whose CPU type is x86-64.</summary>
+    public static bool IsMachOX64(ReadOnlySpan<byte> header) =>
+        header.Length >= 8
+        && System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(header) == 0xFEEDFACF
+        && System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(header[4..]) == 0x01000007;
+
+    /// <summary>Points at the x64 netcoredbg (a folder or the executable), on an Arm64 machine.</summary>
+    public const string X64EnvironmentVariable = "DAEDALUS_NETCOREDBG_X64";
+
+    /// <summary>
+    /// The x64 netcoredbg for programs that run as x64 on an Arm64 machine (M33, ADR 0030: .NET Core 2.x to .NET 5 on
+    /// Apple silicon): <c>DAEDALUS_NETCOREDBG_X64</c>, then <c>debugger/x64/</c> next to the shell, then
+    /// <c>.work/netcoredbg-x64</c> in a source checkout (<c>eng/get-netcoredbg.sh --x64</c>). On an x64 machine it is the
+    /// regular one.
+    /// </summary>
+    public static string? ResolveX64()
+    {
+        if (System.Runtime.InteropServices.RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.Arm64)
+        {
+            return Resolve();
+        }
+
+        var exe = OperatingSystem.IsWindows() ? "netcoredbg.exe" : "netcoredbg";
+        var candidates = new List<string>();
+        if (Environment.GetEnvironmentVariable(X64EnvironmentVariable) is { Length: > 0 } fromEnv)
+        {
+            candidates.Add(Directory.Exists(fromEnv) ? Path.Combine(fromEnv, exe) : fromEnv);
+        }
+
+        candidates.Add(Path.Combine(AppContext.BaseDirectory, "debugger", "x64", exe));
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "DaedalusStudio.slnx")))
+            {
+                candidates.Add(Path.Combine(directory.FullName, ".work", "netcoredbg-x64", exe));
+                break;
+            }
+        }
+
+        return candidates.FirstOrDefault(File.Exists);
+    }
 }
 
 /// <summary>
@@ -40,6 +105,9 @@ public static class DebugAdapterLocator
 /// </summary>
 public sealed class DebugAdapter : IDebugAdapter
 {
+    /// <summary>How long <see cref="DisconnectAsync"/> waits for the adapter's answer.</summary>
+    private static readonly TimeSpan DisconnectTimeout = TimeSpan.FromSeconds(10);
+
     private readonly Process _process;
     private readonly DapConnection _connection;
     private readonly TaskCompletionSource _initialized = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -73,6 +141,33 @@ public sealed class DebugAdapter : IDebugAdapter
                 Log?.Invoke(this, line);
             }
         };
+
+        // The connection normally closes when the adapter's output ends with it. On Unix the debuggee inherits that
+        // output, so an adapter that exits before its debuggee would leave the session running forever (M33).
+        process.EnableRaisingEvents = true;
+        process.Exited += (_, _) => _ = AbandonUnlessClosedAsync();
+    }
+
+    private async Task AbandonUnlessClosedAsync()
+    {
+        await Task.WhenAny(_connection.Closed, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
+        if (!_connection.Closed.IsCompleted)
+        {
+            Log?.Invoke(this, $"The debug adapter exited (code {ExitCode()}), and a process it started still holds its output.");
+            _connection.Abandon();
+        }
+    }
+
+    private string ExitCode()
+    {
+        try
+        {
+            return _process.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (InvalidOperationException)
+        {
+            return "unknown";
+        }
     }
 
     /// <summary>The start of the adapter's stderr, to say why a pipe transport failed.</summary>
@@ -97,8 +192,9 @@ public sealed class DebugAdapter : IDebugAdapter
     public DapConnection Connection => _connection;
 
     /// <summary>Starts the adapter at <paramref name="path"/> and sends <c>initialize</c>.</summary>
-    public static Task<DebugAdapter> StartAsync(string path, CancellationToken cancellationToken) =>
-        StartAsync(DebugAdapterStartInfo.Local(path), cancellationToken);
+    /// <param name="environment">Added to the adapter's own environment (M33: what netcoredbg needs on Linux).</param>
+    public static Task<DebugAdapter> StartAsync(string path, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? environment = null) =>
+        StartAsync(DebugAdapterStartInfo.Local(path) with { Environment = environment }, cancellationToken);
 
     /// <summary>
     /// Starts the adapter as <paramref name="info"/> says (netcoredbg here, or through a pipe transport on another
@@ -250,13 +346,21 @@ public sealed class DebugAdapter : IDebugAdapter
     /// <summary>Ends the session: terminates a launched program, or detaches from an attached one.</summary>
     public async Task DisconnectAsync(bool terminateDebuggee, CancellationToken cancellationToken)
     {
+        // An adapter that no longer answers (netcoredbg after its debuggee failed fast at start, M33) must not hold the
+        // session open: after the timeout, disposing the adapter ends its process.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(DisconnectTimeout);
         try
         {
-            await _connection.RequestAsync("disconnect", new DisconnectArguments(terminateDebuggee), Json.DisconnectArguments, cancellationToken).ConfigureAwait(false);
+            await _connection.RequestAsync("disconnect", new DisconnectArguments(terminateDebuggee), Json.DisconnectArguments, timeout.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is DapConnectionLostException or DapException)
         {
             // Already gone.
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // No answer in time.
         }
     }
 

@@ -2,6 +2,7 @@ using System.Globalization;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Commands;
+using DaedalusStudio.Workbench.Projects;
 using DaedalusStudio.Workbench.StatusBar;
 
 namespace DaedalusStudio.Shell;
@@ -28,6 +29,22 @@ public sealed partial class ShellHost
 
     /// <summary>Builds the startup project, then runs it under <c>dotnet watch</c>.</summary>
     public Task StartWithHotReloadAsync(string? argument = null) => StartWithoutDebuggingAsync(argument, hotReload: true);
+
+    /// <summary>
+    /// Why Hot Reload can't run <paramref name="project"/> (by default the startup project), or null when it can (M33):
+    /// <c>dotnet watch</c> applies changes from .NET 6 on.
+    /// </summary>
+    public string? HotReloadUnsupportedReason(string? project = null)
+    {
+        project ??= Runs.StartupProject;
+        if (project is null || !Solutions.Projects.TryGetValue(project, out var info))
+        {
+            return null;
+        }
+
+        var framework = Solutions.ActiveFramework(project) ?? info.TargetFrameworks.FirstOrDefault();
+        return DotnetFrameworks.HotReloadUnsupportedReason(framework, info.Name);
+    }
 
     /// <summary>Alt+F10: saves the modified documents, which <c>dotnet watch</c> applies to the running program.</summary>
     public async Task ApplyCodeChangesAsync()

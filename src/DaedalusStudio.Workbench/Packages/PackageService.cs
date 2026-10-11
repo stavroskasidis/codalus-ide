@@ -46,8 +46,15 @@ public sealed class PackageService
     public Task<PackageSearchResult> SearchAsync(string query, bool prerelease, int skip, int take, string? source, CancellationToken cancellationToken, bool refresh = false) =>
         _solutions.RequestAsync(PackageMethods.Search, new PackageSearchParams(query, prerelease, skip, take, source, Offline, refresh), Json.PackageSearchParams, Json.PackageSearchResult, cancellationToken, s_networkTimeout);
 
-    public Task<PackageDetails> DetailsAsync(string id, bool prerelease, string? version, string? source, CancellationToken cancellationToken) =>
-        _solutions.RequestAsync(PackageMethods.Details, new PackageDetailsParams(id, prerelease, version, source, Offline), Json.PackageDetailsParams, Json.PackageDetails, cancellationToken, s_networkTimeout);
+    /// <param name="targetFrameworks">A project's frameworks: each version says whether it supports them (M33).</param>
+    public Task<PackageDetails> DetailsAsync(string id, bool prerelease, string? version, string? source, CancellationToken cancellationToken, IReadOnlyList<string>? targetFrameworks = null) =>
+        _solutions.RequestAsync(
+            PackageMethods.Details,
+            new PackageDetailsParams(id, prerelease, version, source, Offline, targetFrameworks is { Count: > 0 } ? [.. targetFrameworks] : null),
+            Json.PackageDetailsParams,
+            Json.PackageDetails,
+            cancellationToken,
+            s_networkTimeout);
 
     public Task<PackageStatusResult> StatusAsync(IReadOnlyList<PackageStatusQuery> packages, bool prerelease, CancellationToken cancellationToken, bool refresh = false) =>
         _solutions.RequestAsync(PackageMethods.Status, new PackageStatusParams([.. packages], prerelease, Offline, refresh), Json.PackageStatusParams, Json.PackageStatusResult, cancellationToken, s_networkTimeout);

@@ -109,7 +109,9 @@ A solution loads and builds with the same SDK as `dotnet build` in its folder: t
 - the SDK the solution builds with, and the `global.json` that chose it;
 - the installed SDKs, each with its support status: supported until a date, out of support since a date, or a preview;
 - the installed workloads;
-- a warning when Daedalus can't load the SDK the solution asks for, and which SDK it uses instead. The same warning goes to the Output window (Build Host).
+- a warning when Daedalus can't load the SDK the solution asks for, and which SDK it uses instead: an SDK whose runtime is missing, an SDK below the build host's floor (2.1.200), or a global.json that asks for an SDK that isn't installed. The same warning goes to the Output window (Build Host).
+
+SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own process; projects of every .NET version from .NET Core 2.0 work with the current SDK. [Older .NET versions](dotnet-versions.md) has the details.
 
 **Use This SDK** pins the selected SDK in `global.json` (with the roll-forward policy you choose) and reloads the solution with it. **Remove Pin** takes the version out again.
 

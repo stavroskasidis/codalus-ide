@@ -128,6 +128,12 @@ internal sealed class DotnetTools(string dotnet, string directory)
 /// <summary>Starting the SDK's <c>dotnet</c> from the build host.</summary>
 internal static class DotnetProcess
 {
+    /// <summary>The SDK whose CLI runs restores and tools in the solution's folder: the one <c>global.json</c> resolves.</summary>
+    public static Version? SdkVersion { get; set; }
+
+    /// <summary>The system's ICU major version on Linux (<c>libicuuc.so.74</c> → 74), found once.</summary>
+    private static readonly Lazy<int?> s_icu = new(SystemIcuMajor);
+
     public static ProcessStartInfo StartInfo(string dotnet, string workingDirectory, IEnumerable<string> args)
     {
         var psi = new ProcessStartInfo(dotnet)
@@ -147,6 +153,15 @@ internal static class DotnetProcess
         psi.Environment["DOTNET_NOLOGO"] = "1";
         psi.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
 
+        // The CLI of an SDK before 5.0 runs on .NET Core 2.x or 3.x, which stops at start on a Linux distribution whose
+        // ICU is newer than the ones it knows (M33, ADR 0030): it gets the system's ICU, unless the choice is made.
+        if (OperatingSystem.IsLinux() && SdkVersion is { Major: < 5 } && s_icu.Value is { } icu
+            && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CLR_ICU_VERSION_OVERRIDE"))
+            && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT")))
+        {
+            psi.Environment["CLR_ICU_VERSION_OVERRIDE"] = icu.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         // MSBuildLocator pointed this process at the SDK's MSBuild through environment variables; the child
         // dotnet must resolve its own.
         foreach (var variable in new[] { "MSBUILD_EXE_PATH", "MSBuildExtensionsPath", "MSBuildSDKsPath", "MSBuildLoadMicrosoftTargetsReadOnly" })
@@ -155,6 +170,38 @@ internal static class DotnetProcess
         }
 
         return psi;
+    }
+
+    /// <summary>The system's ICU major version on Linux, or null.</summary>
+    public static int? IcuMajor => s_icu.Value;
+
+    private static int? SystemIcuMajor()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return null;
+        }
+
+        int? newest = null;
+        foreach (var folder in new[] { "/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu", "/usr/lib/aarch64-linux-gnu", "/lib/aarch64-linux-gnu", "/usr/lib64", "/lib64", "/usr/lib", "/usr/local/lib" })
+        {
+            try
+            {
+                foreach (var file in Directory.Exists(folder) ? Directory.EnumerateFiles(folder, "libicuuc.so.?*") : [])
+                {
+                    if (Path.GetFileName(file).Length > "libicuuc.so.".Length && int.TryParse(Path.GetFileName(file)["libicuuc.so.".Length..].Split('.')[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var major)
+                        && major > (newest ?? 0))
+                    {
+                        newest = major;
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return newest;
     }
 
     /// <summary>

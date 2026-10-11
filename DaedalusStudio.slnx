@@ -55,6 +55,7 @@
     <Project Path="tests/DaedalusStudio.Release.Tests/DaedalusStudio.Release.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Rpc.Tests/DaedalusStudio.Rpc.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Shell.Tests/DaedalusStudio.Shell.Tests.csproj" />
+    <Project Path="tests/DaedalusStudio.TargetFrameworks.Tests/DaedalusStudio.TargetFrameworks.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Workbench.Tests/DaedalusStudio.Workbench.Tests.csproj" />
   </Folder>
 </Solution>

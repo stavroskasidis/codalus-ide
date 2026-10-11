@@ -200,6 +200,11 @@ public sealed partial class ShellHost
             }
 
             DebugLog.AppendLine($"> {plan.FileName} {plan.Arguments}".TrimEnd());
+            foreach (var note in plan.Notes)
+            {
+                DebugLog.AppendLine(note);
+            }
+
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);

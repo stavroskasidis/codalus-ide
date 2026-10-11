@@ -112,6 +112,12 @@ public sealed record LaunchPlan(
     IReadOnlyDictionary<string, string> Environment,
     string? BrowserUrl)
 {
+    /// <summary>The program runs as x64 on an Arm64 machine (M33, <see cref="RuntimeSelection"/>): it needs the x64 debugger.</summary>
+    public bool RunsAsX64 { get; init; }
+
+    /// <summary>What Daedalus Studio changed about the launch and why (M33, <see cref="RuntimeSelection"/>), for the program's output.</summary>
+    public IReadOnlyList<string> Notes { get; init; } = [];
+
     /// <summary>
     /// The arguments exactly (a WSL command, a compiler response file, M14c); when null, <see cref="Arguments"/> is
     /// split like a command line.

@@ -1020,6 +1020,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             shell.Workbench.StatusBar.Remove(ShellHost.UpdateStatusItem);
         }).ConfigureAwait(true);
 
+
         const string wasmTitle = "F5 debugs a Blazor WebAssembly app in the browser: a breakpoint in a .razor file stops";
         if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null && Environment.GetEnvironmentVariable("CI") != "true")
         {
@@ -1029,6 +1030,73 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
+        }
+
+        // Last: it opens a solution of 38 projects, and nothing after it depends on what it leaves behind.
+        await StepAsync("dotnet.older", "M33", "Projects of .NET Core 2.0 to .NET 10 open and build; Hot Reload says why it needs .NET 6", OlderFrameworksStepAsync).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Older .NET (M33, ADR 0030) on samples/TargetFrameworks, with the newest SDK as a user has it: the eleven
+    /// frameworks evaluate, .NET Core 2.1's framework is its package, the solution builds, Hot Reload is disabled for a
+    /// netcoreapp3.1 startup project with its reason, and the net10.0 app runs. The netcoreapp2.1 app runs too when
+    /// this machine has the .NET Core 2.1 runtime (the full matrix is DaedalusStudio.TargetFrameworks.Tests).
+    /// </summary>
+    private async Task OlderFrameworksStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var source = Path.Combine(samples, "TargetFrameworks");
+        Check(File.Exists(Path.Combine(source, "TargetFrameworks.sln")), $"the samples folder {samples} has TargetFrameworks");
+        var target = Path.Combine(_work, "TargetFrameworks");
+        Copy(source, target);
+        await shell.OpenSolutionAsync(Path.Combine(target, "TargetFrameworks.sln")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 38 && shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState is "succeeded" or "failed",
+            "the 38 projects are open and restored", 600).ConfigureAwait(true);
+        Check(shell.Solutions.RestoreState == "succeeded", "the restore succeeded");
+        var lib = shell.Solutions.Projects.Values.Single(p => p.Name == "Core21.Lib");
+        Check(lib.References.Any(r => r is { Kind: DaedalusStudio.Projects.Protocol.ReferenceKinds.Framework, Name: "Microsoft.NETCore.App", Resolved: true }), "netcoreapp2.1's framework is the Microsoft.NETCore.App package");
+
+        var core31 = shell.Solutions.Projects.Values.Single(p => p.Name == "Core31.App").Path;
+        shell.Runs.SetStartupProject(core31);
+        await WaitAsync(() => shell.Workbench.Context.GetValue("hotReloadSupported") is false, "Start with Hot Reload is disabled for Core31.App", 30).ConfigureAwait(true);
+        Check(shell.HotReloadUnsupportedReason() == "Hot Reload needs .NET 6 or later: Core31.App targets netcoreapp3.1.", "the reason names the framework: " + shell.HotReloadUnsupportedReason());
+
+        var before = shell.Builds.LastBuild;
+        shell.Run("build.buildSolution");
+        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 600).ConfigureAwait(true);
+        Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+
+        var apps = new List<string> { "Net100.App" };
+        if (HasRuntime("2.1."))
+        {
+            apps.Add("Core21.App");
+        }
+
+        foreach (var name in apps)
+        {
+            shell.Runs.SetStartupProject(shell.Solutions.Projects.Values.Single(p => p.Name == name).Path);
+            shell.Run("run.startWithoutDebugging");
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: " + name)?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("has exited with code", StringComparison.Ordinal), $"{name} runs and exits", 300).ConfigureAwait(true);
+            Check(Output().Contains("has exited with code 0", StringComparison.Ordinal) && Output().Contains("Hello, ", StringComparison.Ordinal), $"{name} ran:\n" + Tail(Output(), 1000));
+        }
+
+        Console.Out.WriteLine($"  ran: {string.Join(", ", apps)}" + (apps.Count == 1 ? " (no .NET Core 2.1 runtime here)" : string.Empty));
+    }
+
+    /// <summary>Whether <c>dotnet --list-runtimes</c> lists a Microsoft.NETCore.App version starting with <paramref name="prefix"/>.</summary>
+    private static bool HasRuntime(string prefix)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("dotnet", "--list-runtimes") { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true });
+            var output = process!.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            return output.Split('\n').Any(l => l.StartsWith("Microsoft.NETCore.App " + prefix, StringComparison.Ordinal));
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
         }
     }
 

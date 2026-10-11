@@ -304,6 +304,13 @@ public sealed class RunService : IDisposable
     /// </summary>
     public string? EnvironmentOverride { get; set; }
 
+    /// <summary>
+    /// Applies <see cref="EnvironmentOverride"/> to a plan, and picks the <c>dotnet</c> the program of <paramref name="info"/>
+    /// runs on (<see cref="RuntimeSelection"/>, M33): the SDK's root for an apphost, the x64 one where the framework
+    /// has no Arm64 runtime.
+    /// </summary>
+    public LaunchPlan Adjust(LaunchPlan plan, RunInfo info) => Adjust(RuntimeSelection.Apply(plan, info, DotnetRoot));
+
     /// <summary>Applies <see cref="EnvironmentOverride"/> to a plan.</summary>
     public LaunchPlan Adjust(LaunchPlan plan)
     {
@@ -420,6 +427,11 @@ public sealed class RunService : IDisposable
 
         channel.Clear();
         channel.AppendLine($"> {plan.FileName} {plan.Arguments}".TrimEnd() + note);
+        foreach (var runtimeNote in plan.Notes)
+        {
+            channel.AppendLine(runtimeNote);
+        }
+
         var process = new Process { StartInfo = start, EnableRaisingEvents = true };
         var ready = new TaskCompletionSource<RunningProgram>(TaskCreationOptions.RunContinuationsAsynchronously);
         process.Exited += (_, _) => _ = ready.Task.ContinueWith(t => OnExited(t.Result, plan, channel, console), CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);

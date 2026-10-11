@@ -19,30 +19,70 @@ Console.SetOut(Console.Error);
 // The SDK `dotnet` resolves for the solution's folder (global.json included) comes first, then the others, newest
 // first (ADR 0025). The shell starts the host on a runtime that can load it; if this one still can't, the newest SDK
 // it can load is used, and the shell is told which SDK the solution asked for.
-var instances = MSBuildLocator.QueryVisualStudioInstances(new VisualStudioInstanceQueryOptions
-    {
-        DiscoveryTypes = DiscoveryType.DotNetSdk,
-        WorkingDirectory = Directory.GetCurrentDirectory(),
-        AllowAllRuntimeVersions = true,
-    })
-    .ToList();
-var instance = instances.FirstOrDefault(i => SdkSelection.CanLoad(i.Version, Environment.Version));
+var globalJson = GlobalJsonSdk.Find(Directory.GetCurrentDirectory());
+string? unresolved = null;
+List<VisualStudioInstance> instances;
+try
+{
+    instances = Query(Directory.GetCurrentDirectory());
+}
+catch (Exception ex) when (ex is not OutOfMemoryException)
+{
+    // A global.json that asks for an SDK that isn't installed: the locator throws, as dotnet fails there (M33). The
+    // SDKs are listed from a folder without one instead, and the solution is told.
+    unresolved = ex.Message.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+    instances = Query(AppContext.BaseDirectory);
+}
+
+// Below the floor (M33, ADR 0030), an SDK's MSBuild doesn't run here: the newest SDK that does stands in, and the
+// solution is told which SDK it asked for and why it isn't used.
+var instance = instances.FirstOrDefault(i => SdkSelection.CanLoad(i.Version, Environment.Version) && SdkSelection.AboveFloor(i.Version));
 if (instance is null)
 {
     await Console.Error.WriteLineAsync(instances.Count == 0
         ? "No .NET SDK was found. Install the .NET SDK to open solutions."
+        : !SdkSelection.AboveFloor(instances[0].Version) ? SdkSelection.BelowFloor(SdkName(instances[0]), GlobalJsonSdk.Find(Directory.GetCurrentDirectory())?.Path, null)
         : SdkSelection.Unloadable(instances[0].Version, null, Environment.Version)).ConfigureAwait(false);
     return 3;
 }
 
-var sdkWarning = instance == instances[0] ? null : SdkSelection.Unloadable(instances[0].Version, instance.Version, Environment.Version);
+// A global.json that asks for an SDK that isn't installed: dotnet fails there, and the locator offers the newest SDK
+// (or throws, above).
+var sdkWarning = globalJson is not null && (unresolved is not null || !globalJson.Accepts(SdkName(instances[0]))) ? SdkSelection.NotInstalled(globalJson, instance.Version)
+    : unresolved is not null ? $"{unresolved} The build host uses the .NET SDK {instance.Version.ToString(3)} instead."
+    : instance == instances[0] ? null
+    : !SdkSelection.AboveFloor(instances[0].Version) ? SdkSelection.BelowFloor(SdkName(instances[0]), globalJson?.Path, instance.Version)
+    : SdkSelection.Unloadable(instances[0].Version, instance.Version, Environment.Version);
 if (sdkWarning is not null)
 {
     await Console.Error.WriteLineAsync(sdkWarning).ConfigureAwait(false);
 }
 
+// The CLI that restores and runs tools in the solution's folder is the SDK global.json resolves, not necessarily the one loaded here.
+DaedalusStudio.Projects.Host.Packages.DotnetProcess.SdkVersion = unresolved is null && instances.Count > 0 ? instances[0].Version : instance.Version;
+
+// MSBuild before 17 builds in this process (ADR 0030), and its tasks start the SDK's own tools (csc on .NET Core 2.x or
+// 3.x), which stop at start on a Linux distribution whose ICU is newer than the ones they know. They inherit this.
+if (OperatingSystem.IsLinux() && instance.Version.Major < 5 && DaedalusStudio.Projects.Host.Packages.DotnetProcess.IcuMajor is { } icu
+    && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CLR_ICU_VERSION_OVERRIDE"))
+    && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT")))
+{
+    Environment.SetEnvironmentVariable("CLR_ICU_VERSION_OVERRIDE", icu.ToString(System.Globalization.CultureInfo.InvariantCulture));
+}
 MSBuildLocator.RegisterInstance(instance);
 return await RunAsync(stdin, stdout, instance.MSBuildPath, sdkWarning).ConfigureAwait(false);
+
+static List<VisualStudioInstance> Query(string directory) =>
+    MSBuildLocator.QueryVisualStudioInstances(new VisualStudioInstanceQueryOptions
+        {
+            DiscoveryTypes = DiscoveryType.DotNetSdk,
+            WorkingDirectory = directory,
+            AllowAllRuntimeVersions = true,
+        })
+        .ToList();
+
+// The SDK's full version, from its folder (VisualStudioInstance.Version drops a prerelease label).
+static string SdkName(VisualStudioInstance instance) => Path.GetFileName(Path.TrimEndingDirectorySeparator(instance.MSBuildPath));
 
 // Separate method: Microsoft.Build types must not be loaded before RegisterInstance.
 [MethodImpl(MethodImplOptions.NoInlining)]
