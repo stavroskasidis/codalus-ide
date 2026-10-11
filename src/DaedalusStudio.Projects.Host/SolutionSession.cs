@@ -369,7 +369,8 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
         lock (_designTimePending)
         {
-            _designTimePending.UnionWith(projects.Where(p => !IsUnloaded(p)));
+            // SQL database projects (.sqlproj, ADR 0038) have no compiler command line: they build, but get no design-time build.
+            _designTimePending.UnionWith(projects.Where(p => !IsUnloaded(p) && !p.EndsWith(".sqlproj", StringComparison.OrdinalIgnoreCase)));
             if (_designTimeWorker.IsCompleted)
             {
                 var token = _designTimeBatch.Token;

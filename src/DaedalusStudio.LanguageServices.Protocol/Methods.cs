@@ -76,4 +76,7 @@ public static class Methods
 
     /// <summary>EF Core DbContext types in the solution, with their provider and connection name (M27a).</summary>
     public const string EfContexts = "daedalus/ef/contexts";
+
+    /// <summary>Client → SQL server notification: a SQL document's dialect and schema (M27b).</summary>
+    public const string SqlContext = "daedalus/sql/context";
 }

@@ -158,7 +158,7 @@ internal sealed class ProjectWatcher(Func<ProjectWatcher.Changes, Task> onChange
     }
 
     private static bool IsMSBuildFile(string path) =>
-        Path.GetExtension(path).ToLowerInvariant() is ".csproj" or ".fsproj" or ".vbproj" or ".props" or ".targets"
+        Path.GetExtension(path).ToLowerInvariant() is ".csproj" or ".fsproj" or ".vbproj" or ".sqlproj" or ".props" or ".targets"
         || Path.GetFileName(path).Equals("Directory.Packages.props", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsRestoreOutput(string path) =>

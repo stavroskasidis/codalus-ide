@@ -898,6 +898,8 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 
         await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
 
+        await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -989,6 +991,75 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         Check(form.Error is null && File.Exists(Path.Combine(target, "Blogging", "Inventory", "Product.cs")), "the inventory database is reverse engineered: " + form.Error + "\n" + Log());
         shell.Layout.CloseDocument(model);
         shell.Layout.CloseDocument(scaffold);
+    }
+
+    /// <summary>
+    /// The database explorer (M27b, ADR 0037 and 0038) on a copy of samples/Data's inventory database: a connection
+    /// added in the form, the tree, a table's data edited and committed, a query editor with schema completion,
+    /// results and an estimated plan, all through the published data host.
+    /// </summary>
+    private async Task DataExplorerStepAsync()
+    {
+        var database = Path.Combine(_work, "smoke-inventory.db");
+        File.Copy(Path.Combine(samples, "Data", "Inventory", "inventory.db"), database, overwrite: true);
+        shell.ShowDatabaseExplorer();
+        var form = shell.OpenConnectionForm().ViewModel;
+        form.EngineName = "SQLite";
+        form.File = database;
+        await form.TestAsync().ConfigureAwait(true);
+        Check(form.Result?.StartsWith("Connected: SQLite", StringComparison.Ordinal) == true, "Test Connection reaches the database: " + form.Result + "\n" + Tail(shell.DataLog.GetText(), 1500));
+        await form.SaveAsync().ConfigureAwait(true);
+        var connection = shell.DbExplorer.Roots.FirstOrDefault(r => r.Label == "smoke-inventory.db");
+        Check(connection is not null, "the connection is in the Database Explorer");
+
+        async Task<DbNodeViewModel> Child(DbNodeViewModel node, string label)
+        {
+            node.IsExpanded = true;
+            await WaitAsync(() => node.Children.Any(c => c.Label == label), $"{node.Label} shows {label}", 60).ConfigureAwait(true);
+            return node.Children.First(c => c.Label == label);
+        }
+
+        var products = await Child(await Child(connection!, "Tables").ConfigureAwait(true), "Products").ConfigureAwait(true);
+        shell.DbExplorer.Selected = products;
+        var document = await shell.ViewTableDataAsync(products).ConfigureAwait(true);
+        Check(document is not null, "View Data opens the table");
+        var table = document!.ViewModel;
+        await WaitAsync(() => table.Grid is { Rows.Count: 5 } && !table.IsBusy, "the table's rows are shown", 60).ConfigureAwait(true);
+        var name = Array.FindIndex(table.Grid!.Columns, c => c.Name == "Name");
+        table.Grid.Rows[1].Set(name, "Chang (smoke)");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-data-table.png");
+        Check(await table.CommitAsync().ConfigureAwait(true), "the edit commits: " + table.Message);
+        Check(table.Grid!.Rows[1].Values[name] == "Chang (smoke)", "the committed value is read back");
+
+        var editor = await shell.OpenQueryAsync(products).ConfigureAwait(true);
+        Check(editor is not null, "New Query opens an editor");
+        await WaitAsync(() => editor!.Controller is not null, "the query editor appears").ConfigureAwait(true);
+        editor!.Model.Text.Text = "SELECT p.Name, c.Name AS Category FROM Products p JOIN Categories c ON c.CategoryId = p.CategoryId ORDER BY p.ProductId;";
+        var client = await shell.Languages.ClientAsync(ShellHost.SqlLanguageId).ConfigureAwait(true);
+        Check(client is not null, "the SQL language service starts");
+        var found = false;
+        for (var attempt = 0; attempt < 120 && !found; attempt++)
+        {
+            var completion = await client!.CompletionAsync(editor.Model.Uri, new LanguageServices.Protocol.Position(0, "SELECT p.".Length), null, CancellationToken.None).ConfigureAwait(true);
+            found = completion.Items.Any(i => i.Label == "Sku");
+            if (!found)
+            {
+                await Task.Delay(500).ConfigureAwait(true);
+            }
+        }
+
+        Check(found, "SQL completion offers the alias's columns from the schema");
+        var result = await shell.ExecuteQueryAsync().ConfigureAwait(true);
+        Check(result?.ResultSets is [{ Rows.Length: 5 }], "the query returns the 5 products: " + shell.QueryResults.Messages);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-data-query.png");
+        await shell.ExecuteQueryAsync(plan: Data.Protocol.PlanKinds.Estimated).ConfigureAwait(true);
+        Check(shell.QueryResults.HasPlan && shell.QueryResults.Plan.Count > 0, "the estimated plan is shown: " + shell.QueryResults.Messages);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-data-plan.png");
+        shell.Layout.CloseDocument(document);
+        await shell.Data.DisconnectAsync(connection!.ConnectionId!).ConfigureAwait(true);
     }
 
     /// <summary>

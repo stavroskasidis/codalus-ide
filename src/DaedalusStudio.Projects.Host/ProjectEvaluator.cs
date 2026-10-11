@@ -19,6 +19,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
     {
         "Compile", "None", "Content", "EmbeddedResource", "Folder", "Page", "ApplicationDefinition", "Resource",
         "AdditionalFiles", "AvaloniaResource", "AvaloniaXaml", "Protobuf", "TypeScriptCompile",
+        "Build", "PreDeploy", "PostDeploy", "RefactorLog", "SqlCmdVariable", // SQL database projects (Microsoft.Build.Sql)
     };
 
     /// <summary>Item types that <c>AvailableItemName</c> may list but that belong under Dependencies or nowhere.</summary>

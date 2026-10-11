@@ -87,6 +87,7 @@ namespace DaedalusStudio.LanguageServices.Protocol;
 [JsonSerializable(typeof(AspNetEndpointsResult))]
 [JsonSerializable(typeof(EfContextsParams))]
 [JsonSerializable(typeof(EfDiscoveredContextsResult))]
+[JsonSerializable(typeof(SqlContextParams))]
 [JsonSerializable(typeof(CodeActionChoices))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(string[]))]

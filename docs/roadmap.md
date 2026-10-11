@@ -45,7 +45,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M22 | Plugin platform 1.0 and marketplace | planned |
 | M23 | Personalization, settings sync and localization | planned |
 | M26 | Build and project-system depth | planned |
-| M27 | Data and Entity Framework Core tooling | M27a at checkpoint ([m27a](checkpoints/m27a.md), ADR 0036): the Entity Framework window over the user's dotnet-ef (migrations with their SQL shown before they are applied, scripts, bundles, compiled models, reverse engineering), Roslyn DbContext discovery, the model view; M27b (database explorer, query editor, SQL language service, `.sqlproj`) next |
+| M27 | Data and Entity Framework Core tooling | done (M27a and M27b at checkpoint): the Entity Framework window over the user's dotnet-ef (migrations with their SQL shown first, scripts, bundles, compiled models, reverse engineering, the model view; [m27a](checkpoints/m27a.md), ADR 0036); the Database Explorer in `daedalus-datahost` (SQL Server, PostgreSQL, MySQL/MariaDB, SQLite), table data with explicit commit, CSV/JSON export and import, the query editor with results, messages, cancel, history and plans, the SQL language service (ScriptDom), `.sqlproj` loading and builds ([m27b](checkpoints/m27b.md), ADRs 0037 and 0038); schema compare and publish are a gap (D15: DacFx is proprietary) |
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
 | M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Daedalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
@@ -1773,7 +1773,7 @@ New APIs start in `DaedalusStudio.Plugins.Proposed` and are promoted in M22.
 | M21 | `runsOn` placement, a file-system provider API |
 | M22 | Freeze 1.0, declarative views (D2), permissions manifest, custom editors, themes and icon themes. Webviews come after 1.0. |
 | M26 | Custom tool (single-file generator) contributions, Properties window property providers, external-tool macros |
-| M27 | Database connection providers (more engines as plugins) |
+| M27 | Database connection providers (more engines as plugins): deferred to M22 (`TODO(issue)` in the M27b checkpoint); the four engines are built in |
 | M28 | AI model providers, AI context providers, MCP server contributions (all proposed, after 1.0) |
 
 ### Performance
@@ -1940,7 +1940,7 @@ The "Daedalus" column uses these terms:
 | User secrets | M15 |
 | Open Folder (no solution) | M26 |
 | Docker Compose projects (`.dcproj`) | M17 |
-| SQL database projects (`.sqlproj`) | M27 |
+| SQL database projects (`.sqlproj`) | M27b (done: SDK-style, Microsoft.Build.Sql) |
 | Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10) |
 | Non-SDK-style projects, .NET Framework-only scenarios | Non-goal |
 | WinForms, WPF, UWP and WinUI project types and designers | Non-goal |
@@ -2034,7 +2034,7 @@ The "Daedalus" column uses these terms:
 | F# | M36 (load, build and run since M2) |
 | Razor and Blazor | M16 |
 | HTML, CSS, JavaScript and TypeScript | M16 |
-| SQL (T-SQL and other dialects) | M27 |
+| SQL (T-SQL and other dialects) | M27b (done: ScriptDom for T-SQL, schema completion for every dialect, ADR 0038) |
 | XAML: Avalonia | M19 |
 | XAML: .NET MAUI | M20 |
 | MSBuild, JSON, XML, YAML | M11 |
@@ -2131,11 +2131,11 @@ The "Daedalus" column uses these terms:
 
 | Visual Studio feature | Daedalus |
 |---|---|
-| Server Explorer, SQL Server Object Explorer | M27 |
-| SQL editor, results grid, execution plans | M27 |
-| Table data viewer and editor | M27 |
+| Server Explorer, SQL Server Object Explorer | M27b (done: the Database Explorer, ADR 0037) |
+| SQL editor, results grid, execution plans | M27b (done: the query editor and Query Results; plans as trees, ADRs 0037 and 0038) |
+| Table data viewer and editor | M27b (done: paged, explicit commit, CSV/JSON export and import) |
 | EF Core migrations, reverse engineering, model view | M27a (done: the user's dotnet-ef through the build host, ADR 0036) |
-| SQL database projects, schema compare, publish | M27 (D15) |
+| SQL database projects, schema compare, publish | M27b: SDK-style `.sqlproj` load and build (done); schema compare and publish are a gap: DacFx's license is proprietary (D15) |
 | Entity Data Model designer (EF6, EDMX) | Non-goal (.NET Framework) |
 
 ### UI frameworks and designers
@@ -2244,7 +2244,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D12 | Licence of Aspire's orchestrator (DCP), and the IDE's relationship to it | M17 | Integrate through the IDE execution protocol only, never redistribute | decided 2026-10-10: as recommended, without a separate question. M17 still checks DCP's licence. |
 | D13 | Phase order | Each phase start | As listed in this document | decided 2026-10-10. Phase 4 (M30–M33) comes next. Then M16c, and the rest in the phase table's order. Amended the same day: M16c comes right after M30a, before M31–M33. The list ends with M28, then M20 (MAUI), M34 (polish), and VB and F# (M35, M36), which always stay last. |
 | D14 | Product 1.0 criteria (as opposed to preview releases) | After Phase 2 | Phases 1–2 complete, and plugin API 1.0 frozen early (pulled ahead of the marketplace work) | decided 2026-10-10: there are no criteria. Releases stay 0.x, even after the repository goes public, until the maintainer says otherwise. Plugin API 1.0 (M22) is separate from the product's version. |
-| D15 | Data tooling scope: which database engines first, the T-SQL language service (SQL Tools Service or our own on ScriptDom), and whether DacFx's licence allows schema compare and publish | M27 | SQL Server, PostgreSQL, SQLite and MySQL; SQL Tools Service through the LSP bridge; DacFx only if its licence is OSI-approved | decided 2026-10-10: as recommended. SQL Server, PostgreSQL, SQLite and MySQL/MariaDB come first. M27 checks DacFx's licence. |
+| D15 | Data tooling scope: which database engines first, the T-SQL language service (SQL Tools Service or our own on ScriptDom), and whether DacFx's licence allows schema compare and publish | M27 | SQL Server, PostgreSQL, SQLite and MySQL; SQL Tools Service through the LSP bridge; DacFx only if its licence is OSI-approved | decided 2026-10-10: as recommended. SQL Server, PostgreSQL, SQLite and MySQL/MariaDB come first. M27 checks DacFx's licence. Checked 2026-10-11 (M27b): DacFx is under Microsoft's proprietary terms, so schema compare and publish are a gap; T-SQL uses ScriptDom (MIT) in the data host instead of SQL Tools Service (ADR 0038). |
 | D16 | Self-update mechanism and release channels | M32 | An updater for the direct-download builds, with stable, preview and nightly channels; package-manager builds update through their own channel | decided 2026-10-10: Velopack, with two channels, stable (`master`) and nightly (`develop`). Updates download silently in the background and are applied at the next restart, with a "Restart to update" status bar item and a setting to switch to notify-only or off. apt and dnf installs update through the package manager. |
 | D17 | Installer technology | M31 | Velopack (MIT): installers, delta updates and channels from one tool | decided 2026-10-10: Velopack. A per-user `Setup.exe` on Windows, a `.pkg` on macOS and an AppImage on Linux. The Windows zip and the macOS `.app` zip stay. |
 | D18 | Linux formats | M31 | An AppImage, plus `.deb` and `.rpm` from our own repositories | decided 2026-10-10: a self-updating AppImage; `.deb` and `.rpm` from apt and dnf repositories on GitHub Pages, which update with the system; and the `.tar.gz`. No Flatpak for now. |
@@ -2340,3 +2340,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Git:** an askpass prompt behind the user's credential helper, worktrees, Git LFS awareness (pointer files, locks), solutions spanning several repositories.
   - **Open:** the project's OAuth apps (client ids) are to be registered; until then device sign-in needs a client id in settings, and a personal access token works.
 - 2026-10-11: M27a built and at its checkpoint (ADR 0036): EF Core through the user's own `dotnet ef`, run by the build host in trusted solutions (`ef/*`), and a model agent (`daedalus-efagent`) on the app's runtime for the model view. The Entity Framework window lists the DbContexts (found by Roslyn with their provider and connection name, `daedalus/ef/contexts`) and their migrations on a chosen connection (the app's configuration, `appsettings*.json` or user secrets); Update Database and reverts show their SQL before applying it; Add and Remove Migration, scripts (idempotent, without transactions), bundles, compiled models, reverse engineering (`dbcontext scaffold`) and installing dotnet-ef as a local tool. `samples/Data`. M27b (the database explorer, the query editor, the SQL language service, `.sqlproj`) follows.
+- 2026-10-11: M27b built and at its checkpoint (ADRs 0037 and 0038), which completes M27: a new supervised, lazy `daedalus-datahost` with SQL Server (Microsoft.Data.SqlClient on managed networking: its native SNI is proprietary and excluded), PostgreSQL (Npgsql), MySQL/MariaDB (MySqlConnector) and SQLite (Microsoft.Data.Sqlite); the Database Explorer (your connections, passwords in the OS credential store, and the solution's from appsettings, user secrets and Aspire AppHosts), table data (paged, edited, committed in one transaction, CSV/JSON export and import), the query editor (Query Results with grids, messages, time, cancel, history, estimated and actual plans as trees), the SQL language server (`daedalus-datahost --lsp`: schema completion and hover, T-SQL diagnostics and formatting through ScriptDom), and SDK-style `.sqlproj` load and build. D15: DacFx's licence is proprietary, so schema compare and publish are a gap; SQL Tools Service wasn't integrated (a 100 MB download per platform and its own connection protocol; `TODO(issue)`).

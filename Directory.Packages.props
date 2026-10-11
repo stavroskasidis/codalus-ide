@@ -38,6 +38,15 @@
     <PackageVersion Include="NuGet.Credentials" Version="6.11.2" />
     <PackageVersion Include="NuGet.Protocol" Version="6.11.2" />
   </ItemGroup>
+  <ItemGroup Label="Data host (M27b, ADR 0037 and 0038)">
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <!-- Excluded (ExcludeAssets="all" in the host): its native SNI is under proprietary terms; the host uses managed SNI. -->
+    <PackageVersion Include="Microsoft.Data.SqlClient.SNI.runtime" Version="7.1.0" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="MySqlConnector" Version="2.6.2" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.117.0" />
+  </ItemGroup>
   <ItemGroup Label="Installers and self-update (M31, M32; keep in step with the vpk version in eng/package.sh)">
     <PackageVersion Include="Velopack" Version="1.2.161" />
   </ItemGroup>

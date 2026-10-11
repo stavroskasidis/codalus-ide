@@ -317,3 +317,15 @@ public sealed record EfDiscoveredContext(
     bool HasDesignTimeFactory);
 
 public sealed record EfDiscoveredContextsResult(EfDiscoveredContext[] Contexts);
+
+/// <summary>
+/// <c>daedalus/sql/context</c> (M27b, ADR 0038), client → SQL server notification: a SQL document's dialect
+/// (<c>sqlserver</c>, <c>postgresql</c>, <c>mysql</c>, <c>sqlite</c> or <c>sql</c> when it has no connection) and the
+/// connection's schema, for completion and hover. Sent when the editor's connection or its schema changes.
+/// </summary>
+public sealed record SqlContextParams(string Uri, string Dialect, string? DefaultSchema, SqlSchemaObject[] Objects);
+
+/// <summary>A table, view, procedure or function (<see cref="Kind"/>) of the connection's database.</summary>
+public sealed record SqlSchemaObject(string? Schema, string Name, string Kind, SqlSchemaColumn[] Columns);
+
+public sealed record SqlSchemaColumn(string Name, string Type, bool IsKey, bool Nullable);

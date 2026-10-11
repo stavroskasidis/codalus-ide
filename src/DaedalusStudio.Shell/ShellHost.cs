@@ -63,7 +63,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings()]);
+        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
@@ -108,6 +108,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeNpm();
         InitializeHotReload();
         InitializeEntityFramework();
+        InitializeData();
         InitializeUpdates();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -160,6 +161,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         ApplyKeyboardScheme();
         Workbench.Settings.Changed += (_, e) => Ui.Post(() => OnSettingsChanged(e));
         Layout.ActiveDocumentChanged += (_, document) => Workbench.Context.Set("activeDocumentKind", document?.Kind);
+        Layout.ActiveDocumentChanged += (_, _) => OnSqlEditorActivated();
         Notifications.Changed += (_, _) => UpdateStatusItems();
         Theme.Changed += (_, _) => UpdateStatusItems();
         Palette.Closed += (_, _) => Workbench.Context.Set("inCommandPalette", false);
@@ -394,6 +396,8 @@ public sealed partial class ShellHost : IAsyncDisposable
             TerminalViewModel.ToolWindowId => TerminalWindow,
             InteractiveViewModel.ToolWindowId => InteractiveWindow,
             EntityFrameworkViewModel.ToolWindowId => OpenEntityFramework(),
+            DatabaseExplorerViewModel.ToolWindowId => OpenDatabaseExplorer(),
+            QueryResultsViewModel.ToolWindowId => QueryResults,
             _ => null,
         },
     };
@@ -764,6 +768,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         await Debugger.DisposeAsync().ConfigureAwait(false);
         Git.Dispose();
         EntityFramework.Dispose();
+        await Data.DisposeAsync().ConfigureAwait(false);
         await Languages.DisposeAsync().ConfigureAwait(false);
         await Solutions.DisposeAsync().ConfigureAwait(false);
         await Plugins.DisposeAsync().ConfigureAwait(false);

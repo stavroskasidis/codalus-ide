@@ -28,6 +28,7 @@ internal sealed class ShellFixture : IAsyncDisposable
         Environment.SetEnvironmentVariable("DAEDALUS_LSHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.LanguageServices.Host", "bin", Configuration, "net10.0", "daedalus-lshost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_MARKUPHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.Markup.Host", "bin", Configuration, "net10.0", "daedalus-markuphost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_REPLHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.Interactive.Host", "bin", Configuration, "net10.0", "daedalus-replhost.dll"));
+        Environment.SetEnvironmentVariable("DAEDALUS_DATAHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.Data.Host", "bin", Configuration, "net10.0", "daedalus-datahost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_TRASH_DIR", Path.Combine(userData, "trash"));
 
         // Hosting tokens stay in this process: the tests never touch the OS credential store (M13b).
