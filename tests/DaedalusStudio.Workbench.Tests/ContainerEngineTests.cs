@@ -47,7 +47,7 @@ internal sealed class ContainerDatabase : IAsyncDisposable
             Skip($"The container {image} didn't start: {output.Trim()}");
         }
 
-        var id = output.Trim().Split('\n')[^1].Trim();
+        var id = name; // not the printed id: a docker shim may print more than the id
         var (portCode, mapping) = Run("port", id, $"{containerPort}/tcp");
         var port = 0;
         if (portCode != 0 || !int.TryParse(mapping.Trim().Split('\n')[0].Split(':')[^1], out port))
@@ -119,7 +119,9 @@ internal sealed class ContainerDatabase : IAsyncDisposable
                 return (-1, "timed out");
             }
 
-            return (process.ExitCode, stdout.Result + stderr.Result);
+            // podman's docker shim notes on stderr that it emulates docker: not output to parse.
+            var notes = string.Join('\n', stderr.Result.Split('\n').Where(l => !l.StartsWith("Emulate Docker CLI using podman", StringComparison.Ordinal)));
+            return (process.ExitCode, stdout.Result + notes);
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
