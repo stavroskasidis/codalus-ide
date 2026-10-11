@@ -97,6 +97,7 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
     [Fact]
     public async Task A_program_in_the_terminal_reads_input_stops_at_a_breakpoint_and_runs_on_after_Detach_All()
     {
+        Assert.SkipWhen(OperatingSystem.IsMacOS(), "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "loop")));
         await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan("--read")) { Console = DebugConsoleKind.Terminal }], TestContext.Current.CancellationToken);
 
@@ -125,6 +126,7 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
     [Fact]
     public async Task Detach_All_from_an_apphost_stopped_at_a_breakpoint_leaves_it_running()
     {
+        Assert.SkipWhen(OperatingSystem.IsMacOS(), "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
         // The apphost, as launch profiles run it: netcoredbg used to end it when detaching while it was stopped.
         var apphost = Path.Combine(Path.GetDirectoryName(debuggee.Dll)!, OperatingSystem.IsWindows() ? "Debuggee.exe" : "Debuggee");
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "loop")));
@@ -142,6 +144,7 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
     [Fact]
     public async Task Stop_ends_a_program_launched_in_the_terminal()
     {
+        Assert.SkipWhen(OperatingSystem.IsMacOS(), "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "print")));
         await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan()) { Console = DebugConsoleKind.Terminal }], TestContext.Current.CancellationToken);
         await NextStopAsync();

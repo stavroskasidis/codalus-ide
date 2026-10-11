@@ -953,7 +953,11 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 
         // M14c: debugger sessions (ADR 0039), on samples/Debugging's Sessions.slnx.
         await StepAsync("debug.compound", "M14c", "Two startup projects from the Startup Projects page debug in one session: each stops at its breakpoint, and the Processes window lists both", DebugCompoundStepAsync, "debug.session").ConfigureAwait(true);
-        await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
+        // Not on macOS, where debugged programs use the Debug Console (netcoredbg can't attach to a held program there).
+        if (!OperatingSystem.IsMacOS())
+        {
+            await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
+        }
         await StepAsync("debug.roslyn", "M14c", "F5 on a source generator's DebugRoslynComponent profile runs the compiler on its target and stops in the generator", DebugRoslynStepAsync, "debug.compound").ConfigureAwait(true);
         if (await RemoteStandInAsync().ConfigureAwait(true) is { } remote)
         {

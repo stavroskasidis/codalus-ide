@@ -19,7 +19,7 @@ The program's output and the debugger's messages appear in the **Debug Console**
 
 ### The program's console
 
-By default a debugged console app writes to the Debug Console and gets no input. Set **`debug.console`** to `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Daedalus Studio starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal.
+By default a debugged console app writes to the Debug Console and gets no input. Set **`debug.console`** to `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Daedalus Studio starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS the setting has no effect yet: the debugger can't attach to a program held in the terminal there, so programs use the Debug Console.
 
 ### Several startup projects
 

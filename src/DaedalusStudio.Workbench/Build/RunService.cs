@@ -309,7 +309,11 @@ public sealed class RunService : IDisposable
     /// runs on (<see cref="RuntimeSelection"/>, M33): the SDK's root for an apphost, the x64 one where the framework
     /// has no Arm64 runtime.
     /// </summary>
-    public LaunchPlan Adjust(LaunchPlan plan, RunInfo info) => Adjust(RuntimeSelection.Apply(plan, info, DotnetRoot));
+    public LaunchPlan Adjust(LaunchPlan plan, RunInfo info) =>
+        Adjust(Machine is { } machine ? RuntimeSelection.Apply(plan, info, DotnetRoot, machine) : RuntimeSelection.Apply(plan, info, DotnetRoot));
+
+    /// <summary>The machine <see cref="RuntimeSelection"/> asks (tests); null for this one.</summary>
+    internal RuntimeSelection.Machine? Machine { get; set; }
 
     /// <summary>Applies <see cref="EnvironmentOverride"/> to a plan.</summary>
     public LaunchPlan Adjust(LaunchPlan plan)
@@ -348,10 +352,11 @@ public sealed class RunService : IDisposable
     /// </summary>
     public async Task<LaunchPlan> PlanAsync(RunInfo info, LaunchProfile? profile, CancellationToken cancellationToken)
     {
-        var plan = profile is { CommandName: LaunchProfile.RoslynComponent }
-            ? await RoslynComponents.PlanAsync(_solutions, info, profile, cancellationToken).ConfigureAwait(false)
-            : LaunchPlanner.Plan(info, profile);
-        return Adjust(plan);
+        // The compiler a Roslyn component runs under is the SDK's; the project's own program needs its runtime picked
+        // (the x64 one where the framework has no Arm64 runtime, M33).
+        return profile is { CommandName: LaunchProfile.RoslynComponent }
+            ? Adjust(await RoslynComponents.PlanAsync(_solutions, info, profile, cancellationToken).ConfigureAwait(false))
+            : Adjust(LaunchPlanner.Plan(info, profile), info);
     }
 
     /// <summary>The folder of the <c>dotnet</c> the solution builds with (null: the one on PATH), for Hot Reload.</summary>
