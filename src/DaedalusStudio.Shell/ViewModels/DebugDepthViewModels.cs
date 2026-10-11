@@ -117,6 +117,13 @@ public sealed class DataTipViewModel(DebugService debugger, string expression, E
         [new VariableNode(expression, result.Result, result.Type, result.VariablesReference, r => debugger.VariablesAsync(r), evaluateName: expression)];
 
     public Task<string?> SetValueAsync(VariableNode node, string value) => VariableEditing.SetAsync(debugger, node, value, Roots.Contains(node));
+
+    /// <summary>Pins the tip to its line (M14b); null where it can't be pinned (read-only documents).</summary>
+    public Action? PinToSource { get; init; }
+
+    public bool CanPin => PinToSource is not null;
+
+    public void Pin() => PinToSource?.Invoke();
 }
 
 /// <summary>A row of the Threads window.</summary>
@@ -348,7 +355,14 @@ public sealed class ExceptionTypeRow(string type, bool breaks, ExceptionSettings
         }
     }
 
-    public string AccessibleName => $"{Type}, {(BreakWhenThrown ? "breaks when thrown" : "doesn't break when thrown")}";
+    /// <summary>Module names where it breaks (M14b): comma-separated, wildcards, <c>!</c> to exclude.</summary>
+    public string Condition
+    {
+        get => settings.ConditionOf(Type) ?? string.Empty;
+        set => settings.SetCondition(Type, value);
+    }
+
+    public string AccessibleName => $"{Type}, {(BreakWhenThrown ? "breaks when thrown" : "doesn't break when thrown")}{(settings.ConditionOf(Type) is { } c ? ", in modules " + c : string.Empty)}";
 }
 
 /// <summary>The Exception Settings window (ADR 0021): which exception types break when thrown.</summary>
@@ -444,6 +458,12 @@ public enum VisualizerKind
     Json,
     Xml,
     Html,
+
+    /// <summary>A collection's elements as a table (M14b).</summary>
+    Grid,
+
+    /// <summary>A byte array shown as the image it holds (M14b).</summary>
+    Image,
 }
 
 /// <summary>Turns a debugger string value into a visualizer's text.</summary>
@@ -454,6 +474,8 @@ public static class Visualizers
         VisualizerKind.Json => "JSON Visualizer",
         VisualizerKind.Xml => "XML Visualizer",
         VisualizerKind.Html => "HTML Visualizer",
+        VisualizerKind.Grid => "Grid Visualizer",
+        VisualizerKind.Image => "Image Visualizer",
         _ => "Text Visualizer",
     };
 
@@ -537,6 +559,14 @@ public static class Visualizers
         }
     }
 
+    private static readonly VisualizerKind[] StringKinds = [VisualizerKind.Text, VisualizerKind.Json, VisualizerKind.Xml, VisualizerKind.Html];
+
+    /// <summary>The visualizers for a value that isn't a string: Grid for collections, and Image too for byte arrays.</summary>
+    public static IReadOnlyList<VisualizerKind> ForType(string? type) =>
+        CollectionVisualizers.IsByteArray(type) ? [VisualizerKind.Image, VisualizerKind.Grid]
+        : CollectionVisualizers.IsCollection(type) ? [VisualizerKind.Grid]
+        : [];
+
     /// <summary>The kinds a string value probably is, most likely first (Text is always offered).</summary>
     public static IReadOnlyList<VisualizerKind> Suggested(string text)
     {
@@ -556,7 +586,7 @@ public static class Visualizers
         }
 
         kinds.Add(VisualizerKind.Text);
-        foreach (var kind in Enum.GetValues<VisualizerKind>().Where(k => !kinds.Contains(k)))
+        foreach (var kind in StringKinds.Where(k => !kinds.Contains(k)))
         {
             kinds.Add(kind);
         }

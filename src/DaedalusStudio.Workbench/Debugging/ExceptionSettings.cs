@@ -41,6 +41,7 @@ public sealed class ExceptionSettings
 
     private readonly Lock _gate = new();
     private readonly SortedDictionary<string, bool> _types = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _conditions = new(StringComparer.Ordinal);
     private bool _others;
 
     public ExceptionSettings() => Reset();
@@ -70,6 +71,73 @@ public sealed class ExceptionSettings
             }
         }
     }
+
+    /// <summary>
+    /// The module condition of <paramref name="type"/> (M14b): module names, comma-separated, with <c>*</c> and <c>?</c>
+    /// wildcards; a <c>!</c> prefix excludes. Null: every module.
+    /// </summary>
+    public string? ConditionOf(string type)
+    {
+        lock (_gate)
+        {
+            return _conditions.GetValueOrDefault(type);
+        }
+    }
+
+    /// <summary>The module conditions by type (what a solution saves).</summary>
+    public Dictionary<string, string> Conditions()
+    {
+        lock (_gate)
+        {
+            return new Dictionary<string, string>(_conditions, StringComparer.Ordinal);
+        }
+    }
+
+    /// <summary>Sets <paramref name="type"/>'s module condition (null or empty: every module).</summary>
+    public void SetCondition(string type, string? condition)
+    {
+        condition = string.IsNullOrWhiteSpace(condition) ? null : condition.Trim();
+        lock (_gate)
+        {
+            if (_conditions.GetValueOrDefault(type) == condition)
+            {
+                return;
+            }
+
+            if (condition is null)
+            {
+                _conditions.Remove(type);
+            }
+            else
+            {
+                _conditions[type] = condition;
+            }
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Whether an exception of <paramref name="type"/> thrown in <paramref name="module"/> passes the type's module
+    /// condition: the module matches one of its names (when it has any without <c>!</c>) and none of its <c>!</c> names.
+    /// </summary>
+    public bool ModuleAllows(string type, string? module)
+    {
+        if (ConditionOf(type) is not { } condition)
+        {
+            return true;
+        }
+
+        var patterns = condition.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var included = patterns.Where(p => !p.StartsWith('!')).ToList();
+        var excluded = patterns.Where(p => p.StartsWith('!')).Select(p => p[1..].Trim()).ToList();
+        var name = module ?? string.Empty;
+        return (included.Count == 0 || included.Any(p => Wildcard(p, name))) && !excluded.Any(p => Wildcard(p, name));
+    }
+
+    private static bool Wildcard(string pattern, string name) =>
+        System.Text.RegularExpressions.Regex.IsMatch(name, "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal).Replace("\\?", ".", StringComparison.Ordinal) + "$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>Whether <paramref name="type"/> (a full type name) breaks when thrown.</summary>
     public bool Breaks(string type)
@@ -154,6 +222,7 @@ public sealed class ExceptionSettings
         {
             _others = false;
             _types.Clear();
+            _conditions.Clear();
             foreach (var type in CommonTypes)
             {
                 _types[type] = false;
@@ -164,12 +233,18 @@ public sealed class ExceptionSettings
     }
 
     /// <summary>Replaces the settings (a solution's saved ones); types missing from <paramref name="types"/> keep their defaults.</summary>
-    public void Load(bool breakOnOthers, IReadOnlyDictionary<string, bool>? types)
+    public void Load(bool breakOnOthers, IReadOnlyDictionary<string, bool>? types, IReadOnlyDictionary<string, string>? conditions = null)
     {
         lock (_gate)
         {
             _others = breakOnOthers;
             _types.Clear();
+            _conditions.Clear();
+            foreach (var (type, condition) in conditions ?? new Dictionary<string, string>())
+            {
+                _conditions[type] = condition;
+            }
+
             foreach (var type in CommonTypes)
             {
                 _types[type] = false;

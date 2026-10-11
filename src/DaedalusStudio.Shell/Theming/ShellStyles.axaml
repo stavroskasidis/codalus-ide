@@ -194,6 +194,12 @@
   <Style Selector="controls|Icon.none">
     <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
   </Style>
+  <!-- Tabs inside documents and dialogs (dumps, HTTP responses, Reference Manager): body-sized headers, not Fluent's 24 pt. -->
+  <Style Selector="TabItem">
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Padding" Value="10,4" />
+  </Style>
   <!-- Quick Info and diagnostics popup in the editor. -->
   <Style Selector="Border.editorHover">
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />

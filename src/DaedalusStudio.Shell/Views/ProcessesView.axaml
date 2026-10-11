@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.ProcessesView"
+             x:DataType="vm:ProcessesViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
+      <Button Content="Attach to Process…" Click="OnAttach" AutomationProperties.Name="Attach to Process" />
+      <Button Content="Detach All" Click="OnDetach" IsEnabled="{Binding CanDetach}" AutomationProperties.Name="Detach All"
+              ToolTip.Tip="Detach from an attached program and leave it running" />
+      <Button Content="Terminate All" Click="OnTerminate" IsEnabled="{Binding !IsEmpty}" AutomationProperties.Name="Terminate All" />
+    </StackPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="160,70,80,80,*" Margin="8,2">
+      <TextBlock Text="Name" Classes="muted" />
+      <TextBlock Grid.Column="1" Text="ID" Classes="muted" />
+      <TextBlock Grid.Column="2" Text="State" Classes="muted" />
+      <TextBlock Grid.Column="3" Text="Debugging" Classes="muted" />
+      <TextBlock Grid.Column="4" Text="Path" Classes="muted" />
+    </Grid>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="No process is being debugged." IsVisible="{Binding IsEmpty}" />
+    <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Processes">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:ProcessRow">
+          <Setter Property="Padding" Value="2" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ProcessRow">
+          <Grid ColumnDefinitions="160,70,80,80,*" ToolTip.Tip="{Binding Title}">
+            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="1" Text="{Binding IdText}" />
+            <TextBlock Grid.Column="2" Text="{Binding State}" />
+            <TextBlock Grid.Column="3" Text="{Binding Kind}" />
+            <TextBlock Grid.Column="4" Text="{Binding Path}" Classes="muted" TextTrimming="CharacterEllipsis" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

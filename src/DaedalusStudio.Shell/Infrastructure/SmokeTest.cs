@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Avalonia;
@@ -499,6 +500,69 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 
             shell.Run("debug.stop");
             await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        }, "debug.session").ConfigureAwait(true);
+
+        await StepAsync("debug.companion", "M14", "Parallel Stacks, the grid visualizer, a pinned data tip, and a dump written and opened by the debug companion", async () =>
+        {
+            var lines = File.ReadAllLines(Program);
+            var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+            var cwdLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"cwd", StringComparison.Ordinal)) + 1;
+            await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == argsLine, $"the debugger stops at line {argsLine}", 300).ConfigureAwait(true);
+
+            // Parallel Stacks: the main thread's frames, marked as the active thread's.
+            shell.Layout.ShowToolWindow(ParallelStacksViewModel.ToolWindowId);
+            await shell.ParallelStacksWindow.RefreshAsync().ConfigureAwait(true);
+            Check(Flatten(shell.ParallelStacksWindow.Roots).Any(n => n.HasCurrentThread && n.Frames.Any(f => f.Contains("Main", StringComparison.Ordinal))), "Parallel Stacks shows the active thread in Main");
+
+            // The grid visualizer on args.
+            await shell.Locals.RefreshAsync().ConfigureAwait(true);
+            var args = shell.Locals.Roots.SingleOrDefault(r => r.Name == "args") ?? throw new SmokeFailure("Locals has no args.");
+            await shell.VisualizeAsync(args, VisualizerKind.Grid).ConfigureAwait(true);
+            await WaitAsync(() => shell.ActiveEditor?.Model is { ReadOnlyLabel: "Grid Visualizer" } model && model.Text.Text.Contains("two words", StringComparison.Ordinal), "the Grid Visualizer lists args").ConfigureAwait(true);
+
+            // A pinned data tip, evaluated at the next pause.
+            var pin = shell.Debugger.PinnedTips.Pin(Program, cwdLine, "args[1]");
+            shell.Debugger.PinnedTips.SetComment(pin, "the second argument");
+            await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && pin.Value == "\"two words\"", "the pinned data tip shows args[1] at the next pause", 60).ConfigureAwait(true);
+            var editor = await OpenAsync(Program).ConfigureAwait(true);
+            await WaitAsync(() => editor.PinLayer.Pins.TryGetValue(cwdLine, out var control) && control.IsVisible, "the pinned data tip floats over its line").ConfigureAwait(true);
+            Screenshot("smoke-test-debug-companion.png");
+
+            // A full dump of the paused program, opened in the dump view.
+            var pid = shell.Debugger.ProcessId ?? throw new SmokeFailure("The session has no process id.");
+            var dump = Path.Combine(Path.GetTempPath(), $"daedalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
+            var created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
+            Check(File.Exists(created.Path) && created.Size > 0, $"the companion writes a dump ({created.Size} bytes)");
+            shell.Debugger.PinnedTips.Clear();
+            shell.Run("debug.stop");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            try
+            {
+                var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
+                await WaitAsync(() => window.GetVisualDescendants().OfType<DumpView>().Any(), "the dump view renders").ConfigureAwait(true);
+                var main = document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).FirstOrDefault(f => f.Method.Contains("Main", StringComparison.Ordinal));
+                Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
+                Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
+                await document.ViewModel.LoadHeapAsync().ConfigureAwait(true);
+                Check(document.ViewModel.Heap.Any(r => r.Name == "System.String"), "the heap lists System.String");
+                Screenshot("smoke-test-dump.png");
+                shell.Layout.CloseDocument(document);
+                await document.ViewModel.CloseAsync().ConfigureAwait(true);
+            }
+            finally
+            {
+                // Best effort: a failure above may leave the dump open, and must not be hidden by this.
+                try
+                {
+                    File.Delete(created.Path);
+                }
+                catch (IOException ex)
+                {
+                    shell.Workbench.Log.AppendLine($"[smoke] Could not delete the dump: {ex.Message}");
+                }
+            }
         }, "debug.session").ConfigureAwait(true);
 
         // M6: Git.
@@ -1428,6 +1492,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         process.WaitForExit();
         Check(process.ExitCode == 0, $"git {string.Join(' ', arguments)} succeeds (exit code {process.ExitCode}: {error.Result.Trim()} {output.Trim()})");
     }
+
+    private static IEnumerable<ParallelStackNodeViewModel> Flatten(IEnumerable<ParallelStackNodeViewModel> nodes) =>
+        nodes.SelectMany(n => Flatten(n.Children).Prepend(n));
 
     private async Task<CodeEditorController> OpenAsync(string path)
     {

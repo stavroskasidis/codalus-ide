@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using DaedalusStudio.Debugging;
@@ -83,6 +84,40 @@ public sealed class DebugDepthTests
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.ReadOnlyLabel == "JSON Visualizer");
         Assert.Contains("\"tags\": [", f.Shell.ActiveEditor!.Model.Text.Text, StringComparison.Ordinal);
 
+        // Grid and image visualizers (M14b): the list as a table, the PNG bytes in the image viewer.
+        var squares = f.Shell.Locals.Roots.Single(r => r.Name == "squares");
+        Assert.Equal([VisualizerKind.Grid], Visualizers.ForType(squares.Type));
+        await f.Shell.VisualizeAsync(squares, VisualizerKind.Grid);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.ReadOnlyLabel == "Grid Visualizer");
+        Assert.Contains("squares (12 elements)", f.Shell.ActiveEditor!.Model.Text.Text, StringComparison.Ordinal);
+        var pixel = f.Shell.Locals.Roots.Single(r => r.Name == "pixel");
+        Assert.Equal([VisualizerKind.Image, VisualizerKind.Grid], Visualizers.ForType(pixel.Type));
+        await f.Shell.VisualizeAsync(pixel, VisualizerKind.Image);
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is ImageDocument { Path: var image } && image.EndsWith("pixel.png", StringComparison.Ordinal));
+
+        // Pinned data tips (M14b): the data tip pins to its line and floats over the editor.
+        tip.Pin();
+        var pinned = Assert.Single(f.Shell.Debugger.PinnedTips.All);
+        Assert.Equal((depth, Line(depth, "depth-end"), "settings"), (pinned.Path, pinned.Line, pinned.Expression));
+        f.Shell.Debugger.PinnedTips.SetComment(pinned, "retries edited above");
+        await f.Shell.OpenFileAsync(depth);
+        await ShellFixture.PumpUntil(() => controller.PinLayer.Pins.TryGetValue(Line(depth, "depth-end"), out var pin) && pin.IsVisible);
+        Assert.Contains(controller.PinLayer.Pins[Line(depth, "depth-end")].GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "retries edited above");
+
+        // The Processes window and the Debug Location toolbar (M14b).
+        f.Shell.Layout.ShowToolWindow(ProcessesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<ProcessesView>().Any());
+        var process = Assert.Single(f.Shell.ProcessesWindow.Rows);
+        Assert.Equal((f.Shell.Debugger.ProcessId, "Break", "Launched"), ((int?)process.Id, process.State, process.Kind));
+        var location = f.Shell.DebugLocation;
+        Assert.Same(location, f.Shell.Toolbar.DebugLocation);
+        Assert.Equal(f.Shell.Debugger.SelectedThreadId, location.Thread?.Id);
+        Assert.Contains("Run", location.Frame?.Frame.Name, StringComparison.Ordinal);
+        Assert.True(location.Frames.Count > 1);
+        location.Frame = location.Frames[1];
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.SelectedFrame == location.Frames[1].Frame);
+        location.Frame = location.Frames[0];
+
         // Threads and Modules.
         f.Shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
         await f.Shell.ThreadList.RefreshAsync();
@@ -113,6 +148,32 @@ public sealed class DebugDepthTests
         Assert.Equal("loop, math", f.Shell.Debugger.Breakpoints.All.Single().Labels);
         Assert.True(f.Shell.Debugger.Breakpoints.All.Single().Temporary);
         Assert.Equal("Debuggee.Depth.Square", f.Shell.Debugger.Breakpoints.Functions.Single().Name);
+    }
+
+    [AvaloniaFact]
+    public async Task A_dump_opens_in_its_document_with_threads_and_frames()
+    {
+        await using var f = ShellFixture.Create();
+        var summary = new DaedalusStudio.Debugging.Companion.DumpSummary(
+            "1", Path.Combine(Path.GetTempPath(), "crash.dmp"), ".NET 10.0.0", "X64", 42, ["App.dll"],
+            [
+                new(1, 100, false, "System.InvalidOperationException: boom", [new("App.Program.Main()", "App.dll", 3, null, null)]),
+                new(2, 101, true, null, []),
+            ]);
+        await using var companion = new DebugCompanion(() => null);
+        var document = new DumpDocument(new DumpViewModel(summary, companion, (_, _) => Task.CompletedTask));
+        f.Shell.Layout.OpenDocument(document);
+
+        // The view loads (its tab control raises SelectionChanged while the XAML is still populating).
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DumpView>().Any());
+        Assert.Equal("Dump: crash.dmp", document.Title);
+        Assert.Equal("Thread #1: System.InvalidOperationException: boom", document.ViewModel.Exception);
+        Assert.Equal(1, document.ViewModel.SelectedThread?.Thread.ManagedId); // the one that threw, before the finalizer
+        Assert.Equal("App.Program.Main()", Assert.Single(document.ViewModel.Frames).Method);
+
+        // Without an exception, the first thread with managed frames, not the finalizer listed before it.
+        var calm = summary with { Threads = [new(1, 100, true, null, []), new(2, 101, false, null, [new("App.Program.Main()", "App.dll", 3, null, null)])] };
+        Assert.Equal(2, new DumpViewModel(calm, companion, (_, _) => Task.CompletedTask).SelectedThread?.Thread.ManagedId);
     }
 
     [Theory]

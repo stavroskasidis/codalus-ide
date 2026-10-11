@@ -241,6 +241,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto") };
         Grid.SetRow(grid, row);
         grid.Children.Add(parts.Editor);
+        grid.Children.Add(parts.Controller.PinLayer);
         if (overlay is not null)
         {
             grid.Children.Add(new Canvas { Children = { overlay }, IsHitTestVisible = true, ClipToBounds = true, Background = null });

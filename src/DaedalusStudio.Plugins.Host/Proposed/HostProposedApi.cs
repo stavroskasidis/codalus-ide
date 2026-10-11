@@ -13,6 +13,7 @@ internal sealed class ProposedHost : IDisposable
     private readonly PluginHostServer _server;
     private readonly ConcurrentDictionary<string, TaskCompletionSource<int?>> _debugSessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, HostTerminal> _terminals = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Func<IDebugVisualizerContext, CancellationToken, Task<VisualizerView>>> _visualizers = new(StringComparer.Ordinal);
 
     public ProposedHost(PluginHostServer server)
     {
@@ -44,6 +45,16 @@ internal sealed class ProposedHost : IDisposable
         {
             await Tests.RefreshAsync(p.ControllerId, ct).ConfigureAwait(false);
             return new EmptyResult();
+        });
+        connection.OnRequest(ProposedMethods.DebugVisualize, json.DebugVisualizeParams, json.DebugVisualizerViewDto, async (p, ct) =>
+        {
+            if (!_visualizers.TryGetValue(p.VisualizerId, out var visualize))
+            {
+                throw new DaedalusStudio.Rpc.JsonRpcHandlerException(PluginErrorCodes.ViewNotFound, $"No visualizer {p.VisualizerId}.");
+            }
+
+            var view = await visualize(new VisualizerContext(this, p), ct).ConfigureAwait(false);
+            return new DebugVisualizerViewDto(view.Text, view.LanguageId, view.Columns is null ? null : [.. view.Columns], view.Rows is null ? null : [.. view.Rows.Select(r => r.ToArray())]);
         });
         connection.OnNotification(ProposedMethods.WorkspaceSolutionChanged, json.EmptyParams, _ => SolutionChanged?.Invoke(this, EventArgs.Empty));
         connection.OnNotification(ProposedMethods.WorkspaceDocumentsChanged, json.DocumentUrisParams, p => DocumentsChanged?.Invoke(this, new DocumentsChangedEventArgs(p.Uris)));
@@ -90,6 +101,50 @@ internal sealed class ProposedHost : IDisposable
 
     internal Task<T> RequestAsync<TParams, T>(string method, TParams parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsInfo, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> resultInfo, CancellationToken cancellationToken) =>
         _server.RequestAsync(method, parameters, paramsInfo, resultInfo, cancellationToken);
+
+    /// <summary>Offers a plugin's visualizer to the shell (as <c>pluginId/id</c>) until the result is disposed.</summary>
+    internal IDisposable AddVisualizer(string pluginId, DebugVisualizerOptions options, Func<IDebugVisualizerContext, CancellationToken, Task<VisualizerView>> visualize)
+    {
+        var id = pluginId + "/" + options.Id;
+        _visualizers[id] = visualize;
+        _server.Post(ProposedMethods.DebugRegisterVisualizer, new DebugVisualizerDto(id, pluginId, options.Title, [.. options.Types]), PluginJsonContext.Default.DebugVisualizerDto);
+        return new Registration(() =>
+        {
+            if (_visualizers.TryRemove(id, out _))
+            {
+                _server.Post(ProposedMethods.DebugUnregisterVisualizer, new DebugVisualizerIdParams(id), PluginJsonContext.Default.DebugVisualizerIdParams);
+            }
+        });
+    }
+
+    private sealed class Registration(Action dispose) : IDisposable
+    {
+        private Action? _dispose = dispose;
+
+        public void Dispose() => Interlocked.Exchange(ref _dispose, null)?.Invoke();
+    }
+
+    private sealed class VisualizerContext(ProposedHost host, DebugVisualizeParams request) : IDebugVisualizerContext
+    {
+        public string Expression => request.Expression;
+
+        public string? Type => request.Type;
+
+        public string Value => request.Value;
+
+        public async Task<DebugValue> EvaluateAsync(string expression, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var value = await host.RequestAsync(ProposedMethods.DebugEvaluate, new DebugEvaluateParams(expression), PluginJsonContext.Default.DebugEvaluateParams, PluginJsonContext.Default.DebugValueDto, cancellationToken).ConfigureAwait(false);
+                return new DebugValue(value.Value, value.Type);
+            }
+            catch (DaedalusStudio.Rpc.JsonRpcRemoteException ex)
+            {
+                throw new InvalidOperationException(ex.Message, ex);
+            }
+        }
+    }
 
     internal IDebugSession TrackSession(DebugSessionDto session)
     {
@@ -203,6 +258,7 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
     private readonly ProposedHost _host;
     private readonly string _pluginId;
     private readonly List<HostTestController> _controllers = [];
+    private readonly List<IDisposable> _visualizers = [];
 
     public PluginProposedApi(ProposedHost host, string pluginId)
     {
@@ -353,6 +409,19 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
         return _host.TrackTerminal(terminal);
     }
 
+    public IDisposable RegisterVisualizer(DebugVisualizerOptions options, Func<IDebugVisualizerContext, CancellationToken, Task<VisualizerView>> visualize)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(visualize);
+        var registration = _host.AddVisualizer(_pluginId, options, visualize);
+        lock (_visualizers)
+        {
+            _visualizers.Add(registration);
+        }
+
+        return registration;
+    }
+
     public async Task<IDebugSession> AttachAsync(int processId, CancellationToken cancellationToken)
     {
         var session = await _host.RequestAsync(ProposedMethods.DebugAttach, new DebugAttachParams(processId), PluginJsonContext.Default.DebugAttachParams, PluginJsonContext.Default.DebugSessionDto, cancellationToken).ConfigureAwait(false);
@@ -386,6 +455,18 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
         foreach (var provider in providers)
         {
             provider.Dispose();
+        }
+
+        List<IDisposable> visualizers;
+        lock (_visualizers)
+        {
+            visualizers = [.. _visualizers];
+            _visualizers.Clear();
+        }
+
+        foreach (var visualizer in visualizers)
+        {
+            visualizer.Dispose();
         }
     }
 }
