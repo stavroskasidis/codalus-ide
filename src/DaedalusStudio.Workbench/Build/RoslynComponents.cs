@@ -61,7 +61,8 @@ public static class RoslynComponents
         }
 
         var sdk = solutions.SdkPath ?? throw new InvalidOperationException("The .NET SDK in use isn't known yet.");
-        var output = Path.Combine(Path.GetTempPath(), "daedalus-roslyn", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(target.ToUpperInvariant())))[..12]);
+        // A folder per run: a compiler still exiting from the last run may hold the previous one's files.
+        var output = Path.Combine(Path.GetTempPath(), "daedalus-roslyn", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(target.ToUpperInvariant())))[..12], Guid.NewGuid().ToString("N")[..8]);
         return Plan(sdk, inputs, output);
     }
 
