@@ -207,7 +207,9 @@ public sealed class DataHostTests : IAsyncLifetime
         var roundTrip = watch.Elapsed.TotalMilliseconds;
         Assert.Equal(200, page.Rows.Length);
         var plan = await _data.ExecuteAsync(new ExecuteParams("inventory", "SELECT * FROM \"Big\" ORDER BY \"Id\" LIMIT 200 OFFSET 0", Plan: PlanKinds.Estimated), Timeout());
-        Assert.True(roundTrip < 500, $"The first page took {roundTrip:0} ms ({page.ElapsedMilliseconds:0} ms in the host; plan {string.Join(", ", plan.Plan!.Roots.Select(r => r.Detail))}).");
+        // The host's time is the budget everywhere; the round trip also counts the test process's thread pool, which a
+        // loaded CI runner stalls (1.8 s with 2 ms in the host on the Windows runner), so it is held to it locally only.
+        Assert.True(page.ElapsedMilliseconds < 500 && (roundTrip < 500 || Environment.GetEnvironmentVariable("CI") == "true"), $"The first page took {roundTrip:0} ms ({page.ElapsedMilliseconds:0} ms in the host; plan {string.Join(", ", plan.Plan!.Roots.Select(r => r.Detail))}).");
         var last = await _data.ReadAsync(new ReadParams("inventory", null, table, 999_800, 200), Timeout());
         Assert.Equal("1000000", last.Rows[^1][0]);
         Assert.Equal(1_000_000, (await _data.CountAsync(new CountParams("inventory", null, table), Timeout())).Count);
