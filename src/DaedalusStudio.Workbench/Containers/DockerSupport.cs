@@ -107,15 +107,12 @@ public static class DockerSupport
     public static string? ImageVersion(string targetFramework)
     {
         var framework = targetFramework.Split('-')[0];
-        if (!framework.StartsWith("net", StringComparison.OrdinalIgnoreCase) || framework.Length < 4 || !char.IsAsciiDigit(framework[3]))
+        var version = framework.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase) ? framework["netcoreapp".Length..]
+            : framework.StartsWith("net", StringComparison.OrdinalIgnoreCase) && framework.Length > 3 && char.IsAsciiDigit(framework[3]) ? framework[3..]
+            : null;
+        if (version is null)
         {
             return null;
-        }
-
-        var version = framework[3..];
-        if (version.StartsWith("coreapp", StringComparison.OrdinalIgnoreCase))
-        {
-            version = version["coreapp".Length..];
         }
 
         return version.Contains('.', StringComparison.Ordinal) && double.TryParse(version, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && number >= 2

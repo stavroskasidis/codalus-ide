@@ -1005,6 +1005,19 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 
         await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
 
+        // M17a: containers (ADR 0042), where an engine runs Linux containers (GitHub's Linux runner; Podman here).
+        const string containerTitle = "A web app runs in a container through its \"Container (Dockerfile)\" profile (fast mode), answers, and the Containers window shows it";
+        var engine = shell.ContainerEngine;
+        var (engineOs, engineError) = await engine.ServerOsAsync(CancellationToken.None).ConfigureAwait(true);
+        if (engineOs != "linux" && !(Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux()))
+        {
+            Report("containers.run", "M17", containerTitle, "skipped", 0, engineOs is null ? $"No container engine answers ({engine.Name}: {engineError})." : $"{engine.Name} runs {engineOs} containers.");
+        }
+        else
+        {
+            await StepAsync("containers.run", "M17", containerTitle, ContainerRunStepAsync).ConfigureAwait(true);
+        }
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -1390,6 +1403,54 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     /// added in the form, the tree, a table's data edited and committed, a query editor with schema completion,
     /// results and an estimated plan, all through the published data host.
     /// </summary>
+    /// <summary>
+    /// Containers (M17a): samples/Containers' web app with its container profile: Ctrl+F5 builds the Dockerfile's base
+    /// stage, mounts the build output and starts the app through exec; it answers on its published port; the Containers
+    /// window lists the container with its environment; stopping the program removes the container.
+    /// </summary>
+    private async Task ContainerRunStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "Containers");
+        Copy(Path.Combine(samples, "Containers"), target);
+        await shell.OpenSolutionAsync(Path.Combine(target, "Containers.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the containers solution is open", 300).ConfigureAwait(true);
+        var web = Path.Combine(target, "Web", "Web.csproj");
+        var name = Workbench.Containers.DockerSupport.ContainerName(web);
+        var engine = shell.ContainerEngine;
+        shell.Runs.SetStartupProject(web);
+        shell.Runs.SetProfile(web, Workbench.Containers.DockerSupport.ContainerProfileName);
+        try
+        {
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Web")?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("Now listening on", StringComparison.Ordinal), "the app listens in its container:\n" + Tail(shell.ContainerLog.GetText(), 2000), 600).ConfigureAwait(true);
+            var port = await engine.HostPortAsync(name, "8080/tcp", CancellationToken.None).ConfigureAwait(true);
+            Check(port is not null, "the container publishes port 8080");
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            var answer = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/")).ConfigureAwait(true);
+            Check(answer.StartsWith("Hello from ", StringComparison.Ordinal), "the app answers: " + answer);
+
+            await shell.ShowContainersAsync().ConfigureAwait(true);
+            var row = shell.ContainersWindow.Containers.FirstOrDefault(c => c.Name == name);
+            Check(row is { IsOurs: true }, "the Containers window lists the container first");
+            shell.ContainersWindow.Selected = row;
+            await WaitAsync(() => shell.ContainersWindow.Environment.Any(e => e.Name == "ASPNETCORE_HTTP_PORTS"), "the container's environment is shown", 60).ConfigureAwait(true);
+            shell.ContainersWindow.Tab = 1;
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-containers.png");
+
+            shell.StopRunning();
+            await WaitAsync(() => engine.InspectAsync(name, CancellationToken.None).GetAwaiter().GetResult() is null, "stopping the app removes its container", 60).ConfigureAwait(true);
+        }
+        finally
+        {
+            shell.StopRunning();
+            await engine.RemoveAsync(name, CancellationToken.None).ConfigureAwait(true);
+            await engine.RunAsync(["rmi", name + ":dev"], CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
     private async Task DataExplorerStepAsync()
     {
         var database = Path.Combine(_work, "smoke-inventory.db");
