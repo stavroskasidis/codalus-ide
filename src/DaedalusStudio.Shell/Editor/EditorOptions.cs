@@ -214,4 +214,13 @@ public interface IEditorServices
 
     /// <summary>Code snippets by language (M12b).</summary>
     DaedalusStudio.Workbench.Snippets.SnippetRegistry Snippets { get; }
+
+    /// <summary>The review threads of the current branch's pull request on a file (M13b), at their lines.</summary>
+    IReadOnlyList<DaedalusStudio.Workbench.Hosting.EditorReviewThread> ReviewThreadsFor(string path);
+
+    /// <summary>The pull request's review threads changed (raised on any thread).</summary>
+    event EventHandler? ReviewThreadsChanged;
+
+    /// <summary>Shows review threads in a flyout at <paramref name="anchor"/> (clicking their note at the end of a line).</summary>
+    void ShowReviewThreads(IReadOnlyList<DaedalusStudio.Workbench.Hosting.EditorReviewThread> threads, Avalonia.Controls.Control anchor);
 }

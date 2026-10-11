@@ -38,6 +38,9 @@
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Welcome\DaedalusStudio.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Templates\DaedalusStudio.Plugins.Templates.csproj" PluginId="daedalus.templates" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.DotNetTest\DaedalusStudio.Plugins.DotNetTest.csproj" PluginId="daedalus.dotnettest" />
+    <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.GitHub\DaedalusStudio.Plugins.GitHub.csproj" PluginId="daedalus.github" />
+    <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.AzureDevOps\DaedalusStudio.Plugins.AzureDevOps.csproj" PluginId="daedalus.azuredevops" />
+    <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.GitLab\DaedalusStudio.Plugins.GitLab.csproj" PluginId="daedalus.gitlab" />
     <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
   </ItemGroup>
 
@@ -55,6 +58,12 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="DaedalusStudio.Shell.Tests" />
+  </ItemGroup>
+
+  <!-- The smoke test's mock GitHub (M13b): the same source as the tests' mock servers, so nothing reaches GitHub. -->
+  <ItemGroup>
+    <Compile Include="..\..\tests\Shared\MockHttpServer.cs" Link="Infrastructure\Mocks\MockHttpServer.cs" />
+    <Compile Include="..\..\tests\Shared\MockGitHub.cs" Link="Infrastructure\Mocks\MockGitHub.cs" />
   </ItemGroup>
 
   <ItemGroup>

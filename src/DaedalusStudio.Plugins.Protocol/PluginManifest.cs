@@ -74,6 +74,24 @@ public sealed record ManifestContributions
 
     /// <summary>Macros for External Tools' arguments, from a command (API 0.2.8, M26, ADR 0033).</summary>
     public ManifestToolMacro[]? ExternalToolMacros { get; init; }
+
+    /// <summary>Git hosting providers (API 0.2.6, ADR 0031): known to the shell before the plugin runs.</summary>
+    public ManifestHostingProvider[]? HostingProviders { get; init; }
+}
+
+/// <summary>
+/// A Git hosting provider: <see cref="Id"/> (activation event <c>onHostingProvider:&lt;id&gt;</c>), the name users see, and
+/// the hosts its remotes are on by default (enterprise hosts are known once the user signs in to them).
+/// </summary>
+public sealed record ManifestHostingProvider(string Id, string Label)
+{
+    public string[]? Hosts { get; init; }
+
+    /// <summary>A setting holding the server's URL (an enterprise server): its host counts as one of <see cref="Hosts"/>.</summary>
+    public string? ServerSetting { get; init; }
+
+    /// <summary>A built-in icon name.</summary>
+    public string? Icon { get; init; }
 }
 
 /// <summary>
@@ -262,4 +280,31 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(TestRunUpdateParams))]
 [JsonSerializable(typeof(TestRunCoverageParams))]
 [JsonSerializable(typeof(TestRunIdParams))]
+[JsonSerializable(typeof(HostingProviderParams))]
+[JsonSerializable(typeof(HostingDeviceCodeParams))]
+[JsonSerializable(typeof(SecretParams))]
+[JsonSerializable(typeof(SecretResult))]
+[JsonSerializable(typeof(HostingResolveParams))]
+[JsonSerializable(typeof(HostingResolveResult))]
+[JsonSerializable(typeof(HostingIdParams))]
+[JsonSerializable(typeof(HostingAccountResult))]
+[JsonSerializable(typeof(HostingSignInParams))]
+[JsonSerializable(typeof(HostingAccountDto))]
+[JsonSerializable(typeof(HostingRepositoryParams))]
+[JsonSerializable(typeof(HostingRepositoryInfoDto))]
+[JsonSerializable(typeof(HostingPullRequestsParams))]
+[JsonSerializable(typeof(PullRequestsResult))]
+[JsonSerializable(typeof(HostingPullRequestParams))]
+[JsonSerializable(typeof(PullRequestDetailsDto))]
+[JsonSerializable(typeof(HostingCheckoutParams))]
+[JsonSerializable(typeof(PullRequestCheckoutDto))]
+[JsonSerializable(typeof(HostingCreatePullRequestParams))]
+[JsonSerializable(typeof(PullRequestDto))]
+[JsonSerializable(typeof(HostingBranchStatusParams))]
+[JsonSerializable(typeof(BranchStatusDto))]
+[JsonSerializable(typeof(HostingWorkItemsParams))]
+[JsonSerializable(typeof(WorkItemsResult))]
+[JsonSerializable(typeof(HostingOwnersResult))]
+[JsonSerializable(typeof(HostingPublishParams))]
+[JsonSerializable(typeof(PublishedRepositoryDto))]
 public sealed partial class PluginJsonContext : JsonSerializerContext;

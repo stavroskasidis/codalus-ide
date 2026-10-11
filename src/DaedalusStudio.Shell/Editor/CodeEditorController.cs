@@ -1413,8 +1413,9 @@ public sealed partial class CodeEditorController : IDisposable
     public async Task UpdateGitMarkersAsync()
     {
         var git = _services.Git;
-        if (_disposed || Model.IsReadOnly || git.Root is not { } root
-            || !Model.Path.StartsWith(root, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+
+        // The file's own repository: a solution can span several (M13b); only the open one has a status.
+        if (_disposed || Model.IsReadOnly || git.RepositoryFor(Model.Path) is not { } root)
         {
             _gitMargin.Changes = [];
             return;
@@ -1425,11 +1426,11 @@ public sealed partial class CodeEditorController : IDisposable
         {
             if (!_indexLoaded)
             {
-                _indexText = await git.ShowAsync(Model.Path, ":", cancellationToken).ConfigureAwait(true);
+                _indexText = await git.ShowInRepositoryAsync(Model.Path, ":", cancellationToken).ConfigureAwait(true);
                 _indexLoaded = true;
             }
 
-            var status = git.Status?.Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, Model.Path));
+            var status = root == git.Root ? git.Status?.Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, Model.Path)) : null;
             var current = Model.Text.Text;
             var baseline = _indexText ?? (status is { IsUntracked: true } ? string.Empty : null);
             if (baseline is null)
@@ -1463,7 +1464,7 @@ public sealed partial class CodeEditorController : IDisposable
             return;
         }
 
-        if (_services.Git.Root is null)
+        if (_services.Git.RepositoryFor(Model.Path) is null)
         {
             _services.ShowMessage("This file is not in a git repository.");
             return;
@@ -1471,7 +1472,7 @@ public sealed partial class CodeEditorController : IDisposable
 
         try
         {
-            var ranges = await _services.Git.BlameAsync(Model.Path, Model.Text.Text).ConfigureAwait(true);
+            var ranges = await _services.Git.BlameInRepositoryAsync(Model.Path, Model.Text.Text).ConfigureAwait(true);
             _blameMargin = new BlameMargin { Ranges = ranges };
             Editor.TextArea.LeftMargins.Insert(0, _blameMargin);
         }

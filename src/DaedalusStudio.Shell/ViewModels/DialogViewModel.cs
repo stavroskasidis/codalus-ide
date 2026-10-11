@@ -29,6 +29,9 @@ public sealed record DialogRequest(string Title, string Message, IReadOnlyList<s
 
     /// <summary>The checklist's items can be moved up and down (Change Signature).</summary>
     public bool Reorderable { get; init; }
+
+    /// <summary>The input is a secret: masked as it is typed (askpass's passwords and passphrases, M13b).</summary>
+    public bool IsPassword { get; init; }
 }
 
 /// <summary>An item of a dialog's checklist.</summary>
@@ -102,6 +105,7 @@ public sealed class DialogViewModel : ObservableObject
                 OnPropertyChanged(nameof(Title));
                 OnPropertyChanged(nameof(Message));
                 OnPropertyChanged(nameof(HasInput));
+                OnPropertyChanged(nameof(PasswordChar));
                 OnPropertyChanged(nameof(Details));
                 OnPropertyChanged(nameof(HasDetails));
             }
@@ -115,6 +119,9 @@ public sealed class DialogViewModel : ObservableObject
     public string Message => _request?.Message ?? string.Empty;
 
     public bool HasInput => _request?.Input is not null;
+
+    /// <summary>The input's mask: a dot for passwords and passphrases (askpass, M13b), none otherwise.</summary>
+    public char PasswordChar => _request?.IsPassword == true ? '●' : '\0';
 
     public IReadOnlyList<DetailLine> Details => _request?.Details ?? [];
 

@@ -1,0 +1,32 @@
+{
+  "id": "daedalus.gitlab",
+  "version": "0.1.0",
+  "displayName": "GitLab",
+  "publisher": "daedalus",
+  "description": "Merge requests, review discussions, pipelines, issues and publishing for GitLab.com and self-managed GitLab. Inactive until you sign in.",
+  "engines": { "daedalus": "^0.2.6" },
+  "entry": { "runtime": "dotnet", "assembly": "DaedalusStudio.Plugins.GitLab.dll" },
+  "enableProposedApi": true,
+  "contributes": {
+    "hostingProviders": [
+      { "id": "gitlab", "label": "GitLab", "hosts": ["gitlab.com"], "serverSetting": "gitlab.serverUrl", "icon": "cloud" }
+    ],
+    "settings": {
+      "title": "GitLab",
+      "properties": {
+        "gitlab.serverUrl": {
+          "type": "string",
+          "default": "https://gitlab.com",
+          "description": "The GitLab server: https://gitlab.com, or a self-managed GitLab's address.",
+          "scope": "user"
+        },
+        "gitlab.oauthClientId": {
+          "type": "string",
+          "default": "",
+          "description": "The application id of the OAuth application used to sign in with a device code (GitLab 17.2 or later). Empty: sign in with a personal access token.",
+          "scope": "user"
+        }
+      }
+    }
+  }
+}

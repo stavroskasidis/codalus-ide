@@ -30,6 +30,8 @@ public sealed class ViewLocator : IDataTemplate
         ProjectPropertiesDocument document => new PaneHost(document, new ProjectPropertiesView { DataContext = document.ViewModel }),
         SolutionManagementDocument document => new PaneHost(document, BuildManagementContent(document.ViewModel)),
         PageDocument document => new PaneHost(document, BuildManagementContent(document.ViewModel)),
+        AccountsDocument document => new PaneHost(document, new AccountsView { DataContext = document.ViewModel }),
+        CreatePullRequestDocument document => new PaneHost(document, new CreatePullRequestView { DataContext = document.ViewModel }),
         _ => null,
     };
 
@@ -95,6 +97,9 @@ public sealed class ViewLocator : IDataTemplate
         BreakpointsViewModel vm => new BreakpointsView { DataContext = vm },
         DebugConsoleViewModel vm => new DebugConsoleView { DataContext = vm },
         GitChangesViewModel vm => new GitChangesView { DataContext = vm },
+        PullRequestsViewModel vm => new PullRequestsView { DataContext = vm },
+        WorkItemsViewModel vm => new WorkItemsView { DataContext = vm },
+        WorktreesViewModel vm => new WorktreesView { DataContext = vm },
         TerminalViewModel vm => new TerminalView { DataContext = vm },
         InteractiveViewModel vm => new InteractiveView { DataContext = vm },
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },

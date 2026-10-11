@@ -10,6 +10,9 @@
         <TextBlock Text="{Binding Letter}" FontWeight="SemiBold" ToolTip.Tip="{Binding Description}" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
           <TextBlock Text="{Binding Name}" />
+          <Border IsVisible="{Binding HasBadge}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="3" Padding="3,0" VerticalAlignment="Center" ToolTip.Tip="{Binding BadgeTooltip}">
+            <TextBlock Text="{Binding Badge}" FontSize="10" Classes="muted" />
+          </Border>
           <TextBlock Text="{Binding Folder}" Classes="muted" TextTrimming="CharacterEllipsis" />
         </StackPanel>
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
@@ -28,6 +31,18 @@
     </StackPanel>
     <DockPanel IsVisible="{Binding HasRepository}">
       <StackPanel DockPanel.Dock="Top" Margin="6,4" Spacing="4">
+        <ComboBox ItemsSource="{Binding Repositories}" SelectedItem="{Binding SelectedRepository}" IsVisible="{Binding HasSeveralRepositories}"
+                  HorizontalAlignment="Stretch" AutomationProperties.Name="Repository" ToolTip.Tip="The solution spans several repositories: the one shown here">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:GitRepositoryChoice">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <controls:Icon Kind="folder" />
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Path}" Classes="muted" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
         <DockPanel>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
             <Button Classes="toolbar" Content="Fetch" Tag="git.fetch" Click="OnCommand" />
@@ -38,7 +53,39 @@
             <TextBlock Text="{Binding BranchText}" FontWeight="SemiBold" />
           </Button>
         </DockPanel>
-        <TextBox x:Name="Message" Text="{Binding Message}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" MaxHeight="160" PlaceholderText="Commit message (Ctrl+Enter to commit)" AutomationProperties.Name="Commit message" />
+        <WrapPanel Orientation="Horizontal" IsVisible="{Binding HasCi}">
+          <Button Classes="link" Tag="hosting.showChecks" Click="OnCommand" ToolTip.Tip="{Binding CiTooltip}" AutomationProperties.Name="{Binding CiText}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <controls:Icon Kind="{Binding CiIcon}" Classes.passed="{Binding IsCiPassed}" Classes.failed="{Binding IsCiFailed}" Classes.running="{Binding IsCiPending}" />
+              <TextBlock Text="{Binding CiText}" />
+            </StackPanel>
+          </Button>
+        </WrapPanel>
+        <Button Classes="link" Tag="git.pullRequests" Click="OnCommand" IsVisible="{Binding HasPullRequest}" ToolTip.Tip="The current branch's pull request" AutomationProperties.Name="{Binding PullRequestText}">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <controls:Icon Kind="pull-request" />
+            <TextBlock Text="{Binding PullRequestText}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </Button>
+        <Panel>
+          <TextBox x:Name="Message" Text="{Binding Message}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" MaxHeight="160" PlaceholderText="Commit message (Ctrl+Enter to commit; # mentions an issue)" AutomationProperties.Name="Commit message" />
+          <Popup x:Name="CompletionPopup" PlacementTarget="{Binding #Message}" Placement="Bottom" IsLightDismissEnabled="True">
+            <Border Classes="overlay" Padding="2" MinWidth="280" MaxWidth="520">
+              <ListBox x:Name="CompletionList" MaxHeight="220" Background="Transparent" AutomationProperties.Name="Issues and work items">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:CommitCompletion">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <controls:Icon Kind="issue" />
+                      <TextBlock Text="{Binding Reference}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Border>
+          </Popup>
+        </Panel>
         <StackPanel Orientation="Horizontal" Spacing="6">
           <Button Classes="accent" Content="Commit Staged" Tag="staged" Click="OnCommit" IsEnabled="{Binding HasStaged}" />
           <Button Content="Commit All" Tag="all" Click="OnCommit" />

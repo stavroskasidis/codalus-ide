@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The Secret Service test sets the native environment (LibraryImport of setenv). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\DaedalusStudio.Workbench\DaedalusStudio.Workbench.csproj" />
     <ProjectReference Include="..\..\src\DaedalusStudio.Platform\DaedalusStudio.Platform.csproj" />
@@ -6,5 +10,8 @@
     <ProjectReference Include="..\..\src\DaedalusStudio.Interactive.Host\DaedalusStudio.Interactive.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\DaedalusStudio.LspConformance.Server\DaedalusStudio.LspConformance.Server.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\DaedalusStudio.Markup.Host\DaedalusStudio.Markup.Host.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
 </Project>

@@ -71,6 +71,28 @@ public interface ITestSink
     void RunEnded(string runId);
 }
 
+/// <summary>Receives hosting providers as their plugins register them (the shell's <c>HostingService</c>, ADR 0031).</summary>
+public interface IHostingSink
+{
+    void ProviderRegistered(string pluginId, string providerId, IHostingConnection connection);
+
+    void ProviderUnregistered(string providerId);
+
+    /// <summary>A sign-in waits for the user to enter a device code.</summary>
+    void DeviceCodeReceived(HostingDeviceCodeParams code);
+}
+
+/// <summary>Requests to a hosting provider's plugin host (<c>hosting/*</c>).</summary>
+public interface IHostingConnection
+{
+    Task<TResult> InvokeAsync<TParams, TResult>(
+        string method,
+        TParams parameters,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsInfo,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TResult> resultInfo,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>Requests to a test controller's plugin.</summary>
 public interface ITestControllerConnection
 {

@@ -61,6 +61,9 @@ internal static partial class BuiltIns
         Add("git.clone", "Clone Repository…", shell.CloneRepositoryAsync, string.Empty);
         Add("git.init", "Create Git Repository", shell.CreateRepositoryAsync, "solutionOpen && !gitRepository");
         Add("explorer.addToGitignore", "Add to .gitignore", shell.AddToGitignoreAsync, "gitRepository && explorerItemKind");
+
+        // M13b: hosting, worktrees, LFS, several repositories.
+        RegisterHostingCommands(shell);
     }
 
     public static void RegisterGitMenus(MenuRegistry menus)
@@ -108,5 +111,6 @@ internal static partial class BuiltIns
             new(Views.SolutionExplorerView.ContextMenuLocation, "git.fileHistory", shell) { Group = "6-git", Order = 1, When = WhenClause.Parse("gitRepository && explorerItemKind != solution") },
             new(Views.SolutionExplorerView.ContextMenuLocation, "explorer.addToGitignore", shell) { Group = "6-git", Order = 2, When = WhenClause.Parse("gitRepository && explorerItemKind != solution") },
         ]);
+        RegisterHostingMenus(menus);
     }
 }

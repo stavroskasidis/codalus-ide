@@ -102,6 +102,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeInteractive();
         InitializeDebugging();
         InitializeGit();
+        InitializeHosting();
         InitializeEditor();
         InitializeRefactoring();
         InitializeNavigation();
@@ -391,6 +392,9 @@ public sealed partial class ShellHost : IAsyncDisposable
             ModulesViewModel.ToolWindowId => ModuleList,
             ExceptionSettingsViewModel.ToolWindowId => ExceptionSettingsWindow,
             GitChangesViewModel.ToolWindowId => GitChanges,
+            PullRequestsViewModel.ToolWindowId => OpenPullRequests(),
+            WorkItemsViewModel.ToolWindowId => OpenWorkItems(),
+            WorktreesViewModel.ToolWindowId => OpenWorktrees(),
             TerminalViewModel.ToolWindowId => TerminalWindow,
             InteractiveViewModel.ToolWindowId => InteractiveWindow,
             _ => null,
@@ -753,6 +757,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         _updateHttp.Dispose();
         _instance?.Dispose();
+        Askpass?.Dispose();
         Terminals?.Dispose();
         if (Interactive is not null)
         {

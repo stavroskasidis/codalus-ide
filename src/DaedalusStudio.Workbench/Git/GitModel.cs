@@ -197,7 +197,7 @@ public sealed record BlameRange(int StartLine, int LineCount, string Commit, str
 }
 
 /// <summary>Parsers for git's machine-readable output.</summary>
-public static class GitParsers
+public static partial class GitParsers
 {
     /// <summary>Parses <c>git status --porcelain=v2 -z --branch</c>.</summary>
     public static GitStatus ParseStatus(string root, string output, bool isMerging)

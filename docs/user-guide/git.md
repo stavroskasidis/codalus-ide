@@ -56,6 +56,46 @@ Git → View History (`Ctrl+0 Ctrl+H`) shows the commits of every branch as a gr
 - **Clone Repository** (Git menu): a URL and a destination folder. If the repository has one solution at its root, it opens.
 - **Create Git Repository**: for an open solution that isn't in one, with a .NET `.gitignore`.
 - **Add to .gitignore**: from the Solution Explorer's context menu.
+- **Publish to a Git Host** (Git menu): creates a repository on GitHub, Azure DevOps or GitLab (you choose the owner: you, an organization or group, or an Azure DevOps project; the name; private or public; a description), adds it as `origin` (or another free name), and pushes the branch. A solution that isn't in a repository yet gets one, with a first commit.
+- **Several repositories**: when the solution's projects are in more than one repository (a project in a repository of its own, a submodule), Git Changes shows a **repository picker**, and Git → Switch Repository changes which one Git Changes, the history and the status bar show. Change markers and blame always use each file's own repository.
+
+## Worktrees
+
+Git → Worktrees lists the repository's worktrees: their folder, branch, and whether one is the main worktree, the one open here, locked, or gone.
+- **Add** a worktree for a new branch or an existing one, in a folder next to the repository.
+- **Open** opens its solution in this window; **Open in New Window** starts another Daedalus Studio on it.
+- **Lock** (with a reason) and **Unlock**; **Remove** (a worktree with changes asks again before forcing); **Prune** forgets worktrees whose folders are gone.
+
+## Git LFS
+
+Daedalus Studio reads which files Git LFS tracks from `.gitattributes`, so it works whether or not git-lfs is installed.
+- In Git Changes, LFS files are marked **LFS**; a file whose content wasn't downloaded (only its pointer is in the working tree) is marked **LFS pointer**, and a locked file says who holds the lock.
+- With git-lfs installed: **Git LFS Locks** lists the locks (pick one to unlock it, or force-unlock someone else's), **Git LFS: Lock File** and **Unlock File** act on the active file or the Solution Explorer's selection, and **Git LFS: Download Files** runs `git lfs pull`.
+
+## GitHub, Azure DevOps and GitLab
+
+Built-in plugins connect to GitHub (and GitHub Enterprise Server), Azure DevOps and GitLab (and self-managed GitLab). **Nothing is sent to a host until you sign in to it**: before that, the plugins don't even load.
+
+**Signing in** (Git → Git Hosting Accounts):
+- **Sign In** shows a code: **Copy Code and Open Browser**, enter it on the host's page and approve. The page shows *Waiting for approval…* until you do; **Cancel** stops.
+- **Or paste a personal access token**: GitHub needs the `repo`, `read:org` and `workflow` scopes; GitLab the `api` scope; Azure DevOps Code (read and write), Build (read) and Work Items (read).
+- Tokens are kept in the operating system's credential store: Windows Credential Manager, the macOS Keychain, or the Secret Service (GNOME Keyring, KWallet…) through libsecret on Linux. Daedalus Studio never writes them to a file. Where no credential store is available, a sign-in lasts until Daedalus Studio closes; the environment variable `DAEDALUS_CREDENTIAL_STORE=memory` does that on purpose (tests). A `--user-data-dir` profile keeps its sign-ins apart from the default profile's.
+- **Servers**: `github.serverUrl`, `gitlab.serverUrl`, and `azureDevOps.serverUrl` (with `azureDevOps.authorityUrl` and `azureDevOps.profileUrl`) point at an enterprise or self-managed server. Device sign-in needs the server's OAuth app: its client id goes in `github.oauthClientId`, `gitlab.oauthClientId` or `azureDevOps.oauthClientId`. Without one, sign in with a token.
+- **Sign Out** deletes the token. A session that expires or is revoked asks you to sign in again.
+
+The repository's host is found from its remotes (`origin` first). Then:
+- **Pull Requests** (Git → Pull Requests): the open pull requests (merge requests on GitLab), all of them, yours, or those that ask for your review. Select one for its description, its review comments (with the file and line; click to open it) and its conversation. **Check Out** fetches its branch (a fork's pull request too) and switches to it. **Open in Browser** opens it on the host.
+- **Review comments in the editor**: when the current branch has an open pull request, its unresolved review comments show at the end of their lines (◆ who: what). Click one for the whole thread. Settings: `hosting.reviewComments`, `hosting.showResolvedComments`.
+- **Create Pull Request** (Git menu, or the Pull Requests window's toolbar): a title (from the branch name), a description in Markdown, the branch to merge into (the default branch first), draft. The branch is pushed first if it needs to be.
+- **CI status**: the current branch's checks (GitHub check runs and statuses, Azure Pipelines builds, GitLab's latest pipeline) in the status bar and Git Changes; click for the list, and pick one to open it. It's read again when you switch branches, push, and every `hosting.statusRefreshSeconds` (120). `hosting.ciStatus` turns it off.
+- **Work Items** (Git → Work Items): the issues or work items assigned to you, or found by number or words. **Mention in Commit Message** adds its reference to the commit message.
+- **`#` in the commit message** completes issues and work items: type `#` and a number or words, then pick one (Up, Down, Enter).
+
+`hosting.enabled` turns all of this off: no call is made to any host.
+
+## Credentials and SSH passphrases
+
+Git asks your credential helper first (Git Credential Manager, the macOS Keychain helper, …). When none answers, or an SSH key needs its passphrase, or ssh asks whether to trust a new host, Daedalus Studio asks in a dialog (passwords and passphrases are masked). The answer goes to git once and isn't stored; your credential helper may store it, as it would in a terminal.
 
 ## Diffs
 
@@ -77,6 +117,6 @@ Git → Compare with Unmodified opens the active file's diff.
 - **The status bar's branch item** (or Git → Switch Branch) lists local and remote branches, and offers to create a new one. Switching to a remote branch creates a local branch that tracks it.
 - **Git → Merge Branch** merges another branch into the current one.
 - **Git → Fetch, Pull and Push**. The first push of a new branch publishes it to `origin` (or your only remote) and sets its upstream.
-- **Credentials** come from your git credential helper (Git Credential Manager, the macOS keychain, …). Daedalus Studio doesn't prompt in a terminal, so if no helper is set up, the operation fails with git's message.
+- **Credentials** come from your git credential helper (Git Credential Manager, the macOS keychain, …), or from you, in a dialog, when no helper answers ([above](#credentials-and-ssh-passphrases)).
 
 Errors from git are shown as notifications. The full log of git commands is in View → Output → Git.

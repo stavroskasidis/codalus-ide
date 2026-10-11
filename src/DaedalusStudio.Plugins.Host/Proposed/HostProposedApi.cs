@@ -18,9 +18,14 @@ internal sealed class ProposedHost : IDisposable
     {
         _server = server;
         Tests = new HostTestRegistry(server);
+        Hosting = new HostHostingRegistry(server);
     }
 
     public HostTestRegistry Tests { get; }
+
+    public HostHostingRegistry Hosting { get; }
+
+    internal PluginHostServer Server => _server;
 
     public event EventHandler? SolutionChanged;
 
@@ -32,6 +37,7 @@ internal sealed class ProposedHost : IDisposable
     {
         var json = PluginJsonContext.Default;
         var connection = _server.Connection;
+        Hosting.RegisterHandlers(connection);
         connection.OnRequest(ProposedMethods.TestsRun, json.TestRunParams, json.TestRunResultDto, async (p, ct) =>
             new TestRunResultDto([.. await Tests.RunAsync(p, ct).ConfigureAwait(false)]));
         connection.OnRequest(ProposedMethods.TestsRefresh, json.TestControllerIdParams, json.EmptyResult, async (p, ct) =>
@@ -192,7 +198,7 @@ internal sealed class ProposedHost : IDisposable
 }
 
 /// <summary>One plugin's view of the proposed APIs. Its event subscriptions end when the plugin is deactivated.</summary>
-internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBuild, IDebug, ITerminals, IDisposable
+internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBuild, IDebug, ITerminals, IHosting, IDisposable
 {
     private readonly ProposedHost _host;
     private readonly string _pluginId;
@@ -216,6 +222,25 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
     public IDebug Debug => this;
 
     public ITerminals Terminals => this;
+
+    public IHosting Hosting => this;
+
+    public ISecrets Secrets => _secrets ??= new HostSecrets(_host.Server, _pluginId);
+
+    private HostSecrets? _secrets;
+    private readonly List<IDisposable> _providers = [];
+
+    public IDisposable RegisterProvider(HostingProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        var registration = _host.Hosting.Register(_pluginId, provider);
+        lock (_providers)
+        {
+            _providers.Add(registration);
+        }
+
+        return registration;
+    }
 
     public event EventHandler? SolutionChanged;
 
@@ -349,6 +374,18 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
         foreach (var controller in controllers)
         {
             controller.Dispose();
+        }
+
+        List<IDisposable> providers;
+        lock (_providers)
+        {
+            providers = [.. _providers];
+            _providers.Clear();
+        }
+
+        foreach (var provider in providers)
+        {
+            provider.Dispose();
         }
     }
 }

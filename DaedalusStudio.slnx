@@ -31,7 +31,11 @@
     <Project Path="src/DaedalusStudio.Workbench/DaedalusStudio.Workbench.csproj" />
   </Folder>
   <Folder Name="/src/Plugins/">
+    <Project Path="src/Plugins/DaedalusStudio.Plugins.AzureDevOps/DaedalusStudio.Plugins.AzureDevOps.csproj" />
     <Project Path="src/Plugins/DaedalusStudio.Plugins.DotNetTest/DaedalusStudio.Plugins.DotNetTest.csproj" />
+    <Project Path="src/Plugins/DaedalusStudio.Plugins.GitHub/DaedalusStudio.Plugins.GitHub.csproj" />
+    <Project Path="src/Plugins/DaedalusStudio.Plugins.GitLab/DaedalusStudio.Plugins.GitLab.csproj" />
+    <Project Path="src/Plugins/DaedalusStudio.Plugins.Hosting/DaedalusStudio.Plugins.Hosting.csproj" />
     <Project Path="src/Plugins/DaedalusStudio.Plugins.Templates/DaedalusStudio.Plugins.Templates.csproj" />
     <Project Path="src/Plugins/DaedalusStudio.Plugins.Welcome/DaedalusStudio.Plugins.Welcome.csproj" />
   </Folder>
