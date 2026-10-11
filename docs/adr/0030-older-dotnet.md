@@ -40,7 +40,7 @@ Before deciding anything, M33 ran each framework and each older SDK through the 
 **Programs start on the runtime the SDK would give them** (`RuntimeSelection`, for Run, Debug and the integrated terminal's plan):
 - an apphost gets the SDK's root in `DOTNET_ROOT` (`DOTNET_ROOT_<ARCH>` from .NET 6) unless the variable is set, as `dotnet run` does;
 - on Arm64, frameworks without an Arm64 runtime (macOS before .NET 6, Windows before .NET 5) run as x64: `dotnet exec` becomes the x64 `dotnet`, and an apphost gets the x64 root. The x64 root is `<root>/x64`, the registered location (`/etc/dotnet/install_location_x64`), or the default one; without it the launch fails with what to install;
-- on Linux, .NET Core 2.x to 3.1 get `CLR_ICU_VERSION_OVERRIDE` with the system's ICU, unless the launch sets it or invariant globalization; the Run and Debug output says so. The build host does the same for the CLI of SDKs before 5.0 (restores, tools), and the .NET test plugin for test hosts.
+- on Linux, .NET Core 2.x to 3.1 get `CLR_ICU_VERSION_OVERRIDE` with the system's ICU, unless the launch sets it or invariant globalization; the Run and Debug output says so. The build host does the same for the CLI of SDKs before 5.0 (restores, tools) and for its own process (in-process builds run those SDKs' compilers), the .NET test plugin for test hosts, and the debug service for netcoredbg, which reads symbols on the debuggee's runtime in its own process.
 
 **The x64 debugger ships on macOS:** netcoredbg 3.1.3-1062's macOS x64 build in `debugger/x64/` (`eng/get-netcoredbg.sh --x64`, `DAEDALUS_NETCOREDBG_X64`). `DebugService` uses it for a plan that runs as x64 and for any x64-only Mach-O program (the test host VSTest starts with the x64 `dotnet`).
 
