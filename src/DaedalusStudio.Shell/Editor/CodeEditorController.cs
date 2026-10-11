@@ -57,6 +57,7 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly TestMargin _testMargin;
     private readonly HttpRequestMargin _httpMargin;
     private readonly CoverageMargin _coverageMargin;
+    private readonly HotLineMargin _hotLineMargin;
     private readonly EditorInsights _insights;
     private readonly BookmarkMargin _bookmarkMargin;
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
@@ -119,6 +120,8 @@ public sealed partial class CodeEditorController : IDisposable
         editor.TextArea.LeftMargins.Add(_gitMargin);
         _coverageMargin = new CoverageMargin(() => Model.Path, services.Tests.Coverage);
         editor.TextArea.LeftMargins.Add(_coverageMargin);
+        _hotLineMargin = new HotLineMargin(() => Model.Path, services.HotLines);
+        editor.TextArea.LeftMargins.Insert(0, _hotLineMargin);
         _gitTimer.Tick += OnGitTimer;
         services.Git.IndexChanged += OnGitIndexChanged;
         document.TextChanged += OnGitTextChanged;
@@ -175,6 +178,9 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>The coverage coloring (tests and the headless UI test).</summary>
     public CoverageMargin CoverageMargin => _coverageMargin;
+
+    /// <summary>The profiler's hot lines (M18; tests).</summary>
+    public HotLineMargin HotLineMargin => _hotLineMargin;
 
     /// <summary>The Git changes of the gutter (the overview ruler).</summary>
     internal IReadOnlyList<Workbench.Git.LineChange> GitChanges => _gitMargin.Changes;
@@ -1774,6 +1780,8 @@ public sealed partial class CodeEditorController : IDisposable
         _bookmarkMargin.Detach();
         Editor.TextArea.LeftMargins.Remove(_coverageMargin);
         _coverageMargin.Detach();
+        Editor.TextArea.LeftMargins.Remove(_hotLineMargin);
+        _hotLineMargin.Detach();
         Editor.TextArea.ContextRequested -= OnContextRequested;
         _services.Debugger.StateChanged -= OnDebuggerChanged;
         _services.Debugger.FrameChanged -= OnDebuggerChanged;

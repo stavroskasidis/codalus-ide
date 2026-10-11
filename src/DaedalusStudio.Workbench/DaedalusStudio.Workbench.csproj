@@ -14,6 +14,7 @@
     <ProjectReference Include="..\DaedalusStudio.Plugins.Protocol\DaedalusStudio.Plugins.Protocol.csproj" />
     <ProjectReference Include="..\DaedalusStudio.Projects.Protocol\DaedalusStudio.Projects.Protocol.csproj" />
     <ProjectReference Include="..\DaedalusStudio.Data.Protocol\DaedalusStudio.Data.Protocol.csproj" />
+    <ProjectReference Include="..\DaedalusStudio.Diagnostics.Protocol\DaedalusStudio.Diagnostics.Protocol.csproj" />
     <ProjectReference Include="..\DaedalusStudio.LanguageServices.Client\DaedalusStudio.LanguageServices.Client.csproj" />
   </ItemGroup>
   <ItemGroup>

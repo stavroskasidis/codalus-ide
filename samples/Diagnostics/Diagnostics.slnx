@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="CpuBound/CpuBound.csproj" />
+  <Project Path="Allocations/Allocations.csproj" />
+  <Project Path="Leaky/Leaky.csproj" />
+  <Project Path="AsyncHeavy/AsyncHeavy.csproj" />
+</Solution>

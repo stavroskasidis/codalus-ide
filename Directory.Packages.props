@@ -59,6 +59,9 @@
     <PackageVersion Include="Microsoft.Diagnostics.Runtime" Version="4.1.745802" />
     <PackageVersion Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.745401" />
   </ItemGroup>
+  <ItemGroup Label="Diagnostics host (M18, ADR 0044)">
+    <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.2.8" />
+  </ItemGroup>
   <ItemGroup Label="T4 host (M26b, ADR 0035)">
     <PackageVersion Include="Mono.TextTemplating" Version="3.0.0" />
     <PackageVersion Include="Mono.TextTemplating.Roslyn" Version="3.0.0" />

@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "CpuBound": {
+      "commandName": "Project",
+      "commandLineArgs": "3"
+    }
+  }
+}

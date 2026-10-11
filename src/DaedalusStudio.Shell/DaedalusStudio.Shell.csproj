@@ -37,6 +37,7 @@
     <HelperProcess Include="..\DaedalusStudio.Data.Host\DaedalusStudio.Data.Host.csproj" Folder="datahost" />
     <HelperProcess Include="..\DaedalusStudio.Debugging.Host\DaedalusStudio.Debugging.Host.csproj" Folder="debughost" />
     <HelperProcess Include="..\DaedalusStudio.TextTemplating.Host\DaedalusStudio.TextTemplating.Host.csproj" Folder="t4host" />
+    <HelperProcess Include="..\DaedalusStudio.Diagnostics.Host\DaedalusStudio.Diagnostics.Host.csproj" Folder="diaghost" />
     <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Welcome\DaedalusStudio.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Templates\DaedalusStudio.Plugins.Templates.csproj" PluginId="daedalus.templates" />
@@ -98,6 +99,7 @@
       datahost/                   daedalus-datahost, databases and the SQL language server (likewise)
       debughost/                  daedalus-debughost, the debug companion: debugger attributes, dumps (likewise),
                                   and DaedalusStudio.Debugging.StartupHook.dll for programs debugged in the terminal
+      diaghost/                   daedalus-diaghost, EventPipe sessions and trace processing for the profiler (likewise)
       plugins/<plugin id>/        built-in plugins
       terminal/                   shell integration scripts for the integrated terminal
   -->

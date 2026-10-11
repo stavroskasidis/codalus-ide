@@ -209,6 +209,9 @@ public interface IEditorServices
     /// <summary>Runs a command on the active editor (CodeLens).</summary>
     void RunCommand(string commandId);
 
+    /// <summary>The profiler's hot lines for the gutter (M18).</summary>
+    DaedalusStudio.Workbench.Diagnostics.HotLineStore HotLines { get; }
+
     /// <summary>Bookmarks (M12b): the editor's margin shows and moves them.</summary>
     DaedalusStudio.Workbench.Bookmarks.BookmarkService Bookmarks { get; }
 

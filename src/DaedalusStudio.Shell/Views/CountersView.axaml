@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.CountersView"
+             x:DataType="vm:CountersViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Margin="6,4" Spacing="4">
+      <WrapPanel Orientation="Horizontal">
+        <TextBox x:Name="TargetBox" Text="{Binding Target}" Width="180" Margin="0,0,6,4" PlaceholderText="Process id or name" AutomationProperties.Name="Process id or name" />
+        <ComboBox ItemsSource="{Binding Processes}" SelectedItem="{Binding SelectedProcess}" MinWidth="220" Margin="0,0,6,4" PlaceholderText="Running .NET processes" AutomationProperties.Name="Running .NET processes">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProcessRowViewModel">
+              <TextBlock Text="{Binding Text}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Content="Refresh" Command="{Binding RefreshCommand}" Margin="0,0,12,4" />
+        <Button Content="Start" Command="{Binding StartCommand}" Margin="0,0,6,4" />
+        <Button Content="Stop" Command="{Binding StopCommand}" Margin="0,0,12,4" />
+        <Button Content="Export CSV" Command="{Binding ExportCsvCommand}" Margin="0,0,6,4" />
+        <Button Content="Export JSON" Command="{Binding ExportJsonCommand}" Margin="0,0,6,4" />
+      </WrapPanel>
+      <Grid ColumnDefinitions="*,*,Auto,70">
+        <TextBox Text="{Binding EventSources}" Margin="0,0,6,0" PlaceholderText="EventSources: System.Runtime, MyCompany-MyLibrary[requests;errors]" AutomationProperties.Name="EventSources whose counters to watch, comma-separated" ToolTip.Tip="EventSources whose counters to watch, comma-separated; Name[a;b] picks counters" />
+        <TextBox Grid.Column="1" Text="{Binding Meters}" Margin="0,0,6,0" PlaceholderText="Meters: System.Net.Http, MyApp[orders.placed]" AutomationProperties.Name="System.Diagnostics.Metrics meters to watch, comma-separated" ToolTip.Tip="System.Diagnostics.Metrics meters to watch, comma-separated; Meter[a;b] picks instruments" />
+        <TextBlock Grid.Column="2" Text="Every (s)" VerticalAlignment="Center" Margin="0,0,6,0" />
+        <TextBox Grid.Column="3" Text="{Binding Interval}" AutomationProperties.Name="Interval in seconds" />
+      </Grid>
+      <TextBlock Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+    </StackPanel>
+    <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Counters and their latest values">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:CounterRowViewModel">
+          <Grid ColumnDefinitions="220,*,120,Auto" AutomationProperties.Name="{Binding AccessibleName}">
+            <TextBlock Text="{Binding Provider}" Classes="muted" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Text="{Binding Value}" TextAlignment="Right" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="3" Text="{Binding Unit}" Classes="muted" Margin="6,0,0,0" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>
