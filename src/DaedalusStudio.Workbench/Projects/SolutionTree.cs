@@ -44,7 +44,23 @@ public sealed record ExplorerNode(string Id, ExplorerNodeKind Kind, string Name)
     /// <summary>A file outside the project folder, shown through a link.</summary>
     public bool IsLinked { get; init; }
 
+    /// <summary>Show All Files: a file or folder on disk that isn't part of the project (shown dimmed, ADR 0033).</summary>
+    public bool IsExcluded { get; init; }
+
     public IReadOnlyList<ExplorerNode> Children { get; init; } = [];
+}
+
+/// <summary>
+/// What the Solution Explorer shows besides the projects' items (ADR 0033): with Show All Files, the files on disk of
+/// each project (<see cref="DiskEntries"/>, by project path); in folder mode's folder view, the folder's tree
+/// (<see cref="FolderEntries"/>).
+/// </summary>
+public sealed record ExplorerOptions
+{
+    public IReadOnlyDictionary<string, IReadOnlyList<DirectoryEntry>>? DiskEntries { get; init; }
+
+    /// <summary>The folder view: everything under the workspace folder (null: the solution view).</summary>
+    public IReadOnlyList<DirectoryEntry>? FolderEntries { get; init; }
 }
 
 /// <summary>
@@ -59,8 +75,14 @@ public static class SolutionTree
     public static ExplorerNode Build(
         SolutionInfo solution,
         IReadOnlyDictionary<string, ProjectInfo> projects,
-        IReadOnlyDictionary<string, CompilerInputsInfo>? compilerInputs = null)
+        IReadOnlyDictionary<string, CompilerInputsInfo>? compilerInputs = null,
+        ExplorerOptions? options = null)
     {
+        if (solution.IsFolder && options?.FolderEntries is { } entries)
+        {
+            return FolderView(solution, entries);
+        }
+
         var folders = solution.Folders.ToDictionary(f => f.Id, StringComparer.Ordinal);
         IReadOnlyList<ExplorerNode> ChildrenOf(string? parent)
         {
@@ -82,23 +104,88 @@ public static class SolutionTree
 
             foreach (var project in solution.Projects.Where(p => p.Parent == parent && (p.Parent is null || folders.ContainsKey(p.Parent))).OrderBy(p => p.Name, s_names))
             {
-                nodes.Add(Project(project, projects.GetValueOrDefault(project.Path), solution.Trusted, compilerInputs?.GetValueOrDefault(project.Path)));
+                nodes.Add(Project(project, projects.GetValueOrDefault(project.Path), solution.Trusted, compilerInputs?.GetValueOrDefault(project.Path), options?.DiskEntries?.GetValueOrDefault(project.Path)));
             }
 
             return nodes;
         }
 
         var count = solution.Projects.Length;
-        return new ExplorerNode("solution", ExplorerNodeKind.Solution, $"Solution '{System.IO.Path.GetFileNameWithoutExtension(solution.Path)}'")
+        return new ExplorerNode("solution", ExplorerNodeKind.Solution, solution.IsFolder ? $"Folder '{solution.Name}'" : $"Solution '{solution.Name}'")
         {
             Path = solution.Path,
-            Icon = "solution",
-            Detail = count == 1 ? "(1 project)" : $"({count} projects)",
+            Icon = solution.IsFolder ? "folder" : "solution",
+            Detail = solution.IsFolder ? (count == 1 ? "(1 project loaded)" : $"({count} projects loaded)") : count == 1 ? "(1 project)" : $"({count} projects)",
             Children = ChildrenOf(null),
         };
     }
 
-    public static ExplorerNode Project(SolutionProjectInfo entry, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs = null)
+    /// <summary>
+    /// Folder mode's folder view (ADR 0033): the folder's files and folders as they are on disk, project files marked
+    /// (with "(not loaded)" until they are loaded). Nodes inside a loaded project know it.
+    /// </summary>
+    public static ExplorerNode FolderView(SolutionInfo solution, IReadOnlyList<DirectoryEntry> entries)
+    {
+        var root = System.IO.Path.TrimEndingDirectorySeparator(solution.Directory);
+        var loaded = solution.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer);
+        string? Owner(string path) => solution.Projects
+            .Select(p => p.Path)
+            .Where(p => IsUnder(path, System.IO.Path.GetDirectoryName(p)!) || SolutionService.PathComparer.Equals(path, System.IO.Path.GetDirectoryName(p)))
+            .OrderByDescending(p => p.Length)
+            .FirstOrDefault();
+
+        var children = new Dictionary<string, List<DirectoryEntry>>(SolutionService.PathComparer);
+        foreach (var entry in entries.Where(e => IsUnder(e.Path, root)))
+        {
+            var parent = System.IO.Path.GetDirectoryName(entry.Path)!;
+            if (!children.TryGetValue(parent, out var list))
+            {
+                children[parent] = list = [];
+            }
+
+            list.Add(entry);
+        }
+
+        IReadOnlyList<ExplorerNode> NodesOf(string folder) =>
+        [
+            .. (children.GetValueOrDefault(folder) ?? []).Where(e => e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), s_names)
+                .Select(e => new ExplorerNode("d:" + e.Path, ExplorerNodeKind.Folder, System.IO.Path.GetFileName(e.Path))
+                {
+                    Path = e.Path,
+                    ProjectPath = Owner(e.Path),
+                    Icon = "folder",
+                    Children = NodesOf(e.Path),
+                }),
+            .. (children.GetValueOrDefault(folder) ?? []).Where(e => !e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), s_names)
+                .Select(e =>
+                {
+                    var name = System.IO.Path.GetFileName(e.Path);
+                    var isProject = IsProjectFile(name);
+                    return new ExplorerNode("f:" + e.Path, ExplorerNodeKind.File, name)
+                    {
+                        Path = e.Path,
+                        ProjectPath = isProject && loaded.Contains(e.Path) ? e.Path : Owner(e.Path),
+                        Icon = isProject ? "project" : FileIcon(name),
+                        Detail = isProject && !loaded.Contains(e.Path) ? "(not loaded)" : null,
+                    };
+                }),
+        ];
+
+        var count = solution.Projects.Length;
+        return new ExplorerNode("solution", ExplorerNodeKind.Solution, $"Folder '{solution.Name}'")
+        {
+            Path = solution.Path,
+            Icon = "folder",
+            Detail = count == 1 ? "(1 project loaded)" : $"({count} projects loaded)",
+            Children = NodesOf(root),
+        };
+    }
+
+    /// <summary>A project file (<c>.csproj</c>, <c>.fsproj</c>, <c>.vbproj</c>).</summary>
+    public static bool IsProjectFile(string path) =>
+        System.IO.Path.GetExtension(path).ToLowerInvariant() is ".csproj" or ".fsproj" or ".vbproj";
+
+    public static ExplorerNode Project(SolutionProjectInfo entry, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs = null, IReadOnlyList<DirectoryEntry>? disk = null)
     {
         var node = new ExplorerNode("p:" + entry.Path, ExplorerNodeKind.Project, entry.Name)
         {
@@ -138,25 +225,33 @@ public static class SolutionTree
         return node with
         {
             Detail = info.TargetFrameworks.Length > 1 ? string.Join(", ", info.TargetFrameworks) : null,
-            Children = [.. dependencies is null ? [] : new[] { dependencies }, .. Contents(entry.Path, info)],
+            Children = [.. dependencies is null ? [] : new[] { dependencies }, .. Contents(entry.Path, info, disk)],
         };
     }
 
     // ------------------------------------------------------------------ files
 
-    private sealed class FolderBuilder(string path, string name)
+    private sealed class FolderBuilder(string path, string name, bool excluded = false)
     {
         public string Path { get; } = path;
 
         public string Name { get; } = name;
 
+        /// <summary>Only on disk (Show All Files): no item is in it.</summary>
+        public bool Excluded { get; } = excluded;
+
         public Dictionary<string, FolderBuilder> Folders { get; } = new(s_names);
 
-        public List<(string Name, string FullPath, string? DependentUpon, bool Linked)> Files { get; } = [];
+        public List<FileEntry> Files { get; } = [];
     }
 
-    /// <summary>Folders and files of a project, with nesting applied.</summary>
-    public static IReadOnlyList<ExplorerNode> Contents(string projectPath, ProjectInfo info)
+    private sealed record FileEntry(string Name, string FullPath, string? DependentUpon, bool Linked, bool Excluded = false);
+
+    /// <summary>
+    /// Folders and files of a project, with nesting applied. With <paramref name="disk"/> (Show All Files), files and
+    /// folders on disk that aren't items are added, marked <see cref="ExplorerNode.IsExcluded"/>.
+    /// </summary>
+    public static IReadOnlyList<ExplorerNode> Contents(string projectPath, ProjectInfo info, IReadOnlyList<DirectoryEntry>? disk = null)
     {
         var projectDirectory = System.IO.Path.GetDirectoryName(projectPath)!;
         var root = new FolderBuilder(projectDirectory, string.Empty);
@@ -192,7 +287,33 @@ public static class SolutionTree
 
             if (!isFolderItem && seen.Add(item.Path))
             {
-                folder.Files.Add((segments[^1], item.Path, item.DependentUpon, !inside || item.Link is not null));
+                folder.Files.Add(new FileEntry(segments[^1], item.Path, item.DependentUpon, !inside || item.Link is not null));
+            }
+        }
+
+        foreach (var entry in disk ?? [])
+        {
+            if (SolutionService.PathComparer.Equals(entry.Path, projectPath) || !IsUnder(entry.Path, projectDirectory) || (!entry.IsDirectory && seen.Contains(entry.Path)))
+            {
+                continue;
+            }
+
+            var segments = System.IO.Path.GetRelativePath(projectDirectory, entry.Path).Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+            var folder = root;
+            for (var i = 0; i < (entry.IsDirectory ? segments.Length : segments.Length - 1); i++)
+            {
+                if (!folder.Folders.TryGetValue(segments[i], out var child))
+                {
+                    child = new FolderBuilder(System.IO.Path.Combine(folder.Path, segments[i]), segments[i], excluded: true);
+                    folder.Folders[segments[i]] = child;
+                }
+
+                folder = child;
+            }
+
+            if (!entry.IsDirectory && seen.Add(entry.Path))
+            {
+                folder.Files.Add(new FileEntry(segments[^1], entry.Path, null, Linked: false, Excluded: true));
             }
         }
 
@@ -209,20 +330,22 @@ public static class SolutionTree
                 Path = child.Path,
                 ProjectPath = projectPath,
                 Icon = "folder",
+                IsExcluded = child.Excluded,
                 Children = Build(child, projectPath),
             });
         }
 
         // Nesting: each file finds its parent among its siblings; files without a parent are roots.
         var names = folder.Files.Select(f => f.Name).ToHashSet(s_names);
-        var parentOf = folder.Files.ToDictionary(f => f.Name, f => NestParent(f.Name, names, f.DependentUpon), s_names);
-        ExplorerNode File((string Name, string FullPath, string? DependentUpon, bool Linked) file) =>
+        var parentOf = folder.Files.GroupBy(f => f.Name, s_names).ToDictionary(g => g.Key, g => NestParent(g.Key, names, g.First().DependentUpon), s_names);
+        ExplorerNode File(FileEntry file) =>
             new("f:" + file.FullPath, ExplorerNodeKind.File, file.Name)
             {
                 Path = file.FullPath,
                 ProjectPath = projectPath,
                 Icon = FileIcon(file.Name),
                 IsLinked = file.Linked,
+                IsExcluded = file.Excluded,
                 Children = [.. folder.Files
                     .Where(f => s_names.Equals(parentOf[f.Name], file.Name))
                     .OrderBy(f => f.Name, s_names)
