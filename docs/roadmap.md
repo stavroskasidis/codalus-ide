@@ -37,7 +37,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M14 | Debugger depth | done (M14a–M14c at checkpoint). M14a: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b ([m14b](checkpoints/m14b.md), ADR 0032): the debug companion host, `[DebuggerDisplay]`, grid, image and plugin visualizers, pinned data tips, Parallel Stacks and Watch, Processes and Debug Location, breakpoint filters, exception module conditions, dumps; M14c ([m14c](checkpoints/m14c.md), ADR 0039 and 0040): multiple startup projects in one session, debugging in the integrated terminal (Detach All for launched programs), attach over SSH, in containers and in WSL, the WSL launch profile, Roslyn components, Just-In-Time crash dumps, the Hot Reload-while-debugging research |
 | M15 | ASP.NET Core and Hot Reload | M15a and M15b at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch`, ADR 0022; M15c (scaffolding, service references) deferred until after M16 |
 | M16 | Razor, Blazor and web front-end | done (M16a–M16d at checkpoint): Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023); HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); Blazor WebAssembly debugging in the browser through vscode-js-debug (ADR 0026); compound server-and-page debugging, Debug a Web Page, HTML and CSS inside Razor, scoped CSS, npm scripts in the Task Runner Explorer, ESLint and Prettier (ADR 0027) |
-| M17 | Containers, Aspire and publishing | planned |
+| M17 | Containers, Aspire and publishing | M17a at checkpoint ([m17a](checkpoints/m17a.md), ADR 0042): the Containers window, Add Docker Support, run and debug in a container (fast mode), compose up, down and debug, `.dcproj` as a solution item, the compose schema, Docker and Podman; M17b (Aspire, ADR 0043) and M17c (publishing) next |
 | M18 | Profiling and diagnostics tools | planned |
 | M19 | Avalonia XAML editing and live previewer | planned |
 | M20 | .NET MAUI | planned (D6: go, for Android, iOS and Mac Catalyst), after M28 and before M34 |
@@ -1300,6 +1300,8 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **ADRs.** "Publishing and container tooling". "Aspire integration".
 
+**Split (rule 5, 2026-10-11).** **M17a** (containers, [ADR 0042](adr/0042-container-tooling-and-publishing.md), [checkpoint](checkpoints/m17a.md)): Dockerfile and compose editing, Add Docker Support, run and debug in a container, compose files and `.dcproj`, the Containers window, Docker and Podman. **M17b** (Aspire, ADR 0043): AppHost run, the resource tree, the dashboard, the IDE execution protocol, compound debugging. **M17c** (publishing, ADR 0042): publish profiles and their UI, folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT and container publishing.
+
 **Fixtures.** `samples/Containers/`: a web app with a Dockerfile, a compose app, and an Aspire AppHost with two projects plus a Redis container.
 
 **CI note.** Container tests run on Linux runners only, because GitHub's macOS runners have no Docker and Windows runners don't run Linux containers. Other OSes are covered by manual checkpoint testing.
@@ -1943,7 +1945,7 @@ The "Daedalus" column uses these terms:
 | Custom tools (single-file generators), T4 text templates | M26b |
 | User secrets | M15 |
 | Open Folder (no solution) | M26a |
-| Docker Compose projects (`.dcproj`) | M17 |
+| Docker Compose projects (`.dcproj`) | M17a (done: loaded from their XML as a solution item, left out of builds; compose up, down and debug) |
 | SQL database projects (`.sqlproj`) | M27b (done: SDK-style, Microsoft.Build.Sql) |
 | Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10, and SDKs down to 2.1.200 in `global.json`: at checkpoint, ADR 0030) |
 | Non-SDK-style projects, .NET Framework-only scenarios | Non-goal |
@@ -2125,7 +2127,7 @@ The "Daedalus" column uses these terms:
 | Scaffolding (controllers, Razor Pages, Identity, Blazor CRUD) | M15 |
 | Hot Reload with browser refresh | M15 |
 | Razor and Blazor editing, debugging and hot reload | M16 |
-| Docker files, compose, container debugging, Containers window | M17 |
+| Docker files, compose, container debugging, Containers window | M17a (done: fast mode, Docker and Podman; HTTPS in containers and Windows containers are gaps) |
 | .NET Aspire orchestration and dashboard | M17 |
 | Azure tooling (publish, Functions, Connected Services to Azure, Cloud Explorer) | Candidate (plugins) |
 | Dev Tunnels | Trap |
@@ -2359,3 +2361,9 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Hot Reload while debugging:** researched; the runtime refuses `dotnet watch`'s updates under a debugger, and netcoredbg applies deltas only through its MI interpreter. A gap until a DAP request exists upstream.
   - **Found:** netcoredbg ended an apphost detached while stopped at a breakpoint (Windows); detaches are now prepared.
 - 2026-10-11: M27b built and at its checkpoint (ADRs 0037 and 0038), which completes M27: a new supervised, lazy `daedalus-datahost` with SQL Server (Microsoft.Data.SqlClient on managed networking: its native SNI is proprietary and excluded), PostgreSQL (Npgsql), MySQL/MariaDB (MySqlConnector) and SQLite (Microsoft.Data.Sqlite); the Database Explorer (your connections, passwords in the OS credential store, and the solution's from appsettings, user secrets and Aspire AppHosts), table data (paged, edited, committed in one transaction, CSV/JSON export and import), the query editor (Query Results with grids, messages, time, cancel, history, estimated and actual plans as trees), the SQL language server (`daedalus-datahost --lsp`: schema completion and hover, T-SQL diagnostics and formatting through ScriptDom), and SDK-style `.sqlproj` load and build. D15: DacFx's licence is proprietary, so schema compare and publish are a gap; SQL Tools Service wasn't integrated (a 100 MB download per platform and its own connection protocol; `TODO(issue)`).
+- 2026-10-11: M17 split into M17a (containers), M17b (Aspire) and M17c (publishing). M17a built and at its checkpoint (ADR 0042):
+  - **Engine:** the user's `docker` or `podman` CLI (`containers.tool`), one process per operation, never the Engine API.
+  - **Run and debug:** the "Container (Dockerfile)" launch profile; fast mode runs the build output on the Dockerfile's `base` stage, and F5 launches the app under netcoredbg copied into the container.
+  - **Add Docker Support:** the .NET templates' Dockerfile, `.dockerignore` and profile.
+  - **Compose:** up, down and debug a service; `.dcproj` loads from its XML and is left out of builds and restores; compose files get the Compose Specification's schema.
+  - **The Containers window:** containers and images, logs, environment, ports, labels, files, a terminal in the container, attach.
