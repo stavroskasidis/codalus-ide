@@ -33,6 +33,8 @@ public sealed class ViewLocator : IDataTemplate
         PageDocument document => new PaneHost(document, BuildManagementContent(document.ViewModel)),
         AccountsDocument document => new PaneHost(document, new AccountsView { DataContext = document.ViewModel }),
         CreatePullRequestDocument document => new PaneHost(document, new CreatePullRequestView { DataContext = document.ViewModel }),
+        EfModelDocument document => new PaneHost(document, new EfModelView(document.ViewModel)),
+        EfScaffoldDocument document => new PaneHost(document, new EfScaffoldView { DataContext = document.ViewModel }),
         _ => null,
     };
 
@@ -109,6 +111,7 @@ public sealed class ViewLocator : IDataTemplate
         WorktreesViewModel vm => new WorktreesView { DataContext = vm },
         TerminalViewModel vm => new TerminalView { DataContext = vm },
         InteractiveViewModel vm => new InteractiveView { DataContext = vm },
+        EntityFrameworkViewModel vm => new EntityFrameworkView { DataContext = vm },
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },
     };
 }

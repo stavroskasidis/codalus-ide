@@ -533,8 +533,10 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => editor.PinLayer.Pins.TryGetValue(cwdLine, out var control) && control.IsVisible, "the pinned data tip floats over its line").ConfigureAwait(true);
             Screenshot("smoke-test-debug-companion.png");
 
-            // A full dump of the paused program, opened in the dump view.
-            var pid = shell.Debugger.ProcessId ?? throw new SmokeFailure("The session has no process id.");
+            // A full dump of the paused program, opened in the dump view. On macOS createdump can stall on a program the
+            // debugger holds, so there the dump is of the build host, a .NET process outside the session.
+            var dumpsDebuggee = !OperatingSystem.IsMacOS();
+            var pid = (dumpsDebuggee ? shell.Debugger.ProcessId : shell.Solutions.HostProcessId) ?? throw new SmokeFailure("There is no process id to dump.");
             var dump = Path.Combine(Path.GetTempPath(), $"daedalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
             var created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
             Check(File.Exists(created.Path) && created.Size > 0, $"the companion writes a dump ({created.Size} bytes)");
@@ -545,9 +547,18 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             {
                 var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
                 await WaitAsync(() => window.GetVisualDescendants().OfType<DumpView>().Any(), "the dump view renders").ConfigureAwait(true);
+                if (!dumpsDebuggee)
+                {
+                    Check(document.ViewModel.Summary.Threads.Any(t => t.Frames.Count > 0), "the build host's dump has threads with managed frames");
+                }
+
                 var main = document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).FirstOrDefault(f => f.Method.Contains("Main", StringComparison.Ordinal));
-                Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
-                Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
+                if (dumpsDebuggee)
+                {
+                    Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
+                    Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
+                }
+
                 await document.ViewModel.LoadHeapAsync().ConfigureAwait(true);
                 Check(document.ViewModel.Heap.Any(r => r.Name == "System.String"), "the heap lists System.String");
                 Screenshot("smoke-test-dump.png");
@@ -891,8 +902,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(editor.Model.LanguageId == ShellHost.RazorLanguageId, "Counter.razor is a Razor file");
             var client = shell.Languages.RunningClient(ShellHost.CSharpLanguageId)!;
             var at = editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("@currentCount", StringComparison.Ordinal) + 3);
-            string? hover = null;
-            await WaitAsync(() => (hover = client.HoverAsync(editor.Model.Uri, at, CancellationToken.None).GetAwaiter().GetResult()?.Contents.Value) is not null,
+            var hover = await WaitForAsync(async ct => (await client.HoverAsync(editor.Model.Uri, at, ct).ConfigureAwait(true))?.Contents.Value,
                 "hover on C# in the Razor file", 120).ConfigureAwait(true);
             Check(hover!.Contains("currentCount", StringComparison.Ordinal), "the hover describes the field: " + hover);
             var completion = await client.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("<button", StringComparison.Ordinal) + 1),
@@ -969,6 +979,8 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Screenshot("smoke-test-folder.png");
         }).ConfigureAwait(true);
 
+        await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -996,6 +1008,70 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
         }
+    }
+
+    /// <summary>
+    /// EF Core (M27a, ADR 0036) on samples/Data and SQLite: the fixture's local dotnet-ef is restored, the Entity
+    /// Framework window finds BloggingContext (Roslyn) and its pending migration (dotnet ef), Update Database shows the
+    /// SQL before it applies it, a model change becomes a migration, the model view draws the entities, and the
+    /// inventory database is reverse engineered.
+    /// </summary>
+    private async Task EfStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "Data", "Data.slnx")), $"the samples folder {samples} has Data");
+        var target = Path.Combine(_work, "Data");
+        Copy(Path.Combine(samples, "Data"), target);
+        await shell.OpenSolutionAsync(Path.Combine(target, "Data.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Data solution is open", 300).ConfigureAwait(true);
+        var restore = await shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None).ConfigureAwait(true);
+        Check(restore.Succeeded, "dotnet tool restore gets the fixture's dotnet-ef:\n" + Tail(restore.Output, 1500));
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 1 }, "the C# workspace is ready", 300).ConfigureAwait(true);
+
+        await shell.ShowEntityFrameworkAsync().ConfigureAwait(true);
+        var ef = shell.EfExplorer;
+        string Log() => Tail(shell.EntityFramework.Channel.GetText(), 2500) + "\n" + ef.Message;
+        await WaitAsync(() => ef.Context is { Name: "BloggingContext", Provider: "Microsoft.EntityFrameworkCore.Sqlite" }, "the window finds BloggingContext on SQLite", 120).ConfigureAwait(true);
+        await WaitAsync(() => ef.Migrations.Count == 1 && !ef.IsBusy, "the window lists InitialCreate", 420).ConfigureAwait(true);
+        Check(ef.Migrations[0].State == "Pending", "InitialCreate is pending: " + Log());
+
+        var update = shell.UpdateDatabaseAsync(null);
+        await WaitAsync(() => shell.Dialogs.IsOpen || update.IsCompleted, "Update Database shows the SQL", 240).ConfigureAwait(true);
+        Check(shell.Dialogs.Details.Any(l => l.Text.Contains("CREATE TABLE \"Blogs\"", StringComparison.Ordinal)), "the SQL creates the Blogs table: " + Log());
+        Check(!File.Exists(Path.Combine(target, "Blogging", "blogging.db")), "nothing is applied before Apply");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-ef-update.png");
+        shell.Dialogs.Buttons.Single(b => b.Label == "Apply").Command.Execute(null);
+        await WaitAsync(() => update.IsCompleted, "the migration is applied", 240).ConfigureAwait(true);
+        Check(update.Result && File.Exists(Path.Combine(target, "Blogging", "blogging.db")), "Update Database created the SQLite database: " + Log());
+        await WaitAsync(() => ef.Migrations.Count == 1 && ef.Migrations[0].Applied == true && !ef.IsBusy, "InitialCreate shows as applied", 240).ConfigureAwait(true);
+
+        var context = Path.Combine(target, "Blogging", "Data", "BloggingContext.cs");
+        File.WriteAllText(context, File.ReadAllText(context).Replace("public DateTime Published { get; set; }", "public DateTime Published { get; set; }\n\n    public int Rating { get; set; }", StringComparison.Ordinal));
+        shell.EntityFramework.Invalidate();
+        await shell.AddMigrationAsync("AddRating").ConfigureAwait(true);
+        await WaitAsync(() => ef.Migrations.Count == 2 && !ef.IsBusy, "AddRating is listed", 300).ConfigureAwait(true);
+        Check(ef.Migrations[1].State == "Pending", "AddRating is pending: " + Log());
+
+        var model = await shell.ShowEfModelAsync().ConfigureAwait(true);
+        Check(model is not null, "the model view opens");
+        await WaitAsync(() => model!.ViewModel.Model is not null || model.ViewModel.Message?.StartsWith("Building", StringComparison.Ordinal) == false, "the model is read", 300).ConfigureAwait(true);
+        Check(model!.ViewModel.Model?.Entities.Length == 5, "the model has 5 entity types: " + model.ViewModel.Message + "\n" + Log());
+        await WaitAsync(() => window.GetVisualDescendants().OfType<EfModelView>().Any(v => v.Diagram.Boxes.Count == 5), "the diagram draws them").ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-ef-model.png");
+
+        var scaffold = shell.OpenReverseEngineer();
+        Check(scaffold is not null, "Reverse Engineer opens");
+        var form = scaffold!.ViewModel;
+        form.ConnectionString = "Data Source=" + Path.Combine(target, "Inventory", "inventory.db");
+        form.Provider = "Microsoft.EntityFrameworkCore.Sqlite";
+        form.OutputDir = "Inventory";
+        form.ContextName = "InventoryContext";
+        await form.RunAsync().ConfigureAwait(true);
+        Check(form.Error is null && File.Exists(Path.Combine(target, "Blogging", "Inventory", "Product.cs")), "the inventory database is reverse engineered: " + form.Error + "\n" + Log());
+        shell.Layout.CloseDocument(model);
+        shell.Layout.CloseDocument(scaffold);
     }
 
     /// <summary>
@@ -1555,6 +1631,37 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             }
 
             await Task.Delay(50).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Asks <paramref name="probe"/> until it answers non-null, each try cut off after 10 s, without ever blocking the
+    /// UI thread: a host that stops answering fails the step instead of hanging the app.
+    /// </summary>
+    private static async Task<T> WaitForAsync<T>(Func<CancellationToken, Task<T?>> probe, string what, int seconds = 30) where T : class
+    {
+        var deadline = Stopwatch.GetTimestamp() + (seconds * Stopwatch.Frequency);
+        while (true)
+        {
+            using var attempt = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            try
+            {
+                if (await probe(attempt.Token).ConfigureAwait(true) is { } value)
+                {
+                    return value;
+                }
+            }
+            catch (OperationCanceledException) when (attempt.IsCancellationRequested)
+            {
+                // This try took too long; the deadline decides.
+            }
+
+            if (Stopwatch.GetTimestamp() > deadline)
+            {
+                throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what}.");
+            }
+
+            await Task.Delay(250).ConfigureAwait(true);
         }
     }
 

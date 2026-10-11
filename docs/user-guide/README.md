@@ -9,11 +9,12 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 5. [Building and running](build-and-run.md)
 6. [Debugging](debugging.md)
 7. [Web development: HTML, CSS and JavaScript, Hot Reload, Razor and Blazor, endpoints, .http files, certificates and secrets](web.md)
-8. [Testing](testing.md)
-9. [Git](git.md)
-10. [Terminal and C# Interactive](terminal.md)
-11. [The window, settings, themes and keyboard shortcuts](settings.md)
-12. [Troubleshooting, logs and crash reports](troubleshooting.md)
+8. [Data and Entity Framework Core: migrations, the model view, reverse engineering](data.md)
+9. [Testing](testing.md)
+10. [Git](git.md)
+11. [Terminal and C# Interactive](terminal.md)
+12. [The window, settings, themes and keyboard shortcuts](settings.md)
+13. [Troubleshooting, logs and crash reports](troubleshooting.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 

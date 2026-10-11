@@ -9,3 +9,4 @@
 *.png    binary
 *.ico    binary
 *.ttf    binary
+*.db     binary

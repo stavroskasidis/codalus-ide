@@ -31,6 +31,8 @@ internal interface ISessionEvents
 
     /// <summary>Folders whose set of files changed on disk (Show All Files, the folder view; ADR 0033).</summary>
     Task FilesChangedAsync(FilesChangedParams changes);
+    /// <summary>A message of a running <c>dotnet ef</c> (ADR 0036).</summary>
+    Task EfOutputAsync(EfOutputParams output);
 }
 
 /// <summary>The session's events plus those of builds.</summary>

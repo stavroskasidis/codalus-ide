@@ -45,7 +45,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M22 | Plugin platform 1.0 and marketplace | planned |
 | M23 | Personalization, settings sync and localization | planned |
 | M26 | Build and project-system depth | At checkpoint: M26a ([m26a](checkpoints/m26a.md), ADR 0033): the Properties window, Show All Files, Include and Exclude, links and moves between projects, Add New Item, Export Template, the template manager, folder mode with tasks and launch configurations, External Tools; M26b ([m26b](checkpoints/m26b.md), ADR 0034, 0035): build settings, the fast up-to-date check, Batch Build, Build Timings with the critical path, binary logs and their viewer, build events, custom tools (ResX, T4 in its own host, plugins) |
-| M27 | Data and Entity Framework Core tooling | planned |
+| M27 | Data and Entity Framework Core tooling | M27a at checkpoint ([m27a](checkpoints/m27a.md), ADR 0036): the Entity Framework window over the user's dotnet-ef (migrations with their SQL shown before they are applied, scripts, bundles, compiled models, reverse engineering), Roslyn DbContext discovery, the model view; M27b (database explorer, query editor, SQL language service, `.sqlproj`) next |
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
 | M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Daedalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
@@ -1215,6 +1215,10 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Goal.** Replace what Visual Studio's Server Explorer, SQL Server Object Explorer, SQL editor and EF Core integration give a .NET developer, for the databases .NET developers actually use.
 
+**Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038): the database explorer in `daedalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
+
+**Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038): the database explorer in `daedalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
+
 **Depends on.** M11 (language registry, LSP bridge), M15 (scaffolding uses DbContext discovery). M13's credential store (in `DaedalusStudio.Platform`) holds connection secrets.
 
 **Decisions.** D15: SQL Server, PostgreSQL, SQLite and MySQL/MariaDB first, T-SQL through SQL Tools Service, and DacFx only if its licence is OSI-approved.
@@ -2132,7 +2136,7 @@ The "Daedalus" column uses these terms:
 | Server Explorer, SQL Server Object Explorer | M27 |
 | SQL editor, results grid, execution plans | M27 |
 | Table data viewer and editor | M27 |
-| EF Core migrations, reverse engineering, model view | M27 |
+| EF Core migrations, reverse engineering, model view | M27a (done: the user's dotnet-ef through the build host, ADR 0036) |
 | SQL database projects, schema compare, publish | M27 (D15) |
 | Entity Data Model designer (EF6, EDMX) | Non-goal (.NET Framework) |
 
@@ -2339,3 +2343,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Open:** the project's OAuth apps (client ids) are to be registered; until then device sign-in needs a client id in settings, and a personal access token works.
 - 2026-10-11: M26 split into M26a (project system) and M26b (build depth). M26a built and at its checkpoint (ADR 0033): the Properties window (F4) with Build Action, Copy to Output Directory, Custom Tool and every item metadata, written as Visual Studio writes them under globbing (`items/*` in the build host, which evaluates each edit in memory); Show All Files with Include and Exclude From Project; Add Existing Item and links; moves between projects that carry a file's items; Add New Item (a built-in set and `dotnet new`'s item templates); Export Template and the template manager; folder mode (Open Folder, an in-memory solution of the loaded projects, `.daedalus/tasks.json` and `launch.json`); External Tools with macros. Plugin API 0.2.8: `contributes.propertyProviders` and `contributes.externalToolMacros`.
 - 2026-10-11: M26b built and at its checkpoint (ADR 0034, 0035): build options with every build (verbosity, a log file, parallel projects, binary logs, code analysis on build) from settings, and what F5 does before running; the fast up-to-date check, which records each project's inputs and outputs after a build and skips MSBuild when none changed (verified against real MSBuild runs); Batch Build; Build Timings with the critical path and the slowest targets and tasks; a binary log viewer on MSBuild.StructuredLogger in the build host; the Build Events page (PreBuild/PostBuild targets); custom tools: the ResX generators, T4 templates in a new supervised host (`daedalus-t4host`, Mono.TextTemplating) and plugins' generators (`contributes.customTools`, plugin API 0.2.8), run on demand and on save; the `t4` language.
+- 2026-10-11: M27a built and at its checkpoint (ADR 0036): EF Core through the user's own `dotnet ef`, run by the build host in trusted solutions (`ef/*`), and a model agent (`daedalus-efagent`) on the app's runtime for the model view. The Entity Framework window lists the DbContexts (found by Roslyn with their provider and connection name, `daedalus/ef/contexts`) and their migrations on a chosen connection (the app's configuration, `appsettings*.json` or user secrets); Update Database and reverts show their SQL before applying it; Add and Remove Migration, scripts (idempotent, without transactions), bundles, compiled models, reverse engineering (`dbcontext scaffold`) and installing dotnet-ef as a local tool. `samples/Data`. M27b (the database explorer, the query editor, the SQL language service, `.sqlproj`) follows.
