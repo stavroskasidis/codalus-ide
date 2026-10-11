@@ -214,8 +214,15 @@ internal sealed class Dumps : IDisposable
         return false;
     }
 
-    /// <summary>Create Dump: a dump of a running .NET process through its diagnostics port.</summary>
-    public static CreateDumpResult Create(int processId, string path, string kind)
+    /// <summary>How long a dump may take before the request fails.</summary>
+    public static readonly TimeSpan DumpTimeout = TimeSpan.FromMinutes(3);
+
+    /// <summary>
+    /// Create Dump: a dump of a running .NET process through its diagnostics port (the runtime starts createdump). A
+    /// createdump that doesn't finish in <paramref name="timeout"/> is ended: on macOS it can stall on a program the
+    /// debugger holds paused.
+    /// </summary>
+    public static async Task<CreateDumpResult> CreateAsync(int processId, string path, string kind, TimeSpan timeout, CancellationToken cancellationToken)
     {
         var type = kind switch
         {
@@ -225,8 +232,42 @@ internal sealed class Dumps : IDisposable
             _ => DumpType.WithHeap,
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        new DiagnosticsClient(processId).WriteDump(type, path, logDumpGeneration: false);
+        var started = DateTime.Now.AddSeconds(-1);
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(timeout);
+        try
+        {
+            await new DiagnosticsClient(processId).WriteDumpAsync(type, path, logDumpGeneration: false, limit.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            EndCreatedump(started);
+            throw new TimeoutException($"The dump wasn't written within {timeout.TotalSeconds:0} s. On macOS, continue or detach a paused program before writing its dump.");
+        }
+
         return new CreateDumpResult(path, new FileInfo(path).Length);
+    }
+
+    /// <summary>Ends the createdump processes started for this request (none older than it).</summary>
+    private static void EndCreatedump(DateTime since)
+    {
+        foreach (var process in System.Diagnostics.Process.GetProcessesByName("createdump"))
+        {
+            using (process)
+            {
+                try
+                {
+                    if (process.StartTime >= since)
+                    {
+                        process.Kill();
+                    }
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+                {
+                    // Gone, or not ours to inspect.
+                }
+            }
+        }
     }
 
     private Session Get(string id) => _sessions.TryGetValue(id, out var session) ? session : throw new InvalidOperationException($"No dump session {id}.");
