@@ -1,6 +1,6 @@
 <h1>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/daedalus-wordmark-dark.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/daedalus-wordmark-light.svg">
     <img src="assets/logo/daedalus-wordmark-light.svg" alt="Daedalus Studio" width="420">
   </picture>
 </h1>
