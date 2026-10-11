@@ -152,7 +152,17 @@ public sealed class DebugSessionsTests
         f.Shell.Debugger.Breakpoints.Toggle(generator, Line(generator, "generate"));
 
         f.Shell.Run("debug.start");
-        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 300);
+        try
+        {
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped
+                || f.Shell.Workbench.Notifications.Items.Any(n => n.Message.StartsWith("Could not start debugging", StringComparison.Ordinal)), seconds: 400);
+        }
+        catch (Xunit.Sdk.TrueException)
+        {
+            Assert.Fail($"The generator didn't stop. State {f.Shell.Debugger.State}; build: {f.Shell.Builds.LastBuild?.Result}\nDebug Console:\n{f.Shell.DebugLog.GetText()}");
+        }
+
+        Assert.True(f.Shell.Debugger.State == DebugState.Stopped, string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message)) + "\n" + f.Shell.DebugLog.GetText());
         Assert.Equal(generator, f.Shell.Debugger.SelectedFrame?.Source?.Path, ignoreCase: OperatingSystem.IsWindows());
         Assert.Contains("csc.dll", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
         await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "list" && r.Value.Contains("Customer", StringComparison.Ordinal)));
