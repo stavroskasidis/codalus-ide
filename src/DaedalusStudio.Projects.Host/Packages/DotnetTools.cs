@@ -172,6 +172,9 @@ internal static class DotnetProcess
         return psi;
     }
 
+    /// <summary>The system's ICU major version on Linux, or null.</summary>
+    public static int? IcuMajor => s_icu.Value;
+
     private static int? SystemIcuMajor()
     {
         if (!OperatingSystem.IsLinux())

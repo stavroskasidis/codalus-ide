@@ -60,6 +60,15 @@ if (sdkWarning is not null)
 
 // The CLI that restores and runs tools in the solution's folder is the SDK global.json resolves, not necessarily the one loaded here.
 DaedalusStudio.Projects.Host.Packages.DotnetProcess.SdkVersion = unresolved is null && instances.Count > 0 ? instances[0].Version : instance.Version;
+
+// MSBuild before 17 builds in this process (ADR 0030), and its tasks start the SDK's own tools (csc on .NET Core 2.x or
+// 3.x), which stop at start on a Linux distribution whose ICU is newer than the ones they know. They inherit this.
+if (OperatingSystem.IsLinux() && instance.Version.Major < 5 && DaedalusStudio.Projects.Host.Packages.DotnetProcess.IcuMajor is { } icu
+    && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CLR_ICU_VERSION_OVERRIDE"))
+    && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT")))
+{
+    Environment.SetEnvironmentVariable("CLR_ICU_VERSION_OVERRIDE", icu.ToString(System.Globalization.CultureInfo.InvariantCulture));
+}
 MSBuildLocator.RegisterInstance(instance);
 return await RunAsync(stdin, stdout, instance.MSBuildPath, sdkWarning).ConfigureAwait(false);
 
