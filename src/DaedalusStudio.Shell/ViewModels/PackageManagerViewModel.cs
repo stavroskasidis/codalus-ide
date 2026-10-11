@@ -125,6 +125,13 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
 
     public bool IsSolution => Project is null;
 
+    /// <summary>
+    /// The project's target frameworks (M33): the version picker marks the versions that don't support them and starts
+    /// at the newest one that does. Empty for the solution, whose projects can differ.
+    /// </summary>
+    public IReadOnlyList<string> TargetFrameworks =>
+        Project is { } project && _solutions.Projects.TryGetValue(project, out var info) ? info.TargetFrameworks : [];
+
     public string ProjectName => Project is null ? "Solution" : Path.GetFileNameWithoutExtension(Project);
 
     public string Title => "NuGet: " + ProjectName;
@@ -810,7 +817,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
                 PackageTab.Updates => row.LatestVersion,
                 _ => row.InstalledVersion is { } installed && installed != "multiple" ? installed : null,
             };
-            var result = await _packages.DetailsAsync(row.Id, _includePrerelease, wanted, _tab == PackageTab.Browse ? SourceFilter : null, token).ConfigureAwait(true);
+            var result = await _packages.DetailsAsync(row.Id, _includePrerelease, wanted, _tab == PackageTab.Browse ? SourceFilter : null, token, TargetFrameworks).ConfigureAwait(true);
             token.ThrowIfCancellationRequested();
             details.Apply(result);
             UpdateDetailsInstallState(details);
@@ -1478,6 +1485,15 @@ public sealed class PackageDetailsViewModel : ObservableObject
                 if (version == package.Versions[0])
                 {
                     notes.Add(version.Version.Contains('-', StringComparison.Ordinal) ? "latest prerelease" : "latest");
+                }
+                else if (version.Compatible == true && package.Versions.TakeWhile(v => v != version).All(v => v.Compatible == false))
+                {
+                    notes.Add("latest compatible");
+                }
+
+                if (version.Compatible == false)
+                {
+                    notes.Add("not for " + string.Join(", ", _owner.TargetFrameworks));
                 }
 
                 if (version.Deprecated)

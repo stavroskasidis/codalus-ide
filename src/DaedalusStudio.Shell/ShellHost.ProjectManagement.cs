@@ -40,7 +40,7 @@ public sealed partial class ShellHost
             return open.ViewModel;
         }
 
-        var viewModel = new ProjectPropertiesViewModel(ProjectManagement, Solutions, project, Dialogs, path => OpenFileAsync(path));
+        var viewModel = new ProjectPropertiesViewModel(ProjectManagement, Solutions, project, Dialogs, path => OpenFileAsync(path), buildDepth: BuildDepth);
         Layout.OpenDocument(new ProjectPropertiesDocument(viewModel), focus: true);
         return viewModel;
     }

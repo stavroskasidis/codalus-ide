@@ -9,7 +9,8 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 1. `initialize` `{processId, clientName, protocolVersion}` → `{serverName, serverVersion, protocolVersion, msbuildVersion, sdkPath, sdkWarning?}`.
    - The host loads the SDK that `dotnet` resolves for `--solution-dir`, `global.json` included ([ADR 0025](adr/0025-hosts-and-the-users-sdk.md)).
    - The shell starts the host with `DOTNET_ROLL_FORWARD=LatestMajor` when that SDK belongs to a newer .NET than the host's, so the host can load it. It adds `DOTNET_ROLL_FORWARD_TO_PRERELEASE=1` for a preview SDK.
-   - `sdkWarning` says why the resolved SDK couldn't be loaded and which one is used instead.
+   - `sdkWarning` says why the resolved SDK couldn't be loaded and which one is used instead: its runtime is missing, it is below the floor (the .NET SDK 2.1.200, [ADR 0030](adr/0030-older-dotnet.md)), or `global.json` asks for an SDK that isn't installed. The newest SDK the host can load stands in.
+   - The MSBuild of SDKs before 6.0 (MSBuild 16 and older) builds in the host's own node: its worker nodes don't connect to a host on a newer .NET (ADR 0030).
 2. `solution/open` `{path, trusted, configuration?, platform?, restore, activeFrameworks?}` → `SolutionInfo`, read from the solution file only. A `.csproj` (or `.fsproj`, `.vbproj`) opened on its own becomes an in-memory solution with format `project`.
 3. When trusted, projects are evaluated in parallel and each arrives as a `project/evaluated` notification, with `solution/evaluationProgress` `{evaluated, total, completed}` after each one. Design-time builds follow (below). With `restore`, a restore follows; afterwards only projects whose assets file changed get a new design-time build.
 4. `shutdown` / `exit`. If the host crashes, the shell restarts it and repeats `initialize` and `solution/open` with the user's latest choices (trust, configuration, active frameworks), without restoring again.
@@ -18,7 +19,7 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
-| `solution/open` | `OpenSolutionParams` | `SolutionInfo` | Untrusted: structure only, no evaluation, no restore, no watching. |
+| `solution/open` | `OpenSolutionParams` | `SolutionInfo` | Untrusted: structure only, no evaluation, no restore, no watching (a folder is still watched). `path` may be a folder (folder mode, [below](#project-items-show-all-files-folder-mode-and-item-templates)). |
 | `solution/close` | `{}` | `{}` | |
 | `solution/trust` | `{restore}` | `{}` | The user trusted the folder: evaluate (and restore). |
 | `solution/setConfiguration` | `{configuration, platform}` | `{}` | Re-evaluates every project with the mapped project configuration. |
@@ -89,7 +90,7 @@ NuGet package management ([ADR 0012](adr/0012-package-management.md)) uses the N
 | Method | Params | Result | Notes |
 |---|---|---|---|
 | `packages/search` | `{query, prerelease, skip, take, source?, offline, refresh}` | `{packages, hasMore, errors}` | Every enabled source (or the one named), merged by id, highest version wins. `skip`/`take` page each source. A failing source is reported in `errors`; the others still answer. |
-| `packages/details` | `{id, prerelease, version?, source?, offline}` | `PackageDetails` | The chosen (or latest) version's metadata, every version for the picker, the README (global packages folder, the feed's `ReadmeUriTemplate`, or the `.nupkg` of a local source). |
+| `packages/details` | `{id, prerelease, version?, source?, offline, targetFrameworks?}` | `PackageDetails` | The chosen (or latest) version's metadata, every version for the picker, the README (global packages folder, the feed's `ReadmeUriTemplate`, or the `.nupkg` of a local source). |
 | `packages/installed` | `{project?}` | `{projects: ProjectPackages[]}` | From each target framework's evaluation and `project.assets.json`. All loaded projects when `project` is null. |
 | `packages/status` | `{packages: [{id, version?}], prerelease, offline, refresh}` | `{packages: [{id, latest?, deprecated, vulnerabilitySeverity, iconUrl?}], errors}` | The latest version across sources, and the deprecation and vulnerability badges of the given version. |
 | `packages/why` | `{project, id}` | `{paths: [{framework, chain}]}` | Every chain (`id/version` steps) from a top-level dependency to the package. |
@@ -100,7 +101,7 @@ NuGet package management ([ADR 0012](adr/0012-package-management.md)) uses the N
 | `tools/list` | `{}` | `{manifest?, local, global}` | The nearest `.config/dotnet-tools.json` and `dotnet tool list --global`. |
 | `tools/run` | `{action: install \| update \| uninstall \| restore \| createManifest, id?, version?, global}` | `{succeeded, output}` | Runs `dotnet tool` (or `dotnet new tool-manifest`) in the solution folder. |
 
-- **`PackageDetails`** `{id, version, versions: [{version, downloads?, deprecated, vulnerabilitySeverity}], title?, description?, authors?, licenseExpression?, licenseUrl?, projectUrl?, readme?, requireLicenseAcceptance, published?, downloads?, tags?, dependencyGroups: [{targetFramework, dependencies: [{id, range}]}], deprecation?: {reasons, message?, alternateId?, alternateRange?}, vulnerabilities: [{severity, advisoryUrl}], source}`. Severities are 0 low, 1 moderate, 2 high, 3 critical, -1 none.
+- **`PackageDetails`** `{id, version, versions: [{version, downloads?, deprecated, vulnerabilitySeverity, compatible?}], title?, description?, authors?, licenseExpression?, licenseUrl?, projectUrl?, readme?, requireLicenseAcceptance, published?, downloads?, tags?, dependencyGroups: [{targetFramework, dependencies: [{id, range}]}], deprecation?: {reasons, message?, alternateId?, alternateRange?}, vulnerabilities: [{severity, advisoryUrl}], source}`. Severities are 0 low, 1 moderate, 2 high, 3 critical, -1 none. When `packages/details` gets `targetFrameworks` (a project's, M33), each version's `compatible` says whether its dependency groups cover them (absent: the package lists no frameworks), and `version` is the newest version that does, unless one was asked for.
 - **`ProjectPackages`** `{project, name, targetFrameworks, centralPackageManagement, centralPackagesFile?, restored, packages, transitive}`. `packages` are `{id, requested?, resolved?, frameworks, kind (direct | global | implicit), versionOverride?, centralVersion?, definedIn?}`; `transitive` are `{id, resolved, frameworks}`.
 
 ## Project properties and solution management
@@ -123,6 +124,51 @@ Property pages, references, configurations, dependencies, load/unload, solution 
 | `sdk/setGlobalJson` | `{version?, rollForward?}` | `{}` | Writes `sdk.version`/`sdk.rollForward` of the `global.json` in effect (or one next to the solution); `version` null removes the pin. The shell reopens the solution so a new host picks the SDK. |
 
 `solution/open` also accepts a `.slnf`: the filter's solution opens with only its projects loaded, and `SolutionInfo` gains `filterPath`.
+
+## Project items, Show All Files, folder mode and item templates
+
+The Properties window, Include and Exclude, links, moves between projects, Show All Files, folder mode and `dotnet new` item templates ([ADR 0033](adr/0033-project-items-templates-and-folder-mode.md)). Contracts are in `ItemMessages.cs`; the shell side is `ProjectItemService` in `src/DaedalusStudio.Workbench/Projects`. Item requests need a trusted solution; `fs/listTree` and `folder/discover` don't.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `items/get` | `{project, path}` | `ItemInfoResult` | The file as the Properties window shows it, evaluated with the active configuration (a multi-targeted project with its first framework). |
+| `items/set` | `{project, path, itemType?, metadata?: {name: value \| null}}` | `{changed, updatedFiles}` | Changes the Build Action and metadata with the minimal edit: an `Update` item for a globbed file (metadata as child elements), `<Old Remove>` + `<New Include>` when a glob gives another type, existing metadata changed in place; a null value, or the value the project would have without its own definition, removes the definition. Imports are never edited. |
+| `items/exclude` | `{project, paths}` | `{changed, updatedFiles}` | Removes the file's explicit `Include` and `Update` items, then adds `<Type Remove>` for each type a glob still includes it as. A folder gets `Remove="Folder\**"` for each default glob type (`Compile`, `Content` in web projects, `EmbeddedResource`, `None`). A linked file loses its link. |
+| `items/include` | `{project, paths}` | `{changed, updatedFiles}` | Removes the `Remove` items that name the file or folder; whatever is still excluded gets an `Include` of the type the globs would give it. |
+| `items/addExisting` | `{project, targetFolder, files, asLink}` | `FileOperationResult` | Copies the files into the folder and makes sure they are items; with `asLink`, adds `<Type Include="..\x" Link="Folder\x" />` instead. |
+| `fs/listTree` | `{path, maxEntries?}` | `{entries: [{path, isDirectory}], truncated}` | Everything under a folder (Show All Files, the folder view) except `.git`, `.vs`, `.idea` and `node_modules`; at most 20,000 entries by default. |
+| `folder/discover` | `{}` | `{projects}` | Folder mode: the project files under the folder (not under `bin`, `obj` or those folders). |
+| `folder/setProjects` | `{projects}` | `{}` | Folder mode: the projects of the folder's in-memory solution, kept in `.daedalus/folder.json`. New ones are evaluated (and restored when the solution opened with `restore`). |
+| `templates/instantiate` | `{template, name, outputDirectory, project?, language?, arguments?}` | `{createdPaths, output}` | Runs `dotnet new <template>` with `--project`; a project that isn't restored is restored first (project-capability constraints read its assets). `DAEDALUS_TEMPLATE_HIVE` adds `--debug:custom-hive`. |
+
+| Notification | Params |
+|---|---|
+| `fs/changed` | `{directories}`: folders whose set of files changed (debounced), for Show All Files and the folder view |
+
+- **`ItemInfoResult`** `{project, path, itemType?, isLinked, link?, fromGlob, elements: [{operation (include \| update \| remove), itemType, value, line, condition?}], metadata: [{name, value, projectValue?}], itemTypes}`. `itemType` is null for a file that isn't an item. `metadata` has `CopyToOutputDirectory`, `Generator`, `CustomToolNamespace`, `Link` (linked files) and every metadata of the item; `projectValue` is what the project file sets. `itemTypes` are the Build Action choices (`None`, `Compile`, `Content`, `EmbeddedResource`, `AdditionalFiles`, then `AvailableItemName`).
+- **`fs/move` across projects:** when a file moves (or is copied) from one project's folder into another's, the source project's explicit items that name it are carried to the target project with `items/set`'s edit, and removed from the source on a move.
+- **Folder mode:** `solution/open` with a folder path answers `SolutionInfo` with `format: folder`, `path` the folder, and the loaded projects. `build/run` of the folder builds its one loaded project, or a generated `.daedalus/folder.slnx`; `solution/addProject` and `solution/removeProject` change the loaded projects; editing a solution file fails.
+
+## Build depth: options, the up-to-date check, batch builds, timings, build events and binary logs
+
+[ADR 0034](adr/0034-build-depth.md). Contracts are in `BuildDepthMessages.cs` (`BuildDepthJsonContext`); the shell side is `BuildService` and `BuildDepthService` in `src/DaedalusStudio.Workbench/Build`. Builds, the up-to-date check and build events need a trusted solution.
+
+- **`build/run`** takes `options?: BuildOptions` `{verbosity?, logFile?, logFileVerbosity?, maxParallelProjects, binaryLog?, upToDateCheck (default true), properties?}`. Verbosities are `quiet`, `minimal` (the default), `normal`, `detailed` and `diagnostic`; `properties` are extra global properties. Without options the build runs as in M4. `BuildResultInfo` gains `upToDate` (the fast up-to-date check found nothing to build, so MSBuild didn't run) and `binaryLog` (the log the build wrote).
+- **The fast up-to-date check:** after a build with options, each built project (and the projects it references) records its inputs and outputs, with sizes and write times, in `obj/<configuration>/<framework>/daedalus.uptodate.json` (or forgets them after a failure or a clean). A Build with `upToDateCheck` skips MSBuild when every project in scope (the project and its references, or every project the solution's active configuration builds) is unchanged since. The output names the first out-of-date project and why.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `build/batch` | `{target, entries: [{project, configuration, platform}], options?}` | `{succeeded, canceled, errors, warnings, elapsedMilliseconds, entries: [{project, configuration, platform, succeeded, skipped, errors, warnings, elapsedMilliseconds}]}` | Each entry in turn, in one exclusive build (one restore per project); `skipped` is the up-to-date check's. `build/output`, `build/diagnostic` and `build/cancel` work as for `build/run`. A binary log option is ignored. |
+| `build/upToDate` | `{project?}` | `{upToDate, projects: [{project, upToDate, reason}]}` | The check alone, for a project or the solution. |
+| `build/timings` | `{}` | `BuildTimingsResult` | The last build's: `{totalMilliseconds, projects: [{id, project, name, targetFramework?, node, start, duration, succeeded, targets, dependsOn}], targets: [{project, name, duration}], tasks: [{name, duration, count}], criticalPath: [id], binaryLog?}`; times in milliseconds from the build's start. Fails before the first build that ran MSBuild. |
+| `buildEvents/get` | `{project}` | `{project, preBuild, postBuild, runPostBuildEvent}` | The `PreBuild` and `PostBuild` targets' `Exec` commands, and `RunPostBuildEvent` (`OnBuildSuccess` when unset). |
+| `buildEvents/set` | `{project, preBuild?, postBuild?, runPostBuildEvent?}` | as `buildEvents/get` | A null field is left alone; an empty command removes its target; `OnBuildSuccess` removes the property. |
+| `binlog/open` | `{path}` | `{id, path, root, succeeded, durationMilliseconds, errors, warnings, nodes}` | Reads a `.binlog` with `MSBuild.StructuredLogger`. |
+| `binlog/children` | `{id, node}` | `{children: [BinaryLogNode]}` | A node's children, a level at a time. |
+| `binlog/search` | `{id, query, maxResults = 500}` | `{results: [{node, path: [id]}], truncated}` | Case-insensitive search of the nodes' text and diagnostics' files; `path` runs from the root to the node. |
+| `binlog/close` | `{id}` | `{}` | |
+
+- **`BinaryLogNode`** `{id, kind, text, hasChildren, durationMilliseconds?, file?, line, isError, isWarning}`: `kind` is the StructuredLogger type (`Build`, `Project`, `Target`, `Task`, `Message`, `Error`, `Warning`, `Property`, `Item`, `Folder`…).
 
 ## Entity Framework Core
 

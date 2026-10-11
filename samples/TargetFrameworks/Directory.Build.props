@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Standalone fixture (see README.md): nothing is inherited from the repository, and nothing here changes how the
+    projects compile. Each framework keeps its own defaults, the C# version included.
+    The fixture targets frameworks that are out of support on purpose: their warnings (NETSDK1138, and NuGet's audit
+    of the old Microsoft.NETCore.App packages) would bury everything else in the build output.
+  -->
+  <PropertyGroup>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+</Project>

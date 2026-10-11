@@ -238,7 +238,7 @@ public sealed partial class ShellHost
 
         _lastWebPage = target;
         var webRoot = url.IsFile ? Path.GetDirectoryName(url.LocalPath)!
-            : Solutions.Solution?.Path is { } solution ? Path.GetDirectoryName(solution)!
+            : Solutions.Solution?.Directory is { } solution ? solution
             : ActiveEditor?.Model.Path is { } path && Path.IsPathRooted(path) ? Path.GetDirectoryName(path)! : Environment.CurrentDirectory;
         DebugLog.Clear();
         Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);

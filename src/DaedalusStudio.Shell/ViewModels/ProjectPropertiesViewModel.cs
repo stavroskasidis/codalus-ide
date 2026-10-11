@@ -57,14 +57,15 @@ public sealed class ProjectPropertiesViewModel : ObservableObject, IDisposable
     private CancellationTokenSource _load = new();
     private bool _disposed;
 
-    public ProjectPropertiesViewModel(ProjectManagementService management, SolutionService solutions, string project, DialogViewModel dialogs, Func<string, Task> openFile, IReadOnlyList<PropertyPage>? pages = null)
+    public ProjectPropertiesViewModel(ProjectManagementService management, SolutionService solutions, string project, DialogViewModel dialogs, Func<string, Task> openFile, IReadOnlyList<PropertyPage>? pages = null, BuildDepthService? buildDepth = null)
     {
         _management = management;
         _solutions = solutions;
         _dialogs = dialogs;
         _openFile = openFile;
         Project = project;
-        Pages = pages ?? ProjectPropertyPages.CSharp;
+        Pages = [.. (pages ?? ProjectPropertyPages.CSharp).Where(p => !p.IsBuildEvents || buildDepth is not null)];
+        BuildEvents = buildDepth is null ? null : new BuildEventsViewModel(buildDepth, project);
         _selectedPage = Pages[0];
         Scopes.Add(AllConfigurations);
         LaunchProfiles = new LaunchProfilesViewModel(Path.Combine(Path.GetDirectoryName(project)!, "Properties", "launchSettings.json"), dialogs, openFile);
@@ -93,6 +94,9 @@ public sealed class ProjectPropertiesViewModel : ObservableObject, IDisposable
 
     public LaunchProfilesViewModel LaunchProfiles { get; }
 
+    /// <summary>The Build Events page (null when the page isn't offered).</summary>
+    public BuildEventsViewModel? BuildEvents { get; }
+
     public ICommand OpenProjectFileCommand { get; }
 
     public PropertyPage SelectedPage
@@ -103,6 +107,7 @@ public sealed class ProjectPropertiesViewModel : ObservableObject, IDisposable
             if (value is not null && SetField(ref _selectedPage, value))
             {
                 OnPropertyChanged(nameof(IsLaunchProfilesPage));
+                OnPropertyChanged(nameof(IsBuildEventsPage));
                 OnPropertyChanged(nameof(IsPropertiesPage));
                 _ = LoadAsync();
             }
@@ -111,7 +116,9 @@ public sealed class ProjectPropertiesViewModel : ObservableObject, IDisposable
 
     public bool IsLaunchProfilesPage => _selectedPage.IsLaunchProfiles;
 
-    public bool IsPropertiesPage => !_selectedPage.IsLaunchProfiles;
+    public bool IsBuildEventsPage => _selectedPage.IsBuildEvents;
+
+    public bool IsPropertiesPage => !_selectedPage.IsLaunchProfiles && !_selectedPage.IsBuildEvents;
 
     /// <summary>All configurations, or one (Debug, Release…): edits go to that configuration's scope.</summary>
     public string Scope
@@ -159,6 +166,16 @@ public sealed class ProjectPropertiesViewModel : ObservableObject, IDisposable
         if (_selectedPage.IsLaunchProfiles)
         {
             await LaunchProfiles.LoadAsync().ConfigureAwait(true);
+            return;
+        }
+
+        if (_selectedPage.IsBuildEvents)
+        {
+            if (BuildEvents is { } events)
+            {
+                await events.LoadAsync().ConfigureAwait(true);
+            }
+
             return;
         }
 

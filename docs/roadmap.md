@@ -44,14 +44,14 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M21 | Remote development | planned |
 | M22 | Plugin platform 1.0 and marketplace | planned |
 | M23 | Personalization, settings sync and localization | planned |
-| M26 | Build and project-system depth | planned |
+| M26 | Build and project-system depth | At checkpoint: M26a ([m26a](checkpoints/m26a.md), ADR 0033): the Properties window, Show All Files, Include and Exclude, links and moves between projects, Add New Item, Export Template, the template manager, folder mode with tasks and launch configurations, External Tools; M26b ([m26b](checkpoints/m26b.md), ADR 0034, 0035): build settings, the fast up-to-date check, Batch Build, Build Timings with the critical path, binary logs and their viewer, build events, custom tools (ResX, T4 in its own host, plugins) |
 | M27 | Data and Entity Framework Core tooling | done (M27a and M27b at checkpoint): the Entity Framework window over the user's dotnet-ef (migrations with their SQL shown first, scripts, bundles, compiled models, reverse engineering, the model view; [m27a](checkpoints/m27a.md), ADR 0036); the Database Explorer in `daedalus-datahost` (SQL Server, PostgreSQL, MySQL/MariaDB, SQLite), table data with explicit commit, CSV/JSON export and import, the query editor with results, messages, cancel, history and plans, the SQL language service (ScriptDom), `.sqlproj` loading and builds ([m27b](checkpoints/m27b.md), ADRs 0037 and 0038); schema compare and publish are a gap (D15: DacFx is proprietary) |
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
 | M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Daedalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
 | M31 | Automated release cycle and installers | at checkpoint ([m31](checkpoints/m31.md), ADR 0028): `develop`/`master`, `VERSION` and `daedalus-release`, Velopack installers on every platform, `.deb`/`.rpm`, signed apt and dnf repositories, `nightly.yml`/`release.yml`; the first published releases wait for the hosted runs at the end (the maintainer's call), Linux ARM64 and Pages for the public repository |
 | M32 | Self-update | at checkpoint ([m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
-| M33 | Older .NET: .NET Core 2.0 to .NET 10 | planned, after M32 |
+| M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
 | M34 | UI polish | planned, the last milestone before Visual Basic and F# |
 | M35 | Visual Basic | planned, always second to last |
 | M36 | F# | planned, always last |
@@ -763,6 +763,8 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 **Depends on.** M2, M4, M9 (property-page machinery). M11 helps (MSBuild editing).
 
+**Split** (rule 5, 2026-10-11): **M26a** is the project system (the Properties window, Show All Files, include and exclude, linked files, drag and drop between projects, templates, folder mode, External Tools; [ADR 0033](adr/0033-project-items-templates-and-folder-mode.md), [checkpoint](checkpoints/m26a.md)). **M26b** is build depth (Batch Build, build settings, the fast up-to-date check, timings and the critical path, binary logs and the structured log viewer, pre- and post-build events, custom tools and T4; [ADR 0034](adr/0034-build-depth.md), [ADR 0035](adr/0035-custom-tools-and-text-templates.md), [checkpoint](checkpoints/m26b.md)).
+
 **Scope.**
 - **Properties window** (F4) for the selected Solution Explorer item:
   - for files: Build Action (`Compile`, `None`, `Content`, `EmbeddedResource`, `AdditionalFiles`, …), Copy to Output Directory, Custom Tool and its namespace, Link, and any item metadata
@@ -1034,6 +1036,8 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 ### M33 — Older .NET: .NET Core 2.0 to .NET 10
 
 **Goal.** Prove that projects targeting every version of .NET (Core) from 2.0 to 10.0 work in Daedalus. Fix what doesn't work, or document it (D23).
+
+**Status ([ADR 0030](adr/0030-older-dotnet.md), [checkpoint](checkpoints/m33.md)).** Built on 2026-10-11, in one checkpoint. The support table is [Older .NET versions](user-guide/dotnet-versions.md) in the user guide; the SDK floor is 2.1.200.
 
 **Depends on.**
 - M30 (the hosts start with any SDK)
@@ -1772,7 +1776,7 @@ New APIs start in `DaedalusStudio.Plugins.Proposed` and are promoted in M22.
 | M15–M17 | Launch configuration providers, a port-forwarding API |
 | M21 | `runsOn` placement, a file-system provider API |
 | M22 | Freeze 1.0, declarative views (D2), permissions manifest, custom editors, themes and icon themes. Webviews come after 1.0. |
-| M26 | Custom tool (single-file generator) contributions, Properties window property providers, external-tool macros |
+| M26 | Custom tool (single-file generator) contributions (M26b), Properties window property providers and external-tool macros (M26a; API 0.2.8) |
 | M27 | Database connection providers (more engines as plugins): deferred to M22 (`TODO(issue)` in the M27b checkpoint); the four engines are built in |
 | M28 | AI model providers, AI context providers, MCP server contributions (all proposed, after 1.0) |
 
@@ -1823,7 +1827,7 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
 - **OS versions** (D26): Windows 11 only. macOS and Linux versions follow what the .NET that Daedalus runs on supports: macOS 15 or newer today, which the app bundle's `Info.plist` requires.
 - **.NET versions** (D22, D23):
   - Daedalus itself runs on the newest .NET. It moves to each new major version when it ships, following M30's checklist.
-  - User projects are supported from `netcoreapp2.0` to the newest .NET, on every OS where their runtime installs. M33 has the support table.
+  - User projects are supported from `netcoreapp2.0` to the newest .NET, on every OS where their runtime installs. The support table is in the user guide ([Older .NET versions](user-guide/dotnet-versions.md), M33).
 - **Windows:** ConPTY versions and dev-certificate trust.
 - **macOS:** the Keychain, notarization of downloaded tools, and the login-shell environment.
 - **Linux:** libsecret availability, distribution trust stores, and Flatpak sandbox restrictions on spawning processes. The Flatpak build would need `--talk-name` and host-spawn permissions for the SDK, Docker and the terminal. No Flatpak for now (D18).
@@ -1900,7 +1904,7 @@ The "Daedalus" column uses these terms:
 | Import and Export Settings, settings sync | M23 |
 | Notifications, Output window, status bar | M1 |
 | Command Window (typed commands and aliases) | Not planned: the command palette covers it |
-| External Tools | M26 |
+| External Tools | M26a |
 | Full screen, distraction-free mode | M23 |
 | Localized UI | M23 |
 | Keyboard, screen reader and high-contrast accessibility | M1 onward, required in every milestone ([Accessibility](#accessibility)) |
@@ -1919,15 +1923,15 @@ The "Daedalus" column uses these terms:
 | Solution folders, nested projects, Dependencies node, file nesting | M2 |
 | Solution Explorer search, sync with active document, "scope to this" | M2 (verify at M7, otherwise M26) |
 | File members in Solution Explorer | M12 |
-| Show All Files, include and exclude from project | M26 |
+| Show All Files, include and exclude from project | M26a |
 | Add, rename, delete and move with project file updates; file watching | M2 |
-| Drag and drop between projects, linked files | M26 |
-| Properties window (Build Action, Copy to Output Directory, Custom Tool) | M26 |
+| Drag and drop between projects, linked files | M26a |
+| Properties window (Build Action, Copy to Output Directory, Custom Tool) | M26a |
 | Project property pages | M9 |
 | Launch profiles (`launchSettings.json`) UI | M9 |
 | New Project dialog (`dotnet new` templates) | M2 |
-| Add New Item with item templates | M26 |
-| Export Template, template management | M26 |
+| Add New Item with item templates | M26a |
+| Export Template, template management | M26a |
 | Configurations and platforms, Configuration Manager | M2; Configuration Manager dialog M9 |
 | Multi-targeting, project context switcher | M2/M3; navigation bar drop-down M12 |
 | Project build dependencies and build order | M9 |
@@ -1936,12 +1940,12 @@ The "Daedalus" column uses these terms:
 | Project, assembly and analyzer references | M9 |
 | COM references | Non-goal |
 | Connected Services, OpenAPI and gRPC service references | M15 |
-| Custom tools (single-file generators), T4 text templates | M26 |
+| Custom tools (single-file generators), T4 text templates | M26b |
 | User secrets | M15 |
-| Open Folder (no solution) | M26 |
+| Open Folder (no solution) | M26a |
 | Docker Compose projects (`.dcproj`) | M17 |
 | SQL database projects (`.sqlproj`) | M27b (done: SDK-style, Microsoft.Build.Sql) |
-| Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10) |
+| Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10, and SDKs down to 2.1.200 in `global.json`: at checkpoint, ADR 0030) |
 | Non-SDK-style projects, .NET Framework-only scenarios | Non-goal |
 | WinForms, WPF, UWP and WinUI project types and designers | Non-goal |
 | C++, Python and Node.js workloads | Not first-party: plugins over the M11 LSP bridge (C++/CLI is a non-goal) |
@@ -1955,12 +1959,12 @@ The "Daedalus" column uses these terms:
 | Structured build output, Error List navigation | M4 |
 | Startup project, Run without debugging, launch profiles | M4 |
 | Multiple startup projects | M14 |
-| Batch Build | M26 |
-| Build settings (verbosity, parallel builds, build before run) | M26 |
-| Fast up-to-date check, build acceleration | M26 |
-| Build timings, binary logs and log viewer | M26 |
-| Pre-build and post-build events | M26 (in the M9 property pages) |
-| Code analysis on build | M26 |
+| Batch Build | M26b |
+| Build settings (verbosity, parallel builds, build before run) | M26b |
+| Fast up-to-date check, build acceleration | M26b |
+| Build timings, binary logs and log viewer | M26b |
+| Pre-build and post-build events | M26b (in the M9 property pages) |
+| Code analysis on build | M26b |
 | Publish: folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT, container | M17 |
 | Publish to Azure or other clouds | Candidate (plugins) |
 | Pack NuGet packages | M9 |
@@ -2038,7 +2042,7 @@ The "Daedalus" column uses these terms:
 | XAML: Avalonia | M19 |
 | XAML: .NET MAUI | M20 |
 | MSBuild, JSON, XML, YAML | M11 |
-| T4 | M26 |
+| T4 | M26b |
 | C# Interactive | M10 |
 | F# Interactive | M36 |
 | Other languages | Plugins over M11 |
@@ -2252,7 +2256,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D20 | Releases while the repository is private | M31 | Build everything now, and switch it on when the repository goes public | decided 2026-10-10: as recommended. Manual dispatch while private; the nightly schedule and the release on push to `master` switch on automatically once public. |
 | D21 | Branches and versioning | M31 | `develop` for daily work and nightlies, `master` for stable releases; the version in a file, bumped after each release | decided 2026-10-10: as recommended. The version is in the `VERSION` file; the next minor version is committed to `develop` automatically after each stable release; nightlies are `X.Y.Z-nightly.YYYYMMDD.N`. |
 | D22 | Which .NET Daedalus itself runs on | M30 | Support .NET 11 projects, and keep Daedalus on .NET 10 LTS until .NET 12 | decided 2026-10-10: Daedalus follows the newest .NET and moves to each major version when it ships, starting with .NET 11. |
-| D23 | How far to validate older versions of .NET | M33 | Every target framework from 2.0 to 10.0 with the current SDK; older SDKs pinned by `global.json` only opened and built | decided 2026-10-10: as recommended. |
+| D23 | How far to validate older versions of .NET | M33 | Every target framework from 2.0 to 10.0 with the current SDK; older SDKs pinned by `global.json` only opened and built | decided 2026-10-10: as recommended. Built in M33 (ADR 0030): the floor is the .NET SDK 2.1.200. |
 | D24 | Icon sets | M34 | Fluent UI System Icons (MIT) for commands, and Material Icon Theme (MIT) for file types | decided 2026-10-10: as recommended. Check both licences again at M34. |
 | D25 | What "polished" means | M34 | A written checklist per surface, and a screenshot gallery that the maintainer approves | decided 2026-10-10: as recommended. Every milestone reviews its own panels against the checklist until M34. |
 | D26 | Supported OS versions | M30 | Windows 10 22H2 and Windows 11; macOS and Linux as the .NET that Daedalus runs on supports | decided 2026-10-10: Windows 11 only. That changed the same day from "Windows 10 22H2 and 11", because .NET 10 supports Windows 10 only in its LTSC and IoT editions. macOS and Linux follow what the .NET that Daedalus runs on supports: macOS 15 or newer today, which `Info.plist` requires. |
@@ -2339,5 +2343,12 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Hosting:** built-in GitHub, Azure DevOps and GitLab plugins on a proposed hosting API (plugin API 0.2.6), inactive until sign-in (device flow or a personal access token): pull requests (list, details, check out, create), review comments in the editor, CI status, work items and `#` completion, publishing.
   - **Git:** an askpass prompt behind the user's credential helper, worktrees, Git LFS awareness (pointer files, locks), solutions spanning several repositories.
   - **Open:** the project's OAuth apps (client ids) are to be registered; until then device sign-in needs a client id in settings, and a personal access token works.
+- 2026-10-11: M26 split into M26a (project system) and M26b (build depth). M26a built and at its checkpoint (ADR 0033): the Properties window (F4) with Build Action, Copy to Output Directory, Custom Tool and every item metadata, written as Visual Studio writes them under globbing (`items/*` in the build host, which evaluates each edit in memory); Show All Files with Include and Exclude From Project; Add Existing Item and links; moves between projects that carry a file's items; Add New Item (a built-in set and `dotnet new`'s item templates); Export Template and the template manager; folder mode (Open Folder, an in-memory solution of the loaded projects, `.daedalus/tasks.json` and `launch.json`); External Tools with macros. Plugin API 0.2.8: `contributes.propertyProviders` and `contributes.externalToolMacros`.
+- 2026-10-11: M26b built and at its checkpoint (ADR 0034, 0035): build options with every build (verbosity, a log file, parallel projects, binary logs, code analysis on build) from settings, and what F5 does before running; the fast up-to-date check, which records each project's inputs and outputs after a build and skips MSBuild when none changed (verified against real MSBuild runs); Batch Build; Build Timings with the critical path and the slowest targets and tasks; a binary log viewer on MSBuild.StructuredLogger in the build host; the Build Events page (PreBuild/PostBuild targets); custom tools: the ResX generators, T4 templates in a new supervised host (`daedalus-t4host`, Mono.TextTemplating) and plugins' generators (`contributes.customTools`, plugin API 0.2.8), run on demand and on save; the `t4` language.
 - 2026-10-11: M27a built and at its checkpoint (ADR 0036): EF Core through the user's own `dotnet ef`, run by the build host in trusted solutions (`ef/*`), and a model agent (`daedalus-efagent`) on the app's runtime for the model view. The Entity Framework window lists the DbContexts (found by Roslyn with their provider and connection name, `daedalus/ef/contexts`) and their migrations on a chosen connection (the app's configuration, `appsettings*.json` or user secrets); Update Database and reverts show their SQL before applying it; Add and Remove Migration, scripts (idempotent, without transactions), bundles, compiled models, reverse engineering (`dbcontext scaffold`) and installing dotnet-ef as a local tool. `samples/Data`. M27b (the database explorer, the query editor, the SQL language service, `.sqlproj`) follows.
+- 2026-10-11: M33 built and at its checkpoint (ADR 0030, D23):
+  - **Target frameworks:** `netcoreapp2.0` to `net10.0` and .NET Standard 2.0 and 2.1 open, build, run, debug, test (with coverage) and get each framework's default C# version in the editor, with the current SDK. Hot Reload from .NET 6, disabled with its reason before. The package manager marks the versions that don't support a project's frameworks.
+  - **Older SDKs in `global.json`:** they open and build down to the .NET SDK 2.1.200; those before 6.0 build in the build host's own node, because their MSBuild can't start nodes for a host on .NET 10. Below the floor, or when the SDK isn't installed, the newest SDK stands in and the solution is told why.
+  - **Operating systems:** programs start on the SDK's runtimes (`DOTNET_ROOT` for apphosts); on Apple silicon, .NET 5 and earlier run as x64 with the x64 netcoredbg (shipped in the macOS package); on Linux, .NET Core 2.x and 3.x get the system's ICU (`CLR_ICU_VERSION_OVERRIDE`), and the need of .NET Core 2.x to .NET 5 for OpenSSL 1.x is documented.
+  - **Keeping it checked:** `samples/TargetFrameworks`, `eng/get-runtimes.sh`, the `DaedalusStudio.TargetFrameworks.Tests` suite (WSL and Mac validation, and the manual CI matrix), `eng/compat-containers.sh`, and the support table in the user guide.
 - 2026-10-11: M27b built and at its checkpoint (ADRs 0037 and 0038), which completes M27: a new supervised, lazy `daedalus-datahost` with SQL Server (Microsoft.Data.SqlClient on managed networking: its native SNI is proprietary and excluded), PostgreSQL (Npgsql), MySQL/MariaDB (MySqlConnector) and SQLite (Microsoft.Data.Sqlite); the Database Explorer (your connections, passwords in the OS credential store, and the solution's from appsettings, user secrets and Aspire AppHosts), table data (paged, edited, committed in one transaction, CSV/JSON export and import), the query editor (Query Results with grids, messages, time, cancel, history, estimated and actual plans as trees), the SQL language server (`daedalus-datahost --lsp`: schema completion and hover, T-SQL diagnostics and formatting through ScriptDom), and SDK-style `.sqlproj` load and build. D15: DacFx's licence is proprietary, so schema compare and publish are a gap; SQL Tools Service wasn't integrated (a 100 MB download per platform and its own connection protocol; `TODO(issue)`).

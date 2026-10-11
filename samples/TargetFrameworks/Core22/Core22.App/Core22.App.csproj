@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.2</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Core22.Lib\Core22.Lib.csproj" />
+    <ProjectReference Include="..\..\Multi\Multi.csproj" />
+  </ItemGroup>
+</Project>

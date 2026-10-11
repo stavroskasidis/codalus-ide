@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Opened on its own by the item tests (M26, ADR 0033); not in ProjectSystem.slnx. One file per common Build Action,
+       a linked file, a .resx with its generated class, and a text template with an include. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Fixture.Items</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\Shared.cs" Link="Linked\Shared.cs" />
+    <None Remove="analyzers.json" />
+    <None Remove="content.txt" />
+    <None Remove="data.json" />
+    <AdditionalFiles Include="analyzers.json" />
+    <Content Include="content.txt" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="data.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="notes.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <EmbeddedResource Update="Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <Compile Update="Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+    <None Update="Greeting.tt">
+      <Generator>TextTemplatingFileGenerator</Generator>
+      <LastGenOutput>Greeting.cs</LastGenOutput>
+    </None>
+    <Compile Update="Greeting.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Greeting.tt</DependentUpon>
+    </Compile>
+  </ItemGroup>
+</Project>

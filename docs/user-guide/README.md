@@ -3,7 +3,7 @@
 Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linux.
 
 1. [Installing and first start](getting-started.md)
-2. [Solutions and projects](solutions.md)
+2. [Solutions and projects: the Properties window, Show All Files, items and templates, opening a folder, external tools](solutions.md)
 3. [NuGet packages and .NET tools](packages.md)
 4. [Editing and navigating code](editing.md)
 5. [Building and running](build-and-run.md)
@@ -15,6 +15,7 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 11. [Terminal and C# Interactive](terminal.md)
 12. [The window, settings, themes and keyboard shortcuts](settings.md)
 13. [Troubleshooting, logs and crash reports](troubleshooting.md)
+14. [Older .NET versions: .NET Core 2.0 to .NET 9, and older SDKs in global.json](dotnet-versions.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 
@@ -31,6 +32,10 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `Ctrl+Alt+L`, `Ctrl+;` | Solution Explorer, search it |
 | | `Ctrl+Shift+O` | Open solution or project |
 | | `Ctrl+K Ctrl+R` | Open recent |
+| | `Ctrl+Shift+Alt+O` | Open a folder |
+| Projects | `F4` | Properties window |
+| | `Ctrl+Shift+A`, `Shift+Alt+A` | Add New Item, Add Existing Item |
+| | `Alt+Enter` (Solution Explorer) | Project properties |
 | Editing | `Ctrl+Space` | Completion |
 | | `Ctrl+Shift+Space` | Parameter info |
 | | `Ctrl+K Ctrl+I` | Quick Info |

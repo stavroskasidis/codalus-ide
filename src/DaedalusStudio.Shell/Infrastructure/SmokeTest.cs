@@ -442,6 +442,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(screen.Contains("args: one two words", StringComparison.Ordinal), "the launch profile's arguments arrived");
         }, "build.solution").ConfigureAwait(true);
 
+        // M26b: build depth (ADR 0034, 0035).
+        await StepAsync("build.depth", "M26", "The fast up-to-date check, a binary log in the viewer, Build Timings, Batch Build, and the ResX and T4 custom tools", BuildDepthStepAsync, "build.solution").ConfigureAwait(true);
+
         // M5: debugging (netcoredbg).
         await StepAsync("debug.session", "M5", "F5 stops at a breakpoint; locals, evaluation and continue to exit", async () =>
         {
@@ -535,11 +538,20 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             var dumpsDebuggee = !OperatingSystem.IsMacOS();
             var pid = (dumpsDebuggee ? shell.Debugger.ProcessId : shell.Solutions.HostProcessId) ?? throw new SmokeFailure("There is no process id to dump.");
             var dump = Path.Combine(Path.GetTempPath(), $"daedalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
-            var created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
+            DaedalusStudio.Debugging.Companion.CreateDumpResult created;
+            try
+            {
+                created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
+            }
+            finally
+            {
+                // Ended even when the dump fails, so the steps after this one start without a session.
+                shell.Debugger.PinnedTips.Clear();
+                shell.Run("debug.stop");
+                await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            }
+
             Check(File.Exists(created.Path) && created.Size > 0, $"the companion writes a dump ({created.Size} bytes)");
-            shell.Debugger.PinnedTips.Clear();
-            shell.Run("debug.stop");
-            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
             try
             {
                 var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
@@ -736,6 +748,58 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => shell.Solutions.Projects.TryGetValue(multi, out var p) && p.State == Projects.Protocol.ProjectStates.Loaded, "Multi is loaded again", 60).ConfigureAwait(true);
         }, "packages.manage").ConfigureAwait(true);
 
+        // M26a: project items, Show All Files, Add New Item and External Tools (ADR 0033), on the same solution.
+        await StepAsync("projects.items", "M26", "The Properties window sets Copy to Output; Show All Files with Exclude and Include; Add New Item; an External Tool", async () =>
+        {
+            var plainDir = Path.GetDirectoryName(PlainProject)!;
+            var notes = Path.Combine(plainDir, "notes.txt");
+            await File.WriteAllTextAsync(notes, "Smoke test notes.\n").ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.TryGetValue(PlainProject, out var p) && p.Items.Any(i => i.Path == notes), "notes.txt becomes an item", 60).ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
+            PropertyRowViewModel? Row(string name) => shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == name);
+
+            // The Solution Explorer gets the new file once it has refreshed the project: reveal it until it is selected.
+            await WaitAsync(() =>
+            {
+                if (shell.Explorer.Selected?.Node.Path != notes)
+                {
+                    shell.Explorer.Reveal("f:" + notes);
+                }
+
+                return !shell.PropertiesWindow.IsLoading && Row("Copy to Output Directory") is not null && shell.PropertiesWindow.Title.StartsWith("notes.txt", StringComparison.Ordinal);
+            }, "the Properties window shows notes.txt", 60).ConfigureAwait(true);
+            Check(Row("Build Action")?.Value == "None", "notes.txt is a None item");
+            Row("Copy to Output Directory")!.SelectedOption = PropertiesWindowViewModel.CopyToOutputOptions.Single(o => o.Value == "PreserveNewest");
+            await WaitAsync(() => ReadText(PlainProject).Contains("<None Update=\"notes.txt\">", StringComparison.Ordinal), "an Update item is written for the globbed file", 60).ConfigureAwait(true);
+            await WaitAsync(() => !shell.PropertiesWindow.IsLoading && Row("Copy to Output Directory")?.IsSet == true, "the Properties window shows the new value", 60).ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-properties.png");
+
+            shell.Explorer.ShowAllFiles = true;
+            await shell.ProjectItems.ExcludeAsync(PlainProject, [notes], CancellationToken.None).ConfigureAwait(true);
+            Check(ReadText(PlainProject).Contains("<None Remove=\"notes.txt\" />", StringComparison.Ordinal), "Exclude From Project writes a Remove item");
+            await WaitAsync(() => shell.Explorer.Rows.Any(r => r.Node.Path == notes && r.IsExcluded), "Show All Files shows the excluded file", 60).ConfigureAwait(true);
+            shell.Explorer.Reveal("f:" + notes);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-show-all-files.png");
+            await shell.IncludeInProjectAsync(PlainProject, [notes]).ConfigureAwait(true);
+            Check(!ReadText(PlainProject).Contains("Remove=\"notes.txt\"", StringComparison.Ordinal), "Include In Project removes it");
+            shell.Explorer.ShowAllFiles = false;
+
+            var add = shell.OpenAddNewItem(PlainProject) ?? throw new SmokeFailure("Add New Item did not open.");
+            await WaitAsync(() => !add.IsLoading, "Add New Item lists its templates", 120).ConfigureAwait(true);
+            add.Selected = add.Templates.First(t => t.Template.ShortName == "class");
+            add.Name = "SmokeItem";
+            var created = await add.AddAsync().ConfigureAwait(true);
+            Check(created is not null && ReadText(created).Contains("class SmokeItem", StringComparison.Ordinal), $"Add New Item creates SmokeItem.cs ({add.Error})");
+
+            await shell.SaveExternalToolsAsync([new Workbench.ExternalTools.ExternalTool("smokesdk", "Smoke SDK Version", "dotnet", "--version", "$(SolutionDir)")]).ConfigureAwait(true);
+            shell.Run("externalTools.run.smokesdk");
+            var tools = shell.Workbench.Output.GetOrCreate("daedalus.externalTools");
+            await WaitAsync(() => tools.GetText().Contains("exited with code 0", StringComparison.Ordinal), "the external tool runs in the Output window", 60).ConfigureAwait(true);
+            await shell.SaveExternalToolsAsync([]).ConfigureAwait(true);
+        }, "packages.manage").ConfigureAwait(true);
+
         // M10: C# Interactive (ADR 0015), initialized with Plain (which references a package from the fixture feed).
         await StepAsync("interactive.repl", "M10", "C# Interactive runs code, references a project and a NuGet package", async () =>
         {
@@ -896,6 +960,34 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
         }).ConfigureAwait(true);
 
+        // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
+        await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
+        {
+            await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+            var source = Path.Combine(samples, "ProjectSystem", "FolderOnly");
+            Check(Directory.Exists(source), $"the samples folder {samples} has ProjectSystem/FolderOnly");
+            var parent = Path.Combine(_work, "FolderMode");
+            Directory.CreateDirectory(parent);
+            File.Copy(Path.Combine(samples, "ProjectSystem", "Directory.Build.props"), Path.Combine(parent, "Directory.Build.props"), overwrite: true);
+            var folder = Path.Combine(parent, "FolderOnly");
+            Copy(source, folder);
+            shell.Trust.Trust(folder);
+            await shell.OpenFolderWorkspaceAsync(folder).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Solution is { IsFolder: true } && shell.Explorer.IsFolderView && shell.Explorer.Rows.Any(r => r.Name == "README.md"), "the folder view lists the folder", 120).ConfigureAwait(true);
+            shell.Explorer.Reveal("f:" + Path.Combine(folder, "src", "Tool", "Tool.csproj"));
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-folder-view.png");
+
+            await shell.LoadAllFolderProjectsAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Projects.Values.All(p => p.State == Projects.Protocol.ProjectStates.Loaded), "both projects of the folder load", 240).ConfigureAwait(true);
+            Check(await shell.RunTaskAsync("sdk version").ConfigureAwait(true) == 0, "the task 'sdk version' runs:\n" + Tail(shell.Workbench.Output.GetOrCreate("daedalus.tasks").GetText(), 1000));
+            shell.Run("run.startWithoutDebugging");
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Tool")?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("FROM LAUNCH.JSON!", StringComparison.Ordinal), "the launch configuration 'Tool' runs with its arguments", 300).ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-folder.png");
+        }).ConfigureAwait(true);
+
         await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
 
         await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
@@ -917,6 +1009,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             shell.Workbench.StatusBar.Remove(ShellHost.UpdateStatusItem);
         }).ConfigureAwait(true);
 
+
         const string wasmTitle = "F5 debugs a Blazor WebAssembly app in the browser: a breakpoint in a .razor file stops";
         if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null && Environment.GetEnvironmentVariable("CI") != "true")
         {
@@ -926,6 +1019,73 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
+        }
+
+        // Last: it opens a solution of 38 projects, and nothing after it depends on what it leaves behind.
+        await StepAsync("dotnet.older", "M33", "Projects of .NET Core 2.0 to .NET 10 open and build; Hot Reload says why it needs .NET 6", OlderFrameworksStepAsync).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Older .NET (M33, ADR 0030) on samples/TargetFrameworks, with the newest SDK as a user has it: the eleven
+    /// frameworks evaluate, .NET Core 2.1's framework is its package, the solution builds, Hot Reload is disabled for a
+    /// netcoreapp3.1 startup project with its reason, and the net10.0 app runs. The netcoreapp2.1 app runs too when
+    /// this machine has the .NET Core 2.1 runtime (the full matrix is DaedalusStudio.TargetFrameworks.Tests).
+    /// </summary>
+    private async Task OlderFrameworksStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var source = Path.Combine(samples, "TargetFrameworks");
+        Check(File.Exists(Path.Combine(source, "TargetFrameworks.sln")), $"the samples folder {samples} has TargetFrameworks");
+        var target = Path.Combine(_work, "TargetFrameworks");
+        Copy(source, target);
+        await shell.OpenSolutionAsync(Path.Combine(target, "TargetFrameworks.sln")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 38 && shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState is "succeeded" or "failed",
+            "the 38 projects are open and restored", 600).ConfigureAwait(true);
+        Check(shell.Solutions.RestoreState == "succeeded", "the restore succeeded");
+        var lib = shell.Solutions.Projects.Values.Single(p => p.Name == "Core21.Lib");
+        Check(lib.References.Any(r => r is { Kind: DaedalusStudio.Projects.Protocol.ReferenceKinds.Framework, Name: "Microsoft.NETCore.App", Resolved: true }), "netcoreapp2.1's framework is the Microsoft.NETCore.App package");
+
+        var core31 = shell.Solutions.Projects.Values.Single(p => p.Name == "Core31.App").Path;
+        shell.Runs.SetStartupProject(core31);
+        await WaitAsync(() => shell.Workbench.Context.GetValue("hotReloadSupported") is false, "Start with Hot Reload is disabled for Core31.App", 30).ConfigureAwait(true);
+        Check(shell.HotReloadUnsupportedReason() == "Hot Reload needs .NET 6 or later: Core31.App targets netcoreapp3.1.", "the reason names the framework: " + shell.HotReloadUnsupportedReason());
+
+        var before = shell.Builds.LastBuild;
+        shell.Run("build.buildSolution");
+        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 600).ConfigureAwait(true);
+        Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+
+        var apps = new List<string> { "Net100.App" };
+        if (HasRuntime("2.1."))
+        {
+            apps.Add("Core21.App");
+        }
+
+        foreach (var name in apps)
+        {
+            shell.Runs.SetStartupProject(shell.Solutions.Projects.Values.Single(p => p.Name == name).Path);
+            shell.Run("run.startWithoutDebugging");
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: " + name)?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("has exited with code", StringComparison.Ordinal), $"{name} runs and exits", 300).ConfigureAwait(true);
+            Check(Output().Contains("has exited with code 0", StringComparison.Ordinal) && Output().Contains("Hello, ", StringComparison.Ordinal), $"{name} ran:\n" + Tail(Output(), 1000));
+        }
+
+        Console.Out.WriteLine($"  ran: {string.Join(", ", apps)}" + (apps.Count == 1 ? " (no .NET Core 2.1 runtime here)" : string.Empty));
+    }
+
+    /// <summary>Whether <c>dotnet --list-runtimes</c> lists a Microsoft.NETCore.App version starting with <paramref name="prefix"/>.</summary>
+    private static bool HasRuntime(string prefix)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("dotnet", "--list-runtimes") { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true });
+            var output = process!.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            return output.Split('\n').Any(l => l.StartsWith("Microsoft.NETCore.App " + prefix, StringComparison.Ordinal));
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
         }
     }
 
@@ -1079,6 +1239,86 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             new LanguageServices.Protocol.CompletionContext(LanguageServices.Protocol.CompletionTriggerKind.Invoked, null), CancellationToken.None).ConfigureAwait(true);
         Check(completion?.Items.Any(i => i.Label == "blockquote") == true, "HTML completion in Razor offers blockquote");
         editor.Model.Text.Remove(heading, "\n<blockq".Length);
+    }
+
+    /// <summary>
+    /// Build depth (M26b, ADR 0034 and 0035) on BuildAndRun: Build Solution again is skipped by the fast up-to-date check;
+    /// Build with Binary Log opens the log in the viewer and its search finds CoreCompile; Build Timings shows the
+    /// projects; Batch Build builds Hello's Release configuration; the ResX and T4 custom tools (the shipped T4 host)
+    /// generate code in Greetings, which then builds. The project file and the new files are put back afterwards.
+    /// </summary>
+    private async Task BuildDepthStepAsync()
+    {
+        await WaitAsync(() => !shell.Builds.IsBuilding && shell.Runs.Running.Count == 0, "the previous build and run have finished", 120).ConfigureAwait(true);
+        var before = shell.Builds.LastBuild;
+        shell.Run("build.buildSolution");
+        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 300).ConfigureAwait(true);
+        Check(shell.Builds.LastBuild!.Result is { Succeeded: true, UpToDate: true }, "Build Solution right after a build is up to date:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+
+        // A binary log, read by the build host and browsed in the viewer.
+        shell.Run("build.buildWithBinaryLog");
+        BinaryLogViewModel? Log() => shell.Layout.Documents.OfType<PageDocument>().Select(d => d.ViewModel).OfType<BinaryLogViewModel>().FirstOrDefault();
+        await WaitAsync(() => Log() is { Roots.Count: 1 } log && log.Roots[0].Children.Count > 1, "Build with Binary Log opens the log in the viewer", 300).ConfigureAwait(true);
+        var binlog = Log()!;
+        Check(binlog.Summary?.Contains("Build succeeded", StringComparison.Ordinal) == true, $"the viewer summarizes the build ({binlog.Summary}{binlog.Error})");
+        binlog.Query = "CoreCompile";
+        await binlog.SearchAsync().ConfigureAwait(true);
+        Check(binlog.Results.Any(r => r.Kind == "Target"), "searching the log finds the CoreCompile target");
+        await binlog.RevealAsync(binlog.Results.First(r => r.Kind == "Target").Result).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-binary-log.png");
+
+        var timings = shell.OpenBuildTimings();
+        await WaitAsync(() => timings.Projects.Count > 0, "Build Timings shows the last build's projects", 60).ConfigureAwait(true);
+        Check(timings.CriticalPath.Any(p => p.StartsWith("Hello", StringComparison.Ordinal)), "the critical path ends with Hello: " + timings.CriticalPathText);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-build-timings.png");
+
+        // Batch Build: Hello's Release configuration.
+        var batch = shell.OpenBatchBuild();
+        await WaitAsync(() => batch.Rows.Any(r => r is { Name: "Hello", Configuration: "Release" }), "Batch Build lists the project configurations", 60).ConfigureAwait(true);
+        foreach (var row in batch.Rows)
+        {
+            row.IsChecked = row is { Name: "Hello", Configuration: "Release" };
+        }
+
+        await batch.RunAsync(Projects.Protocol.BuildTargets.Build).ConfigureAwait(true);
+        var release = batch.Rows.First(r => r is { Name: "Hello", Configuration: "Release" });
+        Check(release.Status?.StartsWith("succeeded", StringComparison.Ordinal) == true, $"Batch Build built Hello|Release ({release.Status}):\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-batch-build.png");
+
+        // Custom tools: a .resx and a text template in Greetings (the T4 host shipped next to the app).
+        var greetings = Path.Combine(_folder, "src", "Greetings", "Greetings.csproj");
+        var greetingsDir = Path.GetDirectoryName(greetings)!;
+        var original = await File.ReadAllTextAsync(greetings).ConfigureAwait(true);
+        var resx = Path.Combine(greetingsDir, "SmokeStrings.resx");
+        var template = Path.Combine(greetingsDir, "SmokeNumbers.tt");
+        string[] created = [resx, template, Path.Combine(greetingsDir, "SmokeStrings.Designer.cs"), Path.Combine(greetingsDir, "SmokeNumbers.cs")];
+        try
+        {
+            await File.WriteAllTextAsync(resx, "<root>\n  <data name=\"SmokeGreeting\" xml:space=\"preserve\">\n    <value>Hello from a resource</value>\n  </data>\n</root>\n").ConfigureAwait(true);
+            await File.WriteAllTextAsync(template, "<#@ template language=\"C#\" #>\n<#@ output extension=\".cs\" #>\nnamespace Greetings;\n\npublic static class SmokeNumbers\n{\n<# for (var i = 1; i <= 3; i++) { #>\n    public const int N<#= i #> = <#= i * i #>;\n<# } #>\n}\n").ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.TryGetValue(greetings, out var p) && p.Items.Any(i => i.Path == resx) && p.Items.Any(i => i.Path == template), "the new files become items", 60).ConfigureAwait(true);
+            await shell.ProjectItems.SetAsync(greetings, resx, null, new Dictionary<string, string?> { [Projects.Protocol.ItemMetadataNames.Generator] = "ResXFileCodeGenerator" }, CancellationToken.None).ConfigureAwait(true);
+            await shell.ProjectItems.SetAsync(greetings, template, null, new Dictionary<string, string?> { [Projects.Protocol.ItemMetadataNames.Generator] = "TextTemplatingFileGenerator" }, CancellationToken.None).ConfigureAwait(true);
+            var strings = await shell.RunCustomToolAsync(resx).ConfigureAwait(true);
+            Check(strings?.Succeeded == true && ReadText(created[2]).Contains("internal static string SmokeGreeting", StringComparison.Ordinal), "the ResX generator writes SmokeStrings.Designer.cs");
+            var numbers = await shell.RunCustomToolAsync(template).ConfigureAwait(true);
+            Check(numbers?.Succeeded == true && ReadText(created[3]).Contains("public const int N3 = 9;", StringComparison.Ordinal),
+                "the T4 host transforms SmokeNumbers.tt: " + string.Join("; ", numbers?.Diagnostics.Select(d => d.Message) ?? ["no result"]));
+            Check(ReadText(greetings).Contains("<DependentUpon>SmokeNumbers.tt</DependentUpon>", StringComparison.Ordinal), "the generated file is nested under its template");
+            Check(await shell.BuildAsync(Projects.Protocol.BuildTargets.Build, greetings).ConfigureAwait(true), "Greetings builds with the generated code:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+        }
+        finally
+        {
+            foreach (var file in created.Where(File.Exists))
+            {
+                File.Delete(file);
+            }
+
+            await File.WriteAllTextAsync(greetings, original).ConfigureAwait(true);
+        }
     }
 
     /// <summary>

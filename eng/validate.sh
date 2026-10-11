@@ -47,6 +47,14 @@ echo "== $(uname -sm), .NET SDK $(dotnet --version), $(git --version)"
 echo "== netcoredbg"
 bash eng/get-netcoredbg.sh
 export DAEDALUS_NETCOREDBG="$repo/.work/netcoredbg"
+# The x64 debugger on Apple silicon, for .NET 5 and earlier under Rosetta 2 (M33; does nothing elsewhere).
+bash eng/get-netcoredbg.sh --x64
+
+# The target framework matrix (M33, ADR 0030): .NET Core 2.0 to .NET 9 and older SDKs, pinned, in .work/dotnet-compat.
+# The first run downloads about 1.5 GB; DaedalusStudio.TargetFrameworks.Tests runs against it.
+echo "== target framework matrix"
+bash eng/get-runtimes.sh > /dev/null
+export DAEDALUS_DOTNET_COMPAT="$repo/.work/dotnet-compat"
 
 echo "== restore / build / test"
 dotnet restore DaedalusStudio.slnx

@@ -1,0 +1,11 @@
+{
+  "template directive": { "prefix": "<#@ template", "body": "<#@ template language=\"${1|C#,VB|}\" hostspecific=\"${2|false,true|}\" #>$0", "description": "The template directive: language and host access." },
+  "output directive": { "prefix": "<#@ output", "body": "<#@ output extension=\"${1:.cs}\" #>$0", "description": "The output file's extension." },
+  "include directive": { "prefix": "<#@ include", "body": "<#@ include file=\"${1:Common.ttinclude}\" #>$0", "description": "Includes another template file." },
+  "import directive": { "prefix": "<#@ import", "body": "<#@ import namespace=\"${1:System.Linq}\" #>$0", "description": "Imports a namespace into the template's code." },
+  "assembly directive": { "prefix": "<#@ assembly", "body": "<#@ assembly name=\"${1:System.Core}\" #>$0", "description": "References an assembly from the template's code." },
+  "parameter directive": { "prefix": "<#@ parameter", "body": "<#@ parameter type=\"${1:System.String}\" name=\"${2:name}\" #>$0", "description": "A parameter passed to the template." },
+  "statement block": { "prefix": "<#", "body": "<# $1 #>$0", "description": "A block of code." },
+  "expression block": { "prefix": "<#=", "body": "<#= $1 #>$0", "description": "An expression written to the output." },
+  "class feature block": { "prefix": "<#+", "body": "<#+\n$1\n#>$0", "description": "Members of the template class (helper methods and fields)." }
+}

@@ -39,7 +39,7 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
                 using var registration = cancellationToken.Register(wrapper.CancelDiscovery);
                 await wrapper.DiscoverTestsAsync(
                     [.. group.Select(t => t.AssemblyPath)],
-                    RunSettings(options, [.. group], coverage: null),
+                    RunSettings(OlderFrameworks.Adjust(options, group.Key), [.. group], coverage: null),
                     new TestPlatformOptions { CollectMetrics = false },
                     handler).ConfigureAwait(false);
 
@@ -74,7 +74,8 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
                 continue;
             }
 
-            await RunGroupAsync(sdkPath, [.. group], groupTests, options, reporters, cancellationToken).ConfigureAwait(false);
+            // Older frameworks' test hosts may run as x64 or need an ICU override (M33).
+            await RunGroupAsync(sdkPath, [.. group], groupTests, OlderFrameworks.Adjust(options, group.Key), reporters, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -200,7 +201,7 @@ internal sealed class VsTestRunner(IDebug debug, Action<string> log) : IDisposab
 
         if (coverage is not null)
         {
-            Child(configuration, "TestAdaptersPaths").Value = Path.GetDirectoryName(CoverageTools.CollectorPath)!;
+            Child(configuration, "TestAdaptersPaths").Value = CoverageTools.CollectorFolder(targets.Count > 0 ? targets[0].Framework : null);
             Child(configuration, "ResultsDirectory").Value = coverage.OutputDirectory;
             var collectors = Child(Child(root, "DataCollectionRunSettings"), "DataCollectors");
             var collector = new XElement("DataCollector", new XAttribute("friendlyName", "XPlat code coverage"));

@@ -18,12 +18,48 @@ The tree shows the solution, its solution folders, projects, project folders and
 | Create a file or folder | Use the context menu. New C# files get the right namespace. |
 | Rename | Press `F2`. Renaming a project folder updates the solution and project references. |
 | Delete | Press `Delete`. Files go to the OS trash. |
-| Move or copy | Cut, Copy and Paste, or drag and drop. |
+| Move or copy | Cut, Copy and Paste, or drag and drop. Moving a file into another project takes its Build Action and metadata along; dragging a linked file moves its link (Ctrl copies). Files dropped from the file manager are copied in. |
+| Add files | **Add New Item** (`Ctrl+Shift+A`), **Add Existing Item** (`Shift+Alt+A`), or **Add Existing Item As Link**. |
+| See files that aren't in the project | **Show All Files** on the Solution Explorer's toolbar: files on disk outside the project show dimmed. |
+| Take a file out of the project, or put it back | **Exclude From Project** and **Include In Project** in the context menu. |
+| See and change a file's Build Action, Copy to Output Directory or Custom Tool | **Properties** (`F4`). |
 | Change the solution | Add Existing Project, New Solution Folder, Remove from Solution. |
 | Add a project reference | Add Project Reference on a project. Remove one by deleting it under Dependencies. |
 | Make a project the one F5 and Ctrl+F5 start | **Set as Startup Project** (the startup project is bold). |
 
 Daedalus Studio watches the files: changes made outside the IDE (a `git pull`, another editor) are picked up, and the affected projects are evaluated again.
+
+## The Properties window
+
+`F4` (View → Properties) shows the Solution Explorer's selection:
+- **A file:** its **Build Action** (the item type: `Compile`, `None`, `Content`, `EmbeddedResource`, `AdditionalFiles`, and the project's own types), **Copy to Output Directory**, **Custom Tool** (the generator, such as `ResXFileCodeGenerator`) and its namespace, the link of a linked file, and every other metadata the project file sets. **Add Metadata** adds one.
+- **A folder, a project, the solution or a dependency:** a summary, with links to the project's properties and the Configuration Manager.
+
+Values set in the project file are in bold. Changes are written the way Visual Studio writes them under SDK globbing: a file the globs already include gets an `Update` item for its metadata (`<None Update="notes.txt"><CopyToOutputDirectory>…`); a new Build Action is `<None Remove="notes.txt" />` plus `<Content Include="notes.txt" />`; choosing the value the project would have anyway removes the project's own setting. Plugins can add rows.
+
+## Show All Files, Include and Exclude
+
+**Show All Files** adds the files and folders on disk that aren't in their project, dimmed (including `bin` and `obj`). **Exclude From Project** writes a `Remove` item (`<Compile Remove="Old.cs" />`; for a folder, `Remove="Folder\**"` for each kind of default item), and **Include In Project** removes it again, or adds an `Include` when a wider `Remove` still excludes the file.
+
+## Adding items and templates
+
+- **Add New Item** (`Ctrl+Shift+A`, Project or the context menu) lists item templates for the project's language and kind, with a search box, categories and a preview: Daedalus's own (class, interface, record, struct, enum, text, JSON, XML, Markdown, resources, text template, app settings, HTML, CSS, JavaScript and TypeScript) and the `dotnet new` item templates installed on the computer. Web, MAUI and test templates show for those projects; **Show templates for every kind of project** shows them all. New C# files get the folder's namespace. `dotnet new` templates run only in trusted folders.
+- **Add Existing Item** copies files into the selected folder; **Add Existing Item As Link** adds links to them instead (`<Compile Include="..\Shared\A.cs" Link="Shared\A.cs" />`).
+- **Export Template** (Project menu) makes a project, or the selected file, into a `dotnet new` template in your templates folder and installs it: **New Project** and **Add New Item** offer it from then on.
+- **Tools → Templates** lists the installed template packages: install one (an id, `id@version`, a `.nupkg` or a folder), uninstall, check for updates and update them.
+
+## Opening a folder
+
+**File → Open Folder** (`Ctrl+Shift+Alt+O`) opens a folder as it is, with or without a solution: the Solution Explorer shows the **folder view**, the files on disk, with project files marked "(not loaded)". Search, Git, the terminal and the editor work on the folder. `daedalus <folder>` opens the folder's solution when it has exactly one, and the folder otherwise.
+
+- **Load Project** (on a project file) or **Load All Projects** (on the folder) loads projects into an in-memory solution: they are evaluated, restored, built and get C# features like a solution's. **Switch Views** toggles between the folder view and the solution view. **Open Project** opens one project on its own instead. The loaded projects are remembered in `.daedalus/folder.json`.
+- **Tasks:** `.daedalus/tasks.json` (Build → Configure Tasks) holds commands to run, in VS Code's format: `label`, `type` (`process` or `shell`), `command`, `args`, `options.cwd` and `options.env`, and `group` (`build` or `test`, with `isDefault`). Build → Run Task runs one, with its output in Output → Tasks. In a folder, **Build** runs the default build task when there is one, and builds the loaded projects otherwise.
+- **Launch configurations:** `.daedalus/launch.json` (Debug → Configure Launch): `name`, `type` (`project`, with `project`; or `program`, with `program`: an executable or a `.dll`), `args`, `cwd`, `env` and `preLaunchTask`. The toolbar's startup list shows them; **Start** (F5) debugs and **Start Without Debugging** (Ctrl+F5) runs the selected one.
+- Variables: `${workspaceFolder}`, `${workspaceFolderBasename}`, `${file}`, `${fileDirname}`, `${fileBasename}`, `${fileBasenameNoExtension}`, `${fileExtname}`, `${relativeFile}`, `${lineNumber}`, `${selectedText}` and `${env:NAME}`.
+
+## External tools
+
+**Tools → External Tools** adds your own commands to the Tools menu and the command palette (they can have key bindings: search "External Tools" in Keyboard Shortcuts). Each has a title, a command, arguments and an initial directory, which may use macros such as `$(ItemPath)`, `$(ItemDir)`, `$(ProjectDir)`, `$(SolutionDir)`, `$(TargetPath)`, `$(CurLine)` and `$(SelText)` (the editor lists them all), and whether its output goes to Output → External Tools and whether to ask for the arguments first. They are kept in `externalTools.json` in your settings folder.
 
 ## Configurations and target frameworks
 
@@ -73,7 +109,9 @@ A solution loads and builds with the same SDK as `dotnet build` in its folder: t
 - the SDK the solution builds with, and the `global.json` that chose it;
 - the installed SDKs, each with its support status: supported until a date, out of support since a date, or a preview;
 - the installed workloads;
-- a warning when Daedalus can't load the SDK the solution asks for, and which SDK it uses instead. The same warning goes to the Output window (Build Host).
+- a warning when Daedalus can't load the SDK the solution asks for, and which SDK it uses instead: an SDK whose runtime is missing, an SDK below the build host's floor (2.1.200), or a global.json that asks for an SDK that isn't installed. The same warning goes to the Output window (Build Host).
+
+SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own process; projects of every .NET version from .NET Core 2.0 work with the current SDK. [Older .NET versions](dotnet-versions.md) has the details.
 
 **Use This SDK** pins the selected SDK in `global.json` (with the roll-forward policy you choose) and reloads the solution with it. **Remove Pin** takes the version out again.
 

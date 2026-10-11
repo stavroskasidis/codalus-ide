@@ -215,6 +215,39 @@ public sealed class PackageIntegrationTests : IAsyncLifetime
         Assert.Null(status.Packages[1].Latest);
     }
 
+    [Theory]
+    [InlineData("netcoreapp2.1", "1.0.0")]
+    [InlineData("netcoreapp3.1", "2.0.0")]
+    [InlineData("net6.0", "3.0.0")]
+    [InlineData("net10.0", "4.0.0")]
+    [InlineData("netstandard2.0;net8.0", "1.0.0")]
+    public async Task The_versions_say_which_support_the_projects_frameworks_and_the_newest_that_does_comes_first(string frameworks, string expected)
+    {
+        using var server = new MockNuGetServer();
+        File.WriteAllText(Path.Combine(Fixture, "nuget.config"), $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <configuration>
+              <packageSources>
+                <clear />
+                <add key="mock" value="{server.IndexUrl}" allowInsecureConnections="true" />
+              </packageSources>
+            </configuration>
+            """);
+        await _service.OpenAsync(Slnx, trusted: true, restore: false, Timeout());
+
+        // M33: a package that moved to newer frameworks over its versions.
+        var details = await _packages.DetailsAsync("Framework.Package", prerelease: false, version: null, source: null, Timeout(), frameworks.Split(';'));
+        Assert.Equal(expected, details.Version);
+        Assert.Equal(["4.0.0", "3.0.0", "2.0.0", "1.0.0"], details.Versions.Select(v => v.Version));
+        var expectedVersion = Version.Parse(expected);
+        Assert.All(details.Versions, v => Assert.Equal(Version.Parse(v.Version) <= expectedVersion, v.Compatible));
+
+        // Without frameworks (the solution's package manager): the newest, nothing marked.
+        var any = await _packages.DetailsAsync("Framework.Package", prerelease: false, version: null, source: null, Timeout());
+        Assert.Equal("4.0.0", any.Version);
+        Assert.All(any.Versions, v => Assert.Null(v.Compatible));
+    }
+
     [Fact]
     public async Task An_unreachable_source_is_reported_and_the_others_still_answer()
     {

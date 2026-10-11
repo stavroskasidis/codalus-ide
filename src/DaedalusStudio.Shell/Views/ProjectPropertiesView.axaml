@@ -85,6 +85,37 @@
         </StackPanel>
       </ScrollViewer>
 
+      <!-- Build Events (ADR 0034). -->
+      <Panel Grid.Column="1" IsVisible="{Binding IsBuildEventsPage}">
+        <ScrollViewer DataContext="{Binding BuildEvents}" x:DataType="vm:BuildEventsViewModel">
+          <StackPanel Margin="16,8,16,16" Spacing="6">
+            <TextBlock FontSize="15" FontWeight="SemiBold" Text="Build events" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="Commands that run before and after the project builds, in the platform's shell (cmd on Windows, sh elsewhere). MSBuild expands the macros below." />
+            <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+            <TextBlock FontWeight="SemiBold" Text="Pre-build event command line" Margin="0,6,0,0" />
+            <TextBox x:Name="PreBuildBox" Text="{Binding PreBuild}" AcceptsReturn="True" MinHeight="80" TextWrapping="NoWrap"
+                     FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" AutomationProperties.Name="Pre-build event command line" />
+            <TextBlock FontWeight="SemiBold" Text="Post-build event command line" Margin="0,6,0,0" />
+            <TextBox Text="{Binding PostBuild}" AcceptsReturn="True" MinHeight="80" TextWrapping="NoWrap"
+                     FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" AutomationProperties.Name="Post-build event command line" />
+            <TextBlock Text="Run the post-build event" Margin="0,6,0,0" />
+            <ComboBox MinWidth="320" ItemsSource="{x:Static vm:BuildEventsViewModel.RunOptions}" SelectedItem="{Binding RunPostBuildEvent}" AutomationProperties.Name="Run the post-build event">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:RunPostBuildOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{x:Static vm:BuildEventsViewModel.Macros}" />
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+              <Button Content="Save" Command="{Binding SaveCommand}" AutomationProperties.Name="Save build events" />
+              <Button Content="Revert" Command="{Binding RevertCommand}" />
+              <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Status}" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </Panel>
+
       <!-- Debug: launch profiles. -->
       <Panel Grid.Column="1" IsVisible="{Binding IsLaunchProfilesPage}">
       <DockPanel Margin="16,8" DataContext="{Binding LaunchProfiles}" x:DataType="vm:LaunchProfilesViewModel">

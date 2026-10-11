@@ -273,6 +273,21 @@ public sealed class PluginManager : IAsyncDisposable
         }
     }
 
+    /// <summary>The Properties window's providers of the plugins that load (API 0.2.8, ADR 0033).</summary>
+    public IReadOnlyList<(string PluginId, ManifestPropertyProvider Provider)> PropertyProviders =>
+        [.. Plugins.Where(p => p.State is PluginState.Ready or PluginState.Active)
+            .SelectMany(p => (p.Manifest?.Contributes?.PropertyProviders ?? []).Where(x => !string.IsNullOrWhiteSpace(x.Command)).Select(x => (p.Id, x)))];
+
+    /// <summary>External Tools' macros of the plugins that load (API 0.2.8, ADR 0033).</summary>
+    public IReadOnlyList<(string PluginId, ManifestToolMacro Macro)> ToolMacros =>
+        [.. Plugins.Where(p => p.State is PluginState.Ready or PluginState.Active)
+            .SelectMany(p => (p.Manifest?.Contributes?.ExternalToolMacros ?? []).Where(x => !string.IsNullOrWhiteSpace(x.Name) && !string.IsNullOrWhiteSpace(x.Command)).Select(x => (p.Id, x)))];
+
+    /// <summary>Custom tools of the plugins that load (API 0.2.8, ADR 0035).</summary>
+    public IReadOnlyList<(string PluginId, ManifestCustomTool Tool)> CustomTools =>
+        [.. Plugins.Where(p => p.State is PluginState.Ready or PluginState.Active)
+            .SelectMany(p => (p.Manifest?.Contributes?.CustomTools ?? []).Where(x => !string.IsNullOrWhiteSpace(x.Name) && !string.IsNullOrWhiteSpace(x.Command)).Select(x => (p.Id, x)))];
+
     /// <summary>Languages, grammars and language servers (ADR 0016). They need no plugin code, so they apply at discovery.</summary>
     private void ApplyLanguageContributions(PluginDescription plugin)
     {

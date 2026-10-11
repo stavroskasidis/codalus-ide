@@ -215,7 +215,8 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                             ?? NullIfEmpty(item.GetMetadataValue("Version"))
                             ?? central.GetValueOrDefault(item.EvaluatedInclude);
             var resolved = assets?.ResolvedPackageVersion(framework, item.EvaluatedInclude);
-            yield return new ReferenceInfo(ReferenceKinds.Package, item.EvaluatedInclude, resolved ?? requested, null, framework, resolved is not null);
+            var kind = IsFrameworkPackage(item) ? ReferenceKinds.Framework : ReferenceKinds.Package;
+            yield return new ReferenceInfo(kind, item.EvaluatedInclude, resolved ?? requested, null, framework, resolved is not null);
         }
 
         foreach (var item in project.GetItems("ProjectReference"))
@@ -231,6 +232,16 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             yield return new ReferenceInfo(ReferenceKinds.Assembly, item.EvaluatedInclude.Split(',')[0], null, full, framework, full is null || File.Exists(full));
         }
     }
+
+    /// <summary>
+    /// The framework of .NET Core 2.x and .NET Standard is a package the SDK adds (<c>Microsoft.NETCore.App</c>,
+    /// <c>NETStandard.Library</c>), not a framework reference: it goes with the frameworks (M33).
+    /// </summary>
+    private static bool IsFrameworkPackage(ProjectItem item) =>
+        string.Equals(item.GetMetadataValue("IsImplicitlyDefined"), "true", StringComparison.OrdinalIgnoreCase)
+        && item.EvaluatedInclude is var id
+        && (id.Equals("Microsoft.NETCore.App", StringComparison.OrdinalIgnoreCase) || id.Equals("NETStandard.Library", StringComparison.OrdinalIgnoreCase)
+            || id.Equals("Microsoft.AspNetCore.App", StringComparison.OrdinalIgnoreCase) || id.Equals("Microsoft.AspNetCore.All", StringComparison.OrdinalIgnoreCase));
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
 

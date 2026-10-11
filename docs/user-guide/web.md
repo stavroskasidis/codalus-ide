@@ -51,7 +51,7 @@ Debug → **Start with Hot Reload** runs the startup project under `dotnet watch
 - **Edits that can't be applied** to a running app (a *rude edit*, such as a changed method signature): the app restarts, and a notification says so.
 - **Edits that don't compile:** they wait until they do.
 
-The status bar shows the state (watching, applied in N ms, compile errors, restarting); click it to see the output. The **Hot Reload on Start Without Debugging** setting (`run.hotReload`) makes `Ctrl+F5` start with Hot Reload. Hot Reload isn't available while debugging: the debugger can't apply changes to a paused program, so restart the session instead.
+The status bar shows the state (watching, applied in N ms, compile errors, restarting); click it to see the output. The **Hot Reload on Start Without Debugging** setting (`run.hotReload`) makes `Ctrl+F5` start with Hot Reload. Hot Reload isn't available while debugging: the debugger can't apply changes to a paused program, so restart the session instead. It needs .NET 6 or later: for an older startup project the command is disabled, and its menu item says so.
 
 ## Razor and Blazor
 

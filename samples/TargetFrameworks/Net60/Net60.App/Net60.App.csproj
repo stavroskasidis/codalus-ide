@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Net60.Lib\Net60.Lib.csproj" />
+    <ProjectReference Include="..\..\Multi\Multi.csproj" />
+  </ItemGroup>
+</Project>

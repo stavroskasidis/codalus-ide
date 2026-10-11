@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.Globalization;
+using DaedalusStudio.Projects.Host.Building;
 using DaedalusStudio.Projects.Protocol;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Execution;
 using Microsoft.Build.Framework;
+using Microsoft.Build.Logging;
 
 namespace DaedalusStudio.Projects.Host;
 
@@ -23,6 +25,13 @@ internal interface IBuildEvents
 /// </summary>
 internal sealed class SolutionBuilder : IDisposable
 {
+    /// <summary>
+    /// MSBuild before 17 (the .NET 5 SDK and older) never connects to the worker nodes it starts from a host on a
+    /// newer .NET: the build waits forever (M33, ADR 0030). Its builds run in the build host's own node instead, as its
+    /// design-time builds do. <c>DAEDALUS_BUILD_IN_PROCESS=1</c> does the same for any SDK.
+    /// </summary>
+    internal static bool InProcess { get; } = MSBuildMajorVersion() < 17 || Environment.GetEnvironmentVariable("DAEDALUS_BUILD_IN_PROCESS") == "1";
+
     private readonly BuildManager _manager = new("daedalus-build");
 
     /// <summary>One build at a time; the session also holds it to keep design-time builds out of the way.</summary>
@@ -30,7 +39,8 @@ internal sealed class SolutionBuilder : IDisposable
 
     /// <summary>
     /// Builds <paramref name="path"/> (a solution or a project) with <paramref name="globalProperties"/>.
-    /// The caller holds <see cref="Gate"/>.
+    /// The caller holds <see cref="Gate"/>. <paramref name="options"/> (ADR 0034) set the Output window's verbosity, a
+    /// log file, a binary log and the most nodes; <paramref name="timings"/> records the build's timings.
     /// </summary>
     public async Task<BuildResultInfo> BuildAsync(
         string path,
@@ -38,10 +48,45 @@ internal sealed class SolutionBuilder : IDisposable
         bool restore,
         IReadOnlyDictionary<string, string> globalProperties,
         IBuildEvents events,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        BuildOptions? options = null,
+        TimingLogger? timings = null)
     {
         var started = Stopwatch.GetTimestamp();
-        var logger = new BuildLogger(events);
+        var logger = new BuildLogger(events) { Verbosity = ParseVerbosity(options?.Verbosity, LoggerVerbosity.Minimal) };
+        var loggers = new List<ILogger> { logger };
+        if (options?.LogFile is { Length: > 0 } logFile)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(logFile))!);
+            loggers.Add(new FileLogger
+            {
+                Parameters = $"LogFile={logFile};Encoding=UTF-8",
+                Verbosity = ParseVerbosity(options.LogFileVerbosity, LoggerVerbosity.Normal),
+            });
+        }
+
+        string? binaryLog = null;
+        if (options?.BinaryLog is { Length: > 0 } binlog)
+        {
+            binaryLog = Path.GetFullPath(binlog);
+            Directory.CreateDirectory(Path.GetDirectoryName(binaryLog)!);
+            loggers.Add(new BinaryLogger { Parameters = binaryLog, CollectProjectImports = BinaryLogger.ProjectImportsCollectionMode.Embed });
+        }
+
+        // The timing logger hears only the events it needs, so a build with it forwards nothing else from the nodes.
+        var forwarding = new List<ForwardingLoggerRecord>();
+        if (timings is not null)
+        {
+            var forwarder = typeof(ConfigurableForwardingLogger);
+            forwarding.Add(new ForwardingLoggerRecord(timings, new LoggerDescription(
+                forwarder.FullName,
+                forwarder.Assembly.FullName,
+                null,
+                "BUILDSTARTEDEVENT;BUILDFINISHEDEVENT;PROJECTSTARTEDEVENT;PROJECTFINISHEDEVENT;TARGETSTARTEDEVENT;TARGETFINISHEDEVENT;TASKSTARTEDEVENT;TASKFINISHEDEVENT",
+                LoggerVerbosity.Quiet)));
+        }
+
+        var maxNodes = options?.MaxParallelProjects is > 0 and var max ? Math.Min(max, Environment.ProcessorCount * 2) : Environment.ProcessorCount;
         var msbuildTarget = target switch
         {
             BuildTargets.Rebuild => "Rebuild",
@@ -56,10 +101,11 @@ internal sealed class SolutionBuilder : IDisposable
         var succeeded = false;
         _manager.BeginBuild(new BuildParameters(collection)
         {
-            Loggers = [logger],
-            MaxNodeCount = Environment.ProcessorCount,
+            Loggers = loggers,
+            ForwardingLoggers = forwarding,
+            MaxNodeCount = InProcess ? 1 : maxNodes,
             EnableNodeReuse = false,
-            DisableInProcNode = true,
+            DisableInProcNode = !InProcess,
             ShutdownInProcNodeOnBuildFinish = true,
         });
         try
@@ -109,8 +155,26 @@ internal sealed class SolutionBuilder : IDisposable
         var elapsed = Stopwatch.GetElapsedTime(started);
         var outcome = canceled ? "canceled" : succeeded ? "succeeded" : "failed";
         await events.BuildOutputAsync($"{msbuildTarget} {outcome}: {Count(logger.Errors, "error")}, {Count(logger.Warnings, "warning")}. Elapsed {elapsed:hh\\:mm\\:ss\\.ff}.").ConfigureAwait(false);
-        return new BuildResultInfo(succeeded && !canceled, canceled, logger.Errors, logger.Warnings, (long)elapsed.TotalMilliseconds);
+        return new BuildResultInfo(succeeded && !canceled, canceled, logger.Errors, logger.Warnings, (long)elapsed.TotalMilliseconds, BinaryLog: binaryLog);
     }
+
+    /// <summary>The loaded MSBuild's version (its assembly version stays 15.1 across releases; the file version doesn't).</summary>
+    private static int MSBuildMajorVersion()
+    {
+        var location = typeof(BuildManager).Assembly.Location;
+        return location.Length > 0 && FileVersionInfo.GetVersionInfo(location) is { FileMajorPart: > 0 } version ? version.FileMajorPart : 17;
+    }
+
+    /// <summary>An MSBuild verbosity from its name (<see cref="BuildVerbosities"/>), or <paramref name="fallback"/>.</summary>
+    internal static LoggerVerbosity ParseVerbosity(string? name, LoggerVerbosity fallback) => name?.ToLowerInvariant() switch
+    {
+        BuildVerbosities.Quiet => LoggerVerbosity.Quiet,
+        BuildVerbosities.Minimal => LoggerVerbosity.Minimal,
+        BuildVerbosities.Normal => LoggerVerbosity.Normal,
+        BuildVerbosities.Detailed => LoggerVerbosity.Detailed,
+        BuildVerbosities.Diagnostic => LoggerVerbosity.Diagnostic,
+        _ => fallback,
+    };
 
     private Task<BuildResult> ExecuteAsync(BuildRequestData data)
     {
@@ -154,16 +218,75 @@ internal sealed class SolutionBuilder : IDisposable
 
         public void Initialize(IEventSource eventSource)
         {
-            eventSource.ErrorRaised += (_, e) => _ = ReportAsync(BuildSeverities.Error, e.Code, e.Message, e.File, e.LineNumber, e.ColumnNumber, e.ProjectFile, e.EndLineNumber, e.EndColumnNumber, e.HelpLink);
-            eventSource.WarningRaised += (_, e) => _ = ReportAsync(BuildSeverities.Warning, e.Code, e.Message, e.File, e.LineNumber, e.ColumnNumber, e.ProjectFile, e.EndLineNumber, e.EndColumnNumber, e.HelpLink);
+            eventSource.ErrorRaised += (_, e) => _ = ReportAsync(BuildSeverities.Error, e.Code, e.Message, e.File, e.LineNumber, e.ColumnNumber, e.ProjectFile, e.EndLineNumber, e.EndColumnNumber, HelpLink(e));
+            eventSource.WarningRaised += (_, e) => _ = ReportAsync(BuildSeverities.Warning, e.Code, e.Message, e.File, e.LineNumber, e.ColumnNumber, e.ProjectFile, e.EndLineNumber, e.EndColumnNumber, HelpLink(e));
+            var lowest = Verbosity switch
+            {
+                LoggerVerbosity.Quiet => (MessageImportance?)null,
+                LoggerVerbosity.Minimal => MessageImportance.High,
+                LoggerVerbosity.Normal => MessageImportance.Normal,
+                _ => MessageImportance.Low,
+            };
             eventSource.MessageRaised += (_, e) =>
             {
-                if (e.Importance == MessageImportance.High && !string.IsNullOrWhiteSpace(e.Message))
+                // Command lines only from normal verbosity, as MSBuild's console logger shows them.
+                if (lowest is { } threshold && e.Importance <= threshold && !string.IsNullOrWhiteSpace(e.Message)
+                    && (e is not TaskCommandLineEventArgs || Verbosity >= LoggerVerbosity.Normal))
                 {
                     Enqueue(() => events.BuildOutputAsync(e.Message!.TrimEnd()));
                 }
             };
+            if (Verbosity >= LoggerVerbosity.Normal)
+            {
+                eventSource.ProjectStarted += (_, e) =>
+                {
+                    if (e.ProjectFile is { } file && e.ParentProjectBuildEventContext?.ProjectContextId is null or < 0)
+                    {
+                        Enqueue(() => events.BuildOutputAsync($"Project \"{file}\" ({e.TargetNames}):"));
+                    }
+                };
+                eventSource.TargetStarted += (_, e) =>
+                {
+                    if (Verbosity >= LoggerVerbosity.Detailed)
+                    {
+                        Enqueue(() => events.BuildOutputAsync($"  Target \"{e.TargetName}\" in \"{e.ProjectFile}\":"));
+                    }
+                };
+            }
         }
+
+        // HelpLink came with MSBuild 16.8: the MSBuild of older SDKs (M33) doesn't have it, and a logger that throws
+        // stops the build ("an unexpected logger failure"). The property is read in methods of their own, so a missing
+        // one fails at that call, where it is caught.
+        private static string? HelpLink(BuildErrorEventArgs e)
+        {
+            try
+            {
+                return ErrorHelpLink(e);
+            }
+            catch (MissingMemberException)
+            {
+                return null;
+            }
+        }
+
+        private static string? HelpLink(BuildWarningEventArgs e)
+        {
+            try
+            {
+                return WarningHelpLink(e);
+            }
+            catch (MissingMemberException)
+            {
+                return null;
+            }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static string? ErrorHelpLink(BuildErrorEventArgs e) => e.HelpLink;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static string? WarningHelpLink(BuildWarningEventArgs e) => e.HelpLink;
 
         public Task ReportAsync(string severity, string? code, string? message, string? file, int line, int column, string? project, int endLine = 0, int endColumn = 0, string? helpLink = null)
         {

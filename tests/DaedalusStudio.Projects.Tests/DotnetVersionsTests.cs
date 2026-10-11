@@ -133,6 +133,56 @@ public sealed class DotnetVersionsTests : IAsyncLifetime
         Assert.Contains("Install the .NET 11.0 runtime", warning, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_floor_is_the_2_1_200_band_and_the_message_below_it_names_the_sdk_and_why()
+    {
+        Assert.True(SdkSelection.AboveFloor(new Version(2, 1, 202)));
+        Assert.True(SdkSelection.AboveFloor(new Version(3, 1, 426)));
+        Assert.False(SdkSelection.AboveFloor(new Version(2, 1, 105)));
+        Assert.False(SdkSelection.AboveFloor(new Version(2, 0, 3)));
+        Assert.False(SdkSelection.AboveFloor(new Version(1, 1, 14)));
+
+        var below = SdkSelection.BelowFloor("2.0.3", "/src/global.json", new Version(10, 0, 401));
+        Assert.Contains("resolves to the .NET SDK 2.0.3 (/src/global.json)", below, StringComparison.Ordinal);
+        Assert.Contains("with the .NET SDK 2.1.200 or later", below, StringComparison.Ordinal);
+        Assert.Contains("uses the .NET SDK 10.0.401 instead", below, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("6.0.428", "disable", true, "6.0.428", true)]
+    [InlineData("6.0.428", "disable", true, "6.0.429", false)]
+    [InlineData("6.0.400", "latestPatch", true, "6.0.428", true)]
+    [InlineData("6.0.400", "latestPatch", true, "6.0.300", false)]
+    [InlineData("6.0.400", "latestPatch", true, "6.0.500", false)]
+    [InlineData("2.1.202", "latestPatch", true, "2.1.818", false)]
+    [InlineData("6.0.100", "latestFeature", true, "6.0.428", true)]
+    [InlineData("6.0.100", "latestFeature", true, "7.0.100", false)]
+    [InlineData("6.0.100", "latestMinor", true, "6.1.100", true)]
+    [InlineData("6.0.100", "latestMajor", true, "10.0.401", true)]
+    [InlineData("10.0.100", "latestMajor", false, "11.0.100-rc.1.26425.128", false)]
+    [InlineData("10.0.100", "latestMajor", true, "11.0.100-rc.1.26425.128", true)]
+    [InlineData("6.0.999", "disable", true, "10.0.401", false)]
+    public void Global_json_accepts_the_sdks_its_roll_forward_policy_allows(string version, string rollForward, bool prerelease, string candidate, bool accepted) =>
+        Assert.Equal(accepted, new GlobalJsonSdk("global.json", version, rollForward, prerelease).Accepts(candidate));
+
+    [Fact]
+    public void Global_json_is_read_from_the_nearest_folder_with_its_defaults()
+    {
+        var folder = Path.Combine(_root, "a", "b");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(_root, "global.json"), """{ "sdk": { "version": "8.0.100", "rollForward": "latestMajor" } }""");
+        File.WriteAllText(Path.Combine(_root, "a", "global.json"), """
+            {
+              // comments are allowed
+              "sdk": { "version": "6.0.400", },
+            }
+            """);
+        var found = GlobalJsonSdk.Find(folder)!;
+        Assert.Equal(("6.0.400", "latestPatch", true), (found.Version, found.RollForward, found.AllowPrerelease));
+        Assert.Equal(Path.Combine(_root, "a", "global.json"), found.Path);
+        Assert.Contains("asks for the .NET SDK 6.0.400 (rollForward: latestPatch), and no installed SDK matches", SdkSelection.NotInstalled(found, new Version(10, 0, 401)), StringComparison.Ordinal);
+    }
+
     private static List<string> ListSdks()
     {
         using var process = Process.Start(new ProcessStartInfo("dotnet", "--list-sdks") { RedirectStandardOutput = true, UseShellExecute = false })!;
