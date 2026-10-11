@@ -198,6 +198,14 @@ public static class PublishProfiles
             ["_IsPublishing"] = "true",
             ["Configuration"] = profile.Configuration,
         };
+        // The runtime as global properties too, as 'dotnet publish -r' passes it: the restore before the publish then
+        // writes the RID's target into the assets file (NETSDK1047 otherwise, seen on macOS).
+        if (profile.RuntimeIdentifier is { Length: > 0 } rid)
+        {
+            properties["RuntimeIdentifier"] = rid;
+            properties["SelfContained"] = profile.SelfContained || profile.NativeAot ? "true" : "false";
+        }
+
         if (profile.Target == PublishTarget.Container && string.IsNullOrEmpty(profile.ContainerRegistry) && localEngine is not null)
         {
             properties["LocalRegistry"] = localEngine.Equals("podman", StringComparison.OrdinalIgnoreCase) ? "Podman" : "Docker";

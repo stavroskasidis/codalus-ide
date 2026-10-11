@@ -79,6 +79,8 @@ public sealed class PublishProfilesTests
         Assert.Equal("true", properties["_IsPublishing"]);
         Assert.Equal("Release", properties["Configuration"]);
         Assert.False(properties.ContainsKey("LocalRegistry"));
+        Assert.Equal("linux-x64", properties["RuntimeIdentifier"]); // for the restore too, as 'dotnet publish -r'
+        Assert.Equal("true", properties["SelfContained"]);
 
         var image = new PublishProfile { Name = "Image", Target = PublishTarget.Container, ContainerRepository = "web" };
         Assert.Equal("Podman", PublishProfiles.Properties(image, "podman")["LocalRegistry"]);
