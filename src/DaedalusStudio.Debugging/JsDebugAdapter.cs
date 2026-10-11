@@ -18,7 +18,8 @@ namespace DaedalusStudio.Debugging;
 /// </summary>
 public sealed partial class JsDebugAdapter : IDebugAdapter
 {
-    private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(30);
+    // The first start after a download (a fresh Node.js, scanned on Windows) took over 30 s on a loaded CI runner.
+    private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(60);
 
     private readonly Process _server;
     private readonly int _port;
