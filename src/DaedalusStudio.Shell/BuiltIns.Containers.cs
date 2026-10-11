@@ -70,6 +70,11 @@ internal static partial class BuiltIns
             await Infrastructure.Ui.RunAsync(() => { shell.OpenAspireDashboard(); return Task.CompletedTask; }).ConfigureAwait(false);
             return null;
         });
+        Add("project.publish", "Publish…", path =>
+        {
+            shell.OpenPublish(path);
+            return Task.CompletedTask;
+        }, "solutionOpen && solutionTrusted");
         Add("containers.attach", "Attach to a Process in a Container…", path => shell.AttachToRemoteProcessAsync("container"), "!debugActive");
     }
 
@@ -86,6 +91,8 @@ internal static partial class BuiltIns
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeDebug", "3-containers", 3, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeDown", "3-containers", 4, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(OtherWindowsMenu, "containers.show", "windows", AlphabeticalOrder("Containers")),
+            Item(MenuLocations.MenuBar("build"), "project.publish", "4-publish", 1),
+            Item(SolutionExplorerView.ContextMenuLocation, "project.publish", "3-containers", 0, "explorerItemKind == project && !(" + ComposeProjectWhen + ")"),
             Item(OtherWindowsMenu, "aspire.show", "windows", AlphabeticalOrder("Aspire Resources")),
             Item(MenuLocations.MenuBar("debug"), "aspire.openDashboard", "6-containers", 3),
             Item(MenuLocations.MenuBar("project"), "containers.addDockerSupport", "containers", 1),

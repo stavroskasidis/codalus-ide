@@ -1015,6 +1015,30 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         // M17b: Aspire (ADR 0043), with the fixture's own Aspire packages and orchestrator.
         await StepAsync("aspire.run", "M17", "Ctrl+F5 on an Aspire AppHost runs its two projects through the IDE execution protocol; the Aspire window shows the resources and the dashboard's address", AspireRunStepAsync).ConfigureAwait(true);
 
+        // M17c: publishing (ADR 0042), through the build host.
+        await StepAsync("publish.folder", "M17", "The Publish page saves a folder profile and publishes a single-file app for this machine's runtime", async () =>
+        {
+            await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+            var target = Path.Combine(_work, "Containers");
+            if (!Directory.Exists(target))
+            {
+                Copy(Path.Combine(samples, "Containers"), target);
+            }
+
+            await shell.OpenSolutionAsync(Path.Combine(target, "Containers.slnx")).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the containers solution is open", 300).ConfigureAwait(true);
+            var web = Path.Combine(target, "Web", "Web.csproj");
+            var page = shell.OpenPublish(web);
+            Check(page is not null, "the Publish page opens");
+            page!.RuntimeIdentifier = Workbench.Publishing.PublishProfiles.CurrentRuntimeIdentifier();
+            page.SingleFile = true;
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-publish.png");
+            await page.PublishAsync().ConfigureAwait(true);
+            var output = Workbench.Publishing.PublishProfiles.OutputFolder(web, page.Profile!);
+            Check(File.Exists(Path.Combine(output, OperatingSystem.IsWindows() ? "Web.exe" : "Web")), "the single-file app is published: " + page.Status + "\n" + Tail(shell.Builds.Channel.GetText(), 2000));
+        }).ConfigureAwait(true);
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).

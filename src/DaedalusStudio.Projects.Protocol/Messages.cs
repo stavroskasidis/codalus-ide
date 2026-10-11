@@ -298,6 +298,12 @@ public static class BuildTargets
 
     /// <summary><c>dotnet pack</c>: builds, then writes the project's <c>.nupkg</c> (and <c>.snupkg</c>).</summary>
     public const string Pack = "pack";
+
+    /// <summary><c>dotnet publish</c> (M17c, ADR 0042): the options' properties carry the publish profile.</summary>
+    public const string Publish = "publish";
+
+    /// <summary>The SDK's <c>PublishContainer</c> target: publishes, then builds a container image (M17c).</summary>
+    public const string PublishContainer = "publishContainer";
 }
 
 /// <summary>
