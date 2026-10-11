@@ -130,7 +130,7 @@ public sealed class DebugSessionsTests
             }
         }
 
-        Assert.Contains("echo: typed in the terminal", Screen(), StringComparison.Ordinal);
+        await ShellFixture.PumpUntil(() => Screen().Contains("echo: typed in the terminal", StringComparison.Ordinal)); // drawn after the stop, at times
         await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("debugCanDetach"), true));
         Assert.True(f.Shell.Workbench.Commands.IsEnabled("debug.detachAll"));
 

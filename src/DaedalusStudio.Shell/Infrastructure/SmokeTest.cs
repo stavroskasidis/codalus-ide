@@ -1183,7 +1183,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
                 }
             }
 
-            Check(Screen().Contains("echo: typed in the terminal", StringComparison.Ordinal), "the program read the line typed in the terminal:\n" + Screen());
+            await WaitAsync(() => Screen().Contains("echo: typed in the terminal", StringComparison.Ordinal), "the program read the line typed in the terminal", 30).ConfigureAwait(true);
             await WaitAsync(() => Equals(shell.Workbench.Context.GetValue("debugCanDetach"), true), "Detach All applies").ConfigureAwait(true);
             await Task.Delay(1000).ConfigureAwait(true);
             Screenshot("smoke-test-debug-terminal.png");

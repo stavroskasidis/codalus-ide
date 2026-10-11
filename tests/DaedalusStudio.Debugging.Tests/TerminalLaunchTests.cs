@@ -110,7 +110,7 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
         session.Write("hello from the terminal\r");
         var stop = await NextStopAsync();
         Assert.Equal("breakpoint", stop.Reason);
-        Assert.Contains("echo: hello from the terminal", Screen(), StringComparison.Ordinal);
+        await UntilAsync(() => Screen().Contains("echo: hello from the terminal", StringComparison.Ordinal), "the program echoes the line (the terminal may draw it after the stop):\n" + Screen(), 30);
         Assert.Equal("0", (await _debug.EvaluateAsync("i", "watch", TestContext.Current.CancellationToken)).Result);
         Assert.Equal(process.Id ?? _debug.ProcessId, _debug.ProcessId);
 
