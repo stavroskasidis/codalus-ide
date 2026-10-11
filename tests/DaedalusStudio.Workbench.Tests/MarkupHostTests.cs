@@ -186,4 +186,20 @@ public sealed class MarkupHostTests : IAsyncLifetime
         var hover = await client.HoverAsync(uri, new Position(0, 1), ct);
         Assert.Contains("Stop looking", hover!.Contents.Value, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Compose_files_are_checked_against_the_bundled_compose_schema()
+    {
+        var ct = Timeout();
+        var text = "services:\n  web:\n    build:\n      context: .\n    environment:\n      ASPNETCORE_HTTP_PORTS: 8080\n    ports: 8080\n";
+        var (compose, uri, client) = await OpenAsync("compose.yaml", text);
+        var problem = Assert.Single(await DiagnosticsAsync(compose, d => d.Count > 0, ct));
+        Assert.Equal("yaml.schema", problem.Code);
+        Assert.Equal(6, problem.Range.Start.Line);
+        var hover = await client.HoverAsync(uri, new Position(0, 2), ct);
+        Assert.Contains("The services that will be used", hover!.Contents.Value, StringComparison.Ordinal);
+
+        await _service.ChangeAsync(compose, ++_version, [new TextDocumentContentChangeEvent(null, text.Replace("ports: 8080", "ports:\n      - \"8080:8080\"", StringComparison.Ordinal))]);
+        Assert.Empty(await DiagnosticsAsync(compose, d => d.Count == 0, ct));
+    }
 }

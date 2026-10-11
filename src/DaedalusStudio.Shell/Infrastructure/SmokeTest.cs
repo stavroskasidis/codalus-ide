@@ -1000,6 +1000,46 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         await StepAsync("web.scaffolding", "M15", "Add New Scaffolded Item runs dotnet-aspnet-codegenerator (an API controller over a DbContext); a gRPC service reference generates its client at build time", ScaffoldingStepAsync).ConfigureAwait(true);
         await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
 
+        // M17a: containers (ADR 0042), where an engine runs Linux containers (GitHub's Linux runner; Podman here).
+        const string containerTitle = "A web app runs in a container through its \"Container (Dockerfile)\" profile (fast mode), answers, and the Containers window shows it";
+        var engine = shell.ContainerEngine;
+        var (engineOs, engineError) = await engine.ServerOsAsync(CancellationToken.None).ConfigureAwait(true);
+        if (engineOs != "linux" && !(Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux()))
+        {
+            Report("containers.run", "M17", containerTitle, "skipped", 0, engineOs is null ? $"No container engine answers ({engine.Name}: {engineError})." : $"{engine.Name} runs {engineOs} containers.");
+        }
+        else
+        {
+            await StepAsync("containers.run", "M17", containerTitle, ContainerRunStepAsync).ConfigureAwait(true);
+        }
+
+        // M17b: Aspire (ADR 0043), with the fixture's own Aspire packages and orchestrator.
+        await StepAsync("aspire.run", "M17", "Ctrl+F5 on an Aspire AppHost runs its two projects through the IDE execution protocol; the Aspire window shows the resources and the dashboard's address", AspireRunStepAsync).ConfigureAwait(true);
+
+        // M17c: publishing (ADR 0042), through the build host.
+        await StepAsync("publish.folder", "M17", "The Publish page saves a folder profile and publishes a single-file app for this machine's runtime", async () =>
+        {
+            await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+            var target = Path.Combine(_work, "Containers");
+            if (!Directory.Exists(target))
+            {
+                Copy(Path.Combine(samples, "Containers"), target);
+            }
+
+            await shell.OpenSolutionAsync(Path.Combine(target, "Containers.slnx")).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the containers solution is open", 300).ConfigureAwait(true);
+            var web = Path.Combine(target, "Web", "Web.csproj");
+            var page = shell.OpenPublish(web);
+            Check(page is not null, "the Publish page opens");
+            page!.RuntimeIdentifier = Workbench.Publishing.PublishProfiles.CurrentRuntimeIdentifier();
+            page.SingleFile = true;
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-publish.png");
+            await page.PublishAsync().ConfigureAwait(true);
+            var output = Workbench.Publishing.PublishProfiles.OutputFolder(web, page.Profile!);
+            Check(File.Exists(Path.Combine(output, OperatingSystem.IsWindows() ? "Web.exe" : "Web")), "the single-file app is published: " + page.Status + "\n" + Tail(shell.Builds.Channel.GetText(), 2000));
+        }).ConfigureAwait(true);
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -1435,6 +1475,99 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     /// added in the form, the tree, a table's data edited and committed, a query editor with schema completion,
     /// results and an estimated plan, all through the published data host.
     /// </summary>
+    /// <summary>
+    /// Containers (M17a): samples/Containers' web app with its container profile: Ctrl+F5 builds the Dockerfile's base
+    /// stage, mounts the build output and starts the app through exec; it answers on its published port; the Containers
+    /// window lists the container with its environment; stopping the program removes the container.
+    /// </summary>
+    private async Task ContainerRunStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "Containers");
+        Copy(Path.Combine(samples, "Containers"), target);
+        await shell.OpenSolutionAsync(Path.Combine(target, "Containers.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the containers solution is open", 300).ConfigureAwait(true);
+        var web = Path.Combine(target, "Web", "Web.csproj");
+        var name = Workbench.Containers.DockerSupport.ContainerName(web);
+        var engine = shell.ContainerEngine;
+        shell.Runs.SetStartupProject(web);
+        shell.Runs.SetProfile(web, Workbench.Containers.DockerSupport.ContainerProfileName);
+        try
+        {
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Web")?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("Now listening on", StringComparison.Ordinal), "the app listens in its container:\n" + Tail(shell.ContainerLog.GetText(), 2000), 600).ConfigureAwait(true);
+            var port = await engine.HostPortAsync(name, "8080/tcp", CancellationToken.None).ConfigureAwait(true);
+            Check(port is not null, "the container publishes port 8080");
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            var answer = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/")).ConfigureAwait(true);
+            Check(answer.StartsWith("Hello from ", StringComparison.Ordinal), "the app answers: " + answer);
+
+            await shell.ShowContainersAsync().ConfigureAwait(true);
+            var row = shell.ContainersWindow.Containers.FirstOrDefault(c => c.Name == name);
+            Check(row is { IsOurs: true }, "the Containers window lists the container first");
+            shell.ContainersWindow.Selected = row;
+            await WaitAsync(() => shell.ContainersWindow.Environment.Any(e => e.Name == "ASPNETCORE_HTTP_PORTS"), "the container's environment is shown", 60).ConfigureAwait(true);
+            shell.ContainersWindow.Tab = 1;
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-containers.png");
+
+            shell.StopRunning();
+            await WaitAsync(() => engine.InspectAsync(name, CancellationToken.None).GetAwaiter().GetResult() is null, "stopping the app removes its container", 60).ConfigureAwait(true);
+        }
+        finally
+        {
+            shell.StopRunning();
+            await engine.RemoveAsync(name, CancellationToken.None).ConfigureAwait(true);
+            await engine.RunAsync(["rmi", name + ":dev"], CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Aspire (M17b): samples/Containers/Aspire's AppHost with Ctrl+F5. Its orchestrator asks the IDE for the api and
+    /// the frontend, which run as the IDE's programs; the resource service lists them running and the Redis container
+    /// waiting for its explicit start; the frontend answers through the api; stopping the AppHost ends them.
+    /// </summary>
+    private async Task AspireRunStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "Containers");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "Containers"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "Aspire.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 3 && shell.Solutions.Progress is { Completed: true }, "the Aspire solution is open", 300).ConfigureAwait(true);
+        var appHost = Path.Combine(target, "Aspire", "AppHost", "AppHost.csproj");
+        Check(shell.IsAspireHost(appHost), "the AppHost is recognized (IsAspireHost)");
+        shell.Runs.SetStartupProject(appHost);
+        try
+        {
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            var window = shell.AspireWindow;
+            await WaitAsync(
+                () => window.Resources.Count(r => r.Resource.Type == "Project" && r.Resource.State == "Running") == 2 && window.Resources.Any(r => r.Name == "cache"),
+                "the api and the frontend run, and the cache is listed:\n" + Tail(shell.AspireLog.GetText(), 2000),
+                420).ConfigureAwait(true);
+            await WaitAsync(() => window.HasDashboard, "the dashboard's address is known", 60).ConfigureAwait(true);
+            var url = window.Resources.Single(r => r.Name == "frontend").Resource.Urls.First(u => !u.IsInternal).Url;
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            var answer = await http.GetStringAsync(new Uri(url)).ConfigureAwait(true);
+            Check(answer.StartsWith("Frontend: Sunny, from the api", StringComparison.Ordinal), "the frontend answers through the api: " + answer);
+            window.Selected = window.Resources.Single(r => r.Name == "api");
+            await WaitAsync(() => window.Logs.Contains("Now listening on", StringComparison.Ordinal), "the api's console output is shown", 60).ConfigureAwait(true);
+            shell.ShowAspire();
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-aspire.png");
+        }
+        finally
+        {
+            shell.StopRunning();
+            await WaitAsync(() => !shell.AspireWindow.IsRunning && shell.Runs.Running.Count == 0, "stopping the AppHost ends its projects", 60).ConfigureAwait(true);
+        }
+    }
+
     private async Task DataExplorerStepAsync()
     {
         var database = Path.Combine(_work, "smoke-inventory.db");

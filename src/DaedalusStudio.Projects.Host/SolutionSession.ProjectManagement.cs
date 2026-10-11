@@ -387,13 +387,14 @@ internal sealed partial class SolutionSession
     /// </summary>
     private string BuildEntryPoint()
     {
-        if (UnloadedProjects().Length == 0 || IsSingleProject)
+        // Unloaded projects and compose projects (.dcproj, whose SDK only Visual Studio has: ADR 0042) aren't built.
+        if (IsSingleProject || !ProjectPaths.Any(p => IsUnloaded(p) || ComposeProject.Is(p)))
         {
             return Path;
         }
 
         var filter = System.IO.Path.Combine(SolutionDirectory, ".daedalus", "build.slnf");
-        WriteFilter(filter, [.. ProjectPaths.Where(p => !IsUnloaded(p))]);
+        WriteFilter(filter, [.. ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p))]);
         return filter;
     }
 

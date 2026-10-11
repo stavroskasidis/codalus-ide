@@ -36,6 +36,11 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             return Failed(path, name, ProjectStates.Missing, "The project file does not exist.");
         }
 
+        if (ComposeProject.Is(path))
+        {
+            return ComposeProject.Read(path, name);
+        }
+
         var global = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Configuration"] = configuration,
@@ -108,7 +113,10 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 [.. diagnostics],
                 assets is not null,
                 test.IsTestProject || test.IsTestingPlatformApplication,
-                test.Platform);
+                test.Platform)
+            {
+                IsAspireHost = string.Equals(outer.GetPropertyValue("IsAspireHost").Trim(), "true", StringComparison.OrdinalIgnoreCase),
+            };
             return new EvaluatedProject(info, imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList(), NullIfEmpty(outer.GetPropertyValue("ProjectAssetsFile")));
         }
         catch (InvalidProjectFileException ex)

@@ -27,6 +27,7 @@ internal sealed class SchemaStore(string? cacheDirectory, bool allowDownloads, A
         (new Regex(@"^dotnet-tools\.json$", RegexOptions.IgnoreCase), "dotnet-tools.json"),
         (new Regex(@"^daedalus-plugin\.json$", RegexOptions.IgnoreCase), "daedalus-plugin.json"),
         (new Regex(@"^runtimeconfig\.template\.json$", RegexOptions.IgnoreCase), "runtimeconfig.template.json"),
+        (new Regex(@"^(docker-)?compose(\.[^.]+)*\.ya?ml$", RegexOptions.IgnoreCase), "compose-spec.json"), // the Compose Specification's schema (M17a)
     ];
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };

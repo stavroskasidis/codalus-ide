@@ -95,6 +95,23 @@ public sealed class BuildService
     public Task<BuildResultInfo> BuildAsync(string target, string? project, CancellationToken cancellationToken) =>
         RunAsync(new BuildRequest(target, project), token => _solutions.BuildAsync(target, project, token, Options()), cancellationToken);
 
+    /// <summary>
+    /// A build of <paramref name="project"/> with more global properties (a publish with its profile, M17c), over the
+    /// build settings' own. Trim and AOT warnings arrive as the build's diagnostics.
+    /// </summary>
+    public Task<BuildResultInfo> BuildAsync(string target, string project, IReadOnlyDictionary<string, string> properties, CancellationToken cancellationToken)
+    {
+        var options = Options() ?? new BuildOptions { UpToDateCheck = false };
+        var merged = new Dictionary<string, string>(options.Properties ?? [], StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, value) in properties)
+        {
+            merged[name] = value;
+        }
+
+        options = options with { Properties = merged };
+        return RunAsync(new BuildRequest(target, project), token => _solutions.BuildAsync(target, project, token, options), cancellationToken);
+    }
+
     /// <summary>Batch Build: each project × configuration × platform in turn (ADR 0034). Never throws for build failures.</summary>
     public async Task<BatchBuildResult> BatchBuildAsync(string target, IReadOnlyList<BatchBuildEntry> entries, CancellationToken cancellationToken)
     {

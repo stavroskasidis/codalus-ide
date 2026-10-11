@@ -14,7 +14,7 @@ internal sealed partial class SolutionSession
 
     /// <summary>The projects a solution build builds: loaded, and set to build in the active configuration.</summary>
     private List<string> BuiltProjects() =>
-        [.. ProjectPaths.Where(p => _evaluated.TryGetValue(p, out var project) && project.Info.State == ProjectStates.Loaded && BuildsInActiveConfiguration(p))];
+        [.. ProjectPaths.Where(p => !ComposeProject.Is(p) && _evaluated.TryGetValue(p, out var project) && project.Info.State == ProjectStates.Loaded && BuildsInActiveConfiguration(p))];
 
     private bool BuildsInActiveConfiguration(string projectPath) =>
         _model?.SolutionProjects.FirstOrDefault(p => s_pathComparer.Equals(Full(System.IO.Path.GetDirectoryName(Path)!, p.FilePath), projectPath)) is not { } project

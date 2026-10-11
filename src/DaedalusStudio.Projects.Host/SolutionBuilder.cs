@@ -92,6 +92,8 @@ internal sealed class SolutionBuilder : IDisposable
             BuildTargets.Rebuild => "Rebuild",
             BuildTargets.Clean => "Clean",
             BuildTargets.Pack => "Pack",
+            BuildTargets.Publish => "Publish",
+            BuildTargets.PublishContainer => "Publish;PublishContainer", // the image is made from the published output
             _ => "Build",
         };
         await events.BuildOutputAsync($"{msbuildTarget} started: {Path.GetFileName(path)} ({Describe(globalProperties)})").ConfigureAwait(false);
@@ -137,7 +139,7 @@ internal sealed class SolutionBuilder : IDisposable
             }
             else if (restored)
             {
-                var result = await ExecuteAsync(new BuildRequestData(path, new Dictionary<string, string>(globalProperties), null, [msbuildTarget], null)).ConfigureAwait(false);
+                var result = await ExecuteAsync(new BuildRequestData(path, new Dictionary<string, string>(globalProperties), null, msbuildTarget.Split(';'), null)).ConfigureAwait(false);
                 succeeded = result.OverallResult == BuildResultCode.Success;
                 canceled = cancellationToken.IsCancellationRequested;
                 if (result.Exception is { } exception && !canceled && logger.Errors == 0)
