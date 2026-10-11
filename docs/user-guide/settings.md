@@ -52,3 +52,24 @@ Tools → Keyboard Shortcuts lists every command with its shortcut.
 - **Keyboard**: every function is reachable from it. `Alt+F6` and `Alt+Shift+F6` (`F6` and `Shift+F6` in the VS Code scheme) move between panes, and every command is in the command palette and the search box.
 - **Screen readers**: lists, trees and buttons have accessible names.
 - **Color**: the High Contrast theme raises contrast throughout. Diffs mark lines with `+` and `−`, not only with color.
+
+## Updates and network access
+
+**Updates** (Environment → Updates; M32):
+- **Updates** (`update.mode`): installed builds (the Windows Setup.exe, the macOS .pkg, the AppImage, winget) download new releases in the background and apply them when the IDE restarts: a status bar item offers **Restart to update**, which reopens your solution. **notify** only says that a release is available; **off** stops all update traffic. Help → Check for Updates checks right away in every mode.
+- **Update Channel** (`update.channel`): stable releases or nightly builds. Empty follows the channel the build came from. Switching from nightly builds to stable releases installs the newest stable release, even when it is older, after you confirm.
+- **Other installs**: the `.deb` and `.rpm` update with the system (`apt upgrade`, `dnf upgrade`); the zip, `.app` zip and tar.gz say that a release is out and link to it. Development builds never check.
+- **What's New** (Help → What's New): the release notes of the versions you skipped, shown once after an update.
+
+**Network access.** Daedalus Studio connects to these places, and each can be turned off:
+
+| What | Where | When | Off |
+|---|---|---|---|
+| Update checks and downloads | `api.github.com`, GitHub's release downloads | after startup, then every 4 hours | Updates → off |
+| NuGet | your NuGet feeds (nuget.org by default) | restore, the package manager | your `NuGet.Config` |
+| Node.js and the web language servers | `nodejs.org`, the npm registry | the first web file, after asking | Web → Web Language Servers → off |
+| The browser debugger (vscode-js-debug) | GitHub's release downloads | the first browser debug session | don't debug in the browser |
+| JSON schemas | `www.schemastore.org` | JSON files without a bundled schema, when downloads are allowed | the bundled schemas only |
+| Help for a keyword (F1) | `learn.microsoft.com` | when you press F1 | — |
+
+Daedalus Studio itself has no telemetry. The tools it runs connect on their own terms: git talks to your remotes, and the .NET SDK has its own telemetry, which `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns off.

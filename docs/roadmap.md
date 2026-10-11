@@ -49,8 +49,8 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
 | M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Daedalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
-| M31 | Automated release cycle and installers | planned, **next**, after M16 (M30b follows at .NET 11 GA) |
-| M32 | Self-update | planned, after M31 |
+| M31 | Automated release cycle and installers | at checkpoint ([m31](checkpoints/m31.md), ADR 0028): `develop`/`master`, `VERSION` and `daedalus-release`, Velopack installers on every platform, `.deb`/`.rpm`, signed apt and dnf repositories, `nightly.yml`/`release.yml`; the first published releases wait for the hosted runs at the end (the maintainer's call), Linux ARM64 and Pages for the public repository |
+| M32 | Self-update | at checkpoint ([m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | planned, after M32 |
 | M34 | UI polish | planned, the last milestone before Visual Basic and F# |
 | M35 | Visual Basic | planned, always second to last |
@@ -2326,6 +2326,9 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Linting and formatting:** ESLint as a linter service with pull diagnostics; Prettier for Format Document.
   - **Fixtures:** `samples/BlazorHosted`, `samples/WebScripts` and `samples/WebLint`.
   - **Next:** M31 (the release cycle), which publishes, so the maintainer confirms it first.
+- 2026-10-11: the maintainer's goal: complete every milestone, each validated in every environment (Windows here, WSL and the Mac), with one hosted 3-OS matrix at the end. They approved the GitHub-side steps of M31 (`develop` as the default branch, private releases, signing keys as secrets) and allowed parallel milestones on branches in worktrees; M33 and M13b are built that way, beside M31 and M32.
+- 2026-10-11: M31 built and at its checkpoint (ADR 0028): `develop` is the default branch; `VERSION` and `eng/DaedalusStudio.Release`; Velopack installers (Setup.exe, .pkg, AppImage) with the zip, the `.app` zip, the tar.gz, a `.deb` and a new `.rpm`; installer smoke tests that install, test and uninstall; `packages.yml`, `nightly.yml`, `release.yml` and `linux-repos.yml` (signed apt and dnf repositories). The published releases, Linux ARM64 and Pages wait (D20 and the hosted batch at the end).
+- 2026-10-11: M32 built and at its checkpoint (ADR 0029): self-update through Velopack from GitHub releases, the feeds signed with ECDSA P-256 (.NET 10 has no Ed25519), the update policy in the workbench (`UpdateService`), `update.mode` and `update.channel`, Restart to update, What's New, and an end-to-end update test (`eng/test-update.sh`).
 - 2026-10-11: M13b built and at its checkpoint (ADR 0031), which completes M13:
   - **Credential store:** `DaedalusStudio.Platform` stores secrets in Windows Credential Manager, the macOS Keychain or the Secret Service (libsecret); never in a file.
   - **Hosting:** built-in GitHub, Azure DevOps and GitLab plugins on a proposed hosting API (plugin API 0.2.6), inactive until sign-in (device flow or a personal access token): pull requests (list, details, check out, create), review comments in the editor, CI status, work items and `#` completion, publishing.

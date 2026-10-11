@@ -30,10 +30,11 @@ Last verified: 2026-10-10 (M11: adds `AvaloniaEdit.TextMate`, `TextMateSharp`, `
 | CommunityToolkit.Mvvm (transitive via Dock.Model.Mvvm) | 8.4.2 | MIT | shell |
 | SkiaSharp, HarfBuzzSharp (and native assets) | per Avalonia 12.1.3 | MIT (wrappers). Native Skia is BSD-3-Clause; HarfBuzz uses the "Old MIT" license | shell |
 | Avalonia.Angle.Windows.Natives (ANGLE) | 2.1.27548.20260419 | BSD-3-Clause (ANGLE Project) | shell, Windows |
+| Velopack | 1.2.161 | MIT | shell (the installers' hooks, M31; self-update, M32) |
 | System.Drawing.Common | 10.0.12 | MIT | benchmark harness (Windows probes) |
 | Vortice.DXGI, Vortice.Direct3D11, Vortice.DirectX, SharpGen.Runtime(.COM) | 3.8.3 / 2.4.2-beta | MIT | benchmark harness (Desktop Duplication) |
 
-All 97 resolved NuGet packages (direct and transitive) were checked: 88 are MIT, 8 are Apache-2.0 (test-only xUnit, see below) and 1 is BSD-3-Clause (ANGLE).
+All 98 resolved NuGet packages (direct and transitive) were checked: 89 are MIT, 8 are Apache-2.0 (test-only xUnit, see below) and 1 is BSD-3-Clause (ANGLE).
 
 ## Coverlet (bundled with the .NET test plugin, ADR 0011)
 
@@ -86,12 +87,17 @@ The first browser debug session (F5 on a Blazor WebAssembly app) downloads the p
 |---|---|---|---|
 | vscode-js-debug (`js-debug-dap`, Microsoft) | 1.140.0 | MIT | debugging Blazor WebAssembly and JavaScript in Chrome, Edge or Chromium |
 
-## AppImage packaging (downloaded by `eng/get-appimagetool.sh`; not committed)
+## Installers (Velopack's `vpk`, installed by `eng/package.sh` into `.work/`; not committed)
+
+`vpk` (Velopack's packaging tool, MIT, 1.2.161, the library's version) builds the Windows Setup.exe, the macOS .pkg and .app, and the Linux AppImage (M31, ADR 0028). It puts some of its own programs into what users install:
 
 | Component | Version | License | Notes |
 |---|---|---|---|
-| appimagetool | 1.9.1 | MIT | Build tool only; not redistributed. Pinned by SHA-256. |
-| AppImage type2 runtime | 20251108 | MIT | **Redistributed**: it is the executable header of the Linux `.AppImage` (ADR 0009). Pinned by SHA-256. It is linked statically with squashfuse (BSD-2-Clause), zstd (BSD-3-Clause), zlib (Zlib), mimalloc (MIT), musl (MIT) and **libfuse3 (LGPL-2.1)**. The runtime is a separate program inside the AppImage, not linked with Daedalus Studio's code. LGPL-2.1 is OSI-approved; its source is published by the AppImage and libfuse projects. Only the AppImage carries it; the other packages don't. |
+| Velopack's `Setup.exe`, `Update.exe` and launcher stub (Windows), `UpdateMac` and `UpdateNix` | 1.2.161 | MIT | **Redistributed**: they install, update and uninstall the app. They are Rust programs from the Velopack repository, built with permissively licensed crates. |
+| AppImage type2 runtime (continuous build of 2026-03-07, from vpk's `vendor/`) | — | MIT | **Redistributed**: it is the executable header of the Linux `.AppImage`. It is linked statically with squashfuse (BSD-2-Clause), zstd (BSD-3-Clause), zlib (Zlib), mimalloc (MIT), musl (MIT) and **libfuse3 (LGPL-2.1)**. The runtime is a separate program inside the AppImage, not linked with Daedalus Studio's code. LGPL-2.1 is OSI-approved; its source is published by the AppImage and libfuse projects. Only the AppImage carries it. |
+| zstd (`zstd.exe`), mksquashfs (backhand), a WiX fork, signtool | per vpk 1.2.161 | BSD-3-Clause or GPL-2.0, MIT/Apache-2.0, MS-RL, Windows SDK license | Build tools inside vpk only; not redistributed. The WiX fork is only used for MSI installers, which we don't build. |
+
+The `.deb` and `.rpm` are built with `dpkg-deb` and `rpmbuild` from the build machine, and the apt and dnf repositories with `apt-ftparchive`, `createrepo_c` and `gpg` (tools only).
 
 ## Rust
 

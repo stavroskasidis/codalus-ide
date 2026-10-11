@@ -2,7 +2,7 @@
 
 Prepared at M7 (2026-10-09). **Changing the repository's visibility is the maintainer's call. Nothing here was done to the GitHub settings.** Work through the list, then flip the switch.
 
-**When:** after M32's checkpoint (roadmap D29). By then M31 will have replaced section 5's manual release with nightly releases from `develop`, stable releases from `master` and Velopack installers (D16–D21), and this checklist is updated to match.
+**When:** after M32's checkpoint (roadmap D29). M31 replaced the manual release with nightly releases from `develop`, stable releases from `master` and Velopack installers (ADR 0028); the sections below follow it.
 
 ## 1. Decide on the files that read as internal notes
 
@@ -17,13 +17,15 @@ The history audit (section 6) found no secrets. A few tracked files are working 
 
 ## 2. Repository settings (after flipping to public)
 
-- [ ] **Branch protection** for `master`:
+- [ ] **Branch protection** (rulesets) for `develop` (the default branch) and `master`:
   - require a pull request
   - require the CI checks `dotnet (ubuntu-latest)`, `dotnet (windows-latest)` and `dotnet (macos-latest)`
   - require branches to be up to date
-  - require linear history
   - block force pushes and deletion
+  - `master` only takes merges from `develop` and hotfixes, so don't require linear history there
   - admins may bypass, if you want to keep committing directly at first
+  - **let the release workflow push to `develop`**: after a stable release it merges `master` back and bumps `VERSION` (add GitHub Actions to the bypass list, or the bump fails)
+- [ ] **GitHub Pages**: Settings → Pages → Source: **GitHub Actions**. `linux-repos.yml` then deploys the apt and dnf repositories after each release (it is skipped while the repository is private, because Pages needs a public repository on the free plan).
 - [ ] **Private vulnerability reporting**: Settings → Code security → enable. `SECURITY.md` and the issue templates link to it.
 - [ ] **Dependabot alerts and security updates**: on. Consider Dependabot version updates for NuGet and GitHub Actions.
 - [ ] **Secret scanning and push protection**: on (free for public repositories).
@@ -33,7 +35,7 @@ The history audit (section 6) found no secrets. A few tracked files are working 
 
 ## 3. CI
 
-No workflow edit is needed: `ci.yml` runs the full Windows/macOS/Linux matrix on every push and pull request once the repository is public, and `benchmarks.yml` runs its regression gate on every push to `master`.
+No workflow edit is needed. Once the repository is public: `ci.yml` runs the full Windows/macOS/Linux matrix on every push and pull request; `benchmarks.yml` runs its regression gate on every push to `master`; `nightly.yml` runs every night `develop` changed; `release.yml` runs on every push to `master`; and both add Linux ARM64 (GitHub's ARM64 runners are free for public repositories).
 - [ ] Dispatch `ci.yml` once after the flip and check that all three jobs are green.
 - [ ] Dispatch `benchmarks.yml` a few times to build up a baseline for its `compare` gate (it compares with the median of earlier runs).
 
@@ -42,18 +44,16 @@ No workflow edit is needed: `ci.yml` runs the full Windows/macOS/Linux matrix on
 - [ ] Turn the `TODO(issue)` items into GitHub issues: `git grep -n "TODO(issue)"`, plus the "Deviations and gaps" sections of `docs/checkpoints/`. Labels: `bug`, `enhancement`, `good first issue`, `help wanted`, `area/*`.
 - [ ] Optionally replace `TODO(issue)` in the code with `TODO(#123)`.
 
-## 5. First release
+## 5. First public release
 
-- [ ] Choose the version (suggested: `0.1.0-preview.1`).
-- [ ] Dispatch `release.yml` with it and download the packages:
-  - Windows: zip and winget manifests
-  - macOS: dmg
-  - Linux: tar.gz, deb and AppImage
-- [ ] Smoke-test each package on a clean machine: open a solution, build, Ctrl+F5, F5 with a breakpoint, commit.
+The workflows build, test and publish (ADR 0028); a dispatch without the dry run publishes.
+- [ ] Check `VERSION` on `develop` (the first private releases were `v0.1.0` and its nightlies).
+- [ ] Dispatch `nightly.yml` once with the dry run off, and install the nightly on each platform.
+- [ ] Merge `develop` into `master`: `release.yml` publishes `vX.Y.Z`, the apt and dnf repositories follow, and `develop` moves to the next minor version.
 - [ ] Run `benchmarks check` on the reference machine (ADR 0002) and attach the summary.
-- [ ] Create the GitHub release `v<version>` with the packages and release notes (from the checkpoint summaries).
-- [ ] Submit the winget manifests to `microsoft/winget-pkgs` (they point at the release asset).
-- [ ] macOS: get a Developer ID, sign with `DAEDALUS_CODESIGN_IDENTITY`, and notarize, or document the right-click → Open step, as the user guide does.
+- [ ] Submit the winget manifests (`winget-manifests-<version>.zip` in the release) to `microsoft/winget-pkgs`: they point at the release's `Setup.exe`.
+- [ ] **Code signing** (D19): apply to SignPath Foundation (free for open source) or set up Azure Trusted Signing for Windows, and get an Apple Developer ID with a notary profile for macOS. The workflows pass `DAEDALUS_CODESIGN_IDENTITY` to `eng/package.sh` already; add the secrets and the Windows signing option then.
+- [ ] **Package key**: the apt and dnf repositories are signed with `PACKAGES_GPG_PRIVATE_KEY` (a repository secret, made 2026-10-11, with no expiry). Keep a copy of it somewhere safe outside GitHub: secrets can't be read back.
 
 ## 5a. NuGet package prefix
 

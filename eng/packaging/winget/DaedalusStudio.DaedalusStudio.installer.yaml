@@ -1,11 +1,16 @@
 # winget installer manifest (filled in by eng/package.sh). The release URL is the GitHub release asset.
 PackageIdentifier: DaedalusStudio.DaedalusStudio
 PackageVersion: {{VERSION}}
-InstallerType: zip
-NestedInstallerType: portable
-NestedInstallerFiles:
-  - RelativeFilePath: daedalus-studio\daedalus.exe
-    PortableCommandAlias: daedalus
+# The Velopack Setup.exe (M31): a per-user install that updates itself (M32) and puts `daedalus` on the PATH.
+InstallerType: exe
+Scope: user
+InstallModes:
+  - silent
+  - silentWithProgress
+InstallerSwitches:
+  Silent: --silent
+  SilentWithProgress: --silent
+UpgradeBehavior: install
 # Windows 11 only (roadmap D26).
 MinimumOSVersion: 10.0.22000.0
 Dependencies:

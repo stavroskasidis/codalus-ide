@@ -1,0 +1,111 @@
+name: Nightly
+
+# A nightly build of develop (M31, ADR 0028, D20/D21): packages on every platform, installed and smoke-tested, then
+# published as a GitHub prerelease v<VERSION>-nightly.<date>.<run> with the commits since the previous nightly as its
+# notes. Only the newest 14 nightlies are kept.
+# While the repository is private this runs on manual dispatch only (minutes cost money there); the schedule switches on
+# by itself once the repository is public. A dry run builds and tests everything and publishes nothing.
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and test without publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  plan:
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      ref: ${{ steps.plan.outputs.ref }}
+      previous: ${{ steps.plan.outputs.previous }}
+      build: ${{ steps.plan.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - id: plan
+        shell: bash
+        run: |
+          previous="$(git tag --list 'v*-nightly.*' --sort=-v:refname | head -n 1)"
+          ref="$(git rev-parse HEAD)"
+          build=true
+          # The schedule skips a night when develop hasn't changed since the last nightly.
+          if [[ "${{ github.event_name }}" == "schedule" && -n "$previous" && "$(git rev-parse "$previous^{commit}")" == "$ref" ]]; then
+            build=false
+          fi
+          version="$(dotnet run --project eng/DaedalusStudio.Release -- version nightly --run "${{ github.run_number }}")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "Nightly $version from $ref (previous: ${previous:-none}; build: $build)" >> "$GITHUB_STEP_SUMMARY"
+
+  packages:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    uses: ./.github/workflows/packages.yml
+    with:
+      version: ${{ needs.plan.outputs.version }}
+      kind: nightly
+      ref: ${{ needs.plan.outputs.ref }}
+      previous: ${{ needs.plan.outputs.previous }}
+      arm64: ${{ !github.event.repository.private }}
+    secrets: inherit
+
+  publish:
+    needs: [plan, packages]
+    if: needs.plan.outputs.build == 'true' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          path: downloaded
+      - id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash eng/publish-release.sh nightly "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.ref }}" downloaded
+      - name: Keep the newest 14 nightlies
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- '-nightly\.' | sort -rV | tail -n +15 \
+            | while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done
+
+  linux-repositories:
+    needs: publish
+    # GitHub Pages needs a public repository on the free plan (D20): until then the apt and dnf repositories wait.
+    if: ${{ !github.event.repository.private }}
+    uses: ./.github/workflows/linux-repos.yml
+    secrets: inherit

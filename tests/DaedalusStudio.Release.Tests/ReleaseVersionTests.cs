@@ -50,6 +50,16 @@ public sealed class ReleaseVersionTests
     }
 
     [Theory]
+    [InlineData("0.2.0", "0.2.0", "0.3.0")] // the usual case: develop was released as it is
+    [InlineData("0.3.0", "0.2.1", "0.3.0")] // a hotfix from master: develop has moved on already
+    [InlineData("0.2.0", "0.2.1", "0.3.0")] // a hotfix before develop moved on
+    [InlineData("1.0.0", "0.9.0", "1.0.0")]
+    public void After_a_release_develop_moves_past_it(string develop, string released, string expected)
+    {
+        Assert.Equal(ReleaseVersion.Parse(expected), ReleaseVersion.Parse(develop).After(ReleaseVersion.Parse(released)));
+    }
+
+    [Theory]
     [InlineData("v0.2.0", true, false)]
     [InlineData("v0.2.0-nightly.20261011.1", false, true)]
     [InlineData("v0.2.0-rc.1", false, false)]
