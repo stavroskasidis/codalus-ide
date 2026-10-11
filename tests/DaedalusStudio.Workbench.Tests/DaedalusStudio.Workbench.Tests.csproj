@@ -12,6 +12,8 @@
     <ProjectReference Include="..\..\src\DaedalusStudio.Markup.Host\DaedalusStudio.Markup.Host.csproj" ReferenceOutputAssembly="false" />
     <!-- Launched by the tests, and referenced for its plan parsers (internals visible to these tests). -->
     <ProjectReference Include="..\..\src\DaedalusStudio.Data.Host\DaedalusStudio.Data.Host.csproj" />
+    <!-- Launched by the tests, and referenced for its profile views (internals visible to these tests). -->
+    <ProjectReference Include="..\..\src\DaedalusStudio.Diagnostics.Host\DaedalusStudio.Diagnostics.Host.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
