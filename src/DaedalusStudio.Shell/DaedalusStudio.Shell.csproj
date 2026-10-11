@@ -91,7 +91,8 @@
       lshost/                     daedalus-lshost, the C# language service (likewise)
       replhost/                   daedalus-replhost, C# Interactive (likewise)
       markuphost/                 daedalus-markuphost, JSON/XML/MSBuild/YAML/.editorconfig (likewise)
-      debughost/                  daedalus-debughost, the debug companion: debugger attributes, dumps (likewise)
+      debughost/                  daedalus-debughost, the debug companion: debugger attributes, dumps (likewise),
+                                  and DaedalusStudio.Debugging.StartupHook.dll for programs debugged in the terminal
       plugins/<plugin id>/        built-in plugins
       terminal/                   shell integration scripts for the integrated terminal
   -->

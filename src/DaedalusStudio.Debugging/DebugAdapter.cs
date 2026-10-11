@@ -164,7 +164,7 @@ public sealed class DebugAdapter : IDebugAdapter
     public string? Transport { get; private init; }
 
     /// <summary>Answers <c>runInTerminal</c>: starts the program in a terminal and returns its process id.</summary>
-    internal static async Task<JsonElement> RunInTerminalAsync(ITerminalLauncher terminal, JsonElement arguments, CancellationToken cancellationToken)
+    public static async Task<JsonElement> RunInTerminalAsync(ITerminalLauncher terminal, JsonElement arguments, CancellationToken cancellationToken)
     {
         var request = Read(arguments, DapJsonContext.Default.RunInTerminalRequestArguments)
                       ?? throw new InvalidOperationException("runInTerminal: no arguments.");

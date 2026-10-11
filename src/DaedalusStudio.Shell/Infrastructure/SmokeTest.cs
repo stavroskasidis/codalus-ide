@@ -15,6 +15,7 @@ using DaedalusStudio.Shell.Theming;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Shell.Views;
 using DaedalusStudio.Workbench.Debugging;
+using DaedalusStudio.Workbench.Debugging.Remote;
 using DaedalusStudio.Workbench.Plugins;
 using DaedalusStudio.Workbench.Settings;
 
@@ -886,6 +887,19 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
         }).ConfigureAwait(true);
 
+        // M14c: debugger sessions (ADR 0039), on samples/Debugging's Sessions.slnx.
+        await StepAsync("debug.compound", "M14c", "Two startup projects from the Startup Projects page debug in one session: each stops at its breakpoint, and the Processes window lists both", DebugCompoundStepAsync, "debug.session").ConfigureAwait(true);
+        await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
+        await StepAsync("debug.roslyn", "M14c", "F5 on a source generator's DebugRoslynComponent profile runs the compiler on its target and stops in the generator", DebugRoslynStepAsync, "debug.compound").ConfigureAwait(true);
+        if (await RemoteStandInAsync().ConfigureAwait(true) is { } remote)
+        {
+            await StepAsync("debug.remote", "M14c", $"Attach to a program on another machine ({remote.Display}, a local stand-in) with netcoredbg copied there", () => DebugRemoteStepAsync(remote), "debug.compound").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, "No stand-in: on Windows a WSL distribution with .NET; elsewhere sh.");
+        }
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -912,6 +926,225 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
+        }
+    }
+
+    // ------------------------------------------------------------------ M14c: debugger sessions
+
+    private string Sessions => Path.Combine(_work, "Debugging");
+
+    private string SessionSource(string project, string file) => Path.Combine(Sessions, project, file);
+
+    private static int MarkerLine(string file, string marker) =>
+        Array.FindIndex(File.ReadAllLines(file), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
+
+    /// <summary>Multiple startup projects (M14c): Partner and Debuggee from the Startup Projects page, in one session.</summary>
+    private async Task DebugCompoundStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "Debugging", "Sessions.slnx")), $"the samples folder {samples} has Debugging/Sessions.slnx");
+        Copy(Path.Combine(samples, "Debugging"), Sessions);
+        await shell.OpenSolutionAsync(Path.Combine(Sessions, "Sessions.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true }, "the Sessions solution is open", 300).ConfigureAwait(true);
+
+        var page = shell.OpenStartupProjects() ?? throw new SmokeFailure("The Startup Projects page did not open.");
+        await WaitAsync(() => window.GetVisualDescendants().OfType<StartupProjectsView>().Any() && page.Rows.Count == 4, "the Startup Projects page lists the four projects", 120).ConfigureAwait(true);
+        page.IsMultiple = true;
+        page.Rows.Single(r => r.Name == "Partner").Action = Workbench.Build.StartupAction.Start;
+        page.Rows.Single(r => r.Name == "Debuggee").Action = Workbench.Build.StartupAction.Start;
+        page.Apply();
+        Check(shell.Runs.StartupTargets.Count == 2, "two projects start");
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("smoke-test-startup-projects.png");
+
+        var debuggee = SessionSource("Debuggee", "Program.cs");
+        var partner = SessionSource("Partner", "Program.cs");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Debugger.Breakpoints.Toggle(debuggee, MarkerLine(debuggee, "print"));
+        shell.Debugger.Breakpoints.Toggle(partner, MarkerLine(partner, "partner"));
+        shell.Run("debug.start");
+        string Stopped() => Path.GetFileName(Path.GetDirectoryName(shell.Debugger.SelectedFrame?.Source?.Path) ?? string.Empty);
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the first program stops at its breakpoint", 420).ConfigureAwait(true);
+        var first = Stopped();
+        shell.Layout.ShowToolWindow(ProcessesViewModel.ToolWindowId);
+        await WaitAsync(() => shell.ProcessesWindow.Rows.Count == 2, "the Processes window lists both programs").ConfigureAwait(true);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("smoke-test-debug-compound.png");
+
+        await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && Stopped() != first, $"the other program stops at its breakpoint (the first was {first})", 120).ConfigureAwait(true);
+        Check(new[] { first, Stopped() }.Order().SequenceEqual(["Debuggee", "Partner"]), "Debuggee and Partner both stopped");
+        shell.Debugger.Breakpoints.Clear();
+        await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "both programs end, and the session with them", 120).ConfigureAwait(true);
+        var log = shell.DebugLog.GetText();
+        Check(log.Contains("partner says partner", StringComparison.Ordinal) && log.Contains("total=15", StringComparison.Ordinal), "both programs' output is in the Debug Console:\n" + Tail(log, 1500));
+        shell.SetStartupProject(Path.Combine(Sessions, "Debuggee", "Debuggee.csproj"));
+    }
+
+    /// <summary>A console app in the integrated terminal (M14c): input, a breakpoint, and Detach All leaving it running.</summary>
+    private async Task DebugTerminalStepAsync()
+    {
+        var properties = Path.Combine(Sessions, "Debuggee", "Properties");
+        Directory.CreateDirectory(properties);
+        await File.WriteAllTextAsync(Path.Combine(properties, "launchSettings.json"), """
+            { "profiles": { "Read": { "commandName": "Project", "commandLineArgs": "--read" } } }
+            """).ConfigureAwait(true);
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugConsoleSetting, "integratedTerminal", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            shell.SetStartupProject(Path.Combine(Sessions, "Debuggee", "Debuggee.csproj"));
+            var program = SessionSource("Debuggee", "Program.cs");
+            shell.Debugger.Breakpoints.Clear();
+            shell.Debugger.Breakpoints.Toggle(program, MarkerLine(program, "loop"));
+            var before = shell.DebugTerminal.Last;
+            shell.Run("debug.start");
+            await WaitAsync(() => shell.DebugTerminal.Last is { } last && last != before, "the program starts in a terminal", 300).ConfigureAwait(true);
+            var session = shell.DebugTerminal.Last!;
+            await WaitAsync(() => shell.Debugger.Processes is [{ Kind: DebugProcess.Terminal, Id: not null }], "the debugger attaches to it", 120).ConfigureAwait(true);
+            session.Write("typed in the terminal\r");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "it stops at the breakpoint", 120).ConfigureAwait(true);
+            string Screen()
+            {
+                lock (session.Terminal.SyncRoot)
+                {
+                    return string.Join('\n', Enumerable.Range(0, session.Terminal.TotalRows).Select(i => session.Terminal.GetRow(i).GetText()));
+                }
+            }
+
+            Check(Screen().Contains("echo: typed in the terminal", StringComparison.Ordinal), "the program read the line typed in the terminal:\n" + Screen());
+            await WaitAsync(() => Equals(shell.Workbench.Context.GetValue("debugCanDetach"), true), "Detach All applies").ConfigureAwait(true);
+            await Task.Delay(1000).ConfigureAwait(true);
+            Screenshot("smoke-test-debug-terminal.png");
+
+            shell.Run("debug.detachAll");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            await WaitAsync(() => session.ExitCode is not null, "the program runs on to its end after Detach All", 120).ConfigureAwait(true);
+            Check(session.ExitCode == 15 || OperatingSystem.IsMacOS(), $"it exited with 15 (got {session.ExitCode}):\n{Screen()}");
+            Check(Screen().Contains("done", StringComparison.Ordinal), "its output after the detach is in the terminal");
+        }
+        finally
+        {
+            await shell.Workbench.Settings.SetAsync(ShellHost.DebugConsoleSetting, "internalConsole", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>The DebugRoslynComponent profile (M14c): the compiler runs on GeneratorTarget, and the generator stops.</summary>
+    private async Task DebugRoslynStepAsync()
+    {
+        shell.SetStartupProject(Path.Combine(Sessions, "Generator", "Generator.csproj"));
+        var generator = SessionSource("Generator", "HelloGenerator.cs");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Debugger.Breakpoints.Toggle(generator, MarkerLine(generator, "generate"));
+        shell.Run("debug.start");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the generator stops at its breakpoint", 420).ConfigureAwait(true);
+        Check(string.Equals(shell.Debugger.SelectedFrame?.Source?.Path, generator, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase), $"in HelloGenerator.cs (got {shell.Debugger.SelectedFrame?.Source?.Path})");
+        await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "list" && r.Value.Contains("Customer", StringComparison.Ordinal)), "Locals shows the class names the generator got").ConfigureAwait(true);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("smoke-test-debug-roslyn.png");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Run("debug.stop");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// A machine to attach to without leaving this one: on Windows a WSL distribution with .NET, elsewhere SSH through a
+    /// stand-in <c>ssh</c> that runs the command here. netcoredbg goes to a temporary folder there.
+    /// </summary>
+    private async Task<RemoteTarget?> RemoteStandInAsync()
+    {
+        const string home = "/tmp/daedalus-smoke/netcoredbg";
+        if (OperatingSystem.IsWindows())
+        {
+            foreach (var distribution in await RemoteTargets.WslDistributionsAsync(CancellationToken.None).ConfigureAwait(true))
+            {
+                var target = new WslTarget(distribution) { Home = home };
+                if (!distribution.StartsWith("docker-", StringComparison.OrdinalIgnoreCase) && !distribution.StartsWith("podman-", StringComparison.OrdinalIgnoreCase)
+                    && (await RemoteShell.RunAsync(target, "exec sh -lc 'command -v dotnet'", CancellationToken.None).ConfigureAwait(true)).Output.Trim().StartsWith('/'))
+                {
+                    return target;
+                }
+            }
+
+            return null;
+        }
+
+        Directory.CreateDirectory(_work);
+        var ssh = Path.Combine(_work, "stand-in-ssh");
+        await File.WriteAllTextAsync(ssh, "#!/bin/sh\n# A stand-in for ssh: skip the options and the destination, run the command here.\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -T) shift ;;\n    -o|-p|-i|-l) shift 2 ;;\n    *) break ;;\n  esac\ndone\nshift\nexec sh -c \"$*\"\n").ConfigureAwait(true);
+        File.SetUnixFileMode(ssh, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return new SshTarget("stand-in.invalid", "smoke", null, ssh) { Home = home };
+    }
+
+    /// <summary>Remote attach (M14c): the Debuggee waits on the target, the debugger attaches there, stops, and detaches.</summary>
+    private async Task DebugRemoteStepAsync(RemoteTarget target)
+    {
+        var dll = Path.Combine(Sessions, "Debuggee", "bin", "Debug", "net10.0", "Debuggee.dll");
+        Check(File.Exists(dll), "the Debuggee was built by debug.compound");
+        var signal = "/tmp/daedalus-smoke-" + Guid.NewGuid().ToString("N")[..8];
+        Process program;
+        if (target is WslTarget wsl)
+        {
+            var dotnet = (await RemoteShell.RunAsync(target, "exec sh -lc 'command -v dotnet'", CancellationToken.None).ConfigureAwait(true)).Output.Trim();
+            program = Process.Start(new ProcessStartInfo("wsl.exe", ["-d", wsl.Distribution, "--exec", dotnet, "exec", Workbench.Build.WslLaunch.ToLinuxPath(dll), "--wait-for", signal])
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+            }) ?? throw new SmokeFailure("The program didn't start in WSL.");
+        }
+        else
+        {
+            program = Process.Start(new ProcessStartInfo("dotnet", ["exec", dll, "--wait-for", signal]) { UseShellExecute = false, RedirectStandardOutput = true })
+                      ?? throw new SmokeFailure("The program didn't start.");
+        }
+
+        try
+        {
+            RemoteProcess? remote = null;
+            await WaitAsync(() =>
+            {
+                remote = RemoteShell.ProcessesAsync(target, CancellationToken.None).GetAwaiter().GetResult().FirstOrDefault(p => p.IsDotnet && p.CommandLine.Contains(signal, StringComparison.Ordinal));
+                return remote is not null;
+            }, "the program runs on the target", 60).ConfigureAwait(true);
+
+            var source = SessionSource("Debuggee", "Program.cs");
+            shell.Debugger.Breakpoints.Clear();
+            shell.Debugger.Breakpoints.Toggle(source, MarkerLine(source, "done"));
+            var attaching = shell.AttachToRemoteAsync(target, null, remote!.Id);
+            while (!attaching.IsCompleted)
+            {
+                // The first attach on a target asks to copy netcoredbg there.
+                if (shell.Dialogs.IsOpen && shell.Dialogs.Title == "Copy the Debugger")
+                {
+                    shell.Dialogs.Accept();
+                }
+
+                await Task.Delay(100).ConfigureAwait(true);
+            }
+
+            Check(await attaching.ConfigureAwait(true), "the debugger attached on the target:\n" + Tail(shell.DebugLog.GetText(), 1500));
+            Check(shell.Debugger.Processes is [{ Target: { } where }] && where == target.Display, $"the Processes window shows the target ({target.Display})");
+            await RemoteShell.RunAsync(target, $"touch {signal}", CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "it stops at the breakpoint", 120).ConfigureAwait(true);
+            Check(string.Equals(shell.Debugger.SelectedFrame?.Source?.Path, source, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase), $"the frame maps to this machine's Program.cs (got {shell.Debugger.SelectedFrame?.Source?.Path})");
+            shell.Layout.ShowToolWindow(ProcessesViewModel.ToolWindowId);
+            await Task.Delay(1000).ConfigureAwait(true);
+            Screenshot("smoke-test-debug-remote.png");
+            shell.Debugger.Breakpoints.Clear();
+            shell.Run("debug.detachAll");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            await WaitAsync(() => program.HasExited, "the program runs on to its end after Detach All", 60).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (!program.HasExited)
+            {
+                program.Kill(entireProcessTree: true);
+            }
+
+            program.Dispose();
+            await RemoteShell.RunAsync(target, $"rm -f {signal}", CancellationToken.None).ConfigureAwait(true);
         }
     }
 

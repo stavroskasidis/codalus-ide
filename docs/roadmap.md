@@ -34,7 +34,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M11 | Language platform: LSP bridge, grammars, file-type editing | at checkpoint: language registry, TextMate grammars, LSP bridge, markup host, ADR 0016 |
 | M12 | Editor and code-navigation depth | at checkpoint: M12a (navigation and inline information, ADR 0017) and M12b (editing, refactoring UI and analysis, ADR 0018) |
 | M13 | Git depth and hosting integration | done (M13a and M13b at checkpoint): history, merge editor, operations (ADR 0020); GitHub, Azure DevOps and GitLab plugins (sign-in through the OS credential store, pull requests, review comments, CI status, work items, publishing), askpass, worktrees, Git LFS, several repositories (ADR 0031) |
-| M14 | Debugger depth | M14a at checkpoint: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b at checkpoint ([m14b](checkpoints/m14b.md), ADR 0032): the debug companion host, `[DebuggerDisplay]`, grid, image and plugin visualizers, pinned data tips, Parallel Stacks and Watch, Processes and Debug Location, breakpoint filters, exception module conditions, dumps; M14c (remote sessions) planned |
+| M14 | Debugger depth | done (M14a–M14c at checkpoint). M14a: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b ([m14b](checkpoints/m14b.md), ADR 0032): the debug companion host, `[DebuggerDisplay]`, grid, image and plugin visualizers, pinned data tips, Parallel Stacks and Watch, Processes and Debug Location, breakpoint filters, exception module conditions, dumps; M14c ([m14c](checkpoints/m14c.md), ADR 0039 and 0040): multiple startup projects in one session, debugging in the integrated terminal (Detach All for launched programs), attach over SSH, in containers and in WSL, the WSL launch profile, Roslyn components, Just-In-Time crash dumps, the Hot Reload-while-debugging research |
 | M15 | ASP.NET Core and Hot Reload | M15a and M15b at checkpoint: Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch`, ADR 0022; M15c (scaffolding, service references) deferred until after M16 |
 | M16 | Razor, Blazor and web front-end | done (M16a–M16d at checkpoint): Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023); HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); Blazor WebAssembly debugging in the browser through vscode-js-debug (ADR 0026); compound server-and-page debugging, Debug a Web Page, HTML and CSS inside Razor, scoped CSS, npm scripts in the Task Runner Explorer, ESLint and Prettier (ADR 0027) |
 | M17 | Containers, Aspire and publishing | planned |
@@ -677,7 +677,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 **Goal.** Close the gaps between the M5 debugger and Visual Studio as far as netcoredbg allows, and fill the rest with our own components. **Start by re-reading the M5 known-gaps list.**
 
-**Split (ADR 0021).** **M14a** (done): what netcoredbg allows plus client-side features: per-type exception settings, the exception helper, Run to Cursor and Run to Click, function, temporary and dependent breakpoints with labels and import/export, QuickWatch, editing values, interactive data tips, string visualizers, PerfTips, the Threads and Modules windows, Reattach. **M14b** (done, ADR 0032): the companion host (`DebuggerDisplay`; type proxies and Make Object ID are gaps), the visualizer plugin API with grid and image visualizers, Parallel Stacks and Watch, dumps, pinned data tips; symbol settings are a gap. **M14c**: compound launches, attach over SSH, Docker and WSL, the WSL launch profile, Roslyn components, JIT debugging, the Hot Reload research. Anything netcoredbg can't do is either contributed upstream (MIT, Samsung), worked around in a companion host, or documented.
+**Split (ADR 0021).** **M14a** (done): what netcoredbg allows plus client-side features: per-type exception settings, the exception helper, Run to Cursor and Run to Click, function, temporary and dependent breakpoints with labels and import/export, QuickWatch, editing values, interactive data tips, string visualizers, PerfTips, the Threads and Modules windows, Reattach. **M14b** (done, ADR 0032): the companion host (`DebuggerDisplay`; type proxies and Make Object ID are gaps), the visualizer plugin API with grid and image visualizers, Parallel Stacks and Watch, dumps, pinned data tips; symbol settings are a gap. **M14c** (done, ADR 0039 and 0040): multiple startup projects as one compound session, programs in the integrated terminal (a startup hook holds them until netcoredbg attaches, so Detach All applies), attach over SSH, into Docker or Podman containers and into WSL through pipe transports with netcoredbg copied on first use, the WSL launch profile, Roslyn components, Just-In-Time debugging as per-user crash dumps, and the Hot Reload research (not possible under netcoredbg's DAP today). Anything netcoredbg can't do is either contributed upstream (MIT, Samsung), worked around in a companion host, or documented.
 
 **Depends on.** M5, M12 (Source Link and decompilation).
 
@@ -1950,7 +1950,7 @@ The "Daedalus" column uses these terms:
 | Build, Rebuild and Clean for the solution and for projects; cancel | M4 |
 | Structured build output, Error List navigation | M4 |
 | Startup project, Run without debugging, launch profiles | M4 |
-| Multiple startup projects | M14 |
+| Multiple startup projects | M14c (done) |
 | Batch Build | M26 |
 | Build settings (verbosity, parallel builds, build before run) | M26 |
 | Fast up-to-date check, build acceleration | M26 |
@@ -2018,7 +2018,7 @@ The "Daedalus" column uses these terms:
 | Full-solution analysis, Error List filters | M12 |
 | Code Metrics | M12 |
 | Syntax Visualizer, analyzer and generator authoring templates | M12 |
-| Debugging analyzers and source generators | M14 |
+| Debugging analyzers and source generators | M14c (done: the `DebugRoslynComponent` profile) |
 | Code maps, dependency validation, Class Designer | Candidate |
 
 ### Languages
@@ -2046,22 +2046,22 @@ The "Daedalus" column uses these terms:
 | Launch and attach; line, conditional and hit-count breakpoints; tracepoints | M5 |
 | Stepping, Call Stack, Locals, Autos, Watch, debug console, data tips, threads | M5 |
 | Exception settings, break on throw | M5 |
-| Function, temporary and dependent breakpoints; breakpoint filters, labels, import and export | M14 |
-| Data breakpoints | M14 if netcoredbg supports them, otherwise a gap |
-| Immediate window, QuickWatch, PerfTips, Make Object ID, editing values | M14 |
-| Parallel Stacks, Parallel Watch, Tasks, Modules, Processes, Debug Location toolbar | M14 |
-| Memory window | M14 if netcoredbg supports `readMemory` |
+| Function, temporary and dependent breakpoints; breakpoint filters, labels, import and export | M14 (done) |
+| Data breakpoints | Gap (netcoredbg has none) |
+| Immediate window, QuickWatch, PerfTips, Make Object ID, editing values | M14 (done; Make Object ID is a gap) |
+| Parallel Stacks, Parallel Watch, Tasks, Modules, Processes, Debug Location toolbar | M14 (done; the task view is a gap) |
+| Memory window | Gap (netcoredbg has no `readMemory`) |
 | Disassembly, Registers, mixed-mode (managed and native) | Gap (netcoredbg). Native-only debugging through `lldb-dap` is a candidate. |
-| Debugger visualizers, `DebuggerDisplay`, type proxies | M14 |
-| Exception helper | M14 |
-| Run to Cursor, Run to Click, Set Next Statement | M14 (Set Next Statement if netcoredbg supports it) |
-| Just My Code, step filters | M14 |
-| Source Link stepping, symbol settings | M14 |
-| Attach over SSH, into containers and into WSL; WSL launch profile | M14 |
+| Debugger visualizers, `DebuggerDisplay`, type proxies | M14 (done; type proxies are a gap) |
+| Exception helper | M14 (done) |
+| Run to Cursor, Run to Click, Set Next Statement | M14 (done; Set Next Statement is a gap) |
+| Just My Code, step filters | M14 (done) |
+| Source Link stepping, symbol settings | M12 (Source Link, done); symbol settings are a gap |
+| Attach over SSH, into containers and into WSL; WSL launch profile | M14c (done; Linux and macOS targets) |
 | Visual Studio remote debugger (msvsmon) | Trap (SSH attach replaces it) |
-| Dump files (open and create) | M14 |
-| Just-In-Time debugger | M14 (opt-in) |
-| Hot Reload, Edit and Continue | Hot Reload M15; Hot Reload while debugging researched in M14. Full Edit and Continue is a gap. |
+| Dump files (open and create) | M14 (done) |
+| Just-In-Time debugger | M14c (done, opt-in: crash dumps opened in the dump view; a live system debugger needs administrator rights and is a gap) |
+| Hot Reload, Edit and Continue | Hot Reload M15; Hot Reload while debugging researched in M14c (ADR 0040): the runtime refuses updates under a debugger, and netcoredbg applies them only through its MI interpreter, so it is a gap for now. Full Edit and Continue is a gap. |
 | IntelliTrace, time-travel debugging, Snapshot Debugger | Gap / Trap |
 | Debugging tests | M8 (done) |
 | Blazor WebAssembly and JavaScript debugging | M16 |
@@ -2335,3 +2335,10 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Hosting:** built-in GitHub, Azure DevOps and GitLab plugins on a proposed hosting API (plugin API 0.2.6), inactive until sign-in (device flow or a personal access token): pull requests (list, details, check out, create), review comments in the editor, CI status, work items and `#` completion, publishing.
   - **Git:** an askpass prompt behind the user's credential helper, worktrees, Git LFS awareness (pointer files, locks), solutions spanning several repositories.
   - **Open:** the project's OAuth apps (client ids) are to be registered; until then device sign-in needs a client id in settings, and a personal access token works.
+- 2026-10-11: M14c built and at its checkpoint (ADR 0039 and 0040), which completes M14:
+  - **Sessions:** multiple startup projects (a Startup Projects page, saved with the solution) debug as one compound session; console apps can be debugged in the integrated terminal, held by a startup hook until netcoredbg attaches, so they take input and Detach All leaves them running (the M14b gap).
+  - **Remote:** attach over SSH, into Docker or Podman containers and into WSL through pipe transports, with netcoredbg copied to the target on first use and source paths mapped; the `WSL2` launch profile runs and debugs a project in a WSL distribution.
+  - **Roslyn components:** the `DebugRoslynComponent` profile runs the SDK's compiler on the target project under the debugger.
+  - **Just-In-Time:** opt-in crash dumps per user (no administrator rights), offered for opening in the dump view; a live system JIT debugger is a gap.
+  - **Hot Reload while debugging:** researched; the runtime refuses `dotnet watch`'s updates under a debugger, and netcoredbg applies deltas only through its MI interpreter. A gap until a DAP request exists upstream.
+  - **Found:** netcoredbg ended an apphost detached while stopped at a breakpoint (Windows); detaches are now prepared.

@@ -129,3 +129,16 @@ Servers that implement `documentSymbol`, the hierarchies, `inlayHint` and `codeL
 | `daedalus/debug/dumpObject` | `{id, address}` → `{address, type, size, value?, fields: [{name, type, value, address}]}` | `address` is non-zero for reference fields. |
 | `daedalus/debug/closeDump` | `{id}` → `{}` | |
 | `daedalus/debug/createDump` | `{processId, path, kind: mini\|heap\|triage\|full}` → `{path, size}` | Through the runtime's diagnostics IPC (DiagnosticsClient). The shell writes full dumps. |
+
+## Debug adapter client (M14c)
+
+The shell is a DAP client of netcoredbg (ADR 0007) and of vscode-js-debug (ADR 0026). M14c (ADR 0039) adds:
+
+- **`runInTerminal`.** When the shell has a terminal, `initialize` sends `supportsRunInTerminalRequest: true`. The reverse request is answered after the program starts in a new integrated terminal, with `{processId}`. Its `env` values of `null` unset variables. netcoredbg never sends it.
+- **Programs held for the debugger.** Because netcoredbg can't `runInTerminal`, the shell starts a program in the terminal itself and netcoredbg attaches to it. The program's environment carries:
+  - `DOTNET_STARTUP_HOOKS`: `DaedalusStudio.Debugging.StartupHook.dll` (in `debughost/`), before any hooks already set;
+  - `DAEDALUS_DEBUG_WAIT`: an empty temporary folder.
+
+  Before `Main`, the hook writes the process id to `<folder>/pid` (through `pid.tmp`, renamed) and polls for `<folder>/go`. The shell attaches, sets the breakpoints, waits for the program's module, and creates `go`; the hook then deletes the folder. `DAEDALUS_DEBUG_WAIT_SECONDS` (default 120) bounds the wait. The hook clears `DAEDALUS_DEBUG_WAIT` and `DAEDALUS_DEBUG_WAIT_SECONDS`, so the program's child processes don't wait.
+- **Pipe transports.** On another machine, netcoredbg runs as `sh -c 'exec <path>/netcoredbg --interpreter=vscode'` through `ssh -T <destination>`, `<container tool> exec -i <container>` or `wsl.exe -d <distribution> --exec`. DAP flows over that process's stdin and stdout unchanged. Source paths are translated on the client (`PathMappingDebugAdapter`): `setBreakpoints` sources, and `source.path` in stack frames, `breakpoint` events and `output` events.
+- **`DAEDALUS_NETCOREDBG_LOG=<folder>`** starts netcoredbg with `--engineLogging=<folder>/netcoredbg-<time>-<id>.log`, its DAP traffic, for diagnosis.
