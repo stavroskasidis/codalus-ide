@@ -236,7 +236,7 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
             {
                 lock (text)
                 {
-                    text.Append(line.Text).Append('\n');
+                    text.Append(PlainText(line.Text)).Append('\n');
                     if (text.Length > 200_000)
                     {
                         text.Remove(0, text.Length - 150_000);
@@ -256,6 +256,34 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
         catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException or IOException or InvalidDataException)
         {
         }
+    }
+
+    /// <summary>A console line without its ANSI escape sequences (colors), as the dashboard shows it.</summary>
+    public static string PlainText(string text)
+    {
+        if (!text.Contains('\u001b', StringComparison.Ordinal))
+        {
+            return text;
+        }
+
+        var plain = new System.Text.StringBuilder(text.Length);
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\u001b' && i + 1 < text.Length && text[i + 1] == '[')
+            {
+                i += 2;
+                while (i < text.Length && !char.IsAsciiLetter(text[i]))
+                {
+                    i++;
+                }
+
+                continue;
+            }
+
+            plain.Append(text[i]);
+        }
+
+        return plain.ToString();
     }
 
     /// <summary>Runs a command of the selected resource (<c>resource-start</c>, <c>resource-stop</c>, <c>resource-restart</c>).</summary>
