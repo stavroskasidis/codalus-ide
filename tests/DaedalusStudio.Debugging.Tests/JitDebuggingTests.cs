@@ -69,7 +69,8 @@ public sealed class JitDebuggingTests(DebuggeeFixture debuggee) : IClassFixture<
             var profile = Path.Combine(home, ".profile");
             File.WriteAllText(profile, "export PATH=\"$HOME/bin:$PATH\"\n");
             var environment = new LinuxUserEnvironment(home);
-            var jit = new JitDebugging(environment, "/home/me/.local/state/daedalus/crash-dumps");
+            var dumps = Path.Combine(home, "crash-dumps");
+            var jit = new JitDebugging(environment, dumps);
 
             jit.Register();
             Assert.True(jit.IsRegistered);
@@ -77,7 +78,7 @@ public sealed class JitDebuggingTests(DebuggeeFixture debuggee) : IClassFixture<
             Assert.Contains("DOTNET_DbgEnableMiniDump=1\n", conf, StringComparison.Ordinal);
             var text = File.ReadAllText(profile);
             Assert.StartsWith("export PATH=\"$HOME/bin:$PATH\"\n\n" + LinuxUserEnvironment.BlockStart, text, StringComparison.Ordinal);
-            Assert.Contains($"export DOTNET_DbgMiniDumpName='{Path.Combine("/home/me/.local/state/daedalus/crash-dumps", "%e.%p.dmp")}'", text, StringComparison.Ordinal);
+            Assert.Contains($"export DOTNET_DbgMiniDumpName='{Path.Combine(dumps, "%e.%p.dmp")}'", text, StringComparison.Ordinal);
 
             jit.Register(); // again: still one block
             Assert.Single(System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(profile), ">>> Daedalus"));

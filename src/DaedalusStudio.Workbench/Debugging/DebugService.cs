@@ -349,7 +349,7 @@ public sealed class DebugService : IAsyncDisposable
         if (Path.GetFileNameWithoutExtension(program).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
             && plan.SplitArguments().FirstOrDefault(a => a.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) is { } dll)
         {
-            return Path.GetFileName(dll);
+            return dll[(dll.LastIndexOfAny(['/', '\\']) + 1)..];
         }
 
         return program.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? program : Path.GetFileNameWithoutExtension(program) + ".dll";

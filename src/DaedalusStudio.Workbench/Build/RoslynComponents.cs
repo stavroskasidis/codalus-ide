@@ -105,7 +105,7 @@ public static class RoslynComponents
             switch (option)
             {
                 case "out" or "pdb" or "doc" when value is { Length: > 0 }:
-                    result.Add($"/{option}:{Quote(Path.Combine(outputFolder, Path.GetFileName(value.Trim('"'))))}");
+                    result.Add($"/{option}:{Quote(Path.Combine(outputFolder, FileName(value.Trim('"'))))}");
                     break;
                 case "refout" or "refonly":
                     break;
@@ -117,6 +117,9 @@ public static class RoslynComponents
 
         return result;
     }
+
+    /// <summary>The file name of a path written with either separator (a design-time build's arguments use the project's).</summary>
+    private static string FileName(string path) => path[(path.LastIndexOfAny(['/', '\\']) + 1)..];
 
     /// <summary>An option's name (lower case) and value: <c>/out:x.dll</c> is (<c>out</c>, <c>x.dll</c>); a source file has no name.</summary>
     private static (string? Option, string? Value) Split(string argument)
