@@ -207,6 +207,18 @@ public sealed partial class MainWindow : Window, IShellWindow
         return file?.TryGetLocalPath();
     }
 
+    public async Task<IReadOnlyList<string>> PickFilesAsync(string title)
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions { Title = title, AllowMultiple = true }).ConfigureAwait(true);
+        return [.. files.Select(f => f.TryGetLocalPath()).OfType<string>()];
+    }
+
+    public async Task<string?> PickFolderAsync(string title)
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new Avalonia.Platform.Storage.FolderPickerOpenOptions { Title = title, AllowMultiple = false }).ConfigureAwait(true);
+        return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
+    }
+
     private async Task<string?> PickAsync(string title, string filterName, string[] patterns)
     {
         var files = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions

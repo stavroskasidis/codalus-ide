@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:tools="using:DaedalusStudio.Workbench.ExternalTools"
+             x:Class="DaedalusStudio.Shell.Views.ExternalToolsView"
+             x:DataType="vm:ExternalToolsViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,10">
+      <TextBlock Classes="heading" Text="External Tools" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="Your own commands in the Tools menu and the command palette. Each can have a key binding (Keyboard Shortcuts: search 'External Tools')." />
+      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,10,0,0">
+      <Button Classes="accent" Content="Save" Command="{Binding SaveCommand}" AutomationProperties.Name="Save external tools" />
+      <Button Content="Revert" Command="{Binding RevertCommand}" />
+    </StackPanel>
+    <Grid ColumnDefinitions="240,*,300">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+          <Button x:Name="AddButton" Content="Add" Command="{Binding AddCommand}" />
+          <Button Content="Delete" Command="{Binding RemoveCommand}" />
+          <Button Content="Up" Command="{Binding MoveUpCommand}" AutomationProperties.Name="Move up" />
+          <Button Content="Down" Command="{Binding MoveDownCommand}" AutomationProperties.Name="Move down" />
+        </StackPanel>
+        <ListBox ItemsSource="{Binding Tools}" SelectedItem="{Binding Selected}" AutomationProperties.Name="External tools">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ExternalToolRowViewModel">
+              <TextBlock Text="{Binding Title}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <ScrollViewer Grid.Column="1" Margin="12,0" IsVisible="{Binding HasSelection}">
+        <StackPanel Spacing="6" DataContext="{Binding Selected}" x:DataType="vm:ExternalToolRowViewModel">
+          <TextBlock Text="Title" />
+          <TextBox Text="{Binding Title}" AutomationProperties.Name="Title" />
+          <TextBlock Text="Command" />
+          <TextBox Text="{Binding Command}" PlaceholderText="A program on PATH, or its full path" AutomationProperties.Name="Command" />
+          <TextBlock Text="Arguments" />
+          <TextBox Text="{Binding Arguments}" PlaceholderText="$(ItemPath)" AutomationProperties.Name="Arguments" />
+          <TextBlock Text="Initial directory" />
+          <TextBox Text="{Binding InitialDirectory}" PlaceholderText="$(ItemDir)" AutomationProperties.Name="Initial directory" />
+          <CheckBox Content="Use the Output window" IsChecked="{Binding UseOutputWindow}" />
+          <CheckBox Content="Prompt for arguments" IsChecked="{Binding PromptForArguments}" />
+          <TextBlock Classes="muted" FontSize="11" Text="{Binding CommandId, StringFormat='Command: {0}'}" />
+          <Button HorizontalAlignment="Left" Content="Run" Command="{Binding $parent[UserControl].((vm:ExternalToolsViewModel)DataContext).RunCommand}" />
+        </StackPanel>
+      </ScrollViewer>
+      <DockPanel Grid.Column="2">
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Macros" Margin="0,0,0,4" />
+        <ListBox ItemsSource="{Binding Macros}" AutomationProperties.Name="Macros">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="tools:ToolMacro">
+              <StackPanel>
+                <SelectableTextBlock FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" Text="{Binding Name, StringFormat='$({0})'}" />
+                <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding Description}" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</UserControl>

@@ -250,7 +250,7 @@ internal sealed class ProjectItems : IDisposable
             return;
         }
 
-        if (value is null || InheritedValue(file, type, name) == value)
+        if (value is null || SameMetadataValue(name, InheritedValue(file, type, name), value))
         {
             RemoveDefinitions(Xml, file, type, name);
             Reevaluate();
@@ -270,6 +270,18 @@ internal sealed class ProjectItems : IDisposable
         }
 
         Reevaluate();
+    }
+
+    /// <summary>Whether two values of a metadata mean the same: an empty <c>CopyToOutputDirectory</c> is <c>Never</c>.</summary>
+    private static bool SameMetadataValue(string name, string inherited, string value)
+    {
+        if (name.Equals(ItemMetadataNames.CopyToOutputDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            static string Normalize(string v) => v.Trim().Length == 0 ? "Never" : v.Trim();
+            return Normalize(inherited).Equals(Normalize(value), StringComparison.OrdinalIgnoreCase);
+        }
+
+        return inherited == value;
     }
 
     /// <summary>The metadata value the file would have without the project file's own definitions of it.</summary>

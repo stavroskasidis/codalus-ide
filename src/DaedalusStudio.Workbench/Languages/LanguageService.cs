@@ -165,7 +165,7 @@ public sealed class LanguageService : IAsyncDisposable
             ScopedConfigurationProvider = descriptor.ScopedConfiguration,
             AcceptedRequests = descriptor.AcceptedRequests,
             ApplyEditHandler = edit => ApplyEditHandler?.Invoke(edit) ?? Task.FromResult(false),
-            RootUri = _solutions.Solution?.Path is { } solution ? DocumentUris.FromPath(Path.GetDirectoryName(solution)!) : null,
+            RootUri = _solutions.Solution?.Directory is { } solution ? DocumentUris.FromPath(solution) : null,
             ConfigurationProvider = section => SettingsProvider?.Invoke(section ?? descriptor.SettingsSection),
             PropertyEvaluator = (project, name, ct) => PropertyEvaluator?.Invoke(project, name, ct) ?? Task.FromResult<(string?, string?)?>(null),
         };

@@ -74,6 +74,12 @@ public sealed partial class ShellHost
             await SaveAllAsync().ConfigureAwait(true);
         }
 
+        // Folder mode: the default build task, when tasks.json has one (ADR 0033).
+        if (project is null && await FolderBuildTaskAsync(target).ConfigureAwait(true) is { } taskSucceeded)
+        {
+            return taskSucceeded;
+        }
+
         Workbench.Output.Show(Builds.Channel);
         if (!await BeforeBuildBindingsAsync(target, project).ConfigureAwait(true))
         {
@@ -163,6 +169,11 @@ public sealed partial class ShellHost
     public async Task StartWithoutDebuggingAsync(string? argument = null, bool hotReload = false)
     {
         hotReload |= Workbench.Settings.GetBoolean(HotReloadSetting, false);
+        if (argument is null && !hotReload && await StartFolderLaunchAsync(debug: false).ConfigureAwait(true))
+        {
+            return; // a folder's launch configuration (ADR 0033)
+        }
+
         var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
         if (project is null)
         {

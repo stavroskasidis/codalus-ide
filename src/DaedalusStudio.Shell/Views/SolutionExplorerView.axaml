@@ -17,6 +17,12 @@
       <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="Collapse All" AutomationProperties.Name="Collapse All">
         <controls:Icon Kind="collapse-all" />
       </Button>
+      <ToggleButton Classes="toolbar" IsChecked="{Binding ShowAllFiles}" ToolTip.Tip="Show All Files" AutomationProperties.Name="Show All Files" IsVisible="{Binding !IsFolderView}">
+        <controls:Icon Kind="files" />
+      </ToggleButton>
+      <Button Classes="toolbar" Command="{Binding SwitchViewsCommand}" IsVisible="{Binding CanSwitchViews}" ToolTip.Tip="Switch Views (folder view, solution view)" AutomationProperties.Name="Switch Views">
+        <controls:Icon Kind="layout" />
+      </Button>
       <Button Classes="toolbar" Command="{Binding PropertiesCommand}" ToolTip.Tip="Properties (Alt+Enter)" AutomationProperties.Name="Properties">
         <controls:Icon Kind="gear" />
       </Button>
@@ -63,7 +69,7 @@
               <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
             <controls:Icon Kind="{Binding Icon}" Classes.warning="{Binding IsWarning}" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Classes.linked="{Binding IsLinked}" Classes.startup="{Binding IsStartup}" Classes.unloaded="{Binding IsUnloaded}" />
+            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Classes.linked="{Binding IsLinked}" Classes.startup="{Binding IsStartup}" Classes.unloaded="{Binding IsDimmed}" />
             <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
           </StackPanel>
         </DataTemplate>

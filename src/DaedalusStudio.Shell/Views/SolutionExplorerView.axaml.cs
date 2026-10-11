@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using DaedalusStudio.Shell.Controls;
 using DaedalusStudio.Shell.ViewModels;
@@ -189,7 +190,7 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        _dragStart = e.GetCurrentPoint(List).Properties.IsLeftButtonPressed && RowAt(e.Source)?.Node is { Kind: ExplorerNodeKind.File or ExplorerNodeKind.Folder, IsLinked: false }
+        _dragStart = e.GetCurrentPoint(List).Properties.IsLeftButtonPressed && RowAt(e.Source)?.Node is { Kind: ExplorerNodeKind.File or ExplorerNodeKind.Folder }
             ? e
             : null;
         _dragOrigin = e.GetPosition(List);
@@ -209,10 +210,12 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
         }
 
         _dragStart = null;
-        if (RowAt(start.Source)?.Node.Path is not { } path)
+        if (RowAt(start.Source)?.Node is not { Path: { } path } node)
         {
             return;
         }
+
+        ViewModel?.BeginDrag(node);
 
         var transfer = new DataTransfer();
         transfer.Add(DataTransferItem.Create(s_paths, new[] { path }));
@@ -229,9 +232,10 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     private void OnDragOver(object? sender, DragEventArgs e)
     {
         var target = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
-        var valid = e.DataTransfer.Contains(s_paths)
-                    && target?.DataContext is ExplorerRowViewModel { Node.Kind: ExplorerNodeKind.Folder or ExplorerNodeKind.Project or ExplorerNodeKind.File };
-        e.DragEffects = !valid ? DragDropEffects.None : e.KeyModifiers.HasFlag(KeyModifiers.Control) ? DragDropEffects.Copy : DragDropEffects.Move;
+        var external = !e.DataTransfer.Contains(s_paths) && e.DataTransfer.Contains(DataFormat.File);
+        var valid = (e.DataTransfer.Contains(s_paths) || external)
+                    && target?.DataContext is ExplorerRowViewModel { Node.Kind: ExplorerNodeKind.Folder or ExplorerNodeKind.Project or ExplorerNodeKind.File or ExplorerNodeKind.Solution };
+        e.DragEffects = !valid ? DragDropEffects.None : external || e.KeyModifiers.HasFlag(KeyModifiers.Control) ? DragDropEffects.Copy : DragDropEffects.Move;
         SetDropTarget(valid ? target : null);
         e.Handled = true;
     }
@@ -243,6 +247,12 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
         {
             e.Handled = true;
             await vm.DropAsync(paths, row.Node, copy: e.KeyModifiers.HasFlag(KeyModifiers.Control)).ConfigureAwait(true);
+        }
+        else if (ViewModel is { } model && RowAt(e.Source) is { } target && e.DataTransfer.TryGetFiles() is { Length: > 0 } files)
+        {
+            // From the file manager: copied in (ADR 0033).
+            e.Handled = true;
+            await model.DropExternalAsync([.. files.Select(f => f.TryGetLocalPath()).OfType<string>()], target.Node).ConfigureAwait(true);
         }
     }
 
