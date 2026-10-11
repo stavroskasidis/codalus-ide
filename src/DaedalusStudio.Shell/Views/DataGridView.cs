@@ -167,7 +167,9 @@ public sealed class DataGridView : UserControl
         var updating = false;
         box.TextChanged += (_, _) =>
         {
-            if (updating)
+            // A change event for the text the cell was created with (or a NULL cell's empty text) isn't an edit: on
+            // some platforms it arrives after the cell is realized, and it would turn NULL into an empty string.
+            if (updating || string.Equals(box.Text ?? string.Empty, row.Values[column] ?? string.Empty, StringComparison.Ordinal))
             {
                 return;
             }

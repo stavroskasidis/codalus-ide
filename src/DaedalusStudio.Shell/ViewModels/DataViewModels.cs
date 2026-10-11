@@ -468,6 +468,8 @@ public sealed class TableDataViewModel : ObservableObject
 
             grid.Measure();
             Grid = grid;
+            OnPropertyChanged(nameof(PendingChanges));
+            OnPropertyChanged(nameof(HasPendingChanges));
             Message = read.ReadOnlyReason;
             UpdateStatus(read.Rows.Length, read.ElapsedMilliseconds);
             GridChanged?.Invoke(this, EventArgs.Empty);
