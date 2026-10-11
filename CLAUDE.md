@@ -107,10 +107,10 @@ The development machine is Windows. Validate on Linux and macOS locally, and lea
 
 ## Git
 
-- Commit directly to `develop`, the default branch (M31, D21); no pull requests for now (the repo is private and pre-public).
+- Commit directly to `develop`, the default branch (M31, D21); no pull requests for now.
 - **Parallel milestones** (the maintainer's go-ahead, 2026-10-11): a session may build a milestone on its own branch in a git worktree. It lands on `develop` by merging `origin/develop` into the branch, re-running the affected tests, and pushing a fast-forward (`git push origin HEAD:develop`); never force-push `develop` or touch `master`. Each worktree validates with its own WSL mirror (`DAEDALUS_WSL_DIR`) and its own Mac snapshot branch (`eng/push-snapshot.sh validate-<name>`). `master` only receives merges from `develop`, each one a stable release, and hotfixes; `release.yml` merges a hotfix back into `develop`.
 - Commit messages carry **no** AI co-author or "Generated with" trailers.
-- CI minutes are limited (private repo, free plan). Every push to `develop` or `master` builds and tests on Linux (documentation-only pushes are skipped); the full Windows/macOS/Linux matrix and the benchmarks run only on manual dispatch, once per milestone checkpoint. Test locally first, push in batches, and don't push while a matrix run is in progress (it gets cancelled).
+- The repository is public (since 2026-10-11), so hosted runners are free: every push to `develop` or `master` builds, tests and smoke-tests on Windows, macOS and Linux (documentation-only pushes are skipped), and the nightly schedule publishes prereleases. Read all three jobs' results after a push. Test locally first, and don't push while a run is in progress (it gets cancelled). Benchmarks still run on the local reference machine.
 
 ## Conventions
 
