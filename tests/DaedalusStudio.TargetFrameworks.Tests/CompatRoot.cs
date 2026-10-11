@@ -65,6 +65,13 @@ internal static class CompatRoot
         Environment.SetEnvironmentVariable("DOTNET_MULTILEVEL_LOOKUP", "0");
         Environment.SetEnvironmentVariable("DOTNET_NOLOGO", "1");
         Environment.SetEnvironmentVariable("DOTNET_CLI_TELEMETRY_OPTOUT", "1");
+        if (OperatingSystem.IsLinux())
+        {
+            // dotnet watch (the net6.0 Hot Reload test) polls instead of taking an inotify instance per folder: on
+            // Linux they are limited to 128 for all of the user's processes, and this suite runs beside the others.
+            Environment.SetEnvironmentVariable("DOTNET_USE_POLLING_FILE_WATCHER", "1");
+        }
+
         if (OperatingSystem.IsLinux() && File.Exists(System.IO.Path.Combine(root, "openssl1.1", "libssl.so.1.1")))
         {
             // OpenSSL 1.1 for .NET Core 2.1 to .NET 5 on a distribution with only OpenSSL 3 (eng/get-runtimes.sh), the

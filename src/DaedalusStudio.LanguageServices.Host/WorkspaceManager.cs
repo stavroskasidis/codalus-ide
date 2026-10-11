@@ -552,6 +552,19 @@ internal sealed class WorkspaceManager : IDisposable
             return;
         }
 
+        // One watcher for the projects of a solution folder (M33): each watcher is an inotify instance on Linux, whose
+        // default limit is 128 for all of the user's processes, and a solution of 38 projects used 38 of them.
+        if (_watchers.Keys.Select(w => SolutionFolderAbove(w, directory)).FirstOrDefault(s => s is not null) is { } solutionFolder)
+        {
+            foreach (var covered in _watchers.Keys.Where(w => Paths.Comparer.Equals(w, solutionFolder) || w.StartsWith(solutionFolder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                _watchers[covered].Dispose();
+                _watchers.Remove(covered);
+            }
+
+            directory = solutionFolder;
+        }
+
         var watcher = new FileSystemWatcher(directory)
         {
             IncludeSubdirectories = true,
@@ -562,6 +575,52 @@ internal sealed class WorkspaceManager : IDisposable
         watcher.Renamed += (_, e) => OnFileChanged(e.FullPath);
         watcher.EnableRaisingEvents = true;
         _watchers[directory] = watcher;
+    }
+
+    /// <summary>
+    /// The folder of the solution that holds both <paramref name="a"/> and <paramref name="b"/>: their common ancestor,
+    /// or the folder above it, when it has a solution file (never a root or the home folder). Null otherwise (separate
+    /// watchers).
+    /// </summary>
+    internal static string? SolutionFolderAbove(string a, string b)
+    {
+        var home = Path.TrimEndingDirectorySeparator(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        var common = CommonAncestor(a, b);
+        for (var level = 0; common is not null && level <= 1; level++, common = Path.GetDirectoryName(common))
+        {
+            if ((Path.GetPathRoot(common) is { } root && Paths.Comparer.Equals(Path.TrimEndingDirectorySeparator(root), Path.TrimEndingDirectorySeparator(common)))
+                || Paths.Comparer.Equals(home, Path.TrimEndingDirectorySeparator(common)))
+            {
+                return null;
+            }
+
+            try
+            {
+                if (Directory.EnumerateFiles(common, "*.sln*").Any(f => f.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return common;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? CommonAncestor(string a, string b)
+    {
+        for (var candidate = a; candidate is not null; candidate = Path.GetDirectoryName(candidate))
+        {
+            if (Paths.Comparer.Equals(candidate, b) || b.StartsWith(Path.TrimEndingDirectorySeparator(candidate) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     private void OnFileChanged(string path)
