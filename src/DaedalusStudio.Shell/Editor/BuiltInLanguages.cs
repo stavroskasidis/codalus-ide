@@ -56,6 +56,7 @@ public static class BuiltInLanguages
             L("php", "PHP", [".php"]),
             L("razor", "Razor", [".cshtml", ".razor"]),
             L("http", "HTTP", [".http", ".rest"]),
+            L("t4", "T4 Text Template", [".tt", ".ttinclude", ".t4"]),
         })
         {
             registry.Register(language);
@@ -66,6 +67,13 @@ public static class BuiltInLanguages
         if (File.Exists(http))
         {
             registry.RegisterGrammar(new GrammarDefinition("source.http", "http", http));
+        }
+
+        // T4 text templates (M26b, ADR 0035): directives, control blocks and expression blocks over the generated text.
+        var t4 = Path.Combine(AppContext.BaseDirectory, "grammars", "t4.tmLanguage.json");
+        if (File.Exists(t4))
+        {
+            registry.RegisterGrammar(new GrammarDefinition("source.t4", "t4", t4));
         }
     }
 }

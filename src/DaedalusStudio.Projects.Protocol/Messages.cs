@@ -293,11 +293,17 @@ public static class BuildTargets
 /// Builds the solution (<see cref="Project"/> null) or one project (and the projects it references) with the active
 /// configuration. <see cref="Target"/> is <c>build</c>, <c>rebuild</c> or <c>clean</c>. A restore runs first unless
 /// <see cref="Restore"/> is false (never for clean). <c>build/cancel</c> stops it; the result then says so.
+/// <see cref="Options"/> (ADR 0034) sets verbosity, logs, parallelism and the fast up-to-date check; without them the
+/// build runs as before (minimal verbosity, no up-to-date check).
 /// </summary>
-public sealed record BuildParams(string Target, string? Project, bool Restore = true);
+public sealed record BuildParams(string Target, string? Project, bool Restore = true, BuildOptions? Options = null);
 
-/// <summary>Sent once every <c>build/output</c> and <c>build/diagnostic</c> of the build has been sent.</summary>
-public sealed record BuildResultInfo(bool Succeeded, bool Canceled, int Errors, int Warnings, long ElapsedMilliseconds);
+/// <summary>
+/// Sent once every <c>build/output</c> and <c>build/diagnostic</c> of the build has been sent. <see cref="UpToDate"/>:
+/// the fast up-to-date check found nothing to build, so MSBuild didn't run. <see cref="BinaryLog"/>: the binary log
+/// the build wrote, when the options asked for one.
+/// </summary>
+public sealed record BuildResultInfo(bool Succeeded, bool Canceled, int Errors, int Warnings, long ElapsedMilliseconds, bool UpToDate = false, string? BinaryLog = null);
 
 /// <summary>A line for the Build output channel.</summary>
 public sealed record BuildOutputParams(string Line);

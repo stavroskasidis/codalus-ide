@@ -3,6 +3,7 @@
     <ProjectReference Include="..\..\src\DaedalusStudio.Workbench\DaedalusStudio.Workbench.csproj" />
     <!-- Built so the tests can launch it; not referenced as an assembly. -->
     <ProjectReference Include="..\..\src\DaedalusStudio.Projects.Host\DaedalusStudio.Projects.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\DaedalusStudio.TextTemplating.Host\DaedalusStudio.TextTemplating.Host.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <!-- Host code without MSBuild types, tested on its own. -->

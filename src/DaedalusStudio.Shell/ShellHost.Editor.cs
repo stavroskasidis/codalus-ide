@@ -307,6 +307,7 @@ public sealed partial class ShellHost : IEditorServices
         };
         model.Saved += (_, _) => _ = Languages.SavedAsync(model.Path);
         model.Saved += (_, _) => Ui.Post(() => OnWebDocumentSaved(model.Path));
+        model.Saved += (_, _) => Ui.Post(() => RunCustomToolOnSave(model.Path));
         model.ConflictDetected += (_, _) => _ = ResolveConflictAsync(model);
         if (model.LanguageId is { } languageId)
         {

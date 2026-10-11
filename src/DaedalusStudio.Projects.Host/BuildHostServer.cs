@@ -107,6 +107,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         RegisterPackageHandlers();
         RegisterProjectManagementHandlers();
         RegisterItemHandlers();
+        RegisterBuildDepthHandlers();
         _connection.OnRequest(ProjectMethods.Shutdown, json.EmptyParams, json.EmptyResult, async (_, _) =>
         {
             if (_session is { } session)
@@ -142,6 +143,25 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
     }
 
     /// <summary>Project items, Show All Files, folder mode and item templates (ADR 0033).</summary>
+    private void RegisterBuildDepthHandlers()
+    {
+        var json = BuildDepthJsonContext.Default;
+        _connection.OnRequest(BuildDepthMethods.Batch, json.BatchBuildParams, json.BatchBuildResult, async (p, ct) =>
+        {
+            var result = await Guard(() => Session.BatchBuildAsync(p, this, ct)).ConfigureAwait(false);
+            await FlushAsync().ConfigureAwait(false);
+            return result;
+        });
+        _connection.OnRequest(BuildDepthMethods.UpToDate, json.UpToDateParams, json.UpToDateResult, (p, ct) => Guard(() => Session.CheckUpToDateAsync(p, ct)));
+        _connection.OnRequest(BuildDepthMethods.Timings, json.EmptyParams, json.BuildTimingsResult, (_, _) => Guard(() => Task.FromResult(Session.GetTimings())));
+        _connection.OnRequest(BuildDepthMethods.GetBuildEvents, json.BuildEventsParams, json.BuildEventsResult, (p, _) => Guard(() => Task.Run(() => Session.GetBuildEvents(p))));
+        _connection.OnRequest(BuildDepthMethods.SetBuildEvents, json.SetBuildEventsParams, json.BuildEventsResult, (p, _) => Guard(() => Session.SetBuildEventsAsync(p)));
+        _connection.OnRequest(BuildDepthMethods.OpenBinaryLog, json.OpenBinaryLogParams, json.BinaryLogInfo, (p, ct) => Guard(() => Session.OpenBinaryLogAsync(p, ct)));
+        _connection.OnRequest(BuildDepthMethods.BinaryLogChildren, json.BinaryLogChildrenParams, json.BinaryLogChildrenResult, (p, _) => Guard(() => Task.FromResult(Session.BinaryLogChildren(p))));
+        _connection.OnRequest(BuildDepthMethods.SearchBinaryLog, json.SearchBinaryLogParams, json.SearchBinaryLogResult, (p, ct) => Guard(() => Session.SearchBinaryLogAsync(p, ct)));
+        _connection.OnRequest(BuildDepthMethods.CloseBinaryLog, json.CloseBinaryLogParams, json.EmptyResult, (p, _) => Sync(() => Session.CloseBinaryLog(p)));
+    }
+
     private void RegisterItemHandlers()
     {
         var json = ItemJsonContext.Default;

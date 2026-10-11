@@ -37,7 +37,6 @@ public sealed class ItemsIntegrationTests : IAsyncLifetime
         File.WriteAllText(Path.Combine(_root, "Directory.Build.props"), "<Project />");
         DaedalusStudio.Tests.FixtureSdk.Pin(_root);
         File.WriteAllText(Path.Combine(_root, "Directory.Packages.props"), "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
-        Environment.SetEnvironmentVariable("DAEDALUS_TRASH_DIR", Path.Combine(_root, ".trash"));
         _service = new SolutionService(() => BuildHostIntegrationTests.HostAssemblyPath, new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) });
         _service.Log += (_, line) => Console.Error.WriteLine("[host] " + line);
         _items = new ProjectItemService(_service);

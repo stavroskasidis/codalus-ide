@@ -44,7 +44,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M21 | Remote development | planned |
 | M22 | Plugin platform 1.0 and marketplace | planned |
 | M23 | Personalization, settings sync and localization | planned |
-| M26 | Build and project-system depth | M26a at checkpoint ([m26a](checkpoints/m26a.md), ADR 0033): the Properties window, Show All Files, Include and Exclude, links and moves between projects, Add New Item, Export Template, the template manager, folder mode with tasks and launch configurations, External Tools; M26b (build depth) next |
+| M26 | Build and project-system depth | At checkpoint: M26a ([m26a](checkpoints/m26a.md), ADR 0033): the Properties window, Show All Files, Include and Exclude, links and moves between projects, Add New Item, Export Template, the template manager, folder mode with tasks and launch configurations, External Tools; M26b ([m26b](checkpoints/m26b.md), ADR 0034, 0035): build settings, the fast up-to-date check, Batch Build, Build Timings with the critical path, binary logs and their viewer, build events, custom tools (ResX, T4 in its own host, plugins) |
 | M27 | Data and Entity Framework Core tooling | planned |
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
@@ -763,7 +763,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 **Depends on.** M2, M4, M9 (property-page machinery). M11 helps (MSBuild editing).
 
-**Split** (rule 5, 2026-10-11): **M26a** is the project system (the Properties window, Show All Files, include and exclude, linked files, drag and drop between projects, templates, folder mode, External Tools; [ADR 0033](adr/0033-project-items-templates-and-folder-mode.md), [checkpoint](checkpoints/m26a.md)). **M26b** is build depth (Batch Build, build settings, the fast up-to-date check, timings and the critical path, binary logs and the structured log viewer, pre- and post-build events, custom tools and T4).
+**Split** (rule 5, 2026-10-11): **M26a** is the project system (the Properties window, Show All Files, include and exclude, linked files, drag and drop between projects, templates, folder mode, External Tools; [ADR 0033](adr/0033-project-items-templates-and-folder-mode.md), [checkpoint](checkpoints/m26a.md)). **M26b** is build depth (Batch Build, build settings, the fast up-to-date check, timings and the critical path, binary logs and the structured log viewer, pre- and post-build events, custom tools and T4; [ADR 0034](adr/0034-build-depth.md), [ADR 0035](adr/0035-custom-tools-and-text-templates.md), [checkpoint](checkpoints/m26b.md)).
 
 **Scope.**
 - **Properties window** (F4) for the selected Solution Explorer item:
@@ -1934,7 +1934,7 @@ The "Daedalus" column uses these terms:
 | Project, assembly and analyzer references | M9 |
 | COM references | Non-goal |
 | Connected Services, OpenAPI and gRPC service references | M15 |
-| Custom tools (single-file generators), T4 text templates | M26 |
+| Custom tools (single-file generators), T4 text templates | M26b |
 | User secrets | M15 |
 | Open Folder (no solution) | M26a |
 | Docker Compose projects (`.dcproj`) | M17 |
@@ -1953,12 +1953,12 @@ The "Daedalus" column uses these terms:
 | Structured build output, Error List navigation | M4 |
 | Startup project, Run without debugging, launch profiles | M4 |
 | Multiple startup projects | M14 |
-| Batch Build | M26 |
-| Build settings (verbosity, parallel builds, build before run) | M26 |
-| Fast up-to-date check, build acceleration | M26 |
-| Build timings, binary logs and log viewer | M26 |
-| Pre-build and post-build events | M26 (in the M9 property pages) |
-| Code analysis on build | M26 |
+| Batch Build | M26b |
+| Build settings (verbosity, parallel builds, build before run) | M26b |
+| Fast up-to-date check, build acceleration | M26b |
+| Build timings, binary logs and log viewer | M26b |
+| Pre-build and post-build events | M26b (in the M9 property pages) |
+| Code analysis on build | M26b |
 | Publish: folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT, container | M17 |
 | Publish to Azure or other clouds | Candidate (plugins) |
 | Pack NuGet packages | M9 |
@@ -2036,7 +2036,7 @@ The "Daedalus" column uses these terms:
 | XAML: Avalonia | M19 |
 | XAML: .NET MAUI | M20 |
 | MSBuild, JSON, XML, YAML | M11 |
-| T4 | M26 |
+| T4 | M26b |
 | C# Interactive | M10 |
 | F# Interactive | M36 |
 | Other languages | Plugins over M11 |
@@ -2338,3 +2338,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Git:** an askpass prompt behind the user's credential helper, worktrees, Git LFS awareness (pointer files, locks), solutions spanning several repositories.
   - **Open:** the project's OAuth apps (client ids) are to be registered; until then device sign-in needs a client id in settings, and a personal access token works.
 - 2026-10-11: M26 split into M26a (project system) and M26b (build depth). M26a built and at its checkpoint (ADR 0033): the Properties window (F4) with Build Action, Copy to Output Directory, Custom Tool and every item metadata, written as Visual Studio writes them under globbing (`items/*` in the build host, which evaluates each edit in memory); Show All Files with Include and Exclude From Project; Add Existing Item and links; moves between projects that carry a file's items; Add New Item (a built-in set and `dotnet new`'s item templates); Export Template and the template manager; folder mode (Open Folder, an in-memory solution of the loaded projects, `.daedalus/tasks.json` and `launch.json`); External Tools with macros. Plugin API 0.2.8: `contributes.propertyProviders` and `contributes.externalToolMacros`.
+- 2026-10-11: M26b built and at its checkpoint (ADR 0034, 0035): build options with every build (verbosity, a log file, parallel projects, binary logs, code analysis on build) from settings, and what F5 does before running; the fast up-to-date check, which records each project's inputs and outputs after a build and skips MSBuild when none changed (verified against real MSBuild runs); Batch Build; Build Timings with the critical path and the slowest targets and tasks; a binary log viewer on MSBuild.StructuredLogger in the build host; the Build Events page (PreBuild/PostBuild targets); custom tools: the ResX generators, T4 templates in a new supervised host (`daedalus-t4host`, Mono.TextTemplating) and plugins' generators (`contributes.customTools`, plugin API 0.2.8), run on demand and on save; the `t4` language.

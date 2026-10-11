@@ -71,6 +71,7 @@ The UI shell (`daedalus`, Native AOT) is kept light and responsive. Heavy servic
 | `src/DaedalusStudio.Debugging` | The Debug Adapter Protocol client for netcoredbg. |
 | `src/DaedalusStudio.Markup.Host` | The markup host (`daedalus-markuphost`): JSON with schemas, XML and MSBuild, YAML and `.editorconfig`. |
 | `src/DaedalusStudio.Interactive.*` | The C# Interactive host (`daedalus-replhost`) and its protocol. |
+| `src/DaedalusStudio.TextTemplating.*` | The T4 host (`daedalus-t4host`, Mono.TextTemplating) and its protocol. |
 | `src/DaedalusStudio.Terminal` | The terminal's VT engine (the pseudo-terminals are in `DaedalusStudio.Platform`). |
 | `eng/` | Scripts: fetching netcoredbg, building release packages (`package.sh`) and their templates. |
 | `tests/` | Unit, integration and headless UI tests. |

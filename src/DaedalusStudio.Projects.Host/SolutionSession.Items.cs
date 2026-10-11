@@ -442,7 +442,7 @@ internal sealed partial class SolutionSession
     private static HashSet<string> Snapshot(string folder)
     {
         var files = new HashSet<string>(s_pathComparer);
-        foreach (var entry in Directory.EnumerateFiles(folder, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true }))
+        foreach (var entry in Directory.EnumerateFiles(folder, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 }))
         {
             var relative = System.IO.Path.GetRelativePath(folder, entry);
             var first = relative.Split(System.IO.Path.DirectorySeparatorChar)[0];

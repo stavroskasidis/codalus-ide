@@ -1,0 +1,42 @@
+<local:LoadingView xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+                   xmlns:local="using:DaedalusStudio.Shell.Views"
+                   x:Class="DaedalusStudio.Shell.Views.BatchBuildView"
+                   x:DataType="vm:BatchBuildViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
+      <TextBlock Classes="heading" Text="Batch Build" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="Check the project configurations to build. They build one after another, each with the projects it references; the fast up-to-date check skips those with nothing to do." />
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button x:Name="BuildButton" Content="Build" Command="{Binding BuildCommand}" AutomationProperties.Name="Build checked project configurations" />
+        <Button Content="Rebuild" Command="{Binding RebuildCommand}" AutomationProperties.Name="Rebuild checked project configurations" />
+        <Button Content="Clean" Command="{Binding CleanCommand}" AutomationProperties.Name="Clean checked project configurations" />
+        <Button Content="Select All" Command="{Binding SelectAllCommand}" />
+        <Button Content="Deselect All" Command="{Binding DeselectAllCommand}" />
+        <ProgressBar IsIndeterminate="True" Width="80" Height="2" MinHeight="2" VerticalAlignment="Center" IsVisible="{Binding IsBusy}" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Status}" />
+      </StackPanel>
+    </StackPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="32,240,140,120,*" Margin="4,0,0,4">
+      <TextBlock Grid.Column="1" Classes="muted" Text="Project" />
+      <TextBlock Grid.Column="2" Classes="muted" Text="Configuration" />
+      <TextBlock Grid.Column="3" Classes="muted" Text="Platform" />
+      <TextBlock Grid.Column="4" Classes="muted" Text="Result" />
+    </Grid>
+    <ListBox ItemsSource="{Binding Rows}" AutomationProperties.Name="Project configurations">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:BatchBuildRowViewModel">
+          <Grid ColumnDefinitions="32,240,140,120,*" AutomationProperties.Name="{Binding AccessibleName}">
+            <CheckBox IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding AccessibleName}" />
+            <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding Name}" />
+            <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{Binding Configuration}" />
+            <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="{Binding Platform}" />
+            <TextBlock Grid.Column="4" VerticalAlignment="Center" Text="{Binding Status}" Classes.muted="{Binding !Failed}"
+                       Foreground="{DynamicResource Shell.Error}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</local:LoadingView>

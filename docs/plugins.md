@@ -84,6 +84,7 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 
 - **propertyProviders** (since 0.2.8): rows for the Properties window, `{ command, when }`. The command gets `{ kind, path, project }` of the Solution Explorer's selection (`kind` as in `explorerItemKind`) and returns `[{ category, name, value, description }]`; the rows are read only and show under their category (default: the plugin's name). `when` limits the selections it is asked for.
 - **externalToolMacros** (since 0.2.8): macros for External Tools' command, arguments and initial directory, `{ name, command, description }`. A tool that uses `$(name)` runs the command first; its string result replaces the macro.
+- **customTools** (since 0.2.8): custom tools (single-file generators, ADR 0035), `{ name, command, extension, description }`. A project item whose `Generator` metadata is `name` runs the command on Run Custom Tool and when it is saved: the command gets `{ path, content, namespace, project }` and returns the generated text, or `{ content, extension }`. The output is written next to the input with the extension (default `.cs`) and nested under it, as for the built-in `ResXFileCodeGenerator` and `TextTemplatingFileGenerator`.
 
 ### When-clauses
 
@@ -249,10 +250,11 @@ Installed plugins live in the user plugins folder (**Tools → Open User Plugins
 ### 0.2.8 (M26)
 
 Additive (plugins built for 0.2.0–0.2.7 keep working):
-- `contributes.propertyProviders` and `contributes.externalToolMacros` ([above](#contribution-points)).
+- `contributes.propertyProviders`, `contributes.externalToolMacros` and (M26b) `contributes.customTools` ([above](#contribution-points)).
 - Shell commands `workbench.openFolder` (an optional folder path), `workbench.view.properties`, `explorer.showAllFiles`, `explorer.switchViews`, `explorer.excludeFromProject`, `explorer.includeInProject`, `project.addNewItem` (an optional project path), `project.addExistingItem`, `project.addExistingItemAsLink`, `project.exportTemplate`, `tools.templates`, `tools.externalTools`, `folder.loadAllProjects`, `folder.loadProject`, `folder.unloadProject`, `folder.openProject`, `tasks.run` (an optional task label), `tasks.configure`, `launch.configure`, `run.selectLaunchConfiguration` (an optional name), and `externalTools.run.<id>` for each external tool; the context keys listed under [When-clauses](#when-clauses).
 - `solution.getInfo` returns `format: folder` and the folder as `path` in folder mode; `solution.addProjectFile` loads the project into the folder.
 - Icons `files`, `file-add`, `properties` and `tools`.
+- M26b: shell commands `build.batchBuild`, `build.checkUpToDate` (an optional project path), `build.showTimings`, `build.buildWithBinaryLog`, `build.openBinaryLog` (an optional `.binlog` path), `build.openBuildLog` and `project.runCustomTool` (an optional file path); the settings `build.verbosity`, `build.logFileVerbosity`, `build.maxParallelProjects`, `build.fastUpToDateCheck`, `build.beforeRun`, `build.binaryLog`, `build.runAnalyzersDuringBuild` and `build.runCustomToolsOnSave`; the language `t4` (`.tt`, `.ttinclude`, `.t4`).
 
 ### 0.2.7 (M14b)
 
