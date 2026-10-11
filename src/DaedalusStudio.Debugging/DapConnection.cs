@@ -244,19 +244,56 @@ public sealed class DapConnection : IAsyncDisposable
     /// <summary>An event handler threw (the loop goes on).</summary>
     public event EventHandler<Exception>? HandlerFailed;
 
+    /// <summary>
+    /// Ends the connection without waiting for the end of the adapter's output: for an adapter that exited while a
+    /// process it started still holds that output open (on Unix a debuggee inherits netcoredbg's pipes, M33). Pending
+    /// requests fail, the events end, and <see cref="Closed"/> completes.
+    /// </summary>
+    public void Abandon()
+    {
+        _events.Writer.TryComplete();
+        foreach (var pending in _pending.Values)
+        {
+            pending.TrySetException(new DapConnectionLostException("The debug adapter exited."));
+        }
+
+        _closed.TrySetResult();
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _shutdown.CancelAsync().ConfigureAwait(false);
+        var ended = true;
         try
         {
-            await _readLoop.ConfigureAwait(false);
-            await _eventLoop.ConfigureAwait(false);
+            // A read from a pipe can't be cancelled on Unix: one that another process keeps open is left to end with it.
+            await _readLoop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
         }
+        catch (TimeoutException)
+        {
+            ended = false;
+            Abandon();
+        }
 
-        _shutdown.Dispose();
-        _writeLock.Dispose();
+        try
+        {
+            await _eventLoop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (TimeoutException)
+        {
+            ended = false;
+        }
+
+        if (ended)
+        {
+            _shutdown.Dispose();
+            _writeLock.Dispose();
+        }
     }
 }

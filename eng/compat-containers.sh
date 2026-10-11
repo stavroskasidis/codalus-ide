@@ -8,7 +8,7 @@
 # Studio sets CLR_ICU_VERSION_OVERRIDE for .NET Core 2.x to 3.1 when it runs them (the test suite covers that on the
 # host); OpenSSL 1.x, which .NET Core 2.x to .NET 5 need for cryptography and HTTPS, has no such switch. This script proves the
 # programs themselves on the distributions of their time, with what those distributions bring:
-#   - Ubuntu 18.04 (ICU 60, OpenSSL 1.0 and 1.1): .NET Core 2.0 to 3.1 and ASP.NET Core 2.1 and 3.1
+#   - Ubuntu 18.04 (ICU 60, OpenSSL 1.0 and 1.1, and libunwind, which only .NET Core 2.0 doesn't bring): .NET Core 2.0 to 3.1 and ASP.NET Core 2.1 and 3.1
 #   - Ubuntu 20.04 (ICU 66, OpenSSL 1.1): .NET Core 3.1 and .NET 5
 #   - Ubuntu 24.04 (ICU 74, OpenSSL 3): what fails without help (ICU, OpenSSL), and the ICU override
 # It builds the fixture on the host with the repository's SDK, installs the old runtimes into
@@ -91,7 +91,8 @@ web() {
 
 # An image per distribution with what the runtimes need from it, built once (from an empty context).
 image() {
-  local tag="daedalus-compat-$1" base="$2" packages="$3"
+  local base="$2" packages="$3"
+  local tag="daedalus-compat-$1-$(printf '%s %s' "$base" "$packages" | sha256sum | cut -c1-8)"
   if ! "$engine" image inspect "$tag" > /dev/null 2>&1; then
     echo "== image $tag ($base: $packages)" >&2
     mkdir -p "$work/context"
@@ -101,7 +102,7 @@ image() {
   echo "$tag"
 }
 
-bionic="$(image bionic docker.io/library/ubuntu:18.04 "libicu60 libssl1.0.0 libssl1.1 libgssapi-krb5-2 zlib1g ca-certificates")"
+bionic="$(image bionic docker.io/library/ubuntu:18.04 "libicu60 libssl1.0.0 libssl1.1 libunwind8 libgssapi-krb5-2 zlib1g ca-certificates")"
 focal="$(image focal docker.io/library/ubuntu:20.04 "libicu66 libssl1.1 libgssapi-krb5-2 zlib1g ca-certificates")"
 noble="$(image noble docker.io/library/ubuntu:24.04 "libicu74 libssl3t64 libgssapi-krb5-2 zlib1g ca-certificates")"
 

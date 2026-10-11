@@ -105,6 +105,9 @@ public static class DebugAdapterLocator
 /// </summary>
 public sealed class DebugAdapter : IDebugAdapter
 {
+    /// <summary>How long <see cref="DisconnectAsync"/> waits for the adapter's answer.</summary>
+    private static readonly TimeSpan DisconnectTimeout = TimeSpan.FromSeconds(10);
+
     private readonly Process _process;
     private readonly DapConnection _connection;
     private readonly TaskCompletionSource _initialized = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -130,6 +133,33 @@ public sealed class DebugAdapter : IDebugAdapter
                 Log?.Invoke(this, line);
             }
         };
+
+        // The connection normally closes when the adapter's output ends with it. On Unix the debuggee inherits that
+        // output, so an adapter that exits before its debuggee would leave the session running forever (M33).
+        process.EnableRaisingEvents = true;
+        process.Exited += (_, _) => _ = AbandonUnlessClosedAsync();
+    }
+
+    private async Task AbandonUnlessClosedAsync()
+    {
+        await Task.WhenAny(_connection.Closed, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
+        if (!_connection.Closed.IsCompleted)
+        {
+            Log?.Invoke(this, $"The debug adapter exited (code {ExitCode()}), and a process it started still holds its output.");
+            _connection.Abandon();
+        }
+    }
+
+    private string ExitCode()
+    {
+        try
+        {
+            return _process.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (InvalidOperationException)
+        {
+            return "unknown";
+        }
     }
 
     public Capabilities Capabilities { get; private set; } = new();
@@ -248,13 +278,21 @@ public sealed class DebugAdapter : IDebugAdapter
     /// <summary>Ends the session: terminates a launched program, or detaches from an attached one.</summary>
     public async Task DisconnectAsync(bool terminateDebuggee, CancellationToken cancellationToken)
     {
+        // An adapter that no longer answers (netcoredbg after its debuggee failed fast at start, M33) must not hold the
+        // session open: after the timeout, disposing the adapter ends its process.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(DisconnectTimeout);
         try
         {
-            await _connection.RequestAsync("disconnect", new DisconnectArguments(terminateDebuggee), Json.DisconnectArguments, cancellationToken).ConfigureAwait(false);
+            await _connection.RequestAsync("disconnect", new DisconnectArguments(terminateDebuggee), Json.DisconnectArguments, timeout.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is DapConnectionLostException or DapException)
         {
             // Already gone.
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // No answer in time.
         }
     }
 
