@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.DatabaseExplorerView"
+             x:DataType="vm:DatabaseExplorerViewModel">
+  <DockPanel>
+    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,3">
+      <Button Classes="toolbar" Command="{Binding AddCommand}" ToolTip.Tip="Add a connection" AutomationProperties.Name="Add Connection">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="database" />
+          <TextBlock Text="Add Connection…" VerticalAlignment="Center" />
+        </StackPanel>
+      </Button>
+      <Button Classes="toolbar" Content="New Query" Command="{Binding NewQueryCommand}" ToolTip.Tip="A new SQL editor on the selected connection" />
+      <Button Classes="toolbar" Content="View Data" Command="{Binding ViewDataCommand}" ToolTip.Tip="Show and edit the selected table's rows" />
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh the selected connection" AutomationProperties.Name="Refresh">
+        <controls:Icon Kind="refresh" />
+      </Button>
+    </WrapPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Database Explorer">
+      <TreeView.Styles>
+        <Style Selector="TreeViewItem" x:DataType="vm:DbNodeViewModel">
+          <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          <Setter Property="MinHeight" Value="22" />
+        </Style>
+      </TreeView.Styles>
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate x:DataType="vm:DbNodeViewModel" ItemsSource="{Binding Children}">
+          <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+            <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" Classes.muted="{Binding IsPlaceholder}" />
+            <TextBlock Classes="muted" FontSize="11" Text="{Binding Description}" IsVisible="{Binding HasDescription}" VerticalAlignment="Center" />
+          </StackPanel>
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+    </TreeView>
+  </DockPanel>
+</UserControl>

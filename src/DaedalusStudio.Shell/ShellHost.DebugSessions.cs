@@ -64,11 +64,25 @@ public sealed partial class ShellHost
         });
     }
 
-    /// <summary>The console of a debugged program: the terminal for console apps when <c>debug.console</c> says so.</summary>
-    private DebugConsoleKind ConsoleFor(RunInfo info) =>
-        Workbench.Settings.GetString(DebugConsoleSetting, "internalConsole") == "integratedTerminal" && string.Equals(info.OutputType, "Exe", StringComparison.OrdinalIgnoreCase)
-            ? DebugConsoleKind.Terminal
-            : DebugConsoleKind.Internal;
+    /// <summary>
+    /// The console of a debugged program: the terminal for console apps when <c>debug.console</c> says so. Not on macOS:
+    /// netcoredbg can't attach to a program held at startup there, so the Debug Console it is. `TODO(issue)`.
+    /// </summary>
+    private DebugConsoleKind ConsoleFor(RunInfo info)
+    {
+        if (Workbench.Settings.GetString(DebugConsoleSetting, "internalConsole") != "integratedTerminal" || !string.Equals(info.OutputType, "Exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return DebugConsoleKind.Internal;
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            DebugLog.AppendLine("The integrated terminal isn't available for debugging on macOS yet: the program uses the Debug Console.");
+            return DebugConsoleKind.Internal;
+        }
+
+        return DebugConsoleKind.Terminal;
+    }
 
     // ------------------------------------------------------------------ multiple startup projects
 

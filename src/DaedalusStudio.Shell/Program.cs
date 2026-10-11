@@ -12,7 +12,7 @@ internal static partial class Program
         // Started by git or ssh as askpass (ADR 0031): ask the shell that ran git, print the answer, exit.
         if (DaedalusStudio.Workbench.Git.AskpassClient.IsInvocation(args))
         {
-            return DaedalusStudio.Workbench.Git.AskpassClient.Run(args[0], Console.Out);
+            return DaedalusStudio.Workbench.Git.AskpassClient.Run(args[0], Console.Out, error: Console.Error);
         }
 
         BenchEvents.Emit(BenchEventNames.MainEntered);

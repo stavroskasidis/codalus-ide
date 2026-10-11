@@ -219,8 +219,8 @@ internal sealed class Dumps : IDisposable
 
     /// <summary>
     /// Create Dump: a dump of a running .NET process through its diagnostics port (the runtime starts createdump). A
-    /// createdump that doesn't finish in <paramref name="timeout"/> is ended: on macOS it can stall on a program the
-    /// debugger holds paused.
+    /// createdump that doesn't finish in <paramref name="timeout"/> is ended: on macOS it waits while the system's
+    /// developer-tools password prompt is open.
     /// </summary>
     public static async Task<CreateDumpResult> CreateAsync(int processId, string path, string kind, TimeSpan timeout, CancellationToken cancellationToken)
     {
@@ -234,7 +234,7 @@ internal sealed class Dumps : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var started = DateTime.Now.AddSeconds(-1);
         // The synchronous WriteDump (the call proven on every OS), on its own thread so the wait can be bounded: a
-        // createdump that stalls (seen on macOS) is ended after the timeout, which frees the thread.
+        // createdump that stalls (on macOS, while a password prompt waits) is ended after the timeout, which frees the thread.
         var write = Task.Factory.StartNew(
             () => new DiagnosticsClient(processId).WriteDump(type, path, logDumpGeneration: false),
             CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
@@ -250,7 +250,7 @@ internal sealed class Dumps : IDisposable
                 throw;
             }
 
-            throw new TimeoutException($"The dump wasn't written within {timeout.TotalSeconds:0} s. On macOS, continue or detach a paused program before writing its dump.");
+            throw new TimeoutException($"The dump wasn't written within {timeout.TotalSeconds:0} s. On macOS, check for a password prompt from the system (developer tools access) and approve it.");
         }
 
         return new CreateDumpResult(path, new FileInfo(path).Length);

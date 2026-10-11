@@ -1,0 +1,4 @@
+<Solution>
+  <!-- SDK-style SQL projects build in a solution as the SDK project type (MSBuild skips the classic SSDT type). -->
+  <Project Path="InventoryDb/InventoryDb.sqlproj" Type="C#" />
+</Solution>

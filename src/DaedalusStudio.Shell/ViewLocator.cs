@@ -35,6 +35,8 @@ public sealed class ViewLocator : IDataTemplate
         CreatePullRequestDocument document => new PaneHost(document, new CreatePullRequestView { DataContext = document.ViewModel }),
         EfModelDocument document => new PaneHost(document, new EfModelView(document.ViewModel)),
         EfScaffoldDocument document => new PaneHost(document, new EfScaffoldView { DataContext = document.ViewModel }),
+        TableDataDocument document => new PaneHost(document, new TableDataView(document.ViewModel)),
+        ConnectionFormDocument document => new PaneHost(document, new ConnectionView { DataContext = document.ViewModel }),
         _ => null,
     };
 
@@ -115,6 +117,8 @@ public sealed class ViewLocator : IDataTemplate
         TerminalViewModel vm => new TerminalView { DataContext = vm },
         InteractiveViewModel vm => new InteractiveView { DataContext = vm },
         EntityFrameworkViewModel vm => new EntityFrameworkView { DataContext = vm },
+        DatabaseExplorerViewModel vm => new DatabaseExplorerView { DataContext = vm },
+        QueryResultsViewModel vm => new QueryResultsView(vm, vm.Font!),
         _ => new TextBlock { Text = "This tool window is not available.", Margin = new Thickness(12) },
     };
 }

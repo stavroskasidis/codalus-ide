@@ -534,10 +534,8 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => editor.PinLayer.Pins.TryGetValue(cwdLine, out var control) && control.IsVisible, "the pinned data tip floats over its line").ConfigureAwait(true);
             Screenshot("smoke-test-debug-companion.png");
 
-            // A full dump of the paused program, opened in the dump view. On macOS createdump can stall on a program the
-            // debugger holds, so there the dump is of the build host, a .NET process outside the session.
-            var dumpsDebuggee = !OperatingSystem.IsMacOS();
-            var pid = (dumpsDebuggee ? shell.Debugger.ProcessId : shell.Solutions.HostProcessId) ?? throw new SmokeFailure("There is no process id to dump.");
+            // A full dump of the paused program, opened in the dump view.
+            var pid = shell.Debugger.ProcessId ?? throw new SmokeFailure("The session has no process id.");
             var dump = Path.Combine(Path.GetTempPath(), $"daedalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
             DaedalusStudio.Debugging.Companion.CreateDumpResult created;
             try
@@ -557,17 +555,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             {
                 var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
                 await WaitAsync(() => window.GetVisualDescendants().OfType<DumpView>().Any(), "the dump view renders").ConfigureAwait(true);
-                if (!dumpsDebuggee)
-                {
-                    Check(document.ViewModel.Summary.Threads.Any(t => t.Frames.Count > 0), "the build host's dump has threads with managed frames");
-                }
-
                 var main = document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).FirstOrDefault(f => f.Method.Contains("Main", StringComparison.Ordinal));
-                if (dumpsDebuggee)
-                {
-                    Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
-                    Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
-                }
+                Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
+                Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
 
                 await document.ViewModel.LoadHeapAsync().ConfigureAwait(true);
                 Check(document.ViewModel.Heap.Any(r => r.Name == "System.String"), "the heap lists System.String");
@@ -963,7 +953,11 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 
         // M14c: debugger sessions (ADR 0039), on samples/Debugging's Sessions.slnx.
         await StepAsync("debug.compound", "M14c", "Two startup projects from the Startup Projects page debug in one session: each stops at its breakpoint, and the Processes window lists both", DebugCompoundStepAsync, "debug.session").ConfigureAwait(true);
-        await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
+        // Not on macOS, where debugged programs use the Debug Console (netcoredbg can't attach to a held program there).
+        if (!OperatingSystem.IsMacOS())
+        {
+            await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
+        }
         await StepAsync("debug.roslyn", "M14c", "F5 on a source generator's DebugRoslynComponent profile runs the compiler on its target and stops in the generator", DebugRoslynStepAsync, "debug.compound").ConfigureAwait(true);
         if (await RemoteStandInAsync().ConfigureAwait(true) is { } remote)
         {
@@ -1004,6 +998,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
 
         await StepAsync("web.scaffolding", "M15", "Add New Scaffolded Item runs dotnet-aspnet-codegenerator (an API controller over a DbContext); a gRPC service reference generates its client at build time", ScaffoldingStepAsync).ConfigureAwait(true);
+        await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
 
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
@@ -1433,6 +1428,75 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         {
             shell.Layout.CloseDocument(document);
         }
+    }
+
+    /// <summary>
+    /// The database explorer (M27b, ADR 0037 and 0038) on a copy of samples/Data's inventory database: a connection
+    /// added in the form, the tree, a table's data edited and committed, a query editor with schema completion,
+    /// results and an estimated plan, all through the published data host.
+    /// </summary>
+    private async Task DataExplorerStepAsync()
+    {
+        var database = Path.Combine(_work, "smoke-inventory.db");
+        File.Copy(Path.Combine(samples, "Data", "Inventory", "inventory.db"), database, overwrite: true);
+        shell.ShowDatabaseExplorer();
+        var form = shell.OpenConnectionForm().ViewModel;
+        form.EngineName = "SQLite";
+        form.File = database;
+        await form.TestAsync().ConfigureAwait(true);
+        Check(form.Result?.StartsWith("Connected: SQLite", StringComparison.Ordinal) == true, "Test Connection reaches the database: " + form.Result + "\n" + Tail(shell.DataLog.GetText(), 1500));
+        await form.SaveAsync().ConfigureAwait(true);
+        var connection = shell.DbExplorer.Roots.FirstOrDefault(r => r.Label == "smoke-inventory.db");
+        Check(connection is not null, "the connection is in the Database Explorer");
+
+        async Task<DbNodeViewModel> Child(DbNodeViewModel node, string label)
+        {
+            node.IsExpanded = true;
+            await WaitAsync(() => node.Children.Any(c => c.Label == label), $"{node.Label} shows {label}", 60).ConfigureAwait(true);
+            return node.Children.First(c => c.Label == label);
+        }
+
+        var products = await Child(await Child(connection!, "Tables").ConfigureAwait(true), "Products").ConfigureAwait(true);
+        shell.DbExplorer.Selected = products;
+        var document = await shell.ViewTableDataAsync(products).ConfigureAwait(true);
+        Check(document is not null, "View Data opens the table");
+        var table = document!.ViewModel;
+        await WaitAsync(() => table.Grid is { Rows.Count: 5 } && !table.IsBusy, "the table's rows are shown", 60).ConfigureAwait(true);
+        var name = Array.FindIndex(table.Grid!.Columns, c => c.Name == "Name");
+        table.Grid.Rows[1].Set(name, "Chang (smoke)");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-data-table.png");
+        Check(await table.CommitAsync().ConfigureAwait(true), "the edit commits: " + table.Message);
+        Check(table.Grid!.Rows[1].Values[name] == "Chang (smoke)", "the committed value is read back");
+
+        var editor = await shell.OpenQueryAsync(products).ConfigureAwait(true);
+        Check(editor is not null, "New Query opens an editor");
+        await WaitAsync(() => editor!.Controller is not null, "the query editor appears").ConfigureAwait(true);
+        editor!.Model.Text.Text = "SELECT p.Name, c.Name AS Category FROM Products p JOIN Categories c ON c.CategoryId = p.CategoryId ORDER BY p.ProductId;";
+        var client = await shell.Languages.ClientAsync(ShellHost.SqlLanguageId).ConfigureAwait(true);
+        Check(client is not null, "the SQL language service starts");
+        var found = false;
+        for (var attempt = 0; attempt < 120 && !found; attempt++)
+        {
+            var completion = await client!.CompletionAsync(editor.Model.Uri, new LanguageServices.Protocol.Position(0, "SELECT p.".Length), null, CancellationToken.None).ConfigureAwait(true);
+            found = completion.Items.Any(i => i.Label == "Sku");
+            if (!found)
+            {
+                await Task.Delay(500).ConfigureAwait(true);
+            }
+        }
+
+        Check(found, "SQL completion offers the alias's columns from the schema");
+        var result = await shell.ExecuteQueryAsync().ConfigureAwait(true);
+        Check(result?.ResultSets is [{ Rows.Length: 5 }], "the query returns the 5 products: " + shell.QueryResults.Messages);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-data-query.png");
+        await shell.ExecuteQueryAsync(plan: Data.Protocol.PlanKinds.Estimated).ConfigureAwait(true);
+        Check(shell.QueryResults.HasPlan && shell.QueryResults.Plan.Count > 0, "the estimated plan is shown: " + shell.QueryResults.Messages);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-data-plan.png");
+        shell.Layout.CloseDocument(document);
+        await shell.Data.DisconnectAsync(connection!.ConnectionId!).ConfigureAwait(true);
     }
 
     /// <summary>

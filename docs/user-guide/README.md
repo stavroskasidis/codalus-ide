@@ -9,7 +9,7 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 5. [Building and running](build-and-run.md)
 6. [Debugging](debugging.md)
 7. [Web development: HTML, CSS and JavaScript, Hot Reload, Razor and Blazor, endpoints, .http files, certificates and secrets](web.md)
-8. [Data and Entity Framework Core: migrations, the model view, reverse engineering](data.md)
+8. [Data: Entity Framework Core, the Database Explorer, table data, queries and SQL projects](data.md)
 9. [Testing](testing.md)
 10. [Git](git.md)
 11. [Terminal and C# Interactive](terminal.md)
@@ -63,6 +63,10 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `Shift+F9` | QuickWatch |
 | | `Ctrl+Alt+E` | Exception Settings |
 | | `Ctrl+Alt+B`, `Ctrl+Alt+C`, `Ctrl+Alt+H`, `Ctrl+Alt+U` | Breakpoints, Call Stack, Threads, Modules |
+| Data | `Ctrl+Alt+D` | Database Explorer |
+| | `Ctrl+Shift+E`, `Ctrl+Shift+Enter` | Execute the query, the current statement |
+| | `Ctrl+Shift+L`, `Ctrl+Shift+M` | Estimated plan, actual plan |
+| | `Alt+Break` | Cancel the query |
 | Web | `Ctrl+Alt+R` | Send the .http request at the caret |
 | | `Alt+F10` | Apply code changes (Hot Reload) |
 | Testing | `Ctrl+E T` | Test Explorer |

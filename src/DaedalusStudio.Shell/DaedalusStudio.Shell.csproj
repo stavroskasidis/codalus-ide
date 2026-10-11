@@ -34,6 +34,7 @@
     <HelperProcess Include="..\DaedalusStudio.LanguageServices.Host\DaedalusStudio.LanguageServices.Host.csproj" Folder="lshost" />
     <HelperProcess Include="..\DaedalusStudio.Interactive.Host\DaedalusStudio.Interactive.Host.csproj" Folder="replhost" />
     <HelperProcess Include="..\DaedalusStudio.Markup.Host\DaedalusStudio.Markup.Host.csproj" Folder="markuphost" />
+    <HelperProcess Include="..\DaedalusStudio.Data.Host\DaedalusStudio.Data.Host.csproj" Folder="datahost" />
     <HelperProcess Include="..\DaedalusStudio.Debugging.Host\DaedalusStudio.Debugging.Host.csproj" Folder="debughost" />
     <HelperProcess Include="..\DaedalusStudio.TextTemplating.Host\DaedalusStudio.TextTemplating.Host.csproj" Folder="t4host" />
     <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
@@ -94,6 +95,7 @@
       lshost/                     daedalus-lshost, the C# language service (likewise)
       replhost/                   daedalus-replhost, C# Interactive (likewise)
       markuphost/                 daedalus-markuphost, JSON/XML/MSBuild/YAML/.editorconfig (likewise)
+      datahost/                   daedalus-datahost, databases and the SQL language server (likewise)
       debughost/                  daedalus-debughost, the debug companion: debugger attributes, dumps (likewise),
                                   and DaedalusStudio.Debugging.StartupHook.dll for programs debugged in the terminal
       plugins/<plugin id>/        built-in plugins

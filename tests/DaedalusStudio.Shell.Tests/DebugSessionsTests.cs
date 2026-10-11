@@ -101,6 +101,7 @@ public sealed class DebugSessionsTests
     public async Task A_console_app_debugged_in_the_terminal_takes_input_and_runs_on_after_Detach_All()
     {
         SkipWithoutDebugger();
+        Assert.SkipWhen(OperatingSystem.IsMacOS(), "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
         await using var f = ShellFixture.Create();
         var folder = f.CopySample("Debugging");
         var properties = Path.Combine(folder, "Debuggee", "Properties");

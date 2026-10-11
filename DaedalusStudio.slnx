@@ -12,6 +12,8 @@
     <Project Path="samples/plugins/TodoLanguage/TodoLanguage.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/DaedalusStudio.Data.Host/DaedalusStudio.Data.Host.csproj" />
+    <Project Path="src/DaedalusStudio.Data.Protocol/DaedalusStudio.Data.Protocol.csproj" />
     <Project Path="src/DaedalusStudio.Debugging/DaedalusStudio.Debugging.csproj" />
     <Project Path="src/DaedalusStudio.Debugging.Host/DaedalusStudio.Debugging.Host.csproj" />
     <Project Path="src/DaedalusStudio.Debugging.StartupHook/DaedalusStudio.Debugging.StartupHook.csproj" />

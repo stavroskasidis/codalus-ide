@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.ConnectionView"
+             x:DataType="vm:ConnectionFormViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="24,18" Spacing="8" MaxWidth="720" HorizontalAlignment="Left">
+      <TextBlock Classes="heading" FontSize="18" Text="Database connection" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="Connections are kept for your user account. The password is never written to a file: it goes to the operating system's credential store when you choose to save it, otherwise it is asked once per session." />
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4">
+        <TextBlock Text="Database" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
+        <ComboBox x:Name="EngineBox" Grid.Column="1" ItemsSource="{Binding Engines}" SelectedItem="{Binding EngineName}" MinWidth="240" AutomationProperties.Name="Database engine" />
+        <TextBlock Grid.Row="1" Text="Name" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Name}" PlaceholderText="From the server and database" AutomationProperties.Name="Connection name" />
+      </Grid>
+      <CheckBox Content="Enter a connection string instead" IsChecked="{Binding UseConnectionString}" />
+      <TextBox Text="{Binding ConnectionString}" IsVisible="{Binding UseConnectionString}" AutomationProperties.Name="Connection string" PlaceholderText="Server=localhost;Database=Shop;User ID=sa;Password=…" />
+      <StackPanel Spacing="8" IsVisible="{Binding UseFields}">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto" IsVisible="{Binding IsSqlite}">
+          <TextBlock Text="File" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" MinWidth="80" />
+          <TextBox Grid.Column="1" Text="{Binding File}" PlaceholderText="Path to the .db file" AutomationProperties.Name="Database file" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto" IsVisible="{Binding IsServer}">
+          <TextBlock Text="Server" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" MinWidth="80" />
+          <TextBox Grid.Column="1" Text="{Binding Host}" AutomationProperties.Name="Server" />
+          <TextBlock Grid.Column="2" Text="Port" Classes="muted" VerticalAlignment="Center" Margin="12,0" />
+          <TextBox Grid.Column="3" Width="90" Text="{Binding Port}" PlaceholderText="default" AutomationProperties.Name="Port" />
+          <TextBlock Grid.Row="1" Text="Database" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+          <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Margin="0,6,0,0" Text="{Binding Database}" PlaceholderText="The server's default" AutomationProperties.Name="Database name" />
+        </Grid>
+        <CheckBox Content="Windows authentication (integrated security)" IsChecked="{Binding Integrated}" IsVisible="{Binding IsSqlServer}" />
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" IsVisible="{Binding UsesPassword}">
+          <TextBlock Text="User" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" MinWidth="80" />
+          <TextBox Grid.Column="1" Text="{Binding User}" AutomationProperties.Name="User name" />
+          <TextBlock Grid.Row="1" Text="Password" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+          <TextBox Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Password}" PasswordChar="●" AutomationProperties.Name="Password" />
+        </Grid>
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto">
+          <TextBlock Text="Options" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" MinWidth="80" />
+          <TextBox Grid.Column="1" Text="{Binding Options}" PlaceholderText="More keywords, such as TrustServerCertificate=true" AutomationProperties.Name="Connection options" />
+        </Grid>
+      </StackPanel>
+      <CheckBox Content="Save the password in the operating system's credential store" IsChecked="{Binding SavePassword}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Classes="accent" Content="Save" Command="{Binding SaveCommand}" IsEnabled="{Binding !IsBusy}" />
+        <Button Content="Test Connection" Command="{Binding TestCommand}" IsEnabled="{Binding !IsBusy}" />
+        <TextBlock Text="Connecting…" Classes="muted" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock Text="{Binding Result}" IsVisible="{Binding HasResult}" TextWrapping="Wrap" FontWeight="SemiBold" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
