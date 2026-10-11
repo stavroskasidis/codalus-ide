@@ -530,8 +530,10 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => editor.PinLayer.Pins.TryGetValue(cwdLine, out var control) && control.IsVisible, "the pinned data tip floats over its line").ConfigureAwait(true);
             Screenshot("smoke-test-debug-companion.png");
 
-            // A full dump of the paused program, opened in the dump view.
-            var pid = shell.Debugger.ProcessId ?? throw new SmokeFailure("The session has no process id.");
+            // A full dump of the paused program, opened in the dump view. On macOS createdump can stall on a program the
+            // debugger holds, so there the dump is of the build host, a .NET process outside the session.
+            var dumpsDebuggee = !OperatingSystem.IsMacOS();
+            var pid = (dumpsDebuggee ? shell.Debugger.ProcessId : shell.Solutions.HostProcessId) ?? throw new SmokeFailure("There is no process id to dump.");
             var dump = Path.Combine(Path.GetTempPath(), $"daedalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
             var created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
             Check(File.Exists(created.Path) && created.Size > 0, $"the companion writes a dump ({created.Size} bytes)");
@@ -542,9 +544,18 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             {
                 var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
                 await WaitAsync(() => window.GetVisualDescendants().OfType<DumpView>().Any(), "the dump view renders").ConfigureAwait(true);
+                if (!dumpsDebuggee)
+                {
+                    Check(document.ViewModel.Summary.Threads.Any(t => t.Frames.Count > 0), "the build host's dump has threads with managed frames");
+                }
+
                 var main = document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).FirstOrDefault(f => f.Method.Contains("Main", StringComparison.Ordinal));
-                Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
-                Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
+                if (dumpsDebuggee)
+                {
+                    Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
+                    Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
+                }
+
                 await document.ViewModel.LoadHeapAsync().ConfigureAwait(true);
                 Check(document.ViewModel.Heap.Any(r => r.Name == "System.String"), "the heap lists System.String");
                 Screenshot("smoke-test-dump.png");
@@ -836,8 +847,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(editor.Model.LanguageId == ShellHost.RazorLanguageId, "Counter.razor is a Razor file");
             var client = shell.Languages.RunningClient(ShellHost.CSharpLanguageId)!;
             var at = editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("@currentCount", StringComparison.Ordinal) + 3);
-            string? hover = null;
-            await WaitAsync(() => (hover = client.HoverAsync(editor.Model.Uri, at, CancellationToken.None).GetAwaiter().GetResult()?.Contents.Value) is not null,
+            var hover = await WaitForAsync(async ct => (await client.HoverAsync(editor.Model.Uri, at, ct).ConfigureAwait(true))?.Contents.Value,
                 "hover on C# in the Razor file", 120).ConfigureAwait(true);
             Check(hover!.Contains("currentCount", StringComparison.Ordinal), "the hover describes the field: " + hover);
             var completion = await client.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("<button", StringComparison.Ordinal) + 1),
@@ -1458,6 +1468,37 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             }
 
             await Task.Delay(50).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Asks <paramref name="probe"/> until it answers non-null, each try cut off after 10 s, without ever blocking the
+    /// UI thread: a host that stops answering fails the step instead of hanging the app.
+    /// </summary>
+    private static async Task<T> WaitForAsync<T>(Func<CancellationToken, Task<T?>> probe, string what, int seconds = 30) where T : class
+    {
+        var deadline = Stopwatch.GetTimestamp() + (seconds * Stopwatch.Frequency);
+        while (true)
+        {
+            using var attempt = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            try
+            {
+                if (await probe(attempt.Token).ConfigureAwait(true) is { } value)
+                {
+                    return value;
+                }
+            }
+            catch (OperationCanceledException) when (attempt.IsCancellationRequested)
+            {
+                // This try took too long; the deadline decides.
+            }
+
+            if (Stopwatch.GetTimestamp() > deadline)
+            {
+                throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what}.");
+            }
+
+            await Task.Delay(250).ConfigureAwait(true);
         }
     }
 
