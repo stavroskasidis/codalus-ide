@@ -228,6 +228,7 @@ internal sealed partial class SolutionSession
         var psi = DotnetProcess.StartInfo(_dotnet, directory, args);
         psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1"; // the generator's build leaves no MSBuild nodes behind
         psi.StandardOutputEncoding = Encoding.UTF8;
         psi.StandardErrorEncoding = Encoding.UTF8;
         await _events.ScaffoldOutputAsync(new ScaffoldOutputParams("info", "> dotnet " + string.Join(' ', args.Select(a => a.Contains(' ', StringComparison.Ordinal) ? "\"" + a + "\"" : a)))).ConfigureAwait(false);

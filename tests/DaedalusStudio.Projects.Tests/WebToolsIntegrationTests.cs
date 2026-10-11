@@ -1,6 +1,6 @@
-using System.Diagnostics;
 using DaedalusStudio.Projects.Protocol;
 using DaedalusStudio.Tests;
+using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Output;
 using DaedalusStudio.Workbench.Projects;
 using DaedalusStudio.Workbench.Web;
@@ -77,7 +77,7 @@ public sealed class WebToolsIntegrationTests : IAsyncLifetime
         var scaffolding = new ScaffoldingService(_solutions, new ProjectManagementService(_solutions), _output);
         var restored = await _solutions.RequestAsync(PackageMethods.ToolCommand, new ToolCommandParams(ToolActions.Restore), PackageJsonContext.Default.ToolCommandParams, PackageJsonContext.Default.ToolCommandResult, Timeout());
         Assert.True(restored.Succeeded, restored.Output);
-        Assert.Equal(0, await DotnetAsync(Path.GetDirectoryName(Shop)!, "restore", Shop));
+        await BuildAsync(Shop); // restored and built through the build host, as the IDE does before scaffolding
 
         var status = await scaffolding.StatusAsync(Shop, Timeout());
         Assert.True(status.ToolAvailable, status.Message);
@@ -123,7 +123,7 @@ public sealed class WebToolsIntegrationTests : IAsyncLifetime
         Assert.Contains("MapTodoEndpoints", todo, StringComparison.Ordinal);
 
         // Everything that was generated compiles.
-        Assert.Equal(0, await DotnetAsync(shop, "build", Shop, "--no-restore"));
+        await BuildAsync(Shop);
     }
 
     [Fact]
@@ -199,32 +199,20 @@ public sealed class WebToolsIntegrationTests : IAsyncLifetime
             Timeout());
         var client = Path.GetDirectoryName(Client)!;
         File.WriteAllText(Path.Combine(client, "Program.cs"), "var client = new Contracts.Greet.Greeter.GreeterClient(Grpc.Net.Client.GrpcChannel.ForAddress(\"http://localhost:5000\"));\nConsole.WriteLine(client.GetType().Name);\n");
-        Assert.Equal(0, await DotnetAsync(client, "build", Client));
+        await BuildAsync(Client);
         Assert.NotEmpty(Directory.GetFiles(Path.Combine(client, "obj"), "GreetGrpc.cs", SearchOption.AllDirectories));
     }
 
-    private static async Task<int> DotnetAsync(string directory, params string[] args)
+    /// <summary>
+    /// Builds through the build host, which takes turns with its design-time builds: a command-line build next to them
+    /// ran Grpc.Tools' protoc twice in one obj folder (CI, Windows).
+    /// </summary>
+    private async Task BuildAsync(string project)
     {
-        var psi = new ProcessStartInfo("dotnet") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var arg in args)
-        {
-            psi.ArgumentList.Add(arg);
-        }
-
-        psi.ArgumentList.Add("--nologo");
-        psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
-        using var process = Process.Start(psi)!;
-        var stdout = process.StandardOutput.ReadToEndAsync(Timeout());
-        var stderr = process.StandardError.ReadToEndAsync(Timeout());
-        await process.WaitForExitAsync(Timeout());
-        if (process.ExitCode != 0)
-        {
-            Console.Error.WriteLine(await stdout + await stderr);
-        }
-
-        return process.ExitCode;
+        var builds = new BuildService(_solutions, _output);
+        var result = await builds.BuildAsync(BuildTargets.Build, project, Timeout());
+        Assert.True(result.Succeeded, builds.Channel.GetText());
     }
-
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow + s_timeout;
