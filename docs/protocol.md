@@ -115,3 +115,17 @@ Servers that implement `documentSymbol`, the hierarchies, `inlayHint` and `codeL
 | Method | Direction | Params → result | Notes |
 |---|---|---|---|
 | `daedalus/msbuild/property` | server → client request | `{project, name}` → `{value, origin}` or null | MSBuild hover's evaluated value. The shell answers from the build host's `projectProperties/get` (with the active configuration); null when the project isn't loaded. |
+
+## Debug companion host
+
+`daedalus-debughost` (`src/DaedalusStudio.Debugging.Host`, ADR 0032; `DAEDALUS_DEBUGHOST` overrides) answers what DAP can't: debugger attributes from the debuggee's metadata, and dumps through ClrMD. The shell starts it on first use. It speaks JSON-RPC over stdio with the shell's framing; it never attaches to the debuggee. Records are in `src/DaedalusStudio.Debugging/Companion/CompanionProtocol.cs`.
+
+| Method | Params → result | Notes |
+|---|---|---|
+| `daedalus/debug/typeDisplay` | `{typeName, modules}` → `{display?, name?, typeProxy?, hidden, rootHidden, module?}` or null | `[DebuggerDisplay]`, `[DebuggerTypeProxy]` and `[DebuggerBrowsable]` of the type or its nearest base type that has them, read from the modules' metadata (the paths the adapter's `module` events gave). |
+| `daedalus/debug/openDump` | `{path}` → `{id, path, runtime, architecture, processId?, modules, threads: [{managedId, osId, isFinalizer, exception?, frames: [{method, module, ilOffset, file?, line?}]}]}` | A Windows minidump or a Linux or macOS core dump of the same OS. A frame's line comes from the portable PDB next to its module; frames without an IL map (heap dumps) have none. |
+| `daedalus/debug/dumpHeap` | `{id, top}` → `{totalObjects, totalSize, types: [{type, count, size, methodTable}]}` | Types by total size. |
+| `daedalus/debug/dumpInstances` | `{id, methodTable, max}` → addresses | |
+| `daedalus/debug/dumpObject` | `{id, address}` → `{address, type, size, value?, fields: [{name, type, value, address}]}` | `address` is non-zero for reference fields. |
+| `daedalus/debug/closeDump` | `{id}` → `{}` | |
+| `daedalus/debug/createDump` | `{processId, path, kind: mini\|heap\|triage\|full}` → `{path, size}` | Through the runtime's diagnostics IPC (DiagnosticsClient). The shell writes full dumps. |

@@ -69,7 +69,7 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 | `version` | SemVer. |
 | `engines.daedalus` | An npm-style range over the **plugin API version** (`^0.1.0`, `~0.1.2`, `>=0.1.0 <0.3.0`, `0.1.x`, `a \|\| b`). Plugins whose range doesn't include the running API are not loaded; the user is told why. |
 | `entry` | `runtime` is `dotnet`; `assembly` is the plugin DLL next to the manifest. If it contains more than one public `IDaedalusPlugin`, name one with `type`. |
-| `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, `onTestProjects` (the open solution has a test project; since 0.2.1), and `onHostingProvider:<id>` (the shell needs a hosting provider the plugin declares; since 0.2.6, implicit). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
+| `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, `onTestProjects` (the open solution has a test project; since 0.2.1), `onHostingProvider:<id>` (the shell needs a hosting provider the plugin declares; since 0.2.7, implicit), and `onDebug` (a debug session starts; since 0.2.7). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
 | `isolation` | `shared` (default) or `dedicated` (a host process of its own). |
 | `enableProposedApi` | Use [proposed APIs](#proposed-apis). Honored for built-in plugins, and for others when Daedalus runs with `--enable-proposed-api`. |
 
@@ -123,7 +123,7 @@ Implement `ITreeDataProvider<T>`: `GetChildrenAsync(element)` (null means the ro
 
 ### Icons and status bar text
 
-Icons are names from the shell's set, so they follow the theme, including high contrast: `search`, `gear`, `keyboard`, `color-mode`, `history`, `extensions`, `folder`, `file`, `book`, `check`, `circle`, `home`, `info`, `warning`, `error`, `bell`, `bell-dot`, `close`, `chevron-right`, `chevron-down`, `refresh`, `output`, `list`, `play`, `link-external`, `clear-all`, `lock`, `arrow-down`, `star`, `question`, `edit`, `discard`, `trash`, `layout`, `dot`, `solution`, `project`, `package`, `link`, `file-code`, `file-data`, and since 0.2.6 `cloud`, `pull-request`, `comment`, `issue`, `worktree`, `account`, `sync`. Status bar text may start with `$(icon)`, for example `"$(home) Start"`.
+Icons are names from the shell's set, so they follow the theme, including high contrast: `search`, `gear`, `keyboard`, `color-mode`, `history`, `extensions`, `folder`, `file`, `book`, `check`, `circle`, `home`, `info`, `warning`, `error`, `bell`, `bell-dot`, `close`, `chevron-right`, `chevron-down`, `refresh`, `output`, `list`, `play`, `link-external`, `clear-all`, `lock`, `arrow-down`, `star`, `question`, `edit`, `discard`, `trash`, `layout`, `dot`, `solution`, `project`, `package`, `link`, `file-code`, `file-data`, and since 0.2.6 `cloud`, `pull-request`, `comment`, `issue`, `worktree`, `account`, `sync`, and since 0.2.7 `pin`. Status bar text may start with `$(icon)`, for example `"$(home) Start"`.
 
 ### Shell commands for plugins
 
@@ -217,6 +217,7 @@ Proposed APIs are not covered by the versioning policy (ADR 0003): they may chan
 - **`Workspace`:** the open solution (`GetSolutionAsync`: projects with target frameworks, test project and test platform, compile files and project references), `GetProjectOutputAsync` (the build output per target framework), `FindTestCandidatesAsync` (test classes and methods found in source by the language service, before any build), `GetTypeOutlineAsync` (the type at a position and its methods), and the events `SolutionChanged` and `DocumentsChanged`.
 - **`Build`:** `BuildAsync(projects)` builds through the shell (after a build in progress; output in the Build channel and the Error List), and the `Finished` event.
 - **`Debug`:** `LaunchAsync` and `AttachAsync` start a debug session (netcoredbg, ADR 0007) and return its process id and an `Ended` task.
+  - **Visualizers** (0.2.7, ADR 0032): `RegisterVisualizer(new DebugVisualizerOptions(id, title, types), visualize)` adds a visualizer to the View menu of the debugger's variable trees, for values whose type is in `types` (a name ending in `*` is a prefix: `System.Collections.Generic.Dictionary<*`). When the user picks it, `visualize` gets the value's expression, type and text, and `EvaluateAsync` to read more of the paused program (members, indexers, method calls and private fields; no `new`, casts or lambdas). It returns `VisualizerView.FromText(text, languageId)` (a read-only document) or `VisualizerView.FromTable(columns, rows)`. Activate with `onDebug`. `samples/plugins/DictionaryVisualizer` shows a `Dictionary<TKey, TValue>` as a key/value table.
 - **`Terminals`** (0.2.3): `CreateAsync(new TerminalOptions { Program = "dotnet", Arguments = ["watch"] })` runs a command in an integrated terminal (ADR 0014); without `Program` it opens the user's shell (`Profile`, or the default). The `ITerminal` takes typed input (`SendTextAsync("dir\r")`), raises `Output` with the program's text when `ReportOutput` is set, completes `Exited` with the exit code, and closes on `KillAsync` or disposal.
 
 The built-in .NET test plugin (`src/Plugins/DaedalusStudio.Plugins.DotNetTest`) uses all of them.
@@ -241,6 +242,14 @@ The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/DaedalusStudi
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 0.2.7 (M14b)
+
+Additive (plugins built for 0.2.0–0.2.6 keep working):
+- The activation event `onDebug`.
+- Proposed: debugger visualizers, `IDebug.RegisterVisualizer` ([above](#proposed-apis)).
+- Shell commands `debug.openDump`, `debug.createDump`, `debug.detachAll` and `debug.clearDataTips`; the setting `debug.stepOverPropertiesAndOperators`.
+- The icon `pin`.
 
 ### 0.2.6 (M13b)
 

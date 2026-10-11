@@ -69,6 +69,10 @@ Since protocol 0.2 (API 0.2.1). Only plugins loaded with `enableProposedApi` use
 | `debug/attach` | host → shell | request | `{processId}` → `{sessionId, processId}` |
 | `debug/stop` | host → shell | request | `{sessionId}` → `{}` |
 | `debug/ended` | shell → host | notification | `{sessionId, exitCode?}` |
+| `debug/registerVisualizer` | host → shell | notification | `{visualizerId, pluginId, title, types}`; `visualizerId` is `pluginId/id`, a type ending in `*` is a prefix (API 0.2.7) |
+| `debug/unregisterVisualizer` | host → shell | notification | `{visualizerId}` (API 0.2.7) |
+| `debug/visualize` | shell → host | request | `{visualizerId, expression, type?, value}` → `{text?, languageId?, columns?, rows?}` (API 0.2.7) |
+| `debug/evaluate` | host → shell | request | `{expression}` → `{value, type?}`, in the paused program's selected frame; an error when it isn't paused or the evaluation fails (API 0.2.7) |
 | `terminal/create` | host → shell | request | `{name?, profile?, workingDirectory?, program?, arguments?, environment?, show, reportOutput}` → `{terminalId, processId}`: a shell (profile id, null for the default) or, with `program`, that program in a terminal (API 0.2.3) |
 | `terminal/sendText` | host → shell | request | `{terminalId, text}` → `{}` (as typed; `\r` runs a line) |
 | `terminal/kill` | host → shell | request | `{terminalId}` → `{}` (ends the program and closes the terminal) |

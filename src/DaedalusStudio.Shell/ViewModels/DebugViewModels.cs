@@ -579,6 +579,7 @@ public sealed class BreakpointRow : ObservableObject
     {
         (Spec?.Condition ?? Function?.Condition) is { } c ? "when " + c : null,
         Spec?.HitCondition is { } h ? "hit count " + h : null,
+        Spec?.Filter is { } f ? "filter " + f : null,
         Spec?.LogMessage is { } m ? "log \"" + m + "\"" : null,
         Spec?.Temporary == true ? "temporary" : null,
         Spec?.DependsOn is { } d ? $"after {System.IO.Path.GetFileName(d.Path)}, line {d.Line}" : null,

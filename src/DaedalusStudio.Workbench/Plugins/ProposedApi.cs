@@ -30,6 +30,9 @@ public interface IProposedApiHost
 
     Task DebugStopAsync(string sessionId, CancellationToken cancellationToken);
 
+    /// <summary>Evaluates an expression in the paused program's selected frame (visualizers, API 0.2.7).</summary>
+    Task<DebugValueDto> DebugEvaluateAsync(string expression, CancellationToken cancellationToken);
+
     /// <summary>Opens a terminal; <paramref name="output"/> (with <c>ReportOutput</c>) and <paramref name="exited"/> report on it.</summary>
     Task<TerminalDto> TerminalCreateAsync(TerminalCreateParams create, Action<TerminalOutputParams> output, Action<TerminalExitedParams> exited, CancellationToken cancellationToken);
 

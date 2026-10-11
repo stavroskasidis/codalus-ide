@@ -29,7 +29,7 @@
     "enableProposedApi": { "type": "boolean", "description": "Use proposed APIs (third-party plugins also need --enable-proposed-api)." },
     "activationEvents": {
       "type": "array",
-      "items": { "type": "string", "pattern": "^(\\*|onStartup|onCommand:.+|onView:.+|onSettingChanged:.+|onTestProjects|onSolutionOpened|onLanguage:.+|onHostingProvider:.+)$" },
+      "items": { "type": "string", "pattern": "^(\\*|onStartup|onCommand:.+|onView:.+|onSettingChanged:.+|onTestProjects|onSolutionOpened|onDebug|onLanguage:.+|onHostingProvider:.+)$" },
       "description": "When the plugin activates."
     },
     "contributes": {

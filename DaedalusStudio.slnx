@@ -7,11 +7,13 @@
     <Project Path="eng/DaedalusStudio.Release/DaedalusStudio.Release.csproj" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/plugins/DictionaryVisualizer/DictionaryVisualizer.csproj" />
     <Project Path="samples/plugins/HelloWorld/HelloWorld.csproj" />
     <Project Path="samples/plugins/TodoLanguage/TodoLanguage.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/DaedalusStudio.Debugging/DaedalusStudio.Debugging.csproj" />
+    <Project Path="src/DaedalusStudio.Debugging.Host/DaedalusStudio.Debugging.Host.csproj" />
     <Project Path="src/DaedalusStudio.Diagnostics.BenchEvents/DaedalusStudio.Diagnostics.BenchEvents.csproj" />
     <Project Path="src/DaedalusStudio.Interactive.Host/DaedalusStudio.Interactive.Host.csproj" />
     <Project Path="src/DaedalusStudio.Interactive.Protocol/DaedalusStudio.Interactive.Protocol.csproj" />

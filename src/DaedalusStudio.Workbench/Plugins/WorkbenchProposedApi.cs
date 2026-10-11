@@ -1,6 +1,8 @@
 using DaedalusStudio.LanguageServices.Protocol;
 using DaedalusStudio.Plugins.Protocol;
+using DaedalusStudio.Debugging;
 using DaedalusStudio.Projects.Protocol;
+using DaedalusStudio.Rpc;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Workbench.Languages;
@@ -257,6 +259,24 @@ public sealed class WorkbenchProposedApi : IProposedApiHost, IDisposable
         {
             ClearSession(id);
             throw;
+        }
+    }
+
+    public async Task<DebugValueDto> DebugEvaluateAsync(string expression, CancellationToken cancellationToken)
+    {
+        if (_debug.State != DebugState.Stopped)
+        {
+            throw new JsonRpcHandlerException(PluginErrorCodes.CommandFailed, "The program isn't paused.");
+        }
+
+        try
+        {
+            var result = await _debug.EvaluateAsync(expression, "watch", cancellationToken).ConfigureAwait(false);
+            return new DebugValueDto(result.Result, result.Type);
+        }
+        catch (DapException ex)
+        {
+            throw new JsonRpcHandlerException(PluginErrorCodes.CommandFailed, ex.Message);
         }
     }
 

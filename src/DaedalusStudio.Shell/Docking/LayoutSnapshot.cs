@@ -82,9 +82,18 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
     /// <summary>Exception types whose setting differs from the defaults: type → break when thrown.</summary>
     public Dictionary<string, bool>? ExceptionTypes { get; init; }
 
+    /// <summary>Module conditions of exception types (M14b): type → module names.</summary>
+    public Dictionary<string, string>? ExceptionConditions { get; init; }
+
     /// <summary>Watch window expressions.</summary>
     public IReadOnlyList<string>? Watches { get; init; }
+
+    /// <summary>Pinned data tips (M14b).</summary>
+    public IReadOnlyList<SessionDataTip>? DataTips { get; init; }
 }
+
+/// <summary>A data tip pinned to a line (1-based), kept with the solution.</summary>
+public sealed record SessionDataTip(string Path, int Line, string Expression, string? Comment = null);
 
 /// <summary>A breakpoint (1-based line), kept with the solution. <see cref="DependsOnPath"/> and <see cref="DependsOnLine"/> name the breakpoint it depends on.</summary>
 public sealed record SessionBreakpoint(string Path, int Line, string? Condition = null, string? HitCondition = null, string? LogMessage = null, bool Enabled = true)
@@ -96,6 +105,9 @@ public sealed record SessionBreakpoint(string Path, int Line, string? Condition 
     public int? DependsOnLine { get; init; }
 
     public string? Labels { get; init; }
+
+    /// <summary>A thread or process filter (M14b), e.g. <c>ThreadName = "Worker"</c>.</summary>
+    public string? Filter { get; init; }
 }
 
 /// <summary>A function breakpoint, kept with the solution.</summary>

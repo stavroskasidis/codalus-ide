@@ -105,6 +105,42 @@ public sealed class DebuggerDepthTests(DebuggeeFixture debuggee) : IClassFixture
     }
 
     [Fact]
+    public async Task Module_conditions_skip_exceptions_thrown_in_other_modules()
+    {
+        // ArgumentException is thrown in Debuggee.dll, which its condition excludes; InvalidOperationException's includes it.
+        _debug.ExceptionSettings.Set("System.ArgumentException", true);
+        _debug.ExceptionSettings.SetCondition("System.ArgumentException", "!Debuggee.dll");
+        _debug.ExceptionSettings.Set("System.InvalidOperationException", true);
+        _debug.ExceptionSettings.SetCondition("System.InvalidOperationException", "Debug*.dll, Other.dll");
+        await LaunchAsync();
+
+        var stop = await NextStopAsync();
+        Assert.Equal("System.InvalidOperationException", stop.Exception?.Details?.FullTypeName);
+        Assert.Equal(Line("depth-outer"), _debug.SelectedFrame?.Line);
+        await _debug.StopAsync();
+    }
+
+    [Theory]
+    [InlineData(null, "Any.dll", true)]
+    [InlineData("MyApp.dll", "myapp.dll", true)]
+    [InlineData("MyApp.dll", "Other.dll", false)]
+    [InlineData("!System.*", "System.Private.CoreLib.dll", false)]
+    [InlineData("!System.*", "MyApp.dll", true)]
+    [InlineData("My?pp.dll, !MyApp.dll", "MyApp.dll", false)]
+    [InlineData("MyApp.dll", null, false)]
+    public void Module_conditions_match_names_with_wildcards(string? condition, string? module, bool expected)
+    {
+        var settings = new ExceptionSettings();
+        settings.SetCondition("System.Exception", condition);
+        Assert.Equal(expected, settings.ModuleAllows("System.Exception", module));
+        Assert.True(settings.ModuleAllows("System.FormatException", module)); // no condition
+
+        var loaded = new ExceptionSettings();
+        loaded.Load(false, null, settings.Conditions());
+        Assert.Equal(condition, loaded.ConditionOf("System.Exception"));
+    }
+
+    [Fact]
     public void Exception_settings_become_filter_conditions()
     {
         var settings = new ExceptionSettings();

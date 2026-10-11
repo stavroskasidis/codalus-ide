@@ -74,6 +74,14 @@
       <Button Classes="toolbar" Command="{Binding StepOutCommand}" IsVisible="{Binding IsStopped}" ToolTip.Tip="Step Out (Shift+F11)" AutomationProperties.Name="Step Out">
         <controls:Icon Kind="step-out" />
       </Button>
+      <!-- Debug Location (M14b): the process, thread and stack frame while paused. -->
+      <Border Classes="toolbarSeparator" IsVisible="{Binding IsStopped}" />
+      <TextBlock Text="{Binding DebugLocation.Process}" IsVisible="{Binding IsStopped}" VerticalAlignment="Center" Margin="4,0" Classes="muted"
+                 ToolTip.Tip="Process" AutomationProperties.Name="Process" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding DebugLocation.Threads}" SelectedItem="{Binding DebugLocation.Thread}" MinWidth="140" MaxWidth="240"
+                IsVisible="{Binding IsStopped}" ToolTip.Tip="Thread" AutomationProperties.Name="Thread" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding DebugLocation.Frames}" SelectedItem="{Binding DebugLocation.Frame}" MinWidth="180" MaxWidth="360"
+                IsVisible="{Binding IsStopped}" ToolTip.Tip="Stack Frame" AutomationProperties.Name="Stack Frame" />
     </WrapPanel>
   </Border>
 </UserControl>

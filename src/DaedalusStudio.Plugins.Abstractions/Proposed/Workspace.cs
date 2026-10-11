@@ -187,6 +187,12 @@ public interface IDebug
 
     /// <summary>Attaches to a running .NET process.</summary>
     Task<IDebugSession> AttachAsync(int processId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Offers a visualizer for values of the given types (since API 0.2.7). <paramref name="visualize"/> runs when the user
+    /// picks it, while the program is paused. Dispose the result to withdraw it. Activate with <c>onDebug</c>.
+    /// </summary>
+    IDisposable RegisterVisualizer(DebugVisualizerOptions options, Func<IDebugVisualizerContext, CancellationToken, Task<VisualizerView>> visualize);
 }
 
 /// <summary>How to start a program. <see cref="Arguments"/> are passed as they are (no shell parsing).</summary>
