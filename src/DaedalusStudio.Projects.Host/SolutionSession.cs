@@ -522,6 +522,25 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             properties["Platform"] = Active.Platform;
         }
 
+        foreach (var (name, value) in parameters.Options?.Properties ?? [])
+        {
+            properties[name] = value;
+        }
+
+        var perProject = parameters.Project is null && !IsSingleProject;
+        IReadOnlyList<string> scope = !perProject ? [path] : BuiltProjects();
+        return await ExclusiveBuildAsync(
+            token => BuildWithCheckAsync(path, parameters.Target, parameters.Restore, properties, scope, BuildGlobals(perProject, properties), parameters.Options, events, token),
+            new BuildResultInfo(false, true, 0, 0, 0),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs a build exclusively: one at a time (<c>build/cancel</c> stops it), with design-time builds paused and queued
+    /// again afterwards, and projects whose assets file the build's restore changed evaluated again.
+    /// </summary>
+    private async Task<T> ExclusiveBuildAsync<T>(Func<CancellationToken, Task<T>> build, T canceled, CancellationToken cancellationToken)
+    {
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
         if (Interlocked.CompareExchange(ref _buildCancellation, cancellation, null) is not null)
         {
@@ -537,12 +556,12 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         {
             Interlocked.Exchange(ref _buildCancellation, null);
             ScheduleDesignTimeBuilds(interrupted);
-            return new BuildResultInfo(false, true, 0, 0, 0);
+            return canceled;
         }
 
         try
         {
-            return await _builder.BuildAsync(path, parameters.Target, parameters.Restore, properties, events, cancellation.Token).ConfigureAwait(false);
+            return await build(cancellation.Token).ConfigureAwait(false);
         }
         finally
         {

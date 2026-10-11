@@ -117,13 +117,14 @@ public sealed class ManifestValidationTests : IDisposable
     }
 
     [Fact]
-    public void Property_providers_and_external_tool_macros_are_contributed()
+    public void Property_providers_external_tool_macros_and_custom_tools_are_contributed()
     {
         var dir = Variant("projectsystem", m =>
         {
             m["engines"]!["daedalus"] = "^0.2.8";
             m["contributes"]!["propertyProviders"] = JsonNode.Parse("""[ { "command": "hello.properties", "when": "explorerItemKind == file" }, { "command": "" } ]""");
             m["contributes"]!["externalToolMacros"] = JsonNode.Parse("""[ { "name": "Greeting", "command": "hello.greeting", "description": "A greeting." } ]""");
+            m["contributes"]!["customTools"] = JsonNode.Parse("""[ { "name": "HelloGenerator", "command": "hello.generate", "extension": ".g.cs" }, { "name": "", "command": "x" } ]""");
         });
         var plugin = PluginDescription.Read(dir, isBuiltIn: false, PlatformKind.Windows);
         Assert.Equal(PluginState.Ready, plugin.State);
@@ -136,6 +137,7 @@ public sealed class ManifestValidationTests : IDisposable
         manager.AddPlugins([plugin]);
         Assert.Equal([("hello.properties")], manager.PropertyProviders.Select(p => p.Provider.Command));
         Assert.Equal(("Greeting", "hello.greeting", "A greeting."), manager.ToolMacros.Select(m => (m.Macro.Name, m.Macro.Command, m.Macro.Description)).Single());
+        Assert.Equal(("HelloGenerator", "hello.generate", ".g.cs"), manager.CustomTools.Select(t => (t.Tool.Name, t.Tool.Command, t.Tool.Extension)).Single());
     }
 
     [Fact]

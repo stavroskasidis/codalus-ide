@@ -1,0 +1,47 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "T4 Text Template",
+  "scopeName": "source.t4",
+  "patterns": [
+    { "include": "#directive" },
+    { "include": "#classFeature" },
+    { "include": "#expression" },
+    { "include": "#statement" }
+  ],
+  "repository": {
+    "directive": {
+      "begin": "(<#@)\\s*([A-Za-z]+)",
+      "beginCaptures": { "1": { "name": "punctuation.section.embedded.begin.t4" }, "2": { "name": "keyword.control.directive.t4" } },
+      "end": "#>",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.t4" } },
+      "patterns": [
+        { "match": "([A-Za-z]+)\\s*(=)", "captures": { "1": { "name": "entity.other.attribute-name.t4" }, "2": { "name": "punctuation.separator.key-value.t4" } } },
+        { "match": "\"[^\"]*\"", "name": "string.quoted.double.t4" }
+      ]
+    },
+    "classFeature": {
+      "begin": "<#\\+",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.t4" } },
+      "end": "#>",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.t4" } },
+      "contentName": "meta.embedded.block.csharp",
+      "patterns": [ { "include": "source.cs" } ]
+    },
+    "expression": {
+      "begin": "<#=",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.t4" } },
+      "end": "#>",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.t4" } },
+      "contentName": "meta.embedded.expression.csharp",
+      "patterns": [ { "include": "source.cs" } ]
+    },
+    "statement": {
+      "begin": "<#(?![@=+])",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.t4" } },
+      "end": "#>",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.t4" } },
+      "contentName": "meta.embedded.block.csharp",
+      "patterns": [ { "include": "source.cs" } ]
+    }
+  }
+}

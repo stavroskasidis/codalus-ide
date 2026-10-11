@@ -64,6 +64,9 @@ public sealed class ViewLocator : IDataTemplate
         ExportTemplateViewModel vm => new ExportTemplateView { DataContext = vm },
         TemplateManagerViewModel vm => new TemplateManagerView { DataContext = vm },
         ExternalToolsViewModel vm => new ExternalToolsView { DataContext = vm },
+        BatchBuildViewModel vm => new BatchBuildView { DataContext = vm },
+        BuildTimingsViewModel vm => new BuildTimingsView { DataContext = vm },
+        BinaryLogViewModel vm => new BinaryLogView { DataContext = vm },
         _ => new TextBlock { Text = "This view is not available.", Margin = new Thickness(12) },
     };
 

@@ -62,6 +62,19 @@ internal static class ProjectProperties
         var xml = ProjectRootElement.Open(path, collection, preserveFormatting: true);
         xml.Reload(throwIfUnsavedChanges: false, preserveFormatting: true); // always the file on disk
         var before = xml.RawXml; // Reload marks the element dirty, so a change is a different text, not HasUnsavedChanges
+        SetIn(xml, name, value, scope);
+        if (xml.RawXml == before)
+        {
+            return false;
+        }
+
+        xml.SaveFile();
+        return true;
+    }
+
+    /// <summary>Sets or removes the property in an open project file, without saving it.</summary>
+    internal static void SetIn(ProjectRootElement xml, string name, string? value, string? scope)
+    {
         var existing = InScope(xml, name, scope).ToList();
         if (value is null)
         {
@@ -107,14 +120,6 @@ internal static class ProjectProperties
 
             group.AddProperty(name, value);
         }
-
-        if (xml.RawXml == before)
-        {
-            return false;
-        }
-
-        xml.SaveFile();
-        return true;
     }
 
     /// <summary>The project file's unconditioned definitions of <paramref name="name"/> in the scope's groups.</summary>

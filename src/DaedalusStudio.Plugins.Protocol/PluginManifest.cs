@@ -75,6 +75,9 @@ public sealed record ManifestContributions
     /// <summary>Macros for External Tools' arguments, from a command (API 0.2.8, M26, ADR 0033).</summary>
     public ManifestToolMacro[]? ExternalToolMacros { get; init; }
 
+    /// <summary>Custom tools (single-file generators) a project item's <c>Generator</c> names (API 0.2.8, M26b, ADR 0035).</summary>
+    public ManifestCustomTool[]? CustomTools { get; init; }
+
     /// <summary>Git hosting providers (API 0.2.6, ADR 0031): known to the shell before the plugin runs.</summary>
     public ManifestHostingProvider[]? HostingProviders { get; init; }
 }
@@ -106,6 +109,18 @@ public sealed record ManifestPropertyProvider(string Command)
 /// <summary>An External Tools macro <c>$(Name)</c>: <see cref="Command"/> returns its value as a string.</summary>
 public sealed record ManifestToolMacro(string Name, string Command)
 {
+    public string? Description { get; init; }
+}
+
+/// <summary>
+/// A custom tool <see cref="Name"/> (the value of an item's <c>Generator</c> metadata): <see cref="Command"/> gets
+/// <c>{ path, content, namespace, project }</c> and returns the generated text, or <c>{ content, extension }</c>. The
+/// output is written next to the input with <see cref="Extension"/> (default <c>.cs</c>).
+/// </summary>
+public sealed record ManifestCustomTool(string Name, string Command)
+{
+    public string? Extension { get; init; }
+
     public string? Description { get; init; }
 }
 

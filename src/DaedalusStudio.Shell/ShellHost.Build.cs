@@ -199,7 +199,7 @@ public sealed partial class ShellHost
 
         hotReload |= hotReloadSetting;
 
-        if (!await BuildAsync(BuildTargets.Build, project).ConfigureAwait(true))
+        if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
             {

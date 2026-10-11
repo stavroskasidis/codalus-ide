@@ -149,6 +149,27 @@ The Properties window, Include and Exclude, links, moves between projects, Show 
 - **`fs/move` across projects:** when a file moves (or is copied) from one project's folder into another's, the source project's explicit items that name it are carried to the target project with `items/set`'s edit, and removed from the source on a move.
 - **Folder mode:** `solution/open` with a folder path answers `SolutionInfo` with `format: folder`, `path` the folder, and the loaded projects. `build/run` of the folder builds its one loaded project, or a generated `.daedalus/folder.slnx`; `solution/addProject` and `solution/removeProject` change the loaded projects; editing a solution file fails.
 
+## Build depth: options, the up-to-date check, batch builds, timings, build events and binary logs
+
+[ADR 0034](adr/0034-build-depth.md). Contracts are in `BuildDepthMessages.cs` (`BuildDepthJsonContext`); the shell side is `BuildService` and `BuildDepthService` in `src/DaedalusStudio.Workbench/Build`. Builds, the up-to-date check and build events need a trusted solution.
+
+- **`build/run`** takes `options?: BuildOptions` `{verbosity?, logFile?, logFileVerbosity?, maxParallelProjects, binaryLog?, upToDateCheck (default true), properties?}`. Verbosities are `quiet`, `minimal` (the default), `normal`, `detailed` and `diagnostic`; `properties` are extra global properties. Without options the build runs as in M4. `BuildResultInfo` gains `upToDate` (the fast up-to-date check found nothing to build, so MSBuild didn't run) and `binaryLog` (the log the build wrote).
+- **The fast up-to-date check:** after a build with options, each built project (and the projects it references) records its inputs and outputs, with sizes and write times, in `obj/<configuration>/<framework>/daedalus.uptodate.json` (or forgets them after a failure or a clean). A Build with `upToDateCheck` skips MSBuild when every project in scope (the project and its references, or every project the solution's active configuration builds) is unchanged since. The output names the first out-of-date project and why.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `build/batch` | `{target, entries: [{project, configuration, platform}], options?}` | `{succeeded, canceled, errors, warnings, elapsedMilliseconds, entries: [{project, configuration, platform, succeeded, skipped, errors, warnings, elapsedMilliseconds}]}` | Each entry in turn, in one exclusive build (one restore per project); `skipped` is the up-to-date check's. `build/output`, `build/diagnostic` and `build/cancel` work as for `build/run`. A binary log option is ignored. |
+| `build/upToDate` | `{project?}` | `{upToDate, projects: [{project, upToDate, reason}]}` | The check alone, for a project or the solution. |
+| `build/timings` | `{}` | `BuildTimingsResult` | The last build's: `{totalMilliseconds, projects: [{id, project, name, targetFramework?, node, start, duration, succeeded, targets, dependsOn}], targets: [{project, name, duration}], tasks: [{name, duration, count}], criticalPath: [id], binaryLog?}`; times in milliseconds from the build's start. Fails before the first build that ran MSBuild. |
+| `buildEvents/get` | `{project}` | `{project, preBuild, postBuild, runPostBuildEvent}` | The `PreBuild` and `PostBuild` targets' `Exec` commands, and `RunPostBuildEvent` (`OnBuildSuccess` when unset). |
+| `buildEvents/set` | `{project, preBuild?, postBuild?, runPostBuildEvent?}` | as `buildEvents/get` | A null field is left alone; an empty command removes its target; `OnBuildSuccess` removes the property. |
+| `binlog/open` | `{path}` | `{id, path, root, succeeded, durationMilliseconds, errors, warnings, nodes}` | Reads a `.binlog` with `MSBuild.StructuredLogger`. |
+| `binlog/children` | `{id, node}` | `{children: [BinaryLogNode]}` | A node's children, a level at a time. |
+| `binlog/search` | `{id, query, maxResults = 500}` | `{results: [{node, path: [id]}], truncated}` | Case-insensitive search of the nodes' text and diagnostics' files; `path` runs from the root to the node. |
+| `binlog/close` | `{id}` | `{}` | |
+
+- **`BinaryLogNode`** `{id, kind, text, hasChildren, durationMilliseconds?, file?, line, isError, isWarning}`: `kind` is the StructuredLogger type (`Build`, `Project`, `Target`, `Task`, `Message`, `Error`, `Warning`, `Property`, `Item`, `Folder`…).
+
 ## Entity Framework Core
 
 EF Core ([ADR 0036](adr/0036-ef-core-integration.md)) runs the user's own `dotnet ef` as a child process of the host, in the startup project's folder, with `--json --prefix-output` (one at a time: dotnet-ef copies its own build host into the project's output on every run). The model view's data comes from `daedalus-efagent` (`buildhost/efagent/`, net8.0), started like dotnet-ef starts its `ef.dll`: `dotnet exec --depsfile <app>.deps.json --runtimeconfig <app>.runtimeconfig.json`, so it runs on the app's runtime with the app's EF Core. Every request needs a trusted solution; cancelling one kills its process tree. Contracts are in `EntityFrameworkMessages.cs`; the shell side is `EntityFrameworkService` in `src/DaedalusStudio.Workbench/Data`, which builds the startup project first and passes `noBuild`.

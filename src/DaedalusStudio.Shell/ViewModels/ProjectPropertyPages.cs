@@ -25,8 +25,11 @@ public sealed record PropertyDefinition(string Name, string Label, string Descri
 
 public sealed record PropertySection(string Title, IReadOnlyList<PropertyDefinition> Properties);
 
-/// <summary>A property page. <see cref="IsLaunchProfiles"/> pages show the launch profile editor instead of properties.</summary>
-public sealed record PropertyPage(string Id, string Title, IReadOnlyList<PropertySection> Sections, bool IsLaunchProfiles = false)
+/// <summary>
+/// A property page. <see cref="IsLaunchProfiles"/> pages show the launch profile editor instead of properties,
+/// <see cref="IsBuildEvents"/> pages the pre-build and post-build events (ADR 0034).
+/// </summary>
+public sealed record PropertyPage(string Id, string Title, IReadOnlyList<PropertySection> Sections, bool IsLaunchProfiles = false, bool IsBuildEvents = false)
 {
     public IEnumerable<PropertyDefinition> Properties => Sections.SelectMany(s => s.Properties);
 }
@@ -145,6 +148,7 @@ public static class ProjectPropertyPages
                 new("PublicSign", "Public sign", "Signs with the public key only (open-source projects).", PropertyEditor.Bool) { Options = s_bool },
             ]),
         ]),
+        new("buildEvents", "Build Events", [], IsBuildEvents: true),
         new("debug", "Debug", [], IsLaunchProfiles: true),
     ];
 }

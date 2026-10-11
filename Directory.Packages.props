@@ -35,6 +35,9 @@
     <PackageVersion Include="Microsoft.Build" Version="17.11.48" />
     <PackageVersion Include="Microsoft.VisualStudio.SolutionPersistence" Version="1.0.52" />
     <PackageVersion Include="Microsoft.Build.Framework" Version="17.11.48" />
+    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="17.11.48" />
+    <!-- The binary log viewer (M26b, ADR 0034), read in the build host. -->
+    <PackageVersion Include="MSBuild.StructuredLogger" Version="2.3.246" />
     <PackageVersion Include="Microsoft.NET.StringTools" Version="18.4.0" />
     <!-- Compile-time only: at run time the build host uses the NuGet that ships in the user's SDK (ADR 0012). -->
     <PackageVersion Include="NuGet.Credentials" Version="6.11.2" />
@@ -46,6 +49,11 @@
   <ItemGroup Label="Debug companion host (M14b, ADR 0032)">
     <PackageVersion Include="Microsoft.Diagnostics.Runtime" Version="4.1.745802" />
     <PackageVersion Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.745401" />
+  </ItemGroup>
+  <ItemGroup Label="T4 host (M26b, ADR 0035)">
+    <PackageVersion Include="Mono.TextTemplating" Version="3.0.0" />
+    <PackageVersion Include="Mono.TextTemplating.Roslyn" Version="3.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(RoslynVersion)" />
   </ItemGroup>
   <ItemGroup Label="Benchmarks">
     <PackageVersion Include="Vortice.Direct3D11" Version="3.8.3" />

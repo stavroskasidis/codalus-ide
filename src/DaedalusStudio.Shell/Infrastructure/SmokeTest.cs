@@ -442,6 +442,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(screen.Contains("args: one two words", StringComparison.Ordinal), "the launch profile's arguments arrived");
         }, "build.solution").ConfigureAwait(true);
 
+        // M26b: build depth (ADR 0034, 0035).
+        await StepAsync("build.depth", "M26", "The fast up-to-date check, a binary log in the viewer, Build Timings, Batch Build, and the ResX and T4 custom tools", BuildDepthStepAsync, "build.solution").ConfigureAwait(true);
+
         // M5: debugging (netcoredbg).
         await StepAsync("debug.session", "M5", "F5 stops at a breakpoint; locals, evaluation and continue to exit", async () =>
         {
@@ -1165,6 +1168,86 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             new LanguageServices.Protocol.CompletionContext(LanguageServices.Protocol.CompletionTriggerKind.Invoked, null), CancellationToken.None).ConfigureAwait(true);
         Check(completion?.Items.Any(i => i.Label == "blockquote") == true, "HTML completion in Razor offers blockquote");
         editor.Model.Text.Remove(heading, "\n<blockq".Length);
+    }
+
+    /// <summary>
+    /// Build depth (M26b, ADR 0034 and 0035) on BuildAndRun: Build Solution again is skipped by the fast up-to-date check;
+    /// Build with Binary Log opens the log in the viewer and its search finds CoreCompile; Build Timings shows the
+    /// projects; Batch Build builds Hello's Release configuration; the ResX and T4 custom tools (the shipped T4 host)
+    /// generate code in Greetings, which then builds. The project file and the new files are put back afterwards.
+    /// </summary>
+    private async Task BuildDepthStepAsync()
+    {
+        await WaitAsync(() => !shell.Builds.IsBuilding && shell.Runs.Running.Count == 0, "the previous build and run have finished", 120).ConfigureAwait(true);
+        var before = shell.Builds.LastBuild;
+        shell.Run("build.buildSolution");
+        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 300).ConfigureAwait(true);
+        Check(shell.Builds.LastBuild!.Result is { Succeeded: true, UpToDate: true }, "Build Solution right after a build is up to date:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+
+        // A binary log, read by the build host and browsed in the viewer.
+        shell.Run("build.buildWithBinaryLog");
+        BinaryLogViewModel? Log() => shell.Layout.Documents.OfType<PageDocument>().Select(d => d.ViewModel).OfType<BinaryLogViewModel>().FirstOrDefault();
+        await WaitAsync(() => Log() is { Roots.Count: 1 } log && log.Roots[0].Children.Count > 1, "Build with Binary Log opens the log in the viewer", 300).ConfigureAwait(true);
+        var binlog = Log()!;
+        Check(binlog.Summary?.Contains("Build succeeded", StringComparison.Ordinal) == true, $"the viewer summarizes the build ({binlog.Summary}{binlog.Error})");
+        binlog.Query = "CoreCompile";
+        await binlog.SearchAsync().ConfigureAwait(true);
+        Check(binlog.Results.Any(r => r.Kind == "Target"), "searching the log finds the CoreCompile target");
+        await binlog.RevealAsync(binlog.Results.First(r => r.Kind == "Target").Result).ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-binary-log.png");
+
+        var timings = shell.OpenBuildTimings();
+        await WaitAsync(() => timings.Projects.Count > 0, "Build Timings shows the last build's projects", 60).ConfigureAwait(true);
+        Check(timings.CriticalPath.Any(p => p.StartsWith("Hello", StringComparison.Ordinal)), "the critical path ends with Hello: " + timings.CriticalPathText);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-build-timings.png");
+
+        // Batch Build: Hello's Release configuration.
+        var batch = shell.OpenBatchBuild();
+        await WaitAsync(() => batch.Rows.Any(r => r is { Name: "Hello", Configuration: "Release" }), "Batch Build lists the project configurations", 60).ConfigureAwait(true);
+        foreach (var row in batch.Rows)
+        {
+            row.IsChecked = row is { Name: "Hello", Configuration: "Release" };
+        }
+
+        await batch.RunAsync(Projects.Protocol.BuildTargets.Build).ConfigureAwait(true);
+        var release = batch.Rows.First(r => r is { Name: "Hello", Configuration: "Release" });
+        Check(release.Status?.StartsWith("succeeded", StringComparison.Ordinal) == true, $"Batch Build built Hello|Release ({release.Status}):\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-batch-build.png");
+
+        // Custom tools: a .resx and a text template in Greetings (the T4 host shipped next to the app).
+        var greetings = Path.Combine(_folder, "src", "Greetings", "Greetings.csproj");
+        var greetingsDir = Path.GetDirectoryName(greetings)!;
+        var original = await File.ReadAllTextAsync(greetings).ConfigureAwait(true);
+        var resx = Path.Combine(greetingsDir, "SmokeStrings.resx");
+        var template = Path.Combine(greetingsDir, "SmokeNumbers.tt");
+        string[] created = [resx, template, Path.Combine(greetingsDir, "SmokeStrings.Designer.cs"), Path.Combine(greetingsDir, "SmokeNumbers.cs")];
+        try
+        {
+            await File.WriteAllTextAsync(resx, "<root>\n  <data name=\"SmokeGreeting\" xml:space=\"preserve\">\n    <value>Hello from a resource</value>\n  </data>\n</root>\n").ConfigureAwait(true);
+            await File.WriteAllTextAsync(template, "<#@ template language=\"C#\" #>\n<#@ output extension=\".cs\" #>\nnamespace Greetings;\n\npublic static class SmokeNumbers\n{\n<# for (var i = 1; i <= 3; i++) { #>\n    public const int N<#= i #> = <#= i * i #>;\n<# } #>\n}\n").ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.TryGetValue(greetings, out var p) && p.Items.Any(i => i.Path == resx) && p.Items.Any(i => i.Path == template), "the new files become items", 60).ConfigureAwait(true);
+            await shell.ProjectItems.SetAsync(greetings, resx, null, new Dictionary<string, string?> { [Projects.Protocol.ItemMetadataNames.Generator] = "ResXFileCodeGenerator" }, CancellationToken.None).ConfigureAwait(true);
+            await shell.ProjectItems.SetAsync(greetings, template, null, new Dictionary<string, string?> { [Projects.Protocol.ItemMetadataNames.Generator] = "TextTemplatingFileGenerator" }, CancellationToken.None).ConfigureAwait(true);
+            var strings = await shell.RunCustomToolAsync(resx).ConfigureAwait(true);
+            Check(strings?.Succeeded == true && ReadText(created[2]).Contains("internal static string SmokeGreeting", StringComparison.Ordinal), "the ResX generator writes SmokeStrings.Designer.cs");
+            var numbers = await shell.RunCustomToolAsync(template).ConfigureAwait(true);
+            Check(numbers?.Succeeded == true && ReadText(created[3]).Contains("public const int N3 = 9;", StringComparison.Ordinal),
+                "the T4 host transforms SmokeNumbers.tt: " + string.Join("; ", numbers?.Diagnostics.Select(d => d.Message) ?? ["no result"]));
+            Check(ReadText(greetings).Contains("<DependentUpon>SmokeNumbers.tt</DependentUpon>", StringComparison.Ordinal), "the generated file is nested under its template");
+            Check(await shell.BuildAsync(Projects.Protocol.BuildTargets.Build, greetings).ConfigureAwait(true), "Greetings builds with the generated code:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+        }
+        finally
+        {
+            foreach (var file in created.Where(File.Exists))
+            {
+                File.Delete(file);
+            }
+
+            await File.WriteAllTextAsync(greetings, original).ConfigureAwait(true);
+        }
     }
 
     /// <summary>
