@@ -1,0 +1,74 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:data="using:DaedalusStudio.Workbench.Data"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.EntityFrameworkView"
+             x:DataType="vm:EntityFrameworkViewModel">
+  <DockPanel>
+    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,3">
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Build and refresh the contexts and migrations" AutomationProperties.Name="Refresh Entity Framework">
+        <controls:Icon Kind="refresh" />
+      </Button>
+      <Button Classes="toolbar" Content="Add Migration…" Command="{Binding AddCommand}" IsEnabled="{Binding HasContext}" />
+      <Button Classes="toolbar" Content="Update Database" Command="{Binding UpdateCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="Apply the pending migrations (the SQL is shown first)" />
+      <Button Classes="toolbar" Content="Script…" Command="{Binding ScriptCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="Generate a SQL script of migrations" />
+      <Button Classes="toolbar" Content="Model" Command="{Binding ModelCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="The context's model: a diagram and the debug view" />
+      <Button Classes="toolbar" Content="Bundle…" Command="{Binding BundleCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="Create a migrations bundle (an executable that applies the migrations)" />
+      <Button Classes="toolbar" Content="Compiled Model…" Command="{Binding OptimizeCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="Generate a compiled model (dbcontext optimize)" />
+      <Button Classes="toolbar" Content="Reverse Engineer…" Command="{Binding ScaffoldCommand}" ToolTip.Tip="Generate entities and a context from a database (dbcontext scaffold)" />
+    </WrapPanel>
+    <StackPanel DockPanel.Dock="Top" Margin="8,2,8,4" Spacing="4">
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+        <TextBlock Text="Context" Classes="muted" VerticalAlignment="Center" Margin="0,0,8,0" />
+        <ComboBox x:Name="ContextBox" Grid.Column="1" ItemsSource="{Binding Contexts}" SelectedItem="{Binding Context}" HorizontalAlignment="Stretch" AutomationProperties.Name="DbContext">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="data:EfContextEntry">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Grid.Row="1" Text="Database" Classes="muted" VerticalAlignment="Center" Margin="0,4,8,0" />
+        <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" ItemsSource="{Binding Connections}" SelectedItem="{Binding Connection}" HorizontalAlignment="Stretch" AutomationProperties.Name="Connection the migrations apply to">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:EfConnectionChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </Grid>
+      <TextBlock Text="{Binding Database}" IsVisible="{Binding HasDatabase}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+      <TextBlock Text="{Binding Status}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+      <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsBusy}">
+        <ProgressBar IsIndeterminate="True" Width="60" Height="4" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding Busy}" Classes="muted" FontSize="11" />
+      </StackPanel>
+      <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Warning}" />
+      <Button Content="Install dotnet-ef" Command="{Binding InstallCommand}" IsVisible="{Binding CanInstall}" HorizontalAlignment="Left" ToolTip.Tip="Install dotnet-ef as a local tool at the project's EF Core version, or restore the .NET tools" />
+    </StackPanel>
+    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0" Padding="4,3">
+      <WrapPanel Orientation="Horizontal">
+        <Button Classes="toolbar" Content="Update to This Migration" Command="{Binding UpdateToCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="Apply or revert migrations so the database is at the selected one" />
+        <Button Classes="toolbar" Content="Remove Last Migration" Command="{Binding RemoveCommand}" IsEnabled="{Binding HasContext}" />
+        <Button Classes="toolbar" Content="Go to Context" Command="{Binding OpenCommand}" IsEnabled="{Binding HasContext}" />
+      </WrapPanel>
+    </Border>
+    <ListBox x:Name="List" ItemsSource="{Binding Migrations}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Migrations">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:EfMigrationRow">
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:EfMigrationRow">
+          <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+            <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Text="{Binding Created}" Classes="muted" FontSize="11" VerticalAlignment="Center" Margin="8,0" />
+            <TextBlock Grid.Column="3" Text="{Binding State}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

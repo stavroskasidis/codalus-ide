@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             x:Class="DaedalusStudio.Shell.Views.EfScaffoldView"
+             x:DataType="vm:EfScaffoldViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="24,18" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+      <TextBlock Classes="heading" FontSize="18" Text="Reverse engineer a database" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="dotnet ef dbcontext scaffold generates entity types and a DbContext from the database's schema into the project. The project needs the provider's EF Core package and Microsoft.EntityFrameworkCore.Design." />
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4">
+        <TextBlock Text="Project" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
+        <ComboBox x:Name="ProjectBox" Grid.Column="1" ItemsSource="{Binding Projects}" SelectedItem="{Binding Project}" MinWidth="320" AutomationProperties.Name="Project" />
+        <TextBlock Grid.Row="1" Text="Known connection" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" ItemsSource="{Binding KnownConnections}" SelectedItem="{Binding KnownConnection}" MinWidth="320" PlaceholderText="From appsettings or user secrets" AutomationProperties.Name="Known connection">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:EfConnectionChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Grid.Row="2" Text="Connection string" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" Text="{Binding ConnectionString}" AutomationProperties.Name="Connection string" />
+        <TextBlock Grid.Row="3" Text="Provider" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <ComboBox Grid.Row="3" Grid.Column="1" Margin="0,6,0,0" ItemsSource="{Binding Providers}" SelectedItem="{Binding Provider}" MinWidth="320" AutomationProperties.Name="Provider" />
+        <TextBlock Grid.Row="4" Text="Output folder" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="4" Grid.Column="1" Margin="0,6,0,0" Text="{Binding OutputDir}" AutomationProperties.Name="Output folder" />
+        <TextBlock Grid.Row="5" Text="Context name" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="5" Grid.Column="1" Margin="0,6,0,0" Text="{Binding ContextName}" Watermark="From the database's name" AutomationProperties.Name="Context name" />
+        <TextBlock Grid.Row="6" Text="Tables" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="6" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Tables}" Watermark="All tables, or a comma-separated list" AutomationProperties.Name="Tables" />
+      </Grid>
+      <TextBlock Text="Schemas (comma-separated; empty: all)" Classes="muted" />
+      <TextBox Text="{Binding Schemas}" AutomationProperties.Name="Schemas" />
+      <CheckBox Content="Use data annotations where possible (instead of the fluent API)" IsChecked="{Binding DataAnnotations}" />
+      <CheckBox Content="Don't generate OnConfiguring (keeps the connection string out of the code)" IsChecked="{Binding NoOnConfiguring}" />
+      <CheckBox Content="Use the database's names for tables and columns" IsChecked="{Binding UseDatabaseNames}" />
+      <CheckBox Content="Don't pluralize or singularize names" IsChecked="{Binding NoPluralize}" />
+      <CheckBox Content="Overwrite existing files" IsChecked="{Binding Force}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Classes="accent" Content="Generate" Command="{Binding RunCommand}" IsEnabled="{Binding !IsBusy}" />
+        <TextBlock Text="Building and generating…" Classes="muted" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Result}" IsVisible="{Binding HasResult}" FontWeight="SemiBold" TextWrapping="Wrap" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

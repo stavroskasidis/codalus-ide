@@ -34,4 +34,26 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DaedalusStudio.Projects.Tests" />
   </ItemGroup>
+
+  <!--
+    The EF Core model agent (ADR 0036) runs on the user's application's runtime, so it is built for net8.0 on its own
+    and shipped in efagent/ next to the host: referenced for build order only.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DaedalusStudio.EntityFramework.Agent\DaedalusStudio.EntityFramework.Agent.csproj" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishReadyToRun" />
+  </ItemGroup>
+
+  <Target Name="DaedalusEfAgentFiles">
+    <ItemGroup>
+      <_DaedalusEfAgentFiles Include="$(MSBuildThisFileDirectory)..\DaedalusStudio.EntityFramework.Agent\bin\$(Configuration)\net8.0\daedalus-efagent.*" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="DaedalusCopyEfAgent" AfterTargets="Build" DependsOnTargets="DaedalusEfAgentFiles" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Copy SourceFiles="@(_DaedalusEfAgentFiles)" DestinationFolder="$(OutDir)efagent" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="DaedalusPublishEfAgent" AfterTargets="Publish" DependsOnTargets="DaedalusEfAgentFiles">
+    <Copy SourceFiles="@(_DaedalusEfAgentFiles)" DestinationFolder="$(PublishDir)efagent" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

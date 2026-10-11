@@ -28,6 +28,9 @@ internal interface ISessionEvents
     Task CompilerInputsAsync(CompilerInputsInfo inputs);
 
     Task DesignTimeProgressAsync(DesignTimeProgressParams progress);
+
+    /// <summary>A message of a running <c>dotnet ef</c> (ADR 0036).</summary>
+    Task EfOutputAsync(EfOutputParams output);
 }
 
 /// <summary>The session's events plus those of builds.</summary>

@@ -295,3 +295,25 @@ public sealed record AspNetEndpointsParams(string? Project = null);
 public sealed record AspNetEndpoint(string HttpMethod, string Route, string Handler, string Kind, string Project, string ProjectPath, Location Location);
 
 public sealed record AspNetEndpointsResult(AspNetEndpoint[] Endpoints);
+
+/// <summary><c>daedalus/ef/contexts</c> (M27a, ADR 0036): the DbContext types of every project, or of one.</summary>
+public sealed record EfContextsParams(string? Project = null);
+
+/// <summary>
+/// A class deriving from EF Core's <c>DbContext</c>, found with the semantic model without building or running anything.
+/// <see cref="Provider"/> is the EF Core provider package its configuration uses (from <c>UseSqlite</c>,
+/// <c>UseSqlServer</c>, <c>UseNpgsql</c>… in <c>OnConfiguring</c> or an <c>AddDbContext&lt;T&gt;</c> call anywhere in the
+/// solution, or Aspire's <c>Add…DbContext&lt;T&gt;</c>); <see cref="ConnectionName"/> is the configuration name given to
+/// <c>GetConnectionString</c> (or Aspire's connection name). <see cref="Entities"/> are the types of its <c>DbSet</c>s.
+/// </summary>
+public sealed record EfDiscoveredContext(
+    string Project,
+    string Name,
+    string FullName,
+    Location Location,
+    string? Provider,
+    string? ConnectionName,
+    string[] Entities,
+    bool HasDesignTimeFactory);
+
+public sealed record EfDiscoveredContextsResult(EfDiscoveredContext[] Contexts);

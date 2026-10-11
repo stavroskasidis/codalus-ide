@@ -32,3 +32,6 @@ Thumbs.db
 
 # Worktrees of parallel milestone sessions (CLAUDE.md, Git)
 /.claude/worktrees/
+
+# The Data fixture's databases created by running it in place (samples/Data/Inventory/inventory.db is committed)
+samples/Data/Blogging/*.db
