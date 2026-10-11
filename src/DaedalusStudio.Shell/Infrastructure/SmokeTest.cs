@@ -535,11 +535,20 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             var dumpsDebuggee = !OperatingSystem.IsMacOS();
             var pid = (dumpsDebuggee ? shell.Debugger.ProcessId : shell.Solutions.HostProcessId) ?? throw new SmokeFailure("There is no process id to dump.");
             var dump = Path.Combine(Path.GetTempPath(), $"daedalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
-            var created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
+            DaedalusStudio.Debugging.Companion.CreateDumpResult created;
+            try
+            {
+                created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
+            }
+            finally
+            {
+                // Ended even when the dump fails, so the steps after this one start without a session.
+                shell.Debugger.PinnedTips.Clear();
+                shell.Run("debug.stop");
+                await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+            }
+
             Check(File.Exists(created.Path) && created.Size > 0, $"the companion writes a dump ({created.Size} bytes)");
-            shell.Debugger.PinnedTips.Clear();
-            shell.Run("debug.stop");
-            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
             try
             {
                 var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
