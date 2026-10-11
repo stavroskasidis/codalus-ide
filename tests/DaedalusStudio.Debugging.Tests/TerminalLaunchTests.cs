@@ -123,6 +123,23 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
     }
 
     [Fact]
+    public async Task Detach_All_from_an_apphost_stopped_at_a_breakpoint_leaves_it_running()
+    {
+        // The apphost, as launch profiles run it: netcoredbg used to end it when detaching while it was stopped.
+        var apphost = Path.Combine(Path.GetDirectoryName(debuggee.Dll)!, OperatingSystem.IsWindows() ? "Debuggee.exe" : "Debuggee");
+        _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "loop")));
+        _debug.ExceptionSettings.SetAll(true);
+        await _debug.LaunchAsync([new DebugLaunch("Debuggee", new LaunchPlan(apphost, "--none", debuggee.Folder, new Dictionary<string, string>(), null)) { Console = DebugConsoleKind.Terminal }], TestContext.Current.CancellationToken);
+        var session = _launcher.Last ?? throw new InvalidOperationException("No terminal started.");
+        await NextStopAsync();
+
+        await _debug.DetachAsync();
+        await UntilAsync(() => session.ExitCode is not null, "the program exits after Detach All:\n" + Screen(), 90);
+        Assert.Equal(15, session.ExitCode);
+        Assert.Contains("caught boom", Screen(), StringComparison.Ordinal); // past the breakpoint and the exception settings
+    }
+
+    [Fact]
     public async Task Stop_ends_a_program_launched_in_the_terminal()
     {
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "print")));

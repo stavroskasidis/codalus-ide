@@ -57,6 +57,7 @@ public sealed class ViewLocator : IDataTemplate
         ConfigurationManagerViewModel vm => new ConfigurationManagerView { DataContext = vm },
         ProjectDependenciesViewModel vm => new ProjectDependenciesView { DataContext = vm },
         SdkViewModel vm => new SdkView { DataContext = vm },
+        StartupProjectsViewModel vm => new StartupProjectsView { DataContext = vm },
         _ => new TextBlock { Text = "This view is not available.", Margin = new Thickness(12) },
     };
 

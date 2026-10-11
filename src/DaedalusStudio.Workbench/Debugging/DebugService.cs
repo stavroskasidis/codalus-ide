@@ -603,9 +603,51 @@ public sealed class DebugService : IAsyncDisposable
             return;
         }
 
+        if (_attached)
+        {
+            await PrepareDetachAsync(adapter).ConfigureAwait(false);
+        }
+
         await adapter.DisconnectAsync(terminateDebuggee: !_attached, CancellationToken.None).ConfigureAwait(false);
         KillTerminalPrograms();
         await EndAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Before a detach from a stopped program (M14c): its breakpoints and exception filters are removed, and a trivial
+    /// function evaluation runs on the stopped thread. netcoredbg 3.2.0 on Windows ends an apphost program
+    /// (<c>App.exe</c>, not <c>dotnet App.dll</c>) with 0xC0000409 when it detaches while the program is stopped at a
+    /// breakpoint, unless a function evaluation ran since the stop; resuming first instead races with the program's
+    /// own debug events (0xC0000354). TODO(issue): report upstream (Samsung/netcoredbg).
+    /// </summary>
+    private async Task PrepareDetachAsync(IDebugAdapter adapter)
+    {
+        if (State != DebugState.Stopped)
+        {
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            foreach (var file in Breakpoints.Files)
+            {
+                await adapter.SetBreakpointsAsync(file, [], timeout.Token).ConfigureAwait(false);
+            }
+
+            if (Breakpoints.Functions.Count > 0)
+            {
+                await adapter.SetFunctionBreakpointsAsync([], timeout.Token).ConfigureAwait(false);
+            }
+
+            await adapter.SetExceptionBreakpointsAsync([], timeout.Token).ConfigureAwait(false);
+
+            await adapter.EvaluateAsync("System.Environment.ProcessId", SelectedFrame?.Id, "watch", timeout.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            Output?.Invoke(this, new DebugOutput("console", $"Preparing the detach: {ex.Message}\n"));
+        }
     }
 
     /// <summary>
@@ -656,6 +698,7 @@ public sealed class DebugService : IAsyncDisposable
             _terminalProcesses.Clear(); // they go on
         }
 
+        await PrepareDetachAsync(adapter).ConfigureAwait(false);
         await adapter.DisconnectAsync(terminateDebuggee: false, CancellationToken.None).ConfigureAwait(false);
         await EndAsync().ConfigureAwait(false);
     }
@@ -1116,7 +1159,8 @@ public sealed class DebugService : IAsyncDisposable
                 break;
             case DapEvents.Exited when DebugAdapter.Read(e.Body, DapJsonContext.Default.ExitedEvent) is { } exited:
                 _exitCode = exited.ExitCode;
-                Output?.Invoke(this, new DebugOutput("console", $"The program has exited with code {exited.ExitCode.ToString(CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n"));
+                var program = _adapter is CompoundDebugAdapter { Independent: true } programs ? $"[{programs.PartNames[0]}] " : string.Empty;
+                Output?.Invoke(this, new DebugOutput("console", $"{program}The program has exited with code {exited.ExitCode.ToString(CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n"));
                 break;
             case DapEvents.Terminated:
                 _ = Task.Run(EndAsync);

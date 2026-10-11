@@ -13,8 +13,21 @@ public sealed record DebugAdapterStartInfo(
     IReadOnlyDictionary<string, string>? Environment = null,
     string? Transport = null)
 {
-    /// <summary>netcoredbg at <paramref name="path"/> on this machine.</summary>
-    public static DebugAdapterStartInfo Local(string path) => new(path, ["--interpreter=vscode"], Path.GetDirectoryName(path));
+    /// <summary>A folder for netcoredbg's DAP logs (<c>--engineLogging</c>), to diagnose a session.</summary>
+    public const string LogVariable = "DAEDALUS_NETCOREDBG_LOG";
+
+    /// <summary>netcoredbg at <paramref name="path"/> on this machine (logging into <c>DAEDALUS_NETCOREDBG_LOG</c> when set).</summary>
+    public static DebugAdapterStartInfo Local(string path)
+    {
+        List<string> arguments = ["--interpreter=vscode"];
+        if (System.Environment.GetEnvironmentVariable(LogVariable) is { Length: > 0 } folder)
+        {
+            Directory.CreateDirectory(folder);
+            arguments.Add("--engineLogging=" + Path.Combine(folder, $"netcoredbg-{DateTime.Now:HHmmss}-{Guid.NewGuid().ToString("N")[..6]}.log"));
+        }
+
+        return new(path, arguments, Path.GetDirectoryName(path));
+    }
 }
 
 /// <summary>A program to start in a terminal (DAP <c>runInTerminal</c>, or a launch in the integrated terminal).</summary>

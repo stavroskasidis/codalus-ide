@@ -30,14 +30,18 @@ public sealed class ProcessesViewModel : ObservableObject
         _debugger = debugger;
         _run = run;
         debugger.StateChanged += (_, _) => Ui.Post(Refresh);
+        debugger.ProcessesChanged += (_, _) => Ui.Post(Refresh);
     }
 
     public ObservableCollection<ProcessRow> Rows { get; } = [];
 
     public bool IsEmpty => Rows.Count == 0;
 
-    /// <summary>Whether Detach All applies: an attached program (a launched one's console is netcoredbg's).</summary>
-    public bool CanDetach => !IsEmpty && _debugger.IsAttached;
+    /// <summary>
+    /// Whether Detach All applies: every program was attached to or launched in the terminal (a program launched with
+    /// the Debug Console has netcoredbg's console, M14c).
+    /// </summary>
+    public bool CanDetach => !IsEmpty && _debugger.CanDetach;
 
     /// <summary>Runs one of the window's commands (attach, detach all, terminate all).</summary>
     public void Run(string commandId) => _run(commandId);
@@ -45,9 +49,32 @@ public sealed class ProcessesViewModel : ObservableObject
     public void Refresh()
     {
         Rows.Clear();
-        if (_debugger.State != DebugState.Idle && _debugger.ProcessId is { } pid)
+        if (_debugger.State != DebugState.Idle)
         {
-            Rows.Add(Describe(pid, _debugger.State == DebugState.Stopped ? "Break" : "Running", _debugger.IsAttached ? "Attached" : "Launched"));
+            var state = _debugger.State == DebugState.Stopped ? "Break" : "Running";
+            foreach (var process in _debugger.Processes)
+            {
+                if (process.Id is not { } pid)
+                {
+                    continue;
+                }
+
+                var kind = process.Kind switch
+                {
+                    DebugProcess.Terminal => "Launched in the terminal",
+                    var other => other,
+                };
+                if (process.Target is { } target)
+                {
+                    // On another machine: what the session knows, not this machine's process of that id.
+                    Rows.Add(new ProcessRow(pid, process.Name, target, string.Empty, process.Ended ? "Exited" : state, kind));
+                }
+                else
+                {
+                    var row = Describe(pid, process.Ended ? "Exited" : state, kind);
+                    Rows.Add(process.Ended ? row with { Name = process.Name } : row);
+                }
+            }
         }
 
         OnPropertyChanged(nameof(IsEmpty));

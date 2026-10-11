@@ -9,6 +9,7 @@ using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Shell.Theming;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Shell.Views;
+using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Languages;
 using DaedalusStudio.Workbench.StatusBar;
@@ -683,6 +684,8 @@ public sealed partial class ShellHost : IEditorServices
             Watches = Watch.Expressions.Count == 0 ? null : Watch.Expressions,
             DataTips = Debugger.PinnedTips.All is { Count: > 0 } tips ? [.. tips.Select(t => new Docking.SessionDataTip(t.Path, t.Line, t.Expression, t.Comment))] : null,
             LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
+            MultipleStartupProjects = Runs.MultipleStartup ? true : null,
+            StartupProjects = Runs.StartupEntries is { Count: > 0 } entries ? [.. entries.Select(e => new Docking.SessionStartupProject(e.Project, e.Action.ToString()))] : null,
         }, Docking.ShellJsonContext.Default.EditorSession);
     }
 
@@ -700,7 +703,11 @@ public sealed partial class ShellHost : IEditorServices
             return;
         }
 
-        Runs.Load(session.StartupProject, session.LaunchProfiles);
+        Runs.Load(
+            session.StartupProject,
+            session.LaunchProfiles,
+            session.MultipleStartupProjects == true,
+            [.. (session.StartupProjects ?? []).Select(p => new StartupEntry(p.Path, Enum.TryParse<StartupAction>(p.Action, out var action) ? action : StartupAction.None))]);
         Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(FromSession), (session.FunctionBreakpoints ?? []).Select(FromSession));
         Debugger.ExceptionSettings.Load(session.BreakOnOtherExceptions ?? false, session.ExceptionTypes, session.ExceptionConditions);
         Runs.EnvironmentOverride = session.AspNetEnvironment;

@@ -91,6 +91,11 @@ internal static partial class BuiltIns
         }, "programRunning");
         Add("run.selectStartupProject", "Select Startup Project…", "Debug", _ => shell.SelectStartupProjectAsync(), "solutionOpen");
         Add("run.selectLaunchProfile", "Select Launch Profile…", "Debug", shell.SelectLaunchProfileAsync, "hasStartupProject");
+        Add("run.configureStartupProjects", "Configure Startup Projects…", "Debug", _ =>
+        {
+            shell.OpenStartupProjects();
+            return Task.CompletedTask;
+        }, "solutionOpen");
         Add("run.setStartupProject", "Set as Startup Project", "Debug", p =>
         {
             if ((p ?? shell.Explorer.Selected?.Node.ProjectPath) is { } project)
@@ -127,6 +132,7 @@ internal static partial class BuiltIns
             Item(MenuLocations.MenuBar("debug"), "run.stop", "1-run", 2),
             Item(MenuLocations.MenuBar("debug"), "run.selectStartupProject", "2-startup", 1),
             Item(MenuLocations.MenuBar("debug"), "run.selectLaunchProfile", "2-startup", 2),
+            Item(MenuLocations.MenuBar("debug"), "run.configureStartupProjects", "2-startup", 3),
 
             Item(Context, "build.buildSolution", "0-build", 1, "explorerItemKind == solution", "Build Solution"),
             Item(Context, "build.rebuildSolution", "0-build", 2, "explorerItemKind == solution", "Rebuild Solution"),
@@ -135,6 +141,7 @@ internal static partial class BuiltIns
             Item(Context, "build.rebuildProject", "0-build", 2, "explorerItemKind == project", "Rebuild"),
             Item(Context, "build.cleanProject", "0-build", 3, "explorerItemKind == project", "Clean"),
             Item(Context, "run.setStartupProject", "4-solution", 0, "explorerItemKind == project"),
+            Item(Context, "run.configureStartupProjects", "4-solution", 1, "explorerItemKind == solution"),
         ]);
     }
 }

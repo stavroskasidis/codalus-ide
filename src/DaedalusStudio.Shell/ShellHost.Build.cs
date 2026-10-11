@@ -163,6 +163,12 @@ public sealed partial class ShellHost
     public async Task StartWithoutDebuggingAsync(string? argument = null, bool hotReload = false)
     {
         hotReload |= Workbench.Settings.GetBoolean(HotReloadSetting, false);
+        if (argument is null && !hotReload && Runs.MultipleStartup)
+        {
+            await StartStartupProjectsAsync(debug: false).ConfigureAwait(true);
+            return;
+        }
+
         var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
         if (project is null)
         {
