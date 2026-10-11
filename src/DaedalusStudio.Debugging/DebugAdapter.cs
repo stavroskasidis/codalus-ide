@@ -62,10 +62,21 @@ public sealed class DebugAdapter : IDebugAdapter
         {
             if (e.Data is { } line)
             {
+                lock (_stderr)
+                {
+                    if (_stderr.Length < 4096)
+                    {
+                        _stderr.AppendLine(line);
+                    }
+                }
+
                 Log?.Invoke(this, line);
             }
         };
     }
+
+    /// <summary>The start of the adapter's stderr, to say why a pipe transport failed.</summary>
+    private readonly System.Text.StringBuilder _stderr = new();
 
     public Capabilities Capabilities { get; private set; } = new();
 
@@ -86,30 +97,59 @@ public sealed class DebugAdapter : IDebugAdapter
     public DapConnection Connection => _connection;
 
     /// <summary>Starts the adapter at <paramref name="path"/> and sends <c>initialize</c>.</summary>
-    public static async Task<DebugAdapter> StartAsync(string path, CancellationToken cancellationToken)
+    public static Task<DebugAdapter> StartAsync(string path, CancellationToken cancellationToken) =>
+        StartAsync(DebugAdapterStartInfo.Local(path), cancellationToken);
+
+    /// <summary>
+    /// Starts the adapter as <paramref name="info"/> says (netcoredbg here, or through a pipe transport on another
+    /// machine, M14c) and sends <c>initialize</c>. With <paramref name="terminal"/>, the client offers DAP's
+    /// <c>runInTerminal</c> and answers it through the terminal.
+    /// </summary>
+    public static async Task<DebugAdapter> StartAsync(DebugAdapterStartInfo info, CancellationToken cancellationToken, ITerminalLauncher? terminal = null)
     {
-        var start = new ProcessStartInfo(path)
+        var start = new ProcessStartInfo(info.Program)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            WorkingDirectory = Path.GetDirectoryName(path)!,
+            WorkingDirectory = info.WorkingDirectory ?? (Path.IsPathRooted(info.Program) ? Path.GetDirectoryName(info.Program)! : Environment.CurrentDirectory),
         };
-        start.ArgumentList.Add("--interpreter=vscode");
-        var process = Process.Start(start) ?? throw new InvalidOperationException($"{path} did not start.");
-        var adapter = new DebugAdapter(process);
+        foreach (var argument in info.Arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        foreach (var (name, value) in info.Environment ?? new Dictionary<string, string>())
+        {
+            start.Environment[name] = value;
+        }
+
+        var process = Process.Start(start) ?? throw new InvalidOperationException($"{info.Program} did not start.");
+        var adapter = new DebugAdapter(process) { Transport = info.Transport };
+        if (terminal is not null)
+        {
+            adapter._connection.Handle("runInTerminal", (arguments, ct) => RunInTerminalAsync(terminal, arguments, ct));
+        }
+
         process.BeginErrorReadLine();
         adapter._connection.Start();
         try
         {
             adapter.Capabilities = await adapter._connection.RequestAsync(
                 "initialize",
-                new InitializeArguments("daedalus", "Daedalus Studio", "coreclr"),
+                new InitializeArguments("daedalus", "Daedalus Studio", "coreclr", SupportsRunInTerminalRequest: terminal is not null),
                 DapJsonContext.Default.InitializeArguments,
                 DapJsonContext.Default.Capabilities,
                 cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (info.Transport is not null && ex is DapConnectionLostException)
+        {
+            // A transport that ended before the adapter answered (ssh refused, the container is gone…): say what it printed.
+            var stderr = adapter._stderr.ToString().Trim();
+            await adapter.DisposeAsync().ConfigureAwait(false);
+            throw new InvalidOperationException($"The debugger didn't start through {info.Transport}{(stderr.Length == 0 ? "." : ": " + stderr)}", ex);
         }
         catch
         {
@@ -120,10 +160,37 @@ public sealed class DebugAdapter : IDebugAdapter
         return adapter;
     }
 
+    /// <summary>The pipe transport's name (<c>ssh host</c>, a container, a WSL distribution), or null when local.</summary>
+    public string? Transport { get; private init; }
+
+    /// <summary>Answers <c>runInTerminal</c>: starts the program in a terminal and returns its process id.</summary>
+    internal static async Task<JsonElement> RunInTerminalAsync(ITerminalLauncher terminal, JsonElement arguments, CancellationToken cancellationToken)
+    {
+        var request = Read(arguments, DapJsonContext.Default.RunInTerminalRequestArguments)
+                      ?? throw new InvalidOperationException("runInTerminal: no arguments.");
+        if (request.Args.Length == 0)
+        {
+            throw new InvalidOperationException("runInTerminal: no program to run.");
+        }
+
+        var launch = new TerminalLaunch(
+            request.Title ?? Path.GetFileNameWithoutExtension(request.Args[0]),
+            request.Args[0],
+            request.Args[1..],
+            request.Cwd,
+            new Dictionary<string, string?>(request.Env ?? [], StringComparer.Ordinal));
+        var processId = await terminal.LaunchAsync(launch, cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.SerializeToElement(new RunInTerminalResponse(processId), DapJsonContext.Default.RunInTerminalResponse);
+    }
+
     private static DapJsonContext Json => DapJsonContext.Default;
 
     public Task LaunchAsync(LaunchArguments arguments, CancellationToken cancellationToken) =>
         _connection.RequestAsync("launch", arguments, Json.LaunchArguments, cancellationToken);
+
+    /// <summary>Launches with arguments of another shape (a remote target's program and paths, M14c).</summary>
+    public Task LaunchAsync<T>(T arguments, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken) =>
+        _connection.RequestAsync("launch", arguments, info, cancellationToken);
 
     public Task AttachAsync(AttachArguments arguments, CancellationToken cancellationToken) =>
         _connection.RequestAsync("attach", arguments, Json.AttachArguments, cancellationToken);

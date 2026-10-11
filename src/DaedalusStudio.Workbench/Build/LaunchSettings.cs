@@ -4,7 +4,11 @@ using DaedalusStudio.Projects.Protocol;
 
 namespace DaedalusStudio.Workbench.Build;
 
-/// <summary>A profile of <c>Properties/launchSettings.json</c>. Only the <c>Project</c> and <c>Executable</c> commands run.</summary>
+/// <summary>
+/// A profile of <c>Properties/launchSettings.json</c>. The <c>Project</c>, <c>Executable</c>, <c>WSL2</c> (a WSL
+/// distribution, <see cref="DistributionName"/>; M14c) and <c>DebugRoslynComponent</c> (the compiler on
+/// <see cref="TargetProject"/> with this analyzer or generator; M14c) commands run.
+/// </summary>
 public sealed record LaunchProfile(
     string Name,
     string CommandName,
@@ -15,9 +19,14 @@ public sealed record LaunchProfile(
     bool LaunchBrowser = false,
     string? LaunchUrl = null,
     IReadOnlyDictionary<string, string>? EnvironmentVariables = null,
-    string? InspectUri = null)
+    string? InspectUri = null,
+    string? DistributionName = null,
+    string? TargetProject = null)
 {
-    public bool IsRunnable => CommandName is "Project" or "Executable";
+    public const string Wsl = "WSL2";
+    public const string RoslynComponent = "DebugRoslynComponent";
+
+    public bool IsRunnable => CommandName is "Project" or "Executable" or Wsl or RoslynComponent;
 }
 
 /// <summary>Reads launch profiles (the format <c>dotnet run</c> and other IDEs use).</summary>
@@ -63,7 +72,9 @@ public static class LaunchSettings
                 value.TryGetProperty("launchBrowser", out var browser) && browser.ValueKind == JsonValueKind.True,
                 String(value, "launchUrl"),
                 environment,
-                String(value, "inspectUri")));
+                String(value, "inspectUri"),
+                value.TryGetProperty("distributionName", out var distribution) && distribution.ValueKind == JsonValueKind.String ? distribution.GetString() : null,
+                String(value, "targetProject")));
         }
 
         return result;
@@ -99,7 +110,98 @@ public sealed record LaunchPlan(
     string Arguments,
     string WorkingDirectory,
     IReadOnlyDictionary<string, string> Environment,
-    string? BrowserUrl);
+    string? BrowserUrl)
+{
+    /// <summary>
+    /// The arguments exactly (a WSL command, a compiler response file, M14c); when null, <see cref="Arguments"/> is
+    /// split like a command line.
+    /// </summary>
+    public IReadOnlyList<string>? ArgumentList { get; init; }
+
+    /// <summary>The program in a WSL distribution, for the <c>WSL2</c> launch profile (M14c); null otherwise.</summary>
+    public WslLaunch? Wsl { get; init; }
+
+    /// <summary>The arguments as the program receives them.</summary>
+    public IReadOnlyList<string> SplitArguments() => ArgumentList ?? Debugging.CommandLine.Split(Arguments);
+}
+
+/// <summary>
+/// A program in a WSL distribution (the <c>WSL2</c> launch profile, M14c): the Linux <c>dotnet</c> runs the Windows
+/// build's output through <c>/mnt/…</c>. <see cref="Distribution"/> empty is the default distribution. The plan's
+/// environment is applied inside the distribution.
+/// </summary>
+public sealed record WslLaunch(string Distribution, string Program, IReadOnlyList<string> Arguments, string WorkingDirectory)
+{
+    /// <summary>
+    /// <paramref name="plan"/> as a Windows command (<c>wsl.exe -d … --cd … --exec sh -lc '…'</c>) for runs without the
+    /// debugger; a login shell, so the distribution's own <c>PATH</c> finds <c>dotnet</c>.
+    /// </summary>
+    public static LaunchPlan Apply(LaunchPlan plan)
+    {
+        if (plan.Wsl is not { } wsl)
+        {
+            return plan;
+        }
+
+        var script = new StringBuilder("exec env");
+        foreach (var (name, value) in plan.Environment)
+        {
+            script.Append(' ').Append(ShellQuote(name + "=" + value));
+        }
+
+        script.Append(' ').Append(ShellQuote(wsl.Program));
+        foreach (var argument in wsl.Arguments)
+        {
+            script.Append(' ').Append(ShellQuote(argument));
+        }
+
+        List<string> arguments = [];
+        if (wsl.Distribution.Length > 0)
+        {
+            arguments.AddRange(["-d", wsl.Distribution]);
+        }
+
+        arguments.AddRange(["--cd", wsl.WorkingDirectory, "--exec", "sh", "-lc", script.ToString()]);
+        return plan with
+        {
+            FileName = "wsl.exe",
+            ArgumentList = arguments,
+            Arguments = string.Join(' ', arguments.Select(a => a.Contains(' ', StringComparison.Ordinal) ? $"\"{a}\"" : a)),
+        };
+    }
+
+    /// <summary>Quotes for <c>sh</c>: single quotes, with embedded ones as <c>'\''</c>.</summary>
+    public static string ShellQuote(string text) =>
+        text.Length > 0 && text.All(c => char.IsAsciiLetterOrDigit(c) || c is '/' or '.' or '-' or '_' or '=' or ':' or ',' or '+' or '@')
+            ? text
+            : "'" + text.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
+
+    /// <summary>
+    /// The Linux path of a Windows path in WSL: <c>D:\src\App</c> is <c>/mnt/d/src/App</c> under the automount root,
+    /// and <c>\\wsl$\Ubuntu\home\me</c> (or <c>\\wsl.localhost\…</c>) is <c>/home/me</c>.
+    /// </summary>
+    public static string ToLinuxPath(string windowsPath, string mountRoot = "/mnt/")
+    {
+        var path = windowsPath.Replace('/', '\\');
+        foreach (var prefix in new[] { @"\\wsl$\", @"\\wsl.localhost\" })
+        {
+            if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var rest = path[prefix.Length..];
+                var slash = rest.IndexOf('\\', StringComparison.Ordinal);
+                return slash < 0 ? "/" : rest[slash..].Replace('\\', '/');
+            }
+        }
+
+        if (path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':')
+        {
+            var root = mountRoot.EndsWith('/') ? mountRoot : mountRoot + "/";
+            return root + char.ToLowerInvariant(path[0]) + path[2..].Replace('\\', '/').TrimEnd('/');
+        }
+
+        return windowsPath.Replace('\\', '/');
+    }
+}
 
 /// <summary>Turns a project's run information and a launch profile into a <see cref="LaunchPlan"/> (ADR 0006).</summary>
 public static class LaunchPlanner
@@ -112,6 +214,16 @@ public static class LaunchPlanner
     public static LaunchPlan Plan(RunInfo info, LaunchProfile? profile)
     {
         var projectDirectory = Path.GetDirectoryName(info.Path)!;
+        if (profile is { CommandName: LaunchProfile.Wsl })
+        {
+            return PlanWsl(info, profile, projectDirectory);
+        }
+
+        if (profile is { CommandName: LaunchProfile.RoslynComponent })
+        {
+            throw new InvalidOperationException($"The launch profile '{profile.Name}' runs the compiler on its target project: plan it with RoslynComponents.");
+        }
+
         string fileName;
         var arguments = new StringBuilder();
         if (profile is { CommandName: "Executable" })
@@ -171,6 +283,47 @@ public static class LaunchPlanner
         }
 
         return new LaunchPlan(fileName, arguments.ToString(), workingDirectory, environment, browser);
+    }
+
+    /// <summary>
+    /// The <c>WSL2</c> profile (M14c): the project's build output (<c>TargetPath</c>, a portable <c>.dll</c>) runs on
+    /// the distribution's <c>dotnet</c>, from the Linux path of the working directory, with the profile's arguments
+    /// and environment.
+    /// </summary>
+    private static LaunchPlan PlanWsl(RunInfo info, LaunchProfile profile, string projectDirectory)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new InvalidOperationException($"The launch profile '{profile.Name}' runs the program in WSL, which needs Windows.");
+        }
+
+        if (info.TargetPath is not { } target || !target.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"{Path.GetFileName(info.Path)} can't run in WSL: its output isn't a .NET assembly (.dll).");
+        }
+
+        var workingDirectory = Expand(profile.WorkingDirectory, projectDirectory) ?? info.RunWorkingDirectory ?? projectDirectory;
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, value) in profile.EnvironmentVariables ?? new Dictionary<string, string>())
+        {
+            environment[name] = value;
+        }
+
+        environment.TryAdd("DOTNET_LAUNCH_PROFILE", profile.Name);
+        if (profile.ApplicationUrl is { } urls)
+        {
+            environment.TryAdd("ASPNETCORE_URLS", urls);
+        }
+
+        List<string> arguments = ["exec", WslLaunch.ToLinuxPath(target)];
+        if (profile.CommandLineArgs is { } args)
+        {
+            arguments.AddRange(Debugging.CommandLine.Split(args));
+        }
+
+        var wsl = new WslLaunch(profile.DistributionName ?? string.Empty, "dotnet", arguments, WslLaunch.ToLinuxPath(workingDirectory));
+        var plan = new LaunchPlan("wsl.exe", string.Empty, workingDirectory, environment, profile.LaunchBrowser ? BrowserUrl(profile.ApplicationUrl, profile.LaunchUrl) : null) { Wsl = wsl };
+        return WslLaunch.Apply(plan);
     }
 
     /// <summary>

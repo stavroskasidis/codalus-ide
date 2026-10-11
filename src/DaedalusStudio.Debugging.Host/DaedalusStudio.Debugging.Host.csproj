@@ -14,6 +14,13 @@
   <ItemGroup>
     <ProjectReference Include="..\DaedalusStudio.Rpc\DaedalusStudio.Rpc.csproj" />
     <ProjectReference Include="..\DaedalusStudio.Debugging\DaedalusStudio.Debugging.csproj" />
+    <!-- Not used by the host: shipped beside it in debughost/, for programs debugged in the terminal (M14c). -->
+    <ProjectReference Include="..\DaedalusStudio.Debugging.StartupHook\DaedalusStudio.Debugging.StartupHook.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- It loads into the user's program, on whatever .NET that runs: plain IL, not code compiled for ours. -->
+    <PublishReadyToRunExclude Include="DaedalusStudio.Debugging.StartupHook.dll" />
   </ItemGroup>
 
   <ItemGroup>

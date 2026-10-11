@@ -15,6 +15,18 @@ if (args is ["--depth"])
     return Depth.Run(); // [depth-call]
 }
 
+if (args is ["--read"])
+{
+    // A real console (debugging in the terminal, M14c): read a line and echo it.
+    Console.WriteLine("echo: " + Console.ReadLine()); // [read]
+}
+
+if (args is ["--crash"])
+{
+    // Just-In-Time debugging (M14c): an unhandled exception ends the program, and the runtime writes a dump.
+    throw new InvalidOperationException("crashed on purpose"); // [crash]
+}
+
 var numbers = new List<int> { 1, 2, 3, 4, 5 };
 var total = 0;
 for (var i = 0; i < numbers.Count; i++)

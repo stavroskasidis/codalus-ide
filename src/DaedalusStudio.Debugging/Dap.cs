@@ -68,7 +68,16 @@ public sealed record LaunchArguments(
     string Type = "coreclr",
     string Request = "launch");
 
-public sealed record AttachArguments(int ProcessId, bool JustMyCode = true, string Name = ".NET Attach", string Type = "coreclr", string Request = "attach");
+public sealed record AttachArguments(int ProcessId, bool JustMyCode = true, string Name = ".NET Attach", string Type = "coreclr", string Request = "attach", bool EnableStepFiltering = true);
+
+/// <summary>
+/// The <c>runInTerminal</c> reverse request (M14c): start <see cref="Args"/> (the program first) in a terminal.
+/// <see cref="Kind"/> is <c>integrated</c> or <c>external</c>; an <see cref="Env"/> value of null unsets the variable.
+/// </summary>
+public sealed record RunInTerminalRequestArguments(string[] Args, string Cwd, string? Kind = null, string? Title = null, Dictionary<string, string?>? Env = null);
+
+/// <summary>The answer to <c>runInTerminal</c>: the program's process id, when the terminal knows it.</summary>
+public sealed record RunInTerminalResponse(int? ProcessId = null, int? ShellProcessId = null);
 
 /// <summary>
 /// vscode-js-debug's browser <c>launch</c> arguments (ADR 0026). <see cref="Type"/> is <c>pwa-chrome</c> or
@@ -217,6 +226,8 @@ public static class DapEvents
 [JsonSerializable(typeof(Capabilities))]
 [JsonSerializable(typeof(LaunchArguments))]
 [JsonSerializable(typeof(AttachArguments))]
+[JsonSerializable(typeof(RunInTerminalRequestArguments))]
+[JsonSerializable(typeof(RunInTerminalResponse))]
 [JsonSerializable(typeof(BrowserLaunchArguments))]
 [JsonSerializable(typeof(StartDebuggingArguments))]
 [JsonSerializable(typeof(JsonElement))]
