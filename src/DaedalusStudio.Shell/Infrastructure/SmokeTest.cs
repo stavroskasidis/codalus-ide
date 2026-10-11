@@ -836,8 +836,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(editor.Model.LanguageId == ShellHost.RazorLanguageId, "Counter.razor is a Razor file");
             var client = shell.Languages.RunningClient(ShellHost.CSharpLanguageId)!;
             var at = editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("@currentCount", StringComparison.Ordinal) + 3);
-            string? hover = null;
-            await WaitAsync(() => (hover = client.HoverAsync(editor.Model.Uri, at, CancellationToken.None).GetAwaiter().GetResult()?.Contents.Value) is not null,
+            var hover = await WaitForAsync(async ct => (await client.HoverAsync(editor.Model.Uri, at, ct).ConfigureAwait(true))?.Contents.Value,
                 "hover on C# in the Razor file", 120).ConfigureAwait(true);
             Check(hover!.Contains("currentCount", StringComparison.Ordinal), "the hover describes the field: " + hover);
             var completion = await client.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("<button", StringComparison.Ordinal) + 1),
@@ -1392,6 +1391,37 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             }
 
             await Task.Delay(50).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Asks <paramref name="probe"/> until it answers non-null, each try cut off after 10 s, without ever blocking the
+    /// UI thread: a host that stops answering fails the step instead of hanging the app.
+    /// </summary>
+    private static async Task<T> WaitForAsync<T>(Func<CancellationToken, Task<T?>> probe, string what, int seconds = 30) where T : class
+    {
+        var deadline = Stopwatch.GetTimestamp() + (seconds * Stopwatch.Frequency);
+        while (true)
+        {
+            using var attempt = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            try
+            {
+                if (await probe(attempt.Token).ConfigureAwait(true) is { } value)
+                {
+                    return value;
+                }
+            }
+            catch (OperationCanceledException) when (attempt.IsCancellationRequested)
+            {
+                // This try took too long; the deadline decides.
+            }
+
+            if (Stopwatch.GetTimestamp() > deadline)
+            {
+                throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what}.");
+            }
+
+            await Task.Delay(250).ConfigureAwait(true);
         }
     }
 
