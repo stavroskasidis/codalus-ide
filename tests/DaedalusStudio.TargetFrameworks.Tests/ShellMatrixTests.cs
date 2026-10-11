@@ -224,11 +224,6 @@ public sealed class ShellMatrixTests
         var started = System.Diagnostics.Stopwatch.StartNew();
         while (f.Shell.Debugger.State != DebugState.Stopped)
         {
-            if (Environment.GetEnvironmentVariable("M33_F5_LOG") is { Length: > 0 } log && started.Elapsed > TimeSpan.FromSeconds(90))
-            {
-                File.WriteAllText(log, $"state {f.Shell.Debugger.State}\n{f.Shell.DebugLog.GetText()}\n" + string.Join("\n", f.Shell.Workbench.Notifications.Items.Select(n => n.Message)));
-            }
-
             Assert.True(started.Elapsed < TimeSpan.FromMinutes(5), $"No stop at the breakpoint (state {f.Shell.Debugger.State}). Debug Console:\n{f.Shell.DebugLog.GetText()}\nNotifications:\n"
                 + string.Join("\n", f.Shell.Workbench.Notifications.Items.Select(n => n.Message)) + "\nBuild:\n" + Tail(f.Shell.Builds.Channel.GetText()));
             ShellFixture.Pump();
