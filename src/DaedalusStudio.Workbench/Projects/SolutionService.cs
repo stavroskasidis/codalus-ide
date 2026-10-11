@@ -115,6 +115,8 @@ public sealed class SolutionService : IAsyncDisposable
 
     /// <summary>Folders whose set of files changed on disk (Show All Files and the folder view refresh; ADR 0033).</summary>
     public event EventHandler<IReadOnlyList<string>>? FilesChanged;
+    /// <summary>A message of a <c>dotnet ef</c> command the build host runs (ADR 0036).</summary>
+    public event EventHandler<EfOutputParams>? EfOutput;
 
     /// <summary>The build host crashed; <see cref="ProcessCrashedEventArgs.WillRestart"/> tells whether it comes back.</summary>
     public event EventHandler<ProcessCrashedEventArgs>? HostCrashed;
@@ -243,6 +245,7 @@ public sealed class SolutionService : IAsyncDisposable
         connection.OnNotification(ProjectMethods.BuildOutput, json.BuildOutputParams, p => BuildOutput?.Invoke(this, p.Line));
         connection.OnNotification(ProjectMethods.BuildDiagnostic, json.BuildDiagnosticInfo, d => BuildDiagnostic?.Invoke(this, d));
         connection.OnNotification(ItemMethods.FilesChanged, ItemJsonContext.Default.FilesChangedParams, p => FilesChanged?.Invoke(this, p.Directories));
+        connection.OnNotification(EfMethods.Output, EntityFrameworkJsonContext.Default.EfOutputParams, o => EfOutput?.Invoke(this, o));
     }
 
     /// <summary>Runs for the first start and after every restart: (re)opens the solution with the latest settings.</summary>

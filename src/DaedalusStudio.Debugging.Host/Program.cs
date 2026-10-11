@@ -20,7 +20,7 @@ connection.OnRequest(CompanionMethods.DumpHeap, json.DumpHeapParams, json.DumpHe
 connection.OnRequest(CompanionMethods.DumpInstances, json.DumpInstancesParams, json.UInt64Array, (p, _) => Task.Run(() => dumps.Instances(p.Id, p.MethodTable, p.Max)));
 connection.OnRequest(CompanionMethods.DumpObject, json.DumpObjectParams, json.DumpObject, (p, _) => Task.Run(() => dumps.Object(p.Id, p.Address)));
 connection.OnRequest(CompanionMethods.CloseDump, json.CloseDumpParams, json.Boolean, (p, _) => Task.FromResult(dumps.Close(p.Id)));
-connection.OnRequest(CompanionMethods.CreateDump, json.CreateDumpParams, json.CreateDumpResult, (p, _) => Task.Run(() => Dumps.Create(p.ProcessId, p.Path, p.Kind)));
+connection.OnRequest(CompanionMethods.CreateDump, json.CreateDumpParams, json.CreateDumpResult, (p, ct) => Dumps.CreateAsync(p.ProcessId, p.Path, p.Kind, Dumps.DumpTimeout, ct));
 
 connection.Start();
 await connection.Completion.ConfigureAwait(false);

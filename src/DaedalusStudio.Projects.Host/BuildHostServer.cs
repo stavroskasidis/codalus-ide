@@ -107,6 +107,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         RegisterPackageHandlers();
         RegisterProjectManagementHandlers();
         RegisterItemHandlers();
+        RegisterEntityFrameworkHandlers();
         _connection.OnRequest(ProjectMethods.Shutdown, json.EmptyParams, json.EmptyResult, async (_, _) =>
         {
             if (_session is { } session)
@@ -154,6 +155,24 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         _connection.OnRequest(ItemMethods.Discover, json.EmptyParams, json.DiscoverProjectsResult, (_, _) => Guard(() => Task.Run(Session.DiscoverProjects)));
         _connection.OnRequest(ItemMethods.SetFolderProjects, json.SetFolderProjectsParams, json.EmptyResult, (p, ct) => GuardEmpty(() => Session.SetFolderProjectsAsync(p, ct)));
         _connection.OnRequest(ItemMethods.Instantiate, json.InstantiateTemplateParams, json.InstantiateTemplateResult, (p, ct) => Guard(() => Session.InstantiateTemplateAsync(p, ct)));
+    }
+
+    /// <summary>EF Core through the user's dotnet-ef and the model agent (ADR 0036).</summary>
+    private void RegisterEntityFrameworkHandlers()
+    {
+        var json = EntityFrameworkJsonContext.Default;
+        _connection.OnRequest(EfMethods.Status, json.EfStatusParams, json.EfStatusResult, (p, ct) => Guard(() => Session.EfStatusAsync(p, ct)));
+        _connection.OnRequest(EfMethods.Contexts, json.EfTarget, json.EfContextsResult, (p, ct) => Guard(() => Session.EfContextsAsync(p, ct)));
+        _connection.OnRequest(EfMethods.ContextInfo, json.EfTarget, json.EfContextInfoResult, (p, ct) => Guard(() => Session.EfContextInfoAsync(p, ct)));
+        _connection.OnRequest(EfMethods.Migrations, json.EfTarget, json.EfMigrationsResult, (p, ct) => Guard(() => Session.EfMigrationsAsync(p, ct)));
+        _connection.OnRequest(EfMethods.AddMigration, json.EfAddMigrationParams, json.EfFilesResult, (p, ct) => Guard(() => Session.EfAddMigrationAsync(p, ct)));
+        _connection.OnRequest(EfMethods.RemoveMigration, json.EfRemoveMigrationParams, json.EfFilesResult, (p, ct) => Guard(() => Session.EfRemoveMigrationAsync(p, ct)));
+        _connection.OnRequest(EfMethods.Script, json.EfScriptParams, json.EfScriptResult, (p, ct) => Guard(() => Session.EfScriptAsync(p, ct)));
+        _connection.OnRequest(EfMethods.UpdateDatabase, json.EfUpdateDatabaseParams, json.EmptyResult, (p, ct) => Guard(() => Session.EfUpdateDatabaseAsync(p, ct)));
+        _connection.OnRequest(EfMethods.Bundle, json.EfBundleParams, json.EfFilesResult, (p, ct) => Guard(() => Session.EfBundleAsync(p, ct)));
+        _connection.OnRequest(EfMethods.Scaffold, json.EfScaffoldParams, json.EfFilesResult, (p, ct) => Guard(() => Session.EfScaffoldAsync(p, ct)));
+        _connection.OnRequest(EfMethods.Optimize, json.EfOptimizeParams, json.EfFilesResult, (p, ct) => Guard(() => Session.EfOptimizeAsync(p, ct)));
+        _connection.OnRequest(EfMethods.Model, json.EfTarget, json.EfModelResult, (p, ct) => Guard(() => Session.EfModelAsync(p, ct)));
     }
 
     /// <summary>NuGet packages and .NET tools (ADR 0012).</summary>
@@ -249,6 +268,8 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
     public Task BuildOutputAsync(string line) => Post(ProjectMethods.BuildOutput, new BuildOutputParams(line), ProjectJsonContext.Default.BuildOutputParams);
 
     public Task BuildDiagnosticAsync(BuildDiagnosticInfo diagnostic) => Post(ProjectMethods.BuildDiagnostic, diagnostic, ProjectJsonContext.Default.BuildDiagnosticInfo);
+
+    public Task EfOutputAsync(EfOutputParams output) => Post(EfMethods.Output, output, EntityFrameworkJsonContext.Default.EfOutputParams);
 
     /// <summary>Completes once every notification queued so far has been sent (a response must not overtake them).</summary>
     private Task FlushAsync()
