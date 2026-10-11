@@ -130,7 +130,8 @@ public sealed class BuildDepthIntegrationTests : IAsyncLifetime
         Assert.True((await CheckAsync()).UpToDate, string.Join("; ", (await CheckAsync()).Projects.Select(p => $"{p.Project}: {p.Reason}")));
         result = await BuildAsync();
         Assert.True(result.UpToDate, _builds.Channel.GetText());
-        Assert.Contains("up to date, so MSBuild didn't run", _builds.Channel.GetText(), StringComparison.Ordinal);
+        // Output notifications may be handled just after the result arrives.
+        await WaitUntilAsync(() => _builds.Channel.GetText().Contains("up to date, so MSBuild didn't run", StringComparison.Ordinal));
         Assert.Empty(await MSBuildWritesAsync(HelloDll, GreetingsDll));
         Assert.True((await CheckAsync()).UpToDate, "an MSBuild no-op build keeps the projects up to date");
 
@@ -204,7 +205,7 @@ public sealed class BuildDepthIntegrationTests : IAsyncLifetime
         Assert.Equal(binlog, result.BinaryLog);
         Assert.True(File.Exists(binlog));
         Assert.Contains("Target \"CoreCompile\"", File.ReadAllText(logFile), StringComparison.Ordinal);
-        Assert.Contains("Project \"", _builds.Channel.GetText(), StringComparison.Ordinal); // normal verbosity
+        await WaitUntilAsync(() => _builds.Channel.GetText().Contains("Project \"", StringComparison.Ordinal)); // normal verbosity
 
         var timings = await _depth.GetTimingsAsync(Timeout());
         Assert.Equal(binlog, timings.BinaryLog);
@@ -246,7 +247,7 @@ public sealed class BuildDepthIntegrationTests : IAsyncLifetime
         Assert.Equal(2, batch.Entries.Length);
         Assert.True(File.Exists(HelloDll));
         Assert.True(File.Exists(Path.Combine(Fixture, "src", "Hello", "bin", "Release", "net10.0", "Hello.dll")));
-        Assert.Contains("Batch build: 2 succeeded, 0 failed", _builds.Channel.GetText(), StringComparison.OrdinalIgnoreCase);
+        await WaitUntilAsync(() => _builds.Channel.GetText().Contains("Batch build: 2 succeeded, 0 failed", StringComparison.OrdinalIgnoreCase));
 
         batch = await _builds.BatchBuildAsync(BuildTargets.Build, [new BatchBuildEntry(HelloProject, "Debug", "AnyCPU"), new BatchBuildEntry(HelloProject, "Release", "AnyCPU")], Timeout());
         Assert.True(batch.Succeeded);
@@ -269,7 +270,7 @@ public sealed class BuildDepthIntegrationTests : IAsyncLifetime
 
         _options = new BuildOptions { UpToDateCheck = false, Verbosity = BuildVerbosities.Normal };
         await BuildAsync(HelloProject);
-        Assert.Contains("pre-build-ran", _builds.Channel.GetText(), StringComparison.Ordinal);
+        await WaitUntilAsync(() => _builds.Channel.GetText().Contains("pre-build-ran", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(HelloOutput, "post.txt")));
 
         events = await _depth.SetBuildEventsAsync(HelloProject, string.Empty, string.Empty, "OnBuildSuccess", Timeout());
