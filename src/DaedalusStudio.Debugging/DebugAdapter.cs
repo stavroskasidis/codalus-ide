@@ -180,8 +180,11 @@ public sealed class DebugAdapter : IDebugAdapter
 
     public DapConnection Connection => _connection;
 
-    /// <summary>Starts the adapter at <paramref name="path"/> and sends <c>initialize</c>.</summary>
-    public static async Task<DebugAdapter> StartAsync(string path, CancellationToken cancellationToken)
+    /// <summary>
+    /// Starts the adapter at <paramref name="path"/>, with <paramref name="environment"/> added to its own, and sends
+    /// <c>initialize</c>.
+    /// </summary>
+    public static async Task<DebugAdapter> StartAsync(string path, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo(path)
         {
@@ -193,6 +196,11 @@ public sealed class DebugAdapter : IDebugAdapter
             WorkingDirectory = Path.GetDirectoryName(path)!,
         };
         start.ArgumentList.Add("--interpreter=vscode");
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+        {
+            start.Environment[name] = value;
+        }
+
         var process = Process.Start(start) ?? throw new InvalidOperationException($"{path} did not start.");
         var adapter = new DebugAdapter(process);
         process.BeginErrorReadLine();

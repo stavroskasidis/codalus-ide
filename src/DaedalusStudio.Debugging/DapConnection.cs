@@ -129,7 +129,15 @@ public sealed class DapConnection : IAsyncDisposable
             writer.WriteEndObject();
         }
 
-        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException ex)
+        {
+            throw new DapConnectionLostException("The debug adapter exited.", ex);
+        }
+
         try
         {
             // Never cancel a frame halfway (a header without its body corrupts the stream); only the lock wait is cancellable.

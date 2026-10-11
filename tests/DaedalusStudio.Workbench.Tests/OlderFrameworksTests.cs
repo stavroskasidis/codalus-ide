@@ -153,4 +153,23 @@ public sealed class OlderFrameworksTests
         var windows = linux with { Os = OSPlatform.Windows };
         Assert.False(RuntimeSelection.Apply(Plan(core21), core21, "/usr/share/dotnet", windows).Environment.ContainsKey("CLR_ICU_VERSION_OVERRIDE"));
     }
+
+    [Fact]
+    public void On_linux_the_debugger_gets_the_programs_icu_choice_or_the_systems_icu()
+    {
+        // netcoredbg reads symbols on the debuggee's runtime in its own process (M33): .NET Core 2.x stopped it at start.
+        static string? None(string name) => null;
+        var launch = new Dictionary<string, string> { ["CLR_ICU_VERSION_OVERRIDE"] = "74", ["ASPNETCORE_ENVIRONMENT"] = "Development" };
+        var adapter = Debugging.DebugService.AdapterEnvironment(launch, OSPlatform.Linux, None, () => 70);
+        Assert.Equal(new Dictionary<string, string> { ["CLR_ICU_VERSION_OVERRIDE"] = "74" }, adapter);
+
+        var invariant = new Dictionary<string, string> { ["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1" };
+        Assert.Equal(invariant, Debugging.DebugService.AdapterEnvironment(invariant, OSPlatform.Linux, None, () => 74));
+
+        // An attach, or a newer program: the system's ICU, unless the shell's environment decides.
+        Assert.Equal("74", Debugging.DebugService.AdapterEnvironment(null, OSPlatform.Linux, None, () => 74)["CLR_ICU_VERSION_OVERRIDE"]);
+        Assert.Empty(Debugging.DebugService.AdapterEnvironment(null, OSPlatform.Linux, n => n == "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT" ? "1" : null, () => 74));
+        Assert.Empty(Debugging.DebugService.AdapterEnvironment(null, OSPlatform.Linux, None, () => null));
+        Assert.Empty(Debugging.DebugService.AdapterEnvironment(launch, OSPlatform.Windows, None, () => 74));
+    }
 }
