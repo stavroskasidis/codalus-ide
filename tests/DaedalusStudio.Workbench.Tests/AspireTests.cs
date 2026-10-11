@@ -18,6 +18,7 @@ public sealed class AspireTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(DaedalusStudio.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-aspire-" + Guid.NewGuid().ToString("N"));
     private readonly ConcurrentBag<Process> _processes = [];
+    private readonly DateTime _started = DateTime.Now;
 
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
@@ -35,7 +36,7 @@ public sealed class AspireTests : IAsyncLifetime
             }
         }
 
-        await Task.Delay(1000);
+        await AspireRuntime.StopOrchestratorsAsync(_started);
         try
         {
             Directory.Delete(_root, recursive: true);
@@ -86,7 +87,7 @@ public sealed class AspireTests : IAsyncLifetime
     [Fact]
     public async Task The_apphost_starts_its_projects_through_the_ide_and_describes_its_resources()
     {
-        Assert.SkipWhen(OperatingSystem.IsMacOS() && Environment.GetEnvironmentVariable("CI") == "true", "On GitHub's macOS runner the AppHost's orchestrator starts the first project but never the one waiting for it (TODO(issue), checkpoint m17b); the Mac validation runs it.");
+        await AspireRuntime.RequireContainerEngineAsync();
         var ct = TestContext.Current.CancellationToken;
         var fixture = ContainerRuntime.CopyFixture(_root);
         var appHost = Path.Combine(fixture, "Aspire", "AppHost", "AppHost.csproj");
@@ -232,5 +233,72 @@ public sealed class AspireTests : IAsyncLifetime
         }
 
         Assert.Contains("Stopping run session", Log(), StringComparison.Ordinal);
+    }
+}
+
+/// <summary>
+/// Aspire 13.1's orchestrator wants a container runtime: without one (GitHub's macOS runner, a Mac without Docker or
+/// Podman) the Aspire tests skip with the reason, and only CI's Linux runner, which has Docker, fails instead.
+/// </summary>
+internal static class AspireRuntime
+{
+    public static async Task RequireContainerEngineAsync()
+    {
+        var engine = DaedalusStudio.Workbench.Containers.ContainerEngine.Resolve(Environment.GetEnvironmentVariable("DAEDALUS_TEST_CONTAINER_TOOL"));
+        var (os, error) = await engine.ServerOsAsync(CancellationToken.None);
+        if (os is null)
+        {
+            var reason = $"Aspire's orchestrator needs a container runtime, and none answers ({engine.Name}: {error})";
+            if (Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux())
+            {
+                Assert.Fail(reason);
+            }
+
+            Assert.Skip(reason);
+        }
+    }
+
+    /// <summary>
+    /// Ends the orchestrator processes started since <paramref name="since"/> that outlived their AppHost (Aspire's
+    /// DCP runs detached; a killed AppHost can leave it holding the app's ports).
+    /// </summary>
+    public static async Task StopOrchestratorsAsync(DateTime since)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var left = System.Diagnostics.Process.GetProcesses().Where(p => p.ProcessName is "dcp" or "dcpctrl" or "dcpproc" && Started(p) >= since).ToList();
+            if (left.Count == 0)
+            {
+                return;
+            }
+
+            if (attempt == 19)
+            {
+                foreach (var process in left)
+                {
+                    try
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                    {
+                    }
+                }
+            }
+
+            await Task.Delay(500);
+        }
+
+        static DateTime Started(System.Diagnostics.Process process)
+        {
+            try
+            {
+                return process.StartTime;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+                return DateTime.MinValue;
+            }
+        }
     }
 }

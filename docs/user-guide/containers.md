@@ -63,5 +63,5 @@ Right-click a project → **Publish…** (also on the Build menu) opens its Publ
 - Linux containers only.
 - HTTPS inside the container (the development certificate) isn't set up; use HTTP ports.
 - In fast mode, static files of the project folder (`wwwroot`) aren't mounted.
-- Aspire: only project resources are started by the IDE (containers and executables by Aspire's orchestrator); a debug session holds the AppHost and up to seven projects; in a debug session a project's output goes to the Debug Console, not to the dashboard.
+- Aspire: the AppHost's orchestrator needs Docker or Podman running, even when no container is started (without one, a project that waits for another with `WaitFor` never starts); only project resources are started by the IDE (containers and executables by Aspire's orchestrator); a debug session holds the AppHost and up to seven projects; in a debug session a project's output goes to the Debug Console, not to the dashboard.
 - Cloud publish targets (Azure, AWS, Google Cloud) aren't built in.

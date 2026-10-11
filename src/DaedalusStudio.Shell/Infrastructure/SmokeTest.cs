@@ -1015,10 +1015,10 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 
         // M17b: Aspire (ADR 0043), with the fixture's own Aspire packages and orchestrator.
         const string aspireTitle = "Ctrl+F5 on an Aspire AppHost runs its two projects through the IDE execution protocol; the Aspire window shows the resources and the dashboard's address";
-        if (OperatingSystem.IsMacOS() && Environment.GetEnvironmentVariable("CI") == "true")
+        if (engineOs is null && !(Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux()))
         {
-            // TODO(issue): on GitHub's macOS runner the orchestrator never starts the project that waits for the first (checkpoint m17b).
-            Report("aspire.run", "M17", aspireTitle, "skipped", 0, "GitHub's macOS runner: the AppHost's orchestrator never starts the second project there; the Mac validation runs this step.");
+            // Aspire 13.1's orchestrator wants a container runtime (checkpoint m17b).
+            Report("aspire.run", "M17", aspireTitle, "skipped", 0, $"Aspire's orchestrator needs a container runtime, and none answers ({engine.Name}: {engineError}).");
         }
         else
         {

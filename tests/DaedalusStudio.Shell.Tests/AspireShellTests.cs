@@ -15,7 +15,7 @@ public sealed class AspireShellTests
 {
     private static async Task<(ShellFixture Fixture, string Folder)> OpenAsync()
     {
-        Assert.SkipWhen(OperatingSystem.IsMacOS() && Environment.GetEnvironmentVariable("CI") == "true", "On GitHub's macOS runner the AppHost's orchestrator starts the first project but never the one waiting for it (TODO(issue), checkpoint m17b); the Mac validation runs it.");
+        await AspireRuntime.RequireContainerEngineAsync();
         var f = ShellFixture.Create();
         var folder = f.CopySample("Containers");
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
@@ -39,6 +39,7 @@ public sealed class AspireShellTests
     [AvaloniaFact]
     public async Task Ctrl_F5_on_the_apphost_runs_its_projects_and_the_aspire_window_shows_them()
     {
+        var started = DateTime.Now;
         var (f, _) = await OpenAsync();
         await using var fixture = f;
         try
@@ -72,6 +73,7 @@ public sealed class AspireShellTests
         {
             f.Shell.StopRunning();
             await ShellFixture.PumpUntil(() => !f.Shell.AspireWindow.IsRunning && f.Shell.Runs.Running.Count == 0, seconds: 60);
+            await AspireRuntime.StopOrchestratorsAsync(started);
         }
     }
 
@@ -79,6 +81,7 @@ public sealed class AspireShellTests
     public async Task F5_on_the_apphost_debugs_its_projects_in_one_session()
     {
         Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        var started = DateTime.Now;
         var (f, folder) = await OpenAsync();
         await using var fixture = f;
         var api = Path.Combine(folder, "Aspire", "Api", "Program.cs");
@@ -108,6 +111,75 @@ public sealed class AspireShellTests
             if (f.Shell.Debugger.IsActive)
             {
                 await f.Shell.Debugger.StopAsync();
+            }
+
+            await AspireRuntime.StopOrchestratorsAsync(started);
+        }
+    }
+}
+
+/// <summary>
+/// Aspire 13.1's orchestrator wants a container runtime: without one (GitHub's macOS runner, a Mac without Docker or
+/// Podman) the Aspire tests skip with the reason, and only CI's Linux runner, which has Docker, fails instead.
+/// </summary>
+internal static class AspireRuntime
+{
+    public static async Task RequireContainerEngineAsync()
+    {
+        var engine = DaedalusStudio.Workbench.Containers.ContainerEngine.Resolve(Environment.GetEnvironmentVariable("DAEDALUS_TEST_CONTAINER_TOOL"));
+        var (os, error) = await engine.ServerOsAsync(CancellationToken.None);
+        if (os is null)
+        {
+            var reason = $"Aspire's orchestrator needs a container runtime, and none answers ({engine.Name}: {error})";
+            if (Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux())
+            {
+                Assert.Fail(reason);
+            }
+
+            Assert.Skip(reason);
+        }
+    }
+
+    /// <summary>
+    /// Ends the orchestrator processes started since <paramref name="since"/> that outlived their AppHost (Aspire's
+    /// DCP runs detached; a killed AppHost can leave it holding the app's ports).
+    /// </summary>
+    public static async Task StopOrchestratorsAsync(DateTime since)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var left = System.Diagnostics.Process.GetProcesses().Where(p => p.ProcessName is "dcp" or "dcpctrl" or "dcpproc" && Started(p) >= since).ToList();
+            if (left.Count == 0)
+            {
+                return;
+            }
+
+            if (attempt == 19)
+            {
+                foreach (var process in left)
+                {
+                    try
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                    {
+                    }
+                }
+            }
+
+            await Task.Delay(500);
+        }
+
+        static DateTime Started(System.Diagnostics.Process process)
+        {
+            try
+            {
+                return process.StartTime;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+                return DateTime.MinValue;
             }
         }
     }
