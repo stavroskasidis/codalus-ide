@@ -1012,6 +1012,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await StepAsync("containers.run", "M17", containerTitle, ContainerRunStepAsync).ConfigureAwait(true);
         }
 
+        // M17b: Aspire (ADR 0043), with the fixture's own Aspire packages and orchestrator.
+        await StepAsync("aspire.run", "M17", "Ctrl+F5 on an Aspire AppHost runs its two projects through the IDE execution protocol; the Aspire window shows the resources and the dashboard's address", AspireRunStepAsync).ConfigureAwait(true);
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -1442,6 +1445,51 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             shell.StopRunning();
             await engine.RemoveAsync(name, CancellationToken.None).ConfigureAwait(true);
             await engine.RunAsync(["rmi", name + ":dev"], CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Aspire (M17b): samples/Containers/Aspire's AppHost with Ctrl+F5. Its orchestrator asks the IDE for the api and
+    /// the frontend, which run as the IDE's programs; the resource service lists them running and the Redis container
+    /// waiting for its explicit start; the frontend answers through the api; stopping the AppHost ends them.
+    /// </summary>
+    private async Task AspireRunStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "Containers");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "Containers"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "Aspire.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 3 && shell.Solutions.Progress is { Completed: true }, "the Aspire solution is open", 300).ConfigureAwait(true);
+        var appHost = Path.Combine(target, "Aspire", "AppHost", "AppHost.csproj");
+        Check(shell.IsAspireHost(appHost), "the AppHost is recognized (IsAspireHost)");
+        shell.Runs.SetStartupProject(appHost);
+        try
+        {
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            var window = shell.AspireWindow;
+            await WaitAsync(
+                () => window.Resources.Count(r => r.Resource.Type == "Project" && r.Resource.State == "Running") == 2 && window.Resources.Any(r => r.Name == "cache"),
+                "the api and the frontend run, and the cache is listed:\n" + Tail(shell.AspireLog.GetText(), 2000),
+                420).ConfigureAwait(true);
+            await WaitAsync(() => window.HasDashboard, "the dashboard's address is known", 60).ConfigureAwait(true);
+            var url = window.Resources.Single(r => r.Name == "frontend").Resource.Urls.First(u => !u.IsInternal).Url;
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            var answer = await http.GetStringAsync(new Uri(url)).ConfigureAwait(true);
+            Check(answer.StartsWith("Frontend: Sunny, from the api", StringComparison.Ordinal), "the frontend answers through the api: " + answer);
+            window.Selected = window.Resources.Single(r => r.Name == "api");
+            await WaitAsync(() => window.Logs.Contains("Now listening on", StringComparison.Ordinal), "the api's console output is shown", 60).ConfigureAwait(true);
+            shell.ShowAspire();
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-aspire.png");
+        }
+        finally
+        {
+            shell.StopRunning();
+            await WaitAsync(() => !shell.AspireWindow.IsRunning && shell.Runs.Running.Count == 0, "stopping the AppHost ends its projects", 60).ConfigureAwait(true);
         }
     }
 

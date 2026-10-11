@@ -117,6 +117,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeEntityFramework();
         InitializeData();
         InitializeContainers();
+        InitializeAspire();
         InitializeUpdates();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -412,6 +413,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             DatabaseExplorerViewModel.ToolWindowId => OpenDatabaseExplorer(),
             QueryResultsViewModel.ToolWindowId => QueryResults,
             ContainersViewModel.ToolWindowId => ContainersWindow,
+            AspireViewModel.ToolWindowId => AspireWindow,
             _ => null,
         },
     };

@@ -10,7 +10,10 @@ using DaedalusStudio.Workbench.ToolWindows;
 
 namespace DaedalusStudio.Shell;
 
-/// <summary>Containers (M17a, ADR 0042): the Containers window, Add Docker Support, compose commands and their settings.</summary>
+/// <summary>
+/// Containers (M17a, ADR 0042): the Containers window, Add Docker Support, compose commands and their settings; and
+/// Aspire (M17b, ADR 0043): the Aspire window and the dashboard.
+/// </summary>
 internal static partial class BuiltIns
 {
     private const string ComposeFileWhen = "explorerItemName =~ /(?i)^(docker-)?compose.*\\.ya?ml$/";
@@ -35,6 +38,7 @@ internal static partial class BuiltIns
     public static IEnumerable<ToolWindowDescriptor> ContainerToolWindows()
     {
         yield return new ToolWindowDescriptor(ContainersViewModel.ToolWindowId, "Containers", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(AspireViewModel.ToolWindowId, "Aspire", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "list" };
     }
 
     public static void RegisterContainerCommands(ShellHost shell)
@@ -56,6 +60,16 @@ internal static partial class BuiltIns
         Add("containers.composeUp", "Compose Up", async path => await shell.ComposeUpAsync(path).ConfigureAwait(false), "solutionOpen && solutionTrusted");
         Add("containers.composeDown", "Compose Down", async path => await shell.ComposeDownAsync(path).ConfigureAwait(false), "solutionOpen");
         Add("containers.composeDebug", "Debug Compose Service…", async path => await shell.ComposeDebugAsync(path).ConfigureAwait(false), "solutionOpen && solutionTrusted && !debugActive");
+        commands.Register(new CommandDescriptor("aspire.show", "Aspire Resources", ContributionSource.Shell) { Category = "Aspire" }, async (_, _) =>
+        {
+            await Infrastructure.Ui.RunAsync(() => { shell.ShowAspire(); return Task.CompletedTask; }).ConfigureAwait(false);
+            return null;
+        });
+        commands.Register(new CommandDescriptor("aspire.openDashboard", "Open the Aspire Dashboard", ContributionSource.Shell) { Category = "Aspire" }, async (_, _) =>
+        {
+            await Infrastructure.Ui.RunAsync(() => { shell.OpenAspireDashboard(); return Task.CompletedTask; }).ConfigureAwait(false);
+            return null;
+        });
         Add("containers.attach", "Attach to a Process in a Container…", path => shell.AttachToRemoteProcessAsync("container"), "!debugActive");
     }
 
@@ -72,6 +86,8 @@ internal static partial class BuiltIns
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeDebug", "3-containers", 3, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeDown", "3-containers", 4, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(OtherWindowsMenu, "containers.show", "windows", AlphabeticalOrder("Containers")),
+            Item(OtherWindowsMenu, "aspire.show", "windows", AlphabeticalOrder("Aspire Resources")),
+            Item(MenuLocations.MenuBar("debug"), "aspire.openDashboard", "6-containers", 3),
             Item(MenuLocations.MenuBar("project"), "containers.addDockerSupport", "containers", 1),
             Item(MenuLocations.MenuBar("debug"), "containers.composeDebug", "6-containers", 1),
             Item(MenuLocations.MenuBar("debug"), "containers.attach", "6-containers", 2),

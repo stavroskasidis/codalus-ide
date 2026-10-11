@@ -218,6 +218,13 @@ public sealed partial class ShellHost
         _ = OfferDevCertificateAsync(project);
         try
         {
+            if (IsAspireHost(project))
+            {
+                // An Aspire AppHost runs its projects through this IDE (ADR 0043).
+                await StartAspireAsync(project, debug: false).ConfigureAwait(true);
+                return;
+            }
+
             if (!hotReload)
             {
                 var (info, profiles, _) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);

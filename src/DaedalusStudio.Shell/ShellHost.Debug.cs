@@ -184,6 +184,13 @@ public sealed partial class ShellHost
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
             var profile = Runs.ResolveProfile(project, profiles);
+            if (IsAspireHost(project))
+            {
+                // An Aspire AppHost debugs its projects in its session (ADR 0043).
+                await StartAspireAsync(project, debug: true).ConfigureAwait(true);
+                return;
+            }
+
             if (IsContainerProfile(profile))
             {
                 // The "Container (Dockerfile)" profile (ADR 0042).

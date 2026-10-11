@@ -81,7 +81,6 @@ public sealed class AspireTests : IAsyncLifetime
     [Fact]
     public async Task The_apphost_starts_its_projects_through_the_ide_and_describes_its_resources()
     {
-        Assert.SkipUnless(Environment.GetEnvironmentVariable("DAEDALUS_ASPIRE_WIP") == "1", "M17b in progress"); // TODO(M17b): remove before landing
         var ct = TestContext.Current.CancellationToken;
         var fixture = ContainerRuntime.CopyFixture(_root);
         var appHost = Path.Combine(fixture, "Aspire", "AppHost", "AppHost.csproj");
