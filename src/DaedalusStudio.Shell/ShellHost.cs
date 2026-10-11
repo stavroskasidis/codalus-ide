@@ -383,6 +383,9 @@ public sealed partial class ShellHost : IAsyncDisposable
             HttpResponseViewModel.ToolWindowId => HttpResponse,
             ThreadsViewModel.ToolWindowId => ThreadList,
             ModulesViewModel.ToolWindowId => ModuleList,
+            ParallelStacksViewModel.ToolWindowId => ParallelStacksWindow,
+            ParallelWatchViewModel.ToolWindowId => ParallelWatchWindow,
+            ProcessesViewModel.ToolWindowId => ProcessesWindow,
             ExceptionSettingsViewModel.ToolWindowId => ExceptionSettingsWindow,
             GitChangesViewModel.ToolWindowId => GitChanges,
             PullRequestsViewModel.ToolWindowId => OpenPullRequests(),
@@ -750,6 +753,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         _updateHttp.Dispose();
+        await DisposeCompanionAsync().ConfigureAwait(false);
         _instance?.Dispose();
         Askpass?.Dispose();
         Terminals?.Dispose();

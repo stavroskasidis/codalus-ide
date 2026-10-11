@@ -161,7 +161,7 @@ public sealed partial class PluginDescription
         var events = new HashSet<string>(StringComparer.Ordinal);
         foreach (var e in m.ActivationEvents ?? [])
         {
-            if (e is "onStartup" or "onSolutionOpened" or "onTestProjects" || ActivationEventPattern().IsMatch(e))
+            if (e is "onStartup" or "onSolutionOpened" or "onTestProjects" or "onDebug" || ActivationEventPattern().IsMatch(e))
             {
                 events.Add(e);
             }

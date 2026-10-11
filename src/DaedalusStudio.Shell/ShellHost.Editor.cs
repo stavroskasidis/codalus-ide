@@ -679,7 +679,9 @@ public sealed partial class ShellHost : IEditorServices
             BreakOnOtherExceptions = Debugger.ExceptionSettings.BreakOnOthers ? true : null,
             AspNetEnvironment = Runs.EnvironmentOverride,
             ExceptionTypes = Debugger.ExceptionSettings.Changes() is { Count: > 0 } exceptionTypes ? exceptionTypes : null,
+            ExceptionConditions = Debugger.ExceptionSettings.Conditions() is { Count: > 0 } conditions ? conditions : null,
             Watches = Watch.Expressions.Count == 0 ? null : Watch.Expressions,
+            DataTips = Debugger.PinnedTips.All is { Count: > 0 } tips ? [.. tips.Select(t => new Docking.SessionDataTip(t.Path, t.Line, t.Expression, t.Comment))] : null,
             LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
         }, Docking.ShellJsonContext.Default.EditorSession);
     }
@@ -694,14 +696,16 @@ public sealed partial class ShellHost : IEditorServices
             Debugger.ExceptionSettings.Reset();
             Runs.EnvironmentOverride = null;
             Watch.Load(null);
+            Debugger.PinnedTips.Load([]);
             return;
         }
 
         Runs.Load(session.StartupProject, session.LaunchProfiles);
         Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(FromSession), (session.FunctionBreakpoints ?? []).Select(FromSession));
-        Debugger.ExceptionSettings.Load(session.BreakOnOtherExceptions ?? false, session.ExceptionTypes);
+        Debugger.ExceptionSettings.Load(session.BreakOnOtherExceptions ?? false, session.ExceptionTypes, session.ExceptionConditions);
         Runs.EnvironmentOverride = session.AspNetEnvironment;
         Watch.Load(session.Watches);
+        Debugger.PinnedTips.Load((session.DataTips ?? []).Select(t => (t.Path, t.Line, t.Expression, t.Comment)));
 
         foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))
         {

@@ -48,6 +48,9 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(QuickWatchViewModel.ToolWindowId, "QuickWatch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
         yield return new ToolWindowDescriptor(ThreadsViewModel.ToolWindowId, "Threads", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
         yield return new ToolWindowDescriptor(ModulesViewModel.ToolWindowId, "Modules", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(ParallelStacksViewModel.ToolWindowId, "Parallel Stacks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "layout" };
+        yield return new ToolWindowDescriptor(ParallelWatchViewModel.ToolWindowId, "Parallel Watch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
+        yield return new ToolWindowDescriptor(ProcessesViewModel.ToolWindowId, "Processes", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
         yield return new ToolWindowDescriptor(ExceptionSettingsViewModel.ToolWindowId, "Exception Settings", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "circle" };
     }
 
@@ -58,6 +61,13 @@ internal static partial class BuiltIns
             Title = "Just My Code",
             Category = "Debugging",
             Description = "Step through and break in your own code only (optimized and framework code is stepped over).",
+            Order = 1,
+        },
+        SettingDescriptor.Create(ShellHost.StepFilteringSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Step over properties and operators",
+            Category = "Debugging",
+            Description = "Step Into steps over property getters and setters and operators (applies from the next session).",
             Order = 1,
         },
         SettingDescriptor.Create(Workbench.Debugging.Browsers.SettingKey, "\"auto\"", SettingType.String, ContributionSource.Shell) with
@@ -131,6 +141,10 @@ internal static partial class BuiltIns
         Add("debug.insertTemporaryBreakpoint", "Insert Temporary Breakpoint", Sync(shell.InsertTemporaryBreakpoint), "activeDocumentKind == textFile");
         Add("debug.exportBreakpoints", "Export Breakpoints…", _ => shell.ExportBreakpointsAsync(), "hasBreakpoints");
         Add("debug.importBreakpoints", "Import Breakpoints…", _ => shell.ImportBreakpointsAsync());
+        Add("debug.openDump", "Open Dump File…", shell.OpenDumpAsync);
+        Add("debug.createDump", "Create Dump", shell.CreateDumpAsync, "debugActive");
+        Add("debug.clearDataTips", "Clear All DataTips", Sync(shell.Debugger.PinnedTips.Clear));
+        Add("debug.detachAll", "Detach All", _ => shell.Debugger.DetachAsync(), "debugAttached");
     }
 
     public static void RegisterDebugMenus(MenuRegistry menus)
@@ -144,11 +158,14 @@ internal static partial class BuiltIns
             Item("debug.start", "0-debug", 1),
             Item("debug.continue", "0-debug", 2),
             Item("debug.stop", "0-debug", 3),
+            Item("debug.detachAll", "0-debug", 3),
             Item("debug.restart", "0-debug", 4),
             Item("debug.pause", "0-debug", 5),
             Item("debug.attach", "0-debug", 6),
             Item("debug.reattach", "0-debug", 7),
             Item("debug.webPage", "0-debug", 8),
+            Item("debug.openDump", "1-dumps", 1),
+            Item("debug.createDump", "1-dumps", 2),
             Item("debug.stepOver", "3-step", 1),
             Item("debug.stepInto", "3-step", 2),
             Item("debug.stepOut", "3-step", 3),
@@ -166,6 +183,7 @@ internal static partial class BuiltIns
             // Debug → Windows lists the debugger's tool windows (BuiltIns.ViewMenuEntry).
             Item("debug.addWatch", "5-windows", 1),
             Item("debug.quickWatch", "5-windows", 2),
+            Item("debug.clearDataTips", "5-windows", 3),
         ]);
     }
 }

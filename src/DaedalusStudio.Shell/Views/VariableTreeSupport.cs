@@ -19,6 +19,11 @@ public static class VariableActions
 
     public static Func<VariableNode, VisualizerKind, Task>? Visualize { get; set; }
 
+    /// <summary>The plugins' visualizers for a type: id and title (proposed API 0.2.7).</summary>
+    public static Func<string?, IReadOnlyList<(string Id, string Title)>>? PluginVisualizers { get; set; }
+
+    public static Func<VariableNode, string, Task>? VisualizeWithPlugin { get; set; }
+
     public static Func<string, Task>? CopyText { get; set; }
 }
 
@@ -64,12 +69,17 @@ internal static class VariableTreeSupport
                 items.Add(Item("QuickWatch", () => _ = VariableActions.QuickWatch?.Invoke(expression), "Shift+F9"));
             }
 
-            if (node.IsString)
+            var kinds = node.IsString ? Visualizers.Suggested(ViewModels.Visualizers.Unquote(node.Value))
+                : node.EvaluateName is not null ? Visualizers.ForType(node.Type)
+                : [];
+            var plugins = node.EvaluateName is not null ? VariableActions.PluginVisualizers?.Invoke(node.Type) ?? [] : [];
+            if (kinds.Count > 0 || plugins.Count > 0)
             {
                 items.Add(new Separator());
                 var view = new MenuItem { Header = "View" };
-                view.ItemsSource = Visualizers.Suggested(ViewModels.Visualizers.Unquote(node.Value))
+                view.ItemsSource = kinds
                     .Select(kind => Item(Visualizers.Title(kind), () => _ = VariableActions.Visualize?.Invoke(node, kind)))
+                    .Concat(plugins.Select(p => Item(p.Title, () => _ = VariableActions.VisualizeWithPlugin?.Invoke(node, p.Id))))
                     .ToList();
                 items.Add(view);
             }

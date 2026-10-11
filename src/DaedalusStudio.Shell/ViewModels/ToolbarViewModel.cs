@@ -33,6 +33,8 @@ public sealed class ToolbarViewModel : ObservableObject
     private bool _isRunning;
     private IReadOnlyList<(string Configuration, string Platform)> _pairs = [];
 
+    private DebugLocationViewModel? _debugLocation;
+
     public ToolbarViewModel(Func<string, ICommand> command, Action<string, string> selectConfiguration, Action<string> selectStartup, Action undo, Action redo)
     {
         _command = command;
@@ -135,6 +137,13 @@ public sealed class ToolbarViewModel : ObservableObject
     {
         get => _startLabel;
         private set => SetField(ref _startLabel, value);
+    }
+
+    /// <summary>The Debug Location toolbar's process, thread and frame (M14b), shown while paused.</summary>
+    public DebugLocationViewModel? DebugLocation
+    {
+        get => _debugLocation;
+        set => SetField(ref _debugLocation, value);
     }
 
     public bool IsDebugging

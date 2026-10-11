@@ -130,7 +130,7 @@ public sealed record ThreadsResponse(DapThread[] Threads);
 
 public sealed record StackTraceArguments(int ThreadId, int? StartFrame = null, int? Levels = null);
 
-public sealed record StackFrame(int Id, string Name, Source? Source, int Line, int Column, int? EndLine = null, int? EndColumn = null, string? PresentationHint = null);
+public sealed record StackFrame(int Id, string Name, Source? Source, int Line, int Column, int? EndLine = null, int? EndColumn = null, string? PresentationHint = null, System.Text.Json.JsonElement? ModuleId = null);
 
 public sealed record StackTraceResponse(StackFrame[] StackFrames, int? TotalFrames = null);
 

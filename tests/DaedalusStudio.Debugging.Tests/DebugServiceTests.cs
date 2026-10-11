@@ -202,7 +202,7 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
             Assert.Equal("breakpoint", stop.Reason);
             Assert.Equal("15", (await _debug.EvaluateAsync("total", "repl", TestContext.Current.CancellationToken)).Result);
 
-            await _debug.StopAsync(); // detaches: the program goes on
+            await _debug.DetachAsync(); // Detach All (M14b), as Stop does for an attached program: it goes on
             await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
             Assert.Equal(15, process.ExitCode); // the process itself, not the adapter
         }

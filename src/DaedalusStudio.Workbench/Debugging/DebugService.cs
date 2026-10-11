@@ -74,10 +74,16 @@ public sealed class DebugService : IAsyncDisposable
 
     public BreakpointStore Breakpoints { get; } = new();
 
+    /// <summary>Data tips pinned to source lines, evaluated again at each pause (M14b).</summary>
+    public PinnedDataTipStore PinnedTips { get; } = new();
+
     /// <summary>Which exceptions break when thrown (applied to a running session as they change).</summary>
     public ExceptionSettings ExceptionSettings { get; } = new();
 
     public bool JustMyCode { get; set; } = true;
+
+    /// <summary>Step over properties and operators (netcoredbg's <c>enableStepFiltering</c>, M14b).</summary>
+    public bool StepFiltering { get; set; } = true;
 
     /// <summary>The modules the debuggee loaded, in load order.</summary>
     public IReadOnlyList<DebugModule> Modules
@@ -138,7 +144,7 @@ public sealed class DebugService : IAsyncDisposable
         StartAsync(StartNetcoredbgAsync, adapter => adapter.LaunchAsync(Arguments(plan), cancellationToken), attached: false, cancellationToken);
 
     private LaunchArguments Arguments(LaunchPlan plan) =>
-        new(plan.FileName, [.. CommandLine.Split(plan.Arguments)], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: JustMyCode);
+        new(plan.FileName, [.. CommandLine.Split(plan.Arguments)], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering);
 
     /// <summary>
     /// Starts <paramref name="plan"/> (a web server) under netcoredbg as the first adapter of a compound session
@@ -181,7 +187,7 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>Starts <paramref name="program"/> with arguments that are already split (no command-line parsing).</summary>
     public Task LaunchAsync(string program, IReadOnlyList<string> arguments, string workingDirectory, IReadOnlyDictionary<string, string> environment, CancellationToken cancellationToken) =>
         StartAsync(StartNetcoredbgAsync, adapter => adapter.LaunchAsync(
-            new LaunchArguments(program, [.. arguments], workingDirectory, new Dictionary<string, string>(environment), JustMyCode: JustMyCode, EnableStepFiltering: JustMyCode),
+            new LaunchArguments(program, [.. arguments], workingDirectory, new Dictionary<string, string>(environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering),
             cancellationToken), attached: false, cancellationToken);
 
     public async Task AttachAsync(int processId, CancellationToken cancellationToken)
@@ -309,6 +315,22 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         await adapter.DisconnectAsync(terminateDebuggee: !_attached, CancellationToken.None).ConfigureAwait(false);
+        await EndAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Detach All (M14b): ends an attached session and leaves the program running. A launched program's console is
+    /// netcoredbg's (no <c>runInTerminal</c>), so it can't outlive the session: <see cref="StopAsync"/> ends it.
+    /// </summary>
+    public async Task DetachAsync()
+    {
+        if (_adapter is not { } adapter || !_attached)
+        {
+            await StopAsync().ConfigureAwait(false);
+            return;
+        }
+
+        await adapter.DisconnectAsync(terminateDebuggee: false, CancellationToken.None).ConfigureAwait(false);
         await EndAsync().ConfigureAwait(false);
     }
 
@@ -456,19 +478,55 @@ public sealed class DebugService : IAsyncDisposable
         Frames = frames.StackFrames;
         SelectedFrame = Frames.FirstOrDefault(f => f.Source?.Path is not null) ?? (Frames.Count > 0 ? Frames[0] : null);
         FrameChanged?.Invoke(this, EventArgs.Empty);
+        RefreshPinnedTips();
     }
 
     public void SelectFrame(StackFrame frame)
     {
         SelectedFrame = frame;
         FrameChanged?.Invoke(this, EventArgs.Empty);
+        RefreshPinnedTips();
+    }
+
+    /// <summary>The pinned data tips' values in the selected frame (in the background).</summary>
+    private void RefreshPinnedTips()
+    {
+        if (State == DebugState.Stopped && PinnedTips.All.Count > 0)
+        {
+            _ = PinnedTips.RefreshAsync((expression, cancellationToken) => EvaluateAsync(expression, "watch", cancellationToken), _session.Token);
+        }
     }
 
     public async Task<IReadOnlyList<Scope>> ScopesAsync(StackFrame frame) =>
         _adapter is { } adapter ? await adapter.ScopesAsync(frame.Id, _session.Token).ConfigureAwait(false) : [];
 
-    public async Task<IReadOnlyList<Variable>> VariablesAsync(int variablesReference) =>
-        _adapter is { } adapter && variablesReference > 0 ? await adapter.VariablesAsync(variablesReference, _session.Token).ConfigureAwait(false) : [];
+    /// <summary>
+    /// The debugger attributes (M14b): <c>[DebuggerDisplay]</c> and <c>[DebuggerBrowsable]</c> applied to variables and
+    /// evaluations, from the companion host. Null: netcoredbg's values as they are.
+    /// </summary>
+    public DebuggerDisplays? Displays { get; set; }
+
+    public async Task<IReadOnlyList<Variable>> VariablesAsync(int variablesReference)
+    {
+        if (_adapter is not { } adapter || variablesReference <= 0)
+        {
+            return [];
+        }
+
+        var token = _session.Token;
+        var variables = await adapter.VariablesAsync(variablesReference, token).ConfigureAwait(false);
+        return Displays is { } displays && State == DebugState.Stopped
+            ? await displays.ApplyAsync(
+                variablesReference,
+                variables,
+                ModulePaths(),
+                async reference => await adapter.VariablesAsync(reference, token).ConfigureAwait(false),
+                (expression, cancellationToken) => adapter.EvaluateAsync(expression, SelectedFrame?.Id, "watch", cancellationToken),
+                token).ConfigureAwait(false)
+            : variables;
+    }
+
+    private string[] ModulePaths() => [.. Modules.Select(m => m.Path).OfType<string>()];
 
     /// <summary>Evaluates in the selected frame. <paramref name="context"/>: <c>watch</c>, <c>repl</c> or <c>hover</c>.</summary>
     public async Task<EvaluateResponse> EvaluateAsync(string expression, string context, CancellationToken cancellationToken = default)
@@ -479,7 +537,10 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
-        return await adapter.EvaluateAsync(expression, SelectedFrame?.Id, context, linked.Token).ConfigureAwait(false);
+        var response = await adapter.EvaluateAsync(expression, SelectedFrame?.Id, context, linked.Token).ConfigureAwait(false);
+        return Displays is { } displays
+            ? await displays.ApplyAsync(expression, response, ModulePaths(), (member, token) => adapter.EvaluateAsync(member, SelectedFrame?.Id, "watch", token), linked.Token).ConfigureAwait(false)
+            : response;
     }
 
     public async Task<SetVariableResponse> SetVariableAsync(int variablesReference, string name, string value)
@@ -530,6 +591,50 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         return result;
+    }
+
+    /// <summary>Every thread's stack, top frame first, up to <paramref name="levels"/> frames (Parallel Stacks and Parallel Watch, M14b).</summary>
+    public async Task<IReadOnlyDictionary<int, IReadOnlyList<StackFrame>>> AllStacksAsync(int levels, CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, IReadOnlyList<StackFrame>>();
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return result;
+        }
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        foreach (var thread in Threads)
+        {
+            try
+            {
+                var frames = await adapter.StackTraceAsync(thread.Id, levels, linked.Token).ConfigureAwait(false);
+                if (frames.StackFrames.Length > 0)
+                {
+                    result[thread.Id] = frames.StackFrames;
+                }
+            }
+            catch (DapException)
+            {
+                // The thread is gone or has no managed frames.
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Evaluates in a given frame of any thread (Parallel Watch); the attributes apply as in Watch.</summary>
+    public async Task<EvaluateResponse> EvaluateInFrameAsync(string expression, int frameId, CancellationToken cancellationToken)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            throw new InvalidOperationException("Expressions can be evaluated only while the program is stopped.");
+        }
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        var response = await adapter.EvaluateAsync(expression, frameId, "watch", linked.Token).ConfigureAwait(false);
+        return Displays is { } displays
+            ? await displays.ApplyAsync(expression, response, ModulePaths(), (member, token) => adapter.EvaluateAsync(member, frameId, "watch", token), linked.Token).ConfigureAwait(false)
+            : response;
     }
 
     // ------------------------------------------------------------------ settings
@@ -776,8 +881,6 @@ public sealed class DebugService : IAsyncDisposable
                 }
             }
 
-            await EndRunToCursorAsync(adapter).ConfigureAwait(false);
-
             ExceptionInfoResponse? exception = null;
             if (stopped.Reason == "exception" && adapter.Capabilities.SupportsExceptionInfoRequest)
             {
@@ -790,6 +893,15 @@ public sealed class DebugService : IAsyncDisposable
                 }
             }
 
+            // Module conditions (M14b): a thrown exception breaks only in the modules its type's condition names.
+            if (exception is { BreakMode: "always" } && !ExceptionSettings.ModuleAllows(ExceptionType(exception), ModuleOf(frames)))
+            {
+                await adapter.ContinueAsync(threadId, _session.Token).ConfigureAwait(false);
+                return;
+            }
+
+            await EndRunToCursorAsync(adapter).ConfigureAwait(false);
+
             Threads = await adapter.ThreadsAsync(_session.Token).ConfigureAwait(false);
             SelectedThreadId = threadId;
             Frames = frames;
@@ -798,10 +910,29 @@ public sealed class DebugService : IAsyncDisposable
             CurrentStop = info;
             SetState(DebugState.Stopped);
             Stopped?.Invoke(this, info);
+            RefreshPinnedTips();
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
         {
             Output?.Invoke(this, new DebugOutput("console", $"Could not read the stopped program's state: {ex.Message}\n"));
+        }
+    }
+
+    private static string ExceptionType(ExceptionInfoResponse exception) =>
+        exception.Details?.FullTypeName ?? exception.Details?.TypeName ?? exception.ExceptionId.Replace("CLR/", string.Empty, StringComparison.Ordinal);
+
+    /// <summary>The module (file name) of the top frame, where an exception was thrown.</summary>
+    private string? ModuleOf(StackFrame[] frames)
+    {
+        if (frames.Length == 0 || frames[0].ModuleId is not { } id)
+        {
+            return null;
+        }
+
+        var key = id.ValueKind == System.Text.Json.JsonValueKind.String ? id.GetString()! : id.GetRawText();
+        lock (_gate)
+        {
+            return _modules.TryGetValue(key, out var module) ? module.Name : null;
         }
     }
 
@@ -842,8 +973,42 @@ public sealed class DebugService : IAsyncDisposable
     }
 
     /// <summary>Client-side dependencies, hit counts and logpoints: whether this hit shows as a stop.</summary>
+    /// <summary>The stopped thread and the process, for breakpoint filters.</summary>
+    private async Task<BreakpointFilterContext> FilterContextAsync(IDebugAdapter adapter, int threadId)
+    {
+        string? threadName = null;
+        try
+        {
+            threadName = (await adapter.ThreadsAsync(_session.Token).ConfigureAwait(false)).FirstOrDefault(t => t.Id == threadId)?.Name;
+        }
+        catch (DapException)
+        {
+        }
+
+        string? processName = null;
+        if (ProcessId is { } pid)
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(pid);
+                processName = process.ProcessName;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+            }
+        }
+
+        return new BreakpointFilterContext(threadId, threadName, ProcessId, processName);
+    }
+
     private async Task<bool> ShouldBreakAsync(IDebugAdapter adapter, BreakpointSpec breakpoint, StackFrame[] frames, int threadId)
     {
+        if (breakpoint.Filter is { } filterText && BreakpointFilter.TryParse(filterText, out var filter, out _)
+            && !filter.Matches(await FilterContextAsync(adapter, threadId).ConfigureAwait(false)))
+        {
+            return false;
+        }
+
         int hits;
         lock (_gate)
         {
@@ -914,6 +1079,15 @@ public sealed class DebugService : IAsyncDisposable
 
     private void SetState(DebugState state)
     {
+        if (state == DebugState.Running)
+        {
+            Displays?.Resumed();
+        }
+        else if (state == DebugState.Idle)
+        {
+            Displays?.SessionEnded();
+        }
+
         State = state;
         StateChanged?.Invoke(this, EventArgs.Empty);
     }

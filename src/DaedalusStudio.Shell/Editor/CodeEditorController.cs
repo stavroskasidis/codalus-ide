@@ -112,6 +112,7 @@ public sealed partial class CodeEditorController : IDisposable
         view.BackgroundRenderers.Insert(0, _debugLines);
         _perfTip = new PerfTipRenderer(CurrentDebugLine, () => services.Debugger.CurrentStop?.Elapsed, () => services.Options.PerfTips);
         view.BackgroundRenderers.Add(_perfTip);
+        PinLayer = new PinnedDataTipLayer(editor, services, () => Model.Path, relocate: attach);
         services.Debugger.StateChanged += OnDebuggerChanged;
         services.Debugger.FrameChanged += OnDebuggerChanged;
         services.Debugger.Stopped += OnDebuggerStopped;
@@ -1496,6 +1497,9 @@ public sealed partial class CodeEditorController : IDisposable
 
     public BreakpointMargin BreakpointMargin => _breakpointMargin;
 
+    /// <summary>The pinned data tips over this editor (M14b), an overlay the view stacks on it.</summary>
+    public PinnedDataTipLayer PinLayer { get; }
+
     private void OnDebuggerStopped(object? sender, StopInfo e)
     {
         OnDebuggerChanged(sender, EventArgs.Empty);
@@ -1610,7 +1614,15 @@ public sealed partial class CodeEditorController : IDisposable
         try
         {
             var result = await debugger.EvaluateAsync(expression, "hover", cancellationToken).ConfigureAwait(true);
-            return new ViewModels.DataTipViewModel(debugger, expression, result);
+            var line = Model.Text.GetLineByOffset(offset).LineNumber;
+            return new ViewModels.DataTipViewModel(debugger, expression, result)
+            {
+                PinToSource = Model.IsReadOnly ? null : () =>
+                {
+                    debugger.PinnedTips.Pin(Model.Path, line, expression, result.Result);
+                    _hoverPopup.IsOpen = false;
+                },
+            };
         }
         catch (Exception ex) when (ex is DaedalusStudio.Debugging.DapException or DaedalusStudio.Debugging.DapConnectionLostException or InvalidOperationException)
         {
@@ -1766,6 +1778,7 @@ public sealed partial class CodeEditorController : IDisposable
         _services.Debugger.StateChanged -= OnDebuggerChanged;
         _services.Debugger.FrameChanged -= OnDebuggerChanged;
         _services.Debugger.Stopped -= OnDebuggerStopped;
+        PinLayer.Detach();
         view.ScrollOffsetChanged -= OnViewChanged;
         view.VisualLinesChanged -= OnViewChanged;
         view.PointerMoved -= OnPointerMoved;

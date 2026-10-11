@@ -20,14 +20,15 @@ public sealed record BreakpointSpec(
     bool Enabled = true,
     bool Temporary = false,
     BreakpointLocation? DependsOn = null,
-    string? Labels = null)
+    string? Labels = null,
+    string? Filter = null)
 {
     public bool IsLogpoint => LogMessage is not null;
 
     public BreakpointLocation Location => new(Path, Line);
 
     /// <summary>Whether the debugger has to stop to emulate this breakpoint's behavior (netcoredbg has no hit counts, logpoints or dependencies).</summary>
-    public bool NeedsClientHandling => HitCondition is not null || LogMessage is not null || DependsOn is not null;
+    public bool NeedsClientHandling => HitCondition is not null || LogMessage is not null || DependsOn is not null || Filter is not null;
 
     /// <summary>The labels, trimmed, without empty ones.</summary>
     public IReadOnlyList<string> LabelList => BreakpointStore.SplitLabels(Labels);

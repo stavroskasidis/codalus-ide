@@ -132,6 +132,9 @@ public sealed class PluginManager : IAsyncDisposable
         [.. Plugins.Where(p => p.IsUsable && !p.IsDeclarative)
             .SelectMany(p => (p.Manifest!.Contributes?.HostingProviders ?? []).Where(h => p.ActivationEvents.Contains("onHostingProvider:" + h.Id)).Select(h => (p, h)))];
 
+    /// <summary>The plugins' debugger visualizers (proposed API 0.2.7).</summary>
+    public Debugging.DebugVisualizerRegistry DebugVisualizers { get; } = new();
+
     public event EventHandler<TreeViewRefreshEventArgs>? TreeViewRefreshed;
 
     public event EventHandler<string>? MarkdownChanged;
@@ -617,6 +620,7 @@ public sealed class PluginManager : IAsyncDisposable
 
         // Test controllers created by this host's plugins (disposed when the host crashes).
         private readonly ConcurrentDictionary<string, byte> _controllers = new(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, byte> _visualizers = new(StringComparer.Ordinal);
 
         // Hosting providers registered by this host's plugins (unregistered when the host crashes).
         private readonly ConcurrentDictionary<string, byte> _providers = new(StringComparer.Ordinal);
@@ -727,6 +731,12 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 _providers.TryRemove(provider, out _);
                 _manager.HostingSink?.ProviderUnregistered(provider);
+            }
+
+            foreach (var visualizer in _visualizers.Keys)
+            {
+                _visualizers.TryRemove(visualizer, out _);
+                _manager.DebugVisualizers.Unregister(visualizer);
             }
 
             foreach (var plugin in Members.Where(p => p.State == PluginState.Active))
@@ -849,6 +859,20 @@ public sealed class PluginManager : IAsyncDisposable
                 Proposed.DebugLaunchAsync(p, DebugEnded, ct));
             connection.OnRequest(ProposedMethods.DebugAttach, json.DebugAttachParams, json.DebugSessionDto, (p, ct) =>
                 Proposed.DebugAttachAsync(p.ProcessId, DebugEnded, ct));
+            connection.OnRequest(ProposedMethods.DebugEvaluate, json.DebugEvaluateParams, json.DebugValueDto, (p, ct) =>
+                Proposed.DebugEvaluateAsync(p.Expression, ct));
+            connection.OnNotification(ProposedMethods.DebugRegisterVisualizer, json.DebugVisualizerDto, p =>
+            {
+                _visualizers[p.VisualizerId] = 0;
+                _manager.DebugVisualizers.Register(new Debugging.PluginDebugVisualizer(p.VisualizerId, p.PluginId, p.Title, p.Types, async (request, ct) =>
+                    await Connection.InvokeAsync(ProposedMethods.DebugVisualize, request, PluginJsonContext.Default.DebugVisualizeParams, PluginJsonContext.Default.DebugVisualizerViewDto, ct).ConfigureAwait(false)
+                    ?? throw new InvalidOperationException("The visualizer returned nothing.")));
+            });
+            connection.OnNotification(ProposedMethods.DebugUnregisterVisualizer, json.DebugVisualizerIdParams, p =>
+            {
+                _visualizers.TryRemove(p.VisualizerId, out _);
+                _manager.DebugVisualizers.Unregister(p.VisualizerId);
+            });
             connection.OnRequest(ProposedMethods.DebugStop, json.DebugSessionParams, json.EmptyResult, async (p, ct) =>
             {
                 await Proposed.DebugStopAsync(p.SessionId, ct).ConfigureAwait(false);

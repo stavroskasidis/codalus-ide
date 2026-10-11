@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="DaedalusStudio.Workbench.Tests" />
+    <InternalsVisibleTo Include="DaedalusStudio.Debugging.Tests" />
   </ItemGroup>
 </Project>
