@@ -67,32 +67,57 @@ public sealed class AskpassServer : IDisposable
     /// <summary>Prompts answered or cancelled, for tests and the log (never the answers).</summary>
     public event EventHandler<AskpassPrompt>? Asked;
 
+    private NamedPipeServerStream CreateInstance() =>
+        new(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+
+    /// <summary>
+    /// Accepts requests. The next instance exists before an accepted one is served: on Unix the instances share one
+    /// listening socket that closes with the last of them, so serving (which can finish at once) and disposing the only
+    /// instance dropped a client already queued on it, which then read "closed without an answer" (found on the Mac).
+    /// </summary>
     private async Task ListenAsync()
     {
-        while (!_stop.IsCancellationRequested)
+        NamedPipeServerStream? next = null;
+        try
         {
-            NamedPipeServerStream? pipe = null;
-            try
+            while (!_stop.IsCancellationRequested)
             {
-                pipe = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                await pipe.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
-                _ = ServeAsync(pipe);
-                pipe = null;
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(250)).ConfigureAwait(false);
-            }
-            finally
-            {
-                if (pipe is not null)
+                try
                 {
-                    await pipe.DisposeAsync().ConfigureAwait(false);
+                    var pipe = next ?? CreateInstance();
+                    next = pipe;
+                    await pipe.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
+                    next = null;
+                    try
+                    {
+                        next = CreateInstance();
+                    }
+                    finally
+                    {
+                        _ = Task.Run(() => ServeAsync(pipe));
+                    }
                 }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    if (next is not null)
+                    {
+                        await next.DisposeAsync().ConfigureAwait(false);
+                        next = null;
+                    }
+
+                    await Task.Delay(TimeSpan.FromMilliseconds(250)).ConfigureAwait(false);
+                }
+            }
+        }
+        finally
+        {
+            if (next is not null)
+            {
+                await next.DisposeAsync().ConfigureAwait(false);
             }
         }
     }

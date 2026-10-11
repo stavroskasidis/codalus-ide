@@ -111,6 +111,13 @@ jobs:
       - name: Display for the smoke test (Xvfb)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
+      - name: Developer tools access (macOS)
+        # Dumps (createdump) and attaching (netcoredbg) need it; otherwise the system asks for a password that nobody
+        # answers on a runner, and debug.companion, debug.roslyn and debug.remote time out (as a person would approve once).
+        if: runner.os == 'macOS'
+        run: |
+          sudo DevToolsSecurity -enable
+          sudo dseditgroup -o edit -a "$USER" -t user _developer
       - name: Stack traces for a smoke test failure (dotnet-stack)
         # The smoke test prints the C# host's stacks when a step fails: a host that stopped answering says where it is.
         if: runner.os != 'Windows'

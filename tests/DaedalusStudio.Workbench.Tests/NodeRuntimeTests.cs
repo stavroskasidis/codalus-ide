@@ -46,7 +46,21 @@ public sealed class NodeRuntimeTests : IDisposable
         Assert.Contains("checksum", error.Message, StringComparison.Ordinal);
         Assert.Equal($"https://nodejs.org/dist/v{NodeRuntime.Version}/node-v{NodeRuntime.Version}-{NodeRuntime.Platform}", Assert.Single(handler.Requests).ToString());
         Assert.False(node.IsInstalled);
-        Assert.Empty(Directory.EnumerateFiles(Path.Combine(_folder, "node")));
+        Assert.DoesNotContain(Directory.EnumerateFiles(Path.Combine(_folder, "node")), f => !f.EndsWith(".lock", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_install_waits_while_another_holds_the_cache_lock()
+    {
+        // Found on the Mac: two test assemblies downloading Node.js into the same cache wrote the same partial file.
+        var path = Path.Combine(_folder, "node", "test.lock");
+        var first = await CacheLock.AcquireAsync(path, TestContext.Current.CancellationToken);
+        var second = CacheLock.AcquireAsync(path, TestContext.Current.CancellationToken);
+        await Task.Delay(600, TestContext.Current.CancellationToken);
+        Assert.False(second.IsCompleted);
+
+        first.Dispose();
+        using var held = await second.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
     }
 
     [Fact]
