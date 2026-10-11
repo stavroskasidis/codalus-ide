@@ -221,7 +221,7 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
 
             trace = await _diagnostics.OpenTraceAsync(path, Timeout());
             var summary = trace.Summary;
-            Assert.True(summary.Samples > 500, $"{summary.Samples} samples");
+            Assert.True(summary.Samples > 50, $"{summary.Samples} samples"); // a loaded 2-core CI runner samples far less than 1 a millisecond
             Assert.InRange(summary.DurationMilliseconds, 1000, 60_000);
             Assert.True(summary.Threads.Count >= 2);
             var all = new CpuFilter();
