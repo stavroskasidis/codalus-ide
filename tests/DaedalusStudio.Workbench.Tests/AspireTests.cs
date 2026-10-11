@@ -86,6 +86,7 @@ public sealed class AspireTests : IAsyncLifetime
     [Fact]
     public async Task The_apphost_starts_its_projects_through_the_ide_and_describes_its_resources()
     {
+        Assert.SkipWhen(OperatingSystem.IsMacOS() && Environment.GetEnvironmentVariable("CI") == "true", "On GitHub's macOS runner the AppHost's orchestrator starts the first project but never the one waiting for it (TODO(issue), checkpoint m17b); the Mac validation runs it.");
         var ct = TestContext.Current.CancellationToken;
         var fixture = ContainerRuntime.CopyFixture(_root);
         var appHost = Path.Combine(fixture, "Aspire", "AppHost", "AppHost.csproj");
