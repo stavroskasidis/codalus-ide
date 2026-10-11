@@ -91,6 +91,29 @@ internal static partial class BuiltIns
             Description = "Show the time elapsed since the program was resumed at the end of the current statement's line.",
             Order = 2,
         },
+        SettingDescriptor.Create(ShellHost.DebugConsoleSetting, "\"internalConsole\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Console of debugged programs",
+            Category = "Debugging",
+            Description = "Where a console app debugged with Start Debugging gets its console: the Debug Console (output only), or the integrated terminal (a real console that takes input; Detach All then leaves the program running).",
+            Enum = ["internalConsole", "integratedTerminal"],
+            EnumDescriptions = ["Debug Console", "Integrated terminal"],
+            Order = 5,
+        },
+        SettingDescriptor.Create(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, "\"docker\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Container tool",
+            Category = "Debugging",
+            Description = "The container command line for attaching in containers: docker, podman, or one inside WSL such as \"wsl -d Ubuntu --exec podman\".",
+            Order = 6,
+        },
+        SettingDescriptor.Create(Workbench.Debugging.Remote.RemoteTargets.SourceFileMapSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Source file map",
+            Category = "Debugging",
+            Description = "Source folders of programs debugged on another machine, as \"/folder/there=C:\\folder\\here\". Without one, a file is found in the solution by its folder and name.",
+            Order = 7,
+        },
     ];
 
     public static void RegisterDebugCommands(ShellHost shell)
@@ -144,7 +167,9 @@ internal static partial class BuiltIns
         Add("debug.openDump", "Open Dump File…", shell.OpenDumpAsync);
         Add("debug.createDump", "Create Dump", shell.CreateDumpAsync, "debugActive");
         Add("debug.clearDataTips", "Clear All DataTips", Sync(shell.Debugger.PinnedTips.Clear));
-        Add("debug.detachAll", "Detach All", _ => shell.Debugger.DetachAsync(), "debugAttached");
+        Add("debug.detachAll", "Detach All", _ => shell.Debugger.DetachAsync(), "debugCanDetach");
+        Add("debug.attachRemote", "Attach to Process on a Remote Machine…", shell.AttachToRemoteProcessAsync, "!debugActive");
+        Add("debug.justInTime", "Just-In-Time Debugging…", shell.ConfigureJitDebuggingAsync);
     }
 
     public static void RegisterDebugMenus(MenuRegistry menus)
@@ -162,10 +187,12 @@ internal static partial class BuiltIns
             Item("debug.restart", "0-debug", 4),
             Item("debug.pause", "0-debug", 5),
             Item("debug.attach", "0-debug", 6),
-            Item("debug.reattach", "0-debug", 7),
-            Item("debug.webPage", "0-debug", 8),
+            Item("debug.attachRemote", "0-debug", 7),
+            Item("debug.reattach", "0-debug", 8),
+            Item("debug.webPage", "0-debug", 9),
             Item("debug.openDump", "1-dumps", 1),
             Item("debug.createDump", "1-dumps", 2),
+            Item("debug.justInTime", "1-dumps", 3),
             Item("debug.stepOver", "3-step", 1),
             Item("debug.stepInto", "3-step", 2),
             Item("debug.stepOut", "3-step", 3),

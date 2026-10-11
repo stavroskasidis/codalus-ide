@@ -51,6 +51,8 @@ public sealed class DebugService : IAsyncDisposable
     private readonly HashSet<int> _runToIds = [];
     private readonly List<BreakpointLocation> _hitLocations = [];
     private readonly Dictionary<string, DebugModule> _modules = new(StringComparer.Ordinal);
+    private readonly List<DebugProcess> _processes = [];
+    private readonly List<int> _terminalProcesses = [];
     private RunTarget? _runTo;
     private long _resumedAt;
     private IDebugAdapter? _adapter;
@@ -117,6 +119,60 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>Whether the session attached to a running process (Stop detaches instead of terminating).</summary>
     public bool IsAttached => _attached;
 
+    /// <summary>Starts programs in the integrated terminal (M14c); without it, launches use the Debug Console.</summary>
+    public ITerminalLauncher? Terminal { get; set; }
+
+    /// <summary>The startup hook that holds a program launched in the terminal until the debugger attached (<see cref="HeldLaunch"/>).</summary>
+    public string? StartupHook { get; set; }
+
+    /// <summary>How long a program launched in the terminal may take to reach the startup hook.</summary>
+    public TimeSpan TerminalStartTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>The session's programs (several with multiple startup projects, M14c), for the Processes window.</summary>
+    public IReadOnlyList<DebugProcess> Processes
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _processes];
+            }
+        }
+    }
+
+    /// <summary>A program of the session started, got its process id, or ended.</summary>
+    public event EventHandler? ProcessesChanged;
+
+    /// <summary>
+    /// Whether Detach All leaves the programs running: each was attached to or launched in the terminal (a program
+    /// launched with the Debug Console has the debugger's console, and ends with it).
+    /// </summary>
+    public bool CanDetach
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return State != DebugState.Idle && _processes.Count > 0 && _processes.Where(p => !p.Ended).All(p => p.CanDetach);
+            }
+        }
+    }
+
+    private void UpdateProcess(int index, Func<DebugProcess, DebugProcess> update)
+    {
+        lock (_gate)
+        {
+            if (index < 0 || index >= _processes.Count)
+            {
+                return;
+            }
+
+            _processes[index] = update(_processes[index]);
+        }
+
+        ProcessesChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public StopInfo? CurrentStop { get; private set; }
 
     /// <summary>The debuggee's process id, once the adapter reported it (DAP <c>process</c> event) or after an attach.</summary>
@@ -148,10 +204,193 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Starts <paramref name="plan"/> under the debugger. Throws when no adapter is installed or the launch fails.</summary>
     public Task LaunchAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
-        StartAsync(ct => plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName) ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment), adapter => adapter.LaunchAsync(Arguments(plan), cancellationToken), attached: false, cancellationToken);
+        LaunchAsync([new DebugLaunch(ProgramName(plan), plan)], cancellationToken);
 
     private LaunchArguments Arguments(LaunchPlan plan) =>
-        new(plan.FileName, [.. CommandLine.Split(plan.Arguments)], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering);
+        new(plan.FileName, [.. plan.SplitArguments()], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering);
+
+    /// <summary>
+    /// Starts <paramref name="launches"/> under the debugger (M14c). One program is one session as before; several
+    /// (multiple startup projects) are one compound session, each program on a netcoredbg of its own, which lasts
+    /// until the last one ends. A program in the terminal starts there and the debugger attaches; a program in a WSL
+    /// distribution runs under netcoredbg there. Throws when the first program can't start; a later one that can't
+    /// is reported in the Debug Console and the others go on.
+    /// </summary>
+    public async Task LaunchAsync(IReadOnlyList<DebugLaunch> launches, CancellationToken cancellationToken)
+    {
+        if (launches.Count == 0)
+        {
+            throw new ArgumentException("Nothing to launch.", nameof(launches));
+        }
+
+        if (launches.Count > CompoundDebugAdapter.MaxParts)
+        {
+            throw new InvalidOperationException($"A debug session starts at most {CompoundDebugAdapter.MaxParts.ToString(CultureInfo.InvariantCulture)} programs.");
+        }
+
+        var parts = launches.Select((launch, index) => Part(launch, index, cancellationToken)).ToList();
+        if (parts.Count == 1)
+        {
+            await StartAsync(parts[0].CreateAsync, adapter => parts[0].StartAsync(adapter), attached: false, [parts[0].Process], cancellationToken, parts[0].ConfiguredAsync).ConfigureAwait(false);
+            return;
+        }
+
+        await StartAsync(
+            async ct =>
+            {
+                var compound = new CompoundDebugAdapter(await parts[0].CreateAsync(ct).ConfigureAwait(false), parts[0].Name, independent: true);
+                compound.PartChanged += OnPartChanged;
+                return compound;
+            },
+            compound => parts[0].StartAsync(compound.Primary),
+            attached: false,
+            [.. parts.Select(p => p.Process)],
+            cancellationToken,
+            parts[0].ConfiguredAsync).ConfigureAwait(false);
+
+        foreach (var part in parts.Skip(1))
+        {
+            if (_adapter is not CompoundDebugAdapter session)
+            {
+                return; // the session ended meanwhile
+            }
+
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+            try
+            {
+                var adapter = await part.CreateAsync(linked.Token).ConfigureAwait(false);
+                await session.AddAsync(adapter, part.Name, part.StartAsync, linked.Token).ConfigureAwait(false);
+                if (part.ConfiguredAsync is { } configured)
+                {
+                    await configured().ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException or OperationCanceledException)
+            {
+                UpdateProcess(part.Index, p => p with { Ended = true });
+                Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] Could not start: {ex.Message}\n"));
+            }
+        }
+    }
+
+    /// <summary>A program of a launch: how its adapter starts, how it starts the program, and what runs once the session is configured.</summary>
+    private sealed record LaunchPart(
+        string Name,
+        int Index,
+        DebugProcess Process,
+        Func<CancellationToken, Task<IDebugAdapter>> CreateAsync,
+        Func<IDebugAdapter, Task> StartAsync,
+        Func<Task>? ConfiguredAsync = null);
+
+    private LaunchPart Part(DebugLaunch launch, int index, CancellationToken cancellationToken)
+    {
+        if (launch.Remote is { } remote)
+        {
+            return new LaunchPart(
+                launch.Name,
+                index,
+                new DebugProcess(launch.Name, null, DebugProcess.Launched, remote.Target),
+                async ct => new PathMappingDebugAdapter(await DebugAdapter.StartAsync(remote.Adapter, ct).ConfigureAwait(false), remote.Map),
+                adapter => ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
+        }
+
+        if (launch.Console == DebugConsoleKind.Terminal)
+        {
+            if (Terminal is { } terminal && StartupHook is { } hook)
+            {
+                HeldLaunch? held = null;
+                return new LaunchPart(
+                    launch.Name,
+                    index,
+                    new DebugProcess(launch.Name, null, DebugProcess.Terminal, null),
+                    async ct => await StartForPlanAsync(launch.Plan, ct).ConfigureAwait(false),
+                    async adapter =>
+                    {
+                        held = await HeldLaunch.StartAsync(terminal, hook, launch.Plan, launch.Name, TerminalStartTimeout, cancellationToken).ConfigureAwait(false);
+                        lock (_gate)
+                        {
+                            _terminalProcesses.Add(held.ProcessId);
+                        }
+
+                        UpdateProcess(index, p => p with { Id = held.ProcessId });
+                        if (index == 0)
+                        {
+                            OnProcess(held.ProcessId);
+                        }
+
+                        await ((DebugAdapter)adapter).AttachAsync(new AttachArguments(held.ProcessId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken).ConfigureAwait(false);
+                    },
+                    async () =>
+                    {
+                        // Once the program's own module is loaded, its breakpoints are bound: let it run.
+                        await WaitForModuleAsync(EntryModule(launch.Plan), TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+                        held?.Release();
+                    });
+            }
+
+            Output?.Invoke(this, new DebugOutput("console", "The integrated terminal isn't available here: the program's console is the Debug Console.\n"));
+        }
+
+        return new LaunchPart(
+            launch.Name,
+            index,
+            new DebugProcess(launch.Name, null, DebugProcess.Launched, null),
+            async ct => await StartForPlanAsync(launch.Plan, ct).ConfigureAwait(false),
+            adapter => ((DebugAdapter)adapter).LaunchAsync(Arguments(launch.Plan), cancellationToken));
+    }
+
+    /// <summary>A program of an independent compound session started or ended.</summary>
+    private void OnPartChanged(object? sender, CompoundPartEvent e)
+    {
+        UpdateProcess(e.Index, p => e.Ended ? p with { Ended = true, ExitCode = e.ExitCode } : p with { Id = e.ProcessId ?? p.Id });
+        if (e.ProcessId is { } pid && e.Index == 0)
+        {
+            OnProcess(pid);
+        }
+    }
+
+    /// <summary>The name of the program's main module: <c>App.dll</c> for <c>dotnet exec App.dll</c>, <c>App.exe</c> and <c>App</c>.</summary>
+    public static string EntryModule(LaunchPlan plan)
+    {
+        var program = Path.GetFileName(plan.FileName);
+        if (Path.GetFileNameWithoutExtension(program).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+            && plan.SplitArguments().FirstOrDefault(a => a.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) is { } dll)
+        {
+            return dll[(dll.LastIndexOfAny(['/', '\\']) + 1)..];
+        }
+
+        return program.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? program : Path.GetFileNameWithoutExtension(program) + ".dll";
+    }
+
+    private static string ProgramName(LaunchPlan plan) => Path.GetFileNameWithoutExtension(EntryModule(plan));
+
+    /// <summary>Waits until a module named <paramref name="name"/> is loaded (or <paramref name="timeout"/> passes).</summary>
+    private async Task WaitForModuleAsync(string name, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Check(object? sender, EventArgs e)
+        {
+            if (Modules.Any(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase) || string.Equals(Path.GetFileName(m.Path), name, StringComparison.OrdinalIgnoreCase)))
+            {
+                loaded.TrySetResult();
+            }
+        }
+
+        ModulesChanged += Check;
+        try
+        {
+            Check(null, EventArgs.Empty);
+            await loaded.Task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            Output?.Invoke(this, new DebugOutput("console", $"{name} didn't load within {timeout.TotalSeconds:0} seconds; the program goes on, and early breakpoints may be missed.\n"));
+        }
+        finally
+        {
+            ModulesChanged -= Check;
+        }
+    }
 
     /// <summary>
     /// Starts <paramref name="plan"/> (a web server) under netcoredbg as the first adapter of a compound session
@@ -162,6 +401,7 @@ public sealed class DebugService : IAsyncDisposable
             async ct => new CompoundDebugAdapter(await (plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
             adapter => ((DebugAdapter)adapter.Primary).LaunchAsync(Arguments(plan), cancellationToken),
             attached: false,
+            [new DebugProcess(ProgramName(plan), null, DebugProcess.Launched, null)],
             cancellationToken);
 
     /// <summary>Whether the session is a compound one that a browser can join.</summary>
@@ -193,14 +433,43 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Starts <paramref name="program"/> with arguments that are already split (no command-line parsing).</summary>
     public Task LaunchAsync(string program, IReadOnlyList<string> arguments, string workingDirectory, IReadOnlyDictionary<string, string> environment, CancellationToken cancellationToken) =>
-        StartAsync(ct => DebugAdapterLocator.RunsAsX64OnArm64Mac(program) ? StartX64NetcoredbgAsync(ct, environment) : StartNetcoredbgAsync(ct, environment), adapter => adapter.LaunchAsync(
-            new LaunchArguments(program, [.. arguments], workingDirectory, new Dictionary<string, string>(environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering),
-            cancellationToken), attached: false, cancellationToken);
+        LaunchAsync(new LaunchPlan(program, string.Empty, workingDirectory, environment, null) { ArgumentList = arguments }, cancellationToken);
 
-    public async Task AttachAsync(int processId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Attaches to process <paramref name="processId"/>: here, or with <paramref name="remote"/> on another machine
+    /// (M14c: over SSH, in a container or a WSL distribution) through netcoredbg there.
+    /// </summary>
+    public async Task AttachAsync(int processId, CancellationToken cancellationToken, RemoteAttach? remote = null, string? name = null)
     {
-        await StartAsync(ct => StartNetcoredbgAsync(ct), adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode), cancellationToken), attached: true, cancellationToken).ConfigureAwait(false);
+        var process = new DebugProcess(name ?? ProcessName(processId), processId, DebugProcess.Attached, remote?.Target);
+        if (remote is null)
+        {
+            await StartAsync(ct => StartNetcoredbgAsync(ct), adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken), attached: true, [process], cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await StartAsync(
+                async ct => new PathMappingDebugAdapter(await DebugAdapter.StartAsync(remote.Adapter, ct).ConfigureAwait(false), remote.Map),
+                adapter => adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
+                attached: true,
+                [process],
+                cancellationToken).ConfigureAwait(false);
+        }
+
         OnProcess(processId);
+    }
+
+    private static string ProcessName(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return process.ProcessName;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return processId.ToString(CultureInfo.InvariantCulture);
+        }
     }
 
     /// <summary>
@@ -208,7 +477,7 @@ public sealed class DebugService : IAsyncDisposable
     /// which launches the browser with <paramref name="arguments"/>. Stopping the session closes the browser.
     /// </summary>
     public Task LaunchBrowserAsync(Func<CancellationToken, Task<JsDebugAdapter>> start, BrowserLaunchArguments arguments, CancellationToken cancellationToken) =>
-        StartAsync(start, adapter => adapter.LaunchAsync(arguments, cancellationToken), attached: false, cancellationToken);
+        StartAsync(start, adapter => adapter.LaunchAsync(arguments, cancellationToken), attached: false, [new DebugProcess("Browser", null, DebugProcess.Launched, null)], cancellationToken);
 
     /// <summary>The debuggee's process id: completes when the adapter reports it; cancelled when the session ends first.</summary>
     public Task<int> WaitForProcessIdAsync(CancellationToken cancellationToken) => _process.Task.WaitAsync(cancellationToken);
@@ -217,7 +486,12 @@ public sealed class DebugService : IAsyncDisposable
     {
         ProcessId = processId;
         _process.TrySetResult(processId);
+        UpdateProcess(0, p => p.Id is null ? p with { Id = processId } : p);
     }
+
+    /// <summary>The netcoredbg a plan needs: the x64 one for a program that runs as x64 on Arm64 (M33), else the regular one.</summary>
+    private Task<DebugAdapter> StartForPlanAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
+        plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName) ? StartX64NetcoredbgAsync(cancellationToken, plan.Environment) : StartNetcoredbgAsync(cancellationToken, plan.Environment);
 
     private Task<DebugAdapter> StartNetcoredbgAsync(CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? debuggee = null)
     {
@@ -273,7 +547,13 @@ public sealed class DebugService : IAsyncDisposable
         return environment;
     }
 
-    private async Task StartAsync<TAdapter>(Func<CancellationToken, Task<TAdapter>> create, Func<TAdapter, Task> start, bool attached, CancellationToken cancellationToken)
+    private async Task StartAsync<TAdapter>(
+        Func<CancellationToken, Task<TAdapter>> create,
+        Func<TAdapter, Task> start,
+        bool attached,
+        IReadOnlyList<DebugProcess> processes,
+        CancellationToken cancellationToken,
+        Func<Task>? configured = null)
         where TAdapter : class, IDebugAdapter
     {
         if (IsActive)
@@ -281,6 +561,14 @@ public sealed class DebugService : IAsyncDisposable
             throw new InvalidOperationException("A debug session is already running.");
         }
 
+        lock (_gate)
+        {
+            _processes.Clear();
+            _processes.AddRange(processes);
+            _terminalProcesses.Clear();
+        }
+
+        ProcessesChanged?.Invoke(this, EventArgs.Empty);
         SetState(DebugState.Starting);
         _session = new CancellationTokenSource();
         _ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -339,12 +627,17 @@ public sealed class DebugService : IAsyncDisposable
 
             await adapter.ConfigurationDoneAsync(cancellationToken).ConfigureAwait(false);
             await launching.ConfigureAwait(false);
+            if (configured is not null)
+            {
+                await configured().ConfigureAwait(false);
+            }
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         {
             if (adapter is not null)
             {
                 await adapter.DisconnectAsync(terminateDebuggee: !attached, CancellationToken.None).ConfigureAwait(false);
+                KillTerminalPrograms();
                 await EndAsync().ConfigureAwait(false);
             }
             else
@@ -368,22 +661,102 @@ public sealed class DebugService : IAsyncDisposable
             return;
         }
 
+        if (_attached)
+        {
+            await PrepareDetachAsync(adapter).ConfigureAwait(false);
+        }
+
         await adapter.DisconnectAsync(terminateDebuggee: !_attached, CancellationToken.None).ConfigureAwait(false);
+        KillTerminalPrograms();
         await EndAsync().ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Detach All (M14b): ends an attached session and leaves the program running. A launched program's console is
-    /// netcoredbg's (no <c>runInTerminal</c>), so it can't outlive the session: <see cref="StopAsync"/> ends it.
+    /// Before a detach from a stopped program (M14c): its breakpoints and exception filters are removed, and a trivial
+    /// function evaluation runs on the stopped thread. netcoredbg 3.2.0 on Windows ends an apphost program
+    /// (<c>App.exe</c>, not <c>dotnet App.dll</c>) with 0xC0000409 when it detaches while the program is stopped at a
+    /// breakpoint, unless a function evaluation ran since the stop; resuming first instead races with the program's
+    /// own debug events (0xC0000354). TODO(issue): report upstream (Samsung/netcoredbg).
+    /// </summary>
+    private async Task PrepareDetachAsync(IDebugAdapter adapter)
+    {
+        if (State != DebugState.Stopped)
+        {
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            foreach (var file in Breakpoints.Files)
+            {
+                await adapter.SetBreakpointsAsync(file, [], timeout.Token).ConfigureAwait(false);
+            }
+
+            if (Breakpoints.Functions.Count > 0)
+            {
+                await adapter.SetFunctionBreakpointsAsync([], timeout.Token).ConfigureAwait(false);
+            }
+
+            await adapter.SetExceptionBreakpointsAsync([], timeout.Token).ConfigureAwait(false);
+
+            await adapter.EvaluateAsync("System.Environment.ProcessId", SelectedFrame?.Id, "watch", timeout.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            Output?.Invoke(this, new DebugOutput("console", $"Preparing the detach: {ex.Message}\n"));
+        }
+    }
+
+    /// <summary>
+    /// Stop ends programs launched in the terminal too: the debugger attached to them, so its disconnect may only
+    /// detach. The terminal shows that they ended.
+    /// </summary>
+    private void KillTerminalPrograms()
+    {
+        List<int> programs;
+        lock (_gate)
+        {
+            programs = [.. _terminalProcesses];
+            _terminalProcesses.Clear();
+        }
+
+        foreach (var pid in programs)
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(pid);
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+                // Already gone.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Detach All (M14b, M14c): ends the session and leaves the programs running, when each was attached to or
+    /// launched in the terminal (<see cref="CanDetach"/>). A program launched with the Debug Console has netcoredbg's
+    /// console, so it can't outlive the session: <see cref="StopAsync"/> ends it.
     /// </summary>
     public async Task DetachAsync()
     {
-        if (_adapter is not { } adapter || !_attached)
+        if (_adapter is not { } adapter || !CanDetach)
         {
             await StopAsync().ConfigureAwait(false);
             return;
         }
 
+        lock (_gate)
+        {
+            _terminalProcesses.Clear(); // they go on
+        }
+
+        await PrepareDetachAsync(adapter).ConfigureAwait(false);
         await adapter.DisconnectAsync(terminateDebuggee: false, CancellationToken.None).ConfigureAwait(false);
         await EndAsync().ConfigureAwait(false);
     }
@@ -844,7 +1217,8 @@ public sealed class DebugService : IAsyncDisposable
                 break;
             case DapEvents.Exited when DebugAdapter.Read(e.Body, DapJsonContext.Default.ExitedEvent) is { } exited:
                 _exitCode = exited.ExitCode;
-                Output?.Invoke(this, new DebugOutput("console", $"The program has exited with code {exited.ExitCode.ToString(CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n"));
+                var program = _adapter is CompoundDebugAdapter { Independent: true } programs ? $"[{programs.PartNames[0]}] " : string.Empty;
+                Output?.Invoke(this, new DebugOutput("console", $"{program}The program has exited with code {exited.ExitCode.ToString(CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n"));
                 break;
             case DapEvents.Terminated:
                 _ = Task.Run(EndAsync);

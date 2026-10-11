@@ -62,6 +62,7 @@ public sealed class ViewLocator : IDataTemplate
         ConfigurationManagerViewModel vm => new ConfigurationManagerView { DataContext = vm },
         ProjectDependenciesViewModel vm => new ProjectDependenciesView { DataContext = vm },
         SdkViewModel vm => new SdkView { DataContext = vm },
+        StartupProjectsViewModel vm => new StartupProjectsView { DataContext = vm },
         AddNewItemViewModel vm => new AddNewItemView { DataContext = vm },
         ExportTemplateViewModel vm => new ExportTemplateView { DataContext = vm },
         TemplateManagerViewModel vm => new TemplateManagerView { DataContext = vm },

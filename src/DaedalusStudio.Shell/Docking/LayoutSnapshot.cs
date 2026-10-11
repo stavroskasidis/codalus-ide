@@ -90,7 +90,16 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
 
     /// <summary>Pinned data tips (M14b).</summary>
     public IReadOnlyList<SessionDataTip>? DataTips { get; init; }
+
+    /// <summary>Whether several startup projects start together (M14c); null or false: the single startup project.</summary>
+    public bool? MultipleStartupProjects { get; init; }
+
+    /// <summary>The startup projects' actions, in start order (M14c).</summary>
+    public IReadOnlyList<SessionStartupProject>? StartupProjects { get; init; }
 }
+
+/// <summary>A project of multiple startup projects: <see cref="Action"/> is <c>Start</c> or <c>StartWithoutDebugging</c>.</summary>
+public sealed record SessionStartupProject(string Path, string Action);
 
 /// <summary>A data tip pinned to a line (1-based), kept with the solution.</summary>
 public sealed record SessionDataTip(string Path, int Line, string Expression, string? Comment = null);

@@ -8,6 +8,9 @@ namespace DaedalusStudio.Debugging.Tests;
 /// </summary>
 public sealed class CompoundDebugAdapterTests
 {
+    /// <summary>A part's thread 1 in the session: its own id times the parts, plus its index.</summary>
+    private const int M = CompoundDebugAdapter.MaxParts;
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private static async Task<(CompoundDebugAdapter Compound, FakeAdapter Server, FakeAdapter Browser, List<DapEvent> Events)> CreateAsync()
@@ -52,9 +55,9 @@ public sealed class CompoundDebugAdapterTests
     {
         var (compound, server, browser, _) = await CreateAsync();
         var threads = await compound.ThreadsAsync(Ct);
-        Assert.Equal([new DapThread(4, "Main Thread"), new DapThread(5, "Browser: localhost:5000/counter")], threads);
+        Assert.Equal([new DapThread(M, "Main Thread"), new DapThread(M + 1, "Browser: localhost:5000/counter")], threads);
 
-        var frames = (await compound.StackTraceAsync(5, 20, Ct)).StackFrames;
+        var frames = (await compound.StackTraceAsync(M + 1, 20, Ct)).StackFrames;
         Assert.Equal(1, browser.Requests.Count(r => r == "stackTrace 1"));
         Assert.Equal(7 * CompoundDebugAdapter.MaxParts + 1, frames[0].Id);
 
@@ -65,7 +68,7 @@ public sealed class CompoundDebugAdapterTests
         Assert.Contains("variables 9", browser.Requests);
         Assert.Equal(0, variables[0].VariablesReference); // none stays none
 
-        await compound.StackTraceAsync(4, 20, Ct);
+        await compound.StackTraceAsync(M, 20, Ct);
         Assert.Contains("stackTrace 1", server.Requests);
         Assert.Equal(await compound.EvaluateAsync("x", 7 * CompoundDebugAdapter.MaxParts, "watch", Ct), new EvaluateResponse("x", VariablesReference: 0));
         Assert.Contains("evaluate x 7", server.Requests);
@@ -117,13 +120,13 @@ public sealed class CompoundDebugAdapterTests
         var (compound, server, browser, events) = await CreateAsync();
         await server.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
         await browser.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
-        Assert.Equal([4], Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Select(s => s.ThreadId));
+        Assert.Equal([M], Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Select(s => s.ThreadId));
 
-        await compound.ContinueAsync(4, Ct);
+        await compound.ContinueAsync(M, Ct);
         Assert.Contains("continue 1", server.Requests);
         Assert.DoesNotContain("continue 1", browser.Requests);
         await WaitAsync(() => Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Length == 2);
-        Assert.Equal([4, 5], Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Select(s => s.ThreadId));
+        Assert.Equal([M, M + 1], Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Select(s => s.ThreadId));
     }
 
     [Fact]
@@ -137,7 +140,7 @@ public sealed class CompoundDebugAdapterTests
         await browser.RaiseAsync(DapEvents.Stopped, new StoppedEvent("pause", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
         Assert.Single(Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent));
 
-        await compound.ContinueAsync(4, Ct);
+        await compound.ContinueAsync(M, Ct);
         Assert.Contains("continue 1", server.Requests);
         Assert.Contains("continue 1", browser.Requests);
         await Task.Delay(100, Ct);
@@ -163,9 +166,85 @@ public sealed class CompoundDebugAdapterTests
         var browser = new FakeAdapter([new DapThread(1, "page")]);
         await Assert.ThrowsAsync<DapException>(() => compound.AddAsync(browser, "Browser", _ => throw new DapException("launch", "no browser"), Ct));
         Assert.Equal(1, compound.PartCount);
-        Assert.Equal([new DapThread(4, "Main Thread")], await compound.ThreadsAsync(Ct));
+        Assert.Equal([new DapThread(M, "Main Thread")], await compound.ThreadsAsync(Ct));
         Assert.False(compound.Closed.IsCompleted);
         Assert.True(browser.Disposed);
+    }
+
+    [Fact]
+    public async Task Independent_programs_end_one_by_one_and_the_session_ends_with_the_last()
+    {
+        // M14c: multiple startup projects, each program on its own adapter.
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var second = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var compound = new CompoundDebugAdapter(first, "Api", independent: true);
+        var events = new List<DapEvent>();
+        var parts = new List<CompoundPartEvent>();
+        compound.EventReceived += e =>
+        {
+            lock (events)
+            {
+                events.Add(e);
+            }
+
+            return Task.CompletedTask;
+        };
+        compound.PartChanged += (_, e) =>
+        {
+            lock (parts)
+            {
+                parts.Add(e);
+            }
+        };
+        await compound.AddAsync(second, "Worker", _ => Task.CompletedTask, Ct);
+        Assert.Equal(["Api", "Worker"], compound.PartNames);
+        Assert.Equal([new DapThread(M, "Api: Main Thread"), new DapThread(M + 1, "Worker: Main Thread")], await compound.ThreadsAsync(Ct));
+
+        // Each program's process is reported; the second's exit becomes a line in the Debug Console.
+        await first.RaiseAsync(DapEvents.Process, new ProcessEvent("api", 100), DapJsonContext.Default.ProcessEvent);
+        await second.RaiseAsync(DapEvents.Process, new ProcessEvent("worker", 200), DapJsonContext.Default.ProcessEvent);
+        Assert.Equal([100, 200], parts.Select(p => p.ProcessId));
+        Assert.Single(events, e => e.Name == DapEvents.Process); // the primary's, for the session's process id
+
+        await second.RaiseAsync(DapEvents.Exited, new ExitedEvent(3), DapJsonContext.Default.ExitedEvent);
+        await second.RaiseAsync(DapEvents.Terminated, new ExitedEvent(0), DapJsonContext.Default.ExitedEvent);
+        Assert.Contains(Events(events, DapEvents.Output, DapJsonContext.Default.OutputEvent), o => o.Output.Contains("[Worker] The program has exited with code 3", StringComparison.Ordinal));
+        Assert.DoesNotContain("disconnect True", first.Requests); // the other program goes on
+        Assert.DoesNotContain(events, e => e.Name == DapEvents.Terminated);
+        Assert.False(compound.Closed.IsCompleted);
+        Assert.Contains(parts, p => p is { Name: "Worker", Ended: true, ExitCode: 3 });
+        Assert.Equal([new DapThread(M, "Api: Main Thread")], await compound.ThreadsAsync(Ct));
+
+        await first.RaiseAsync(DapEvents.Terminated, new ExitedEvent(0), DapJsonContext.Default.ExitedEvent);
+        Assert.Single(events, e => e.Name == DapEvents.Terminated);
+        Assert.True(compound.Closed.IsCompleted);
+    }
+
+    [Fact]
+    public async Task An_independent_programs_stop_still_waits_for_the_one_shown()
+    {
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var second = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var compound = new CompoundDebugAdapter(first, "Api", independent: true);
+        var events = new List<DapEvent>();
+        compound.EventReceived += e =>
+        {
+            lock (events)
+            {
+                events.Add(e);
+            }
+
+            return Task.CompletedTask;
+        };
+        await compound.AddAsync(second, "Worker", _ => Task.CompletedTask, Ct);
+        await first.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await second.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        Assert.Equal([M], Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Select(s => s.ThreadId));
+
+        // The shown program ends: the waiting stop shows.
+        await first.RaiseAsync(DapEvents.Terminated, new ExitedEvent(0), DapJsonContext.Default.ExitedEvent);
+        await WaitAsync(() => Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Length == 2);
+        Assert.Equal(M + 1, Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent)[1].ThreadId);
     }
 
     /// <summary>An adapter that records its requests: thread 1, frame 7, scope reference 9.</summary>

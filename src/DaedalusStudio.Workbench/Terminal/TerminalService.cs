@@ -269,6 +269,28 @@ public sealed class TerminalService : IDisposable
         return Launch(name, program, arguments, workingDirectory, env, columns, rows, outputText);
     }
 
+    /// <summary>
+    /// Runs a program in a new terminal for the debugger (M14c, DAP <c>runInTerminal</c>): a null variable is removed
+    /// from the environment the terminal would otherwise inherit.
+    /// </summary>
+    public TerminalSession Run(DaedalusStudio.Debugging.TerminalLaunch launch, int columns = 120, int rows = 30)
+    {
+        var env = BaseEnvironment();
+        foreach (var (key, value) in launch.Environment)
+        {
+            if (value is null)
+            {
+                env.Remove(key);
+            }
+            else
+            {
+                env[key] = value;
+            }
+        }
+
+        return Launch(launch.Title, launch.Program, launch.Arguments, launch.WorkingDirectory, env, columns, rows, null);
+    }
+
     private TerminalSession Launch(string name, string program, IReadOnlyList<string> arguments, string workingDirectory, Dictionary<string, string> environment, int columns, int rows, Action<string>? outputText)
     {
         var terminal = new VirtualTerminal(columns, rows, Scrollback);

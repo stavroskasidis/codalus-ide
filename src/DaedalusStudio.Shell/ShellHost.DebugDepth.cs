@@ -261,7 +261,11 @@ public sealed partial class ShellHost
     {
         if (_lastAttached is not { } last)
         {
-            await AttachToProcessAsync().ConfigureAwait(true);
+            if (!await ReattachRemoteAsync().ConfigureAwait(true))
+            {
+                await AttachToProcessAsync().ConfigureAwait(true);
+            }
+
             return;
         }
 
@@ -282,6 +286,7 @@ public sealed partial class ShellHost
         {
             using var process = Process.GetProcessById(processId);
             _lastAttached = (processId, process.ProcessName);
+            _lastRemote = null;
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {

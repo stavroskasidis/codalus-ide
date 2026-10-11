@@ -217,6 +217,35 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
         }
     }
 
+    [Fact]
+    public async Task Detach_All_from_an_attached_apphost_stopped_at_a_breakpoint_leaves_it_running()
+    {
+        // M14c: netcoredbg ended an apphost (not dotnet App.dll) detached while stopped; DebugService prepares the detach.
+        var signal = Path.Combine(Path.GetTempPath(), "daedalus-attach-" + Guid.NewGuid().ToString("N"));
+        var apphost = Path.Combine(Path.GetDirectoryName(debuggee.Dll)!, OperatingSystem.IsWindows() ? "Debuggee.exe" : "Debuggee");
+        using var process = Process.Start(new ProcessStartInfo(apphost, ["--wait-for", signal]) { UseShellExecute = false, RedirectStandardOutput = true })!;
+        try
+        {
+            _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, Line("loop")));
+            await _debug.AttachAsync(process.Id, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(signal, "go", TestContext.Current.CancellationToken);
+            await NextStopAsync();
+
+            await _debug.DetachAsync();
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.Equal(15, process.ExitCode);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill();
+            }
+
+            File.Delete(signal);
+        }
+    }
+
     [Theory]
     [InlineData("exec \"C:\\a b\\x.dll\" one", new[] { "exec", "C:\\a b\\x.dll", "one" })]
     [InlineData("a \"b \\\"c\\\" d\" e\\f", new[] { "a", "b \"c\" d", "e\\f" })]

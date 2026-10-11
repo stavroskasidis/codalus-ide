@@ -16,11 +16,14 @@ namespace DaedalusStudio.Debugging;
 /// <item>The session ends when any adapter ends: closing the browser stops the server, as stopping the server closes
 /// the browser.</item>
 /// </list>
+/// With <c>independent</c> (M14c, multiple startup projects), each adapter debugs a program of its own: the session
+/// ends when the last one ends, every thread is named after its program, and <see cref="PartChanged"/> reports each
+/// program's process and exit.
 /// </summary>
 public sealed class CompoundDebugAdapter : IDebugAdapter
 {
     /// <summary>The most adapters one session holds (ids keep the index in their low bits).</summary>
-    public const int MaxParts = 4;
+    public const int MaxParts = 8;
 
     private readonly Lock _gate = new();
     private readonly List<Part> _parts = [];
@@ -36,11 +39,33 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private int _nextId;
     private int _ending;
 
-    public CompoundDebugAdapter(IDebugAdapter primary, string name)
+    public CompoundDebugAdapter(IDebugAdapter primary, string name, bool independent = false)
     {
         Primary = primary;
-        Attach(new Part(primary, name, 0));
-        _ = primary.Closed.ContinueWith(_ => _closed.TrySetResult(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        Independent = independent;
+        var part = new Part(primary, name, 0);
+        Attach(part);
+        _ = independent
+            ? primary.Closed.ContinueWith(_ => EndAsync(part), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap()
+            : primary.Closed.ContinueWith(_ => _closed.TrySetResult(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+    }
+
+    /// <summary>Each adapter debugs a program of its own, and the session lasts until the last one ends (multiple startup projects).</summary>
+    public bool Independent { get; }
+
+    /// <summary>A program of an independent session started (its process id) or ended (its exit code).</summary>
+    public event EventHandler<CompoundPartEvent>? PartChanged;
+
+    /// <summary>The adapters' names, in the order they joined.</summary>
+    public IReadOnlyList<string> PartNames
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _parts.Select(p => p.Name)];
+            }
+        }
     }
 
     private sealed class Part(IDebugAdapter adapter, string name, int index)
@@ -59,8 +84,11 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         /// <summary>The thread of this adapter's last stop (its own id).</summary>
         public int StoppedThread { get; set; }
 
-        /// <summary>It couldn't join the session (its launch failed): requests and events skip it.</summary>
+        /// <summary>It couldn't join the session (its launch failed), or its program ended: requests and events skip it.</summary>
         public bool Ended { get; set; }
+
+        /// <summary>Its program's exit code (independent sessions).</summary>
+        public int? ExitCode { get; set; }
     }
 
     /// <summary>The adapter the session was launched with.</summary>
@@ -126,11 +154,18 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         }
         catch
         {
-            // The rest of the session goes on without it.
-            lock (_gate)
+            // The rest of the session goes on without it (an independent session ends if it was the last one).
+            if (Independent)
             {
-                part.Ended = true;
-                Unqueue(part);
+                await EndAsync(part).ConfigureAwait(false);
+            }
+            else
+            {
+                lock (_gate)
+                {
+                    part.Ended = true;
+                    Unqueue(part);
+                }
             }
 
             await adapter.DisposeAsync().ConfigureAwait(false);
@@ -277,6 +312,27 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             case DapEvents.Terminated:
                 await EndAsync(part).ConfigureAwait(false);
                 return;
+            case DapEvents.Process when Independent && DebugAdapter.Read(e.Body, Json.ProcessEvent) is { SystemProcessId: { } pid }:
+                PartChanged?.Invoke(this, new CompoundPartEvent(part.Name, part.Index, pid, Ended: false, ExitCode: null));
+                if (part.Index == 0)
+                {
+                    await RaiseAsync(e.Name, e.Body).ConfigureAwait(false);
+                }
+
+                return;
+            case DapEvents.Exited when Independent && DebugAdapter.Read(e.Body, Json.ExitedEvent) is { } exited:
+                part.ExitCode = exited.ExitCode;
+                if (part.Index == 0)
+                {
+                    await RaiseAsync(e.Name, e.Body).ConfigureAwait(false);
+                }
+                else
+                {
+                    var text = $"[{part.Name}] The program has exited with code {exited.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n";
+                    await RaiseAsync(DapEvents.Output, JsonSerializer.SerializeToElement(new OutputEvent(text, "console"), Json.OutputEvent)).ConfigureAwait(false);
+                }
+
+                return;
             case DapEvents.Exited or DapEvents.Process when part.Index != 0:
                 // The browser's own process: the session's debuggee is the primary's.
                 return;
@@ -332,9 +388,49 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         }
     }
 
-    /// <summary>One adapter ended: the others are disconnected (terminating their debuggees), then the session ends once.</summary>
+    /// <summary>
+    /// One adapter ended: the others are disconnected (terminating their debuggees), then the session ends once. In an
+    /// independent session the others go on, and the session ends with the last one.
+    /// </summary>
     private async Task EndAsync(Part part)
     {
+        if (Independent)
+        {
+            bool last;
+            lock (_gate)
+            {
+                if (part.Ended)
+                {
+                    return;
+                }
+
+                part.Ended = true;
+                part.Stopped = false;
+                Unqueue(part);
+                if (_shown == part)
+                {
+                    _shown = null;
+                }
+
+                last = _parts.All(p => p.Ended);
+            }
+
+            PartChanged?.Invoke(this, new CompoundPartEvent(part.Name, part.Index, null, Ended: true, part.ExitCode));
+            if (!last)
+            {
+                ShowNext();
+                return;
+            }
+
+            if (Interlocked.Exchange(ref _ending, 1) == 0)
+            {
+                await RaiseAsync(DapEvents.Terminated, default).ConfigureAwait(false);
+            }
+
+            _closed.TrySetResult();
+            return;
+        }
+
         if (part.Ended || Interlocked.Exchange(ref _ending, 1) == 1)
         {
             return;
@@ -553,12 +649,16 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             {
                 foreach (var thread in await part.Adapter.ThreadsAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    result.Add(new DapThread(Id(thread.Id, part), part.Index == 0 ? thread.Name : $"{part.Name}: {thread.Name}"));
+                    result.Add(new DapThread(Id(thread.Id, part), part.Index == 0 && !Independent ? thread.Name : $"{part.Name}: {thread.Name}"));
                 }
             }
-            catch (DapException) when (part.Index != 0)
+            catch (DapException) when (part.Index != 0 || Independent)
             {
-                // Not attached yet.
+                // Not attached yet, or its program is ending.
+            }
+            catch (DapConnectionLostException) when (Independent)
+            {
+                // Its program ended meanwhile.
             }
         }
 
@@ -659,3 +759,6 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         _raising.Dispose();
     }
 }
+
+/// <summary>A program of an independent compound session (M14c): started with <see cref="ProcessId"/>, or ended with <see cref="ExitCode"/>.</summary>
+public sealed record CompoundPartEvent(string Name, int Index, int? ProcessId, bool Ended, int? ExitCode);

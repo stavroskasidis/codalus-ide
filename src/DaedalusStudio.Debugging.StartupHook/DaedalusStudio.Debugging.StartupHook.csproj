@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Loaded into the user's program, whatever .NET it runs on (startup hooks exist since .NET Core 3.0). -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Description>Daedalus Studio: holds a program started in the terminal until the debugger has attached (M14c).</Description>
+    <IsTrimmable>false</IsTrimmable>
+  </PropertyGroup>
+</Project>

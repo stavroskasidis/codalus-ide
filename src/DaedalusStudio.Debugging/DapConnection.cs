@@ -25,7 +25,8 @@ public sealed record DapReverseRequest(string Command, JsonElement Arguments);
 /// <summary>
 /// A Debug Adapter Protocol client over a pair of streams (<c>Content-Length</c> framing, like LSP). Requests are
 /// answered in any order; events are delivered in arrival order on one background loop. Reverse requests from the
-/// adapter are refused, except those accepted with <see cref="Accept"/>. All serialization is source-generated (AOT-safe).
+/// adapter are refused, except those accepted with <see cref="Accept"/> or answered by a <see cref="Handle"/> handler. All
+/// serialization is source-generated (AOT-safe).
 /// </summary>
 public sealed class DapConnection : IAsyncDisposable
 {
@@ -35,6 +36,7 @@ public sealed class DapConnection : IAsyncDisposable
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
     private readonly Channel<object> _events = Channel.CreateUnbounded<object>(new UnboundedChannelOptions { SingleReader = true });
     private readonly HashSet<string> _accepted = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Func<JsonElement, CancellationToken, Task<JsonElement>>> _handlers = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _shutdown = new();
     private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _seq;
@@ -62,6 +64,13 @@ public sealed class DapConnection : IAsyncDisposable
     /// before <see cref="Start"/>.
     /// </summary>
     public void Accept(string command) => _accepted.Add(command);
+
+    /// <summary>
+    /// Answers the reverse request <paramref name="command"/> (<c>runInTerminal</c>, M14c) with the body
+    /// <paramref name="handler"/> returns; a handler that throws answers with an error carrying its message. The handler
+    /// runs off the read loop, so it may take its time. Call before <see cref="Start"/>.
+    /// </summary>
+    public void Handle(string command, Func<JsonElement, CancellationToken, Task<JsonElement>> handler) => _handlers[command] = handler;
 
     public void Start()
     {
@@ -183,6 +192,9 @@ public sealed class DapConnection : IAsyncDisposable
                         var name = message.TryGetProperty("event", out var e) ? e.GetString() ?? string.Empty : string.Empty;
                         _events.Writer.TryWrite(new DapEvent(name, message.TryGetProperty("body", out var body) ? body : default));
                         break;
+                    case "request" when message.TryGetProperty("command", out var handled) && handled.GetString() is { } handledName && _handlers.TryGetValue(handledName, out var handler):
+                        _ = HandleAsync(message, handler);
+                        break;
                     case "request" when message.TryGetProperty("command", out var command) && command.GetString() is { } accepted && _accepted.Contains(accepted):
                         await AnswerAsync(message, success: true).ConfigureAwait(false);
                         _events.Writer.TryWrite(new DapReverseRequest(accepted, message.TryGetProperty("arguments", out var arguments) ? arguments : default));
@@ -212,8 +224,32 @@ public sealed class DapConnection : IAsyncDisposable
         _closed.TrySetResult();
     }
 
-    /// <summary>Answers a reverse request: accepted ones with success, the rest (runInTerminal…) with an error.</summary>
-    private Task AnswerAsync(JsonElement request, bool success) => WriteAsync(writer =>
+    /// <summary>Runs a handled reverse request and answers it with the handler's body, or its failure.</summary>
+    private async Task HandleAsync(JsonElement request, Func<JsonElement, CancellationToken, Task<JsonElement>> handler)
+    {
+        try
+        {
+            JsonElement body;
+            try
+            {
+                body = await handler(request.TryGetProperty("arguments", out var arguments) ? arguments : default, _shutdown.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                await AnswerAsync(request, success: false, message: ex.Message).ConfigureAwait(false);
+                return;
+            }
+
+            await AnswerAsync(request, success: true, body: body).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException or ObjectDisposedException)
+        {
+            // The adapter is gone: nobody waits for the answer.
+        }
+    }
+
+    /// <summary>Answers a reverse request: accepted ones with success, the rest with an error.</summary>
+    private Task AnswerAsync(JsonElement request, bool success, JsonElement body = default, string? message = null) => WriteAsync(writer =>
     {
         writer.WriteNumber("seq", Interlocked.Increment(ref _seq));
         writer.WriteString("type", "response");
@@ -222,7 +258,12 @@ public sealed class DapConnection : IAsyncDisposable
         writer.WriteString("command", request.TryGetProperty("command", out var command) ? command.GetString() : string.Empty);
         if (!success)
         {
-            writer.WriteString("message", "Not supported by Daedalus Studio.");
+            writer.WriteString("message", message ?? "Not supported by Daedalus Studio.");
+        }
+        else if (body.ValueKind == JsonValueKind.Object)
+        {
+            writer.WritePropertyName("body");
+            body.WriteTo(writer);
         }
     }, _shutdown.Token);
 

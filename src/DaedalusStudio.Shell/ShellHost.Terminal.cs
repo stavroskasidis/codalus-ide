@@ -171,7 +171,7 @@ public sealed partial class ShellHost
         try
         {
             var name = Path.GetFileNameWithoutExtension(project) + (profile is null ? string.Empty : $" ({profile.Name})");
-            var session = Terminals.Run(name, plan.FileName, DaedalusStudio.Workbench.Debugging.CommandLine.Split(plan.Arguments), plan.WorkingDirectory, plan.Environment);
+            var session = Terminals.Run(name, plan.FileName, plan.SplitArguments(), plan.WorkingDirectory, plan.Environment);
             Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
             TerminalWindow.Show(session);
             if (plan.BrowserUrl is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri))

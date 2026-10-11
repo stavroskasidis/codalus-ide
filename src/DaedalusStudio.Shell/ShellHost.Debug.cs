@@ -83,7 +83,9 @@ public sealed partial class ShellHost
             code is { } c ? $"The program exited with code {c.ToString(CultureInfo.InvariantCulture)}." : "Debugging stopped.", TimeSpan.FromSeconds(6)));
         Debugger.Breakpoints.Changed += (_, _) => Ui.Post(() => Workbench.Context.Set("hasBreakpoints", Debugger.Breakpoints.All.Count + Debugger.Breakpoints.Functions.Count > 0));
         Watch.Changed += (_, _) => SaveEditorSession();
+        Debugger.ProcessesChanged += (_, _) => Ui.Post(() => Workbench.Context.Set("debugCanDetach", Debugger.CanDetach));
         InitializeDebugDepth();
+        InitializeDebugSessions();
         OnDebugStateChanged();
     }
 
@@ -102,11 +104,22 @@ public sealed partial class ShellHost
     {
         DebugLog.Append(output.Text);
         OnServerOutput(output);
-        if (_pendingBrowserUrl is { } url && output.Category == "stdout"
+        if (output.Category == "stdout"
             && (output.Text.Contains("Now listening on:", StringComparison.Ordinal) || output.Text.Contains("Application started.", StringComparison.Ordinal)))
         {
-            _pendingBrowserUrl = null;
-            if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            // One page per server that starts listening (several with multiple startup projects, M14c).
+            var url = Interlocked.Exchange(ref _pendingBrowserUrl, null);
+            if (url is null)
+            {
+                Ui.Post(() =>
+                {
+                    if (_pendingBrowserUrls.TryDequeue(out var next) && Uri.TryCreate(next, UriKind.Absolute, out var nextUri))
+                    {
+                        ShellIntegration.OpenUrl(nextUri);
+                    }
+                });
+            }
+            else if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
                 ShellIntegration.OpenUrl(uri);
             }
@@ -132,6 +145,12 @@ public sealed partial class ShellHost
         if (argument is null && await StartFolderLaunchAsync(debug: true).ConfigureAwait(true))
         {
             return; // a folder's launch configuration (ADR 0033)
+        }
+
+        if (argument is null && Runs.MultipleStartup)
+        {
+            await StartStartupProjectsAsync(debug: true).ConfigureAwait(true);
+            return;
         }
 
         var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
@@ -165,14 +184,14 @@ public sealed partial class ShellHost
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
             var profile = Runs.ResolveProfile(project, profiles);
-            var plan = Runs.Adjust(LaunchPlanner.Plan(info, profile), info);
+            var plan = await Runs.PlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
             DebugLog.Clear();
             if (error is not null)
             {
                 DebugLog.AppendLine("Ignoring the launch settings: " + error);
             }
 
-            if (LaunchPlanner.BrowserDebugTarget(info, profile) is { } target)
+            if (plan.Wsl is null && LaunchPlanner.BrowserDebugTarget(info, profile) is { } target)
             {
                 // A Blazor WebAssembly app runs in the browser: debug it there (ADR 0026).
                 Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
@@ -189,17 +208,26 @@ public sealed partial class ShellHost
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
-            if (LaunchPlanner.PageDebugTarget(profile, Workbench.Settings.GetBoolean(JavaScriptDebugSetting, true)) is { } page)
+            if (plan.Wsl is null && LaunchPlanner.PageDebugTarget(profile, Workbench.Settings.GetBoolean(JavaScriptDebugSetting, true)) is { } page)
             {
                 // The server and its page in one session (ADR 0027).
                 await StartCompoundDebuggingAsync(project, plan, page).ConfigureAwait(true);
                 return;
             }
 
+            var name = Path.GetFileNameWithoutExtension(project);
+            var launch = plan.Wsl is not null
+                ? await WslLaunchAsync(name, plan).ConfigureAwait(true)
+                : new DebugLaunch(name, plan) { Console = profile?.CommandName == LaunchProfile.RoslynComponent ? DebugConsoleKind.Internal : ConsoleFor(info) };
+            if (launch is null)
+            {
+                return;
+            }
+
             _pendingBrowserUrl = plan.BrowserUrl;
-            await Debugger.LaunchAsync(plan, CancellationToken.None).ConfigureAwait(true);
+            await Debugger.LaunchAsync([launch], CancellationToken.None).ConfigureAwait(true);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException)
+        catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException or IOException)
         {
             Workbench.Notifications.Error($"Could not start debugging {Path.GetFileNameWithoutExtension(project)}: {ex.Message}");
         }
@@ -390,10 +418,12 @@ public sealed partial class ShellHost
             _ = Plugins.ActivateByEventAsync("onDebug", CancellationToken.None);
         }
 
+        Workbench.Context.Set("debugCanDetach", Debugger.CanDetach);
         if (state == DebugState.Idle)
         {
             Workbench.StatusBar.Remove(DebugStatusItem);
             _pendingBrowserUrl = null;
+            _pendingBrowserUrls.Clear();
             return;
         }
 

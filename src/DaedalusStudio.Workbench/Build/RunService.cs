@@ -167,9 +167,15 @@ public sealed class RunService : IDisposable
         _solutions.Projects.TryGetValue(projectPath, out var project) && project.OutputType is { } type
         && (type.Equals("Exe", StringComparison.OrdinalIgnoreCase) || type.Equals("WinExe", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Sets the single startup project (Set as Startup Project): multiple startup projects are turned off.</summary>
     public void SetStartupProject(string? projectPath)
     {
-        _startupProject = projectPath;
+        lock (_gate)
+        {
+            _startupProject = projectPath;
+            _multiple = false;
+        }
+
         StartupChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -200,7 +206,7 @@ public sealed class RunService : IDisposable
     }
 
     /// <summary>Restores the solution's saved choices (or clears them when a solution closes).</summary>
-    public void Load(string? startupProject, IReadOnlyDictionary<string, string>? profiles)
+    public void Load(string? startupProject, IReadOnlyDictionary<string, string>? profiles, bool multiple = false, IReadOnlyList<StartupEntry>? entries = null)
     {
         lock (_gate)
         {
@@ -209,6 +215,75 @@ public sealed class RunService : IDisposable
             foreach (var (project, profile) in profiles ?? new Dictionary<string, string>())
             {
                 _profiles[project] = profile;
+            }
+
+            _multiple = multiple;
+            _entries = [.. entries ?? []];
+        }
+
+        StartupChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // ------------------------------------------------------------------ multiple startup projects (M14c)
+
+    private bool _multiple;
+    private List<StartupEntry> _entries = [];
+
+    /// <summary>Whether Start and Run start several projects (the Startup Projects dialog's "Multiple startup projects").</summary>
+    public bool MultipleStartup
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _multiple;
+            }
+        }
+    }
+
+    /// <summary>Every project's action in the multiple-startup setting, in start order (projects without one are None).</summary>
+    public IReadOnlyList<StartupEntry> StartupEntries
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _entries];
+            }
+        }
+    }
+
+    /// <summary>
+    /// The projects a start starts, in order: with multiple startup projects, those whose action isn't None and that
+    /// are still in the solution; otherwise the startup project, started.
+    /// </summary>
+    public IReadOnlyList<StartupEntry> StartupTargets
+    {
+        get
+        {
+            var projects = _solutions.Solution?.Projects ?? [];
+            lock (_gate)
+            {
+                if (_multiple)
+                {
+                    return [.. _entries.Where(e => e.Action != StartupAction.None && projects.Any(p => SolutionService.PathComparer.Equals(p.Path, e.Project)))];
+                }
+            }
+
+            return StartupProject is { } single ? [new StartupEntry(single, StartupAction.Start)] : [];
+        }
+    }
+
+    /// <summary>Sets single or multiple startup projects (the Startup Projects dialog's Apply).</summary>
+    public void SetStartupProjects(bool multiple, IReadOnlyList<StartupEntry> entries, string? single = null)
+    {
+        lock (_gate)
+        {
+            _multiple = multiple;
+            _entries = [.. entries];
+            if (!multiple && single is not null)
+            {
+                _startupProject = single;
             }
         }
 
@@ -249,7 +324,7 @@ public sealed class RunService : IDisposable
             ["ASPNETCORE_ENVIRONMENT"] = environment,
             ["DOTNET_ENVIRONMENT"] = environment,
         };
-        return plan with { Environment = variables };
+        return WslLaunch.Apply(plan with { Environment = variables });
     }
 
     /// <summary>The profile a run of <paramref name="projectPath"/> uses: the chosen one, else the first runnable one.</summary>
@@ -264,7 +339,19 @@ public sealed class RunService : IDisposable
     {
         var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken).ConfigureAwait(false);
         var profile = ResolveProfile(projectPath, profiles);
-        return (Adjust(LaunchPlanner.Plan(info, profile), info), profile, error);
+        return (await PlanAsync(info, profile, cancellationToken).ConfigureAwait(false), profile, error);
+    }
+
+    /// <summary>
+    /// The plan of a project's run with <paramref name="profile"/>, the environment override applied. A
+    /// <c>DebugRoslynComponent</c> profile runs the compiler on its target project (M14c, <see cref="RoslynComponents"/>).
+    /// </summary>
+    public async Task<LaunchPlan> PlanAsync(RunInfo info, LaunchProfile? profile, CancellationToken cancellationToken)
+    {
+        var plan = profile is { CommandName: LaunchProfile.RoslynComponent }
+            ? await RoslynComponents.PlanAsync(_solutions, info, profile, cancellationToken).ConfigureAwait(false)
+            : LaunchPlanner.Plan(info, profile);
+        return Adjust(plan);
     }
 
     /// <summary>The folder of the <c>dotnet</c> the solution builds with (null: the one on PATH), for Hot Reload.</summary>
@@ -291,7 +378,7 @@ public sealed class RunService : IDisposable
             ["DOTNET_WATCH_RESTART_ON_RUDE_EDIT"] = "true",
             ["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "1",
         };
-        return plan with { FileName = dotnet, Arguments = arguments.TrimEnd(), Environment = environment };
+        return plan with { FileName = dotnet, Arguments = arguments.TrimEnd(), ArgumentList = null, Wsl = null, Environment = environment };
     }
 
     /// <summary>
@@ -311,7 +398,7 @@ public sealed class RunService : IDisposable
         }
 
         var profile = ResolveProfile(projectPath, profiles);
-        var plan = Adjust(LaunchPlanner.Plan(info, profile), info);
+        var plan = await PlanAsync(info, profile, cancellationToken).ConfigureAwait(false);
         if (!openBrowser)
         {
             plan = plan with { BrowserUrl = null };
@@ -449,8 +536,9 @@ public sealed class RunService : IDisposable
         }
         else
         {
-            start = new ProcessStartInfo(plan.FileName, plan.Arguments)
+            start = new ProcessStartInfo(plan.FileName, plan.ArgumentList ?? [])
             {
+                Arguments = plan.ArgumentList is null ? plan.Arguments : string.Empty,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardInput = true,
@@ -481,3 +569,18 @@ public sealed class RunService : IDisposable
 
     public void Dispose() => StopAll();
 }
+
+/// <summary>What a start does with a project of multiple startup projects (M14c).</summary>
+public enum StartupAction
+{
+    None,
+
+    /// <summary>Start Debugging debugs it; Start Without Debugging runs it.</summary>
+    Start,
+
+    /// <summary>It runs without the debugger either way.</summary>
+    StartWithoutDebugging,
+}
+
+/// <summary>A project's action in the multiple-startup setting.</summary>
+public sealed record StartupEntry(string Project, StartupAction Action);

@@ -174,6 +174,12 @@ public sealed partial class ShellHost
             return; // a folder's launch configuration (ADR 0033)
         }
 
+        if (argument is null && !hotReload && Runs.MultipleStartup)
+        {
+            await StartStartupProjectsAsync(debug: false).ConfigureAwait(true);
+            return;
+        }
+
         var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
         if (project is null)
         {

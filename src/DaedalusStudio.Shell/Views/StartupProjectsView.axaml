@@ -1,0 +1,53 @@
+<local:LoadingView xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+                   xmlns:local="using:DaedalusStudio.Shell.Views"
+                   xmlns:protocol="using:DaedalusStudio.Projects.Protocol"
+                   x:Class="DaedalusStudio.Shell.Views.StartupProjectsView"
+                   x:DataType="vm:StartupProjectsViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
+      <TextBlock Classes="heading" Text="Startup Projects" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="What Start Debugging (F5) and Start Without Debugging (Ctrl+F5) launch. Several projects start in the order below; those that start under the debugger share one debug session." />
+      <RadioButton GroupName="startup" Content="Single startup project" IsChecked="{Binding IsSingle}" AutomationProperties.Name="Single startup project" />
+      <ComboBox Margin="24,0,0,0" MinWidth="260" HorizontalAlignment="Left" ItemsSource="{Binding Projects}" SelectedItem="{Binding SingleProject}" IsEnabled="{Binding IsSingle}" AutomationProperties.Name="Startup project">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="protocol:SolutionProjectInfo">
+            <TextBlock Text="{Binding Name}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <RadioButton GroupName="startup" Content="Multiple startup projects" IsChecked="{Binding IsMultiple}" AutomationProperties.Name="Multiple startup projects" />
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+      <Button Content="Apply" Classes="accent" Command="{Binding ApplyCommand}" AutomationProperties.Name="Apply startup projects" />
+      <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" />
+    </StackPanel>
+    <Grid ColumnDefinitions="*,Auto" IsEnabled="{Binding IsMultiple}">
+      <Grid RowDefinitions="Auto,*">
+        <Grid ColumnDefinitions="*,190,200" Margin="8,2">
+          <TextBlock Classes="muted" Text="Project" />
+          <TextBlock Grid.Column="1" Classes="muted" Text="Action" />
+          <TextBlock Grid.Column="2" Classes="muted" Text="Launch profile" />
+        </Grid>
+        <ListBox Grid.Row="1" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Startup project actions">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:StartupProjectRowViewModel">
+              <Grid ColumnDefinitions="*,190,200">
+                <TextBlock VerticalAlignment="Center" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <ComboBox Grid.Column="1" Margin="0,0,8,0" ItemsSource="{x:Static vm:StartupProjectRowViewModel.Actions}" SelectedIndex="{Binding ActionIndex}"
+                          AutomationProperties.Name="{Binding Name, StringFormat='{}{0} action'}" />
+                <ComboBox Grid.Column="2" ItemsSource="{Binding Profiles}" SelectedItem="{Binding Profile}" IsVisible="{Binding HasProfiles}"
+                          AutomationProperties.Name="{Binding Name, StringFormat='{}{0} launch profile'}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+      <StackPanel Grid.Column="1" Spacing="4" Margin="8,24,0,0">
+        <Button Content="Move Up" Command="{Binding MoveUpCommand}" MinWidth="84" AutomationProperties.Name="Move up" />
+        <Button Content="Move Down" Command="{Binding MoveDownCommand}" MinWidth="84" AutomationProperties.Name="Move down" />
+      </StackPanel>
+    </Grid>
+  </DockPanel>
+</local:LoadingView>

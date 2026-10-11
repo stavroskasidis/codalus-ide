@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Debuggee/Debuggee.csproj" />
+  <Project Path="Partner/Partner.csproj" />
+  <Project Path="Generator/Generator.csproj" />
+  <Project Path="GeneratorTarget/GeneratorTarget.csproj" />
+</Solution>

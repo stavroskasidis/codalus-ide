@@ -42,3 +42,8 @@ public sealed partial class SdkView : LoadingView
 {
     public SdkView() => InitializeComponent();
 }
+
+public sealed partial class StartupProjectsView : LoadingView
+{
+    public StartupProjectsView() => InitializeComponent();
+}
