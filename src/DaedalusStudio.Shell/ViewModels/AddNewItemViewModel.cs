@@ -259,9 +259,21 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
         var selected = _selected?.Template.Id;
         var search = _search.Trim();
         var visible = _all.Where(t => _showAll || ItemTemplates.AppliesTo(t, _kind)).ToList();
-        foreach (var category in visible.Select(t => t.Category).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).Where(c => !Categories.Contains(c)))
+        var categories = visible.Select(t => t.Category).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        foreach (var stale in Categories.Skip(1).Where(c => !categories.Contains(c)).ToList())
+        {
+            Categories.Remove(stale);
+        }
+
+        foreach (var category in categories.Where(c => !Categories.Contains(c)))
         {
             Categories.Add(category);
+        }
+
+        if (!Categories.Contains(_category))
+        {
+            _category = AllCategories;
+            OnPropertyChanged(nameof(SelectedCategory));
         }
 
         Templates.Clear();
@@ -312,7 +324,7 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
         try
         {
             var fileName = template.FileName(_name.Trim());
-            var stem = Path.GetFileNameWithoutExtension(fileName);
+            var stem = Path.GetFileNameWithoutExtension(fileName) is { Length: > 0 } baseName ? baseName : fileName.TrimStart('.'); // .editorconfig
             string? created;
             if (template.Content is { } content)
             {

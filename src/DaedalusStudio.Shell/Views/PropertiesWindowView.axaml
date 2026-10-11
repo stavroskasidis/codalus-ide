@@ -61,7 +61,7 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PropertyRowViewModel">
                       <Border Classes="row">
-                        <Grid ColumnDefinitions="150,*">
+                        <Grid ColumnDefinitions="0.45*,0.55*">
                           <TextBlock VerticalAlignment="Center" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
                           <TextBox Grid.Column="1" Classes="cell" IsVisible="{Binding IsText}" Text="{Binding Text, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="{Binding Name}" />
                           <ComboBox Grid.Column="1" Classes="cell" HorizontalAlignment="Stretch" IsVisible="{Binding IsChoice}" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}" AutomationProperties.Name="{Binding Name}">
