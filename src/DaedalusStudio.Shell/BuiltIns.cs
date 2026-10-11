@@ -2,6 +2,7 @@ using System.Text.Json;
 using DaedalusStudio.Platform;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.Theming;
+using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Context;
 using DaedalusStudio.Workbench.Keybindings;
@@ -218,7 +219,7 @@ internal static partial class BuiltIns
         ["solutionExplorer", "git.changes", "testExplorer", "bookmarks", "codeDefinition", "errorList", "output", "taskList", "terminal", "notifications", "properties"];
 
     /// <summary>Tool windows whose menu entry is contributed explicitly (with a command that does more than show them).</summary>
-    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire" };
+    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId };
 
     /// <summary>Where a tool window's <c>workbench.view.*</c> entry goes, or null when it has an explicit one.</summary>
     public static MenuItemRule? ViewMenuEntry(string windowId, string title, string command, ContributionSource source)
@@ -321,6 +322,7 @@ internal static partial class BuiltIns
             .. KeybindingService.ParseRules(InteractiveKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(WebKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(DataKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+        .. KeybindingService.ParseRules(ProfilingKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         ];
 
     private static CommandHandler Ui(Action action) => async (_, _) =>

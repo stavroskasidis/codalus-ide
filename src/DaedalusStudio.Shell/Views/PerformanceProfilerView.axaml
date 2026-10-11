@@ -1,0 +1,67 @@
+<local:LoadingView xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+                   xmlns:local="using:DaedalusStudio.Shell.Views"
+                   x:Class="DaedalusStudio.Shell.Views.PerformanceProfilerView"
+                   x:DataType="vm:PerformanceProfilerViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="16,12" Spacing="8" MaxWidth="900" HorizontalAlignment="Left">
+      <TextBlock Classes="heading" Text="Performance Profiler" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="Choose the tools and what to profile, then Start. Stop Collection (or the program ending) saves the session in the solution's .daedalus/profiler folder and opens its report." />
+
+      <TextBlock FontWeight="SemiBold" Text="Tools" Margin="0,6,0,0" />
+      <CheckBox x:Name="CpuBox" IsChecked="{Binding UseCpu}" AutomationProperties.Name="CPU Usage">
+        <TextBlock TextWrapping="Wrap" Text="CPU Usage: where the time goes, as a call tree, hot paths, functions and a flame graph (EventPipe's sampling profiler)" />
+      </CheckBox>
+      <CheckBox IsChecked="{Binding UseCounters}" AutomationProperties.Name=".NET Counters">
+        <TextBlock TextWrapping="Wrap" Text=".NET Counters: CPU, memory, garbage collections and exceptions over time (the runtime's counters)" />
+      </CheckBox>
+
+      <TextBlock FontWeight="SemiBold" Text="Target" Margin="0,6,0,0" />
+      <ComboBox SelectedIndex="{Binding TargetIndex}" MinWidth="380" AutomationProperties.Name="What to profile">
+        <ComboBoxItem Content="{Binding StartupProject}" />
+        <ComboBoxItem Content="A running .NET process" />
+      </ComboBox>
+      <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !IsProcessTarget}" Text="The startup project is built and started with its launch profile; it waits before its first line until the tools are attached, so its startup is profiled too." />
+      <StackPanel Spacing="6" IsVisible="{Binding IsProcessTarget}">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Text="{Binding ProcessFilter}" PlaceholderText="Filter by process id or name" AutomationProperties.Name="Filter processes by id or name" />
+          <Button Grid.Column="1" Margin="6,0,0,0" Content="Refresh" Command="{Binding RefreshCommand}" />
+        </Grid>
+        <ListBox ItemsSource="{Binding Processes}" SelectedItem="{Binding SelectedProcess}" Height="180" AutomationProperties.Name=".NET processes">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProcessRowViewModel">
+              <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
+                <TextBlock Text="{Binding Text}" />
+                <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNotNull}}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
+        <Button x:Name="StartButton" Content="Start" Command="{Binding StartCommand}" />
+        <Button Content="Stop Collection" Command="{Binding StopCommand}" />
+        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Elapsed}" IsVisible="{Binding IsCollecting}" AutomationProperties.Name="Time collecting" />
+      </StackPanel>
+      <TextBlock TextWrapping="Wrap" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
+
+      <TextBlock FontWeight="SemiBold" Text="Sessions" Margin="0,10,0,0" />
+      <ListBox x:Name="SessionList" ItemsSource="{Binding Sessions}" SelectedItem="{Binding SelectedSession}" MaxHeight="300" AutomationProperties.Name="Saved profiling sessions">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ProfilerSessionRowViewModel">
+            <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+              <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="Open Report" Command="{Binding OpenSessionCommand}" />
+        <Button Content="Delete" Command="{Binding DeleteSessionCommand}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</local:LoadingView>

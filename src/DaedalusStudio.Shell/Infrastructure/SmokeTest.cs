@@ -1040,6 +1040,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(File.Exists(Path.Combine(output, OperatingSystem.IsWindows() ? "Web.exe" : "Web")), "the single-file app is published: " + page.Status + "\n" + Tail(shell.Builds.Channel.GetText(), 2000));
         }).ConfigureAwait(true);
 
+        // M18a: profiling (ADR 0044 and 0045), in the diagnostics host.
+        await StepAsync("profiler.cpu", "M18", "The Performance Profiler launches the startup project with CPU Usage and .NET Counters; the report shows the hot function, the flame graph and hot lines (the diagnostics host)", ProfilerStepAsync).ConfigureAwait(true);
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -1566,6 +1569,53 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             shell.StopRunning();
             await WaitAsync(() => !shell.AspireWindow.IsRunning && shell.Runs.Running.Count == 0, "stopping the AppHost ends its projects", 60).ConfigureAwait(true);
         }
+    }
+
+    private async Task ProfilerStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "Diagnostics");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "Diagnostics"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "Diagnostics.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true }, "the Diagnostics solution is open", 300).ConfigureAwait(true);
+        shell.SetStartupProject(Path.Combine(target, "CpuBound", "CpuBound.csproj"));
+        var hub = shell.OpenProfiler();
+        var run = await hub.StartAsync().ConfigureAwait(true);
+        Check(run is not null, "profiling starts: " + hub.Status);
+        await WaitAsync(() => !hub.IsCollecting, "CpuBound runs its 3 seconds and the collection stops", 300).ConfigureAwait(true);
+
+        ProfilingReportViewModel? Report() => shell.Layout.Documents.OfType<SolutionManagementDocument>().Select(d => d.ViewModel).OfType<ProfilingReportViewModel>().FirstOrDefault();
+        await WaitAsync(() => Report() is { IsLoading: false, Total: > 0 } r && (r.HotFiles.Count > 0 || r.HasError), "the report shows the trace with its source lines", 300).ConfigureAwait(true);
+        var report = Report()!;
+        Check(!report.HasError, "the trace was read: " + report.Error);
+        Check(report.Functions.Count > 0 && report.Functions[0].Name.Contains("Primes.IsPrime", StringComparison.Ordinal), "the hot function comes first: " + report.Functions.FirstOrDefault()?.Name);
+        Check(report.CounterSummaries.Count > 0, "the counters were recorded");
+        Console.Out.WriteLine($"  {report.Summary}");
+
+        // The flame graph: drawn in the window; zoom steps timed (the budget is 50 ms a frame).
+        report.SelectedTab = 3;
+        await RenderedAsync().ConfigureAwait(true);
+        var graph = window.GetVisualDescendants().OfType<Controls.FlameGraph>().FirstOrDefault();
+        Check(graph is { Frames.Count: > 0 }, "the flame graph has frames");
+        var clock = Stopwatch.StartNew();
+        for (var i = 0; i < 10; i++)
+        {
+            graph!.Zoom(1.15, 0.3);
+            await RenderedAsync().ConfigureAwait(true);
+        }
+
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  flame graph: {graph!.Frames!.Count} frames, {clock.Elapsed.TotalMilliseconds / 10:0.0} ms per zoom step (two rendered frames each)"));
+        graph.ResetView();
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-profiler.png");
+
+        // Hot lines in the editor's gutter.
+        var editor = await OpenAsync(Path.Combine(target, "CpuBound", "Program.cs")).ConfigureAwait(true);
+        await WaitAsync(() => editor.HotLineMargin.Lines.Count > 0, "Program.cs shows its hot lines in the gutter", 60).ConfigureAwait(true);
     }
 
     private async Task DataExplorerStepAsync()

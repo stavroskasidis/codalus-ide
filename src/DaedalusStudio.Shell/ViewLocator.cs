@@ -73,6 +73,8 @@ public sealed class ViewLocator : IDataTemplate
         BinaryLogViewModel vm => new BinaryLogView { DataContext = vm },
         ScaffoldViewModel vm => new ScaffoldView { DataContext = vm },
         ServiceReferencesViewModel vm => new ServiceReferencesView { DataContext = vm },
+        PerformanceProfilerViewModel vm => new PerformanceProfilerView { DataContext = vm },
+        ProfilingReportViewModel vm => new ProfilingReportView { DataContext = vm },
         _ => new TextBlock { Text = "This view is not available.", Margin = new Thickness(12) },
     };
 
@@ -103,6 +105,8 @@ public sealed class ViewLocator : IDataTemplate
         TaskRunnerViewModel vm => new TaskRunnerView { DataContext = vm },
         ContainersViewModel vm => new ContainersView { DataContext = vm },
         AspireViewModel vm => new AspireView { DataContext = vm },
+        DiagnosticToolsViewModel vm => new DiagnosticToolsView { DataContext = vm },
+        CountersViewModel vm => new CountersView { DataContext = vm },
         HttpResponseViewModel vm => new HttpResponseView { DataContext = vm },
         ThreadsViewModel vm => new ThreadsView { DataContext = vm },
         ModulesViewModel vm => new ModulesView { DataContext = vm },

@@ -1,0 +1,177 @@
+<local:LoadingView xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+                   xmlns:local="using:DaedalusStudio.Shell.Views"
+                   xmlns:controls="using:DaedalusStudio.Shell.Controls"
+                   x:Class="DaedalusStudio.Shell.Views.ProfilingReportView"
+                   x:DataType="vm:ProfilingReportViewModel">
+  <local:LoadingView.Styles>
+    <Style Selector="TreeViewItem" x:DataType="vm:CpuTreeNodeViewModel">
+      <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+      <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+      <Setter Property="MinHeight" Value="20" />
+    </Style>
+  </local:LoadingView.Styles>
+  <DockPanel Margin="12,10">
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+      <TextBlock Classes="heading" Text="{Binding Title}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Summary}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <StackPanel IsVisible="{Binding HasCpu}" Spacing="4">
+        <controls:SampleTimeline x:Name="Timeline" Samples="{Binding Timeline}" Height="56"
+                                 SelectionStart="{Binding SelectionStart, Mode=TwoWay}" SelectionEnd="{Binding SelectionEnd, Mode=TwoWay}"
+                                 BarBrush="{DynamicResource Shell.Accent}" SelectionBrush="{DynamicResource Shell.Focus}"
+                                 AutomationProperties.Name="CPU samples over time: drag to select a time range, Escape clears it" />
+        <WrapPanel Orientation="Horizontal">
+          <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" Text="{Binding RangeText}" />
+          <Button Content="Clear Range" Command="{Binding ClearRangeCommand}" IsVisible="{Binding HasRange}" Margin="0,0,12,0" />
+          <ComboBox ItemsSource="{Binding Threads}" SelectedItem="{Binding SelectedThread}" MinWidth="220" Margin="0,0,12,0" AutomationProperties.Name="Thread">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ThreadChoice">
+                <TextBlock Text="{Binding Text}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <CheckBox Content="Include native code and waiting" IsChecked="{Binding IncludeExternal}" Margin="0,0,12,0" ToolTip.Tip="EventPipe samples every managed thread; samples outside managed code (native code, waits) are left out unless this is on." />
+          <CheckBox Content="Show hot lines in the editor" IsChecked="{Binding ShowHotLines}" />
+        </WrapPanel>
+        <TextBlock Classes="muted" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
+      </StackPanel>
+    </StackPanel>
+    <TabControl x:Name="Tabs" SelectedIndex="{Binding SelectedTab}" Padding="0,6,0,0">
+      <TabItem Header="Call Tree" IsVisible="{Binding HasCpu}">
+        <TreeView x:Name="CallTreeView" ItemsSource="{Binding CallTree}" AutomationProperties.Name="Call tree, top down">
+          <TreeView.ItemTemplate>
+            <TreeDataTemplate x:DataType="vm:CpuTreeNodeViewModel" ItemsSource="{Binding Children}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding Inclusive}" Width="56" TextAlignment="Right" ToolTip.Tip="Total: samples with this call on the stack" />
+                <TextBlock Text="{Binding Exclusive}" Width="56" TextAlignment="Right" Classes="muted" ToolTip.Tip="Self: samples running in it" />
+                <TextBlock Text="{Binding Name}" MaxWidth="900" TextTrimming="CharacterEllipsis" Classes.muted="{Binding IsPlaceholder}" />
+                <TextBlock Text="{Binding Module}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+              </StackPanel>
+            </TreeDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+      </TabItem>
+      <TabItem Header="Bottom-Up" IsVisible="{Binding HasCpu}">
+        <TreeView x:Name="BottomUpView" ItemsSource="{Binding BottomUp}" AutomationProperties.Name="Hot functions and their callers, bottom up">
+          <TreeView.ItemTemplate>
+            <TreeDataTemplate x:DataType="vm:CpuTreeNodeViewModel" ItemsSource="{Binding Children}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding Inclusive}" Width="56" TextAlignment="Right" ToolTip.Tip="Samples running in the hot function, through this path" />
+                <TextBlock Text="{Binding Name}" MaxWidth="900" TextTrimming="CharacterEllipsis" Classes.muted="{Binding IsPlaceholder}" />
+                <TextBlock Text="{Binding Module}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+              </StackPanel>
+            </TreeDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+      </TabItem>
+      <TabItem Header="Functions" IsVisible="{Binding HasCpu}">
+        <Grid ColumnDefinitions="3*,4,2*">
+          <DockPanel>
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+              <TextBox Text="{Binding Search}" PlaceholderText="Search functions" AutomationProperties.Name="Search functions" />
+              <Button Grid.Column="1" Margin="6,0,0,0" Content="Search" Command="{Binding SearchCommand}" IsDefault="True" />
+            </Grid>
+            <ListBox x:Name="FunctionList" ItemsSource="{Binding Functions}" SelectedItem="{Binding SelectedFunction}" AutomationProperties.Name="Functions, by self time">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:CpuFunctionRowViewModel">
+                  <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                    <TextBlock Text="{Binding Exclusive}" Width="56" TextAlignment="Right" ToolTip.Tip="Self" />
+                    <TextBlock Text="{Binding Inclusive}" Width="56" TextAlignment="Right" Classes="muted" ToolTip.Tip="Total" />
+                    <TextBlock Text="{Binding Name}" MaxWidth="700" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Location}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+          <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+          <DockPanel Grid.Column="2" Margin="6,0,0,0">
+            <StackPanel DockPanel.Dock="Top" Spacing="4" IsVisible="{Binding HasCurrentFunction}">
+              <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="{Binding CurrentFunction.Name, FallbackValue=''}" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="muted" Text="{Binding CurrentFunction.Inclusive, StringFormat='Total {0}', FallbackValue=''}" />
+                <TextBlock Classes="muted" Text="{Binding CurrentFunction.Exclusive, StringFormat='Self {0}', FallbackValue=''}" />
+                <Button Content="Go to Source" Command="{Binding GoToSourceCommand}" Padding="8,2" />
+              </StackPanel>
+            </StackPanel>
+            <Grid RowDefinitions="Auto,*,Auto,*" Margin="0,6,0,0">
+              <TextBlock FontWeight="SemiBold" Text="Called by" />
+              <ListBox x:Name="CallerList" Grid.Row="1" ItemsSource="{Binding Callers}" AutomationProperties.Name="Callers">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:CpuFunctionRowViewModel">
+                    <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                      <TextBlock Text="{Binding Inclusive}" Width="56" TextAlignment="Right" />
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+              <TextBlock Grid.Row="2" FontWeight="SemiBold" Text="Calls" Margin="0,6,0,0" />
+              <ListBox x:Name="CalleeList" Grid.Row="3" ItemsSource="{Binding Callees}" AutomationProperties.Name="Callees">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:CpuFunctionRowViewModel">
+                    <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                      <TextBlock Text="{Binding Inclusive}" Width="56" TextAlignment="Right" />
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Grid>
+          </DockPanel>
+        </Grid>
+      </TabItem>
+      <TabItem Header="Flame Graph" IsVisible="{Binding HasCpu}">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Button Content="Back" Command="{Binding ZoomOutCommand}" ToolTip.Tip="The previous zoom (Backspace)" />
+              <Button Content="All Samples" Command="{Binding ResetZoomCommand}" />
+              <TextBlock VerticalAlignment="Center" Text="{Binding FlamePath}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding SelectedFlameText}" AutomationProperties.LiveSetting="Polite" />
+          </StackPanel>
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <controls:FlameGraph x:Name="Flame" Frames="{Binding FlameFrames}" Total="{Binding FlameTotal}"
+                                 SelectedFrame="{Binding SelectedFlameFrame, Mode=TwoWay}" HighlightBrush="{DynamicResource Shell.Focus}" VerticalAlignment="Top"
+                                 AutomationProperties.Name="Flame graph: arrow keys move between frames, Enter shows a frame's calls, Backspace goes back, plus and minus zoom" />
+          </ScrollViewer>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="Hot Files" IsVisible="{Binding HasCpu}">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,6" Text="Source files with samples, from the symbols next to the program. Open one to see its hot lines in the gutter." />
+          <ListBox x:Name="HotFileList" ItemsSource="{Binding HotFiles}" AutomationProperties.Name="Hot files">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:HotFileRow">
+                <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                  <TextBlock Text="{Binding Share}" Width="56" TextAlignment="Right" />
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Path}" Classes="muted" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="Counters" IsVisible="{Binding HasCounters}">
+        <ListBox ItemsSource="{Binding CounterSummaries}" AutomationProperties.Name="Counters: average, minimum, maximum and last">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:CounterSummaryRow">
+              <Grid ColumnDefinitions="260,90,90,90,90,*" AutomationProperties.Name="{Binding AccessibleName}">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Provider}" />
+                <TextBlock Grid.Column="1" Text="{Binding Average, StringFormat='avg {0}'}" />
+                <TextBlock Grid.Column="2" Text="{Binding Minimum, StringFormat='min {0}'}" Classes="muted" />
+                <TextBlock Grid.Column="3" Text="{Binding Maximum, StringFormat='max {0}'}" Classes="muted" />
+                <TextBlock Grid.Column="4" Text="{Binding Last, StringFormat='last {0}'}" Classes="muted" />
+                <TextBlock Grid.Column="5" Text="{Binding Unit}" Classes="muted" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</local:LoadingView>
