@@ -426,7 +426,7 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
                     {
                         process.Kill(entireProcessTree: true);
                     }
-                    catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                    catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException)
                     {
                         log($"Could not stop test process {process.Id}: {ex.Message}");
                     }
