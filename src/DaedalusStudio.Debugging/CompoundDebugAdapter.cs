@@ -154,11 +154,18 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         }
         catch
         {
-            // The rest of the session goes on without it.
-            lock (_gate)
+            // The rest of the session goes on without it (an independent session ends if it was the last one).
+            if (Independent)
             {
-                part.Ended = true;
-                Unqueue(part);
+                await EndAsync(part).ConfigureAwait(false);
+            }
+            else
+            {
+                lock (_gate)
+                {
+                    part.Ended = true;
+                    Unqueue(part);
+                }
             }
 
             await adapter.DisposeAsync().ConfigureAwait(false);
