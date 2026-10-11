@@ -233,15 +233,23 @@ internal sealed class Dumps : IDisposable
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var started = DateTime.Now.AddSeconds(-1);
-        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        limit.CancelAfter(timeout);
+        // The synchronous WriteDump (the call proven on every OS), on its own thread so the wait can be bounded: a
+        // createdump that stalls (seen on macOS) is ended after the timeout, which frees the thread.
+        var write = Task.Factory.StartNew(
+            () => new DiagnosticsClient(processId).WriteDump(type, path, logDumpGeneration: false),
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         try
         {
-            await new DiagnosticsClient(processId).WriteDumpAsync(type, path, logDumpGeneration: false, limit.Token).ConfigureAwait(false);
+            await write.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
         {
             EndCreatedump(started);
+            if (ex is OperationCanceledException)
+            {
+                throw;
+            }
+
             throw new TimeoutException($"The dump wasn't written within {timeout.TotalSeconds:0} s. On macOS, continue or detach a paused program before writing its dump.");
         }
 
