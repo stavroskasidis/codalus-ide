@@ -230,7 +230,22 @@ public sealed class EntityFrameworkViewModel : ObservableObject
     /// Reloads the contexts: Roslyn's at once, then (when <paramref name="fromTool"/>) <c>dotnet ef dbcontext list</c>'s,
     /// which builds. Keeps the selected context when it still exists.
     /// </summary>
-    public async Task ReloadAsync(bool fromTool)
+    public Task ReloadAsync(bool fromTool)
+    {
+        // A reload in progress serves a second request of the same kind (the window opening while a command shows it).
+        if (_reload is { IsCompleted: false } running && (_reloadFromTool || !fromTool))
+        {
+            return running;
+        }
+
+        _reloadFromTool = fromTool;
+        return _reload = ReloadCoreAsync(fromTool);
+    }
+
+    private Task? _reload;
+    private bool _reloadFromTool;
+
+    private async Task ReloadCoreAsync(bool fromTool)
     {
         if (_ef.Projects.Count == 0)
         {
@@ -488,7 +503,7 @@ public sealed class EfScaffoldViewModel : ObservableObject
 
     public EfScaffoldViewModel(IReadOnlyList<string> projects, Func<string, IReadOnlyList<EfConnectionChoice>> connections, Func<EfScaffoldViewModel, Task> run)
     {
-        Projects = projects;
+        Projects = [.. projects.Select(p => new EfProjectChoice(p))];
         _run = run;
         ConnectionsOf = connections;
         _project = projects.Count > 0 ? projects[0] : null;
@@ -496,7 +511,14 @@ public sealed class EfScaffoldViewModel : ObservableObject
         RefreshConnections();
     }
 
-    public IReadOnlyList<string> Projects { get; }
+    public IReadOnlyList<EfProjectChoice> Projects { get; }
+
+    /// <summary>The chosen project, for the picker (its name; the path in the tooltip).</summary>
+    public EfProjectChoice? SelectedProject
+    {
+        get => Projects.FirstOrDefault(p => p.Path == _project);
+        set => Project = value?.Path;
+    }
 
     public IReadOnlyList<string> Providers { get; } =
     [
@@ -518,6 +540,7 @@ public sealed class EfScaffoldViewModel : ObservableObject
             if (SetField(ref _project, value))
             {
                 OnPropertyChanged(nameof(ProjectName));
+                OnPropertyChanged(nameof(SelectedProject));
                 RefreshConnections();
             }
         }
@@ -700,6 +723,12 @@ public sealed class EfScaffoldViewModel : ObservableObject
             }
         }
     }
+}
+
+/// <summary>A project in a picker: its name, and its path.</summary>
+public sealed record EfProjectChoice(string Path)
+{
+    public string Name => System.IO.Path.GetFileNameWithoutExtension(Path);
 }
 
 public sealed class EfScaffoldDocument : ShellDocument

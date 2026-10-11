@@ -306,6 +306,7 @@ internal sealed partial class SolutionSession
         psi.StandardErrorEncoding = Encoding.UTF8;
         psi.StandardOutputEncoding = Encoding.UTF8;
         await _events.EfOutputAsync(new EfOutputParams("info", $"> daedalus-efagent model --context {context} ({System.IO.Path.GetFileName(assembly)})")).ConfigureAwait(false);
+        await EfTool.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
@@ -327,6 +328,7 @@ internal sealed partial class SolutionSession
         }
         finally
         {
+            EfTool.Gate.Release();
             File.Delete(output);
         }
     }

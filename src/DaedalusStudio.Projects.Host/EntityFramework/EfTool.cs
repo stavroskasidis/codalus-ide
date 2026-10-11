@@ -26,7 +26,26 @@ internal sealed class EfTool(string dotnet, Func<EfOutputParams, Task> output)
 {
     private const int PrefixWidth = 9; // "data:    ", "info:    ", "error:   ", "verbose: "
 
+    /// <summary>
+    /// One EF process at a time per host (one solution): dotnet-ef copies its build host into the project's output on
+    /// every run, and two runs at once collide on those files.
+    /// </summary>
+    public static SemaphoreSlim Gate { get; } = new(1, 1);
+
     public async Task<EfRun> RunAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    {
+        await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await RunCoreAsync(workingDirectory, arguments, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    private async Task<EfRun> RunCoreAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
         var all = new List<string> { "ef" };
         all.AddRange(arguments);

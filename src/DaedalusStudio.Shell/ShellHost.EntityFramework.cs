@@ -247,7 +247,7 @@ public sealed partial class ShellHost
         var where = EfExplorer.Connection?.ConnectionString is null ? "the app's database" : EfExplorer.Connection.Label;
         var message = revert
             ? $"Revert {where} to {(to == "0" ? "no migrations" : Name(to))}? This SQL will run:"
-            : $"Apply {items.Count(m => string.CompareOrdinal(m.Id, from) > 0 && string.CompareOrdinal(m.Id, to) <= 0)} migration(s) to {where}? This SQL will run:";
+            : $"Apply {Plural(items.Count(m => string.CompareOrdinal(m.Id, from) > 0 && string.CompareOrdinal(m.Id, to) <= 0), "migration")} to {where}? This SQL will run:";
         var choice = await Dialogs.ShowAsync(new DialogRequest(revert ? "Revert Migrations" : "Update Database", message, [revert ? "Revert" : "Apply", "Open in Editor", "Cancel"])
         {
             Details = [.. sql.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Select(line => new DetailLine(line, line.StartsWith("--", StringComparison.Ordinal) ? "header" : null))],
@@ -271,6 +271,7 @@ public sealed partial class ShellHost
         return true;
 
         string Name(string id) => id == "0" ? "empty" : items.FirstOrDefault(m => m.Id == id)?.Name ?? id;
+        static string Plural(int count, string noun) => count == 1 ? "1 " + noun : $"{count} {noun}s";
     }
 
     /// <summary>Generate Script: from and to migrations, idempotent or not, opened as an unsaved SQL file.</summary>
@@ -457,7 +458,7 @@ public sealed partial class ShellHost
         try
         {
             var files = await EntityFramework.ScaffoldAsync(form.Parameters(), CancellationToken.None).ConfigureAwait(true);
-            form.Result = $"Generated {files.Count} file(s).";
+            form.Result = files.Count == 1 ? "Generated 1 file." : $"Generated {files.Count} files.";
             if ((files.FirstOrDefault(f => f.EndsWith("Context.cs", StringComparison.Ordinal)) ?? (files.Count > 0 ? files[0] : null)) is { } first)
             {
                 await OpenFileAsync(first, preview: false).ConfigureAwait(true);

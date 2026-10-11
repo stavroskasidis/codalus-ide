@@ -195,8 +195,11 @@ public sealed class EfDiagram : Control
         var ownedPen = new Pen(muted, 1.2, new DashStyle([4, 3], 0));
         var typeface = new Typeface(FontFamily.Default);
         var bold = new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.SemiBold);
+        var background = Brush("Shell.Editor.Background", Brushes.White);
+        context.FillRectangle(background, new Rect(Bounds.Size));
 
-        // Relationships first, under the boxes.
+        // Relationships first, under the boxes; their labels last, over everything, on the panel's background.
+        var labels = new List<(string Text, Point Center)>();
         foreach (var entity in model.Entities)
         {
             if (!_boxes.TryGetValue(entity.Name, out var dependent))
@@ -216,11 +219,13 @@ public sealed class EfDiagram : Control
                 DrawArrow(context, fk.IsOwnership ? ownedPen : linePen, from, to);
                 var many = fk.IsUnique ? (fk.IsRequired ? "1" : "0..1") : "*";
                 var one = fk.IsRequired ? "1" : "0..1";
-                Text(context, fk.IsOwnership ? "owned" : many, Lerp(from, to, 0.12) + new Vector(4, -14), muted, typeface, 10);
-                Text(context, one, Lerp(from, to, 0.88) + new Vector(4, -14), muted, typeface, 10);
-                if (!fk.IsOwnership && fk.DeleteBehavior is { } behavior && behavior != "ClientSetNull")
+                var length = Math.Max(1, Math.Sqrt(Math.Pow(to.X - from.X, 2) + Math.Pow(to.Y - from.Y, 2)));
+                var along = new Vector((to.X - from.X) / length, (to.Y - from.Y) / length);
+                labels.Add((fk.IsOwnership ? "owned" : many, from + (along * 12)));
+                labels.Add((one, to - (along * 14)));
+                if (!fk.IsOwnership && fk.DeleteBehavior is { } behavior && behavior != "ClientSetNull" && length > 60)
                 {
-                    Text(context, "on delete: " + behavior, Lerp(from, to, 0.5) + new Vector(4, 2), muted, typeface, 10);
+                    labels.Add((behavior.ToLowerInvariant(), Lerp(from, to, 0.5)));
                 }
             }
         }
@@ -258,6 +263,14 @@ public sealed class EfDiagram : Control
             {
                 Text(context, $"… {entity.Properties.Length - MaxRows} more", new Point(box.X + 28, y), muted, typeface, 10.5);
             }
+        }
+
+        foreach (var (text, center) in labels)
+        {
+            var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, 10, muted);
+            var at = new Point(center.X - (formatted.Width / 2), center.Y - (formatted.Height / 2));
+            context.DrawRectangle(background, null, new Rect(at.X - 2, at.Y, formatted.Width + 4, formatted.Height), 2, 2);
+            context.DrawText(formatted, at);
         }
     }
 

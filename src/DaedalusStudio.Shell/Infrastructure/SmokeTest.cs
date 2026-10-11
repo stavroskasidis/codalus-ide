@@ -886,6 +886,8 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
         }).ConfigureAwait(true);
 
+        await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -913,6 +915,70 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
         }
+    }
+
+    /// <summary>
+    /// EF Core (M27a, ADR 0036) on samples/Data and SQLite: the fixture's local dotnet-ef is restored, the Entity
+    /// Framework window finds BloggingContext (Roslyn) and its pending migration (dotnet ef), Update Database shows the
+    /// SQL before it applies it, a model change becomes a migration, the model view draws the entities, and the
+    /// inventory database is reverse engineered.
+    /// </summary>
+    private async Task EfStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "Data", "Data.slnx")), $"the samples folder {samples} has Data");
+        var target = Path.Combine(_work, "Data");
+        Copy(Path.Combine(samples, "Data"), target);
+        await shell.OpenSolutionAsync(Path.Combine(target, "Data.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Data solution is open", 300).ConfigureAwait(true);
+        var restore = await shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None).ConfigureAwait(true);
+        Check(restore.Succeeded, "dotnet tool restore gets the fixture's dotnet-ef:\n" + Tail(restore.Output, 1500));
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 1 }, "the C# workspace is ready", 300).ConfigureAwait(true);
+
+        await shell.ShowEntityFrameworkAsync().ConfigureAwait(true);
+        var ef = shell.EfExplorer;
+        string Log() => Tail(shell.EntityFramework.Channel.GetText(), 2500) + "\n" + ef.Message;
+        await WaitAsync(() => ef.Context is { Name: "BloggingContext", Provider: "Microsoft.EntityFrameworkCore.Sqlite" }, "the window finds BloggingContext on SQLite", 120).ConfigureAwait(true);
+        await WaitAsync(() => ef.Migrations.Count == 1 && !ef.IsBusy, "the window lists InitialCreate", 420).ConfigureAwait(true);
+        Check(ef.Migrations[0].State == "Pending", "InitialCreate is pending: " + Log());
+
+        var update = shell.UpdateDatabaseAsync(null);
+        await WaitAsync(() => shell.Dialogs.IsOpen || update.IsCompleted, "Update Database shows the SQL", 240).ConfigureAwait(true);
+        Check(shell.Dialogs.Details.Any(l => l.Text.Contains("CREATE TABLE \"Blogs\"", StringComparison.Ordinal)), "the SQL creates the Blogs table: " + Log());
+        Check(!File.Exists(Path.Combine(target, "Blogging", "blogging.db")), "nothing is applied before Apply");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-ef-update.png");
+        shell.Dialogs.Buttons.Single(b => b.Label == "Apply").Command.Execute(null);
+        await WaitAsync(() => update.IsCompleted, "the migration is applied", 240).ConfigureAwait(true);
+        Check(update.Result && File.Exists(Path.Combine(target, "Blogging", "blogging.db")), "Update Database created the SQLite database: " + Log());
+        await WaitAsync(() => ef.Migrations.Count == 1 && ef.Migrations[0].Applied == true && !ef.IsBusy, "InitialCreate shows as applied", 240).ConfigureAwait(true);
+
+        var context = Path.Combine(target, "Blogging", "Data", "BloggingContext.cs");
+        File.WriteAllText(context, File.ReadAllText(context).Replace("public DateTime Published { get; set; }", "public DateTime Published { get; set; }\n\n    public int Rating { get; set; }", StringComparison.Ordinal));
+        shell.EntityFramework.Invalidate();
+        await shell.AddMigrationAsync("AddRating").ConfigureAwait(true);
+        await WaitAsync(() => ef.Migrations.Count == 2 && !ef.IsBusy, "AddRating is listed", 300).ConfigureAwait(true);
+        Check(ef.Migrations[1].State == "Pending", "AddRating is pending: " + Log());
+
+        var model = await shell.ShowEfModelAsync().ConfigureAwait(true);
+        Check(model is not null, "the model view opens");
+        await WaitAsync(() => model!.ViewModel.Model is not null || model.ViewModel.Message?.StartsWith("Building", StringComparison.Ordinal) == false, "the model is read", 300).ConfigureAwait(true);
+        Check(model!.ViewModel.Model?.Entities.Length == 5, "the model has 5 entity types: " + model.ViewModel.Message + "\n" + Log());
+        await WaitAsync(() => window.GetVisualDescendants().OfType<EfModelView>().Any(v => v.Diagram.Boxes.Count == 5), "the diagram draws them").ConfigureAwait(true);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-ef-model.png");
+
+        var scaffold = shell.OpenReverseEngineer();
+        Check(scaffold is not null, "Reverse Engineer opens");
+        var form = scaffold!.ViewModel;
+        form.ConnectionString = "Data Source=" + Path.Combine(target, "Inventory", "inventory.db");
+        form.Provider = "Microsoft.EntityFrameworkCore.Sqlite";
+        form.OutputDir = "Inventory";
+        form.ContextName = "InventoryContext";
+        await form.RunAsync().ConfigureAwait(true);
+        Check(form.Error is null && File.Exists(Path.Combine(target, "Blogging", "Inventory", "Product.cs")), "the inventory database is reverse engineered: " + form.Error + "\n" + Log());
+        shell.Layout.CloseDocument(model);
+        shell.Layout.CloseDocument(scaffold);
     }
 
     /// <summary>

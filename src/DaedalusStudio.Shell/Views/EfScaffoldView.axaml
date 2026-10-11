@@ -9,7 +9,13 @@
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="dotnet ef dbcontext scaffold generates entity types and a DbContext from the database's schema into the project. The project needs the provider's EF Core package and Microsoft.EntityFrameworkCore.Design." />
       <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4">
         <TextBlock Text="Project" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
-        <ComboBox x:Name="ProjectBox" Grid.Column="1" ItemsSource="{Binding Projects}" SelectedItem="{Binding Project}" MinWidth="320" AutomationProperties.Name="Project" />
+        <ComboBox x:Name="ProjectBox" Grid.Column="1" ItemsSource="{Binding Projects}" SelectedItem="{Binding SelectedProject}" MinWidth="320" AutomationProperties.Name="Project">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:EfProjectChoice">
+              <TextBlock Text="{Binding Name}" ToolTip.Tip="{Binding Path}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
         <TextBlock Grid.Row="1" Text="Known connection" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
         <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" ItemsSource="{Binding KnownConnections}" SelectedItem="{Binding KnownConnection}" MinWidth="320" PlaceholderText="From appsettings or user secrets" AutomationProperties.Name="Known connection">
           <ComboBox.ItemTemplate>
@@ -25,9 +31,9 @@
         <TextBlock Grid.Row="4" Text="Output folder" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
         <TextBox Grid.Row="4" Grid.Column="1" Margin="0,6,0,0" Text="{Binding OutputDir}" AutomationProperties.Name="Output folder" />
         <TextBlock Grid.Row="5" Text="Context name" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
-        <TextBox Grid.Row="5" Grid.Column="1" Margin="0,6,0,0" Text="{Binding ContextName}" Watermark="From the database's name" AutomationProperties.Name="Context name" />
+        <TextBox Grid.Row="5" Grid.Column="1" Margin="0,6,0,0" Text="{Binding ContextName}" PlaceholderText="From the database's name" AutomationProperties.Name="Context name" />
         <TextBlock Grid.Row="6" Text="Tables" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
-        <TextBox Grid.Row="6" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Tables}" Watermark="All tables, or a comma-separated list" AutomationProperties.Name="Tables" />
+        <TextBox Grid.Row="6" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Tables}" PlaceholderText="All tables, or a comma-separated list" AutomationProperties.Name="Tables" />
       </Grid>
       <TextBlock Text="Schemas (comma-separated; empty: all)" Classes="muted" />
       <TextBox Text="{Binding Schemas}" AutomationProperties.Name="Schemas" />
