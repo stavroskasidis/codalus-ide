@@ -1,0 +1,18 @@
+{
+  // Folder mode's build tasks (ADR 0033), like tasks.vs.json. Build runs the default build task.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build tool",
+      "command": "dotnet",
+      "args": ["build", "${workspaceFolder}/src/Tool/Tool.csproj"],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "sdk version",
+      "command": "dotnet",
+      "args": ["--version"],
+      "options": { "cwd": "${workspaceFolder}" }
+    }
+  ]
+}

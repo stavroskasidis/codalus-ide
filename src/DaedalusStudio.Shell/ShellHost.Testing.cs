@@ -121,7 +121,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        TestExplorer.SetPlaylists(Playlists.Load(solution.Path));
+        TestExplorer.SetPlaylists(Playlists.Load(PlaylistAnchor(solution)));
         if (Solutions.Projects.Values.Any(p => p.IsTestProject))
         {
             ActivateTestProviders();
@@ -275,7 +275,7 @@ public sealed partial class ShellHost
 
         // The failing frame in the solution's own code, else the test's declaration.
         var frames = StackTraces.Parse(test.Result is { Messages.Count: > 0 } failure ? failure.Messages[0].StackTrace : null);
-        var root = Solutions.Solution is { } solution ? Path.GetDirectoryName(solution.Path)! : null;
+        var root = Solutions.Solution?.Directory;
         if (StackTraces.FirstUserFrame(frames, f => root is not null && f.StartsWith(root, StringComparison.OrdinalIgnoreCase) && File.Exists(f)) is { File: { } file } frame && File.Exists(file))
         {
             await OpenFileAsync(file, preview: false, new Position(Math.Max(0, frame.Line - 1), 0)).ConfigureAwait(true);
@@ -374,7 +374,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        var existing = Playlists.Load(solution.Path);
+        var existing = Playlists.Load(PlaylistAnchor(solution));
         var choices = existing.Select(p => new QuickPickItem(p.Name) { Detail = $"{p.Tests.Count} items", Tag = p }).Prepend(new QuickPickItem("New Playlist…")).ToList();
         var picked = existing.Count == 0 ? choices[0] : await Palette.ShowAsync(choices, "Add to playlist").ConfigureAwait(true);
         if (picked is null)
@@ -398,8 +398,8 @@ public sealed partial class ShellHost
             playlist = new Playlist(name.Trim(), [.. keys]);
         }
 
-        await Playlists.SaveAsync(solution.Path, playlist, CancellationToken.None).ConfigureAwait(true);
-        TestExplorer.SetPlaylists(Playlists.Load(solution.Path), playlist.Name);
+        await Playlists.SaveAsync(PlaylistAnchor(solution), playlist, CancellationToken.None).ConfigureAwait(true);
+        TestExplorer.SetPlaylists(Playlists.Load(PlaylistAnchor(solution)), playlist.Name);
     }
 
     public async Task RemoveFromPlaylistAsync(Playlist playlist, IReadOnlyList<string> keys)
@@ -410,8 +410,8 @@ public sealed partial class ShellHost
         }
 
         var updated = playlist with { Tests = [.. playlist.Tests.Except(keys, StringComparer.Ordinal)] };
-        await Playlists.SaveAsync(solution.Path, updated, CancellationToken.None).ConfigureAwait(true);
-        TestExplorer.SetPlaylists(Playlists.Load(solution.Path), updated.Name);
+        await Playlists.SaveAsync(PlaylistAnchor(solution), updated, CancellationToken.None).ConfigureAwait(true);
+        TestExplorer.SetPlaylists(Playlists.Load(PlaylistAnchor(solution)), updated.Name);
     }
 
     public async Task DeletePlaylistAsync()
@@ -421,7 +421,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        var existing = Playlists.Load(solution.Path);
+        var existing = Playlists.Load(PlaylistAnchor(solution));
         if (existing.Count == 0)
         {
             StatusBar.ShowMessage("This solution has no playlists.", TimeSpan.FromSeconds(4));
@@ -430,8 +430,8 @@ public sealed partial class ShellHost
 
         if (await Palette.ShowAsync([.. existing.Select(p => new QuickPickItem(p.Name) { Tag = p })], "Delete playlist").ConfigureAwait(true) is { Tag: Playlist chosen })
         {
-            Playlists.Delete(solution.Path, chosen.Name);
-            TestExplorer.SetPlaylists(Playlists.Load(solution.Path));
+            Playlists.Delete(PlaylistAnchor(solution), chosen.Name);
+            TestExplorer.SetPlaylists(Playlists.Load(PlaylistAnchor(solution)));
         }
     }
 
@@ -458,8 +458,8 @@ public sealed partial class ShellHost
             }
 
             var playlist = new Playlist(Path.GetFileNameWithoutExtension(file), keys);
-            await Playlists.SaveAsync(solution.Path, playlist, CancellationToken.None).ConfigureAwait(true);
-            TestExplorer.SetPlaylists(Playlists.Load(solution.Path), playlist.Name);
+            await Playlists.SaveAsync(PlaylistAnchor(solution), playlist, CancellationToken.None).ConfigureAwait(true);
+            TestExplorer.SetPlaylists(Playlists.Load(PlaylistAnchor(solution)), playlist.Name);
         }
         catch (Exception ex) when (ex is IOException or System.Xml.XmlException or FormatException or UnauthorizedAccessException)
         {

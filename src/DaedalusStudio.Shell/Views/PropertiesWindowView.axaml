@@ -1,0 +1,88 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.PropertiesWindowView"
+             x:DataType="vm:PropertiesWindowViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.row">
+      <Setter Property="Padding" Value="6,1" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="TextBlock.set">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBox.cell, ComboBox.cell">
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Padding="8,4" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.Border}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+        <Button Grid.Column="1" Classes="toolbar" Command="{Binding AddMetadataCommand}" ToolTip.Tip="Add Metadata…" AutomationProperties.Name="Add Metadata">
+          <controls:Icon Kind="file-add" />
+        </Button>
+      </Grid>
+    </Border>
+    <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
+
+    <!-- The selected property's description, as a classic IDE's property grid shows it. -->
+    <Border DockPanel.Dock="Bottom" Padding="8,6" MinHeight="58" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Shell.Border}">
+      <StackPanel Spacing="2">
+        <TextBlock FontWeight="SemiBold" Text="{Binding DescriptionTitle}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" />
+      </StackPanel>
+    </Border>
+    <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding Links}" Margin="8,4">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:PropertyLinkViewModel">
+          <Button Classes="link" Content="{Binding Title}" Command="{Binding Command}" HorizontalAlignment="Left" />
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <Grid>
+      <TextBlock Classes="muted" Margin="12" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+      <ScrollViewer IsVisible="{Binding !HasMessage}">
+        <ItemsControl x:Name="Grid" ItemsSource="{Binding Categories}" AutomationProperties.Name="Properties">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:PropertyCategoryViewModel">
+              <StackPanel>
+                <Border Padding="6,3" Background="{DynamicResource Shell.Toolbar}">
+                  <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                </Border>
+                <ItemsControl ItemsSource="{Binding Rows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PropertyRowViewModel">
+                      <Border Classes="row">
+                        <Grid ColumnDefinitions="0.45*,0.55*">
+                          <TextBlock VerticalAlignment="Center" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
+                          <TextBox Grid.Column="1" Classes="cell" IsVisible="{Binding IsText}" Text="{Binding Text, UpdateSourceTrigger=LostFocus}" AutomationProperties.Name="{Binding Name}" />
+                          <ComboBox Grid.Column="1" Classes="cell" HorizontalAlignment="Stretch" IsVisible="{Binding IsChoice}" ItemsSource="{Binding Options}" SelectedItem="{Binding SelectedOption}" AutomationProperties.Name="{Binding Name}">
+                            <ComboBox.ItemTemplate>
+                              <DataTemplate x:DataType="vm:PropertyOption">
+                                <TextBlock Text="{Binding Label}" />
+                              </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                          </ComboBox>
+                          <SelectableTextBlock Grid.Column="1" Margin="4,3" IsVisible="{Binding IsReadOnly}" Text="{Binding Value}" Classes.set="{Binding IsSet}" TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding Value}" AutomationProperties.Name="{Binding AccessibleName}" Focusable="True" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</UserControl>

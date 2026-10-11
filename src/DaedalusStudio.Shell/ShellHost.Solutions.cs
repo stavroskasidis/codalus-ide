@@ -69,6 +69,12 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (Directory.Exists(path))
+        {
+            await OpenFolderWorkspaceAsync(path).ConfigureAwait(true); // a recent folder (folder mode, ADR 0033)
+            return;
+        }
+
         path = DaedalusStudio.Platform.RealPath.Resolve(path);
         if (!File.Exists(path))
         {
@@ -124,7 +130,10 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Opens the solution in <paramref name="folder"/> (.slnx first, then .sln, then a single project).</summary>
+    /// <summary>
+    /// Opens <paramref name="folder"/> from the command line or a drop: its solution (.slnx first, then .sln, then a single
+    /// project), or the folder itself (folder mode, ADR 0033) when it has none.
+    /// </summary>
     public Task OpenFolderAsync(string folder)
     {
         var candidates = s_openPatterns
@@ -132,8 +141,7 @@ public sealed partial class ShellHost
             .FirstOrDefault(found => found.Count > 0);
         if (candidates is not [var single, ..] || candidates.Count > 1 && !single.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) && !single.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
         {
-            Workbench.Notifications.Info($"'{folder}' has no single solution or project file to open. Use File > Open Solution.");
-            return Task.CompletedTask;
+            return OpenFolderWorkspaceAsync(folder);
         }
 
         return OpenSolutionAsync(single);
@@ -155,7 +163,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        var folder = Path.GetDirectoryName(solution.Path)!;
+        var folder = solution.Directory;
         if (await Dialogs.ConfirmAsync("Trust this folder?", $"Projects in {folder} will be evaluated and their packages restored.", "Trust").ConfigureAwait(true))
         {
             Trust.Trust(folder);

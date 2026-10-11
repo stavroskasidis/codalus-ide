@@ -19,7 +19,7 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
-| `solution/open` | `OpenSolutionParams` | `SolutionInfo` | Untrusted: structure only, no evaluation, no restore, no watching. |
+| `solution/open` | `OpenSolutionParams` | `SolutionInfo` | Untrusted: structure only, no evaluation, no restore, no watching (a folder is still watched). `path` may be a folder (folder mode, [below](#project-items-show-all-files-folder-mode-and-item-templates)). |
 | `solution/close` | `{}` | `{}` | |
 | `solution/trust` | `{restore}` | `{}` | The user trusted the folder: evaluate (and restore). |
 | `solution/setConfiguration` | `{configuration, platform}` | `{}` | Re-evaluates every project with the mapped project configuration. |
@@ -124,6 +124,30 @@ Property pages, references, configurations, dependencies, load/unload, solution 
 | `sdk/setGlobalJson` | `{version?, rollForward?}` | `{}` | Writes `sdk.version`/`sdk.rollForward` of the `global.json` in effect (or one next to the solution); `version` null removes the pin. The shell reopens the solution so a new host picks the SDK. |
 
 `solution/open` also accepts a `.slnf`: the filter's solution opens with only its projects loaded, and `SolutionInfo` gains `filterPath`.
+
+## Project items, Show All Files, folder mode and item templates
+
+The Properties window, Include and Exclude, links, moves between projects, Show All Files, folder mode and `dotnet new` item templates ([ADR 0033](adr/0033-project-items-templates-and-folder-mode.md)). Contracts are in `ItemMessages.cs`; the shell side is `ProjectItemService` in `src/DaedalusStudio.Workbench/Projects`. Item requests need a trusted solution; `fs/listTree` and `folder/discover` don't.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `items/get` | `{project, path}` | `ItemInfoResult` | The file as the Properties window shows it, evaluated with the active configuration (a multi-targeted project with its first framework). |
+| `items/set` | `{project, path, itemType?, metadata?: {name: value \| null}}` | `{changed, updatedFiles}` | Changes the Build Action and metadata with the minimal edit: an `Update` item for a globbed file (metadata as child elements), `<Old Remove>` + `<New Include>` when a glob gives another type, existing metadata changed in place; a null value, or the value the project would have without its own definition, removes the definition. Imports are never edited. |
+| `items/exclude` | `{project, paths}` | `{changed, updatedFiles}` | Removes the file's explicit `Include` and `Update` items, then adds `<Type Remove>` for each type a glob still includes it as. A folder gets `Remove="Folder\**"` for each default glob type (`Compile`, `Content` in web projects, `EmbeddedResource`, `None`). A linked file loses its link. |
+| `items/include` | `{project, paths}` | `{changed, updatedFiles}` | Removes the `Remove` items that name the file or folder; whatever is still excluded gets an `Include` of the type the globs would give it. |
+| `items/addExisting` | `{project, targetFolder, files, asLink}` | `FileOperationResult` | Copies the files into the folder and makes sure they are items; with `asLink`, adds `<Type Include="..\x" Link="Folder\x" />` instead. |
+| `fs/listTree` | `{path, maxEntries?}` | `{entries: [{path, isDirectory}], truncated}` | Everything under a folder (Show All Files, the folder view) except `.git`, `.vs`, `.idea` and `node_modules`; at most 20,000 entries by default. |
+| `folder/discover` | `{}` | `{projects}` | Folder mode: the project files under the folder (not under `bin`, `obj` or those folders). |
+| `folder/setProjects` | `{projects}` | `{}` | Folder mode: the projects of the folder's in-memory solution, kept in `.daedalus/folder.json`. New ones are evaluated (and restored when the solution opened with `restore`). |
+| `templates/instantiate` | `{template, name, outputDirectory, project?, language?, arguments?}` | `{createdPaths, output}` | Runs `dotnet new <template>` with `--project`; a project that isn't restored is restored first (project-capability constraints read its assets). `DAEDALUS_TEMPLATE_HIVE` adds `--debug:custom-hive`. |
+
+| Notification | Params |
+|---|---|
+| `fs/changed` | `{directories}`: folders whose set of files changed (debounced), for Show All Files and the folder view |
+
+- **`ItemInfoResult`** `{project, path, itemType?, isLinked, link?, fromGlob, elements: [{operation (include \| update \| remove), itemType, value, line, condition?}], metadata: [{name, value, projectValue?}], itemTypes}`. `itemType` is null for a file that isn't an item. `metadata` has `CopyToOutputDirectory`, `Generator`, `CustomToolNamespace`, `Link` (linked files) and every metadata of the item; `projectValue` is what the project file sets. `itemTypes` are the Build Action choices (`None`, `Compile`, `Content`, `EmbeddedResource`, `AdditionalFiles`, then `AvailableItemName`).
+- **`fs/move` across projects:** when a file moves (or is copied) from one project's folder into another's, the source project's explicit items that name it are carried to the target project with `items/set`'s edit, and removed from the source on a move.
+- **Folder mode:** `solution/open` with a folder path answers `SolutionInfo` with `format: folder`, `path` the folder, and the loaded projects. `build/run` of the folder builds its one loaded project, or a generated `.daedalus/folder.slnx`; `solution/addProject` and `solution/removeProject` change the loaded projects; editing a solution file fails.
 
 ## Entity Framework Core
 

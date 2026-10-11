@@ -30,6 +30,7 @@ public sealed class ViewLocator : IDataTemplate
         DotnetToolsDocument document => new PaneHost(document, new DotnetToolsView { DataContext = document.ViewModel }),
         ProjectPropertiesDocument document => new PaneHost(document, new ProjectPropertiesView { DataContext = document.ViewModel }),
         SolutionManagementDocument document => new PaneHost(document, BuildManagementContent(document.ViewModel)),
+        PageDocument document => new PaneHost(document, BuildManagementContent(document.ViewModel)),
         AccountsDocument document => new PaneHost(document, new AccountsView { DataContext = document.ViewModel }),
         CreatePullRequestDocument document => new PaneHost(document, new CreatePullRequestView { DataContext = document.ViewModel }),
         EfModelDocument document => new PaneHost(document, new EfModelView(document.ViewModel)),
@@ -59,6 +60,10 @@ public sealed class ViewLocator : IDataTemplate
         ConfigurationManagerViewModel vm => new ConfigurationManagerView { DataContext = vm },
         ProjectDependenciesViewModel vm => new ProjectDependenciesView { DataContext = vm },
         SdkViewModel vm => new SdkView { DataContext = vm },
+        AddNewItemViewModel vm => new AddNewItemView { DataContext = vm },
+        ExportTemplateViewModel vm => new ExportTemplateView { DataContext = vm },
+        TemplateManagerViewModel vm => new TemplateManagerView { DataContext = vm },
+        ExternalToolsViewModel vm => new ExternalToolsView { DataContext = vm },
         _ => new TextBlock { Text = "This view is not available.", Margin = new Thickness(12) },
     };
 
@@ -70,6 +75,7 @@ public sealed class ViewLocator : IDataTemplate
         TreeToolViewModel vm => new TreeToolView { DataContext = vm },
         MarkdownToolViewModel vm => new MarkdownToolView { DataContext = vm },
         SolutionExplorerViewModel vm => new SolutionExplorerView { DataContext = vm },
+        PropertiesWindowViewModel vm => new PropertiesWindowView { DataContext = vm },
         TestExplorerViewModel vm => new TestExplorerView { DataContext = vm },
         CoverageResultsViewModel vm => new CoverageResultsView { DataContext = vm },
         ErrorListViewModel vm => new ErrorListView { DataContext = vm },

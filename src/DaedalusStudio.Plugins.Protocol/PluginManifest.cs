@@ -69,6 +69,12 @@ public sealed record ManifestContributions
     /// <summary>Snippet files in VS Code's format, for a language (API 0.2.5, M12b).</summary>
     public ManifestSnippets[]? Snippets { get; init; }
 
+    /// <summary>Rows for the Properties window, from a command (API 0.2.8, M26, ADR 0033).</summary>
+    public ManifestPropertyProvider[]? PropertyProviders { get; init; }
+
+    /// <summary>Macros for External Tools' arguments, from a command (API 0.2.8, M26, ADR 0033).</summary>
+    public ManifestToolMacro[]? ExternalToolMacros { get; init; }
+
     /// <summary>Git hosting providers (API 0.2.6, ADR 0031): known to the shell before the plugin runs.</summary>
     public ManifestHostingProvider[]? HostingProviders { get; init; }
 }
@@ -86,6 +92,21 @@ public sealed record ManifestHostingProvider(string Id, string Label)
 
     /// <summary>A built-in icon name.</summary>
     public string? Icon { get; init; }
+}
+
+/// <summary>
+/// A Properties window provider: <see cref="Command"/> gets <c>{ kind, path?, project? }</c> of the Solution Explorer's
+/// selection and returns <c>[{ category?, name, value, description? }]</c> (read-only rows). <see cref="When"/> limits it.
+/// </summary>
+public sealed record ManifestPropertyProvider(string Command)
+{
+    public string? When { get; init; }
+}
+
+/// <summary>An External Tools macro <c>$(Name)</c>: <see cref="Command"/> returns its value as a string.</summary>
+public sealed record ManifestToolMacro(string Name, string Command)
+{
+    public string? Description { get; init; }
 }
 
 /// <summary>A snippet file, as in VS Code's <c>contributes.snippets</c>: <c>{ language, path }</c>, the path relative to the plugin's folder.</summary>

@@ -25,7 +25,7 @@ public sealed partial class ShellHost
     {
         TaskRunner = new TaskRunnerViewModel(
             NpmRoots,
-            () => Solutions.Solution?.Path is { } solution ? Path.GetDirectoryName(solution) : null,
+            () => Solutions.Solution?.Directory,
             (package, script) => RunNpmScriptAsync(package.Path, script.Name),
             package => RestoreNpmAsync(package.Path),
             path => OpenFileAsync(path, preview: false, null));
@@ -40,7 +40,7 @@ public sealed partial class ShellHost
             return [];
         }
 
-        return [Path.GetDirectoryName(solution.Path)!, .. solution.Projects.Select(p => Path.GetDirectoryName(p.Path)!)];
+        return [solution.Directory, .. solution.Projects.Select(p => Path.GetDirectoryName(p.Path)!)];
     }
 
     private async Task OnSolutionChangedForNpmAsync()
@@ -69,7 +69,7 @@ public sealed partial class ShellHost
             }
             else if (mode == "ask")
             {
-                var names = string.Join(", ", missing.Select(p => Path.GetRelativePath(Path.GetDirectoryName(solution.Path)!, p.Path)));
+                var names = string.Join(", ", missing.Select(p => Path.GetRelativePath(solution.Directory, p.Path)));
                 var choice = await Workbench.Notifications.Show(NotificationSeverity.Info, $"npm packages aren't installed for {names}.", ["Restore", "Not Now", "Never"]).Result.ConfigureAwait(true);
                 if (choice == "Restore")
                 {
@@ -154,7 +154,7 @@ public sealed partial class ShellHost
     public async Task PickNpmScriptAsync()
     {
         await TaskRunner.RefreshAsync().ConfigureAwait(true);
-        var root = Solutions.Solution?.Path is { } solution ? Path.GetDirectoryName(solution)! : null;
+        var root = Solutions.Solution?.Directory;
         var items = TaskRunner.Packages
             .SelectMany(p => p.Scripts.Select(s => new QuickPickItem(s.Name)
             {

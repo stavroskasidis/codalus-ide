@@ -40,6 +40,12 @@ public interface IShellWindow
 
     /// <summary>Asks where to save a file (null: cancelled).</summary>
     Task<string?> SaveFileAsync(string title, string suggestedName, string filterName, string[] patterns);
+
+    /// <summary>Asks for one or more existing files of any type (empty: cancelled).</summary>
+    Task<IReadOnlyList<string>> PickFilesAsync(string title);
+
+    /// <summary>Asks for a folder (null: cancelled).</summary>
+    Task<string?> PickFolderAsync(string title);
 }
 
 /// <summary>
@@ -91,6 +97,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeBuild();
         InitializePackages();
         InitializeProjectManagement();
+        InitializeProjectSystem();
         InitializeTerminal();
         InitializeInteractive();
         InitializeDebugging();
@@ -130,6 +137,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterPackageCommands(this);
         BuiltIns.RegisterProjectManagementCommands(this);
+        BuiltIns.RegisterProjectSystemCommands(this);
         BuiltIns.RegisterMenus(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
         BuiltIns.RegisterEditorMenus(Workbench.Menus);
@@ -141,6 +149,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterTestingMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
         BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
+        BuiltIns.RegisterProjectSystemMenus(Workbench.Menus);
         BuiltIns.RegisterTerminalMenus(Workbench.Menus);
         BuiltIns.RegisterInteractiveMenus(Workbench.Menus);
         Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform));
@@ -269,7 +278,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         if (Options.Path is { } path)
         {
-            // TODO(issue): open a folder without a solution or project file (post-MVP).
+            // A folder opens its solution, or itself in folder mode (ADR 0033).
             _ = Directory.Exists(path) ? OpenFolderAsync(path) : OpenSolutionAsync(path);
         }
 
@@ -360,6 +369,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             BuiltIns.NotificationsWindow => Notifications,
             BuiltIns.PluginsWindow => PluginList,
             SolutionExplorerViewModel.ToolWindowId => Explorer,
+            PropertiesWindowViewModel.ToolWindowId => PropertiesWindow,
             TestExplorerViewModel.ToolWindowId => OpenTestExplorer(),
             CoverageResultsViewModel.ToolWindowId => CoverageResults,
             ErrorListViewModel.ToolWindowId => ErrorList,

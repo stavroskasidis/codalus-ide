@@ -117,6 +117,28 @@ public sealed class ManifestValidationTests : IDisposable
     }
 
     [Fact]
+    public void Property_providers_and_external_tool_macros_are_contributed()
+    {
+        var dir = Variant("projectsystem", m =>
+        {
+            m["engines"]!["daedalus"] = "^0.2.8";
+            m["contributes"]!["propertyProviders"] = JsonNode.Parse("""[ { "command": "hello.properties", "when": "explorerItemKind == file" }, { "command": "" } ]""");
+            m["contributes"]!["externalToolMacros"] = JsonNode.Parse("""[ { "name": "Greeting", "command": "hello.greeting", "description": "A greeting." } ]""");
+        });
+        var plugin = PluginDescription.Read(dir, isBuiltIn: false, PlatformKind.Windows);
+        Assert.Equal(PluginState.Ready, plugin.State);
+        Assert.Equal("explorerItemKind == file", plugin.Manifest!.Contributes!.PropertyProviders![0].When);
+
+        var paths = AppPaths.Resolve(PlatformKind.Windows, _ => null, Path.Combine(_root, "user"));
+        paths.EnsureCreated();
+        using var workbench = new DaedalusStudio.Workbench.WorkbenchServices(paths, PlatformInfo.Current, watchFiles: false);
+        var manager = new PluginManager(workbench, _ => null, "test");
+        manager.AddPlugins([plugin]);
+        Assert.Equal([("hello.properties")], manager.PropertyProviders.Select(p => p.Provider.Command));
+        Assert.Equal(("Greeting", "hello.greeting", "A greeting."), manager.ToolMacros.Select(m => (m.Macro.Name, m.Macro.Command, m.Macro.Description)).Single());
+    }
+
+    [Fact]
     public void Missing_assembly_and_proposed_api_are_rejected()
     {
         Assert.Equal(PluginState.Invalid, PluginDescription.Read(Variant("noasm", m => m["entry"]!["assembly"] = "Missing.dll"), false, PlatformKind.Windows).State);

@@ -44,7 +44,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M21 | Remote development | planned |
 | M22 | Plugin platform 1.0 and marketplace | planned |
 | M23 | Personalization, settings sync and localization | planned |
-| M26 | Build and project-system depth | planned |
+| M26 | Build and project-system depth | M26a at checkpoint ([m26a](checkpoints/m26a.md), ADR 0033): the Properties window, Show All Files, Include and Exclude, links and moves between projects, Add New Item, Export Template, the template manager, folder mode with tasks and launch configurations, External Tools; M26b (build depth) next |
 | M27 | Data and Entity Framework Core tooling | M27a at checkpoint ([m27a](checkpoints/m27a.md), ADR 0036): the Entity Framework window over the user's dotnet-ef (migrations with their SQL shown before they are applied, scripts, bundles, compiled models, reverse engineering), Roslyn DbContext discovery, the model view; M27b (database explorer, query editor, SQL language service, `.sqlproj`) next |
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
@@ -762,6 +762,8 @@ Build-level and file-level project features (the Properties window, Show All Fil
 **Goal.** The rest of Visual Studio's project and build features: per-file properties, build diagnostics, custom tools, templates, and folder workflows. After this, nothing in a .NET project needs Visual Studio or hand-editing.
 
 **Depends on.** M2, M4, M9 (property-page machinery). M11 helps (MSBuild editing).
+
+**Split** (rule 5, 2026-10-11): **M26a** is the project system (the Properties window, Show All Files, include and exclude, linked files, drag and drop between projects, templates, folder mode, External Tools; [ADR 0033](adr/0033-project-items-templates-and-folder-mode.md), [checkpoint](checkpoints/m26a.md)). **M26b** is build depth (Batch Build, build settings, the fast up-to-date check, timings and the critical path, binary logs and the structured log viewer, pre- and post-build events, custom tools and T4).
 
 **Scope.**
 - **Properties window** (F4) for the selected Solution Explorer item:
@@ -1774,7 +1776,7 @@ New APIs start in `DaedalusStudio.Plugins.Proposed` and are promoted in M22.
 | M15–M17 | Launch configuration providers, a port-forwarding API |
 | M21 | `runsOn` placement, a file-system provider API |
 | M22 | Freeze 1.0, declarative views (D2), permissions manifest, custom editors, themes and icon themes. Webviews come after 1.0. |
-| M26 | Custom tool (single-file generator) contributions, Properties window property providers, external-tool macros |
+| M26 | Custom tool (single-file generator) contributions (M26b), Properties window property providers and external-tool macros (M26a; API 0.2.8) |
 | M27 | Database connection providers (more engines as plugins) |
 | M28 | AI model providers, AI context providers, MCP server contributions (all proposed, after 1.0) |
 
@@ -1902,7 +1904,7 @@ The "Daedalus" column uses these terms:
 | Import and Export Settings, settings sync | M23 |
 | Notifications, Output window, status bar | M1 |
 | Command Window (typed commands and aliases) | Not planned: the command palette covers it |
-| External Tools | M26 |
+| External Tools | M26a |
 | Full screen, distraction-free mode | M23 |
 | Localized UI | M23 |
 | Keyboard, screen reader and high-contrast accessibility | M1 onward, required in every milestone ([Accessibility](#accessibility)) |
@@ -1921,15 +1923,15 @@ The "Daedalus" column uses these terms:
 | Solution folders, nested projects, Dependencies node, file nesting | M2 |
 | Solution Explorer search, sync with active document, "scope to this" | M2 (verify at M7, otherwise M26) |
 | File members in Solution Explorer | M12 |
-| Show All Files, include and exclude from project | M26 |
+| Show All Files, include and exclude from project | M26a |
 | Add, rename, delete and move with project file updates; file watching | M2 |
-| Drag and drop between projects, linked files | M26 |
-| Properties window (Build Action, Copy to Output Directory, Custom Tool) | M26 |
+| Drag and drop between projects, linked files | M26a |
+| Properties window (Build Action, Copy to Output Directory, Custom Tool) | M26a |
 | Project property pages | M9 |
 | Launch profiles (`launchSettings.json`) UI | M9 |
 | New Project dialog (`dotnet new` templates) | M2 |
-| Add New Item with item templates | M26 |
-| Export Template, template management | M26 |
+| Add New Item with item templates | M26a |
+| Export Template, template management | M26a |
 | Configurations and platforms, Configuration Manager | M2; Configuration Manager dialog M9 |
 | Multi-targeting, project context switcher | M2/M3; navigation bar drop-down M12 |
 | Project build dependencies and build order | M9 |
@@ -1940,7 +1942,7 @@ The "Daedalus" column uses these terms:
 | Connected Services, OpenAPI and gRPC service references | M15 |
 | Custom tools (single-file generators), T4 text templates | M26 |
 | User secrets | M15 |
-| Open Folder (no solution) | M26 |
+| Open Folder (no solution) | M26a |
 | Docker Compose projects (`.dcproj`) | M17 |
 | SQL database projects (`.sqlproj`) | M27 |
 | Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10, and SDKs down to 2.1.200 in `global.json`: at checkpoint, ADR 0030) |
@@ -2341,6 +2343,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Hosting:** built-in GitHub, Azure DevOps and GitLab plugins on a proposed hosting API (plugin API 0.2.6), inactive until sign-in (device flow or a personal access token): pull requests (list, details, check out, create), review comments in the editor, CI status, work items and `#` completion, publishing.
   - **Git:** an askpass prompt behind the user's credential helper, worktrees, Git LFS awareness (pointer files, locks), solutions spanning several repositories.
   - **Open:** the project's OAuth apps (client ids) are to be registered; until then device sign-in needs a client id in settings, and a personal access token works.
+- 2026-10-11: M26 split into M26a (project system) and M26b (build depth). M26a built and at its checkpoint (ADR 0033): the Properties window (F4) with Build Action, Copy to Output Directory, Custom Tool and every item metadata, written as Visual Studio writes them under globbing (`items/*` in the build host, which evaluates each edit in memory); Show All Files with Include and Exclude From Project; Add Existing Item and links; moves between projects that carry a file's items; Add New Item (a built-in set and `dotnet new`'s item templates); Export Template and the template manager; folder mode (Open Folder, an in-memory solution of the loaded projects, `.daedalus/tasks.json` and `launch.json`); External Tools with macros. Plugin API 0.2.8: `contributes.propertyProviders` and `contributes.externalToolMacros`.
 - 2026-10-11: M27a built and at its checkpoint (ADR 0036): EF Core through the user's own `dotnet ef`, run by the build host in trusted solutions (`ef/*`), and a model agent (`daedalus-efagent`) on the app's runtime for the model view. The Entity Framework window lists the DbContexts (found by Roslyn with their provider and connection name, `daedalus/ef/contexts`) and their migrations on a chosen connection (the app's configuration, `appsettings*.json` or user secrets); Update Database and reverts show their SQL before applying it; Add and Remove Migration, scripts (idempotent, without transactions), bundles, compiled models, reverse engineering (`dbcontext scaffold`) and installing dotnet-ef as a local tool. `samples/Data`. M27b (the database explorer, the query editor, the SQL language service, `.sqlproj`) follows.
 - 2026-10-11: M33 built and at its checkpoint (ADR 0030, D23):
   - **Target frameworks:** `netcoreapp2.0` to `net10.0` and .NET Standard 2.0 and 2.1 open, build, run, debug, test (with coverage) and get each framework's default C# version in the editor, with the current SDK. Hot Reload from .NET 6, disabled with its reason before. The package manager marks the versions that don't support a project's frameworks.

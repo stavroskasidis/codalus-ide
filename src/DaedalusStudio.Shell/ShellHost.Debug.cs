@@ -129,6 +129,11 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (argument is null && await StartFolderLaunchAsync(debug: true).ConfigureAwait(true))
+        {
+            return; // a folder's launch configuration (ADR 0033)
+        }
+
         var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
         if (project is null && ActiveEditor?.Model.Path is { } htmlFile && IsHtmlFile(htmlFile) && File.Exists(htmlFile))
         {

@@ -324,13 +324,25 @@ public sealed class RunService : IDisposable
         }
 
         var console = externalConsole && OperatingSystem.IsWindows() && string.Equals(info.OutputType, "Exe", StringComparison.OrdinalIgnoreCase);
+        return Launch(projectPath, name, plan, channel, console, hotReload, profile is null ? string.Empty : $"   (profile '{profile.Name}')");
+    }
+
+    /// <summary>
+    /// Starts a plan made elsewhere (folder mode's launch configurations, ADR 0033): its output goes to a "Run: name"
+    /// channel. <paramref name="key"/> identifies what runs (a project or a program).
+    /// </summary>
+    public RunningProgram StartPlan(string key, string name, LaunchPlan plan) =>
+        Launch(key, name, plan, _output.GetOrCreate("daedalus.run." + name, "Run: " + name), console: false, hotReload: false, string.Empty);
+
+    private RunningProgram Launch(string projectPath, string name, LaunchPlan plan, OutputChannel channel, bool console, bool hotReload, string note)
+    {
         var start = CreateStartInfo(plan, console);
 
         channel.Clear();
-        channel.AppendLine($"> {plan.FileName} {plan.Arguments}".TrimEnd() + (profile is null ? "" : $"   (profile '{profile.Name}')"));
-        foreach (var note in plan.Notes)
+        channel.AppendLine($"> {plan.FileName} {plan.Arguments}".TrimEnd() + note);
+        foreach (var runtimeNote in plan.Notes)
         {
-            channel.AppendLine(note);
+            channel.AppendLine(runtimeNote);
         }
 
         var process = new Process { StartInfo = start, EnableRaisingEvents = true };

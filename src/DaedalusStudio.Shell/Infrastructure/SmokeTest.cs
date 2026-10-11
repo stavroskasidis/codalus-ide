@@ -736,6 +736,58 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => shell.Solutions.Projects.TryGetValue(multi, out var p) && p.State == Projects.Protocol.ProjectStates.Loaded, "Multi is loaded again", 60).ConfigureAwait(true);
         }, "packages.manage").ConfigureAwait(true);
 
+        // M26a: project items, Show All Files, Add New Item and External Tools (ADR 0033), on the same solution.
+        await StepAsync("projects.items", "M26", "The Properties window sets Copy to Output; Show All Files with Exclude and Include; Add New Item; an External Tool", async () =>
+        {
+            var plainDir = Path.GetDirectoryName(PlainProject)!;
+            var notes = Path.Combine(plainDir, "notes.txt");
+            await File.WriteAllTextAsync(notes, "Smoke test notes.\n").ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.TryGetValue(PlainProject, out var p) && p.Items.Any(i => i.Path == notes), "notes.txt becomes an item", 60).ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(PropertiesWindowViewModel.ToolWindowId, focus: false);
+            PropertyRowViewModel? Row(string name) => shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == name);
+
+            // The Solution Explorer gets the new file once it has refreshed the project: reveal it until it is selected.
+            await WaitAsync(() =>
+            {
+                if (shell.Explorer.Selected?.Node.Path != notes)
+                {
+                    shell.Explorer.Reveal("f:" + notes);
+                }
+
+                return !shell.PropertiesWindow.IsLoading && Row("Copy to Output Directory") is not null && shell.PropertiesWindow.Title.StartsWith("notes.txt", StringComparison.Ordinal);
+            }, "the Properties window shows notes.txt", 60).ConfigureAwait(true);
+            Check(Row("Build Action")?.Value == "None", "notes.txt is a None item");
+            Row("Copy to Output Directory")!.SelectedOption = PropertiesWindowViewModel.CopyToOutputOptions.Single(o => o.Value == "PreserveNewest");
+            await WaitAsync(() => ReadText(PlainProject).Contains("<None Update=\"notes.txt\">", StringComparison.Ordinal), "an Update item is written for the globbed file", 60).ConfigureAwait(true);
+            await WaitAsync(() => !shell.PropertiesWindow.IsLoading && Row("Copy to Output Directory")?.IsSet == true, "the Properties window shows the new value", 60).ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-properties.png");
+
+            shell.Explorer.ShowAllFiles = true;
+            await shell.ProjectItems.ExcludeAsync(PlainProject, [notes], CancellationToken.None).ConfigureAwait(true);
+            Check(ReadText(PlainProject).Contains("<None Remove=\"notes.txt\" />", StringComparison.Ordinal), "Exclude From Project writes a Remove item");
+            await WaitAsync(() => shell.Explorer.Rows.Any(r => r.Node.Path == notes && r.IsExcluded), "Show All Files shows the excluded file", 60).ConfigureAwait(true);
+            shell.Explorer.Reveal("f:" + notes);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-show-all-files.png");
+            await shell.IncludeInProjectAsync(PlainProject, [notes]).ConfigureAwait(true);
+            Check(!ReadText(PlainProject).Contains("Remove=\"notes.txt\"", StringComparison.Ordinal), "Include In Project removes it");
+            shell.Explorer.ShowAllFiles = false;
+
+            var add = shell.OpenAddNewItem(PlainProject) ?? throw new SmokeFailure("Add New Item did not open.");
+            await WaitAsync(() => !add.IsLoading, "Add New Item lists its templates", 120).ConfigureAwait(true);
+            add.Selected = add.Templates.First(t => t.Template.ShortName == "class");
+            add.Name = "SmokeItem";
+            var created = await add.AddAsync().ConfigureAwait(true);
+            Check(created is not null && ReadText(created).Contains("class SmokeItem", StringComparison.Ordinal), $"Add New Item creates SmokeItem.cs ({add.Error})");
+
+            await shell.SaveExternalToolsAsync([new Workbench.ExternalTools.ExternalTool("smokesdk", "Smoke SDK Version", "dotnet", "--version", "$(SolutionDir)")]).ConfigureAwait(true);
+            shell.Run("externalTools.run.smokesdk");
+            var tools = shell.Workbench.Output.GetOrCreate("daedalus.externalTools");
+            await WaitAsync(() => tools.GetText().Contains("exited with code 0", StringComparison.Ordinal), "the external tool runs in the Output window", 60).ConfigureAwait(true);
+            await shell.SaveExternalToolsAsync([]).ConfigureAwait(true);
+        }, "packages.manage").ConfigureAwait(true);
+
         // M10: C# Interactive (ADR 0015), initialized with Plain (which references a package from the fixture feed).
         await StepAsync("interactive.repl", "M10", "C# Interactive runs code, references a project and a NuGet package", async () =>
         {
@@ -894,6 +946,34 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: App")?.GetText() ?? string.Empty;
             await WaitAsync(() => Output().Contains("has exited with code 0", StringComparison.Ordinal), "App runs and exits with 0", 300).ConfigureAwait(true);
             Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
+        }).ConfigureAwait(true);
+
+        // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
+        await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
+        {
+            await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+            var source = Path.Combine(samples, "ProjectSystem", "FolderOnly");
+            Check(Directory.Exists(source), $"the samples folder {samples} has ProjectSystem/FolderOnly");
+            var parent = Path.Combine(_work, "FolderMode");
+            Directory.CreateDirectory(parent);
+            File.Copy(Path.Combine(samples, "ProjectSystem", "Directory.Build.props"), Path.Combine(parent, "Directory.Build.props"), overwrite: true);
+            var folder = Path.Combine(parent, "FolderOnly");
+            Copy(source, folder);
+            shell.Trust.Trust(folder);
+            await shell.OpenFolderWorkspaceAsync(folder).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Solution is { IsFolder: true } && shell.Explorer.IsFolderView && shell.Explorer.Rows.Any(r => r.Name == "README.md"), "the folder view lists the folder", 120).ConfigureAwait(true);
+            shell.Explorer.Reveal("f:" + Path.Combine(folder, "src", "Tool", "Tool.csproj"));
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-folder-view.png");
+
+            await shell.LoadAllFolderProjectsAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Projects.Values.All(p => p.State == Projects.Protocol.ProjectStates.Loaded), "both projects of the folder load", 240).ConfigureAwait(true);
+            Check(await shell.RunTaskAsync("sdk version").ConfigureAwait(true) == 0, "the task 'sdk version' runs:\n" + Tail(shell.Workbench.Output.GetOrCreate("daedalus.tasks").GetText(), 1000));
+            shell.Run("run.startWithoutDebugging");
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Tool")?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("FROM LAUNCH.JSON!", StringComparison.Ordinal), "the launch configuration 'Tool' runs with its arguments", 300).ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-folder.png");
         }).ConfigureAwait(true);
 
         await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);

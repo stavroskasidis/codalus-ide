@@ -1,0 +1,3 @@
+<#+
+    private static readonly string[] Names = new[] { "Ada", "Grace" };
+#>

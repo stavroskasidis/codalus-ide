@@ -106,6 +106,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         _connection.OnRequest(ProjectMethods.RunInfo, json.RunInfoParams, json.RunInfo, (p, _) => Guard(() => Task.Run(() => Session.GetRunInfo(p.Path, p.TargetFramework))));
         RegisterPackageHandlers();
         RegisterProjectManagementHandlers();
+        RegisterItemHandlers();
         RegisterEntityFrameworkHandlers();
         _connection.OnRequest(ProjectMethods.Shutdown, json.EmptyParams, json.EmptyResult, async (_, _) =>
         {
@@ -139,6 +140,21 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         _connection.OnRequest(ProjectManagementMethods.SaveFilter, json.SaveFilterParams, json.EmptyResult, (p, _) => Sync(() => Session.SaveFilter(p)));
         _connection.OnRequest(ProjectManagementMethods.SdkInfo, json.EmptyParams, json.SdkInfoResult, (_, ct) => Guard(() => Session.GetSdkInfoAsync(ct)));
         _connection.OnRequest(ProjectManagementMethods.SetGlobalJson, json.SetGlobalJsonParams, json.EmptyResult, (p, _) => Sync(() => Session.SetGlobalJson(p)));
+    }
+
+    /// <summary>Project items, Show All Files, folder mode and item templates (ADR 0033).</summary>
+    private void RegisterItemHandlers()
+    {
+        var json = ItemJsonContext.Default;
+        _connection.OnRequest(ItemMethods.Get, json.ItemParams, json.ItemInfoResult, (p, _) => Guard(() => Task.Run(() => Session.GetItem(p))));
+        _connection.OnRequest(ItemMethods.Set, json.ItemSetParams, json.ItemEditResult, (p, _) => Guard(() => Session.SetItemAsync(p)));
+        _connection.OnRequest(ItemMethods.Exclude, json.ItemPathsParams, json.ItemEditResult, (p, _) => Guard(() => Session.ExcludeAsync(p)));
+        _connection.OnRequest(ItemMethods.Include, json.ItemPathsParams, json.ItemEditResult, (p, _) => Guard(() => Session.IncludeAsync(p)));
+        _connection.OnRequest(ItemMethods.AddExisting, json.AddExistingItemsParams, json.FileOperationResult, (p, _) => Guard(() => Session.AddExistingAsync(p)));
+        _connection.OnRequest(ItemMethods.ListTree, json.ListTreeParams, json.ListTreeResult, (p, _) => Guard(() => Task.Run(() => Session.ListTree(p))));
+        _connection.OnRequest(ItemMethods.Discover, json.EmptyParams, json.DiscoverProjectsResult, (_, _) => Guard(() => Task.Run(Session.DiscoverProjects)));
+        _connection.OnRequest(ItemMethods.SetFolderProjects, json.SetFolderProjectsParams, json.EmptyResult, (p, ct) => GuardEmpty(() => Session.SetFolderProjectsAsync(p, ct)));
+        _connection.OnRequest(ItemMethods.Instantiate, json.InstantiateTemplateParams, json.InstantiateTemplateResult, (p, ct) => Guard(() => Session.InstantiateTemplateAsync(p, ct)));
     }
 
     /// <summary>EF Core through the user's dotnet-ef and the model agent (ADR 0036).</summary>
@@ -246,6 +262,8 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
     public Task CompilerInputsAsync(CompilerInputsInfo inputs) => Post(ProjectMethods.CompilerInputs, inputs, ProjectJsonContext.Default.CompilerInputsInfo);
 
     public Task DesignTimeProgressAsync(DesignTimeProgressParams progress) => Post(ProjectMethods.DesignTimeProgress, progress, ProjectJsonContext.Default.DesignTimeProgressParams);
+
+    public Task FilesChangedAsync(FilesChangedParams changes) => Post(ItemMethods.FilesChanged, changes, ItemJsonContext.Default.FilesChangedParams);
 
     public Task BuildOutputAsync(string line) => Post(ProjectMethods.BuildOutput, new BuildOutputParams(line), ProjectJsonContext.Default.BuildOutputParams);
 
