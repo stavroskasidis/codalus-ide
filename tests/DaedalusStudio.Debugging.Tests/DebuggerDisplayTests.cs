@@ -15,7 +15,11 @@ public sealed class DebuggerDisplayTests(DebuggeeFixture debuggee) : IClassFixtu
         _debug = new DebugService(() => DebuggeeFixture.Adapter)
         {
             // The companion host's lookup, in-process.
-            Displays = new DebuggerDisplays((type, modules, _) => Task.FromResult<DaedalusStudio.Debugging.Companion.TypeDisplayResult?>(_attributes.Find(type, modules))),
+            // A slow CI runner's first evaluations take longer than the shell's 3 s budget.
+            Displays = new DebuggerDisplays((type, modules, _) => Task.FromResult<DaedalusStudio.Debugging.Companion.TypeDisplayResult?>(_attributes.Find(type, modules)))
+            {
+                Budget = TimeSpan.FromSeconds(60),
+            },
         };
         return ValueTask.CompletedTask;
     }

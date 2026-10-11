@@ -235,8 +235,19 @@ internal sealed class Dumps : IDisposable
         var started = DateTime.Now.AddSeconds(-1);
         // The synchronous WriteDump (the call proven on every OS), on its own thread so the wait can be bounded: a
         // createdump that stalls (on macOS, while a password prompt waits) is ended after the timeout, which frees the thread.
+        // A createdump that fails reading a page that went away while it ran (seen once on macOS) gets one more try.
         var write = Task.Factory.StartNew(
-            () => new DiagnosticsClient(processId).WriteDump(type, path, logDumpGeneration: false),
+            () =>
+            {
+                try
+                {
+                    new DiagnosticsClient(processId).WriteDump(type, path, logDumpGeneration: false);
+                }
+                catch (DiagnosticsClientException ex) when (ex.Message.Contains("reading memory", StringComparison.OrdinalIgnoreCase))
+                {
+                    new DiagnosticsClient(processId).WriteDump(type, path, logDumpGeneration: false);
+                }
+            },
             CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         try
         {

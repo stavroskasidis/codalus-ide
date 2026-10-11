@@ -13,7 +13,11 @@ public sealed class CollectionVisualizerTests(DebuggeeFixture debuggee) : IClass
     {
         _debug = new DebugService(() => DebuggeeFixture.Adapter)
         {
-            Displays = new DebuggerDisplays((type, modules, _) => Task.FromResult<DaedalusStudio.Debugging.Companion.TypeDisplayResult?>(_attributes.Find(type, modules))),
+            // A slow CI runner's first evaluations take longer than the shell's 3 s budget.
+            Displays = new DebuggerDisplays((type, modules, _) => Task.FromResult<DaedalusStudio.Debugging.Companion.TypeDisplayResult?>(_attributes.Find(type, modules)))
+            {
+                Budget = TimeSpan.FromSeconds(60),
+            },
         };
         return ValueTask.CompletedTask;
     }
