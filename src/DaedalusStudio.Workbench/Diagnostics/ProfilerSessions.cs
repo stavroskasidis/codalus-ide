@@ -67,9 +67,10 @@ public static class ProfilerSessionStore
         return folder;
     }
 
+    /// <summary>A folder name that is valid on every OS (the solution may be shared).</summary>
     private static string Sanitize(string text)
     {
-        var invalid = Path.GetInvalidFileNameChars();
+        char[] invalid = [.. Path.GetInvalidFileNameChars(), ':', '*', '?', '"', '<', '>', '|', '\\', '/'];
         var clean = new string([.. text.Select(c => invalid.Contains(c) || char.IsWhiteSpace(c) ? '-' : c)]).Trim('-', '.');
         return clean.Length == 0 ? "session" : clean.Length > 40 ? clean[..40] : clean;
     }

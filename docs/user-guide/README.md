@@ -17,6 +17,7 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 13. [Troubleshooting, logs and crash reports](troubleshooting.md)
 14. [Older .NET versions: .NET Core 2.0 to .NET 9, and older SDKs in global.json](dotnet-versions.md)
 15. [Containers, Aspire and publishing](containers.md)
+16. [Profiling and diagnostics: the Performance Profiler, Diagnostic Tools and .NET Counters](profiling.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 
@@ -64,6 +65,8 @@ Writing plugins is covered in [plugins.md](../plugins.md).
 | | `Shift+F9` | QuickWatch |
 | | `Ctrl+Alt+E` | Exception Settings |
 | | `Ctrl+Alt+B`, `Ctrl+Alt+C`, `Ctrl+Alt+H`, `Ctrl+Alt+U` | Breakpoints, Call Stack, Threads, Modules |
+| Profiling | `Alt+F2` | Performance Profiler |
+| | `Ctrl+Alt+F2` | Diagnostic Tools |
 | Data | `Ctrl+Alt+D` | Database Explorer |
 | | `Ctrl+Shift+E`, `Ctrl+Shift+Enter` | Execute the query, the current statement |
 | | `Ctrl+Shift+L`, `Ctrl+Shift+M` | Estimated plan, actual plan |

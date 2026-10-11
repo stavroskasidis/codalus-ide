@@ -365,6 +365,40 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
         }
     }
 
+    /// <summary>
+    /// The sampling overhead (the roadmap's budget: at most 10%): CpuBound's primes in 4 seconds, alone and traced from
+    /// its first instruction. Measured and printed; asserted loosely, as the machines vary.
+    /// </summary>
+    [Fact]
+    public async Task Sampling_overhead_on_the_cpu_fixture()
+    {
+        static async Task<long> PrimesAsync(Process process)
+        {
+            var output = await process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+            var line = output.Split('\n').Single(l => l.StartsWith("CpuBound finished: ", StringComparison.Ordinal));
+            return long.Parse(line["CpuBound finished: ".Length..line.IndexOf(' ', "CpuBound finished: ".Length)], System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var plainProcess = await fixture.StartAsync(4);
+        var plain = await PrimesAsync(plainProcess);
+        Kill(plainProcess);
+
+        var tracedProcess = await fixture.StartAsync(4, suspended: true);
+        var recording = await _diagnostics.StartTraceAsync(tracedProcess.Id, Path.Combine(_work, "overhead.nettrace"), Timeout());
+        await _diagnostics.ResumeAsync(tracedProcess.Id, Timeout());
+        var traced = await PrimesAsync(tracedProcess);
+        Kill(tracedProcess);
+        await recording.StopAsync(Timeout());
+
+        var overhead = 1 - ((double)traced / plain);
+        TestContext.Current.TestOutputHelper?.WriteLine($"Sampling overhead: {overhead:P1} ({plain} primes alone, {traced} traced, in 4 s)");
+        if (Environment.GetEnvironmentVariable("DAEDALUS_BUDGET_LOG") is { Length: > 0 } budgetLog)
+        {
+            File.AppendAllText(budgetLog, $"sampling overhead: {overhead:P1} ({plain} primes alone, {traced} traced, in 4 s){Environment.NewLine}");
+        }
+        Assert.True(overhead < 0.5, $"Sampling overhead {overhead:P1}: {plain} primes alone, {traced} traced");
+    }
+
     [Fact]
     public async Task Errors_name_what_went_wrong()
     {

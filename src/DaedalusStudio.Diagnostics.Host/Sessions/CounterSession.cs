@@ -111,8 +111,9 @@ internal sealed class CounterSession : IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or EndOfStreamException or InvalidOperationException or ObjectDisposedException or FormatException)
         {
-            // A process that exits (or is killed) cuts the stream short: that is the session's normal end.
-            if (!_stop.IsCancellationRequested && ex is not EndOfStreamException && DiagnosticsPort.IsAlive(_parameters.ProcessId))
+            // A process that exits (or is killed) cuts the stream short: that is the session's normal end. The stream can
+            // end a moment before the process is gone (Linux), so it is given a little time.
+            if (!_stop.IsCancellationRequested && ex is not EndOfStreamException && await StillAliveAsync().ConfigureAwait(false))
             {
                 error = ex.Message;
             }
@@ -129,6 +130,21 @@ internal sealed class CounterSession : IAsyncDisposable
 
         await FlushAsync().ConfigureAwait(false);
         await _ended(error).ConfigureAwait(false);
+    }
+
+    private async Task<bool> StillAliveAsync()
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            if (!DiagnosticsPort.IsAlive(_parameters.ProcessId))
+            {
+                return false;
+            }
+
+            await Task.Delay(100).ConfigureAwait(false);
+        }
+
+        return true;
     }
 
     private void OnEvent(TraceEvent data)

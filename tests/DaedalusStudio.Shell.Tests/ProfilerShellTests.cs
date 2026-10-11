@@ -213,6 +213,11 @@ public sealed class ProfilerShellTests
 
         var perFrame = clock.Elapsed.TotalMilliseconds / 10;
         TestContext.Current.TestOutputHelper?.WriteLine($"Flame graph: {perFrame:0.0} ms per frame for {frames.Count} frames");
+        if (Environment.GetEnvironmentVariable("DAEDALUS_BUDGET_LOG") is { Length: > 0 } budgetLog)
+        {
+            File.AppendAllText(budgetLog, $"flame graph render: {perFrame:0.0} ms per frame, {frames.Count} frames{Environment.NewLine}");
+        }
+
         Assert.True(perFrame < 250, $"{perFrame:0.0} ms per frame");
         window.Close();
     }
