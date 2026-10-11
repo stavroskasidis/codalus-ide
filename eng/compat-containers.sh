@@ -8,7 +8,7 @@
 # Studio sets CLR_ICU_VERSION_OVERRIDE for .NET Core 2.x to 3.1 when it runs them (the test suite covers that on the
 # host); OpenSSL 1.x, which .NET Core 2.x to .NET 5 need for cryptography and HTTPS, has no such switch. This script proves the
 # programs themselves on the distributions of their time, with what those distributions bring:
-#   - Ubuntu 18.04 (ICU 60, OpenSSL 1.1): .NET Core 2.0 to 3.1 and ASP.NET Core 2.1 and 3.1
+#   - Ubuntu 18.04 (ICU 60, OpenSSL 1.0 and 1.1): .NET Core 2.0 to 3.1 and ASP.NET Core 2.1 and 3.1
 #   - Ubuntu 20.04 (ICU 66, OpenSSL 1.1): .NET Core 3.1 and .NET 5
 #   - Ubuntu 24.04 (ICU 74, OpenSSL 3): what fails without help (ICU, OpenSSL), and the ICU override
 # It builds the fixture on the host with the repository's SDK, installs the old runtimes into
@@ -53,7 +53,7 @@ app() { echo "$out/$1/$1.App/bin/Release/$2/$1.App.dll"; }
 # One container run: image, then a shell script run inside with /dotnet and /fixture mounted.
 run() {
   local image="$1" script="$2"
-  "$engine" run --rm --pull=missing -v "$work/dotnet:/dotnet:ro" -v "$work/samples:/fixture:ro" -e DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+  "$engine" run --rm -v "$work/dotnet:/dotnet:ro" -v "$work/samples:/fixture:ro" -e DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     -e TARGETFRAMEWORKS_CRYPTO=1 "$image" bash -c "$script" 2>&1
 }
 
@@ -83,20 +83,32 @@ expect() {
   echo "| $distribution | $label | \`$expected\` | $result |" >> "$results"
 }
 
-# A web app: start it, request / through bash's /dev/tcp (the runtime-deps images have no curl), stop it.
+# A web app: start it, request / through bash's /dev/tcp (the images have no curl), stop it.
 web() {
   local dll="$1" port="$2"
   echo "cd \$(dirname $dll) && ASPNETCORE_URLS=http://localhost:$port /dotnet/dotnet $dll > /tmp/web.log 2>&1 & for i in \$(seq 1 60); do grep -q 'Now listening' /tmp/web.log && break; sleep 0.5; done; exec 3<>/dev/tcp/localhost/$port && printf 'GET / HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && cat <&3; cat /tmp/web.log | head -3"
 }
 
-bionic=mcr.microsoft.com/dotnet/runtime-deps:3.1-bionic
-focal=mcr.microsoft.com/dotnet/runtime-deps:5.0-focal
-noble=mcr.microsoft.com/dotnet/runtime-deps:8.0-noble
+# An image per distribution with what the runtimes need from it, built once (from an empty context).
+image() {
+  local tag="daedalus-compat-$1" base="$2" packages="$3"
+  if ! "$engine" image inspect "$tag" > /dev/null 2>&1; then
+    echo "== image $tag ($base: $packages)" >&2
+    mkdir -p "$work/context"
+    printf 'FROM %s\nRUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends %s > /dev/null\n' \
+      "$base" "$packages" | "$engine" build -q -t "$tag" -f - "$work/context" > /dev/null
+  fi
+  echo "$tag"
+}
+
+bionic="$(image bionic docker.io/library/ubuntu:18.04 "libicu60 libssl1.0.0 libssl1.1 libgssapi-krb5-2 zlib1g ca-certificates")"
+focal="$(image focal docker.io/library/ubuntu:20.04 "libicu66 libssl1.1 libgssapi-krb5-2 zlib1g ca-certificates")"
+noble="$(image noble docker.io/library/ubuntu:24.04 "libicu74 libssl3t64 libgssapi-krb5-2 zlib1g ca-certificates")"
 
 for pair in Core20:netcoreapp2.0:2.0 Core21:netcoreapp2.1:2.1 Core22:netcoreapp2.2:2.2 Core30:netcoreapp3.0:3.0 Core31:netcoreapp3.1:3.1; do
   IFS=: read -r id tfm version <<< "$pair"
   expect "Ubuntu 18.04" "$bionic" "$id.App" "runtime=$version." "/dotnet/dotnet $(app "$id" "$tfm")"
-  expect "Ubuntu 18.04" "$bionic" "$id.App, SHA-256 (OpenSSL 1.1)" "sha256=32" "/dotnet/dotnet $(app "$id" "$tfm")"
+  expect "Ubuntu 18.04" "$bionic" "$id.App, SHA-256 (OpenSSL 1.0 or 1.1)" "sha256=32" "/dotnet/dotnet $(app "$id" "$tfm")"
 done
 expect "Ubuntu 18.04" "$bionic" "Web21 (ASP.NET Core 2.1)" "Web21 on 2.1." "$(web "$out/Web21/bin/Release/netcoreapp2.1/Web21.dll" 5021)"
 expect "Ubuntu 18.04" "$bionic" "Web31 (ASP.NET Core 3.1)" "Web31 on 3.1." "$(web "$out/Web31/bin/Release/netcoreapp3.1/Web31.dll" 5031)"

@@ -89,7 +89,7 @@ public sealed class ShellMatrixTests
             }
         };
         var keys = f.Shell.Tests.Read(roots => roots.Where(r => projects.Contains(r.Label)).Select(r => r.Key).ToList());
-        await f.Shell.RunTestsAsync(TestRunKind.Coverage, keys);
+        await WithOutput(f, f.Shell.RunTestsAsync(TestRunKind.Coverage, keys), TimeSpan.FromMinutes(15));
         await ShellFixture.PumpUntil(() => !f.Shell.Tests.IsRunning, seconds: 900);
         var outcomes = f.Shell.Tests.Read(roots => roots.Where(r => projects.Contains(r.Label))
             .ToDictionary(r => r.Label, r => r.Leaves().Select(l => l.Outcome).ToList()));
@@ -117,7 +117,7 @@ public sealed class ShellMatrixTests
         f.Shell.Runs.SetStartupProject(core31);
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.Context.GetValue("hotReloadSupported") is false);
         Assert.Equal("Hot Reload needs .NET 6 or later: Core31.App targets netcoreapp3.1.", f.Shell.HotReloadUnsupportedReason());
-        await f.Shell.StartWithHotReloadAsync();
+        await WithOutput(f, f.Shell.StartWithHotReloadAsync(), TimeSpan.FromMinutes(5));
         Assert.Null(f.Shell.HotReloadProgram);
         Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("Hot Reload needs .NET 6 or later: Core31.App targets netcoreapp3.1.", StringComparison.Ordinal));
 
@@ -168,6 +168,29 @@ public sealed class ShellMatrixTests
             Screenshot(f, $"m33-dependencies-{theme}");
         }
     }
+
+    /// <summary>
+    /// Awaits <paramref name="work"/> while the UI runs, and fails with the Output window's channels when it takes longer
+    /// than <paramref name="limit"/> (a run that never reports its end would otherwise hang the suite).
+    /// </summary>
+    private static async Task WithOutput(ShellFixture f, Task work, TimeSpan limit)
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        while (!work.IsCompleted)
+        {
+            if (started.Elapsed > limit)
+            {
+                Assert.Fail($"Not done after {limit.TotalMinutes} minutes. Output:\n" + string.Join("\n", f.Shell.Workbench.Output.Channels.Select(c => $"--- {c.Name}\n{Tail(c.GetText())}")));
+            }
+
+            ShellFixture.Pump();
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+
+        await work;
+    }
+
+    private static string Tail(string text) => text.Length > 3000 ? text[^3000..] : text;
 
     /// <summary>Saves the window when <c>DAEDALUS_UI_SNAPSHOTS</c> names a folder (for looking at the rendering).</summary>
     private static void Screenshot(ShellFixture f, string name)
