@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!--
+      Runs on the user's application's runtime (dotnet exec with its deps.json and runtimeconfig.json, the way dotnet-ef
+      runs ef.dll), so it targets the oldest .NET that EF Core 8 supports and references nothing but the framework.
+    -->
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <AssemblyName>daedalus-efagent</AssemblyName>
+    <RootNamespace>DaedalusStudio.EntityFramework.Agent</RootNamespace>
+    <Description>Reads an EF Core model at design time for the model view (ADR 0036). Runs the user's code, as a child of the build host, only in trusted solutions.</Description>
+    <UseAppHost>false</UseAppHost>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+</Project>

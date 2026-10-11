@@ -57,6 +57,9 @@ public static class ProjectErrorCodes
     public const int NotTrusted = -33101;
     public const int InvalidOperation = -33102;
     public const int FileSystem = -33103;
+
+    /// <summary>A tool the request runs isn't installed (dotnet-ef, ADR 0036).</summary>
+    public const int ToolMissing = -33104;
 }
 
 public sealed record EmptyParams;

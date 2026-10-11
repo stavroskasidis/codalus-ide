@@ -72,7 +72,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -107,6 +107,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeWebLanguages();
         InitializeNpm();
         InitializeHotReload();
+        InitializeEntityFramework();
         InitializeUpdates();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -124,6 +125,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterBuildCommands(this);
         BuiltIns.RegisterDebugCommands(this);
         BuiltIns.RegisterWebCommands(this);
+        BuiltIns.RegisterDataCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterPackageCommands(this);
@@ -134,6 +136,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
         BuiltIns.RegisterDebugMenus(Workbench.Menus);
         BuiltIns.RegisterWebMenus(Workbench.Menus);
+        BuiltIns.RegisterDataMenus(Workbench.Menus);
         BuiltIns.RegisterGitMenus(Workbench.Menus);
         BuiltIns.RegisterTestingMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
@@ -390,6 +393,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             WorktreesViewModel.ToolWindowId => OpenWorktrees(),
             TerminalViewModel.ToolWindowId => TerminalWindow,
             InteractiveViewModel.ToolWindowId => InteractiveWindow,
+            EntityFrameworkViewModel.ToolWindowId => OpenEntityFramework(),
             _ => null,
         },
     };
@@ -759,6 +763,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
         await Debugger.DisposeAsync().ConfigureAwait(false);
         Git.Dispose();
+        EntityFramework.Dispose();
         await Languages.DisposeAsync().ConfigureAwait(false);
         await Solutions.DisposeAsync().ConfigureAwait(false);
         await Plugins.DisposeAsync().ConfigureAwait(false);

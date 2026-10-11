@@ -125,6 +125,29 @@ Property pages, references, configurations, dependencies, load/unload, solution 
 
 `solution/open` also accepts a `.slnf`: the filter's solution opens with only its projects loaded, and `SolutionInfo` gains `filterPath`.
 
+## Entity Framework Core
+
+EF Core ([ADR 0036](adr/0036-ef-core-integration.md)) runs the user's own `dotnet ef` as a child process of the host, in the startup project's folder, with `--json --prefix-output` (one at a time: dotnet-ef copies its own build host into the project's output on every run). The model view's data comes from `daedalus-efagent` (`buildhost/efagent/`, net8.0), started like dotnet-ef starts its `ef.dll`: `dotnet exec --depsfile <app>.deps.json --runtimeconfig <app>.runtimeconfig.json`, so it runs on the app's runtime with the app's EF Core. Every request needs a trusted solution; cancelling one kills its process tree. Contracts are in `EntityFrameworkMessages.cs`; the shell side is `EntityFrameworkService` in `src/DaedalusStudio.Workbench/Data`, which builds the startup project first and passes `noBuild`.
+
+**`EfTarget`** `{project, startupProject?, context?, connection?, noBuild}`: `--project`, `--startup-project` (default: the project), `--context` (full or short name), `--connection` (default: the app's configuration; only for the commands that take one, and never echoed in `ef/output`), `--no-build`. The startup project's configuration in the active solution configuration and its active target framework are passed too.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `ef/status` | `{project, startupProject?}` | `{toolVersion?, toolSource? (local \| global), manifest?, manifestListsTool, efCoreVersion?, providers, hasDesignPackage, message?}` | `dotnet ef --version` in the startup project's folder, the tool manifest, and the projects' EF Core package references. |
+| `ef/contexts` | `EfTarget` | `{contexts: [{name, fullName, assemblyQualifiedName?}]}` | `dbcontext list`. |
+| `ef/contextInfo` | `EfTarget` | `{type, providerName?, databaseName?, dataSource?, options?}` | `dbcontext info`. |
+| `ef/migrations` | `EfTarget` | `{migrations: [{id, name, applied?}], connectionError?}` | `migrations list`; when the database can't be reached, again with `--no-connect` (`applied` null) and the error. |
+| `ef/addMigration` | `{target, name, outputDir?, namespace?}` | `{files}` | `migrations add`; the name must be a C# identifier. |
+| `ef/removeMigration` | `{target, force}` | `{files}` | `migrations remove` (`--force` reverts an applied one first). |
+| `ef/script` | `{target, from?, to?, idempotent, noTransactions}` | `{sql}` | `migrations script` into a temporary file. `from` newer than `to` gives the Down script; the shell shows the script from the last applied migration to the target before every update. |
+| `ef/updateDatabase` | `{target, migration?}` | `{}` | `database update [migration]` (`0` reverts every migration). |
+| `ef/bundle` | `{target, output, selfContained, runtime?, force}` | `{files}` | `migrations bundle`. |
+| `ef/scaffold` | `{project, startupProject?, connection, provider, outputDir?, contextDir?, contextName?, namespace?, contextNamespace?, tables?, schemas?, dataAnnotations, noOnConfiguring, useDatabaseNames, noPluralize, force, noBuild}` | `{files}` | `dbcontext scaffold`; empty `tables` and `schemas` mean everything. |
+| `ef/optimize` | `{target, outputDir?, namespace?}` | `{files}` | `dbcontext optimize`; `files` are the files written to the output folder. |
+| `ef/model` | `EfTarget` | `{context, provider?, productVersion?, entities, debugView?}` | The design-time model from `daedalus-efagent`. Each entity: `{name, clrType?, table?, schema?, view?, isOwned, owner?, baseType?, isKeyless, properties: [{name, clrType?, nullable, isKey, isForeignKey, isShadow, column?, columnType?, maxLength?}], keys: [{properties, isPrimary}], foreignKeys: [{properties, principal, principalProperties, deleteBehavior?, isUnique, isRequired, isOwnership, dependentToPrincipal?, principalToDependent?}], navigations: [{name, target?, isCollection, isOnDependent, inverse?, isSkip}], indexes: [{properties, isUnique, name?}]}`. |
+
+Notification (host → shell): **`ef/output`** `{level: info | warn | error | verbose, line}`, the running command's messages (the command line comes first as `> dotnet ef …`).
+
 ## Errors
 
 | Code | Meaning |
@@ -133,3 +156,4 @@ Property pages, references, configurations, dependencies, load/unload, solution 
 | -33101 | The solution is not trusted. |
 | -33102 | Invalid operation (e.g. no such solution folder; editing the solution of a project opened on its own). |
 | -33103 | File system error (exists, not found, access denied); the message is meant for the user. |
+| -33104 | A tool the request runs isn't installed (`dotnet-ef` for `ef/*`): the shell offers to install or restore it. |

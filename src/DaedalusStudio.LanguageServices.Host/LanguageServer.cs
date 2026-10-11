@@ -250,6 +250,8 @@ internal sealed class LanguageServer : IAsyncDisposable
         });
         _connection.OnRequest(Methods.AspNetEndpoints, json.AspNetEndpointsParams, json.AspNetEndpointsResult,
             (p, ct) => AspNetEndpointsFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
+        _connection.OnRequest(Methods.EfContexts, json.EfContextsParams, json.EfDiscoveredContextsResult,
+            (p, ct) => EntityFrameworkFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
     }
 
     private void ApplySettings(JsonElement settings)
