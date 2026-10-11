@@ -306,17 +306,24 @@ public sealed class GitRepositoryFeaturesTests : IAsyncLifetime
         Assert.False(AskpassClient.IsInvocation(["a", "b"], Environment));
         Assert.False(AskpassClient.IsInvocation(["Password: "], _ => null));
 
+        var errors = new System.Text.StringBuilder();
         string Run(string prompt, Func<string, string?> environment, out int code)
         {
             var output = new StringWriter();
-            code = AskpassClient.Run(prompt, output, environment);
+            var error = new StringWriter();
+            code = AskpassClient.Run(prompt, output, environment, error);
+            lock (errors)
+            {
+                errors.Append(error);
+            }
+
             return output.ToString();
         }
 
         var answer = await Task.Run(() => (Run("Password for 'https://ada@example.com': ", Environment, out var code), code), Ct);
-        Assert.Equal(("s3cret\n", 0), answer);
+        Assert.True(answer == ("s3cret\n", 0), $"{answer}; the client said: {errors}");
         answer = await Task.Run(() => (Run("Username for 'https://example.com': ", Environment, out var code), code), Ct);
-        Assert.Equal(("ada\n", 0), answer);
+        Assert.True(answer == ("ada\n", 0), $"{answer}; the client said: {errors}");
 
         // Cancelled by the user, a wrong token, no shell: exit code 1 and nothing printed.
         answer = await Task.Run(() => (Run("Are you sure you want to continue connecting (yes/no/[fingerprint])? ", Environment, out var code), code), Ct);

@@ -161,7 +161,7 @@ public static class AskpassClient
     }
 
     /// <summary>Asks the shell named by the environment; writes the answer and a newline to <paramref name="output"/>.</summary>
-    public static int Run(string prompt, TextWriter output, Func<string, string?>? getEnvironment = null)
+    public static int Run(string prompt, TextWriter output, Func<string, string?>? getEnvironment = null, TextWriter? error = null)
     {
         var environment = getEnvironment ?? System.Environment.GetEnvironmentVariable;
         if (environment(PipeVariable) is not { Length: > 0 } pipeName || environment(TokenVariable) is not { Length: > 0 } token)
@@ -171,15 +171,20 @@ public static class AskpassClient
 
         try
         {
-            using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
-            pipe.Connect(TimeSpan.FromSeconds(5));
+            using var pipe = Connect(pipeName, TimeSpan.FromSeconds(5));
             using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
             using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
             writer.WriteLine(token);
             writer.WriteLine(Convert.ToBase64String(Encoding.UTF8.GetBytes(prompt)));
-            if (reader.ReadLine() is not { } line || !line.StartsWith("1 ", StringComparison.Ordinal))
+            if (reader.ReadLine() is not { } line)
             {
+                error?.WriteLine("daedalus askpass: the IDE closed the request without an answer.");
                 return 1;
+            }
+
+            if (!line.StartsWith("1 ", StringComparison.Ordinal))
+            {
+                return 1; // declined, or a wrong token
             }
 
             output.Write(Encoding.UTF8.GetString(Convert.FromBase64String(line[2..])));
@@ -189,7 +194,37 @@ public static class AskpassClient
         }
         catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or FormatException)
         {
+            error?.WriteLine($"daedalus askpass: {ex.GetType().Name}: {ex.Message}");
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// Connects to the IDE's pipe, trying again until <paramref name="budget"/> runs out: on Unix (a socket) a
+    /// connection can be refused for a moment under load, before the server has seen the request.
+    /// </summary>
+    private static NamedPipeClientStream Connect(string pipeName, TimeSpan budget)
+    {
+        var deadline = DateTime.UtcNow + budget;
+        while (true)
+        {
+            var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
+            try
+            {
+                var left = deadline - DateTime.UtcNow;
+                pipe.Connect(left > TimeSpan.Zero ? left : TimeSpan.FromMilliseconds(1));
+                return pipe;
+            }
+            catch (IOException) when (DateTime.UtcNow < deadline)
+            {
+                pipe.Dispose();
+                Thread.Sleep(50);
+            }
+            catch
+            {
+                pipe.Dispose();
+                throw;
+            }
         }
     }
 }

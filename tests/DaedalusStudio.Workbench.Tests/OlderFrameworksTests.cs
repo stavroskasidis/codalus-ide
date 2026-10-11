@@ -62,6 +62,21 @@ public sealed class OlderFrameworksTests
         Assert.False(DotnetFrameworks.RunsAsX64(tfm, Architecture.X64, OSPlatform.Create(os)));
     }
 
+    [Fact]
+    public async Task A_run_plan_picks_the_runtime_of_the_program()
+    {
+        // M14c's run plans skipped RuntimeSelection (the x64 runtime on Apple silicon); found on the Mac.
+        var runs = new RunService(null!, new DaedalusStudio.Workbench.Output.OutputService(), _ => { })
+        {
+            DotnetRoot = "/usr/local/share/dotnet",
+            Machine = Mac("/usr/local/share/dotnet/x64/dotnet"),
+        };
+        var info = Info("netcoreapp2.1", "/usr/local/share/dotnet/dotnet", "exec \"/src/App/bin/App.dll\"");
+        var plan = await runs.PlanAsync(info, null, TestContext.Current.CancellationToken);
+        Assert.True(plan.RunsAsX64);
+        Assert.Equal("/usr/local/share/dotnet/x64/dotnet", plan.FileName.Replace('\\', '/'));
+    }
+
     private static RunInfo Info(string tfm, string command, string arguments = "") =>
         new("/src/App/App.csproj", tfm, "Exe", "/src/App/bin/App.dll", command, arguments, "/src/App", null);
 

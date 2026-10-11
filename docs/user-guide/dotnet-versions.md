@@ -44,7 +44,7 @@ Tested on Ubuntu 24.04 (WSL), and in containers of Ubuntu 18.04 and 20.04 for th
 | `net6.0` – `net10.0` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | `netstandard2.0`, `2.1` | yes | yes | yes | – | – | – | – | – | yes |
 
-The macOS results are pending the Mac run of this milestone (see the M33 checkpoint).
+Validated on an Apple M4 (macOS 27.0.1). Every framework from `netcoreapp2.0` to `net10.0` evaluates, builds, runs and debugs to a breakpoint, the ones before `net6.0` as x64 under Rosetta. The ASP.NET Core 2.1 and 3.1 apps answer, and tests run with coverage on every framework's test host. The SDKs before 6.0 have no Arm64 build, so a `global.json` that pins one counts as not installed (note 6).
 
 ### Notes
 

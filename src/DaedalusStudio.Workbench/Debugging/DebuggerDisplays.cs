@@ -15,7 +15,7 @@ namespace DaedalusStudio.Workbench.Debugging;
 public sealed class DebuggerDisplays
 {
     /// <summary>Evaluations for one list of variables stop after this long: the rest keep netcoredbg's values.</summary>
-    public static readonly TimeSpan Budget = TimeSpan.FromSeconds(3);
+    public TimeSpan Budget { get; init; } = TimeSpan.FromSeconds(3);
 
     private const int MaxPerList = 60;
 

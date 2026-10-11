@@ -89,7 +89,9 @@ internal sealed class ContainerDatabase : IAsyncDisposable
     [System.Diagnostics.CodeAnalysis.DoesNotReturn]
     private static void Skip(string reason)
     {
-        if (Environment.GetEnvironmentVariable("CI") == "true")
+        // CI runs Linux containers on its Linux runner only (M27's plan); the Windows runner's Docker runs Windows
+        // containers, and the macOS runner has no engine.
+        if (Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux())
         {
             Assert.Fail(reason);
         }

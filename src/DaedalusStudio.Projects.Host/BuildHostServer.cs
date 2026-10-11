@@ -249,6 +249,12 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or Microsoft.Build.Exceptions.InvalidProjectFileException)
         {
+            if (ex is ArgumentNullException)
+            {
+                // A bug, not a user's mistake: the stack goes to the host's log (and CI output) too.
+                await Console.Error.WriteLineAsync("[host] [error] " + ex).ConfigureAwait(false);
+            }
+
             throw new JsonRpcHandlerException(ProjectErrorCodes.InvalidOperation, ex.Message);
         }
     }

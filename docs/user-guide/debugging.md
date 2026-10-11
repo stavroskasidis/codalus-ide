@@ -19,7 +19,7 @@ The program's output and the debugger's messages appear in the **Debug Console**
 
 ### The program's console
 
-By default a debugged console app writes to the Debug Console and gets no input. Set **`debug.console`** to `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Daedalus Studio starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal.
+By default a debugged console app writes to the Debug Console and gets no input. Set **`debug.console`** to `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Daedalus Studio starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS the setting has no effect yet: the debugger can't attach to a program held in the terminal there, so programs use the Debug Console.
 
 ### Several startup projects
 
@@ -152,7 +152,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
   - **Threads**: each managed thread with its exception, if it had one, and its call stack. Frames map to source lines when the program's PDBs are next to its assemblies; double-click a frame to open the line.
   - **Heap**: the objects by type, with their count and size. Pick a type to list its instances, and an instance to see its fields; follow references to other objects, and go back.
 - Dumps open on the operating system that wrote them, because the runtime's debugging library has to load on the machine reading them.
-- On macOS, writing a dump of a program paused in the debugger can stall: continue or detach it first. A dump that takes longer than 3 minutes is abandoned, with a message.
+- On macOS, the first dump may make the system ask for your password (access to developer tools). The dump waits until you approve it, and is abandoned with a message after 3 minutes.
 
 ## Settings
 
