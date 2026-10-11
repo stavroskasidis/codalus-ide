@@ -16,6 +16,22 @@ internal static class LinuxLegacy
         s_folders.Concat((Environment.GetEnvironmentVariable("LD_LIBRARY_PATH") ?? string.Empty).Split(':', StringSplitOptions.RemoveEmptyEntries))
             .Any(folder => names.Any(name => File.Exists(Path.Combine(folder, name))));
 
+    /// <summary>
+    /// Why a VSTest test host on the runtime <paramref name="framework"/> can't start on this machine, or null when it can:
+    /// test hosts hash test names, which goes through OpenSSL on Linux.
+    /// </summary>
+    public static string? MissingForTestHost(Version framework)
+    {
+        if (!OperatingSystem.IsLinux() || framework.Major >= 6)
+        {
+            return null;
+        }
+
+        var core20 = framework < new Version(2, 1);
+        var found = core20 ? Has("libssl.so.1.0.0", "libssl.so.1.0.2", "libssl.so.10") : Has("libssl.so.1.1", "libssl.so.1.0.0", "libssl.so.1.0.2");
+        return found ? null : $".NET {framework}'s test host needs OpenSSL {(core20 ? "1.0" : "1.0 or 1.1")}, which this distribution doesn't have.";
+    }
+
     /// <summary>Why the SDK <paramref name="sdk"/> can't restore on this machine, or null when it can.</summary>
     public static string? Missing(Version sdk)
     {

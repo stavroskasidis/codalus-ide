@@ -77,8 +77,18 @@ public sealed class ShellMatrixTests
     {
         await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("DaedalusStudio.Plugins.DotNetTest"));
         await OpenAsync(f);
-        var projects = Matrix.All.Select(m => m.Tests).ToHashSet(StringComparer.Ordinal);
-        await ShellFixture.PumpUntil(() => f.Shell.Tests.Read(roots => roots.Count(r => projects.Contains(r.Label) && r.Leaves().Any()) == projects.Count), seconds: 600);
+        var all = Matrix.All.Select(m => m.Tests).ToHashSet(StringComparer.Ordinal);
+        await ShellFixture.PumpUntil(() => f.Shell.Tests.Read(roots => roots.Count(r => all.Contains(r.Label) && r.Leaves().Any()) == all.Count), seconds: 600);
+
+        // On Linux, the test hosts of .NET Core 2.x to .NET 5 need OpenSSL 1.x: the suite provides 1.1 (eng/get-runtimes.sh),
+        // not the 1.0 that .NET Core 2.0 needs (user guide, note 3).
+        var frameworks = Matrix.All.Where(m => LinuxLegacy.MissingForTestHost(m.Runtime) is null).ToList();
+        foreach (var skipped in Matrix.All.Except(frameworks))
+        {
+            TestContext.Current.SendDiagnosticMessage($"{skipped.Tests} not run: {LinuxLegacy.MissingForTestHost(skipped.Runtime)}");
+        }
+
+        var projects = frameworks.Select(m => m.Tests).ToHashSet(StringComparer.Ordinal);
 
         var covered = new List<string>();
         f.Shell.Tests.CoverageReported += (_, report) =>
@@ -93,17 +103,28 @@ public sealed class ShellMatrixTests
         await ShellFixture.PumpUntil(() => !f.Shell.Tests.IsRunning, seconds: 900);
         var outcomes = f.Shell.Tests.Read(roots => roots.Where(r => projects.Contains(r.Label))
             .ToDictionary(r => r.Label, r => r.Leaves().Select(l => l.Outcome).ToList()));
-        Assert.All(projects, p => Assert.True(outcomes[p] is [TestOutcome.Passed, TestOutcome.Passed], $"{p}: {string.Join(", ", outcomes[p])}"));
+        var failing = projects.Where(p => outcomes[p] is not [TestOutcome.Passed, TestOutcome.Passed]).ToList();
+        Assert.True(failing.Count == 0, string.Join("; ", failing.Select(p => $"{p}: {string.Join(", ", outcomes[p])}")) + "\nOutput:\n"
+            + string.Join("\n", f.Shell.Workbench.Output.Channels.Select(c => $"--- {c.Name}\n{Tail(c.GetText())}")));
 
         // Each framework's library was measured through its own test host (coverlet's netstandard2.0 collector before
         // .NET 8, the current one after).
-        await ShellFixture.PumpUntil(() =>
+        string[] Uncovered()
         {
             lock (covered)
             {
-                return Matrix.All.All(m => covered.Any(u => u.EndsWith($"/{m.Lib}/Greeter.cs", StringComparison.OrdinalIgnoreCase)));
+                return [.. frameworks.Where(m => !covered.Any(u => u.EndsWith($"/{m.Lib}/Greeter.cs", StringComparison.OrdinalIgnoreCase))).Select(m => m.Lib)];
             }
-        }, seconds: 120);
+        }
+
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (Uncovered() is { Length: > 0 } uncovered)
+        {
+            Assert.True(waited.Elapsed < TimeSpan.FromSeconds(300), $"No coverage of {string.Join(", ", uncovered)}. Output:\n"
+                + string.Join("\n", f.Shell.Workbench.Output.Channels.Select(c => $"--- {c.Name}\n{Tail(c.GetText())}")));
+            ShellFixture.Pump();
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
     }
 
     [AvaloniaFact]
