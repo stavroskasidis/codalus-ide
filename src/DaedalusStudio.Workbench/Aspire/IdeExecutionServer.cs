@@ -256,6 +256,11 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     private async Task SendAsync(IdeNotification notification)
     {
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(notification, IdeExecutionJsonContext.Default.IdeNotification));
+        if (_sockets.IsEmpty && notification.Type != "serviceLogs")
+        {
+            Log?.Invoke($"No notification socket: {notification.Type} for run session {notification.SessionId} wasn't sent.");
+        }
+
         foreach (var (socket, gate) in _sockets)
         {
             await gate.WaitAsync().ConfigureAwait(false);
@@ -264,10 +269,19 @@ public sealed class IdeExecutionServer : IAsyncDisposable
                 if (socket.State == WebSocketState.Open)
                 {
                     await socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, _lifetime.Token).ConfigureAwait(false);
+                    if (notification.Type != "serviceLogs")
+                    {
+                        Log?.Invoke($"Sent {notification.Type} for run session {notification.SessionId}{(notification.ProcessId is { } pid ? $" (process {pid})" : string.Empty)}.");
+                    }
+                }
+                else
+                {
+                    Log?.Invoke($"The notification socket is {socket.State}: {notification.Type} for run session {notification.SessionId} wasn't sent.");
                 }
             }
             catch (Exception ex) when (ex is WebSocketException or ObjectDisposedException or OperationCanceledException or IOException)
             {
+                Log?.Invoke($"Could not send {notification.Type} for run session {notification.SessionId}: {ex.Message}");
                 _sockets.TryRemove(socket, out _);
             }
             finally

@@ -4,15 +4,21 @@ using DaedalusStudio.Workbench.Aspire;
 
 namespace DaedalusStudio.Workbench.Tests;
 
+/// <summary>The Aspire test runs alone, after the parallel ones: its orchestrator has 20 s to start on a busy runner.</summary>
+[CollectionDefinition(nameof(AspireTests), DisableParallelization = true)]
+public sealed class AspireTestsAlone;
+
 /// <summary>
 /// Aspire (M17b, ADR 0043) on samples/Containers/Aspire, with the user's Aspire packages (13.1, restored from nuget.org)
 /// and their orchestrator: the AppHost asks our IDE execution server to start its two projects, and the resource service
 /// describes them, a Redis container that waits for an explicit start, and their logs. No container is started.
 /// </summary>
+[Collection(nameof(AspireTests))]
 public sealed class AspireTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(DaedalusStudio.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-aspire-" + Guid.NewGuid().ToString("N"));
     private readonly ConcurrentBag<Process> _processes = [];
+    private readonly DateTime _started = DateTime.Now;
 
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
@@ -30,7 +36,7 @@ public sealed class AspireTests : IAsyncLifetime
             }
         }
 
-        await Task.Delay(1000);
+        await AspireRuntime.StopOrchestratorsAsync(_started);
         try
         {
             Directory.Delete(_root, recursive: true);
@@ -81,6 +87,7 @@ public sealed class AspireTests : IAsyncLifetime
     [Fact]
     public async Task The_apphost_starts_its_projects_through_the_ide_and_describes_its_resources()
     {
+        await AspireRuntime.RequireContainerEngineAsync();
         var ct = TestContext.Current.CancellationToken;
         var fixture = ContainerRuntime.CopyFixture(_root);
         var appHost = Path.Combine(fixture, "Aspire", "AppHost", "AppHost.csproj");
@@ -120,14 +127,29 @@ public sealed class AspireTests : IAsyncLifetime
             ["ASPNETCORE_URLS"] = $"http://localhost:{Containers.ContainerLaunch.FreePort()}",
             ["ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"] = $"http://localhost:{Containers.ContainerLaunch.FreePort()}",
         };
-        var host = StartProcess("dotnet", ["run", "--project", appHost, "--no-build", "--no-launch-profile"], Path.GetDirectoryName(appHost)!, environment, line => log.Enqueue("[apphost] " + line));
-        _processes.Add(host);
+        Process StartAppHost()
+        {
+            var process = StartProcess("dotnet", ["run", "--project", appHost, "--no-build", "--no-launch-profile"], Path.GetDirectoryName(appHost)!, environment, line => log.Enqueue("[apphost] " + line));
+            _processes.Add(process);
+            return process;
+        }
+
+        var host = StartAppHost();
         string Log() => string.Join('\n', log);
 
         var deadline = Stopwatch.StartNew();
+        var restarted = false;
         while (requests.Count < 2)
         {
-            Assert.True(deadline.Elapsed < TimeSpan.FromMinutes(3) && !host.HasExited, "The AppHost didn't ask for its two projects:\n" + Log());
+            if (host.HasExited && !restarted && requests.IsEmpty && Log().Contains("Hosting failed to start", StringComparison.Ordinal))
+            {
+                // Aspire gives its orchestrator 20 s to start, which a loaded CI runner can miss: once more.
+                restarted = true;
+                log.Enqueue("[test] The orchestrator didn't start in time: starting the AppHost again.");
+                host = StartAppHost();
+            }
+
+            Assert.True(deadline.Elapsed < TimeSpan.FromMinutes(4) && !host.HasExited, "The AppHost didn't ask for its two projects:\n" + Log());
             await Task.Delay(250, ct);
         }
 
@@ -211,5 +233,72 @@ public sealed class AspireTests : IAsyncLifetime
         }
 
         Assert.Contains("Stopping run session", Log(), StringComparison.Ordinal);
+    }
+}
+
+/// <summary>
+/// Aspire 13.1's orchestrator wants a container runtime: without one (GitHub's macOS runner, a Mac without Docker or
+/// Podman) the Aspire tests skip with the reason, and only CI's Linux runner, which has Docker, fails instead.
+/// </summary>
+internal static class AspireRuntime
+{
+    public static async Task RequireContainerEngineAsync()
+    {
+        var engine = DaedalusStudio.Workbench.Containers.ContainerEngine.Resolve(Environment.GetEnvironmentVariable("DAEDALUS_TEST_CONTAINER_TOOL"));
+        var (os, error) = await engine.ServerOsAsync(CancellationToken.None);
+        if (os is null)
+        {
+            var reason = $"Aspire's orchestrator needs a container runtime, and none answers ({engine.Name}: {error})";
+            if (Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux())
+            {
+                Assert.Fail(reason);
+            }
+
+            Assert.Skip(reason);
+        }
+    }
+
+    /// <summary>
+    /// Ends the orchestrator processes started since <paramref name="since"/> that outlived their AppHost (Aspire's
+    /// DCP runs detached; a killed AppHost can leave it holding the app's ports).
+    /// </summary>
+    public static async Task StopOrchestratorsAsync(DateTime since)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var left = System.Diagnostics.Process.GetProcesses().Where(p => p.ProcessName is "dcp" or "dcpctrl" or "dcpproc" && Started(p) >= since).ToList();
+            if (left.Count == 0)
+            {
+                return;
+            }
+
+            if (attempt == 19)
+            {
+                foreach (var process in left)
+                {
+                    try
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                    {
+                    }
+                }
+            }
+
+            await Task.Delay(500);
+        }
+
+        static DateTime Started(System.Diagnostics.Process process)
+        {
+            try
+            {
+                return process.StartTime;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+                return DateTime.MinValue;
+            }
+        }
     }
 }

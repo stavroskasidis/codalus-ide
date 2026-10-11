@@ -287,6 +287,25 @@ public sealed class GitRepositoryFeaturesTests : IAsyncLifetime
     // ------------------------------------------------------------------ askpass
 
     [Fact]
+    public async Task Askpass_answers_every_request_of_a_quick_series()
+    {
+        // An instant answer used to let the only pipe instance close before the next existed, dropping a client already
+        // queued on Unix's shared socket (found on the Mac, under load).
+        using var server = new AskpassServer("daedalus", (_, _) => Task.FromResult<string?>("ada"));
+        string? Environment(string name) => server.Environment.TryGetValue(name, out var value) ? value : null;
+        for (var i = 0; i < 100; i++)
+        {
+            var error = new StringWriter();
+            var (output, code) = await Task.Run(() =>
+            {
+                var output = new StringWriter();
+                return (output, AskpassClient.Run("Username: ", output, Environment, error));
+            }, Ct);
+            Assert.True(code == 0 && output.ToString() == "ada\n", $"request {i}: {code}; the client said: {error}");
+        }
+    }
+
+    [Fact]
     public async Task Askpass_answers_through_the_pipe_and_never_without_the_token()
     {
         var asked = new List<AskpassPrompt>();

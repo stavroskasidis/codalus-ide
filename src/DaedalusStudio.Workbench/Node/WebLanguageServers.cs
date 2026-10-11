@@ -61,6 +61,8 @@ public sealed class WebLanguageServers(NodeRuntime node, string manifestFolder, 
         await _install.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // Another process (a second window, a parallel test assembly) may be installing into the same cache.
+            using var cacheLock = await CacheLock.AcquireAsync(Folder + ".lock", cancellationToken).ConfigureAwait(false);
             if (IsInstalled)
             {
                 return;
