@@ -820,7 +820,23 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
         }).ConfigureAwait(true);
 
-        await StepAsync("dotnet.older", "M33", "Projects of .NET Core 2.0 to .NET 10 open and build; Hot Reload says why it needs .NET 6", OlderFrameworksStepAsync).ConfigureAwait(true);
+        await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
+        {
+            // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
+            var offer = new Workbench.Updates.UpdateOffer("99.0.0", "stable", false, "- Release notes the smoke test wrote.", null);
+            shell.UseUpdates(new Workbench.Updates.InstallInfo(ShellInfo.Version, Workbench.Updates.InstallKind.SelfUpdating), new StandInUpdates(offer));
+            await shell.CheckForUpdatesAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Right)
+                .Any(i => i.Id == ShellHost.UpdateStatusItem && i.Text.Contains("Restart to update (99.0.0)", StringComparison.Ordinal)), "the Restart to update item").ConfigureAwait(true);
+            var notes = shell.ShowWhatsNew();
+            Check(notes is not null && notes.Source.Text.Text.Contains("Release notes the smoke test wrote.", StringComparison.Ordinal), "What's New shows the release's notes");
+            await Task.Delay(1000).ConfigureAwait(true); // rendered
+            Screenshot("smoke-test-update.png");
+            shell.Layout.CloseDocument(notes!);
+            shell.UseUpdates(new Workbench.Updates.InstallInfo(ShellInfo.Version, Workbench.Updates.InstallKind.Development), new StandInUpdates(offer));
+            shell.Workbench.StatusBar.Remove(ShellHost.UpdateStatusItem);
+        }).ConfigureAwait(true);
+
 
         const string wasmTitle = "F5 debugs a Blazor WebAssembly app in the browser: a breakpoint in a .razor file stops";
         if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null && Environment.GetEnvironmentVariable("CI") != "true")
@@ -832,6 +848,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
         }
+
+        // Last: it opens a solution of 38 projects, and nothing after it depends on what it leaves behind.
+        await StepAsync("dotnet.older", "M33", "Projects of .NET Core 2.0 to .NET 10 open and build; Hot Reload says why it needs .NET 6", OlderFrameworksStepAsync).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -1039,11 +1058,14 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         var counter = Path.Combine(target, "BlazorWasm", "Pages", "Counter.razor");
         var line = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [initialized]", StringComparison.Ordinal)) + 1;
         shell.Debugger.Breakpoints.Toggle(counter, line);
+        var buildBefore = shell.Builds.LastBuild;
+        bool BuildFailed() => shell.Builds.LastBuild is { Result.Succeeded: false } build && build != buildBefore;
         shell.Run("debug.start");
         try
         {
-            // The first session downloads vscode-js-debug (and Node.js, if M16b's step didn't).
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the browser session stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
+            // The first session downloads vscode-js-debug (and Node.js, if M16b's step didn't). A failed build ends the wait.
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), "the browser session stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
+            Check(!BuildFailed(), "the build before debugging succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the call stack", 60).ConfigureAwait(true);
             Check(shell.CallStack.Frames[0].Name.Contains("Counter.OnInitialized", StringComparison.Ordinal), "the top frame is Counter.OnInitialized, in the browser: " + shell.CallStack.Frames[0].Name);
             Screenshot("smoke-test-blazor-wasm-debug.png");
@@ -1487,4 +1509,21 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     }
 
     private static string Tail(string text, int length) => text.Length > length ? "…" + text[^length..] : text;
+
+    /// <summary>The update step's backend: one offer, a download that is done at once, nothing applied.</summary>
+    private sealed class StandInUpdates(Workbench.Updates.UpdateOffer offer) : Workbench.Updates.IUpdateBackend
+    {
+        public Task<Workbench.Updates.UpdateOffer?> CheckAsync(string channel, bool allowDowngrade, CancellationToken cancellationToken) =>
+            Task.FromResult<Workbench.Updates.UpdateOffer?>(offer);
+
+        public Task DownloadAsync(Workbench.Updates.UpdateOffer offer, IProgress<int> progress, CancellationToken cancellationToken)
+        {
+            progress.Report(100);
+            return Task.CompletedTask;
+        }
+
+        public void ApplyAfterExit(Workbench.Updates.UpdateOffer offer, bool restart, IReadOnlyList<string> arguments)
+        {
+        }
+    }
 }

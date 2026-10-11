@@ -10,12 +10,19 @@ internal static partial class Program
     public static int Main(string[] args)
     {
         BenchEvents.Emit(BenchEventNames.MainEntered);
+        Infrastructure.Installation.Run();
         var options = ShellOptions.Parse(args);
         if (options.ShowVersion || options.ShowHelp)
         {
             AttachToParentConsole();
             Console.Out.WriteLine(options.ShowVersion ? ShellInfo.VersionText : ShellOptions.HelpText);
             return 0;
+        }
+
+        if (options.UpdateNow)
+        {
+            AttachToParentConsole();
+            return Infrastructure.Updates.UpdateNow(Console.Out);
         }
 
         // daedalus diff: hand it to the running shell of this user-data folder, if there is one.

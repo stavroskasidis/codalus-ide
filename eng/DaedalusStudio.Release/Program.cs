@@ -4,7 +4,8 @@ using DaedalusStudio.Release;
 // The release workflows' helper (M31, D21). Run from anywhere inside the repository:
 //   daedalus-release version stable|nightly|dev [--run N] [--date YYYYMMDD]   the version to stamp a build with
 //   daedalus-release check-tag <version>                                     fails when v<version> already exists
-//   daedalus-release bump                                                    VERSION := the next minor version
+//   daedalus-release bump [--after <released version>]                       VERSION := the next minor version
+//                                                                            (after a release: past it, unless already further)
 //   daedalus-release notes stable|nightly <version> [--repo owner/name] [--to REF] [--since TAG] [--changelog FILE]
 string? Option(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
 
@@ -40,7 +41,8 @@ try
 
         case "bump":
         {
-            var next = ReleaseVersion.Read(versionFile).NextMinor();
+            var current = ReleaseVersion.Read(versionFile);
+            var next = Option("--after") is { } released ? current.After(ReleaseVersion.Parse(released)) : current.NextMinor();
             File.WriteAllText(versionFile, next + "\n");
             Console.WriteLine(next);
             return 0;

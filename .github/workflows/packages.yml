@@ -1,0 +1,123 @@
+name: Packages
+
+# Builds the installers on every platform (eng/package.sh), installs them the way users would and smoke-tests the
+# installed app (eng/smoke-test.sh --packages), then uploads them. Called by nightly.yml and release.yml (M31, ADR 0028).
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The version to stamp (daedalus-release version …)
+        type: string
+        required: true
+      kind:
+        description: stable or nightly (the update channel is <rid>-<kind>)
+        type: string
+        required: true
+      ref:
+        description: The commit to build
+        type: string
+        required: true
+      previous:
+        description: The previous release of the same kind, for Velopack's delta packages (empty for the first)
+        type: string
+        default: ""
+      arm64:
+        description: Also build Linux ARM64 (GitHub's ARM64 Linux runners are free for public repositories only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.pick.outputs.include }}
+    steps:
+      - id: pick
+        shell: bash
+        run: |
+          include='[{"os":"windows-latest","rid":"win-x64"},{"os":"macos-latest","rid":"osx-arm64"},{"os":"ubuntu-latest","rid":"linux-x64"}'
+          [[ "${{ inputs.arm64 }}" == "true" ]] && include+=',{"os":"ubuntu-24.04-arm","rid":"linux-arm64"}'
+          echo "include=$include]" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0 # the release notes read the history and the tags
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          # The smoke test's .NET 11 step (M30): keep it in step with samples/Net11/global.json.
+          dotnet-version: 11.0.100-rc.1.26425.128
+      - name: Linux prerequisites (Native AOT, AppImage, rpm, delta packages, Xvfb)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev squashfs-tools rpm zstd xvfb
+      - name: macOS prerequisites (delta packages)
+        if: runner.os == 'macOS'
+        run: command -v zstd || brew install zstd
+      - name: The previous release of this channel (Velopack delta packages)
+        if: inputs.previous != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          channel="${{ matrix.rid }}-${{ inputs.kind }}"
+          gh release download "${{ inputs.previous }}" -D previous-release -p "releases.$channel.json" -p "*-$channel-full.nupkg" \
+            || echo "No $channel files in ${{ inputs.previous }}: no delta package this time."
+      - name: Release notes
+        shell: bash
+        run: dotnet run --project eng/DaedalusStudio.Release -- notes "${{ inputs.kind }}" "${{ inputs.version }}" --repo "${{ github.repository }}" > release-notes.md
+      - name: Package
+        shell: bash
+        env:
+          DAEDALUS_PREVIOUS_RELEASE: ${{ github.workspace }}/previous-release
+          DAEDALUS_RELEASE_NOTES: ${{ github.workspace }}/release-notes.md
+          # The update feed's signature (M32): installed builds refuse a feed without it.
+          DAEDALUS_FEED_KEY: ${{ secrets.FEED_SIGNING_KEY }}
+          # Code signing (D19) waits behind these until the repository is public.
+          DAEDALUS_CODESIGN_IDENTITY: ${{ secrets.DAEDALUS_CODESIGN_IDENTITY }}
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
+          bash eng/package.sh "${{ inputs.version }}" "${{ inputs.kind }}"
+      - name: Stack traces for a smoke test failure (dotnet-stack)
+        if: runner.os != 'Windows'
+        run: dotnet tool install -g dotnet-stack || true
+      - name: Install, smoke-test and uninstall the packages
+        shell: bash
+        timeout-minutes: 40
+        run: bash eng/smoke-test.sh --packages artifacts/packages artifacts/smoke-test
+      - uses: actions/upload-artifact@v4
+        if: failure() || cancelled()
+        with:
+          name: smoke-test-${{ matrix.rid }}
+          path: artifacts/smoke-test/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.rid }}
+          path: artifacts/packages/
+          if-no-files-found: error
+      # Self-update end to end (M32): version N and N+1 of the installer, N installed, a tampered feed refused, then N
+      # updated to N+1 through a signed local feed. After the upload, in its own folder.
+      - name: Self-update test
+        shell: bash
+        timeout-minutes: 45
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
+          bash eng/test-update.sh "$RUNNER_TEMP/update-test"

@@ -1,62 +1,119 @@
-name: Release packages
+name: Release
 
-# Builds the per-OS packages with eng/package.sh (ADR 0009) and uploads them as workflow artifacts. Manual only: on the
-# private repo's free plan this costs about as much as a full CI matrix run. Creating a GitHub release from the
-# artifacts is a manual step (see docs/release/go-public-checklist.md).
+# A stable release from master (M31, ADR 0028, D20/D21): every merge from develop (and every hotfix) publishes
+# v<VERSION>, the version in the VERSION file. The release fails if that tag exists already. It carries the installers
+# for every platform, the update feeds (M32), the winget manifests and checksums, with notes generated from the commits
+# since the previous stable release. Afterwards develop moves past the released version (and takes in a hotfix).
+# While the repository is private this runs on manual dispatch only; the push trigger switches on by itself once the
+# repository is public. A dry run builds and tests everything and publishes nothing.
 on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   workflow_dispatch:
     inputs:
-      version:
-        description: Version to stamp (e.g. 0.1.0)
-        required: true
-        default: 0.1.0-preview.1
+      dry_run:
+        description: Build and test without publishing
+        type: boolean
+        default: true
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
 
 jobs:
-  package:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+  plan:
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      ref: ${{ steps.plan.outputs.ref }}
+      previous: ${{ steps.plan.outputs.previous }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-          # The smoke test's .NET 11 step (M30): keep it in step with samples/Net11/global.json.
-          dotnet-version: 11.0.100-rc.1.26425.128
-      - name: Native AOT prerequisites (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
-      - name: Package
+      - id: plan
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
-          bash eng/package.sh "${{ inputs.version }}"
-      # Installs the packages it just built (outside the checkout) and runs the smoke test on them, with their bundled
-      # debugger: the Windows zip, the macOS .app from the dmg, the Linux .deb (and --version of the tar.gz and AppImage).
-      - name: Display for the smoke test (Xvfb)
-        if: runner.os == 'Linux'
-        run: sudo apt-get install -y --no-install-recommends xvfb
-      - name: Smoke test the packages
+          version="$(dotnet run --project eng/DaedalusStudio.Release -- version stable)"
+          dotnet run --project eng/DaedalusStudio.Release -- check-tag "$version"
+          previous="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "Release $version from $(git rev-parse --short HEAD) (previous: ${previous:-none})" >> "$GITHUB_STEP_SUMMARY"
+
+  packages:
+    needs: plan
+    uses: ./.github/workflows/packages.yml
+    with:
+      version: ${{ needs.plan.outputs.version }}
+      kind: stable
+      ref: ${{ needs.plan.outputs.ref }}
+      previous: ${{ needs.plan.outputs.previous }}
+      arm64: ${{ !github.event.repository.private }}
+    secrets: inherit
+
+  publish:
+    needs: [plan, packages]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          path: downloaded
+      - name: Publish the release
         shell: bash
-        run: bash eng/smoke-test.sh --packages artifacts/packages artifacts/smoke-test
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: smoke-test-${{ runner.os }}
-          path: artifacts/smoke-test/
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
-        with:
-          name: packages-${{ runner.os }}
-          path: artifacts/packages/
-          if-no-files-found: error
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash eng/publish-release.sh stable "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.ref }}" downloaded
+      - name: Move develop past the release (and take in a hotfix)
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin develop master
+          git switch -c develop-after-release origin/develop
+          if ! git merge --no-edit origin/master; then
+            # A hotfix released from master: develop's VERSION wins (the bump below moves it past the release); any
+            # other conflict needs the maintainer.
+            if [[ "$(git diff --name-only --diff-filter=U)" == "VERSION" ]]; then
+              git checkout --ours VERSION && git add VERSION && git commit --no-edit
+            else
+              echo "::error::Merging master into develop conflicts beyond VERSION; merge it by hand." && exit 1
+            fi
+          fi
+          next="$(dotnet run --project eng/DaedalusStudio.Release -- bump --after "${{ needs.plan.outputs.version }}")"
+          if ! git diff --quiet VERSION; then
+            git commit -m "Start $next after the ${{ needs.plan.outputs.version }} release" VERSION
+          fi
+          git push origin HEAD:develop
+
+  linux-repositories:
+    needs: publish
+    # GitHub Pages needs a public repository on the free plan (D20): until then the apt and dnf repositories wait.
+    if: ${{ !github.event.repository.private }}
+    uses: ./.github/workflows/linux-repos.yml
+    secrets: inherit
