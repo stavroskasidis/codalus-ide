@@ -82,6 +82,59 @@ internal sealed class ProjectFileEditor(ProjectCollection collection)
         return changed;
     }
 
+    /// <summary>
+    /// The project's explicit items naming <paramref name="source"/> (or files under it), for a move or copy into another
+    /// project (ADR 0033): they are returned to be applied there and, unless <paramref name="copy"/>, removed here.
+    /// <c>Remove</c> items are dropped on a move, not carried. Returns whether the project file changed.
+    /// </summary>
+    public bool TakeItems(string projectPath, string source, bool copy, List<ProjectManagement.ProjectItems.CarriedItem> carried)
+    {
+        if (!File.Exists(projectPath))
+        {
+            return false;
+        }
+
+        var xml = Open(projectPath);
+        var directory = Path.GetDirectoryName(projectPath)!;
+        var edited = false;
+        foreach (var item in xml.ItemGroups.Where(g => g.Parent == xml && g.Condition.Length == 0).SelectMany(g => g.Items).Where(i => i.Condition.Length == 0).ToList())
+        {
+            var value = item.Include.Length > 0 ? item.Include : item.Update.Length > 0 ? item.Update : item.Remove;
+            if (value.Length == 0 || value.IndexOfAny(['*', '?', ';', '$', '@']) >= 0)
+            {
+                continue;
+            }
+
+            var full = Full(directory, value);
+            if (!IsSameOrUnder(full, source))
+            {
+                continue;
+            }
+
+            if (item.Remove.Length == 0)
+            {
+                var relative = Path.GetRelativePath(source, full);
+                carried.Add(new ProjectManagement.ProjectItems.CarriedItem(
+                    item.ItemType,
+                    relative == "." ? string.Empty : relative,
+                    item.Metadata.Where(m => m.Condition.Length == 0).GroupBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.Last().Value, StringComparer.OrdinalIgnoreCase)));
+            }
+
+            if (!copy)
+            {
+                RemoveItem(item);
+                edited = true;
+            }
+        }
+
+        if (edited)
+        {
+            xml.SaveFile();
+        }
+
+        return edited;
+    }
+
     public bool AddProjectReference(string projectPath, string referencePath)
     {
         var xml = Open(projectPath);

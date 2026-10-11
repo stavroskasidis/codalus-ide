@@ -28,6 +28,9 @@ internal interface ISessionEvents
     Task CompilerInputsAsync(CompilerInputsInfo inputs);
 
     Task DesignTimeProgressAsync(DesignTimeProgressParams progress);
+
+    /// <summary>Folders whose set of files changed on disk (Show All Files, the folder view; ADR 0033).</summary>
+    Task FilesChangedAsync(FilesChangedParams changes);
 }
 
 /// <summary>The session's events plus those of builds.</summary>
@@ -97,7 +100,8 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
     public SolutionConfigurationInfo Active { get; private set; } = new("Debug", "Any CPU");
 
-    private bool IsSingleProject => _model is null;
+    /// <summary>A project opened on its own (no solution file, not a folder).</summary>
+    private bool IsSingleProject => _model is null && !IsFolder;
 
     private IEnumerable<string> ProjectPaths => _info.Projects.Select(p => p.Path);
 
@@ -107,7 +111,12 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     {
         Path = System.IO.Path.GetFullPath(parameters.Path);
         string[]? filterProjects = null;
-        if (System.IO.Path.GetExtension(Path).Equals(".slnf", StringComparison.OrdinalIgnoreCase))
+        if (Directory.Exists(Path))
+        {
+            IsFolder = true;
+            Path = System.IO.Path.TrimEndingDirectorySeparator(Path);
+        }
+        else if (System.IO.Path.GetExtension(Path).Equals(".slnf", StringComparison.OrdinalIgnoreCase))
         {
             FilterPath = Path;
             (Path, filterProjects) = ReadFilter(FilterPath);
@@ -118,6 +127,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         }
 
         Trusted = parameters.Trusted;
+        _restoreOnOpen = parameters.Restore;
         foreach (var (project, framework) in parameters.ActiveFrameworks ?? [])
         {
             _activeFrameworks[System.IO.Path.GetFullPath(project)] = framework;
@@ -139,7 +149,11 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         if (Trusted)
         {
             StartWatching();
-            StartEvaluation(restoreAfterwards: parameters.Restore);
+            StartEvaluation(restoreAfterwards: parameters.Restore && _info.Projects.Length > 0);
+        }
+        else if (IsFolder)
+        {
+            StartWatching(); // the folder view follows the disk; nothing is evaluated
         }
 
         return _info;
@@ -172,6 +186,14 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
     private async Task<SolutionInfo> ReadSolutionAsync(CancellationToken cancellationToken)
     {
+        if (IsFolder)
+        {
+            // A folder: an in-memory solution of the projects the user loaded (ADR 0033).
+            _model = null;
+            _serializer = null;
+            return FolderInfo(LoadFolderProjects());
+        }
+
         var extension = System.IO.Path.GetExtension(Path);
         if (extension is ".sln" or ".slnx")
         {
@@ -485,6 +507,12 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             path = Path;
             (properties["Configuration"], properties["Platform"]) = ProjectConfiguration(path);
         }
+        else if (IsFolder)
+        {
+            path = FolderBuildEntryPoint();
+            properties["Configuration"] = Active.Configuration;
+            properties["Platform"] = path.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ? Active.Platform : Active.Platform.Replace(" ", string.Empty, StringComparison.Ordinal);
+        }
         else
         {
             path = BuildEntryPoint();
@@ -603,7 +631,11 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private Dictionary<string, string> SolutionProperties()
     {
         var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (!IsSingleProject)
+        if (IsFolder)
+        {
+            properties["SolutionDir"] = Path + System.IO.Path.DirectorySeparatorChar;
+        }
+        else if (!IsSingleProject)
         {
             properties["SolutionDir"] = System.IO.Path.GetDirectoryName(Path) + System.IO.Path.DirectorySeparatorChar;
             properties["SolutionPath"] = Path;
@@ -625,14 +657,23 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private void StartWatching()
     {
         _watcher ??= new ProjectWatcher(OnFilesChanged);
-        _watcher.Watch(Path, ProjectPaths);
+        WatchNow();
     }
+
+    /// <summary>Points the watcher at the workspace folder, the solution file (when there is one) and the projects.</summary>
+    private void WatchNow() => _watcher?.Watch(SolutionDirectory, IsFolder ? null : Path, ProjectPaths);
 
     private async Task OnFilesChanged(ProjectWatcher.Changes changes)
     {
         try
         {
-            if (changes.SolutionFileChanged && !IsSingleProject)
+            var structural = changes.Directories.Concat(changes.MSBuildFiles.Select(f => System.IO.Path.GetDirectoryName(f)!)).Distinct(s_pathComparer).ToArray();
+            if (structural.Length > 0)
+            {
+                await _events.FilesChangedAsync(new FilesChangedParams(structural)).ConfigureAwait(false);
+            }
+
+            if (changes.SolutionFileChanged && !IsSingleProject && !IsFolder)
             {
                 await _solutionLock.WaitAsync(_lifetime.Token).ConfigureAwait(false);
                 try
@@ -640,7 +681,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                     var old = ProjectPaths.ToHashSet(s_pathComparer);
                     _info = await ReadSolutionAsync(_lifetime.Token).ConfigureAwait(false) with { Active = Active, Trusted = Trusted, FilterPath = FilterPath };
                     await _events.SolutionChangedAsync(_info).ConfigureAwait(false);
-                    _watcher?.Watch(Path, ProjectPaths);
+                    WatchNow();
                     var added = ProjectPaths.Where(p => !old.Contains(p)).ToList();
                     await EvaluateAsync(added, _lifetime.Token).ConfigureAwait(false);
                 }
@@ -679,6 +720,16 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         if (!Trusted)
         {
             throw new InvalidOperationException("Restore runs only in trusted solutions.");
+        }
+
+        if (path is null && IsFolder)
+        {
+            if (!ProjectPaths.Any(p => !IsUnloaded(p)))
+            {
+                return; // a folder with no loaded project has nothing to restore
+            }
+
+            path = FolderBuildEntryPoint();
         }
 
         _restore = _restore.ContinueWith(_ => RestoreAsync(path ?? Path), TaskScheduler.Default).Unwrap();
@@ -768,6 +819,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
             MovePath(source, destination, parameters.Copy);
             created.Add(destination);
+
+            // Into another project: its explicit items (metadata, build action) go with it (ADR 0033).
+            updated.AddRange(CarryItems(source, destination, parameters.Copy));
             if (!parameters.Copy)
             {
                 updated.AddRange(_editor.Renamed(ProjectPathsAfter(source, destination), source, destination));
@@ -785,7 +839,11 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         {
             Trash.Move(path);
             updated.AddRange(_editor.Deleted(ProjectPaths.Where(File.Exists), path));
-            if (!IsSingleProject && ProjectPaths.Any(p => ProjectFileEditor.IsSameOrUnder(p, path)))
+            if (IsFolder && ProjectPaths.Any(p => ProjectFileEditor.IsSameOrUnder(p, path)))
+            {
+                await ChangeFolderProjectsAsync([.. ProjectPaths.Where(p => !ProjectFileEditor.IsSameOrUnder(p, path))], cancellationToken).ConfigureAwait(false);
+            }
+            else if (!IsSingleProject && !IsFolder && ProjectPaths.Any(p => ProjectFileEditor.IsSameOrUnder(p, path)))
             {
                 await EditSolutionAsync(model =>
                 {
@@ -895,11 +953,22 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
     // ------------------------------------------------------------------ solution edits
 
-    private string SolutionDirectory => System.IO.Path.GetDirectoryName(Path)!;
+    /// <summary>The workspace folder: the folder in folder mode, else the solution (or project) file's folder.</summary>
+    private string SolutionDirectory => IsFolder ? Path : System.IO.Path.GetDirectoryName(Path)!;
 
     /// <summary>Points solution entries at projects that moved with a file or folder rename.</summary>
     private async Task<IReadOnlyList<string>> UpdateSolutionPathsAsync(string oldPath, string newPath, CancellationToken cancellationToken)
     {
+        if (IsFolder)
+        {
+            if (ProjectPaths.Any(p => ProjectFileEditor.IsSameOrUnder(p, oldPath)))
+            {
+                await ChangeFolderProjectsAsync([.. ProjectPathsAfter(oldPath, newPath)], cancellationToken).ConfigureAwait(false);
+            }
+
+            return [];
+        }
+
         if (IsSingleProject)
         {
             if (ProjectFileEditor.IsSameOrUnder(Path, oldPath))
@@ -941,7 +1010,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     }
 
     public Task AddProjectAsync(AddProjectParams parameters, CancellationToken cancellationToken) =>
-        EditSolutionAsync(model =>
+        IsFolder
+            ? ChangeFolderProjectsAsync([.. ProjectPaths.Append(System.IO.Path.GetFullPath(parameters.ProjectPath)).Distinct(s_pathComparer)], cancellationToken)
+            : EditSolutionAsync(model =>
         {
             var relative = System.IO.Path.GetRelativePath(SolutionDirectory, System.IO.Path.GetFullPath(parameters.ProjectPath));
             if (model.FindProject(relative) is not null)
@@ -954,7 +1025,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         }, cancellationToken);
 
     public Task RemoveProjectAsync(ProjectPathParams parameters, CancellationToken cancellationToken) =>
-        EditSolutionAsync(model =>
+        IsFolder
+            ? ChangeFolderProjectsAsync([.. ProjectPaths.Where(p => !s_pathComparer.Equals(p, System.IO.Path.GetFullPath(parameters.Path)))], cancellationToken)
+            : EditSolutionAsync(model =>
         {
             if (FindProject(model, parameters.Path) is { } project)
             {
@@ -1010,7 +1083,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     {
         if (_model is null || _serializer is null)
         {
-            throw new InvalidOperationException("A project opened on its own has no solution file to edit.");
+            throw new InvalidOperationException(IsFolder ? "A folder opened without a solution has no solution file to edit." : "A project opened on its own has no solution file to edit.");
         }
 
         await _solutionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -1031,7 +1104,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             await _events.SolutionChangedAsync(_info).ConfigureAwait(false);
             if (Trusted)
             {
-                _watcher?.Watch(Path, ProjectPaths);
+                WatchNow();
                 _ = EvaluateAsync([.. ProjectPaths.Where(p => !old.Contains(p))], _lifetime.Token);
             }
         }

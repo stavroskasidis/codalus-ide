@@ -1,0 +1,20 @@
+{
+  // Folder mode's launch configurations (ADR 0033), like launch.vs.json.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tool",
+      "type": "project",
+      "project": "${workspaceFolder}/src/Tool/Tool.csproj",
+      "args": ["from", "launch.json"]
+    },
+    {
+      "name": "Tool (program)",
+      "type": "program",
+      "program": "${workspaceFolder}/src/Tool/bin/Debug/net10.0/Tool.dll",
+      "args": ["program"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build tool"
+    }
+  ]
+}

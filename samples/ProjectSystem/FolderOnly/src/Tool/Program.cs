@@ -1,0 +1,1 @@
+Console.WriteLine(Lib.Text.Shout(args.Length > 0 ? string.Join(' ', args) : "folder mode"));

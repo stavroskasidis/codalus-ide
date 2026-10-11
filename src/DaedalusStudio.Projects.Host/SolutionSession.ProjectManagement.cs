@@ -399,9 +399,9 @@ internal sealed partial class SolutionSession
 
     public void SaveFilter(SaveFilterParams parameters)
     {
-        if (IsSingleProject)
+        if (IsSingleProject || IsFolder)
         {
-            throw new InvalidOperationException("A project opened on its own has no solution to filter.");
+            throw new InvalidOperationException("A project or folder opened on its own has no solution to filter.");
         }
 
         var projects = parameters.Projects?.Select(System.IO.Path.GetFullPath).ToList() ?? [.. ProjectPaths.Where(p => !IsUnloaded(p))];

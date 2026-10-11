@@ -71,7 +71,7 @@ public sealed record InitializeResult(string ServerName, string ServerVersion, s
 // ------------------------------------------------------------------ solution
 
 /// <summary>
-/// Opens a solution (<c>.sln</c>, <c>.slnx</c>) or a single project (<c>.csproj</c>…). With <see cref="Trusted"/>
+/// Opens a solution (<c>.sln</c>, <c>.slnx</c>), a single project (<c>.csproj</c>…) or a folder (folder mode, ADR 0033). With <see cref="Trusted"/>
 /// false only the solution file is read: no MSBuild evaluation and no restore. <see cref="ActiveFrameworks"/> maps
 /// multi-targeted project paths to the framework the language service sees (default: the first one).
 /// </summary>
@@ -80,7 +80,10 @@ public sealed record OpenSolutionParams(string Path, bool Trusted, string? Confi
 // A solution filter (.slnf) opens its solution with only the filter's projects loaded (ADR 0013); SolutionInfo.Path is
 // the solution itself and SolutionInfo.FilterPath the filter.
 
-/// <summary>The structure from the solution file, sent before any evaluation.</summary>
+/// <summary>
+/// The structure from the solution file, sent before any evaluation. In folder mode (ADR 0033) <see cref="Format"/> is
+/// <c>folder</c>, <see cref="Path"/> the folder, and <see cref="Projects"/> the projects loaded from it.
+/// </summary>
 public sealed record SolutionInfo(
     string Path,
     string Format,
@@ -89,7 +92,20 @@ public sealed record SolutionInfo(
     SolutionConfigurationInfo[] Configurations,
     SolutionConfigurationInfo? Active,
     bool Trusted,
-    string? FilterPath = null);
+    string? FilterPath = null)
+{
+    /// <summary>The workspace folder: the folder itself in folder mode, else the solution (or project) file's folder.</summary>
+    [JsonIgnore]
+    public string Directory => IsFolder ? Path : System.IO.Path.GetDirectoryName(Path)!;
+
+    /// <summary>Folder mode: a folder opened without a solution file (ADR 0033).</summary>
+    [JsonIgnore]
+    public bool IsFolder => Format == SolutionFormats.Folder;
+
+    /// <summary>The name shown for the workspace: the folder's or the solution file's.</summary>
+    [JsonIgnore]
+    public string Name => IsFolder ? System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(Path)) : System.IO.Path.GetFileNameWithoutExtension(Path);
+}
 
 /// <summary>A solution folder. <see cref="Id"/> is its path inside the solution, e.g. <c>/src/tests/</c>.</summary>
 public sealed record SolutionFolderInfo(string Id, string Name, string? Parent, string[] Files);

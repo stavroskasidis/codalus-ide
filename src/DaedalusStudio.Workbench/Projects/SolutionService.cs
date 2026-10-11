@@ -113,6 +113,9 @@ public sealed class SolutionService : IAsyncDisposable
     /// <summary>Build host messages and process output, for the Output window.</summary>
     public event EventHandler<string>? Log;
 
+    /// <summary>Folders whose set of files changed on disk (Show All Files and the folder view refresh; ADR 0033).</summary>
+    public event EventHandler<IReadOnlyList<string>>? FilesChanged;
+
     /// <summary>The build host crashed; <see cref="ProcessCrashedEventArgs.WillRestart"/> tells whether it comes back.</summary>
     public event EventHandler<ProcessCrashedEventArgs>? HostCrashed;
 
@@ -134,7 +137,7 @@ public sealed class SolutionService : IAsyncDisposable
             var full = Path.GetFullPath(path);
             var hostPath = _resolveHost() ?? throw new InvalidOperationException("The build host (daedalus-buildhost) was not found.");
             _openParams = new OpenSolutionParams(full, trusted, configuration, platform, restore);
-            var directory = Path.GetDirectoryName(full)!;
+            var directory = Directory.Exists(full) ? Path.TrimEndingDirectorySeparator(full) : Path.GetDirectoryName(full)!;
             var environment = await _hostEnvironment(directory, cancellationToken).ConfigureAwait(false);
             if (environment is not null)
             {
@@ -239,6 +242,7 @@ public sealed class SolutionService : IAsyncDisposable
         connection.OnNotification(ProjectMethods.Log, json.LogParams, p => Log?.Invoke(this, $"[{p.Level}] {p.Message}"));
         connection.OnNotification(ProjectMethods.BuildOutput, json.BuildOutputParams, p => BuildOutput?.Invoke(this, p.Line));
         connection.OnNotification(ProjectMethods.BuildDiagnostic, json.BuildDiagnosticInfo, d => BuildDiagnostic?.Invoke(this, d));
+        connection.OnNotification(ItemMethods.FilesChanged, ItemJsonContext.Default.FilesChangedParams, p => FilesChanged?.Invoke(this, p.Directories));
     }
 
     /// <summary>Runs for the first start and after every restart: (re)opens the solution with the latest settings.</summary>
