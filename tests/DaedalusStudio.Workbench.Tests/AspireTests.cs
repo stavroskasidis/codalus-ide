@@ -4,11 +4,16 @@ using DaedalusStudio.Workbench.Aspire;
 
 namespace DaedalusStudio.Workbench.Tests;
 
+/// <summary>The Aspire test runs alone, after the parallel ones: its orchestrator has 20 s to start on a busy runner.</summary>
+[CollectionDefinition(nameof(AspireTests), DisableParallelization = true)]
+public sealed class AspireTestsAlone;
+
 /// <summary>
 /// Aspire (M17b, ADR 0043) on samples/Containers/Aspire, with the user's Aspire packages (13.1, restored from nuget.org)
 /// and their orchestrator: the AppHost asks our IDE execution server to start its two projects, and the resource service
 /// describes them, a Redis container that waits for an explicit start, and their logs. No container is started.
 /// </summary>
+[Collection(nameof(AspireTests))]
 public sealed class AspireTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(DaedalusStudio.Platform.RealPath.Resolve(Path.GetTempPath()), "daedalus-aspire-" + Guid.NewGuid().ToString("N"));
@@ -120,14 +125,29 @@ public sealed class AspireTests : IAsyncLifetime
             ["ASPNETCORE_URLS"] = $"http://localhost:{Containers.ContainerLaunch.FreePort()}",
             ["ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL"] = $"http://localhost:{Containers.ContainerLaunch.FreePort()}",
         };
-        var host = StartProcess("dotnet", ["run", "--project", appHost, "--no-build", "--no-launch-profile"], Path.GetDirectoryName(appHost)!, environment, line => log.Enqueue("[apphost] " + line));
-        _processes.Add(host);
+        Process StartAppHost()
+        {
+            var process = StartProcess("dotnet", ["run", "--project", appHost, "--no-build", "--no-launch-profile"], Path.GetDirectoryName(appHost)!, environment, line => log.Enqueue("[apphost] " + line));
+            _processes.Add(process);
+            return process;
+        }
+
+        var host = StartAppHost();
         string Log() => string.Join('\n', log);
 
         var deadline = Stopwatch.StartNew();
+        var restarted = false;
         while (requests.Count < 2)
         {
-            Assert.True(deadline.Elapsed < TimeSpan.FromMinutes(3) && !host.HasExited, "The AppHost didn't ask for its two projects:\n" + Log());
+            if (host.HasExited && !restarted && requests.IsEmpty && Log().Contains("Hosting failed to start", StringComparison.Ordinal))
+            {
+                // Aspire gives its orchestrator 20 s to start, which a loaded CI runner can miss: once more.
+                restarted = true;
+                log.Enqueue("[test] The orchestrator didn't start in time: starting the AppHost again.");
+                host = StartAppHost();
+            }
+
+            Assert.True(deadline.Elapsed < TimeSpan.FromMinutes(4) && !host.HasExited, "The AppHost didn't ask for its two projects:\n" + Log());
             await Task.Delay(250, ct);
         }
 
