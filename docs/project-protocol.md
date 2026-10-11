@@ -193,6 +193,22 @@ EF Core ([ADR 0036](adr/0036-ef-core-integration.md)) runs the user's own `dotne
 
 Notification (host → shell): **`ef/output`** `{level: info | warn | error | verbose, line}`, the running command's messages (the command line comes first as `> dotnet ef …`).
 
+## Scaffolding and service references
+
+Scaffolding ([ADR 0041](adr/0041-scaffolding-and-service-references.md)) runs the user's own `dotnet aspnet-codegenerator` (a local or global tool) as a child process of the host, in the project's folder, one at a time; every request needs a trusted solution, and cancelling one kills its process tree. Scaffolders that need no tool go through `templates/instantiate` (the SDK's `apicontroller`, `mvccontroller`, `page`, `view` and `razorcomponent` item templates). Service references are project edits: the items `dotnet-openapi` writes, and the packages that generate the code at build time. Contracts are in `WebToolsMessages.cs`; the shell side is `ScaffoldingService` and `ServiceReferenceService` in `src/DaedalusStudio.Workbench/Web`, which also copies or downloads the documents into the project.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `scaffold/status` | `{project}` | `{toolAvailable, toolVersion?, toolSource? (local \| global), manifest?, manifestListsTool, designPackageVersion?, dotnetVersion?, efProviders, efToolsVersion?, message?}` | `dotnet aspnet-codegenerator --help` in the project's folder, the tool manifest, and the project's declared package references (`Microsoft.VisualStudio.Web.CodeGeneration.Design`, the EF Core providers, `Microsoft.EntityFrameworkCore.Tools`). |
+| `scaffold/install` | `{project, version?}` | as `scaffold/status` | `dotnet tool restore` when the manifest lists the tool, otherwise `dotnet tool install dotnet-aspnet-codegenerator` (a manifest is created first); adds the design package and, in an EF Core project, `Microsoft.EntityFrameworkCore.Tools` (at its EF Core version), then restores. The version is the newest stable one of the project's .NET major version, from the global packages folder first, then the sources. |
+| `scaffold/run` | `{project, generator, arguments}` | `{created, modified, output}` | `dotnet aspnet-codegenerator <generator> <arguments>`; `generator` is `controller`, `view`, `razorpage`, `area`, `identity`, `minimalapi`, `blazor` or `blazor-identity`. The created and modified files come from comparing the project's folder (without `bin` and `obj`) before and after. The generator exits with 0 after some errors (a missing package): an error on its standard error with nothing written fails the request, with the line before its stack trace as the message. |
+| `serviceReferences/list` | `{project}` | `{references: [{kind (openapi \| grpc), path, include, sourceUrl?, namespace?, className?, codeGenerator?, options?, grpcServices?, access?}], packages: [{id, version?}]}` | The project's own `OpenApiReference` and `Protobuf` items (evaluated), and the generating packages it references. |
+| `serviceReferences/add` | `{project, kind, file, sourceUrl?, namespace?, className?, codeGenerator?, options?, grpcServices?, access?, restore, versions?}` | `{changedFiles, addedPackages}` | Adds the packages the project doesn't reference yet (OpenAPI: `Microsoft.Extensions.ApiDescription.Client`, `NSwag.ApiDescription.Client`, `Newtonsoft.Json`; a gRPC client: `Grpc.Net.ClientFactory`, `Google.Protobuf`, `Grpc.Tools`; a server: `Grpc.AspNetCore`), central package management included, the generators with `PrivateAssets="all"`; then the item, its `Include` relative to the project. `versions` pins package versions; otherwise each is the newest stable one in the global packages folder, else from the sources, else a known one. `addedPackages` are `Id Version`. |
+| `serviceReferences/update` | as `add` | `{changedFiles, addedPackages: []}` | Rewrites the item's metadata; null metadata is removed. |
+| `serviceReferences/remove` | `{project, kind, file, deleteFile}` | `{changedFiles, addedPackages: []}` | Removes the item (and an item group left empty); `deleteFile` sends the document to the trash. The packages stay. |
+
+Notification (host → shell): **`scaffold/output`** `{level: info | error, line}`, the code generator's output (the command line comes first as `> dotnet aspnet-codegenerator …`).
+
 ## Errors
 
 | Code | Meaning |

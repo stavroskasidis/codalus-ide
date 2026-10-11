@@ -88,6 +88,8 @@ internal static partial class BuiltIns
         Add("web.checkDevCertificate", "Check the HTTPS Development Certificate", "ASP.NET Core", _ => shell.CheckDevCertificateAsync());
         Add("web.trustDevCertificate", "Trust the HTTPS Development Certificate", "ASP.NET Core", _ => shell.TrustDevCertificateAsync());
         Add("web.manageUserSecrets", "Manage User Secrets", "ASP.NET Core", shell.ManageUserSecretsAsync, "solutionOpen && solutionTrusted");
+        Add("web.addScaffoldedItem", "Add New Scaffolded Item…", "ASP.NET Core", project => { shell.OpenAddScaffoldedItem(project); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
+        Add("web.serviceReferences", "Service References (OpenAPI, gRPC)…", "ASP.NET Core", project => { shell.OpenServiceReferences(project); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
         Add("web.installLanguageServers", "Install the Web Language Servers (Node.js)", "Web", _ => shell.InstallWebLanguagesAsync());
         Add("npm.taskRunner", "Task Runner Explorer", "npm", _ => shell.ShowTaskRunnerAsync());
         Add("npm.runScript", "Run npm Script…", "npm", _ => shell.PickNpmScriptAsync(), "solutionOpen");
@@ -112,6 +114,10 @@ internal static partial class BuiltIns
         [
             Item(OtherWindowsMenu, "web.endpoints", "windows", AlphabeticalOrder("Endpoints Explorer")),
             Item(MenuLocations.MenuBar("project"), "web.manageUserSecrets", "web", 1),
+            Item(MenuLocations.MenuBar("project"), "web.addScaffoldedItem", "add", 0),
+            Item(MenuLocations.MenuBar("project"), "web.serviceReferences", "web", 0),
+            Item(SolutionExplorerView.ContextMenuLocation, "web.addScaffoldedItem", "1-new", 1, "(explorerItemKind == project || explorerItemKind == folder) && !explorerFolderView", "New Scaffolded Item…"),
+            Item(SolutionExplorerView.ContextMenuLocation, "web.serviceReferences", "3-web", 0, "explorerItemKind == project", "Service References…"),
             Item(MenuLocations.MenuBar("debug"), "web.selectEnvironment", "6-web", 1),
             Item(MenuLocations.MenuBar("debug"), "web.checkDevCertificate", "6-web", 2),
             Item(MenuLocations.MenuBar("debug"), "web.trustDevCertificate", "6-web", 3),

@@ -57,6 +57,7 @@ public static class BuiltInLanguages
             L("razor", "Razor", [".cshtml", ".razor"]),
             L("http", "HTTP", [".http", ".rest"]),
             L("t4", "T4 Text Template", [".tt", ".ttinclude", ".t4"]),
+            L("proto", "Protocol Buffers", [".proto"]),
         })
         {
             registry.Register(language);
@@ -74,6 +75,13 @@ public static class BuiltInLanguages
         if (File.Exists(t4))
         {
             registry.RegisterGrammar(new GrammarDefinition("source.t4", "t4", t4));
+        }
+
+        // .proto files (M15c, ADR 0041): gRPC service references' contracts.
+        var proto = Path.Combine(AppContext.BaseDirectory, "grammars", "proto.tmLanguage.json");
+        if (File.Exists(proto))
+        {
+            registry.RegisterGrammar(new GrammarDefinition("source.proto", "proto", proto));
         }
     }
 }

@@ -776,7 +776,7 @@ public sealed class DebugService : IAsyncDisposable
                     process.Kill(entireProcessTree: true);
                 }
             }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)
             {
                 // Already gone.
             }

@@ -997,6 +997,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 
         await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
 
+        await StepAsync("web.scaffolding", "M15", "Add New Scaffolded Item runs dotnet-aspnet-codegenerator (an API controller over a DbContext); a gRPC service reference generates its client at build time", ScaffoldingStepAsync).ConfigureAwait(true);
         await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
 
         // M17a: containers (ADR 0042), where an engine runs Linux containers (GitHub's Linux runner; Podman here).
@@ -1417,6 +1418,56 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         Check(form.Error is null && File.Exists(Path.Combine(target, "Blogging", "Inventory", "Product.cs")), "the inventory database is reverse engineered: " + form.Error + "\n" + Log());
         shell.Layout.CloseDocument(model);
         shell.Layout.CloseDocument(scaffold);
+    }
+
+    /// <summary>
+    /// Scaffolding and service references (M15c, ADR 0041) on samples/Scaffolding: an API controller through the
+    /// fixture's local dotnet-aspnet-codegenerator, and a gRPC reference whose client the build generates.
+    /// </summary>
+    private async Task ScaffoldingStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "Scaffolding", "Scaffolding.slnx")), $"the samples folder {samples} has Scaffolding");
+        var target = Path.Combine(_work, "Scaffolding");
+        Copy(Path.Combine(samples, "Scaffolding"), target);
+        await shell.OpenSolutionAsync(Path.Combine(target, "Scaffolding.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Scaffolding solution is open", 300).ConfigureAwait(true);
+        var restore = await shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None).ConfigureAwait(true);
+        Check(restore.Succeeded, "dotnet tool restore gets the fixture's dotnet-aspnet-codegenerator:\n" + Tail(restore.Output, 1500));
+        string Log() => Tail(shell.Scaffolding.Channel.GetText(), 2500);
+
+        var form = shell.OpenAddScaffoldedItem(Path.Combine(target, "Shop", "Shop.csproj"), Path.Combine(target, "Shop", "Controllers"));
+        Check(form is not null, "Add New Scaffolded Item opens");
+        form!.Select("api.ef");
+        await WaitAsync(() => form.Status is not null, "the code generator's state is known", 120).ConfigureAwait(true);
+        Check(!form.NeedsTool, "the code generator can run: " + form.ToolMessage);
+        ((ScaffoldTextField)form.Field("model")!).Text = "Product";
+        ((ScaffoldTextField)form.Field("dbContext")!).Text = "ShopContext";
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-scaffold.png");
+        await form.AddAsync().ConfigureAwait(true);
+        var controller = Path.Combine(target, "Shop", "Controllers", "ProductsController.cs");
+        Check(form.Error is null && File.Exists(controller), "the API controller is scaffolded: " + form.Error + "\n" + Log());
+        Check(File.ReadAllText(controller).Contains("ShopContext", StringComparison.Ordinal), "the controller uses the context");
+
+        var client = Path.Combine(target, "Client", "Client.csproj");
+        var references = shell.OpenServiceReferences(client);
+        Check(references is not null, "Service References opens");
+        await WaitAsync(() => !references!.IsBusy && references.Packages.Length > 0, "the references are listed", 120).ConfigureAwait(true);
+        references!.KindLabel = "gRPC";
+        references.Source = Path.Combine(target, "contracts", "greet.proto");
+        references.GrpcServices = Projects.Protocol.GrpcServiceKinds.Client;
+        await references.RunAsync("add").ConfigureAwait(true);
+        Check(references.Error is null && references.References.Count == 1, "the gRPC reference is added: " + references.Error);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-service-references.png");
+        File.WriteAllText(Path.Combine(target, "Client", "Program.cs"), "var client = new Contracts.Greet.Greeter.GreeterClient(Grpc.Net.Client.GrpcChannel.ForAddress(\"http://localhost:5000\"));\nConsole.WriteLine(client.GetType().Name);\n");
+        Check(await shell.BuildAsync(Projects.Protocol.BuildTargets.Build, client).ConfigureAwait(true), "the client builds with its generated gRPC client:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+        Check(Directory.GetFiles(Path.Combine(target, "Client", "obj"), "GreetGrpc.cs", SearchOption.AllDirectories).Length > 0, "Grpc.Tools generated GreetGrpc.cs");
+        foreach (var document in shell.Layout.Documents.OfType<SolutionManagementDocument>().ToList())
+        {
+            shell.Layout.CloseDocument(document);
+        }
     }
 
     /// <summary>

@@ -79,7 +79,7 @@ public sealed class RunningProgram : IDisposable
         _listening.TrySetCanceled();
     }
 
-    /// <summary>Ends the program and every process it started.</summary>
+    /// <summary>Ends the program and every process it started; a child the OS won't let us end (access denied, already exiting) is left.</summary>
     public void Stop()
     {
         try
@@ -89,9 +89,9 @@ public sealed class RunningProgram : IDisposable
                 _process.Kill(entireProcessTree: true);
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)
         {
-            // Already gone.
+            // Already gone, or a child that is exiting or that we may not end.
         }
     }
 

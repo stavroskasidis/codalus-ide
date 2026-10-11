@@ -115,6 +115,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeNpm();
         InitializeHotReload();
         InitializeEntityFramework();
+        InitializeWebTools();
         InitializeData();
         InitializeContainers();
         InitializeAspire();

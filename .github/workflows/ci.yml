@@ -98,7 +98,8 @@ jobs:
         if: always() && runner.os != 'Windows'
         shell: bash
         run: |
-          ps -eo pid,ppid,etime,pcpu,rss,args --sort=-pcpu | head -25 | cut -c1-240
+          # BSD ps (macOS) has no --sort: sort by the CPU column instead.
+          ps -eo pid,ppid,etime,pcpu,rss,args | sort -k4 -nr | head -25 | cut -c1-240 || true
           df -h / /tmp | uniq
           dotnet build-server shutdown > /dev/null 2>&1 || true
           pkill -f 'chrome|chromium|msedge|dapDebugServer|blazor-devserver|BrowserDebugHost|dotnet-watch' || true
