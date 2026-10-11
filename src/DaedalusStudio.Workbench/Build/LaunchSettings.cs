@@ -26,7 +26,22 @@ public sealed record LaunchProfile(
     public const string Wsl = "WSL2";
     public const string RoslynComponent = "DebugRoslynComponent";
 
-    public bool IsRunnable => CommandName is "Project" or "Executable" or Wsl or RoslynComponent;
+    /// <summary>The "Container (Dockerfile)" profile (M17a, ADR 0042): the project runs in a container built from its Dockerfile.</summary>
+    public const string Docker = "Docker";
+
+    public bool IsRunnable => CommandName is "Project" or "Executable" or Wsl or RoslynComponent or Docker;
+
+    /// <summary>A container profile's host port for the container's HTTP port (<c>httpPort</c>); null: a free one.</summary>
+    public int? HttpPort { get; init; }
+
+    /// <summary>A container profile's host port for the container's HTTPS port (<c>sslPort</c>).</summary>
+    public int? SslPort { get; init; }
+
+    /// <summary>A container profile's <c>publishAllPorts</c>: every exposed port is published, not just HTTP and HTTPS.</summary>
+    public bool PublishAllPorts { get; init; }
+
+    /// <summary>A container profile's <c>containerRunArguments</c>: more arguments for <c>docker run</c>.</summary>
+    public string? ContainerRunArguments { get; init; }
 }
 
 /// <summary>Reads launch profiles (the format <c>dotnet run</c> and other IDEs use).</summary>
@@ -74,7 +89,13 @@ public static class LaunchSettings
                 environment,
                 String(value, "inspectUri"),
                 value.TryGetProperty("distributionName", out var distribution) && distribution.ValueKind == JsonValueKind.String ? distribution.GetString() : null,
-                String(value, "targetProject")));
+                String(value, "targetProject"))
+            {
+                HttpPort = Int(value, "httpPort"),
+                SslPort = Int(value, "sslPort"),
+                PublishAllPorts = value.TryGetProperty("publishAllPorts", out var all) && all.ValueKind == JsonValueKind.True,
+                ContainerRunArguments = String(value, "containerRunArguments") ?? String(value, "dockerfileRunArguments"),
+            });
         }
 
         return result;
@@ -102,6 +123,9 @@ public static class LaunchSettings
 
     private static string? String(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } text ? text : null;
+
+    private static int? Int(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) && number is > 0 and < 65536 ? number : null;
 }
 
 /// <summary>What to start for a run: a process and, when the profile asks for it, a browser URL.</summary>

@@ -184,6 +184,13 @@ public sealed partial class ShellHost
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
             var profile = Runs.ResolveProfile(project, profiles);
+            if (IsContainerProfile(profile))
+            {
+                // The "Container (Dockerfile)" profile (ADR 0042).
+                await StartInContainerAsync(project, info, profile!, debug: true).ConfigureAwait(true);
+                return;
+            }
+
             var plan = await Runs.PlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
             DebugLog.Clear();
             if (error is not null)

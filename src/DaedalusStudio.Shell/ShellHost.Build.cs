@@ -218,6 +218,17 @@ public sealed partial class ShellHost
         _ = OfferDevCertificateAsync(project);
         try
         {
+            if (!hotReload)
+            {
+                var (info, profiles, _) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
+                if (Runs.ResolveProfile(project, profiles) is { } profile && IsContainerProfile(profile))
+                {
+                    // The "Container (Dockerfile)" profile (ADR 0042).
+                    await StartInContainerAsync(project, info, profile, debug: false).ConfigureAwait(true);
+                    return;
+                }
+            }
+
             var console = Workbench.Settings.GetString(RunConsoleSetting, "outputWindow");
             if (console == "integratedTerminal" && Runs.IsExecutable(project) && !hotReload)
             {

@@ -103,6 +103,14 @@ public sealed partial class ShellHost
             var name = Path.GetFileNameWithoutExtension(target.Project);
             try
             {
+                var (containerInfo, containerProfiles, _) = await Runs.GetProfilesAsync(target.Project, CancellationToken.None).ConfigureAwait(true);
+                if (Runs.ResolveProfile(target.Project, containerProfiles) is { } containerProfile && IsContainerProfile(containerProfile))
+                {
+                    // A container runs on its own (ADR 0042): debugged, it is a session of its own after this one.
+                    await StartInContainerAsync(target.Project, containerInfo, containerProfile, debug: false).ConfigureAwait(true);
+                    continue;
+                }
+
                 if (debug && target.Action == StartupAction.Start)
                 {
                     var (info, profiles, error) = await Runs.GetProfilesAsync(target.Project, CancellationToken.None).ConfigureAwait(true);

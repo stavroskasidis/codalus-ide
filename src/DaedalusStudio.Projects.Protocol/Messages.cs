@@ -161,7 +161,15 @@ public sealed record ProjectInfo(
     string[] Diagnostics,
     bool Restored,
     bool IsTestProject = false,
-    string? TestPlatform = null);
+    string? TestPlatform = null)
+{
+    /// <summary>An Aspire AppHost (<c>IsAspireHost</c>, M17b): running it orchestrates its resources (ADR 0043).</summary>
+    public bool IsAspireHost { get; init; }
+
+    /// <summary>A Docker Compose project (<c>.dcproj</c>, M17a): loaded from its XML, never evaluated or built (ADR 0042).</summary>
+    [JsonIgnore]
+    public bool IsComposeProject => Path.EndsWith(".dcproj", StringComparison.OrdinalIgnoreCase);
+}
 
 public static class TestPlatforms
 {
