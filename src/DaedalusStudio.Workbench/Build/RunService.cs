@@ -41,8 +41,12 @@ public sealed class RunningProgram : IDisposable
     /// <summary>Completes with the first URL a server reports ("Now listening on: http://localhost:5045").</summary>
     public Task<string> Listening => _listening.Task;
 
+    /// <summary>Each line of the program's output (stdout and stderr), on a background thread.</summary>
+    public event Action<string>? LineReceived;
+
     internal void OnLine(string line)
     {
+        LineReceived?.Invoke(line);
         const string marker = "Now listening on:";
         var at = line.IndexOf(marker, StringComparison.Ordinal);
         if (at >= 0)

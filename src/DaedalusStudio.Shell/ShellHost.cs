@@ -69,7 +69,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings()]);
+        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
@@ -78,7 +78,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -117,6 +117,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeEntityFramework();
         InitializeWebTools();
         InitializeData();
+        InitializeContainers();
+        InitializeAspire();
         InitializeUpdates();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -135,6 +137,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterDebugCommands(this);
         BuiltIns.RegisterWebCommands(this);
         BuiltIns.RegisterDataCommands(this);
+        BuiltIns.RegisterContainerCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterPackageCommands(this);
@@ -147,6 +150,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterDebugMenus(Workbench.Menus);
         BuiltIns.RegisterWebMenus(Workbench.Menus);
         BuiltIns.RegisterDataMenus(Workbench.Menus);
+        BuiltIns.RegisterContainerMenus(Workbench.Menus);
         BuiltIns.RegisterGitMenus(Workbench.Menus);
         BuiltIns.RegisterTestingMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
@@ -409,6 +413,8 @@ public sealed partial class ShellHost : IAsyncDisposable
             EntityFrameworkViewModel.ToolWindowId => OpenEntityFramework(),
             DatabaseExplorerViewModel.ToolWindowId => OpenDatabaseExplorer(),
             QueryResultsViewModel.ToolWindowId => QueryResults,
+            ContainersViewModel.ToolWindowId => ContainersWindow,
+            AspireViewModel.ToolWindowId => AspireWindow,
             _ => null,
         },
     };

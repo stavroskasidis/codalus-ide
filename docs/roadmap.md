@@ -37,7 +37,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M14 | Debugger depth | done (M14a–M14c at checkpoint). M14a: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b ([m14b](checkpoints/m14b.md), ADR 0032): the debug companion host, `[DebuggerDisplay]`, grid, image and plugin visualizers, pinned data tips, Parallel Stacks and Watch, Processes and Debug Location, breakpoint filters, exception module conditions, dumps; M14c ([m14c](checkpoints/m14c.md), ADR 0039 and 0040): multiple startup projects in one session, debugging in the integrated terminal (Detach All for launched programs), attach over SSH, in containers and in WSL, the WSL launch profile, Roslyn components, Just-In-Time crash dumps, the Hot Reload-while-debugging research |
 | M15 | ASP.NET Core and Hot Reload | M15a, M15b and M15c at checkpoint (done): Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch` (ADR 0022); scaffolding through the user's `dotnet-aspnet-codegenerator` and the SDK's item templates, OpenAPI and gRPC service references (ADR 0041) |
 | M16 | Razor, Blazor and web front-end | done (M16a–M16d at checkpoint): Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023); HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); Blazor WebAssembly debugging in the browser through vscode-js-debug (ADR 0026); compound server-and-page debugging, Debug a Web Page, HTML and CSS inside Razor, scoped CSS, npm scripts in the Task Runner Explorer, ESLint and Prettier (ADR 0027) |
-| M17 | Containers, Aspire and publishing | planned |
+| M17 | Containers, Aspire and publishing | done (M17a–M17c at checkpoint): M17a ([m17a](checkpoints/m17a.md), ADR 0042): the Containers window, Add Docker Support, run and debug in a container (fast mode), compose up, down and debug, `.dcproj` as a solution item, the compose schema, Docker and Podman; M17b ([m17b](checkpoints/m17b.md), ADR 0043): Aspire AppHosts run and debug their projects through the IDE execution protocol, the Aspire window from the resource service, the dashboard; M17c ([m17c](checkpoints/m17c.md), ADR 0042): publish profiles and the Publish page, folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT and container publishing |
 | M18 | Profiling and diagnostics tools | planned |
 | M19 | Avalonia XAML editing and live previewer | planned |
 | M20 | .NET MAUI | planned (D6: go, for Android, iOS and Mac Catalyst), after M28 and before M34 |
@@ -1300,6 +1300,8 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **ADRs.** "Publishing and container tooling". "Aspire integration".
 
+**Split (rule 5, 2026-10-11).** **M17a** (containers, [ADR 0042](adr/0042-container-tooling-and-publishing.md), [checkpoint](checkpoints/m17a.md)): Dockerfile and compose editing, Add Docker Support, run and debug in a container, compose files and `.dcproj`, the Containers window, Docker and Podman. **M17b** (Aspire, ADR 0043): AppHost run, the resource tree, the dashboard, the IDE execution protocol, compound debugging. **M17c** (publishing, ADR 0042): publish profiles and their UI, folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT and container publishing.
+
 **Fixtures.** `samples/Containers/`: a web app with a Dockerfile, a compose app, and an Aspire AppHost with two projects plus a Redis container.
 
 **CI note.** Container tests run on Linux runners only, because GitHub's macOS runners have no Docker and Windows runners don't run Linux containers. Other OSes are covered by manual checkpoint testing.
@@ -1943,7 +1945,7 @@ The "Daedalus" column uses these terms:
 | Custom tools (single-file generators), T4 text templates | M26b |
 | User secrets | M15 |
 | Open Folder (no solution) | M26a |
-| Docker Compose projects (`.dcproj`) | M17 |
+| Docker Compose projects (`.dcproj`) | M17a (done: loaded from their XML as a solution item, left out of builds; compose up, down and debug) |
 | SQL database projects (`.sqlproj`) | M27b (done: SDK-style, Microsoft.Build.Sql) |
 | Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10, and SDKs down to 2.1.200 in `global.json`: at checkpoint, ADR 0030) |
 | Non-SDK-style projects, .NET Framework-only scenarios | Non-goal |
@@ -1965,7 +1967,7 @@ The "Daedalus" column uses these terms:
 | Build timings, binary logs and log viewer | M26b |
 | Pre-build and post-build events | M26b (in the M9 property pages) |
 | Code analysis on build | M26b |
-| Publish: folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT, container | M17 |
+| Publish: folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT, container | M17c (done: `.pubxml` profiles, the Publish page, the build host's `Publish` and `PublishContainer`; cloud targets are plugins) |
 | Publish to Azure or other clouds | Candidate (plugins) |
 | Pack NuGet packages | M9 |
 
@@ -2125,8 +2127,8 @@ The "Daedalus" column uses these terms:
 | Scaffolding (controllers, Razor Pages, Identity, Blazor CRUD) | M15c (ADR 0041): the user's `dotnet-aspnet-codegenerator`, SDK item templates for empty items |
 | Hot Reload with browser refresh | M15 |
 | Razor and Blazor editing, debugging and hot reload | M16 |
-| Docker files, compose, container debugging, Containers window | M17 |
-| .NET Aspire orchestration and dashboard | M17 |
+| Docker files, compose, container debugging, Containers window | M17a (done: fast mode, Docker and Podman; HTTPS in containers and Windows containers are gaps) |
+| .NET Aspire orchestration and dashboard | M17b (done: run and debug through the IDE execution protocol, the resource tree, the dashboard) |
 | Azure tooling (publish, Functions, Connected Services to Azure, Cloud Explorer) | Candidate (plugins) |
 | Dev Tunnels | Trap |
 | Kubernetes | Candidate |
@@ -2245,7 +2247,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D9 | Spell-check dictionaries and their licences | M12b | Only MIT/BSD-compatible dictionaries, or user-supplied ones | decided 2026-10-10: the en-US dictionary from SCOWL (permissive licence) is bundled. Other languages download on demand, each showing its licence first. |
 | D10 | F# host: FsAutoComplete or our own FCS host | M36 | FsAutoComplete through the LSP bridge | decided 2026-10-10: FsAutoComplete through the LSP bridge. |
 | D11 | Translation platform for localization | M23 | Decide at M23 | decided 2026-10-10: hosted Weblate (free for open-source projects), once the repository is public. |
-| D12 | Licence of Aspire's orchestrator (DCP), and the IDE's relationship to it | M17 | Integrate through the IDE execution protocol only, never redistribute | decided 2026-10-10: as recommended, without a separate question. M17 still checks DCP's licence. |
+| D12 | Licence of Aspire's orchestrator (DCP), and the IDE's relationship to it | M17 | Integrate through the IDE execution protocol only, never redistribute | decided 2026-10-10: as recommended, without a separate question. Checked in M17b (ADR 0043): the orchestration package declares MIT with licence acceptance and carries Microsoft's EULA for the DCP binaries; we never ship, download or start it (the user's AppHost does). |
 | D13 | Phase order | Each phase start | As listed in this document | decided 2026-10-10. Phase 4 (M30–M33) comes next. Then M16c, and the rest in the phase table's order. Amended the same day: M16c comes right after M30a, before M31–M33. The list ends with M28, then M20 (MAUI), M34 (polish), and VB and F# (M35, M36), which always stay last. |
 | D14 | Product 1.0 criteria (as opposed to preview releases) | After Phase 2 | Phases 1–2 complete, and plugin API 1.0 frozen early (pulled ahead of the marketplace work) | decided 2026-10-10: there are no criteria. Releases stay 0.x, even after the repository goes public, until the maintainer says otherwise. Plugin API 1.0 (M22) is separate from the product's version. |
 | D15 | Data tooling scope: which database engines first, the T-SQL language service (SQL Tools Service or our own on ScriptDom), and whether DacFx's licence allows schema compare and publish | M27 | SQL Server, PostgreSQL, SQLite and MySQL; SQL Tools Service through the LSP bridge; DacFx only if its licence is OSI-approved | decided 2026-10-10: as recommended. SQL Server, PostgreSQL, SQLite and MySQL/MariaDB come first. M27 checks DacFx's licence. Checked 2026-10-11 (M27b): DacFx is under Microsoft's proprietary terms, so schema compare and publish are a gap; T-SQL uses ScriptDom (MIT) in the data host instead of SQL Tools Service (ADR 0038). |
@@ -2360,3 +2362,11 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Hot Reload while debugging:** researched; the runtime refuses `dotnet watch`'s updates under a debugger, and netcoredbg applies deltas only through its MI interpreter. A gap until a DAP request exists upstream.
   - **Found:** netcoredbg ended an apphost detached while stopped at a breakpoint (Windows); detaches are now prepared.
 - 2026-10-11: M27b built and at its checkpoint (ADRs 0037 and 0038), which completes M27: a new supervised, lazy `daedalus-datahost` with SQL Server (Microsoft.Data.SqlClient on managed networking: its native SNI is proprietary and excluded), PostgreSQL (Npgsql), MySQL/MariaDB (MySqlConnector) and SQLite (Microsoft.Data.Sqlite); the Database Explorer (your connections, passwords in the OS credential store, and the solution's from appsettings, user secrets and Aspire AppHosts), table data (paged, edited, committed in one transaction, CSV/JSON export and import), the query editor (Query Results with grids, messages, time, cancel, history, estimated and actual plans as trees), the SQL language server (`daedalus-datahost --lsp`: schema completion and hover, T-SQL diagnostics and formatting through ScriptDom), and SDK-style `.sqlproj` load and build. D15: DacFx's licence is proprietary, so schema compare and publish are a gap; SQL Tools Service wasn't integrated (a 100 MB download per platform and its own connection protocol; `TODO(issue)`).
+- 2026-10-11: M17 split into M17a (containers), M17b (Aspire) and M17c (publishing). M17a built and at its checkpoint (ADR 0042):
+  - **Engine:** the user's `docker` or `podman` CLI (`containers.tool`), one process per operation, never the Engine API.
+  - **Run and debug:** the "Container (Dockerfile)" launch profile; fast mode runs the build output on the Dockerfile's `base` stage, and F5 launches the app under netcoredbg copied into the container.
+  - **Add Docker Support:** the .NET templates' Dockerfile, `.dockerignore` and profile.
+  - **Compose:** up, down and debug a service; `.dcproj` loads from its XML and is left out of builds and restores; compose files get the Compose Specification's schema.
+  - **The Containers window:** containers and images, logs, environment, ports, labels, files, a terminal in the container, attach.
+- 2026-10-11: M17b built and at its checkpoint (ADR 0043): an Aspire AppHost (`IsAspireHost`) runs (Ctrl+F5) and debugs (F5) with Daedalus Studio as its IDE: our IDE execution protocol server starts each project resource as a program of ours, in the AppHost's compound debug session when debugging; the Aspire window reads the AppHost's resource service with our own gRPC client (no Grpc.Net.Client in the Native AOT shell): resources, state, endpoints, console output, start, stop and restart; the dashboard opens signed in. D12 checked: DCP is the user's (Microsoft's EULA), never ours.
+- 2026-10-11: M17c built and at its checkpoint (ADR 0042), which completes M17: publish profiles (`.pubxml`) and the Publish page (folder or container image; configuration, framework, runtime, self-contained, single-file, trimmed, ReadyToRun, Native AOT), published by the build host's `Publish` and `Publish;PublishContainer` targets with the profile, so trim and AOT warnings reach the Error List.

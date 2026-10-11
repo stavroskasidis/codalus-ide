@@ -151,3 +151,13 @@ None. The GPUI prototype (M0) and its crates were removed when Avalonia was chos
 ## Fonts and assets
 
 None are bundled. The shell uses platform fonts (Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono) by name.
+
+## Schemas (bundled)
+
+| Component | Version | License | Used for |
+|---|---|---|---|
+| The Compose Specification's JSON schema (`compose-spec.json`, compose-spec/compose-spec) | `main` of 2026-10-11 | Apache-2.0 | **Redistributed** as an embedded resource of the markup host (M17a, ADR 0042): validation and hover in `compose.yaml` and `docker-compose*.yml`. Copyright The Compose Specification Authors; the Apache License 2.0 applies to that file, unchanged. |
+
+## Container engines (M17, ADR 0042)
+
+Docker and Podman are the user's own programs, run through their CLIs; nothing of theirs is shipped, and no container image is. Fast mode runs the user's build output on the base images their Dockerfiles name (the .NET templates use `mcr.microsoft.com/dotnet/aspnet` and `runtime`, MIT-licensed .NET on Linux distributions). Remote debugging copies the pinned Linux netcoredbg (listed above) into the container.

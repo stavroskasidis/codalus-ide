@@ -161,7 +161,15 @@ public sealed record ProjectInfo(
     string[] Diagnostics,
     bool Restored,
     bool IsTestProject = false,
-    string? TestPlatform = null);
+    string? TestPlatform = null)
+{
+    /// <summary>An Aspire AppHost (<c>IsAspireHost</c>, M17b): running it orchestrates its resources (ADR 0043).</summary>
+    public bool IsAspireHost { get; init; }
+
+    /// <summary>A Docker Compose project (<c>.dcproj</c>, M17a): loaded from its XML, never evaluated or built (ADR 0042).</summary>
+    [JsonIgnore]
+    public bool IsComposeProject => Path.EndsWith(".dcproj", StringComparison.OrdinalIgnoreCase);
+}
 
 public static class TestPlatforms
 {
@@ -290,6 +298,12 @@ public static class BuildTargets
 
     /// <summary><c>dotnet pack</c>: builds, then writes the project's <c>.nupkg</c> (and <c>.snupkg</c>).</summary>
     public const string Pack = "pack";
+
+    /// <summary><c>dotnet publish</c> (M17c, ADR 0042): the options' properties carry the publish profile.</summary>
+    public const string Publish = "publish";
+
+    /// <summary>The SDK's <c>PublishContainer</c> target: publishes, then builds a container image (M17c).</summary>
+    public const string PublishContainer = "publishContainer";
 }
 
 /// <summary>

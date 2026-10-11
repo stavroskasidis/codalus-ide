@@ -216,7 +216,8 @@ public sealed class DebugService : IAsyncDisposable
     /// distribution runs under netcoredbg there. Throws when the first program can't start; a later one that can't
     /// is reported in the Debug Console and the others go on.
     /// </summary>
-    public async Task LaunchAsync(IReadOnlyList<DebugLaunch> launches, CancellationToken cancellationToken)
+    /// <param name="compound">A compound session even for one program, so programs can join it later (<see cref="AddLaunchAsync"/>, M17b).</param>
+    public async Task LaunchAsync(IReadOnlyList<DebugLaunch> launches, CancellationToken cancellationToken, bool compound = false)
     {
         if (launches.Count == 0)
         {
@@ -229,7 +230,7 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         var parts = launches.Select((launch, index) => Part(launch, index, cancellationToken)).ToList();
-        if (parts.Count == 1)
+        if (parts.Count == 1 && !compound)
         {
             await StartAsync(parts[0].CreateAsync, adapter => parts[0].StartAsync(adapter), attached: false, [parts[0].Process], cancellationToken, parts[0].ConfiguredAsync).ConfigureAwait(false);
             return;
@@ -271,6 +272,50 @@ public sealed class DebugService : IAsyncDisposable
                 Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] Could not start: {ex.Message}\n"));
             }
         }
+    }
+
+    /// <summary>
+    /// Adds a program to the running multi-program session (an Aspire AppHost's projects, M17b, ADR 0043) and returns
+    /// its index in <see cref="Processes"/>, where its process id and exit appear. Throws when no such session runs or
+    /// the program can't start.
+    /// </summary>
+    public async Task<int> AddLaunchAsync(DebugLaunch launch, CancellationToken cancellationToken)
+    {
+        if (_adapter is not CompoundDebugAdapter { Independent: true } session)
+        {
+            throw new InvalidOperationException("No multi-program debug session is running.");
+        }
+
+        LaunchPart part;
+        lock (_gate)
+        {
+            if (_processes.Count >= CompoundDebugAdapter.MaxParts)
+            {
+                throw new InvalidOperationException($"A debug session holds at most {CompoundDebugAdapter.MaxParts.ToString(CultureInfo.InvariantCulture)} programs.");
+            }
+
+            part = Part(launch, _processes.Count, cancellationToken);
+            _processes.Add(part.Process);
+        }
+
+        ProcessesChanged?.Invoke(this, EventArgs.Empty);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        try
+        {
+            var adapter = await part.CreateAsync(linked.Token).ConfigureAwait(false);
+            await session.AddAsync(adapter, part.Name, part.StartAsync, linked.Token).ConfigureAwait(false);
+            if (part.ConfiguredAsync is { } configured)
+            {
+                await configured().ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or OperationCanceledException)
+        {
+            UpdateProcess(part.Index, p => p with { Ended = true });
+            throw new InvalidOperationException($"{part.Name} could not start: {ex.Message}", ex);
+        }
+
+        return part.Index;
     }
 
     /// <summary>A program of a launch: how its adapter starts, how it starts the program, and what runs once the session is configured.</summary>

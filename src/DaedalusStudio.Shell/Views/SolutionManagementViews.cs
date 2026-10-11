@@ -47,3 +47,10 @@ public sealed partial class StartupProjectsView : LoadingView
 {
     public StartupProjectsView() => InitializeComponent();
 }
+
+public sealed partial class PublishView : LoadingView
+{
+    public PublishView() => InitializeComponent();
+
+    public override void FocusPrimary() => ProfileBox.Focus();
+}

@@ -394,7 +394,8 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         lock (_designTimePending)
         {
             // SQL database projects (.sqlproj, ADR 0038) have no compiler command line: they build, but get no design-time build.
-            _designTimePending.UnionWith(projects.Where(p => !IsUnloaded(p) && !p.EndsWith(".sqlproj", StringComparison.OrdinalIgnoreCase)));
+            // Compose projects (.dcproj, ADR 0042) aren't MSBuild projects to us at all.
+            _designTimePending.UnionWith(projects.Where(p => !IsUnloaded(p) && !p.EndsWith(".sqlproj", StringComparison.OrdinalIgnoreCase) && !ComposeProject.Is(p)));
             if (_designTimeWorker.IsCompleted)
             {
                 var token = _designTimeBatch.Token;
@@ -755,6 +756,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             }
 
             path = FolderBuildEntryPoint();
+        }
+        else if (path is null && !IsFolder && ProjectPaths.Any(ComposeProject.Is))
+        {
+            path = BuildEntryPoint(); // without the compose projects, which dotnet restore can't load
         }
 
         _restore = _restore.ContinueWith(_ => RestoreAsync(path ?? Path), TaskScheduler.Default).Unwrap();
