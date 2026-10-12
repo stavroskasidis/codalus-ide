@@ -147,7 +147,7 @@ public sealed partial class ShellHost
                 .Where(m => m.Match is not null)
                 .OrderByDescending(m => m.Match!.Score)
                 .Take(8)
-                .Select(m => new QuickPickItem(Path.GetFileName(m.Path)) { Detail = "File · " + Path.GetDirectoryName(m.Path), Tag = m.Path }));
+                .Select(m => new QuickPickItem(Path.GetFileName(m.Path)) { Detail = "File · " + Path.GetDirectoryName(m.Path), Tag = m.Path, Icon = Controls.FileIcons.ForFile(Path.GetFileName(m.Path)) }));
             if (query.Length >= 2 && Languages.RunningClient(CSharpLanguageId) is { } client)
             {
                 try
@@ -158,6 +158,7 @@ public sealed partial class ShellHost
                         {
                             Detail = $"{KindName(symbol.Kind)}{(symbol.ContainerName is { } container ? " in " + container : string.Empty)} · {Path.GetFileName(DocumentUris.ToPath(symbol.Location.Uri))}",
                             Tag = symbol.Location,
+                            Icon = ViewModels.SymbolNodeViewModel.IconFor(symbol.Kind),
                         });
                     }
                 }

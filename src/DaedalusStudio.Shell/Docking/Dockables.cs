@@ -42,6 +42,11 @@ public abstract class ShellDocument : Document
     /// <summary>The value of the <c>activeDocumentKind</c> context key while this document is active.</summary>
     public abstract string Kind { get; }
 
+    /// <summary>The tab's icon (a file's type, M34a), or null for none.</summary>
+    public virtual string? TabIcon => null;
+
+    public bool HasTabIcon => TabIcon is not null;
+
     /// <summary>
     /// A preview tab (italic title): the next preview replaces it, until it is edited, double-clicked or kept open.
     /// </summary>

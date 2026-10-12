@@ -38,6 +38,12 @@ public sealed class Icon : Control
 
     protected override Size MeasureOverride(Size availableSize) => new(16, 16);
 
+    public Icon()
+    {
+        // High Contrast draws multicolor icons in the foreground, and "kind@Family" accents follow the theme.
+        ActualThemeVariantChanged += (_, _) => InvalidateVisual();
+    }
+
     public override void Render(DrawingContext context)
     {
         if (Foreground is not { } brush)
@@ -45,20 +51,37 @@ public sealed class Icon : Control
             return;
         }
 
+        // "kind@Family" colors the icon with the family's token (Shell.Icon.Test…), for icons chosen in code.
+        var kind = Kind;
+        if (kind?.IndexOf('@', StringComparison.Ordinal) is int at and >= 0)
+        {
+            if (this.TryFindResource("Shell.Icon." + kind[(at + 1)..], ActualThemeVariant, out var accent) && accent is IBrush accentBrush)
+            {
+                brush = accentBrush;
+            }
+
+            kind = kind[..at];
+        }
+
         var size = Math.Min(Bounds.Width, Bounds.Height);
         var offset = new Point((Bounds.Width - size) / 2, (Bounds.Height - size) / 2);
-        if (IconSet.GetFilled(Kind) is { } filled)
+        if (IconSet.GetFilled(kind) is { } filled)
         {
+            // Multicolor icons (file types) keep their colors, except in High Contrast, where shape carries the meaning.
+            var monochrome = ActualThemeVariant == Theming.ThemeService.HighContrast;
             var scale = size / filled.DesignSize;
             using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(offset.X, offset.Y)))
             {
-                context.DrawGeometry(brush, null, filled.Geometry);
+                foreach (var layer in filled.Layers)
+                {
+                    context.DrawGeometry(layer.Color == 0 || monochrome ? brush : filled.Brush(layer.Color), null, layer.Geometry);
+                }
             }
 
             return;
         }
 
-        if (IconSet.Get(Kind) is not { } geometry)
+        if (IconSet.Get(kind) is not { } geometry)
         {
             return;
         }
@@ -71,8 +94,29 @@ public sealed class Icon : Control
     }
 }
 
-/// <summary>A compiled Fluent icon: its geometry and the size it was drawn for (16 or 20).</summary>
-public sealed record FilledIcon(Geometry Geometry, double DesignSize);
+/// <summary>A compiled icon: its fills and the size it was drawn for (its view box: 16, 20, 24, 32…).</summary>
+internal sealed class FilledIcon(IReadOnlyList<IconLayer> layers, double designSize)
+{
+    private readonly Dictionary<uint, IBrush> _brushes = [];
+
+    public IReadOnlyList<IconLayer> Layers { get; } = layers;
+
+    public double DesignSize { get; } = designSize;
+
+    /// <summary>The bounds of all the fills (tests).</summary>
+    public Rect Bounds => Layers.Select(l => l.Geometry.Bounds).Aggregate((a, b) => a.Union(b));
+
+    public IBrush Brush(uint color)
+    {
+        if (!_brushes.TryGetValue(color, out var brush))
+        {
+            brush = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromUInt32(color));
+            _brushes[color] = brush;
+        }
+
+        return brush;
+    }
+}
 
 /// <summary>The built-in icons. Unknown names render nothing.</summary>
 public static class IconSet
@@ -216,10 +260,22 @@ public static class IconSet
     /// <summary>Our Fluent icon names and the Fluent file each one uses (tests).</summary>
     public static IReadOnlyDictionary<string, string> FluentNames => s_fluent;
 
-    /// <summary>A Fluent icon's compiled geometry, or null when <paramref name="name"/> is a stroke icon or unknown.</summary>
-    public static FilledIcon? GetFilled(string? name)
+    /// <summary>The prefix of Material Icon Theme's file-type icons (<c>mi:csharp</c>, <c>mi:folder-src-open</c>; Controls/FileIcons.cs).</summary>
+    public const string MaterialPrefix = "mi:";
+
+    /// <summary>
+    /// A compiled icon, or null when <paramref name="name"/> is a stroke icon or unknown: one of our Fluent names, or
+    /// <c>mi:</c> and a Material Icon Theme file name.
+    /// </summary>
+    internal static FilledIcon? GetFilled(string? name)
     {
-        if (name is null || !s_fluent.TryGetValue(name, out var file))
+        string? file = null;
+        if (name is not null && !s_fluent.TryGetValue(name, out file) && name.StartsWith(MaterialPrefix, StringComparison.Ordinal))
+        {
+            file = name[MaterialPrefix.Length..];
+        }
+
+        if (name is null || file is null)
         {
             return null;
         }
@@ -228,7 +284,7 @@ public static class IconSet
         {
             if (!s_filled.TryGetValue(name, out var icon))
             {
-                icon = FluentIcons.Create(file) is { } geometry ? new FilledIcon(geometry, FluentIcons.DesignSize(file)) : null;
+                icon = CompiledIcons.Create(file) is { } layers ? new FilledIcon(layers, CompiledIcons.DesignSize(file)) : null;
                 s_filled[name] = icon;
             }
 

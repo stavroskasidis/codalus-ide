@@ -64,8 +64,8 @@
     <InternalsVisibleTo Include="DaedalusStudio.Shell.Tests" />
   </ItemGroup>
 
-  <!-- Fluent UI System Icons (D24, M34a): Icons/Fluent/*.svg compiled into geometries at build time. -->
-  <Import Project="..\..\eng\icons\FluentIcons.targets" />
+  <!-- Icons (D24, M34a): Icons/Fluent and Icons/Material SVGs compiled into geometries at build time. -->
+  <Import Project="..\..\eng\icons\Icons.targets" />
 
   <!-- The smoke test's mock GitHub (M13b): the same source as the tests' mock servers, so nothing reaches GitHub. -->
   <ItemGroup>

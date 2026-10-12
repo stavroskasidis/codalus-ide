@@ -15,7 +15,10 @@
   <Style Selector="DocumentControl">
     <Setter Property="HeaderTemplate">
       <DataTemplate DataType="docking:ShellDocument">
-        <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="{Binding TabIcon}" IsVisible="{Binding HasTabIcon}" Width="14" Height="14" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
+        </StackPanel>
       </DataTemplate>
     </Setter>
   </Style>
@@ -98,6 +101,52 @@
     <Setter Property="FontSize" Value="12" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
+  <!-- The editor's navigation bar (M34a): flat pickers, a border only on hover, a small chevron, the tabs' height. -->
+  <Style Selector="Border.navigationBar">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="Padding" Value="2,1" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Height" Value="22" />
+    <Setter Property="Padding" Value="6,0,4,0" />
+    <Setter Property="Margin" Value="1,0" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar /template/ Border#Background">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar:pointerover /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar:dropdownopen /template/ Border#Background">
+    <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar:focus-visible /template/ Border#Background">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar /template/ PathIcon#DropDownGlyph">
+    <Setter Property="Width" Value="8" />
+    <Setter Property="Height" Value="8" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar /template/ TextBlock#PlaceholderTextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
+  <Style Selector="ComboBox.navigationBar ComboBoxItem">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="6,3" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+
   <Style Selector="controls|Icon.start">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Run}" />
   </Style>

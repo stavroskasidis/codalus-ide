@@ -33,6 +33,7 @@
           <DataTemplate x:DataType="vm:QuickPickRow">
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:Icon Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" VerticalAlignment="Center" />
                 <controls:HighlightedText Source="{Binding Label}" Highlights="{Binding Highlights}" VerticalAlignment="Center" />
                 <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
               </StackPanel>

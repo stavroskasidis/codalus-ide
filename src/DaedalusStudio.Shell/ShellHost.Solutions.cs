@@ -173,7 +173,7 @@ public sealed partial class ShellHost
 
     public async Task OpenRecentAsync()
     {
-        var items = Recent.Items.Select(p => new QuickPickItem(Path.GetFileName(p)) { Detail = Path.GetDirectoryName(p), Tag = p }).ToList();
+        var items = Recent.Items.Select(p => new QuickPickItem(Path.GetFileName(p)) { Detail = Path.GetDirectoryName(p), Tag = p, Icon = Directory.Exists(p) ? Controls.FileIcons.ForFolder(Path.GetFileName(p), open: false) : Controls.FileIcons.ForFile(Path.GetFileName(p)) }).ToList();
         if (items.Count == 0)
         {
             Workbench.Notifications.Info("No recent solutions yet.");
