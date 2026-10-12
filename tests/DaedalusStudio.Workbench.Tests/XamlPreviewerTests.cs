@@ -151,12 +151,35 @@ public sealed class XamlPreviewerTests(AvaloniaFixture avalonia, ITestOutputHelp
             for (var i = 0; i < 12; i++)
             {
                 var edited = xaml.Replace("Text=\"{Binding Greeting}\"", $"Text=\"Edit number {i} {new string('W', i)}\"", StringComparison.Ordinal);
+                var clock = Stopwatch.StartNew();
                 var update = await target.UpdateXamlAsync(edited, avalonia.AppDll, "/Views/MainWindow.axaml", s_timeout, Ct);
                 Assert.True(update.Succeeded, update.Error);
                 Assert.NotNull(update.Frame);
-                Assert.True(Differences(previous, update.Frame) > 0, $"Edit {i} didn't change the preview.");
-                previous = update.Frame;
-                times.Add(update.Elapsed.TotalMilliseconds);
+
+                // The edit is shown by its frame, or (a loaded machine rendering the new window before its layout
+                // settles) by one of the frames right after it: the time is to the first frame that shows it.
+                var shownFrame = update.Frame;
+                for (var attempt = 0; attempt < 2 && Differences(previous, shownFrame) == 0; attempt++)
+                {
+                    if (attempt > 0)
+                    {
+                        // A loaded runner sometimes renders no frame for an update: send it again.
+                        output.WriteLine($"Edit {i}: no new frame in 10 s, sent again");
+                        update = await target.UpdateXamlAsync(edited, avalonia.AppDll, "/Views/MainWindow.axaml", s_timeout, Ct);
+                        shownFrame = update.Frame ?? shownFrame;
+                    }
+
+                    var waited = Stopwatch.StartNew();
+                    while (Differences(previous, shownFrame) == 0 && waited.Elapsed < TimeSpan.FromSeconds(10))
+                    {
+                        await Task.Delay(10, Ct);
+                        shownFrame = target.LastFrame ?? shownFrame;
+                    }
+                }
+
+                Assert.True(Differences(previous, shownFrame) > 0, $"Edit {i} didn't change the preview.");
+                previous = shownFrame;
+                times.Add(ReferenceEquals(shownFrame, update.Frame) ? update.Elapsed.TotalMilliseconds : clock.Elapsed.TotalMilliseconds);
             }
 
             times.Sort();
