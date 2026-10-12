@@ -59,13 +59,6 @@ internal static partial class BuiltIns
         const string Context = SolutionExplorerView.ContextMenuLocation;
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("project"), "project.references", "add", 4),
-            Item(MenuLocations.MenuBar("project"), "solution.projectDependencies", "solution", 4),
-            Item(MenuLocations.MenuBar("project"), "solution.sdks", "solution", 5),
-            Item(MenuLocations.MenuBar("project"), "project.properties", "z-properties", 1, title: "Project Properties"),
-            Item(MenuLocations.MenuBar("build"), "solution.configurationManager", "4-configuration", 2),
-            Item(MenuLocations.MenuBar("file"), "solution.saveFilter", "solution", 4),
-
             Item(Context, "project.references", "2-references", 3, "explorerItemKind == project || explorerItemKind == dependencies"),
             Item(Context, "solution.configurationManager", "4-solution", 4, "explorerItemKind == solution"),
             Item(Context, "solution.projectDependencies", "4-solution", 5, "explorerItemKind == solution || explorerItemKind == project"),

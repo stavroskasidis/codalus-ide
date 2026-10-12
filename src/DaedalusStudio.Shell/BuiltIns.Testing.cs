@@ -97,49 +97,4 @@ internal static partial class BuiltIns
             return Task.CompletedTask;
         }, "coverageAvailable");
     }
-
-    public static void RegisterTestingMenus(MenuRegistry menus)
-    {
-        menus.AddMenuBarMenu(new MenuBarMenu("test", "_Test", 65));
-        var shell = ContributionSource.Shell;
-        MenuItemRule Item(string command, string group, int order, string? title = null) =>
-            new(MenuLocations.MenuBar("test"), command, shell) { Group = group, Order = order, Title = title };
-        MenuItemRule Context(string command, string group, int order, string? title = null, string? when = null) =>
-            new(MenuLocations.EditorContext, command, shell) { Group = group, Order = order, Title = title, When = WhenClause.Parse(when) };
-
-        menus.Add(
-        [
-            Item("testing.runAll", "1-run", 1),
-            Item("testing.debugAll", "1-run", 2),
-            Item("testing.coverAll", "1-run", 3),
-            Item("testing.runFailed", "1-run", 4),
-            Item("testing.runNotRun", "1-run", 5),
-            Item("testing.repeatLast", "1-run", 6),
-            Item("testing.cancel", "1-run", 7),
-            Item(ViewCommandPrefix + TestExplorerViewModel.ToolWindowId, "2-explorer", 1, "Test Explorer"),
-            Item("testing.refresh", "2-explorer", 2),
-            Item("testing.nextFailure", "2-explorer", 3),
-            Item("testing.previousFailure", "2-explorer", 4),
-            Item("testing.newPlaylist", "3-playlists", 1),
-            Item("testing.importPlaylist", "3-playlists", 2),
-            Item("testing.deletePlaylist", "3-playlists", 3),
-            Item("testing.exportTrx", "4-results", 1),
-            Item("testing.importTrx", "4-results", 2),
-            Item(ViewCommandPrefix + CoverageResultsViewModel.ToolWindowId, "5-coverage", 1, "Coverage Results"),
-            Item("testing.toggleCoverageColoring", "5-coverage", 2),
-            Item("testing.exportCoverage", "5-coverage", 3),
-            Item("testing.clearCoverage", "5-coverage", 4),
-
-            // The editor's context menu: navigation and refactoring first, then tests.
-            Context("editor.action.revealDefinition", "1-navigate", 1),
-            Context("editor.action.referenceSearch", "1-navigate", 2),
-            Context("editor.action.rename", "2-refactor", 1),
-            Context("editor.action.quickFix", "2-refactor", 2),
-            Context("editor.action.formatDocument", "2-refactor", 3),
-            Context("testing.runAtCursor", "3-tests", 10, "Run Tests"),
-            Context("testing.debugAtCursor", "3-tests", 11, "Debug Tests"),
-            Context("testing.coverAtCursor", "3-tests", 12, "Run Tests with Coverage"),
-            Context("debug.toggleBreakpoint", "4-debug", 1),
-        ]);
-    }
 }

@@ -30,7 +30,7 @@ namespace DaedalusStudio.Shell.Infrastructure;
 /// standard output; the process exits with 0 when no step failed. A step the machine can't run (no browser, outside CI)
 /// is skipped, not failed; a step whose prerequisite failed is skipped too, after that failure.
 /// </summary>
-internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
+internal sealed partial class SmokeTest(Window window, ShellHost shell, string samples)
 {
     private const string Branch = "main";
     private static readonly TimeSpan s_watchdog = TimeSpan.FromMinutes(25);
@@ -322,6 +322,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 
             await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         }, "language.ready").ConfigureAwait(true);
+
+        // M34a: the menus as trees with icons, Ctrl+Space through the keyboard, output that follows.
+        await UxPassStepsAsync().ConfigureAwait(true);
 
         await StepAsync("editor.editing", "M12", "Snippets, Duplicate Line, Expand Selection, the Syntax Visualizer and Code Metrics", async () =>
         {

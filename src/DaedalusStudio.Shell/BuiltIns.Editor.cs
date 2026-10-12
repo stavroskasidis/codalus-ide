@@ -14,21 +14,23 @@ internal static partial class BuiltIns
     /// <summary>Editor key bindings; they apply while an editor has focus (<c>editorTextFocus</c>).</summary>
     public const string EditorKeybindings = """
         [
+          { "key": "ctrl+j", "command": "editor.action.triggerSuggest", "when": "editorTextFocus" },
+          { "mac": "alt+escape", "command": "editor.action.triggerSuggest", "when": "editorTextFocus" },
           { "key": "ctrl+space", "command": "editor.action.triggerSuggest", "when": "editorTextFocus" },
           { "key": "ctrl+shift+space", "command": "editor.action.triggerParameterHints", "when": "editorTextFocus" },
           { "key": "primary+k primary+i", "command": "editor.action.showHover", "when": "editorTextFocus" },
           { "key": "f12", "command": "editor.action.revealDefinition", "when": "editorTextFocus" },
           { "key": "primary+f12", "command": "editor.action.goToImplementation", "when": "editorTextFocus" },
-          { "key": "primary+m primary+m", "command": "editor.action.toggleFold", "when": "editorTextFocus" },
-          { "key": "primary+m primary+o", "command": "editor.action.foldAll", "when": "editorTextFocus" },
-          { "key": "primary+m primary+l", "command": "editor.action.unfoldAll", "when": "editorTextFocus" },
+          { "key": "primary+m primary+m", "mac": "cmd+alt+[", "command": "editor.action.toggleFold", "when": "editorTextFocus" },
+          { "key": "primary+m primary+o", "mac": "cmd+k cmd+0", "command": "editor.action.foldAll", "when": "editorTextFocus" },
+          { "key": "primary+m primary+l", "mac": "cmd+k cmd+j", "command": "editor.action.unfoldAll", "when": "editorTextFocus" },
           { "key": "primary+f", "command": "editor.action.find", "when": "editorTextFocus" },
           { "key": "primary+h", "mac": "cmd+alt+f", "command": "editor.action.replace", "when": "editorTextFocus" },
           { "key": "f3", "command": "editor.action.findNext", "when": "editorTextFocus" },
           { "key": "shift+f3", "command": "editor.action.findPrevious", "when": "editorTextFocus" },
           { "key": "primary+g", "mac": "ctrl+g", "command": "editor.action.gotoLine", "when": "editorTextFocus" },
-          { "key": "ctrl+alt+up", "command": "editor.action.insertCursorAbove", "when": "editorTextFocus" },
-          { "key": "ctrl+alt+down", "command": "editor.action.insertCursorBelow", "when": "editorTextFocus" },
+          { "key": "ctrl+alt+up", "linux": "shift+alt+up", "command": "editor.action.insertCursorAbove", "when": "editorTextFocus" },
+          { "key": "ctrl+alt+down", "linux": "shift+alt+down", "command": "editor.action.insertCursorBelow", "when": "editorTextFocus" },
           { "key": "shift+alt+.", "command": "editor.action.addSelectionToNextFindMatch", "when": "editorTextFocus" },
           { "key": "shift+alt+;", "command": "editor.action.selectHighlights", "when": "editorTextFocus" },
           { "key": "primary+shift+s", "command": "file.saveAll" },
@@ -49,7 +51,7 @@ internal static partial class BuiltIns
           { "key": "primary+k v", "command": "markdown.showPreviewToSide", "when": "activeDocumentKind == textFile" },
           { "key": "primary+k primary+u", "command": "editor.action.removeCommentLine", "when": "editorTextFocus" },
           { "key": "primary+/", "command": "editor.action.commentLine", "when": "editorTextFocus" },
-          { "key": "primary+alt+space", "command": "editor.action.triggerWordCompletion", "when": "editorTextFocus" },
+          { "key": "primary+alt+space", "mac": "ctrl+.", "command": "editor.action.triggerWordCompletion", "when": "editorTextFocus" },
           { "key": "shift+alt+f", "command": "editor.action.formatDocument", "when": "editorTextFocus" },
           { "key": "primary+k primary+f", "command": "editor.action.formatSelection", "when": "editorTextFocus" },
           { "key": "primary+t", "command": "workbench.action.gotoAll" },
@@ -294,91 +296,5 @@ internal static partial class BuiltIns
         {
             controller.Navigate(new LanguageServices.Protocol.Position(line - 1, 0));
         }
-    }
-
-    public static void RegisterEditorMenus(MenuRegistry menus)
-    {
-        menus.AddMenuBarMenu(new MenuBarMenu("edit", "_Edit", 20));
-        menus.AddMenuBarMenu(new MenuBarMenu("window", "_Window", 80));
-        menus.AddMenuBarMenu(new MenuBarMenu("analyze", "_Analyze", 67));
-        var shell = ContributionSource.Shell;
-        MenuItemRule Item(string location, string command, string group, int order = 0) =>
-            new(location, command, shell) { Group = group, Order = order };
-        string Edit = MenuLocations.MenuBar("edit"), Window = MenuLocations.MenuBar("window"), File = MenuLocations.MenuBar("file");
-        menus.Add(
-        [
-            Item(File, "file.saveAll", "save", 2),
-            Item(Edit, "editor.action.find", "1-find", 1),
-            Item(Edit, "editor.action.replace", "1-find", 2),
-            Item(Edit, "editor.action.findNext", "1-find", 3),
-            Item(Edit, "editor.action.findPrevious", "1-find", 4),
-            Item(Edit, "workbench.action.findInFiles", "1-find", 5),
-            Item(Edit, "workbench.action.gotoAll", "2-go", 0),
-            Item(Edit, "editor.action.referenceSearch", "2-go", 6),
-            Item(Edit, "editor.action.gotoLine", "2-go", 1),
-            Item(Edit, "editor.action.revealDefinition", "2-go", 2),
-            Item(Edit, "editor.action.goToImplementation", "2-go", 3),
-            Item(Edit, "editor.action.peekDefinition", "2-go", 3),
-            Item(Edit, "editor.action.goToBase", "2-go", 3),
-            Item(Edit, "editor.action.showCallHierarchy", "2-go", 7),
-            Item(Edit, "editor.action.showTypeHierarchy", "2-go", 8),
-            Item(Edit, "workbench.action.navigateToLastEditLocation", "2-go", 9),
-            Item(Edit, "editor.action.marker.next", "2-go", 10),
-            Item(Edit, "editor.action.marker.prev", "2-go", 11),
-            // The editor's context menu: navigation first, then refactoring (M12a).
-            Item(MenuLocations.EditorContext, "editor.action.revealDefinition", "1-navigation", 1),
-            Item(MenuLocations.EditorContext, "editor.action.peekDefinition", "1-navigation", 2),
-            Item(MenuLocations.EditorContext, "editor.action.goToImplementation", "1-navigation", 3),
-            Item(MenuLocations.EditorContext, "editor.action.goToBase", "1-navigation", 4) with { When = WhenClause.Parse("editorLanguageId == csharp") },
-            Item(MenuLocations.EditorContext, "editor.action.referenceSearch", "1-navigation", 5),
-            Item(MenuLocations.EditorContext, "editor.action.showCallHierarchy", "1-navigation", 6) with { When = WhenClause.Parse("editorLanguageId == csharp") },
-            Item(MenuLocations.EditorContext, "editor.action.rename", "2-refactor", 1),
-            Item(MenuLocations.EditorContext, "editor.action.quickFix", "2-refactor", 2),
-            Item(MenuLocations.EditorContext, "editor.action.formatDocument", "2-refactor", 3),
-            Item(Edit, "workbench.navigateBack", "2-go", 4),
-            Item(Edit, "workbench.navigateForward", "2-go", 5),
-            Item(Edit, "editor.action.triggerSuggest", "3-intellisense", 1),
-            Item(Edit, "editor.action.triggerParameterHints", "3-intellisense", 2),
-            Item(Edit, "editor.action.showHover", "3-intellisense", 3),
-            Item(Edit, "editor.action.quickFix", "3-intellisense", 4),
-            Item(Edit, "editor.action.rename", "3-intellisense", 5),
-            Item(Edit, "editor.action.formatDocument", "3-intellisense", 6),
-            Item(Edit, "editor.action.formatSelection", "3-intellisense", 7),
-            Item(Edit, "editor.action.insertCursorAbove", "4-carets", 1),
-            Item(Edit, "editor.action.insertCursorBelow", "4-carets", 2),
-            Item(Edit, "editor.action.addSelectionToNextFindMatch", "4-carets", 3),
-            Item(Edit, "editor.action.selectHighlights", "4-carets", 4),
-            Item(Edit, "editor.action.toggleFold", "5-outlining", 1),
-            Item(Edit, "editor.action.foldAll", "5-outlining", 2),
-            Item(Edit, "editor.action.unfoldAll", "5-outlining", 3),
-            Item(Edit, "editor.action.changeEndOfLine", "6-advanced", 1),
-            Item(Edit, "editor.action.codeCleanup", "3-intellisense", 8),
-            Item(Edit, "editor.action.duplicateSelection", "6-advanced", 2),
-            Item(Edit, "editor.action.moveLinesUpAction", "6-advanced", 3),
-            Item(Edit, "editor.action.moveLinesDownAction", "6-advanced", 4),
-            Item(Edit, "editor.action.smartSelect.expand", "6-advanced", 5),
-            Item(Edit, "editor.action.smartSelect.shrink", "6-advanced", 6),
-            Item(Edit, "editor.action.pasteFromClipboardRing", "7-paste", 1),
-            Item(Edit, "editor.action.pasteJsonAsClasses", "7-paste", 2),
-            Item(Edit, "editor.action.insertSnippet", "8-snippets", 1),
-            Item(Edit, "editor.action.surroundWithSnippet", "8-snippets", 2),
-            Item(File, "workbench.action.localHistory", "history", 1),
-            Item(File, "workbench.compareFiles", "history", 2),
-            Item(File, "workbench.compareActiveWith", "history", 3),
-            Item(Window, "workbench.closeDocumentsToTheRight", "3-close", 3),
-            Item(MenuLocations.MenuBar("analyze"), "analysis.codeMetrics.solution", "1-metrics", 1),
-            Item(MenuLocations.MenuBar("analyze"), "analysis.codeMetrics.project", "1-metrics", 2),
-            Item(MenuLocations.MenuBar("analyze"), "editor.action.codeCleanup", "2-cleanup", 1),
-            Item(MenuLocations.MenuBar("analyze"), "analysis.syntaxVisualizer", "3-roslyn", 1),
-            Item(Window, "workbench.toggleEditorSplit", "1-split", 1),
-            Item(Window, "workbench.splitEditorRight", "1-split", 2),
-            Item(Window, "workbench.splitEditorDown", "1-split", 3),
-            Item(Window, "workbench.keepEditor", "2-documents", 1),
-            Item(Window, "workbench.nextDocument", "2-documents", 2),
-            Item(Window, "workbench.previousDocument", "2-documents", 3),
-            Item(Window, "workbench.closeOtherDocuments", "3-close", 1),
-            Item(Window, "workbench.closeAllDocuments", "3-close", 2),
-            Item(Window, "workbench.resetLayout", "4-layout", 1),
-        ]);
     }
 }

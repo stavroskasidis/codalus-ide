@@ -8,7 +8,10 @@ namespace DaedalusStudio.Shell.Controls;
 
 /// <summary>
 /// A named icon from the shell's built-in set (ADR 0003: plugins refer to icons by name so they follow the
-/// theme, including high contrast). Icons are 16×16 stroke drawings in the current foreground color.
+/// theme, including high contrast). Most names are Fluent UI System Icons (D24, M34a), compiled into geometries at
+/// build time and filled in the current foreground; the rest are 16×16 stroke drawings. Command families color their
+/// icons through classes (<c>accent-run</c>, <c>accent-git</c>…) whose brushes are theme tokens, monochrome in High
+/// Contrast.
 /// </summary>
 public sealed class Icon : Control
 {
@@ -37,24 +40,201 @@ public sealed class Icon : Control
 
     public override void Render(DrawingContext context)
     {
-        if (IconSet.Get(Kind) is not { } geometry || Foreground is not { } brush)
+        if (Foreground is not { } brush)
         {
             return;
         }
 
         var size = Math.Min(Bounds.Width, Bounds.Height);
-        var scale = size / 16;
         var offset = new Point((Bounds.Width - size) / 2, (Bounds.Height - size) / 2);
-        using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(offset.X, offset.Y)))
+        if (IconSet.GetFilled(Kind) is { } filled)
+        {
+            var scale = size / filled.DesignSize;
+            using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(offset.X, offset.Y)))
+            {
+                context.DrawGeometry(brush, null, filled.Geometry);
+            }
+
+            return;
+        }
+
+        if (IconSet.Get(Kind) is not { } geometry)
+        {
+            return;
+        }
+
+        var strokeScale = size / 16;
+        using (context.PushTransform(Matrix.CreateScale(strokeScale, strokeScale) * Matrix.CreateTranslation(offset.X, offset.Y)))
         {
             context.DrawGeometry(null, new Pen(brush, 1.25, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), geometry);
         }
     }
 }
 
+/// <summary>A compiled Fluent icon: its geometry and the size it was drawn for (16 or 20).</summary>
+public sealed record FilledIcon(Geometry Geometry, double DesignSize);
+
 /// <summary>The built-in icons. Unknown names render nothing.</summary>
 public static class IconSet
 {
+    /// <summary>Our icon names that are Fluent UI System Icons (D24), by the Fluent file name (Icons/fluent-icons.txt).</summary>
+    private static readonly Dictionary<string, string> s_fluent = new(StringComparer.Ordinal)
+    {
+        // Names that existed before M34a, now drawn from Fluent.
+        ["search"] = "search_16_regular",
+        ["gear"] = "settings_16_regular",
+        ["keyboard"] = "keyboard_16_regular",
+        ["history"] = "history_16_regular",
+        ["extensions"] = "puzzle_piece_16_regular",
+        ["folder"] = "folder_16_regular",
+        ["file"] = "document_16_regular",
+        ["book"] = "book_16_regular",
+        ["check"] = "checkmark_16_regular",
+        ["home"] = "home_16_regular",
+        ["info"] = "info_16_regular",
+        ["warning"] = "warning_16_regular",
+        ["error"] = "error_circle_16_regular",
+        ["bell"] = "alert_16_regular",
+        ["close"] = "dismiss_16_regular",
+        ["refresh"] = "arrow_clockwise_16_regular",
+        ["output"] = "window_text_16_regular",
+        ["list"] = "list_16_regular",
+        ["play"] = "play_16_filled",
+        ["flame"] = "fire_16_regular",
+        ["stop"] = "stop_16_filled",
+        ["branch"] = "branch_16_regular",
+        ["debug"] = "bug_16_regular",
+        ["lock"] = "lock_closed_16_regular",
+        ["arrow-down"] = "arrow_down_16_regular",
+        ["lightbulb"] = "lightbulb_16_regular",
+        ["star"] = "star_16_regular",
+        ["edit"] = "edit_16_regular",
+        ["trash"] = "delete_16_regular",
+        ["pin"] = "pin_16_regular",
+        ["beaker"] = "beaker_16_regular",
+        ["filter"] = "filter_16_regular",
+        ["coverage"] = "data_pie_16_regular",
+        ["package"] = "box_16_regular",
+        ["link"] = "link_16_regular",
+        ["files"] = "document_multiple_16_regular",
+        ["file-add"] = "document_add_16_regular",
+        ["file-data"] = "document_data_16_regular",
+        ["tools"] = "wrench_16_regular",
+        ["arrow-left"] = "arrow_left_16_regular",
+        ["arrow-right"] = "arrow_right_16_regular",
+        ["save"] = "save_16_regular",
+        ["save-all"] = "save_multiple_16_regular",
+        ["undo"] = "arrow_undo_16_regular",
+        ["redo"] = "arrow_redo_16_regular",
+        ["play-outline"] = "play_16_regular",
+        ["pause"] = "pause_16_regular",
+        ["restart"] = "arrow_counterclockwise_16_regular",
+        ["step-over"] = "arrow_step_over_16_regular",
+        ["step-into"] = "arrow_step_in_16_regular",
+        ["step-out"] = "arrow_step_out_16_regular",
+        ["cloud"] = "cloud_16_regular",
+        ["pull-request"] = "branch_request_16_regular",
+        ["comment"] = "comment_16_regular",
+        ["account"] = "person_16_regular",
+        ["sync"] = "arrow_sync_16_regular",
+        ["database"] = "database_16_regular",
+        ["table"] = "table_16_regular",
+        ["key"] = "key_16_regular",
+
+        // Commands and tool windows in menus and toolbars (M34a).
+        ["folder-open"] = "folder_open_16_regular",
+        ["new"] = "new_16_regular",
+        ["new-solution"] = "square_multiple_16_regular",
+        ["compare"] = "branch_compare_16_regular",
+        ["cut"] = "cut_16_regular",
+        ["copy"] = "copy_16_regular",
+        ["paste"] = "clipboard_paste_16_regular",
+        ["find-in-files"] = "document_search_16_regular",
+        ["replace"] = "arrow_swap_16_regular",
+        ["go-to"] = "arrow_forward_16_regular",
+        ["go-to-line"] = "text_number_list_ltr_16_regular",
+        ["definition"] = "arrow_enter_16_regular",
+        ["references"] = "link_multiple_16_regular",
+        ["call-hierarchy"] = "flow_16_regular",
+        ["type-hierarchy"] = "list_bar_tree_16_regular",
+        ["rename"] = "rename_16_regular",
+        ["format"] = "text_align_left_16_regular",
+        ["uncomment"] = "comment_off_16_regular",
+        ["duplicate"] = "square_multiple_16_regular",
+        ["arrow-up"] = "arrow_up_16_regular",
+        ["select-expand"] = "select_all_on_16_regular",
+        ["fold"] = "text_collapse_16_regular",
+        ["unfold"] = "text_expand_16_regular",
+        ["fold-all"] = "arrow_collapse_all_16_regular",
+        ["unfold-all"] = "arrow_expand_all_16_regular",
+        ["bookmark"] = "bookmark_16_regular",
+        ["bookmarks"] = "bookmark_multiple_16_regular",
+        ["caret"] = "cursor_16_regular",
+        ["snippet"] = "code_block_16_regular",
+        ["braces"] = "braces_16_regular",
+        ["broom"] = "broom_16_regular",
+        ["code"] = "code_16_regular",
+        ["terminal"] = "window_console_20_regular",
+        ["task-list"] = "task_list_square_ltr_16_regular",
+        ["window"] = "window_multiple_16_regular",
+        ["tab"] = "tab_16_regular",
+        ["download"] = "arrow_download_16_regular",
+        ["upload"] = "arrow_upload_16_regular",
+        ["fork"] = "branch_fork_16_regular",
+        ["merge"] = "merge_16_regular",
+        ["stash"] = "archive_16_regular",
+        ["tag"] = "tag_16_regular",
+        ["link-add"] = "link_add_16_regular",
+        ["container"] = "cube_16_regular",
+        ["publish"] = "cloud_arrow_up_16_regular",
+        ["build"] = "toolbox_16_regular",
+        ["cancel"] = "dismiss_circle_16_regular",
+        ["layers"] = "stack_16_regular",
+        ["timer"] = "timer_16_regular",
+        ["check-circle"] = "checkmark_circle_16_regular",
+        ["attach"] = "plug_connected_16_regular",
+        ["breakpoint"] = "record_16_filled",
+        ["breakpoint-outline"] = "record_16_regular",
+        ["watch"] = "glasses_16_regular",
+        ["gauge"] = "gauge_16_regular",
+        ["globe"] = "globe_16_regular",
+        ["shield"] = "shield_checkmark_16_regular",
+        ["metrics"] = "data_bar_vertical_16_regular",
+        ["color"] = "color_16_regular",
+        ["templates"] = "document_copy_16_regular",
+        ["split-right"] = "split_vertical_16_regular",
+        ["split-down"] = "split_horizontal_16_regular",
+        ["close-all"] = "dismiss_square_multiple_16_regular",
+        ["layout"] = "layout_column_two_16_regular",
+        ["document-text"] = "document_text_16_regular",
+        ["update"] = "arrow_sync_circle_16_regular",
+        ["sparkle"] = "sparkle_16_regular",
+    };
+
+    private static readonly Dictionary<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);
+
+    /// <summary>Our Fluent icon names and the Fluent file each one uses (tests).</summary>
+    public static IReadOnlyDictionary<string, string> FluentNames => s_fluent;
+
+    /// <summary>A Fluent icon's compiled geometry, or null when <paramref name="name"/> is a stroke icon or unknown.</summary>
+    public static FilledIcon? GetFilled(string? name)
+    {
+        if (name is null || !s_fluent.TryGetValue(name, out var file))
+        {
+            return null;
+        }
+
+        lock (s_filled)
+        {
+            if (!s_filled.TryGetValue(name, out var icon))
+            {
+                icon = FluentIcons.Create(file) is { } geometry ? new FilledIcon(geometry, FluentIcons.DesignSize(file)) : null;
+                s_filled[name] = icon;
+            }
+
+            return icon;
+        }
+    }
     private static readonly Dictionary<string, string> s_paths = new(StringComparer.Ordinal)
     {
         ["search"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14",
@@ -167,7 +347,8 @@ public static class IconSet
 
     private static string Bell => "M3.5,11.5 V7 C3.5,4.5 5.5,2.5 8,2.5 C10.5,2.5 12.5,4.5 12.5,7 V11.5 L13.5,12.5 H2.5 Z M6.5,14.25 H9.5 ";
 
-    public static IReadOnlyCollection<string> Names => s_paths.Keys;
+    /// <summary>Every icon name, Fluent and stroke.</summary>
+    public static IReadOnlyCollection<string> Names => [.. s_paths.Keys.Union(s_fluent.Keys, StringComparer.Ordinal)];
 
     public static Geometry? Get(string? name)
     {

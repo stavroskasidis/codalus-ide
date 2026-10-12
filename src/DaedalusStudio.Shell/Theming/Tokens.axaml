@@ -35,6 +35,15 @@
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6E7681" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <!-- Icon accents by command family (M34a, D24); at least 3:1 against menus, toolbars and panels. -->
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#1E66C5" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#9A6700" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#7B4FD0" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#C4380D" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#0B7A75" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#1E66C5" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#6E7681" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F3F3F3" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#E0E0E0" />
@@ -100,6 +109,14 @@
       <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#2B91AF" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#C5A0F0" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#F37650" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#4EC9B0" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#969696" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#2A2A2A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#404040" />
@@ -232,6 +249,15 @@
       <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <!-- High Contrast keeps icons monochrome: shape carries the meaning, not color. -->
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D0D0D0" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
@@ -269,4 +295,9 @@
       <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#6FC3DF" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
+
+  <!-- Menu density (M34a): rows of about 24 px at 9 pt, as in a classic IDE, so the menus fit a 1080p screen. -->
+  <Thickness x:Key="MenuFlyoutItemThemePadding">8,4,12,4</Thickness>
+  <Thickness x:Key="MenuFlyoutItemThemePaddingNarrow">8,4,12,4</Thickness>
+  <Thickness x:Key="MenuFlyoutSeparatorThemePadding">-4,2,-4,2</Thickness>
 </ResourceDictionary>

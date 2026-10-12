@@ -61,25 +61,9 @@ public sealed partial class DatabaseExplorerView : UserControl, IPaneView
             vm.Selected = node;
         }
 
-        var items = shell.Workbench.Menus.GetItems(ContextMenuLocation).Where(i => i.Submenu is null).ToList();
-        if (items.Count == 0)
+        if (MenuBuilder.Context(shell, ContextMenuLocation) is not { } menu)
         {
             return;
-        }
-
-        var menu = new ContextMenu();
-        string? group = null;
-        foreach (var item in items)
-        {
-            if (group is not null && item.Group != group)
-            {
-                menu.Items.Add(new Separator());
-            }
-
-            group = item.Group;
-            var entry = new MenuItem { Header = new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center }, IsEnabled = item.Enabled, Command = shell.CommandFor(item.Command) };
-            AutomationProperties.SetName(entry, item.Title);
-            menu.Items.Add(entry);
         }
 
         menu.Open(Tree);

@@ -171,46 +171,4 @@ internal static partial class BuiltIns
         Add("debug.attachRemote", "Attach to Process on a Remote Machine…", shell.AttachToRemoteProcessAsync, "!debugActive");
         Add("debug.justInTime", "Just-In-Time Debugging…", shell.ConfigureJitDebuggingAsync);
     }
-
-    public static void RegisterDebugMenus(MenuRegistry menus)
-    {
-        var shell = ContributionSource.Shell;
-        MenuItemRule Item(string command, string group, int order, string? title = null) =>
-            new(MenuLocations.MenuBar("debug"), command, shell) { Group = group, Order = order, Title = title };
-
-        menus.Add(
-        [
-            Item("debug.start", "0-debug", 1),
-            Item("debug.continue", "0-debug", 2),
-            Item("debug.stop", "0-debug", 3),
-            Item("debug.detachAll", "0-debug", 3),
-            Item("debug.restart", "0-debug", 4),
-            Item("debug.pause", "0-debug", 5),
-            Item("debug.attach", "0-debug", 6),
-            Item("debug.attachRemote", "0-debug", 7),
-            Item("debug.reattach", "0-debug", 8),
-            Item("debug.webPage", "0-debug", 9),
-            Item("debug.openDump", "1-dumps", 1),
-            Item("debug.createDump", "1-dumps", 2),
-            Item("debug.justInTime", "1-dumps", 3),
-            Item("debug.stepOver", "3-step", 1),
-            Item("debug.stepInto", "3-step", 2),
-            Item("debug.stepOut", "3-step", 3),
-            Item("debug.runToCursor", "3-step", 4),
-            Item("debug.forceRunToCursor", "3-step", 5),
-            Item("debug.toggleBreakpoint", "4-breakpoints", 1),
-            Item("debug.toggleBreakpointEnabled", "4-breakpoints", 2),
-            Item("debug.editBreakpoint", "4-breakpoints", 3),
-            Item("debug.insertTemporaryBreakpoint", "4-breakpoints", 4),
-            Item("debug.newFunctionBreakpoint", "4-breakpoints", 5),
-            Item("debug.deleteAllBreakpoints", "4-breakpoints", 6),
-            Item("debug.exportBreakpoints", "4-breakpoints", 7),
-            Item("debug.importBreakpoints", "4-breakpoints", 8),
-            Item("debug.exceptionSettings", "4-breakpoints", 9, "Exception Settings…"),
-            // Debug → Windows lists the debugger's tool windows (BuiltIns.ViewMenuEntry).
-            Item("debug.addWatch", "5-windows", 1),
-            Item("debug.quickWatch", "5-windows", 2),
-            Item("debug.clearDataTips", "5-windows", 3),
-        ]);
-    }
 }

@@ -46,7 +46,7 @@ internal static partial class BuiltIns
         menus.Add(
         [
             new MenuItemRule(OtherWindowsMenu, "xaml.showPreview", shell) { Group = "windows", Order = AlphabeticalOrder("XAML Previewer") },
-            new MenuItemRule(MenuLocations.EditorContext, "xaml.showPreview", shell) { Group = "1-navigation", Order = 20, When = WhenClause.Parse("editorLanguageId == axaml") },
+            new MenuItemRule(MenuLocations.EditorContext, "xaml.showPreview", shell) { Group = "2-navigation", Order = 20, When = WhenClause.Parse("editorLanguageId == axaml") },
         ]);
     }
 }
