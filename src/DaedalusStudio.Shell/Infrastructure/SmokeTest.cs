@@ -1706,6 +1706,21 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         Check(report.AllocationTypes.Count > 0, "Allocations lists the allocated types");
         Check(report.EventCounts.Count > 0 && report.Events.Count > 0, "the events viewer lists the trace's events");
         Console.Out.WriteLine($"  {report.Tasks.Count} tasks, {report.ThreadRows.Count} threads, {report.ExceptionGroups.Count} exception groups, {report.AllocationTypes.Count} allocated types, {report.EventCounts.Count} kinds of events");
+        // The flame graph again, once the solution has settled (profiler.cpu times it right after the solution opens).
+        report.SelectedTab = 3;
+        await RenderedAsync().ConfigureAwait(true);
+        if (window.GetVisualDescendants().OfType<Controls.FlameGraph>().FirstOrDefault() is { Frames.Count: > 0 } graph)
+        {
+            var clock = Stopwatch.StartNew();
+            for (var i = 0; i < 10; i++)
+            {
+                graph.Zoom(1.15, 0.3);
+                await RenderedAsync().ConfigureAwait(true);
+            }
+
+            Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  flame graph: {graph.Frames!.Count} frames, {clock.Elapsed.TotalMilliseconds / 10:0.0} ms per zoom step"));
+        }
+
         report.SelectedTab = ProfilingReportViewModel.ThreadsTab;
         await RenderedAsync().ConfigureAwait(true);
         Screenshot("smoke-test-profiler-threads.png");
