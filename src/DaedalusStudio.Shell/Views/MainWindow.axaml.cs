@@ -129,10 +129,25 @@ public sealed partial class MainWindow : Window, IShellWindow
                 BenchEvents.Emit(BenchEventNames.Interactive);
                 _shell.OnInteractive();
                 StartBenchDriver();
-                if (_shell.Options.Screenshot is { } screenshot)
+                if (_shell.Options.Screenshot is { } screenshot && _shell.Options.Remote is not null)
+                {
+                    // A remote window (M21): once it's connected and its C# service is ready (three minutes at most).
+                    var started = System.Diagnostics.Stopwatch.StartNew();
+                    DispatcherTimer? poll = null;
+                    poll = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) =>
+                    {
+                        if (started.Elapsed > TimeSpan.FromMinutes(3) || _shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready" })
+                        {
+                            poll!.Stop();
+                            DispatcherTimer.RunOnce(() => SaveScreenshot(screenshot), TimeSpan.FromSeconds(2));
+                        }
+                    });
+                    poll.Start();
+                }
+                else if (_shell.Options.Screenshot is { } shot)
                 {
                     // Late enough for startup plugins (the Start page) to have rendered.
-                    DispatcherTimer.RunOnce(() => SaveScreenshot(screenshot), TimeSpan.FromSeconds(4));
+                    DispatcherTimer.RunOnce(() => SaveScreenshot(shot), TimeSpan.FromSeconds(4));
                 }
 
                 if (_shell.Options.ExitOn == "interactive" && Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

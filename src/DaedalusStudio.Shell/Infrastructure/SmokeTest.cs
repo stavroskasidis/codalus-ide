@@ -1089,8 +1089,83 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
         }
 
+        // M21: a remote window on the local stand-in server (the shipped remote/server); it disconnects at its end.
+        await StepAsync("remote.session", "M21", "A remote window on a local server: the solution loads in its build host, a file is completed and saved through it, the program runs in its terminal, and a new port is forwarded", RemoteStepAsync, "build.solution").ConfigureAwait(true);
+
         // Last: it opens a solution of 38 projects, and nothing after it depends on what it leaves behind.
         await StepAsync("dotnet.older", "M33", "Projects of .NET Core 2.0 to .NET 10 open and build; Hot Reload says why it needs .NET 6", OlderFrameworksStepAsync).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Remote development (M21, ADR 0049) on the local stand-in: the window connects to the shipped server, opens a copy
+    /// of BuildAndRun through it, completes and saves a file, builds, runs the program in the server's terminal and sees
+    /// a new listening port forwarded; then it disconnects, local again. Every wait is bounded.
+    /// </summary>
+    private async Task RemoteStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        if (shell.Solutions.IsOpen)
+        {
+            await shell.CloseSolutionAsync().ConfigureAwait(true);
+        }
+
+        var folder = Path.Combine(_work, "RemoteBuildAndRun");
+        Copy(Path.Combine(samples, "BuildAndRun"), folder);
+        string RemoteLog() => Tail(shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Remote")?.GetText() ?? string.Empty, 3000);
+        var spec = Workbench.Remote.RemoteTargetSpec.Parse("local")!;
+        var connect = shell.ConnectRemoteAsync(spec, null);
+        await WaitAsync(() => connect.IsCompleted, "the window connects to the local server", 120).ConfigureAwait(true);
+        Check(await connect.ConfigureAwait(true) && shell.Remote is not null, "the window connected to the local server:\n" + RemoteLog());
+        var remote = shell.Remote!;
+        try
+        {
+            Console.Out.WriteLine($"  server {remote.Connection.Server.ServerVersion} ({remote.Connection.Server.ServerFolder}), .NET {remote.Connection.Server.DotnetVersion}, paths {(remote.Map.IsIdentity ? "as they are" : "under " + remote.Map.LocalRoot)}");
+            var local = remote.Map.ToLocal(folder);
+            shell.Trust.Trust(Path.GetDirectoryName(local)!);
+            await shell.OpenRemoteAsync(local).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "both projects are evaluated by the build host on the server", 300).ConfigureAwait(true);
+            Check(shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Any(i => i.Id == ShellHost.RemoteStatusItem && i.Text.Contains(remote.Display, StringComparison.Ordinal)), "the status bar shows the remote connection");
+
+            var program = Path.Combine(local, "src", "Hello", "Program.cs");
+            var editor = await shell.OpenFileAsync(program).ConfigureAwait(true) ?? throw new SmokeFailure("Program.cs didn't open through the server.");
+            Check(editor.Model.Text.Text.Contains("Greeter.Greet", StringComparison.Ordinal), "the editor read Program.cs through the server");
+            await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready", Projects: 2 }, "the C# host on the server is ready with 2 projects", 360).ConfigureAwait(true);
+            var client = shell.Languages.RunningClient(ShellHost.CSharpLanguageId) ?? throw new SmokeFailure("The C# host isn't running.");
+            var text = editor.Model.Text.Text;
+            using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60)))
+            {
+                var completion = await client.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(text.IndexOf("Console.WriteLine", StringComparison.Ordinal) + "Console.".Length), null, timeout.Token).ConfigureAwait(true);
+                Check(completion.Items.Any(i => i.Label == "WriteLine"), "member completion from the C# host on the server lists WriteLine");
+            }
+
+            editor.Model.Text.Insert(0, "// edited in a remote window\n");
+            await shell.SaveAllAsync().ConfigureAwait(true);
+            Check(File.ReadAllText(Path.Combine(folder, "src", "Hello", "Program.cs")).StartsWith("// edited in a remote window", StringComparison.Ordinal), "the save reached the file through the server");
+
+            var before = shell.Builds.LastBuild;
+            shell.Run("build.buildSolution");
+            await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build on the server finishes", 420).ConfigureAwait(true);
+            Check(shell.Builds.LastBuild!.Result.Succeeded, "the build on the server succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+
+            var sessions = shell.Terminals.Sessions.Count;
+            shell.SetStartupProject(Path.Combine(local, "src", "Hello", "Hello.csproj"));
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.Terminals.Sessions.Count > sessions && shell.Terminals.Sessions[^1].ExitCode is not null, "the program runs to its end in the server's terminal", 180).ConfigureAwait(true);
+            var run = shell.Terminals.Sessions[^1];
+            var screen = string.Join('\n', Enumerable.Range(0, run.Terminal.TotalRows).Select(i => run.Terminal.GetRow(i).GetText()));
+            Check(run.ExitCode == 0 && screen.Contains("Hello from Hello", StringComparison.Ordinal), $"it printed its greeting and exited with 0 (exit code {run.ExitCode}):\n{Tail(screen, 1500)}");
+
+            using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+            await WaitAsync(() => remote.Ports.Forwarded.Any(p => p.RemotePort == port), $"port {port} is detected and forwarded", 60).ConfigureAwait(true);
+        }
+        finally
+        {
+            await shell.DisconnectRemoteAsync().ConfigureAwait(true);
+        }
+
+        Check(shell.Remote is null && !shell.Solutions.IsOpen, "the window is local again");
     }
 
     /// <summary>

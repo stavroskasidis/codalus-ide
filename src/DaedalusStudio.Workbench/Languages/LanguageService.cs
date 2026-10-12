@@ -51,6 +51,12 @@ public sealed class LanguageService : IAsyncDisposable
 
     public event EventHandler<string>? Log;
 
+    /// <summary>
+    /// Where language hosts run: null here, or a remote window's server (M21, ADR 0049), which returns null for a host
+    /// that can't run there.
+    /// </summary>
+    public Func<Rpc.ProcessLaunchInfo, Rpc.ProcessLaunchInfo?>? Placement { get; set; }
+
     /// <summary>A language host crashed: (language, whether it restarts).</summary>
     public event EventHandler<(string LanguageId, bool WillRestart)>? HostCrashed;
 
@@ -155,6 +161,18 @@ public sealed class LanguageService : IAsyncDisposable
         {
             Log?.Invoke(this, $"[{languageId}] No language service host was found.");
             return null;
+        }
+
+        if (Placement is { } place)
+        {
+            // A remote window (M21): the hosts that read the workspace run on the server; the others don't run.
+            if (place(launch) is not { } placed)
+            {
+                Log?.Invoke(this, $"[{languageId}] {descriptor.DisplayName} doesn't run in a remote window yet.");
+                return null;
+            }
+
+            launch = placed;
         }
 
         var client = new LanguageHostClient(descriptor.DisplayName + " language service", launch, policy: _policy)

@@ -184,6 +184,14 @@ public sealed partial class ShellHost
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
             var profile = Runs.ResolveProfile(project, profiles);
+            if (Remote is { } remote)
+            {
+                // A remote window (M21): netcoredbg runs there, through the server.
+                DebugLog.Clear();
+                await StartRemoteAsync(remote, project, info, profile, debug: true).ConfigureAwait(true);
+                return;
+            }
+
             if (IsAspireHost(project))
             {
                 // An Aspire AppHost debugs its projects in its session (ADR 0043).

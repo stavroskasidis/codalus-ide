@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using DaedalusStudio.Rpc;
 
 namespace DaedalusStudio.Debugging;
 
@@ -108,14 +109,14 @@ public sealed class DebugAdapter : IDebugAdapter
     /// <summary>How long <see cref="DisconnectAsync"/> waits for the adapter's answer.</summary>
     private static readonly TimeSpan DisconnectTimeout = TimeSpan.FromSeconds(10);
 
-    private readonly Process _process;
+    private readonly IHostProcess _process;
     private readonly DapConnection _connection;
     private readonly TaskCompletionSource _initialized = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private DebugAdapter(Process process)
+    private DebugAdapter(IHostProcess process)
     {
         _process = process;
-        _connection = new DapConnection(process.StandardOutput.BaseStream, process.StandardInput.BaseStream);
+        _connection = new DapConnection(process.Output, process.Input);
         _connection.EventReceived += e =>
         {
             if (e.Name == DapEvents.Initialized)
@@ -126,26 +127,22 @@ public sealed class DebugAdapter : IDebugAdapter
             return EventReceived?.Invoke(e) ?? Task.CompletedTask;
         };
         _connection.HandlerFailed += (_, ex) => Log?.Invoke(this, "Event handler failed: " + ex);
-        process.ErrorDataReceived += (_, e) =>
+        process.ErrorLine += line =>
         {
-            if (e.Data is { } line)
+            lock (_stderr)
             {
-                lock (_stderr)
+                if (_stderr.Length < 4096)
                 {
-                    if (_stderr.Length < 4096)
-                    {
-                        _stderr.AppendLine(line);
-                    }
+                    _stderr.AppendLine(line);
                 }
-
-                Log?.Invoke(this, line);
             }
+
+            Log?.Invoke(this, line);
         };
 
         // The connection normally closes when the adapter's output ends with it. On Unix the debuggee inherits that
         // output, so an adapter that exits before its debuggee would leave the session running forever (M33).
-        process.EnableRaisingEvents = true;
-        process.Exited += (_, _) => _ = AbandonUnlessClosedAsync();
+        _ = process.Exited.ContinueWith(_ => AbandonUnlessClosedAsync(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
     }
 
     private async Task AbandonUnlessClosedAsync()
@@ -160,14 +157,7 @@ public sealed class DebugAdapter : IDebugAdapter
 
     private string ExitCode()
     {
-        try
-        {
-            return _process.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        }
-        catch (InvalidOperationException)
-        {
-            return "unknown";
-        }
+        return _process.Exited is { IsCompletedSuccessfully: true, Result: { } code } ? code.ToString(System.Globalization.CultureInfo.InvariantCulture) : "unknown";
     }
 
     /// <summary>The start of the adapter's stderr, to say why a pipe transport failed.</summary>
@@ -203,33 +193,20 @@ public sealed class DebugAdapter : IDebugAdapter
     /// </summary>
     public static async Task<DebugAdapter> StartAsync(DebugAdapterStartInfo info, CancellationToken cancellationToken, ITerminalLauncher? terminal = null)
     {
-        var start = new ProcessStartInfo(info.Program)
+        var launch = new ProcessLaunchInfo(info.Program, info.Arguments)
         {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            WorkingDirectory = info.WorkingDirectory ?? (Path.IsPathRooted(info.Program) ? Path.GetDirectoryName(info.Program)! : Environment.CurrentDirectory),
+            Environment = info.Environment,
+            WorkingDirectory = info.Launcher is not null ? info.WorkingDirectory
+                : info.WorkingDirectory ?? (Path.IsPathRooted(info.Program) ? Path.GetDirectoryName(info.Program)! : Environment.CurrentDirectory),
         };
-        foreach (var argument in info.Arguments)
-        {
-            start.ArgumentList.Add(argument);
-        }
-
-        foreach (var (name, value) in info.Environment ?? new Dictionary<string, string>())
-        {
-            start.Environment[name] = value;
-        }
-
-        var process = Process.Start(start) ?? throw new InvalidOperationException($"{info.Program} did not start.");
+        var process = await (info.Launcher ?? LocalProcessLauncher.Instance).StartAsync(launch, cancellationToken).ConfigureAwait(false);
         var adapter = new DebugAdapter(process) { Transport = info.Transport };
         if (terminal is not null)
         {
             adapter._connection.Handle("runInTerminal", (arguments, ct) => RunInTerminalAsync(terminal, arguments, ct));
         }
 
-        process.BeginErrorReadLine();
+        process.BeginErrorRead();
         adapter._connection.Start();
         try
         {
@@ -370,23 +347,12 @@ public sealed class DebugAdapter : IDebugAdapter
 
     public async ValueTask DisposeAsync()
     {
-        try
+        if (await Task.WhenAny(_process.Exited, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false) != _process.Exited)
         {
-            if (!_process.HasExited)
-            {
-                await Task.WhenAny(_process.WaitForExitAsync(), Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
-            }
-
-            if (!_process.HasExited)
-            {
-                _process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException)
-        {
+            _process.Kill();
         }
 
         await _connection.DisposeAsync().ConfigureAwait(false);
-        _process.Dispose();
+        await _process.DisposeAsync().ConfigureAwait(false);
     }
 }

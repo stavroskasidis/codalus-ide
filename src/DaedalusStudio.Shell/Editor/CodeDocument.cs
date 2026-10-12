@@ -241,6 +241,15 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     private void RememberFileState()
     {
+        if (Remote is { } remote)
+        {
+            // A remote window's file (M21): the server's time and size, once they arrive.
+            _ = remote.StatAsync(Path, CancellationToken.None).ContinueWith(
+                t => Ui.Post(() => (_lastWrite, _lastLength) = t.IsCompletedSuccessfully && t.Result.Exists ? (t.Result.ModifiedUtc, t.Result.Size) : (default, -1)),
+                TaskScheduler.Default);
+            return;
+        }
+
         try
         {
             var info = new FileInfo(Path);
@@ -251,8 +260,20 @@ public sealed class CodeDocument : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>The remote file system of a remote window's file (M21), or null for a file here.</summary>
+    private Workbench.FileSystem.IFileSystemProvider? Remote =>
+        Workbench.FileSystem.FileSystems.For(Path) is { IsRemote: true } remote ? remote : null;
+
+    private IDisposable? _remoteWatch;
+
     private void Watch()
     {
+        if (!IsReadOnly && Remote is { } remote)
+        {
+            _remoteWatch ??= remote.Watch(Path, recursive: false, _ => ScheduleCheck());
+            return;
+        }
+
         if (IsReadOnly || System.IO.Path.GetDirectoryName(Path) is not { } directory || !Directory.Exists(directory))
         {
             return;
@@ -281,6 +302,20 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     private void CheckFile()
     {
         Interlocked.Exchange(ref _changeCheckScheduled, 0);
+        if (Remote is { } remote)
+        {
+            _ = remote.StatAsync(Path, CancellationToken.None).ContinueWith(
+                t =>
+                {
+                    if (t.IsCompletedSuccessfully)
+                    {
+                        Ui.Post(() => OnFileState(t.Result.Exists, t.Result.ModifiedUtc, t.Result.Size));
+                    }
+                },
+                TaskScheduler.Default);
+            return;
+        }
+
         FileInfo info;
         try
         {
@@ -291,14 +326,19 @@ public sealed class CodeDocument : ObservableObject, IDisposable
             return;
         }
 
-        if (!info.Exists)
+        OnFileState(info.Exists, info.Exists ? info.LastWriteTimeUtc : default, info.Exists ? info.Length : -1);
+    }
+
+    private void OnFileState(bool exists, DateTime lastWrite, long length)
+    {
+        if (!exists)
         {
             IsDeletedOnDisk = true;
             return;
         }
 
         IsDeletedOnDisk = false;
-        if (info.LastWriteTimeUtc == _lastWrite && info.Length == _lastLength)
+        if (lastWrite == _lastWrite && length == _lastLength)
         {
             return; // our own save, or a touch
         }
@@ -330,5 +370,7 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     {
         _watcher?.Dispose();
         _watcher = null;
+        _remoteWatch?.Dispose();
+        _remoteWatch = null;
     }
 }

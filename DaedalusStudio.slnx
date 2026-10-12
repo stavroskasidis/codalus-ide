@@ -36,6 +36,8 @@
     <Project Path="src/DaedalusStudio.Plugins.Protocol/DaedalusStudio.Plugins.Protocol.csproj" />
     <Project Path="src/DaedalusStudio.Projects.Host/DaedalusStudio.Projects.Host.csproj" />
     <Project Path="src/DaedalusStudio.Projects.Protocol/DaedalusStudio.Projects.Protocol.csproj" />
+    <Project Path="src/DaedalusStudio.Remote.Protocol/DaedalusStudio.Remote.Protocol.csproj" />
+    <Project Path="src/DaedalusStudio.Remote.Server/DaedalusStudio.Remote.Server.csproj" />
     <Project Path="src/DaedalusStudio.Rpc/DaedalusStudio.Rpc.csproj" />
     <Project Path="src/DaedalusStudio.Shell/DaedalusStudio.Shell.csproj" />
     <Project Path="src/DaedalusStudio.Terminal/DaedalusStudio.Terminal.csproj" />

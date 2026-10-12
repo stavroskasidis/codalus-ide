@@ -218,6 +218,14 @@ public sealed partial class ShellHost
         _ = OfferDevCertificateAsync(project);
         try
         {
+            if (Remote is { } remote)
+            {
+                // A remote window (M21): the program runs there, in a terminal (TODO(issue): Hot Reload remotely, M21b).
+                var (remoteInfo, remoteProfiles, _) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
+                await StartRemoteAsync(remote, project, remoteInfo, Runs.ResolveProfile(project, remoteProfiles), debug: false).ConfigureAwait(true);
+                return;
+            }
+
             if (IsAspireHost(project))
             {
                 // An Aspire AppHost runs its projects through this IDE (ADR 0043).

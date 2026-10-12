@@ -34,11 +34,12 @@ public sealed partial class ShellHost
             return;
         }
 
-        folder = Path.TrimEndingDirectorySeparator(DaedalusStudio.Platform.RealPath.Resolve(Path.GetFullPath(folder)));
-        if (!Directory.Exists(folder))
+        var remote = IsRemotePath(folder);
+        folder = Path.TrimEndingDirectorySeparator(remote ? Path.GetFullPath(folder) : DaedalusStudio.Platform.RealPath.Resolve(Path.GetFullPath(folder)));
+        if (!(remote ? await DaedalusStudio.Workbench.FileSystem.FileSystems.DirectoryExistsAsync(folder, CancellationToken.None).ConfigureAwait(true) : Directory.Exists(folder)))
         {
             Recent.Remove(folder);
-            Workbench.Notifications.Error($"'{folder}' doesn't exist.");
+            Workbench.Notifications.Error($"'{RemoteDisplay(folder)}' doesn't exist.");
             return;
         }
 
@@ -47,7 +48,7 @@ public sealed partial class ShellHost
         {
             var choice = await Dialogs.ShowAsync(new DialogRequest(
                 "Do you trust the authors of this folder?",
-                $"Projects you load from a folder run code: MSBuild evaluates their project files and imports, and restore runs NuGet package targets. Its tasks run commands.\n\n{folder}\n\n"
+                $"Projects you load from a folder run code: MSBuild evaluates their project files and imports, and restore runs NuGet package targets. Its tasks run commands.\n\n{RemoteDisplay(folder)}\n\n"
                 + "Trust it to load and build its projects and run its tasks. Without trust, you can browse and edit its files.",
                 ["Trust and Open", "Open Without Trusting", "Cancel"])).ConfigureAwait(true);
             if (choice.Button is null or "Cancel")
@@ -74,13 +75,21 @@ public sealed partial class ShellHost
             StatusBar.ShowMessage($"Opening {Path.GetFileName(folder)}…");
             var solution = await Solutions.OpenAsync(folder, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None).ConfigureAwait(true);
             StatusBar.ClearMessage();
-            Recent.Add(folder);
             _launchConfiguration = null;
-            Workbench.Settings.SetWorkspaceFile(Path.Combine(folder, ".daedalus", "settings.json"));
             Explorer.SetFolderView(solution.Projects.Length == 0);
             Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
-            await RestoreEditorSessionAsync(folder).ConfigureAwait(true);
-            await OpenRepositoryAsync(folder).ConfigureAwait(true);
+            if (remote)
+            {
+                OnRemoteWorkspaceOpened(folder);
+            }
+            else
+            {
+                Recent.Add(folder);
+                Workbench.Settings.SetWorkspaceFile(Path.Combine(folder, ".daedalus", "settings.json"));
+                await RestoreEditorSessionAsync(folder).ConfigureAwait(true);
+                await OpenRepositoryAsync(folder).ConfigureAwait(true);
+            }
+
             UpdateRunState();
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException or System.ComponentModel.Win32Exception)

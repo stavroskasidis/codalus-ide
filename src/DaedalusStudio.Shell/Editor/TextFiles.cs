@@ -32,9 +32,10 @@ public sealed record TextFileFormat(Encoding Encoding, bool HasBom, string LineE
 /// </summary>
 public static class TextFiles
 {
+    /// <summary>Reads a file from whichever file system holds it (a remote window's server, M21).</summary>
     public static async Task<(string Text, TextFileFormat Format)> ReadAsync(string path, CancellationToken cancellationToken)
     {
-        var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+        var bytes = await Workbench.FileSystem.FileSystems.For(path).ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
         return Decode(bytes);
     }
 
@@ -94,6 +95,12 @@ public static class TextFiles
     /// <summary>Writes through a temporary file in the same folder, then replaces the target.</summary>
     public static async Task WriteAsync(string path, string text, TextFileFormat format, CancellationToken cancellationToken)
     {
+        if (Workbench.FileSystem.FileSystems.For(path) is { IsRemote: true } remote)
+        {
+            await remote.WriteAllBytesAsync(path, Encode(text, format), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = Path.Combine(Path.GetDirectoryName(path)!, "." + Path.GetFileName(path) + "." + Environment.ProcessId + ".tmp");
         await File.WriteAllBytesAsync(temp, Encode(text, format), cancellationToken).ConfigureAwait(false);

@@ -214,6 +214,12 @@ public sealed class TerminalService : IDisposable
 
     public bool ShellIntegration { get; set; } = true;
 
+    /// <summary>
+    /// Starts pseudo-terminals somewhere else: a remote window's server (M21, ADR 0049). The start info's environment
+    /// is this machine's plus the terminal's own variables; the factory sends only what differs.
+    /// </summary>
+    public Func<PtyStartInfo, PseudoTerminal>? PtyFactory { get; set; }
+
     /// <summary>The SDK the solution builds with (<c>dotnet</c>'s folder), for the .NET developer profile.</summary>
     public string? DotnetRoot { get; set; }
 
@@ -294,7 +300,9 @@ public sealed class TerminalService : IDisposable
     private TerminalSession Launch(string name, string program, IReadOnlyList<string> arguments, string workingDirectory, Dictionary<string, string> environment, int columns, int rows, Action<string>? outputText)
     {
         var terminal = new VirtualTerminal(columns, rows, Scrollback);
-        var pty = PseudoTerminal.Start(new PtyStartInfo(program, arguments, Directory.Exists(workingDirectory) ? workingDirectory : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), environment, columns, rows));
+        var pty = PtyFactory is { } factory
+            ? factory(new PtyStartInfo(program, arguments, workingDirectory, environment, columns, rows))
+            : PseudoTerminal.Start(new PtyStartInfo(program, arguments, Directory.Exists(workingDirectory) ? workingDirectory : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), environment, columns, rows));
         TerminalSession session;
         lock (_gate)
         {

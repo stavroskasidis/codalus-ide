@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- On .NET 10 when installed, else the next newer .NET (ADR 0025); the shipped bundles are self-contained. -->
+    <RollForward>Major</RollForward>
+    <AssemblyName>daedalus-server</AssemblyName>
+    <RootNamespace>DaedalusStudio.Remote.Server</RootNamespace>
+    <Description>The remote development server (M21, ADR 0049): runs on the remote machine and hosts the build and language hosts, debug adapters, terminals, a file-system provider and port tunnels over multiplexed JSON-RPC channels on its stdio.</Description>
+    <VersionPrefix>$(DaedalusVersion)</VersionPrefix>
+    <VersionSuffix>dev</VersionSuffix>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsAotCompatible>true</IsAotCompatible>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DaedalusStudio.Rpc\DaedalusStudio.Rpc.csproj" />
+    <ProjectReference Include="..\DaedalusStudio.Remote.Protocol\DaedalusStudio.Remote.Protocol.csproj" />
+    <ProjectReference Include="..\DaedalusStudio.Platform\DaedalusStudio.Platform.csproj" />
+  </ItemGroup>
+</Project>

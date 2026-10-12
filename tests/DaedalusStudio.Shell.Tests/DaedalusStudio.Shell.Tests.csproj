@@ -8,6 +8,7 @@
     <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.GitHub\DaedalusStudio.Plugins.GitHub.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\DaedalusStudio.Projects.Host\DaedalusStudio.Projects.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\DaedalusStudio.LanguageServices.Host\DaedalusStudio.LanguageServices.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\DaedalusStudio.Remote.Server\DaedalusStudio.Remote.Server.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Headless.XUnit" />
