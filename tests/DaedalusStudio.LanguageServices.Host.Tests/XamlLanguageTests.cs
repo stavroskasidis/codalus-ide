@@ -46,7 +46,7 @@ public sealed class AvaloniaLanguageFixture : LanguageFixture
                    && await SeesAsync(File("AvaloniaControls", "Themes", "Generic.axaml"), "<ControlTheme ", "<ControlTheme ".Length, "BasedOn");
             if (!seen)
             {
-                await Task.Delay(500);
+                await Task.Delay(2000); // gently: other fixtures' hosts share the machine
             }
         }
 
