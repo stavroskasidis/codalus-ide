@@ -73,7 +73,8 @@ internal sealed partial class SmokeTest
             area.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Space, KeyModifiers = Avalonia.Input.KeyModifiers.Control, Source = area });
             await WaitAsync(() => program.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Console"), "completion lists Console", 90).ConfigureAwait(true);
             Check(program.Model.Text.Text == original, "Ctrl+Space typed nothing");
-            Screenshot("smoke-test-completion.png");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-completion.png", program.CompletionWindow is Popup completion ? [completion] : []);
             program.CompletionWindow?.Close();
         }, "language.ready").ConfigureAwait(true);
 
@@ -134,7 +135,10 @@ internal sealed partial class SmokeTest
     private static double PopupHeight(MenuItem item) => PopupOf(item)?.Child?.Bounds.Height ?? 0;
 
     /// <summary>The window with the open menus' popups drawn over it (they are windows of their own on most platforms).</summary>
-    private void Screenshot(string name, params MenuItem[] open)
+    private void Screenshot(string name, params MenuItem[] open) =>
+        Screenshot(name, open.Select(PopupOf).OfType<Popup>());
+
+    private void Screenshot(string name, IEnumerable<Popup> open)
     {
         try
         {
@@ -150,9 +154,9 @@ internal sealed partial class SmokeTest
             bitmap.Render(root);
             var origin = root.PointToScreen(default);
             var popups = new List<(RenderTargetBitmap Image, Rect Where)>();
-            foreach (var item in open)
+            foreach (var popup in open)
             {
-                if (PopupOf(item)?.Child is not { } child || TopLevel.GetTopLevel(child) is not { } host || host == window)
+                if (popup.Child is not { } child || TopLevel.GetTopLevel(child) is not { } host || host == window)
                 {
                     continue; // an overlay popup is part of the window's own rendering
                 }

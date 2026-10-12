@@ -227,6 +227,10 @@ public class UxPassTests
         Assert.True(view.IsFollowing, "following at the end");
         Assert.Equal(0, viewer.Offset.X); // following never scrolls sideways (the first characters stay visible)
 
+        // The end shows the last lines, not an empty page below the document.
+        var lines = editor.TextArea.TextView.VisualLines;
+        Assert.True(lines.Count > 3 && lines.Any(l => l.FirstDocumentLine.LineNumber == editor.Document.LineCount - 1), $"{lines.Count} visible lines");
+
         // Scrolling up stops following: new output doesn't move the view.
         viewer.Offset = new Vector(0, 0);
         await ShellFixture.PumpUntil(() => !view.IsFollowing);

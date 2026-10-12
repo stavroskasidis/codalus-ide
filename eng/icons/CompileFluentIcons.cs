@@ -1,7 +1,8 @@
 // Compiles SVG icons into C# that builds Avalonia geometries (D24, M34a). An MSBuild inline task
 // (RoslynCodeTaskFactory, see eng/icons/FluentIcons.targets), so it targets netstandard2.0 and plain C#.
-// Each icon becomes a method that draws its paths through a StreamGeometryContext: the shell never parses SVG or
-// path data at runtime, and stays Native AOT clean. Only <svg> with <path d="…"> children is accepted (the
+// Each icon becomes its drawing operations (a string) and their numbers (constant data, no allocation), which the
+// generated FluentIcons.Create replays into a StreamGeometry: the shell never parses SVG or path data at runtime, and
+// stays Native AOT clean. (Emitting one method of calls per icon cost 185 KB of IL; this is 17 KB of IL and the numbers' data.) Only <svg> with <path d="…"> children is accepted (the
 // Fluent UI System Icons' format); anything else fails the build, so a new icon can't silently render wrong.
 using System;
 using System.Collections.Generic;
@@ -32,17 +33,21 @@ public sealed class CompileFluentIcons : Task
         sb.AppendLine();
         sb.AppendLine("namespace DaedalusStudio.Shell.Controls;");
         sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// The icons as drawing operations (M = begin a figure, L, C, Q, A = line, cubic, quadratic, arc, Z = close, E = end open)");
+        sb.AppendLine("/// and their numbers, parsed from the SVGs at build time; <see cref=\"Create\"/> replays them into a geometry.");
+        sb.AppendLine("/// </summary>");
         sb.AppendLine("internal static class FluentIcons");
         sb.AppendLine("{");
 
-        var methods = new StringBuilder();
+        var data = new StringBuilder();
         var names = new List<KeyValuePair<string, double>>();
         foreach (var item in Icons.OrderBy(i => i.ItemSpec, StringComparer.Ordinal))
         {
             var name = Path.GetFileNameWithoutExtension(item.ItemSpec);
             try
             {
-                var size = Compile(name, File.ReadAllText(item.ItemSpec), methods);
+                var size = Compile(name, File.ReadAllText(item.ItemSpec), data);
                 names.Add(new KeyValuePair<string, double>(name, size));
             }
             catch (Exception ex) when (ex is FormatException || ex is System.Xml.XmlException)
@@ -77,12 +82,35 @@ public sealed class CompileFluentIcons : Task
         sb.AppendLine("    {");
         foreach (var pair in names)
         {
-            sb.AppendLine("        \"" + pair.Key + "\" => " + MethodName(pair.Key) + "(),");
+            sb.AppendLine("        \"" + pair.Key + "\" => Build(" + MemberName("Ops_", pair.Key) + ", " + MemberName("Data_", pair.Key) + "),");
         }
 
         sb.AppendLine("        _ => null,");
         sb.AppendLine("    };");
-        sb.Append(methods);
+        sb.AppendLine();
+        sb.AppendLine("    private static StreamGeometry Build(string ops, ReadOnlySpan<float> n)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var geometry = new StreamGeometry();");
+        sb.AppendLine("        using var c = geometry.Open();");
+        sb.AppendLine("        c.SetFillRule(FillRule.NonZero);");
+        sb.AppendLine("        var i = 0;");
+        sb.AppendLine("        foreach (var op in ops)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            switch (op)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                case 'M': c.BeginFigure(new Point(n[i], n[i + 1]), true); i += 2; break;");
+        sb.AppendLine("                case 'L': c.LineTo(new Point(n[i], n[i + 1])); i += 2; break;");
+        sb.AppendLine("                case 'C': c.CubicBezierTo(new Point(n[i], n[i + 1]), new Point(n[i + 2], n[i + 3]), new Point(n[i + 4], n[i + 5])); i += 6; break;");
+        sb.AppendLine("                case 'Q': c.QuadraticBezierTo(new Point(n[i], n[i + 1]), new Point(n[i + 2], n[i + 3])); i += 4; break;");
+        sb.AppendLine("                case 'A': c.ArcTo(new Point(n[i], n[i + 1]), new Size(n[i + 2], n[i + 3]), n[i + 4], n[i + 5] != 0, n[i + 6] != 0 ? SweepDirection.Clockwise : SweepDirection.CounterClockwise); i += 7; break;");
+        sb.AppendLine("                case 'Z': c.EndFigure(true); break;");
+        sb.AppendLine("                default: c.EndFigure(false); break;");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        return geometry;");
+        sb.AppendLine("    }");
+        sb.Append(data);
         sb.AppendLine("}");
 
         var text = sb.ToString();
@@ -95,7 +123,7 @@ public sealed class CompileFluentIcons : Task
         return true;
     }
 
-    private static double Compile(string name, string svg, StringBuilder methods)
+    private static double Compile(string name, string svg, StringBuilder data)
     {
         var root = XDocument.Parse(svg).Root;
         if (root == null || root.Name.LocalName != "svg")
@@ -109,14 +137,8 @@ public sealed class CompileFluentIcons : Task
             throw new FormatException("expected a square viewBox at the origin");
         }
 
-        var size = double.Parse(viewBox[2], CultureInfo.InvariantCulture);
-        methods.AppendLine();
-        methods.AppendLine("    private static StreamGeometry " + MethodName(name) + "()");
-        methods.AppendLine("    {");
-        methods.AppendLine("        var g = new StreamGeometry();");
-        methods.AppendLine("        using (var c = g.Open())");
-        methods.AppendLine("        {");
-        methods.AppendLine("            c.SetFillRule(FillRule.NonZero);");
+        var ops = new StringBuilder();
+        var numbers = new List<double>();
         foreach (var element in root.Elements())
         {
             if (element.Name.LocalName != "path" || element.Attributes().Any(a => a.Name.LocalName != "d"))
@@ -124,19 +146,19 @@ public sealed class CompileFluentIcons : Task
                 throw new FormatException("only <path d=\"…\"> elements are supported, found <" + element.Name.LocalName + ">");
             }
 
-            new PathCompiler((string)element.Attribute("d"), methods).Run();
+            new PathCompiler((string)element.Attribute("d"), ops, numbers).Run();
         }
 
-        methods.AppendLine("        }");
-        methods.AppendLine();
-        methods.AppendLine("        return g;");
-        methods.AppendLine("    }");
-        return size;
+        data.AppendLine();
+        data.AppendLine("    private const string " + MemberName("Ops_", name) + " = \"" + ops + "\";");
+        data.AppendLine();
+        data.AppendLine("    private static ReadOnlySpan<float> " + MemberName("Data_", name) + " => [" + string.Join(", ", numbers.Select(v => Number(v) + "f")) + "];");
+        return double.Parse(viewBox[2], CultureInfo.InvariantCulture);
     }
 
-    private static string MethodName(string name)
+    private static string MemberName(string prefix, string name)
     {
-        var sb = new StringBuilder("Icon_");
+        var sb = new StringBuilder(prefix);
         foreach (var ch in name)
         {
             sb.Append(char.IsLetterOrDigit(ch) ? ch : '_');
@@ -155,7 +177,8 @@ public sealed class CompileFluentIcons : Task
     private sealed class PathCompiler
     {
         private readonly string _d;
-        private readonly StringBuilder _out;
+        private readonly StringBuilder _ops;
+        private readonly List<double> _numbers;
         private int _pos;
         private double _x;
         private double _y;
@@ -166,10 +189,11 @@ public sealed class CompileFluentIcons : Task
         private char _last;
         private bool _open;
 
-        public PathCompiler(string d, StringBuilder output)
+        public PathCompiler(string d, StringBuilder ops, List<double> numbers)
         {
             _d = d ?? string.Empty;
-            _out = output;
+            _ops = ops;
+            _numbers = numbers;
         }
 
         public void Run()
@@ -211,7 +235,7 @@ public sealed class CompileFluentIcons : Task
 
             if (_open)
             {
-                Emit("c.EndFigure(false);");
+                Op('E');
             }
         }
 
@@ -227,10 +251,10 @@ public sealed class CompileFluentIcons : Task
                     var y = oy + Number();
                     if (_open)
                     {
-                        Emit("c.EndFigure(false);");
+                        Op('E');
                     }
 
-                    Emit("c.BeginFigure(" + Point(x, y) + ", true);");
+                    Op('M', x, y);
                     _open = true;
                     _x = _startX = x;
                     _y = _startY = y;
@@ -241,7 +265,7 @@ public sealed class CompileFluentIcons : Task
                 case 'Z':
                     if (_open)
                     {
-                        Emit("c.EndFigure(true);");
+                        Op('Z');
                     }
 
                     _open = false;
@@ -301,13 +325,11 @@ public sealed class CompileFluentIcons : Task
                     EnsureFigure();
                     if (rx == 0 || ry == 0)
                     {
-                        Emit("c.LineTo(" + Point(x, y) + ");");
+                        Op('L', x, y);
                     }
                     else
                     {
-                        Emit("c.ArcTo(" + Point(x, y) + ", new Size(" + CompileFluentIcons.Number(rx) + ", " + CompileFluentIcons.Number(ry) + "), "
-                            + CompileFluentIcons.Number(rotation) + ", " + (large ? "true" : "false") + ", "
-                            + (sweep ? "SweepDirection.Clockwise" : "SweepDirection.CounterClockwise") + ");");
+                        Op('A', x, y, rx, ry, rotation, large ? 1 : 0, sweep ? 1 : 0);
                     }
 
                     _x = x;
@@ -325,7 +347,7 @@ public sealed class CompileFluentIcons : Task
         {
             if (!_open)
             {
-                Emit("c.BeginFigure(" + Point(_x, _y) + ", true);");
+                Op('M', _x, _y);
                 _open = true;
                 _startX = _x;
                 _startY = _y;
@@ -335,7 +357,7 @@ public sealed class CompileFluentIcons : Task
         private void LineTo(double x, double y)
         {
             EnsureFigure();
-            Emit("c.LineTo(" + Point(x, y) + ");");
+            Op('L', x, y);
             _x = x;
             _y = y;
             _last = 'L';
@@ -344,7 +366,7 @@ public sealed class CompileFluentIcons : Task
         private void Cubic(double x1, double y1, double x2, double y2, double x, double y)
         {
             EnsureFigure();
-            Emit("c.CubicBezierTo(" + Point(x1, y1) + ", " + Point(x2, y2) + ", " + Point(x, y) + ");");
+            Op('C', x1, y1, x2, y2, x, y);
             _controlX = x2;
             _controlY = y2;
             _x = x;
@@ -355,7 +377,7 @@ public sealed class CompileFluentIcons : Task
         private void Quadratic(double x1, double y1, double x, double y)
         {
             EnsureFigure();
-            Emit("c.QuadraticBezierTo(" + Point(x1, y1) + ", " + Point(x, y) + ");");
+            Op('Q', x1, y1, x, y);
             _controlX = x1;
             _controlY = y1;
             _x = x;
@@ -363,9 +385,13 @@ public sealed class CompileFluentIcons : Task
             _last = 'Q';
         }
 
-        private void Emit(string call) => _out.Append("            ").AppendLine(call);
+        private void Op(char op, params double[] numbers)
+        {
+            _ops.Append(op);
+            _numbers.AddRange(numbers);
+        }
 
-        private static string Point(double x, double y) => "new Point(" + CompileFluentIcons.Number(x) + ", " + CompileFluentIcons.Number(y) + ")";
+        
 
         private void SkipSeparators()
         {

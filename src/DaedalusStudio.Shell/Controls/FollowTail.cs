@@ -22,6 +22,12 @@ public sealed class FollowTail
     {
         _control = control;
         control.LayoutUpdated += OnLayoutUpdated;
+        if (control is AvaloniaEdit.TextEditor editor)
+        {
+            // A log's end is its last line at the bottom: scrolling below the document showed an empty view.
+            editor.Options.AllowScrollBelowDocument = false;
+        }
+
         if (control is TextBox box)
         {
             // A text box scrolls its caret into view after its text changes: keep the caret at the end too.
