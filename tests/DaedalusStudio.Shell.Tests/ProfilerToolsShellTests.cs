@@ -134,13 +134,7 @@ public sealed class ProfilerToolsShellTests
         Assert.Equal("heap-1.nettrace", await hub.TakeSnapshotAsync());
         await Task.Delay(2000, TestContext.Current.CancellationToken);
         Assert.Equal("heap-2.nettrace", await hub.TakeSnapshotAsync());
-        // The hosted macOS runner holds createdump on a system prompt (as M14's dump tests found): no dump there.
-        var dumps = !(OperatingSystem.IsMacOS() && Environment.GetEnvironmentVariable("CI") == "true");
-        if (dumps)
-        {
-            Assert.Equal("full.dmp", await hub.CreateDumpAsync());
-        }
-
+        Assert.Equal("full.dmp", await hub.CreateDumpAsync());
         Assert.Contains("Snapshots taken: 2", hub.SnapshotText, StringComparison.Ordinal);
         await hub.StopAsync();
         await ShellFixture.PumpUntil(() => !hub.IsCollecting, seconds: 120);
@@ -169,12 +163,9 @@ public sealed class ProfilerToolsShellTests
         await ShellFixture.PumpUntil(() => report.HeapTypes.Count > 0 && report.HeapTypes[0].SizeDiff is null, seconds: 60);
 
         // The full dump opens in the dump view (ClrMD in the debug companion host).
-        Assert.Equal(dumps, report.HasDump);
-        if (dumps)
-        {
-            await report.InspectDumpAsync();
-            await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<DumpDocument>().Any(), seconds: 120);
-        }
+        Assert.True(report.HasDump);
+        await report.InspectDumpAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<DumpDocument>().Any(), seconds: 120);
     }
 
     [AvaloniaFact]
