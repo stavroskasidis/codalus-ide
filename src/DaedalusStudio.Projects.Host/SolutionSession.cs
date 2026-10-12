@@ -552,6 +552,22 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             throw new InvalidOperationException("A build is already running.");
         }
 
+        // A background restore (the one after opening) finishes first: it would rewrite the assets file without the
+        // build's own global properties (a publish's RuntimeIdentifier: NETSDK1047, seen on macOS).
+        try
+        {
+            await _restore.WaitAsync(cancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            Interlocked.Exchange(ref _buildCancellation, null);
+            return canceled;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
+        {
+            // A failed restore is reported by the restore itself; the build restores again.
+        }
+
         var interrupted = await PauseDesignTimeBuildsAsync().ConfigureAwait(false);
         try
         {
