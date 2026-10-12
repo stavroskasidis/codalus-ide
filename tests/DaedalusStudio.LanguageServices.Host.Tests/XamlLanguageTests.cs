@@ -27,6 +27,29 @@ public sealed class AvaloniaLanguageFixture : LanguageFixture
                 + string.Join("; ", Solutions.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)} {i.Value.State} restored={Restored(i.Value)}"))
                 + "\n" + string.Join('\n', Log.TakeLast(40)));
         }
+
+        // And the language host has them: Avalonia's types in both projects' XAML (it applies the restored builds'
+        // inputs after the build host reports them).
+        async Task<bool> SeesAsync(string path, string marker, int delta, string label)
+        {
+            var text = await System.IO.File.ReadAllTextAsync(path);
+            var list = await Client.CompletionAsync(Protocol.DocumentUris.FromPath(path), PositionOf(text, text.IndexOf(marker, StringComparison.Ordinal) + delta), new Protocol.CompletionContext(Protocol.CompletionTriggerKind.Invoked, null), CancellationToken.None);
+            return list.Items.Any(i => i.Label == label);
+        }
+
+        var seen = false;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        while (!seen && watch.Elapsed < Timeout)
+        {
+            seen = await SeesAsync(File("AvaloniaApp", "Views", "MainWindow.axaml"), "<DockPanel", 1, "Button")
+                   && await SeesAsync(File("AvaloniaControls", "Themes", "Generic.axaml"), "<ControlTheme ", "<ControlTheme ".Length, "BasedOn");
+            if (!seen)
+            {
+                await Task.Delay(500);
+            }
+        }
+
+        Assert.True(seen, "The language host doesn't see Avalonia's types in the fixture's XAML.\n" + string.Join('\n', Log.TakeLast(40)));
     }
 }
 
