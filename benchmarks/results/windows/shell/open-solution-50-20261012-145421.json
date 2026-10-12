@@ -1,0 +1,191 @@
+{
+  "target": "shell",
+  "scenario": "open-solution-50",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-12T14:54:21.9885569+00:00",
+  "method": "instrumented\u002Bblack-box",
+  "samples": {
+    "solution_structure_ms": [
+      948.809,
+      688.086,
+      699.78
+    ],
+    "solution_loaded_ms": [
+      1984.321,
+      1709.126,
+      1620.382
+    ],
+    "solution_ready_ms": [
+      2155.7292,
+      1798.8654,
+      1691.62
+    ],
+    "designtime_done_ms": [
+      4991.411,
+      4636.414,
+      4629.425
+    ],
+    "language_ready_ms": [
+      9367.903,
+      8991.896,
+      9020.011
+    ],
+    "memory_solution_private_mb": [
+      540.04296875,
+      537.4375,
+      535.66796875
+    ],
+    "warm_solution_structure_ms": [
+      701.509,
+      706.464,
+      685.373
+    ],
+    "warm_solution_loaded_ms": [
+      1714.041,
+      1741.075,
+      1731.848
+    ],
+    "warm_designtime_done_ms": [
+      2081.986,
+      2130.514,
+      2146.444
+    ],
+    "warm_language_ready_ms": [
+      6811.539,
+      6662.907,
+      6532.897
+    ],
+    "warm_memory_solution_private_mb": [
+      507,
+      510.2890625,
+      503.8203125
+    ]
+  },
+  "summary": {
+    "solution_structure_ms": {
+      "n": 3,
+      "min": 688.086,
+      "p50": 699.78,
+      "p95": 948.809,
+      "p99": 948.809,
+      "max": 948.809,
+      "mean": 778.8916666666668,
+      "stdDev": 147.26884441161792
+    },
+    "solution_loaded_ms": {
+      "n": 3,
+      "min": 1620.382,
+      "p50": 1709.126,
+      "p95": 1984.321,
+      "p99": 1984.321,
+      "max": 1984.321,
+      "mean": 1771.2763333333332,
+      "stdDev": 189.76273838752778
+    },
+    "solution_ready_ms": {
+      "n": 3,
+      "min": 1691.62,
+      "p50": 1798.8654,
+      "p95": 2155.7292,
+      "p99": 2155.7292,
+      "max": 2155.7292,
+      "mean": 1882.071533333333,
+      "stdDev": 242.985149442046
+    },
+    "designtime_done_ms": {
+      "n": 3,
+      "min": 4629.425,
+      "p50": 4636.414,
+      "p95": 4991.411,
+      "p99": 4991.411,
+      "max": 4991.411,
+      "mean": 4752.416666666667,
+      "stdDev": 207.00466191449252
+    },
+    "language_ready_ms": {
+      "n": 3,
+      "min": 8991.896,
+      "p50": 9020.011,
+      "p95": 9367.903,
+      "p99": 9367.903,
+      "max": 9367.903,
+      "mean": 9126.603333333333,
+      "stdDev": 209.44393081761348
+    },
+    "memory_solution_private_mb": {
+      "n": 3,
+      "min": 535.66796875,
+      "p50": 537.4375,
+      "p95": 540.04296875,
+      "p99": 540.04296875,
+      "max": 540.04296875,
+      "mean": 537.7161458333334,
+      "stdDev": 2.2007700641651597
+    },
+    "warm_solution_structure_ms": {
+      "n": 3,
+      "min": 685.373,
+      "p50": 701.509,
+      "p95": 706.464,
+      "p99": 706.464,
+      "max": 706.464,
+      "mean": 697.782,
+      "stdDev": 11.028393672697758
+    },
+    "warm_solution_loaded_ms": {
+      "n": 3,
+      "min": 1714.041,
+      "p50": 1731.848,
+      "p95": 1741.075,
+      "p99": 1741.075,
+      "max": 1741.075,
+      "mean": 1728.988,
+      "stdDev": 13.742051848250368
+    },
+    "warm_designtime_done_ms": {
+      "n": 3,
+      "min": 2081.986,
+      "p50": 2130.514,
+      "p95": 2146.444,
+      "p99": 2146.444,
+      "max": 2146.444,
+      "mean": 2119.6479999999997,
+      "stdDev": 33.57470637250615
+    },
+    "warm_language_ready_ms": {
+      "n": 3,
+      "min": 6532.897,
+      "p50": 6662.907,
+      "p95": 6811.539,
+      "p99": 6811.539,
+      "max": 6811.539,
+      "mean": 6669.114333333334,
+      "stdDev": 139.42467242684597
+    },
+    "warm_memory_solution_private_mb": {
+      "n": 3,
+      "min": 503.8203125,
+      "p50": 507,
+      "p95": 510.2890625,
+      "p99": 510.2890625,
+      "max": 510.2890625,
+      "mean": 507.0364583333333,
+      "stdDev": 3.234529107641031
+    }
+  },
+  "notes": [
+    "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+    "The fixture copy is restored (dotnet restore) before each launch; restore time is not measured."
+  ],
+  "discardedRuns": 0
+}

@@ -10,6 +10,11 @@
     { "target": "shell", "scenario": "cold-start", "metric": "memory_idle_private_mb", "stat": "p50", "max": 250, "source": "ADR 0002 #5" },
     { "target": "shell", "scenario": "open-solution-50", "metric": "solution_structure_ms", "stat": "p50", "max": 1500, "source": "ADR 0002 #4 (final without Rider, 2026-10-10)" },
     { "target": "shell", "scenario": "open-solution-50", "metric": "solution_loaded_ms", "stat": "p50", "max": 5000, "source": "ADR 0002 #4 (final without Rider, 2026-10-10)" },
+    { "target": "shell", "scenario": "open-solution-50", "metric": "designtime_done_ms", "stat": "p50", "max": 8000, "source": "M34b (cold open: design-time builds)" },
+    { "target": "shell", "scenario": "open-solution-50", "metric": "language_ready_ms", "stat": "p50", "max": 15000, "source": "M34b (cold open)" },
+    { "target": "shell", "scenario": "open-solution-50", "metric": "warm_solution_loaded_ms", "stat": "p50", "max": 5000, "source": "M34b (warm open, as ADR 0002 #4)" },
+    { "target": "shell", "scenario": "open-solution-50", "metric": "warm_designtime_done_ms", "stat": "p50", "max": 3500, "source": "M34b (warm open: the design-time build cache)" },
+    { "target": "shell", "scenario": "open-solution-50", "metric": "warm_language_ready_ms", "stat": "p50", "max": 10000, "source": "M34b (warm open)" },
 
     { "target": "shell", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p50", "max": 13, "os": "windows", "source": "ADR 0002 #2" },
     { "target": "shell", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p99", "max": 20, "os": "windows", "source": "ADR 0002 #2" },

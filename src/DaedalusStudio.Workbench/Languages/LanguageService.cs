@@ -40,6 +40,9 @@ public sealed class LanguageService : IAsyncDisposable
         _languages = languages;
         _solutions.CompilerInputsChanged += OnCompilerInputs;
         _solutions.SolutionChanged += OnSolutionChanged;
+        _solutions.SolutionChanged += OnLoadingProgress;
+        _solutions.ProgressChanged += OnLoadingProgress;
+        _solutions.DesignTimeProgressChanged += OnLoadingProgress;
     }
 
     public DiagnosticsStore Diagnostics { get; } = new();
@@ -160,6 +163,7 @@ public sealed class LanguageService : IAsyncDisposable
         var client = new LanguageHostClient(descriptor.DisplayName + " language service", launch, policy: _policy)
         {
             ProjectsProvider = () => [.. _projects.Values.Where(p => p.Language == descriptor.ProjectLanguage)],
+            LoadingProvider = () => descriptor.ProjectLanguage is null ? null : IsLoading,
             OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : descriptor.Serves(d.LanguageId)).Select(State)],
             InitializationOptions = descriptor.InitializationOptions,
             ScopedConfigurationProvider = descriptor.ScopedConfiguration,
@@ -214,10 +218,15 @@ public sealed class LanguageService : IAsyncDisposable
                 await client.ConfigureAsync(settings, _lifetime.Token).ConfigureAwait(false);
             }
 
-            if (descriptor.ProjectLanguage is { } language && _projects.Values.Where(p => p.Language == language).ToList() is { Count: > 0 } projects)
+            if (descriptor.ProjectLanguage is { } language)
             {
-                stage = "sending the projects";
-                await client.UpdateProjectsAsync(projects, _lifetime.Token).ConfigureAwait(false);
+                var projects = _projects.Values.Where(p => p.Language == language).ToList();
+                var loading = IsLoading;
+                if (projects.Count > 0 || loading)
+                {
+                    stage = "sending the projects";
+                    await client.UpdateProjectsAsync(projects, _lifetime.Token, loading).ConfigureAwait(false);
+                }
             }
 
             stage = "started";
@@ -398,9 +407,50 @@ public sealed class LanguageService : IAsyncDisposable
 
     // ------------------------------------------------------------------ projects
 
+    /// <summary>How long design-time build results gather before they go to the language host together (M34b).</summary>
+    internal static readonly TimeSpan BatchDelay = TimeSpan.FromMilliseconds(150);
+
+    private readonly ConcurrentDictionary<string, CompilerInputsInfo> _pendingInputs = new(SolutionService.PathComparer);
+    private readonly SemaphoreSlim _flushGate = new(1, 1);
+    private int _flushScheduled;
+    private bool? _sentLoading;
+
+    /// <summary>
+    /// Whether the solution is still loading: projects are being evaluated, design-time builds are running, or their
+    /// results haven't reached the language hosts yet. Hosts hold back semantic diagnostics that missing projects would
+    /// make false until it ends (M34b).
+    /// </summary>
+    public bool IsLoading =>
+        _solutions.Solution is { Trusted: true }
+        && (_solutions.Progress is not { Completed: true } || _solutions.DesignTimeProgress is not { Completed: true } || !_pendingInputs.IsEmpty);
+
     private void OnCompilerInputs(object? sender, CompilerInputsInfo inputs)
     {
-        if (_registry.ForProjectLanguage(inputs.Language) is not { } descriptor)
+        if (_registry.ForProjectLanguage(inputs.Language) is null)
+        {
+            return;
+        }
+
+        _pendingInputs[inputs.Path] = inputs;
+        ScheduleFlush();
+    }
+
+    private void OnLoadingProgress<T>(object? sender, T e)
+    {
+        if (IsLoading != _sentLoading)
+        {
+            ScheduleFlush();
+        }
+    }
+
+    /// <summary>
+    /// Design-time builds finish a project at a time; the language host gets them in batches (one update of many
+    /// projects costs about what one of one project does: before M34b, a 96-project solution took a minute to load
+    /// there).
+    /// </summary>
+    private void ScheduleFlush()
+    {
+        if (Interlocked.Exchange(ref _flushScheduled, 1) == 1)
         {
             return;
         }
@@ -409,32 +459,90 @@ public sealed class LanguageService : IAsyncDisposable
         {
             try
             {
+                await Task.Delay(BatchDelay, _lifetime.Token).ConfigureAwait(false);
+                await _flushGate.WaitAsync(_lifetime.Token).ConfigureAwait(false);
+                try
+                {
+                    Volatile.Write(ref _flushScheduled, 0);
+                    await FlushAsync().ConfigureAwait(false);
+                }
+                finally
+                {
+                    _flushGate.Release();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        });
+    }
+
+    /// <summary>
+    /// Sends what gathered. Flushes run one at a time and the pending set keeps each project's newest inputs, so a host
+    /// that starts slowly never gets a design-time build from before a restore after the one from after it.
+    /// </summary>
+    private async Task FlushAsync()
+    {
+        var batch = new List<CompilerInputsInfo>();
+        foreach (var path in _pendingInputs.Keys)
+        {
+            if (_pendingInputs.TryRemove(path, out var inputs))
+            {
+                batch.Add(inputs);
+            }
+        }
+
+        var loading = IsLoading;
+        _sentLoading = loading;
+        foreach (var descriptor in _registry.All.Where(d => d.ProjectLanguage is not null))
+        {
+            var updated = new List<ProjectData>();
+            var removed = new List<string>();
+            foreach (var inputs in batch.Where(i => i.Language == descriptor.ProjectLanguage))
+            {
                 if (inputs.State != CompilerInputStates.Ok)
                 {
-                    if (_projects.TryRemove(inputs.Path, out _) && RunningClient(descriptor.LanguageId) is { } running)
+                    if (_projects.TryRemove(inputs.Path, out _))
                     {
-                        await running.RemoveProjectsAsync([inputs.Path], _lifetime.Token).ConfigureAwait(false);
+                        removed.Add(inputs.Path);
                     }
 
-                    return;
+                    continue;
                 }
 
                 var data = new ProjectData(inputs.Path, Path.GetFileNameWithoutExtension(inputs.Path), inputs.Language, inputs.TargetFramework, inputs.Arguments, inputs.OutputPath, inputs.OutputRefPath, inputs.ProjectReferences);
-                var isNew = !_clients.ContainsKey(descriptor.LanguageId);
                 _projects[inputs.Path] = data;
+                updated.Add(data);
+            }
 
-                // A new client sends every known project once it has started. While a host starts (slowly, on a loaded
-                // machine) several builds' inputs wait for it here and resume in any order: each sends the newest
-                // inputs, never its own, or a design-time build from before a restore could replace the one after it.
-                if (await ClientAsync(descriptor.LanguageId).ConfigureAwait(false) is { } client && !isNew && _projects.TryGetValue(inputs.Path, out var latest))
+            try
+            {
+                // A new client sends every known project (and the loading state) once it has started.
+                var isNew = !_clients.ContainsKey(descriptor.LanguageId);
+                if (isNew && updated.Count == 0)
                 {
-                    await client.UpdateProjectsAsync([latest], _lifetime.Token).ConfigureAwait(false);
+                    continue;
                 }
+
+                if (await ClientAsync(descriptor.LanguageId).ConfigureAwait(false) is not { } client || isNew)
+                {
+                    continue;
+                }
+
+                if (removed.Count > 0)
+                {
+                    await client.RemoveProjectsAsync(removed, _lifetime.Token).ConfigureAwait(false);
+                }
+
+                await client.UpdateProjectsAsync(updated, _lifetime.Token, loading).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is JsonRpcConnectionLostException or OperationCanceledException or InvalidOperationException)
             {
             }
-        });
+        }
     }
 
     private void OnSolutionChanged(object? sender, EventArgs e)
@@ -473,6 +581,9 @@ public sealed class LanguageService : IAsyncDisposable
     {
         _solutions.CompilerInputsChanged -= OnCompilerInputs;
         _solutions.SolutionChanged -= OnSolutionChanged;
+        _solutions.SolutionChanged -= OnLoadingProgress;
+        _solutions.ProgressChanged -= OnLoadingProgress;
+        _solutions.DesignTimeProgressChanged -= OnLoadingProgress;
         await _lifetime.CancelAsync().ConfigureAwait(false);
         foreach (var lazy in _clients.Values.Where(l => l.IsValueCreated))
         {

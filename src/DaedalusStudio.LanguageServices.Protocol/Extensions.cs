@@ -19,8 +19,15 @@ public sealed record ProjectData(
     string? OutputRefPath,
     string[]? ProjectReferences = null);
 
-/// <summary>Adds or replaces projects (keyed by <see cref="ProjectData.Path"/>).</summary>
-public sealed record ProjectsUpdateParams(ProjectData[] Projects);
+/// <summary>
+/// Adds or replaces projects (keyed by <see cref="ProjectData.Path"/>). <see cref="Loading"/>, when set, says whether
+/// the solution is still loading (design-time builds still to come): the host then holds back semantic diagnostics that
+/// missing projects would make false (M34b). An update may carry no projects, only that state.
+/// </summary>
+public sealed record ProjectsUpdateParams(ProjectData[] Projects)
+{
+    public bool? Loading { get; init; }
+}
 
 public sealed record ProjectsRemoveParams(string[] Paths);
 

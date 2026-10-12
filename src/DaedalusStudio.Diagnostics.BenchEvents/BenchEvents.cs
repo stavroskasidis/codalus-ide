@@ -92,6 +92,9 @@ public static class BenchEventNames
 
     public const string SolutionLoaded = "solution_loaded";
 
+    /// <summary>Every project's compiler inputs are known: design-time builds (or their cache) finished once (M34b).</summary>
+    public const string DesignTimeDone = "designtime_done";
+
     /// <summary>The language service compiled every project once (first background pass finished).</summary>
     public const string LanguageReady = "language_ready";
 

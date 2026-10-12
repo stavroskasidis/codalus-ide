@@ -50,8 +50,11 @@ internal sealed class DiagnosticsService : IDisposable
     /// <summary><see cref="ScopeOpenDocuments"/> (default) or <see cref="ScopeSolution"/>: where analyzers run.</summary>
     public string AnalysisScope { get; set; } = ScopeOpenDocuments;
 
-    /// <summary>Raised after a background pass over every project completes: (projects, documents).</summary>
-    public event Action<int, int>? BackgroundPassCompleted;
+    /// <summary>
+    /// Raised after a background pass over every project completes: (projects, documents, whether the solution had
+    /// finished loading, so every project was in it).
+    /// </summary>
+    public event Action<int, int, bool>? BackgroundPassCompleted;
 
     // ------------------------------------------------------------------ open documents
 
@@ -128,6 +131,13 @@ internal sealed class DiagnosticsService : IDisposable
         }
 
         var tree = await document.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false);
+        if (tree is not null && IsProvisional(document.Project))
+        {
+            // Its project hasn't loaded yet (Miscellaneous Files) or misses projects it references: only syntax is sure.
+            await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), version, Convert(tree.GetDiagnostics(cancellationToken), tree))).ConfigureAwait(false);
+            return;
+        }
+
         var model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
         if (tree is null || model is null)
         {
@@ -145,6 +155,12 @@ internal sealed class DiagnosticsService : IDisposable
     {
         if (await Razor.RazorMapping.CreateAsync(solution, path, cancellationToken).ConfigureAwait(false) is not { } mapping)
         {
+            return;
+        }
+
+        if (IsProvisional(mapping.Generated.Project))
+        {
+            await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), version, [])).ConfigureAwait(false);
             return;
         }
 
@@ -226,47 +242,151 @@ internal sealed class DiagnosticsService : IDisposable
         }, CancellationToken.None);
     }
 
+    /// <summary>
+    /// <paramref name="included"/> in dependency order (referenced projects first), the open documents' projects and
+    /// everything they reference before the rest.
+    /// </summary>
+    private List<Project> Ordered(Solution solution, HashSet<ProjectId> included)
+    {
+        var graph = solution.GetProjectDependencyGraph();
+        var urgent = new HashSet<ProjectId>();
+        foreach (var id in _workspace.OpenPaths.SelectMany(p => solution.GetDocumentIdsWithFilePath(p)).Select(d => d.ProjectId).Distinct())
+        {
+            urgent.Add(id);
+            urgent.UnionWith(graph.GetProjectsThatThisProjectTransitivelyDependsOn(id));
+        }
+
+        var sorted = graph.GetTopologicallySortedProjects().Where(included.Contains).ToList();
+        return [.. sorted.Where(urgent.Contains).Concat(sorted.Where(id => !urgent.Contains(id))).Select(solution.GetProject).OfType<Project>()];
+    }
+
+    /// <summary>Whether a project's semantic diagnostics would be false alarms while the solution loads (M34b).</summary>
+    private bool IsProvisional(Project project) =>
+        _workspace.Loading && (project.Id == _workspace.MiscellaneousProjectId || _workspace.IsIncomplete(project.Id));
+
+    /// <summary>
+    /// What a background pass found in one project, kept while the project and everything it references are unchanged
+    /// (its dependent version, references and the analysis scope), so the next pass skips it.
+    /// </summary>
+    private sealed record ProjectPass(
+        VersionStamp Version,
+        IReadOnlyList<MetadataReference> References,
+        IReadOnlyList<AnalyzerReference> Analyzers,
+        string Scope,
+        int Documents,
+        IReadOnlyList<(string Path, Diagnostic[] Items)> Found);
+
+    private Dictionary<ProjectId, ProjectPass> _passes = [];
+
+    /// <summary>
+    /// Compiles every project (in parallel, the open documents' projects first) and publishes the diagnostics of
+    /// closed files. It runs once the solution has loaded (M34b).
+    /// </summary>
     private async Task BackgroundPassAsync(CancellationToken cancellationToken)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var reused = 0;
         var solution = _workspace.CurrentSolution;
-        var found = new Dictionary<string, Diagnostic[]>(Paths.Comparer);
-        var projects = 0;
-        var documents = 0;
-        foreach (var project in solution.Projects.Where(p => p.Id != _workspace.MiscellaneousProjectId))
+        var loading = _workspace.Loading;
+        if (loading)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await Task.Yield();
-            if (await project.GetCompilationAsync(cancellationToken).ConfigureAwait(false) is not { } compilation)
+            // The whole solution waits until it has loaded (M34b): passes over the projects loaded so far would be
+            // cancelled by the next update, and they take the processors the design-time builds and open documents need.
+            BackgroundPassCompleted?.Invoke(_workspace.ProjectCount, 0, false);
+            return;
+        }
+
+        var scope = AnalysisScope;
+        var included = solution.Projects
+            .Where(p => p.Id != _workspace.MiscellaneousProjectId)
+            .Select(p => p.Id)
+            .ToHashSet();
+        var projects = Ordered(solution, included);
+        Dictionary<ProjectId, ProjectPass> previous;
+        lock (_gate)
+        {
+            previous = _passes;
+        }
+
+        // First every compilation, dependencies before the projects that reference them, in parallel: a project's
+        // compilation needs those of the projects it references, which Roslyn otherwise builds one after another (the
+        // open documents' squiggles wait on them). Then each project's diagnostics.
+        var parallel = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2), CancellationToken = cancellationToken };
+        var results = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, ProjectPass>();
+        var versions = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, VersionStamp>();
+        await Parallel.ForEachAsync(projects, parallel, async (project, token) =>
+        {
+            var version = versions[project.Id] = await project.GetDependentVersionAsync(token).ConfigureAwait(false);
+            if (previous.TryGetValue(project.Id, out var cached) && cached.Version == version && cached.Scope == scope
+                && cached.References.SequenceEqual(project.MetadataReferences) && cached.Analyzers.SequenceEqual(project.AnalyzerReferences))
             {
-                continue;
+                results[project.Id] = cached; // unchanged since the last pass, with everything it references
+                Interlocked.Increment(ref reused);
+                return;
             }
 
-            projects++;
-            documents += project.DocumentIds.Count;
-            var diagnostics = compilation.GetDiagnostics(cancellationToken).ToList();
-            if (AnalysisScope == ScopeSolution && Analyzers(project, compilation, includeProject: true, includeIde: false) is { } analyzers)
-            {
-                diagnostics.AddRange(await analyzers.GetAnalyzerDiagnosticsAsync(cancellationToken).ConfigureAwait(false));
-            }
+            await project.GetCompilationAsync(token).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
-            foreach (var group in diagnostics.Where(d => d.Location.IsInSource).GroupBy(d => d.Location.SourceTree!))
+        await Parallel.ForEachAsync(
+            projects.Where(p => !results.ContainsKey(p.Id)),
+            parallel,
+            async (project, token) =>
             {
-                if (group.Key.FilePath is { Length: > 0 } path && File.Exists(path))
+                var version = versions[project.Id];
+
+                if (await project.GetCompilationAsync(token).ConfigureAwait(false) is not { } compilation)
                 {
-                    found[path] = [.. (found.GetValueOrDefault(path) ?? []).Concat(Convert(group, group.Key))];
+                    return;
                 }
-                else if (Razor.RazorLocations.IsRazorGenerated(group.Key.FilePath) && Razor.RazorLocations.SourceFile(group.Key) is { } razor && File.Exists(razor))
+
+                var diagnostics = compilation.GetDiagnostics(token).ToList();
+                if (scope == ScopeSolution && Analyzers(project, compilation, includeProject: true, includeIde: false) is { } analyzers)
                 {
-                    found[razor] = [.. (found.GetValueOrDefault(razor) ?? []).Concat(ConvertRazor(group, razor))];
+                    diagnostics.AddRange(await analyzers.GetAnalyzerDiagnosticsAsync(token).ConfigureAwait(false));
                 }
-            }
+
+                var found = new List<(string, Diagnostic[])>();
+                foreach (var group in diagnostics.Where(d => d.Location.IsInSource).GroupBy(d => d.Location.SourceTree!))
+                {
+                    if (group.Key.FilePath is { Length: > 0 } path && File.Exists(path))
+                    {
+                        found.Add((path, Convert(group, group.Key)));
+                    }
+                    else if (Razor.RazorLocations.IsRazorGenerated(group.Key.FilePath) && Razor.RazorLocations.SourceFile(group.Key) is { } razor && File.Exists(razor))
+                    {
+                        found.Add((razor, ConvertRazor(group, razor)));
+                    }
+                }
+
+                results[project.Id] = new ProjectPass(version, [.. project.MetadataReferences], [.. project.AnalyzerReferences], scope, project.DocumentIds.Count, found);
+            }).ConfigureAwait(false);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var found = new Dictionary<string, Diagnostic[]>(Paths.Comparer);
+        foreach (var (path, items) in results.Values.SelectMany(r => r.Found))
+        {
+            found[path] = [.. (found.GetValueOrDefault(path) ?? []).Concat(items)];
+        }
+
+        var documents = results.Values.Sum(r => r.Documents);
+        var compiled = results.Count;
+        if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalSeconds: > 5 } elapsed)
+        {
+            _log($"Solution diagnostics: {compiled} project(s) in {elapsed.TotalMilliseconds:0} ms ({reused} unchanged since the last pass).");
+        }
+        lock (_gate)
+        {
+            _passes = new Dictionary<ProjectId, ProjectPass>(results);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         List<string> changed;
         lock (_gate)
         {
-            changed = [.. _background.Keys.Union(found.Keys, Paths.Comparer)];
+            // Only files whose diagnostics changed: unchanged projects keep the same diagnostics (the same instances).
+            changed = [.. _background.Keys.Union(found.Keys, Paths.Comparer)
+                .Where(p => !(_background.TryGetValue(p, out var before) && found.TryGetValue(p, out var after) && before.SequenceEqual(after)))];
             _background.Clear();
             foreach (var (path, diagnostics) in found)
             {
@@ -279,7 +399,7 @@ internal sealed class DiagnosticsService : IDisposable
             await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), null, found.GetValueOrDefault(path) ?? [])).ConfigureAwait(false);
         }
 
-        BackgroundPassCompleted?.Invoke(projects, documents);
+        BackgroundPassCompleted?.Invoke(compiled, documents, true);
         _trimmer.WorkDone();
     }
 

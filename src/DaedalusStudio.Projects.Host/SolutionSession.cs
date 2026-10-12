@@ -252,7 +252,17 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             await EvaluateAsync(ProjectPaths.ToList(), token).ConfigureAwait(false);
             if (restoreAfterwards && !token.IsCancellationRequested)
             {
-                StartRestore(null);
+                // Opening restores only when a project's packages may have changed since its last restore (M34b): a
+                // no-op restore of a large solution costs seconds of processor time next to the design-time builds.
+                if (PackagesUpToDate() is { } upToDate)
+                {
+                    await _events.LogAsync("info", $"Packages of {upToDate} project(s) are up to date: no restore on open.").ConfigureAwait(false);
+                    await _events.RestoreStateAsync("succeeded", null).ConfigureAwait(false);
+                }
+                else
+                {
+                    StartRestore(null);
+                }
             }
         }, token);
     }
@@ -304,8 +314,15 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 {
                     result = new EvaluatedProject(UnloadedInfo(project), []); // unloaded while it was being evaluated
                 }
+                var before = _evaluated.GetValueOrDefault(project);
                 _evaluated[project] = result;
-                await _events.ProjectEvaluatedAsync(result.Info).ConfigureAwait(false);
+
+                // An unchanged project isn't sent again (a restore that changed nothing, a watcher event): every one
+                // costs the shell a refresh of the views that follow projects (M34b).
+                if (before is null || !SameInfo(before.Info, result.Info))
+                {
+                    await _events.ProjectEvaluatedAsync(result.Info).ConfigureAwait(false);
+                }
 
                 // Counted and queued together, so progress never goes backwards (or ends "incomplete").
                 lock (progressGate)
@@ -320,6 +337,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             ? projects
             : [.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]);
     }
+
+    private static bool SameInfo(ProjectInfo a, ProjectInfo b) =>
+        System.Text.Json.JsonSerializer.Serialize(a, ProjectJsonContext.Default.ProjectInfo) == System.Text.Json.JsonSerializer.Serialize(b, ProjectJsonContext.Default.ProjectInfo);
 
     /// <summary>
     /// Evaluates a project, once more when MSBuild reports that its file changed under the evaluation (a design-time
@@ -384,12 +404,18 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             throw new InvalidOperationException("Design-time builds run only in trusted solutions.");
         }
 
-        ScheduleDesignTimeBuilds(path is null ? [.. ProjectPaths] : [System.IO.Path.GetFullPath(path)]);
+        IReadOnlyCollection<string> projects = path is null ? [.. ProjectPaths] : [System.IO.Path.GetFullPath(path)];
+        lock (_designTimePending)
+        {
+            _forcedDesignTime.UnionWith(projects); // asked for: never from the cache
+        }
+
+        ScheduleDesignTimeBuilds(projects);
     }
 
     private void ScheduleDesignTimeBuilds(IReadOnlyCollection<string> projects)
     {
-        if (!Trusted || projects.Count == 0)
+        if (!Trusted)
         {
             return;
         }
@@ -399,6 +425,13 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             // SQL database projects (.sqlproj, ADR 0038) have no compiler command line: they build, but get no design-time build.
             // Compose projects (.dcproj, ADR 0042) aren't MSBuild projects to us at all.
             _designTimePending.UnionWith(projects.Where(p => !IsUnloaded(p) && !p.EndsWith(".sqlproj", StringComparison.OrdinalIgnoreCase) && !ComposeProject.Is(p)));
+            if (_designTimePending.Count == 0 && _designTimeWorker.IsCompleted)
+            {
+                // Nothing to build: say so, or the shell would wait for design-time builds that never come (M34b).
+                _ = _events.DesignTimeProgressAsync(new DesignTimeProgressParams(0, 0, true));
+                return;
+            }
+
             if (_designTimeWorker.IsCompleted)
             {
                 var token = _designTimeBatch.Token;
@@ -457,7 +490,18 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
     private async Task BuildBatchAsync(string[] batch, CancellationToken cancellationToken)
     {
+        var properties = SolutionProperties();
         var requests = new List<DesignTimeBuilder.Request>();
+        var cached = new List<CompilerInputsInfo>();
+        var misses = new List<string>();
+        var keys = new Dictionary<string, (string Directory, string Entry, string Key)>(s_pathComparer);
+        HashSet<string> forced;
+        lock (_designTimePending)
+        {
+            forced = [.. _forcedDesignTime.Intersect(batch, s_pathComparer)];
+            _forcedDesignTime.ExceptWith(forced);
+        }
+
         foreach (var path in batch)
         {
             if (!_evaluated.TryGetValue(path, out var project) || project.Info.State != ProjectStates.Loaded)
@@ -469,17 +513,56 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             var framework = frameworks.Length <= 1 ? null
                 : _activeFrameworks.TryGetValue(path, out var active) && frameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active : frameworks[0];
             var (configuration, platform) = ProjectConfiguration(path);
-            requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework));
             _builtAssets[path] = AssetsStamp(path);
+
+            // The persisted cache (M34b): unchanged inputs give the last build's command line without building.
+            if (project.IntermediateDirectory is { } obj && DesignTimeKey(path, framework, properties) is { } key)
+            {
+                var entry = DesignTimeCache.Entry(configuration, platform, framework);
+                if (forced.Contains(path))
+                {
+                    misses.Add($"{System.IO.Path.GetFileName(path)}: asked for");
+                }
+                else if (DesignTimeCache.TryRead(obj, entry, key, SolutionDirectory, out var miss) is { } hit)
+                {
+                    cached.Add(hit);
+                    continue;
+                }
+                else
+                {
+                    misses.Add($"{System.IO.Path.GetFileName(path)}: {miss}");
+                }
+
+                keys[path] = (obj, entry, key);
+            }
+
+            requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework));
         }
 
         var started = Stopwatch.GetTimestamp();
         var built = 0;
-        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(0, requests.Count, false)).ConfigureAwait(false);
-        await _designTime.BuildAsync(requests, SolutionProperties(), async inputs =>
+        var total = requests.Count + cached.Count;
+        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(0, total, false)).ConfigureAwait(false);
+        foreach (var inputs in cached)
         {
             await _events.CompilerInputsAsync(inputs).ConfigureAwait(false);
-            await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(Interlocked.Increment(ref built), requests.Count, false)).ConfigureAwait(false);
+            built++;
+        }
+
+        if (cached.Count > 0)
+        {
+            await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, total, false)).ConfigureAwait(false);
+        }
+
+        await _designTime.BuildAsync(requests, properties, async inputs =>
+        {
+            if (keys.TryGetValue(inputs.Path, out var key))
+            {
+                DesignTimeCache.Write(key.Directory, key.Entry, key.Key, inputs);
+            }
+
+            await _events.CompilerInputsAsync(inputs).ConfigureAwait(false);
+            await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(Interlocked.Increment(ref built), total, false)).ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);
 
         bool more;
@@ -488,8 +571,14 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             more = _designTimePending.Count > 0;
         }
 
-        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, requests.Count, !more)).ConfigureAwait(false);
-        await _events.LogAsync("info", $"Design-time build of {requests.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms.").ConfigureAwait(false);
+        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, total, !more)).ConfigureAwait(false);
+        await _events.LogAsync("info", $"Design-time build of {requests.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms"
+                                       + (cached.Count > 0 ? $"; {cached.Count} unchanged project(s) from the cache." : ".")).ConfigureAwait(false);
+        if (misses.Count > 0)
+        {
+            // Why each project built instead of coming from the cache (the Output window's build host log).
+            await _events.LogAsync("info", "Design-time build cache: " + string.Join("; ", misses.Take(20))).ConfigureAwait(false);
+        }
     }
 
     // ------------------------------------------------------------------ builds
@@ -797,8 +886,16 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             await Packages.DotnetProcess.WaitOrKillAsync(process, _lifetime.Token).ConfigureAwait(false);
             await Task.WhenAll(output, error).ConfigureAwait(false);
             var ok = process.ExitCode == 0;
+            if (ok)
+            {
+                MarkRestored();
+            }
+
             await _events.RestoreStateAsync(ok ? "succeeded" : "failed", ok ? null : $"dotnet restore exited with code {process.ExitCode}.").ConfigureAwait(false);
-            await EvaluateAsync(ProjectPaths.ToList(), _lifetime.Token, DesignTimeMode.IfAssetsChanged).ConfigureAwait(false);
+
+            // Only projects whose assets file the restore wrote are evaluated again (M34b); the watcher handles the
+            // NuGet-generated imports it rewrote.
+            await EvaluateAsync([.. ProjectPaths.Where(AssetsChangedSinceEvaluation)], _lifetime.Token, DesignTimeMode.IfAssetsChanged).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {

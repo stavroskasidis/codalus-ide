@@ -56,7 +56,7 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 | `restore/output` | `{line}` |
 | `restore/state` | `{state: running \| succeeded \| failed, message?}` |
 | `project/compilerInputs` | `CompilerInputsInfo` (a design-time build finished) |
-| `solution/designTimeProgress` | `{built, total, completed}`; `completed` once nothing more is queued |
+| `solution/designTimeProgress` | `{built, total, completed}`; `completed` once nothing more is queued; `{0, 0, true}` when an evaluation leaves nothing to build (M34b) |
 | `build/output` | `{line}`: a line for the Build output channel |
 | `build/diagnostic` | `BuildDiagnosticInfo` |
 | `log` | `{level, message}` |
@@ -80,6 +80,10 @@ Builds use a `BuildManager` of their own with MSBuild's out-of-process worker no
 ## Design-time builds
 
 After evaluation the host builds `Compile` and `CoreCompile` with `DesignTimeBuild`, `SkipCompilerExecution`, `ProvideCommandLineArgs` and `BuildingInsideVisualStudio` set (referenced projects are asked for their target path, not built), for each project's active target framework, and reports `project/compilerInputs`. Builds are queued and coalesced: changes during a batch are built right after it. They re-run after evaluations caused by project-file or folder changes, configuration and framework switches, and after a restore for projects whose assets file changed. Unrestored projects fail with MSBuild's error (for example NETSDK1004).
+
+Speed (M34b): a batch of six projects or more adds MSBuild worker nodes (half the processors at most; `DAEDALUS_DESIGNTIME_NODES` sets the most; MSBuild before 17 stays in process), and asks only for the items and properties it reads (`ProvideSubsetOfStateAfterBuild`). Successful results are cached in each project's `obj/daedalus.designtime.json`, per configuration, platform and target framework, under a key of the project's evaluation fingerprint (SDK, global properties, every evaluated item, the project file, its imports and the assets file with their timestamps and sizes), the solution's properties and the fingerprints of every project it references; an entry is used only while its sources, analyzers and references outside the solution exist. `build/designTime` (asked for by the user) never reads the cache; `DAEDALUS_DESIGNTIME_CACHE=0` turns it off. Environment variables are not part of the key.
+
+Restore on open (M34b) is skipped when every project's packages are up to date: NuGet's last restore succeeded (`project.nuget.cache`), every package file it expects exists, and the assets file (or `obj/daedalus.restore.stamp`, written after each restore the host runs) is newer than the project file and every import outside `obj/`. The host then reports `succeeded` without `running`. After a restore only projects whose assets file changed are evaluated again, and an evaluation that changes nothing sends no `project/evaluated`.
 
 The tree (nesting, Dependencies grouping) is derived in the shell (`SolutionTree`), not sent by the host.
 

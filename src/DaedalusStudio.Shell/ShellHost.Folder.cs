@@ -64,6 +64,7 @@ public sealed partial class ShellHost
 
         _structureReported = false;
         _evaluationReported = false;
+        _designTimeReported = false;
         if (Solutions.IsOpen)
         {
             await CloseSolutionAsync().ConfigureAwait(true);
