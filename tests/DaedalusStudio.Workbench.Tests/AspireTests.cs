@@ -87,13 +87,25 @@ public sealed class AspireTests : IAsyncLifetime
     [Fact]
     public async Task The_apphost_starts_its_projects_through_the_ide_and_describes_its_resources()
     {
+        // A step that never ends fails the test with what happened, instead of holding the test run (seen on Windows CI).
+        var log = new ConcurrentQueue<string>();
+        var body = RunAsync(log);
+        if (await Task.WhenAny(body, Task.Delay(TimeSpan.FromMinutes(10), TestContext.Current.CancellationToken)) != body)
+        {
+            Assert.Fail("The test didn't finish within 10 minutes:\n" + string.Join('\n', log));
+        }
+
+        await body;
+    }
+
+    private async Task RunAsync(ConcurrentQueue<string> log)
+    {
         await AspireRuntime.RequireContainerEngineAsync();
         var ct = TestContext.Current.CancellationToken;
         var fixture = ContainerRuntime.CopyFixture(_root);
         var appHost = Path.Combine(fixture, "Aspire", "AppHost", "AppHost.csproj");
         ContainerRuntime.Build(appHost);
 
-        var log = new ConcurrentQueue<string>();
         var requests = new ConcurrentQueue<IdeRunRequest>();
         IdeExecutionServer? self = null;
         await using var server = new IdeExecutionServer((request, token) =>

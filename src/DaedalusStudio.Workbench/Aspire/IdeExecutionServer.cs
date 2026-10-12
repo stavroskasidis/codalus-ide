@@ -361,7 +361,14 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         {
         }
 
-        await _loop.ConfigureAwait(false);
+        try
+        {
+            await _loop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // A listener that won't stop doesn't hold whoever disposes it.
+        }
         foreach (var socket in _sockets.Keys)
         {
             socket.Dispose();
