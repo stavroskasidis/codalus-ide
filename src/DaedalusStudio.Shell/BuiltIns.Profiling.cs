@@ -9,8 +9,8 @@ using DaedalusStudio.Workbench.ToolWindows;
 namespace DaedalusStudio.Shell;
 
 /// <summary>
-/// Profiling and diagnostics (M18a, ADR 0044 and 0045): the Performance Profiler, profiling reports, the Diagnostic
-/// Tools and .NET Counters windows, hot lines, their commands, menus and key bindings.
+/// Profiling and diagnostics (M18, ADR 0044 to 0046): the Performance Profiler, profiling reports and comparisons, the
+/// Diagnostic Tools, .NET Counters and Benchmarks windows, hot lines, their commands, menus and key bindings.
 /// </summary>
 internal static partial class BuiltIns
 {
@@ -35,6 +35,7 @@ internal static partial class BuiltIns
     {
         yield return new ToolWindowDescriptor(DiagnosticToolsViewModel.ToolWindowId, "Diagnostic Tools", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "flame" };
         yield return new ToolWindowDescriptor(CountersViewModel.ToolWindowId, ".NET Counters", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "flame" };
+        yield return new ToolWindowDescriptor(BenchmarksViewModel.ToolWindowId, "Benchmarks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "flame" };
     }
 
     public static void RegisterProfilingCommands(ShellHost shell)
@@ -71,6 +72,18 @@ internal static partial class BuiltIns
         {
             shell.ShowCounters();
             return Task.CompletedTask;
+        });
+        Add("profiler.takeSnapshot", "Take Heap Snapshot", async _ =>
+        {
+            if (shell.ActiveProfiling is { TakeSnapshot: { } take })
+            {
+                await take().ConfigureAwait(true);
+            }
+        }, "profilerCollecting");
+        Add("benchmarks.runAll", "Run All Benchmarks", async _ =>
+        {
+            shell.ShowBenchmarks();
+            await shell.BenchmarksWindow.RunAllAsync().ConfigureAwait(true);
         });
     }
 

@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using DaedalusStudio.Diagnostics.Host.Cpu;
+using DaedalusStudio.Diagnostics.Host.Memory;
 using DaedalusStudio.Diagnostics.Host.Sessions;
+using DaedalusStudio.Diagnostics.Host.Trace;
 using DaedalusStudio.Diagnostics.Protocol;
 using DaedalusStudio.Rpc;
 
@@ -19,6 +21,7 @@ internal sealed class DiagnosticsServer : IAsyncDisposable
     private readonly ConcurrentDictionary<string, CounterSession> _counters = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TraceRecording> _recordings = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, OpenedTrace> _traces = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, HeapGraph> _snapshots = new(StringComparer.Ordinal);
     private int _shellProcess = -1;
 
     public DiagnosticsServer(JsonRpcConnection connection) => _connection = connection;
@@ -58,23 +61,46 @@ internal sealed class DiagnosticsServer : IAsyncDisposable
 
             return Task.FromResult(new DiagnosticsEmpty());
         }));
-        _connection.OnRequest(DiagnosticsMethods.CpuTree, json.CpuTreeParams, json.CpuTreeResult, (p, _) => View(p.Trace, v => v.TopDown(p.Filter, p.Node, p.Offset, p.Count)));
-        _connection.OnRequest(DiagnosticsMethods.CpuCallers, json.CpuCallersParams, json.CpuTreeResult, (p, _) => View(p.Trace, v => v.BottomUp(p.Filter, p.Path, p.Offset, p.Count)));
-        _connection.OnRequest(DiagnosticsMethods.CpuFunctions, json.CpuFunctionsParams, json.CpuFunctionsResult, (p, _) => View(p.Trace, v => v.Functions(p.Filter, p.Search, p.Offset, p.Count)));
-        _connection.OnRequest(DiagnosticsMethods.CpuCallerCallee, json.CpuCallerCalleeParams, json.CpuCallerCalleeResult, (p, _) => View(p.Trace, v => v.CallerCallee(p.Filter, p.Function)));
-        _connection.OnRequest(DiagnosticsMethods.CpuFlame, json.CpuFlameParams, json.CpuFlameResult, (p, _) => View(p.Trace, v => v.Flame(p.Filter, p.Root, p.MinFraction, p.MaxFrames)));
-        _connection.OnRequest(DiagnosticsMethods.CpuTimeline, json.CpuTimelineParams, json.CpuTimelineResult, (p, _) => View(p.Trace, v => v.Timeline(p.Filter, p.Buckets)));
+        _connection.OnRequest(DiagnosticsMethods.CpuTree, json.CpuTreeParams, json.CpuTreeResult, (p, _) => View(p.Trace, p.Filter, v => v.TopDown(p.Filter, p.Node, p.Offset, p.Count)));
+        _connection.OnRequest(DiagnosticsMethods.CpuCallers, json.CpuCallersParams, json.CpuTreeResult, (p, _) => View(p.Trace, p.Filter, v => v.BottomUp(p.Filter, p.Path, p.Offset, p.Count)));
+        _connection.OnRequest(DiagnosticsMethods.CpuFunctions, json.CpuFunctionsParams, json.CpuFunctionsResult, (p, _) => View(p.Trace, p.Filter, v => v.Functions(p.Filter, p.Search, p.Offset, p.Count)));
+        _connection.OnRequest(DiagnosticsMethods.CpuCallerCallee, json.CpuCallerCalleeParams, json.CpuCallerCalleeResult, (p, _) => View(p.Trace, p.Filter, v => v.CallerCallee(p.Filter, p.Function)));
+        _connection.OnRequest(DiagnosticsMethods.CpuFlame, json.CpuFlameParams, json.CpuFlameResult, (p, _) => View(p.Trace, p.Filter, v => v.Flame(p.Filter, p.Root, p.MinFraction, p.MaxFrames)));
+        _connection.OnRequest(DiagnosticsMethods.CpuTimeline, json.CpuTimelineParams, json.CpuTimelineResult, (p, _) => View(p.Trace, p.Filter, v => v.Timeline(p.Filter, p.Buckets)));
+        _connection.OnRequest(DiagnosticsMethods.CpuCompare, json.CpuCompareParams, json.CpuCompareResult, (p, _) => Guard(() => Task.FromResult(CpuViews.Compare(Trace(p.Baseline).Data.ViewsOf(p.Filter.Profile), Trace(p.Trace).Data.ViewsOf(p.Filter.Profile), p.Filter, p.Count))));
+        _connection.OnRequest(DiagnosticsMethods.AsyncTasks, json.AsyncTasksParams, json.AsyncTasksResult, (p, _) => Data(p.Trace, d => d.AsyncTasks(p.Filter, p.Search, p.Offset, p.Count)));
+        _connection.OnRequest(DiagnosticsMethods.Threads, json.ThreadsParams, json.ThreadsResult, (p, _) => Data(p.Trace, d => d.Threads(p.Buckets)));
+        _connection.OnRequest(DiagnosticsMethods.Exceptions, json.ExceptionsParams, json.ExceptionsResult, (p, ct) => Guard(async () =>
+        {
+            var trace = Trace(p.Trace);
+            await trace.WaitForLinesAsync(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+            return trace.Data.ExceptionGroups(p.Filter);
+        }));
+        _connection.OnRequest(DiagnosticsMethods.Activities, json.ActivitiesParams, json.ActivitiesResult, (p, _) => Data(p.Trace, d => d.Activities(p.Kind, p.Filter, p.ByTime, p.Offset, p.Count)));
+        _connection.OnRequest(DiagnosticsMethods.FileIo, json.TraceIdParams, json.FileIoResult, (p, _) => Data(p.Trace, d => d.FileIo()));
+        _connection.OnRequest(DiagnosticsMethods.EventStats, json.TraceIdParams, json.EventStatsResult, (p, _) => Data(p.Trace, d => d.EventStats()));
+        _connection.OnRequest(DiagnosticsMethods.Events, json.EventsParams, json.EventsResult, (p, ct) => Data(p.Trace, d => d.Events(p.Filter, p.Offset, p.Count, ct)));
+        _connection.OnRequest(DiagnosticsMethods.Export, json.ExportParams, json.ExportResult, (p, _) => Data(p.Trace, d => new ExportResult(p.OutputPath, TraceExport.Write(d, p.Filter, p.Format, p.OutputPath))));
+        _connection.OnRequest(DiagnosticsMethods.HeapSnapshot, json.HeapSnapshotParams, json.HeapSnapshotResult, (p, ct) => Guard(() => HeapSnapshotRecorder.RecordAsync(p, ct)));
+        _connection.OnRequest(DiagnosticsMethods.HeapOpen, json.HeapOpenParams, json.HeapSummary, (p, ct) => Guard(() => OpenSnapshotAsync(p.Path, ct)));
+        _connection.OnRequest(DiagnosticsMethods.HeapClose, json.HeapIdParams, json.DiagnosticsEmpty, (p, ct) =>
+        {
+            _snapshots.TryRemove(p.Snapshot, out _);
+            return Task.FromResult(new DiagnosticsEmpty());
+        });
+        _connection.OnRequest(DiagnosticsMethods.HeapTypes, json.HeapTypesParams, json.HeapTypesResult, (p, _) => Guard(() => Task.FromResult(Snapshot(p.Snapshot).Types(p.Baseline is { } baseline ? Snapshot(baseline) : null, p.Search, p.Offset, p.Count))));
+        _connection.OnRequest(DiagnosticsMethods.HeapRoots, json.HeapRootsParams, json.HeapRootsResult, (p, _) => Guard(() => Task.FromResult(Snapshot(p.Snapshot).Referrers(p.Path, p.Offset, p.Count))));
         _connection.OnRequest(DiagnosticsMethods.CpuFiles, json.CpuFilesParams, json.CpuFilesResult, (p, ct) => Guard(async () =>
         {
             var trace = Trace(p.Trace);
             await trace.WaitForLinesAsync(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
-            return trace.Views.Files(p.Filter);
+            return trace.Data.ViewsOf(p.Filter.Profile).Files(p.Filter);
         }));
         _connection.OnRequest(DiagnosticsMethods.CpuLines, json.CpuLinesParams, json.CpuLinesResult, (p, ct) => Guard(async () =>
         {
             var trace = Trace(p.Trace);
             await trace.WaitForLinesAsync(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
-            return trace.Views.Lines(p.Filter, p.File);
+            return trace.Data.ViewsOf(p.Filter.Profile).Lines(p.Filter, p.File);
         }));
         _connection.OnRequest(DiagnosticsMethods.Shutdown, (_, _) => Task.FromResult<JsonElement?>(null));
         _connection.OnNotification(DiagnosticsMethods.Exit, json.DiagnosticsEmpty, _ => _exit.TrySetResult());
@@ -93,7 +119,39 @@ internal sealed class DiagnosticsServer : IAsyncDisposable
         }
     }
 
-    private Task<T> View<T>(string trace, Func<CpuViews, T> view) => Guard(() => Task.FromResult(view(Trace(trace).Views)));
+    private Task<T> View<T>(string trace, CpuFilter filter, Func<CpuViews, T> view) => Guard(() => Task.FromResult(view(Trace(trace).Data.ViewsOf(filter.Profile))));
+
+    private Task<T> Data<T>(string trace, Func<TraceData, T> view) => Guard(() => Task.FromResult(view(Trace(trace).Data)));
+
+    private HeapGraph Snapshot(string id) =>
+        _snapshots.TryGetValue(id, out var snapshot) ? snapshot : throw new JsonRpcHandlerException(DiagnosticsErrorCodes.UnknownTrace, "The snapshot isn't open. Open it again.");
+
+    private async Task<HeapSummary> OpenSnapshotAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            throw new JsonRpcHandlerException(DiagnosticsErrorCodes.TraceError, $"{path} doesn't exist.");
+        }
+
+        HeapGraph graph;
+        try
+        {
+            graph = await Task.Run(() => HeapGraph.Read(path, cancellationToken), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not JsonRpcHandlerException)
+        {
+            throw new JsonRpcHandlerException(DiagnosticsErrorCodes.TraceError, $"{Path.GetFileName(path)} could not be read: {ex.Message}");
+        }
+
+        if (graph.ObjectCount == 0)
+        {
+            throw new JsonRpcHandlerException(DiagnosticsErrorCodes.TraceError, $"{Path.GetFileName(path)} has no heap snapshot.");
+        }
+
+        var id = Guid.NewGuid().ToString("N");
+        _snapshots[id] = graph;
+        return new HeapSummary(id, path, graph.ObjectCount, graph.Bytes, graph.TypeCount, graph.RootCount);
+    }
 
     private OpenedTrace Trace(string id) =>
         _traces.TryGetValue(id, out var trace) ? trace : throw new JsonRpcHandlerException(DiagnosticsErrorCodes.UnknownTrace, "The trace isn't open. Open it again.");
@@ -206,7 +264,8 @@ internal sealed class DiagnosticsServer : IAsyncDisposable
 
         var id = Guid.NewGuid().ToString("N");
         _traces[id] = trace;
-        var profile = trace.Views.Profile;
+        var data = trace.Data;
+        var profile = data.Profile(ProfileKinds.Cpu);
         var managed = profile.Samples.Count(s => !s.External);
         return new TraceSummary(
             id,
@@ -217,7 +276,15 @@ internal sealed class DiagnosticsServer : IAsyncDisposable
             managed,
             profile.Samples.Count - managed,
             profile.FunctionCount,
-            trace.Views.Threads());
+            data.ViewsOf(ProfileKinds.Cpu).Threads(),
+            data.ProfileSummaries(),
+            data.EventCount,
+            data.Tasks.Count,
+            data.Requests.Count,
+            data.Commands.Count,
+            data.Spans.Count,
+            data.Pool.Count,
+            data.Io is not null);
     }
 
     public async ValueTask DisposeAsync()
@@ -240,6 +307,7 @@ internal sealed class DiagnosticsServer : IAsyncDisposable
         _counters.Clear();
         _recordings.Clear();
         _traces.Clear();
+        _snapshots.Clear();
     }
 }
 
@@ -249,21 +317,21 @@ internal sealed class OpenedTrace : IDisposable
     private readonly NettraceReader _reader;
     private readonly CancellationTokenSource _lifetime = new();
 
-    private OpenedTrace(CpuProfile profile, NettraceReader reader)
+    private OpenedTrace(TraceData data, NettraceReader reader)
     {
         _reader = reader;
-        Views = new CpuViews(profile);
-        Lines = Task.Run(() => _reader.ResolveLines(profile, _lifetime.Token), _lifetime.Token);
+        Data = data;
+        Lines = Task.Run(() => _reader.ResolveLines(data, _lifetime.Token), _lifetime.Token);
     }
 
-    public CpuViews Views { get; }
+    public TraceData Data { get; }
 
     public Task Lines { get; }
 
     public static OpenedTrace Open(string path, CancellationToken cancellationToken)
     {
-        var (profile, reader) = NettraceReader.Read(path, cancellationToken);
-        return new OpenedTrace(profile, reader);
+        var (data, reader) = NettraceReader.ReadAll(path, cancellationToken);
+        return new OpenedTrace(data, reader);
     }
 
     /// <summary>Waits a while for source lines; views answer without them after that (and say they aren't resolved).</summary>

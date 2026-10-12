@@ -1,10 +1,10 @@
 #nullable enable
 // Leaky: a leak for memory snapshots and their diffs (M18b): a static cache that only grows, with event handlers that
-// keep their subscribers alive. Runs for the seconds given (default 30), printing the heap size every second.
+// keep their subscribers alive. Runs for the seconds given (default 30; 0: until killed), printing the heap size every second.
 using System.Globalization;
 
 var seconds = args.Length > 0 && double.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var given) ? given : 30;
-var until = DateTime.UtcNow.AddSeconds(seconds);
+var until = seconds <= 0 ? DateTime.MaxValue : DateTime.UtcNow.AddSeconds(seconds);
 Console.WriteLine($"Leaky {Environment.ProcessId} started");
 var next = DateTime.UtcNow;
 var id = 0;

@@ -51,7 +51,8 @@ internal sealed class CpuViews(CpuProfile profile)
             filter.StartMilliseconds?.ToString("R", CultureInfo.InvariantCulture) ?? "-",
             filter.EndMilliseconds?.ToString("R", CultureInfo.InvariantCulture) ?? "-",
             filter.Threads is { Count: > 0 } threads ? string.Join(',', threads.Order()) : "*",
-            filter.IncludeExternal ? "x" : "m");
+            filter.IncludeExternal ? "x" : "m",
+            filter.Profile ?? "cpu");
 
     internal static bool Matches(in CpuSample sample, CpuFilter filter, HashSet<int>? threads) =>
         (filter.IncludeExternal || !sample.External)
@@ -100,8 +101,8 @@ internal sealed class CpuViews(CpuProfile profile)
         {
             if (Matches(sample, filter, threads))
             {
-                nodeExclusive[profile.StackNode(sample.Stack)]++;
-                total++;
+                nodeExclusive[profile.StackNode(sample.Stack)] += sample.Weight;
+                total += sample.Weight;
             }
         }
 
@@ -402,7 +403,7 @@ internal sealed class CpuViews(CpuProfile profile)
         {
             if (Matches(sample, all, threads))
             {
-                counts[Math.Clamp((int)(sample.Time / size), 0, buckets - 1)]++;
+                counts[Math.Clamp((int)(sample.Time / size), 0, buckets - 1)] += sample.Weight;
             }
         }
 
@@ -460,7 +461,7 @@ internal sealed class CpuViews(CpuProfile profile)
             var leafLine = profile.StackLine(sample.Stack);
             if (leafLine >= 0)
             {
-                exclusive[leafLine]++;
+                exclusive[leafLine] += sample.Weight;
             }
 
             for (var stack = sample.Stack; stack >= 0; stack = profile.StackParent(stack))
@@ -474,14 +475,14 @@ internal sealed class CpuViews(CpuProfile profile)
                 if (seen[line] != stamp)
                 {
                     seen[line] = stamp;
-                    inclusive[line]++;
+                    inclusive[line] += sample.Weight;
                 }
 
                 var key = (profile.NodeFunction(profile.StackNode(stack)), line);
                 if (functionSeen.GetValueOrDefault(key) != stamp)
                 {
                     functionSeen[key] = stamp;
-                    perFunction[key] = perFunction.GetValueOrDefault(key) + 1;
+                    perFunction[key] = perFunction.GetValueOrDefault(key) + sample.Weight;
                 }
             }
         }
@@ -530,7 +531,7 @@ internal sealed class CpuViews(CpuProfile profile)
                 if (line >= 0 && seen[profile.LineFile(line)] != index)
                 {
                     seen[profile.LineFile(line)] = index;
-                    files[profile.LineFile(line)]++;
+                    files[profile.LineFile(line)] += sample.Weight;
                 }
             }
         }
@@ -564,4 +565,52 @@ internal sealed class CpuViews(CpuProfile profile)
     }
 
     internal static string Normalize(string path) => path.Replace('\\', '/');
+
+    // ------------------------------------------------------------------ comparing
+
+    /// <summary>
+    /// Two profiles' functions side by side (comparing sessions): matched by name and module, each one's self and total
+    /// share of its own profile, the largest changes of the total share first. Only the filter's native-code choice
+    /// applies (time ranges and threads differ between traces).
+    /// </summary>
+    public static CpuCompareResult Compare(CpuViews baseline, CpuViews current, CpuFilter filter, int count)
+    {
+        var all = new CpuFilter(IncludeExternal: filter.IncludeExternal, Profile: filter.Profile);
+        var before = Shares(baseline, all);
+        var after = Shares(current, all);
+        var rows = new List<CpuCompareRow>();
+        foreach (var key in before.Keys.Union(after.Keys))
+        {
+            var b = before.GetValueOrDefault(key);
+            var a = after.GetValueOrDefault(key);
+            rows.Add(new CpuCompareRow(key.Name, key.Module, b.Self, b.Total, a.Self, a.Total, a.Total - b.Total));
+        }
+
+        return new CpuCompareResult(
+            baseline.For(all).Total,
+            current.For(all).Total,
+            [.. rows.OrderByDescending(r => Math.Abs(r.Delta)).ThenByDescending(r => Math.Abs(r.Self - r.BaselineSelf)).ThenBy(r => r.Name, StringComparer.Ordinal).Take(Math.Clamp(count, 1, 5000))]);
+    }
+
+    private static Dictionary<(string Name, string? Module), (double Self, double Total)> Shares(CpuViews views, CpuFilter filter)
+    {
+        var totals = views.For(filter);
+        var shares = new Dictionary<(string, string?), (double, double)>();
+        if (totals.Total == 0)
+        {
+            return shares;
+        }
+
+        for (var function = 0; function < views.Profile.FunctionCount; function++)
+        {
+            if (totals.FunctionInclusive[function] > 0)
+            {
+                var key = (views.Profile.FunctionName(function), views.Profile.FunctionModule(function));
+                var known = shares.GetValueOrDefault(key);
+                shares[key] = (known.Item1 + ((double)totals.FunctionExclusive[function] / totals.Total), Math.Max(known.Item2, (double)totals.FunctionInclusive[function] / totals.Total));
+            }
+        }
+
+        return shares;
+    }
 }

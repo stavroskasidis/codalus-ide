@@ -1,10 +1,10 @@
 // Allocations: allocation-heavy work (M18): many short-lived strings and arrays, and a few large ones, for the GC
-// events in the Diagnostic Tools window and, later, allocation sampling. Runs for the seconds given (default 5).
+// events in the Diagnostic Tools window and, later, allocation sampling. Runs for the seconds given (default 5; 0: until killed).
 using System.Globalization;
 using System.Text;
 
 var seconds = args.Length > 0 && double.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var given) ? given : 5;
-var until = DateTime.UtcNow.AddSeconds(seconds);
+var until = seconds <= 0 ? DateTime.MaxValue : DateTime.UtcNow.AddSeconds(seconds);
 Console.WriteLine($"Allocations {Environment.ProcessId} started");
 long bytes = 0;
 var keep = new List<byte[]>();

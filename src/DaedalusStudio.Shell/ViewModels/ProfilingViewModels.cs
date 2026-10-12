@@ -30,8 +30,11 @@ public sealed record ProcessRowViewModel(DotnetProcess Process)
         || (Process.CommandLine?.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false);
 }
 
-/// <summary>What the Performance Profiler starts: the tools, and the startup project (launched) or a running process.</summary>
-public sealed record ProfilerRequest(bool Cpu, bool Counters, bool Launch, int? ProcessId);
+/// <summary>What the Performance Profiler starts: the tools (<see cref="ProfilerTools"/>), and the startup project (launched) or a running process.</summary>
+public sealed record ProfilerRequest(IReadOnlyList<string> Tools, bool Launch, int? ProcessId)
+{
+    public bool Has(string tool) => Tools.Contains(tool);
+}
 
 /// <summary>What the Performance Profiler needs from the shell.</summary>
 public interface IProfilerHost
@@ -53,6 +56,9 @@ public interface IProfilerHost
     void OpenSession(ProfilerSession session);
 
     void DeleteSession(ProfilerSession session);
+
+    /// <summary>Opens a comparison of two sessions (the baseline first).</summary>
+    void CompareSessions(ProfilerSession baseline, ProfilerSession session);
 }
 
 /// <summary>A collection in progress (the Performance Profiler or the Diagnostic Tools window's Record CPU Profile).</summary>
@@ -68,6 +74,18 @@ public sealed class ProfilingRun
         Tools = tools;
         _stop = stop;
     }
+
+    /// <summary>Memory Usage: takes a heap snapshot now (null: the tool isn't on); its file name in the session folder, or null.</summary>
+    public Func<Task<string?>>? TakeSnapshot { get; init; }
+
+    /// <summary>Memory Usage: writes a full dump of the process into the session (null: the tool isn't on).</summary>
+    public Func<Task<string?>>? CreateDump { get; init; }
+
+    /// <summary>The heap snapshots taken so far (file names in the session folder).</summary>
+    public List<string> Snapshots { get; } = [];
+
+    /// <summary>The full dump written, if any (a file name in the session folder).</summary>
+    public string? Dump { get; set; }
 
     public string Target { get; }
 
@@ -112,23 +130,49 @@ public sealed record ProfilerSessionRowViewModel(ProfilerSession Session)
     public string AccessibleName => $"{Session.Name}, {Session.Description}";
 }
 
+/// <summary>A tool of the Performance Profiler, on or off.</summary>
+public sealed class ProfilerToolChoice(string id, string title, string description, Action changed) : ObservableObject
+{
+    private bool _isSelected;
+
+    public string Id { get; } = id;
+
+    public string Title { get; } = title;
+
+    public string Description { get; } = description;
+
+    public string Text => Title + ": " + Description;
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (SetField(ref _isSelected, value))
+            {
+                changed();
+            }
+        }
+    }
+}
+
 /// <summary>
-/// The Performance Profiler (Alt+F2, M18, ADR 0045): pick tools (CPU Usage, .NET Counters) and a target (the startup
-/// project, launched with the tools attached from its first instruction, or a running .NET process), start and stop
-/// collecting; the session is saved under the solution's <c>.daedalus/profiler/</c> and its report opens. Earlier
-/// sessions are listed to reopen or delete.
+/// The Performance Profiler (Alt+F2, M18, ADR 0045 and 0046): pick tools (CPU Usage, .NET Counters, .NET Object
+/// Allocation, Memory Usage, .NET Async, Threads and Contention, Exceptions, File I/O, Activities) and a target (the
+/// startup project, launched with the tools attached from its first instruction, or a running .NET process), start
+/// and stop collecting (taking heap snapshots or a full dump meanwhile); the session is saved under the solution's
+/// <c>.daedalus/profiler/</c> and its report opens. Earlier sessions are listed to reopen, compare or delete.
 /// </summary>
 public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, IDisposable
 {
     private readonly IProfilerHost _host;
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private List<ProcessRowViewModel> _allProcesses = [];
-    private bool _useCpu = true;
-    private bool _useCounters = true;
     private int _targetIndex;
     private string _processFilter = string.Empty;
     private ProcessRowViewModel? _selectedProcess;
     private ProfilerSessionRowViewModel? _selectedSession;
+    private ProfilerSessionRowViewModel? _compareBaseline;
     private string? _status;
     private string _elapsed = string.Empty;
     private ProfilingRun? _run;
@@ -136,11 +180,26 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
     public PerformanceProfilerViewModel(IProfilerHost host)
     {
         _host = host;
+        Tools =
+        [
+            new(ProfilerTools.Cpu, "CPU Usage", "where the time goes, as a call tree, hot paths, functions and a flame graph (EventPipe's sampling profiler)", Changed) { IsSelected = true },
+            new(ProfilerTools.Counters, ".NET Counters", "CPU, memory, garbage collections and exceptions over time (the runtime's counters)", Changed) { IsSelected = true },
+            new(ProfilerTools.Allocations, ".NET Object Allocation", "the types allocated and the stacks that allocate them (an allocation sample about every 100 KB)", Changed),
+            new(ProfilerTools.Memory, "Memory Usage", "GC heap snapshots while collecting, with type statistics, paths to roots and diffs; a full dump to inspect objects", Changed),
+            new(ProfilerTools.Async, ".NET Async", "async methods and tasks over time, the longest first, with the stacks that started them", Changed),
+            new(ProfilerTools.Threads, "Threads and Contention", "lock contention with the waiting stacks, thread pool injections, each thread's state over time", Changed),
+            new(ProfilerTools.Exceptions, "Exceptions", "first-chance exceptions over time, grouped by type and throw site", Changed),
+            new(ProfilerTools.FileIo, "File I/O", "bytes and operations read and written over time (the process's I/O counters)", Changed),
+            new(ProfilerTools.Activities, "Activities", "HTTP requests, database commands and Activity spans in a timeline", Changed),
+        ];
         StartCommand = new RelayCommand(() => _ = StartAsync(), () => CanStart);
         StopCommand = new RelayCommand(() => _ = StopAsync(), () => IsCollecting);
+        SnapshotCommand = new RelayCommand(() => _ = TakeSnapshotAsync(), () => CanSnapshot);
+        DumpCommand = new RelayCommand(() => _ = CreateDumpAsync(), () => CanSnapshot);
         RefreshCommand = new RelayCommand(() => _ = RefreshProcessesAsync());
         OpenSessionCommand = new RelayCommand(OpenSelectedSession, () => _selectedSession is not null);
         DeleteSessionCommand = new RelayCommand(DeleteSelectedSession, () => _selectedSession is not null);
+        CompareCommand = new RelayCommand(CompareSelected, () => _selectedSession is not null && _compareBaseline is not null && _compareBaseline != _selectedSession);
         _clock.Tick += (_, _) => UpdateElapsed();
         if (host.Active is { } active)
         {
@@ -152,11 +211,19 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
 
     public ICommand StopCommand { get; }
 
+    public ICommand SnapshotCommand { get; }
+
+    public ICommand DumpCommand { get; }
+
     public ICommand RefreshCommand { get; }
 
     public ICommand OpenSessionCommand { get; }
 
     public ICommand DeleteSessionCommand { get; }
+
+    public ICommand CompareCommand { get; }
+
+    public IReadOnlyList<ProfilerToolChoice> Tools { get; }
 
     public ObservableCollection<ProcessRowViewModel> Processes { get; } = [];
 
@@ -164,29 +231,25 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
 
     public string StartupProject => _host.StartupProjectName is { } name ? "Startup project: " + name : "Startup project (none: open a solution with an executable project)";
 
+    private ProfilerToolChoice Tool(string id) => Tools.First(t => t.Id == id);
+
     public bool UseCpu
     {
-        get => _useCpu;
-        set
-        {
-            if (SetField(ref _useCpu, value))
-            {
-                Changed();
-            }
-        }
+        get => Tool(ProfilerTools.Cpu).IsSelected;
+        set => Tool(ProfilerTools.Cpu).IsSelected = value;
     }
 
     public bool UseCounters
     {
-        get => _useCounters;
-        set
-        {
-            if (SetField(ref _useCounters, value))
-            {
-                Changed();
-            }
-        }
+        get => Tool(ProfilerTools.Counters).IsSelected;
+        set => Tool(ProfilerTools.Counters).IsSelected = value;
     }
+
+    /// <summary>Turns a tool on or off (the check boxes; tests and the smoke test).</summary>
+    public void Use(string tool, bool on) => Tool(tool).IsSelected = on;
+
+    /// <summary>The tools on, in the order shown.</summary>
+    public IReadOnlyList<string> SelectedTools => [.. Tools.Where(t => t.IsSelected).Select(t => t.Id)];
 
     /// <summary>0: the startup project, launched; 1: a running process.</summary>
     public int TargetIndex
@@ -241,6 +304,20 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
             {
                 ((RelayCommand)OpenSessionCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)DeleteSessionCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)CompareCommand).RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>The session to compare the selected one with (the baseline).</summary>
+    public ProfilerSessionRowViewModel? CompareBaseline
+    {
+        get => _compareBaseline;
+        set
+        {
+            if (SetField(ref _compareBaseline, value))
+            {
+                ((RelayCommand)CompareCommand).RaiseCanExecuteChanged();
             }
         }
     }
@@ -259,15 +336,24 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
 
     public bool IsCollecting => _run is not null;
 
+    /// <summary>Collecting with Memory Usage: snapshots and dumps can be taken.</summary>
+    public bool CanSnapshot => _run is { TakeSnapshot: not null, IsStopping: false };
+
+    public string SnapshotText => _run is { } run ? $"Snapshots taken: {run.Snapshots.Count.ToString(CultureInfo.CurrentCulture)}{(run.Dump is null ? string.Empty : " · full dump written")}" : string.Empty;
+
     public bool CanStart =>
-        !IsCollecting && (_useCpu || _useCounters)
+        !IsCollecting && Tools.Any(t => t.IsSelected)
         && (_targetIndex == 0 ? _host.StartupProjectName is not null : _selectedProcess is not null);
 
     private void Changed()
     {
         OnPropertyChanged(nameof(CanStart));
-        ((RelayCommand)StartCommand).RaiseCanExecuteChanged();
-        ((RelayCommand)StopCommand).RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(CanSnapshot));
+        OnPropertyChanged(nameof(SnapshotText));
+        foreach (var command in new[] { StartCommand, StopCommand, SnapshotCommand, DumpCommand })
+        {
+            ((RelayCommand?)command)?.RaiseCanExecuteChanged();
+        }
     }
 
     public async Task LoadAsync()
@@ -281,11 +367,16 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
 
     public void LoadSessions()
     {
+        var selected = _selectedSession?.Session.Folder;
+        var baseline = _compareBaseline?.Session.Folder;
         Sessions.Clear();
         foreach (var session in _host.Sessions())
         {
             Sessions.Add(new ProfilerSessionRowViewModel(session));
         }
+
+        SelectedSession = Sessions.FirstOrDefault(s => s.Session.Folder == selected);
+        CompareBaseline = Sessions.FirstOrDefault(s => s.Session.Folder == baseline);
     }
 
     public async Task RefreshProcessesAsync()
@@ -323,7 +414,7 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
         }
 
         Status = _targetIndex == 0 ? "Building and starting the startup project…" : "Attaching…";
-        var run = await _host.StartAsync(new ProfilerRequest(_useCpu, _useCounters, _targetIndex == 0, _targetIndex == 1 ? _selectedProcess?.Id : null)).ConfigureAwait(true);
+        var run = await _host.StartAsync(new ProfilerRequest(SelectedTools, _targetIndex == 0, _targetIndex == 1 ? _selectedProcess?.Id : null)).ConfigureAwait(true);
         if (run is null)
         {
             Status = "Nothing is being collected.";
@@ -353,8 +444,39 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
         if (_run is { } run)
         {
             Status = "Stopping and reading the trace…";
+            Changed();
             await run.StopAsync().ConfigureAwait(true);
         }
+    }
+
+    /// <summary>Takes a heap snapshot of the program being profiled (Memory Usage).</summary>
+    public async Task<string?> TakeSnapshotAsync()
+    {
+        if (_run is not { TakeSnapshot: { } take } run)
+        {
+            return null;
+        }
+
+        Status = "Taking a heap snapshot (a full garbage collection)…";
+        var file = await take().ConfigureAwait(true);
+        Status = file is null ? "The snapshot could not be taken." : $"Snapshot {run.Snapshots.Count.ToString(CultureInfo.CurrentCulture)} taken.";
+        Changed();
+        return file;
+    }
+
+    /// <summary>Writes a full dump of the program being profiled, to inspect its objects (Memory Usage).</summary>
+    public async Task<string?> CreateDumpAsync()
+    {
+        if (_run is not { CreateDump: { } dump })
+        {
+            return null;
+        }
+
+        Status = "Writing a full dump…";
+        var file = await dump().ConfigureAwait(true);
+        Status = file is null ? "The dump could not be written." : "Full dump written; the report opens it.";
+        Changed();
+        return file;
     }
 
     private void OnFinished(ProfilingRun run, ProfilerSession? session)
@@ -390,6 +512,14 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
         }
     }
 
+    private void CompareSelected()
+    {
+        if (_selectedSession is { } session && _compareBaseline is { } baseline && session != baseline)
+        {
+            _host.CompareSessions(baseline.Session, session.Session);
+        }
+    }
+
     public void Dispose() => _clock.Stop();
 }
 
@@ -417,15 +547,18 @@ public sealed class CpuTreeNodeViewModel : ObservableObject
 {
     private readonly ProfilingReportViewModel _owner;
     private readonly bool _bottomUp;
+    private readonly CpuFilter? _filter;
     private bool _loaded;
     private bool _isExpanded;
 
-    public CpuTreeNodeViewModel(ProfilingReportViewModel owner, CpuNode node, int total, bool bottomUp, IReadOnlyList<int> path)
+    /// <param name="filter">The filter its children are loaded with (null: the report's current one).</param>
+    public CpuTreeNodeViewModel(ProfilingReportViewModel owner, CpuNode node, int total, bool bottomUp, IReadOnlyList<int> path, CpuFilter? filter = null)
     {
         _owner = owner;
         Node = node;
         Total = total;
         _bottomUp = bottomUp;
+        _filter = filter;
         Path = path;
         if (node.HasChildren)
         {
@@ -479,12 +612,12 @@ public sealed class CpuTreeNodeViewModel : ObservableObject
 
         _loaded = true;
         var children = _bottomUp
-            ? await _owner.CallersAsync(Path).ConfigureAwait(true)
-            : await _owner.ChildrenAsync(Node.Id).ConfigureAwait(true);
+            ? await _owner.CallersAsync(Path, _filter).ConfigureAwait(true)
+            : await _owner.ChildrenAsync(Node.Id, _filter).ConfigureAwait(true);
         Children.Clear();
         foreach (var child in children.Nodes)
         {
-            Children.Add(new CpuTreeNodeViewModel(_owner, child, Total, _bottomUp, _bottomUp ? [.. Path, child.Function] : []));
+            Children.Add(new CpuTreeNodeViewModel(_owner, child, Total, _bottomUp, _bottomUp ? [.. Path, child.Function] : [], _filter));
         }
 
         if (children.More > 0)
@@ -515,7 +648,7 @@ public sealed record CpuFunctionRowViewModel(CpuFunction Function, int Total)
 /// time (Call Tree, Bottom-Up, Functions with Caller/Callee, Flame Graph, Hot Files), filtered by a time range (dragged
 /// on the timeline), a thread and native samples; its counters' summary; and its hot lines in the editor gutter.
 /// </summary>
-public sealed class ProfilingReportViewModel : ObservableObject, ILoadable, IAsyncDisposable
+public sealed partial class ProfilingReportViewModel : ObservableObject, ILoadable, IAsyncDisposable
 {
     private const int Page = 200;
     private const int MaxHotFiles = 100;
@@ -776,7 +909,13 @@ public sealed class ProfilingReportViewModel : ObservableObject, ILoadable, IAsy
         if (Session.TracePath is not { } path)
         {
             Summary = $"{Session.ProcessName} · {Session.Description}";
-            SelectedTab = 5;
+            SelectedTab = CountersTab;
+            await LoadMemoryAsync().ConfigureAwait(true);
+            if (HasMemory)
+            {
+                SelectedTab = MemoryTab;
+            }
+
             return;
         }
 
@@ -798,7 +937,9 @@ public sealed class ProfilingReportViewModel : ObservableObject, ILoadable, IAsy
 
             _selectedThread = Threads[0];
             OnPropertyChanged(nameof(SelectedThread));
+            InitializeProfiles(summary);
             await RefreshAsync().ConfigureAwait(true);
+            await LoadToolsAsync().ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
         {
@@ -855,7 +996,8 @@ public sealed class ProfilingReportViewModel : ObservableObject, ILoadable, IAsy
             ranged ? Math.Min(_selectionStart, _selectionEnd) * duration : null,
             ranged ? Math.Max(_selectionStart, _selectionEnd) * duration : null,
             _selectedThread?.Id is { } thread ? [thread] : null,
-            _includeExternal);
+            _includeExternal,
+            _selectedProfile?.Kind is { } kind && kind != ProfileKinds.Cpu ? kind : null);
     }
 
     /// <summary>Loads every view again for the current filter (an earlier refresh still running is cancelled).</summary>
@@ -910,8 +1052,11 @@ public sealed class ProfilingReportViewModel : ObservableObject, ILoadable, IAsy
                 await ShowCallerCalleeAsync(current.Function.Id).ConfigureAwait(true);
             }
 
-            Status = string.Create(CultureInfo.CurrentCulture, $"{roots.Total:N0} samples · {RangeText}{(_selectedThread?.Id is null ? string.Empty : " · " + _selectedThread.Text)}");
-            await LoadHotLinesAsync(token).ConfigureAwait(true);
+            Status = string.Create(CultureInfo.CurrentCulture, $"{roots.Total:N0} {_selectedProfile?.Unit ?? "samples"} · {RangeText}{(_selectedThread?.Id is null ? string.Empty : " · " + _selectedThread.Text)}");
+            if (_filter.Profile is null)
+            {
+                await LoadHotLinesAsync(token).ConfigureAwait(true);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -930,11 +1075,11 @@ public sealed class ProfilingReportViewModel : ObservableObject, ILoadable, IAsy
         }
     }
 
-    internal async Task<CpuTreeResult> ChildrenAsync(int node)
+    internal async Task<CpuTreeResult> ChildrenAsync(int node, CpuFilter? filter = null)
     {
         try
         {
-            return _trace is null ? new CpuTreeResult(0, [], 0) : await _trace.TopDownAsync(_filter, node, 0, Page, _refresh.Token).ConfigureAwait(true);
+            return _trace is null ? new CpuTreeResult(0, [], 0) : await _trace.TopDownAsync(filter ?? _filter, node, 0, Page, _refresh.Token).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
         {
@@ -942,11 +1087,11 @@ public sealed class ProfilingReportViewModel : ObservableObject, ILoadable, IAsy
         }
     }
 
-    internal async Task<CpuTreeResult> CallersAsync(IReadOnlyList<int> path)
+    internal async Task<CpuTreeResult> CallersAsync(IReadOnlyList<int> path, CpuFilter? filter = null)
     {
         try
         {
-            return _trace is null ? new CpuTreeResult(0, [], 0) : await _trace.BottomUpAsync(_filter, path, 0, Page, _refresh.Token).ConfigureAwait(true);
+            return _trace is null ? new CpuTreeResult(0, [], 0) : await _trace.BottomUpAsync(filter ?? _filter, path, 0, Page, _refresh.Token).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
         {
@@ -1094,6 +1239,7 @@ public sealed class ProfilingReportViewModel : ObservableObject, ILoadable, IAsy
     {
         await _refresh.CancelAsync().ConfigureAwait(false);
         _diagnostics.HotLines.Clear(Title);
+        await DisposeSnapshotsAsync().ConfigureAwait(false);
         if (_trace is { } trace)
         {
             _trace = null;

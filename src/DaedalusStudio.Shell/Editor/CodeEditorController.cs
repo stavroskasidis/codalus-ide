@@ -56,6 +56,7 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly GitChangeMargin _gitMargin = new();
     private readonly TestMargin _testMargin;
     private readonly HttpRequestMargin _httpMargin;
+    private readonly BenchmarkMargin _benchmarkMargin;
     private readonly CoverageMargin _coverageMargin;
     private readonly HotLineMargin _hotLineMargin;
     private readonly EditorInsights _insights;
@@ -106,6 +107,8 @@ public sealed partial class CodeEditorController : IDisposable
         editor.TextArea.LeftMargins.Insert(1, _testMargin);
         _httpMargin = new HttpRequestMargin(() => Model.LanguageId == "http", line => services.SendHttpRequestAsync(Model.Path, Model.Text.Text, line));
         editor.TextArea.LeftMargins.Insert(1, _httpMargin);
+        _benchmarkMargin = new BenchmarkMargin(() => Model.Path, services.Benchmarks, services.RunBenchmarkAsync);
+        editor.TextArea.LeftMargins.Insert(1, _benchmarkMargin);
         _bookmarkMargin = new BookmarkMargin(document, () => Model.Path, services.Bookmarks);
         editor.TextArea.LeftMargins.Insert(1, _bookmarkMargin);
         editor.TextArea.ContextRequested += OnContextRequested;
@@ -175,6 +178,9 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>The send glyphs of a .http file (M15a).</summary>
     public HttpRequestMargin HttpMargin => _httpMargin;
+
+    /// <summary>The benchmark glyphs (M18b).</summary>
+    public BenchmarkMargin BenchmarkMargin => _benchmarkMargin;
 
     /// <summary>The coverage coloring (tests and the headless UI test).</summary>
     public CoverageMargin CoverageMargin => _coverageMargin;
@@ -1777,6 +1783,8 @@ public sealed partial class CodeEditorController : IDisposable
         _breakpointMargin.Detach();
         Editor.TextArea.LeftMargins.Remove(_testMargin);
         _testMargin.Detach();
+        Editor.TextArea.LeftMargins.Remove(_benchmarkMargin);
+        _benchmarkMargin.Detach();
         _bookmarkMargin.Detach();
         Editor.TextArea.LeftMargins.Remove(_coverageMargin);
         _coverageMargin.Detach();

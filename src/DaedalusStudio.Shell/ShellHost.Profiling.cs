@@ -41,8 +41,9 @@ public sealed partial class ShellHost
     {
         Profiling = new DiagnosticsService(DiagnosticsHostLaunch.Resolve);
         Profiling.Log += (_, line) => Workbench.Log.AppendLine("[diagnostics] " + line);
-        DiagnosticTools = new DiagnosticToolsViewModel(Profiling, (pid, name) => StartProfilingAsync(new ProfilerRequest(Cpu: true, Counters: false, Launch: false, pid), name));
+        DiagnosticTools = new DiagnosticToolsViewModel(Profiling, (pid, name) => StartProfilingAsync(new ProfilerRequest([ProfilerTools.Cpu], Launch: false, pid), name));
         CountersWindow = new CountersViewModel(Profiling, (title, name, filter, patterns) => Window?.SaveFileAsync(title, name, filter, patterns) ?? Task.FromResult<string?>(null));
+        InitializeBenchmarks();
         Runs.RunningChanged += (_, _) => Ui.Post(FollowPrograms);
         Debugger.ProcessesChanged += (_, _) => Ui.Post(FollowPrograms);
         Debugger.StateChanged += (_, _) => Ui.Post(() =>
@@ -126,6 +127,8 @@ public sealed partial class ShellHost
         public IReadOnlyList<ProfilerSession> Sessions() => ProfilerSessionStore.List(shell.ProfilerSessionsRoot);
 
         public void OpenSession(ProfilerSession session) => shell.OpenProfilingReport(session);
+
+        public void CompareSessions(ProfilerSession baseline, ProfilerSession session) => shell.OpenProfilingComparison(baseline, session);
 
         public void DeleteSession(ProfilerSession session)
         {
@@ -214,16 +217,17 @@ public sealed partial class ShellHost
         var folder = ProfilerSessionStore.CreateFolder(ProfilerSessionsRoot, target, startedAt);
         TraceRecordingHandle? trace = null;
         CounterMonitor? counters = null;
+        var traced = request.Tools.Where(ProfilerTools.Traced.Contains).ToList();
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-            if (request.Cpu)
+            if (traced.Count > 0)
             {
-                trace = await Profiling.StartTraceAsync(processId, Path.Combine(folder, "cpu.nettrace"), timeout.Token).ConfigureAwait(true);
+                trace = await Profiling.StartTraceAsync(processId, Path.Combine(folder, "trace.nettrace"), traced, null, timeout.Token).ConfigureAwait(true);
                 target = request.Launch ? target : trace.ProcessName;
             }
 
-            if (request.Counters)
+            if (request.Has(ProfilerTools.Counters))
             {
                 counters = await Profiling.StartCountersAsync(processId, s_sessionCounters, 1, runtimeEvents: true, timeout.Token).ConfigureAwait(true);
                 target = request.Launch ? target : counters.ProcessName;
@@ -252,18 +256,10 @@ public sealed partial class ShellHost
             return null;
         }
 
-        List<string> tools = [];
-        if (trace is not null)
-        {
-            tools.Add(ProfilerTools.Cpu);
-        }
-
-        if (counters is not null)
-        {
-            tools.Add(ProfilerTools.Counters);
-        }
-
+        List<string> tools = [.. request.Tools.Where(t => (ProfilerTools.Traced.Contains(t) && trace is not null) || (t == ProfilerTools.Counters && counters is not null) || t == ProfilerTools.Memory)];
         var name = target;
+        var memory = request.Has(ProfilerTools.Memory);
+        ProfilingRun? created = null;
         var run = new ProfilingRun(target, processId, tools, async r =>
         {
             var session = await FinishProfilingAsync(r, folder, name, project, startedAt, trace, counters, program).ConfigureAwait(true);
@@ -274,7 +270,12 @@ public sealed partial class ShellHost
             }
 
             return session;
-        });
+        })
+        {
+            TakeSnapshot = memory ? () => TakeSnapshotAsync(created!, folder) : null,
+            CreateDump = memory ? () => CreateProfilingDumpAsync(created!, folder) : null,
+        };
+        created = run;
         _profiling = run;
         Workbench.Context.Set("profilerCollecting", true);
         Workbench.StatusBar.Set(new StatusBarItem(ProfilerStatusItem, $"$(record) Profiling {target}", StatusBarAlignment.Left, 40, ContributionSource.Shell.Id)
@@ -294,8 +295,50 @@ public sealed partial class ShellHost
         {
             counters.Stopped += (_, _) => Exited();
         }
+        else if (program is not null)
+        {
+            _ = program.Exited.ContinueWith(_ => Exited(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        }
 
         return run;
+    }
+
+    /// <summary>Memory Usage: a heap snapshot of the program being profiled, into the session folder.</summary>
+    private async Task<string?> TakeSnapshotAsync(ProfilingRun run, string folder)
+    {
+        var file = string.Create(CultureInfo.InvariantCulture, $"heap-{run.Snapshots.Count + 1}.nettrace");
+        try
+        {
+            StatusBar.ShowMessage("Taking a heap snapshot…", TimeSpan.FromSeconds(5));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            await Profiling.TakeHeapSnapshotAsync(run.ProcessId, Path.Combine(folder, file), timeout.Token).ConfigureAwait(true);
+            run.Snapshots.Add(file);
+            return file;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
+        {
+            Workbench.Notifications.Error($"The heap snapshot could not be taken: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>Memory Usage: a full dump of the program being profiled (the debug companion host writes it), into the session folder.</summary>
+    private async Task<string?> CreateProfilingDumpAsync(ProfilingRun run, string folder)
+    {
+        const string File = "full.dmp";
+        try
+        {
+            StatusBar.ShowMessage("Writing a full dump…", TimeSpan.FromSeconds(10));
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            await Companion.CreateDumpAsync(run.ProcessId, Path.Combine(folder, File), "full", timeout.Token).ConfigureAwait(true);
+            run.Dump = File;
+            return File;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Workbench.Notifications.Error($"The dump could not be written: {ex.Message}");
+            return null;
+        }
     }
 
     private static async Task StopQuietlyAsync(TraceRecordingHandle trace)
@@ -366,7 +409,7 @@ public sealed partial class ShellHost
             program.Stop();
         }
 
-        if (traceFile is null && countersFile is null)
+        if (traceFile is null && countersFile is null && run.Snapshots.Count == 0 && run.Dump is null)
         {
             TryDeleteFolder(folder);
             return null;
@@ -382,7 +425,9 @@ public sealed partial class ShellHost
             run.ProcessId,
             run.Tools,
             traceFile,
-            countersFile)
+            countersFile,
+            run.Snapshots.Count == 0 ? null : [.. run.Snapshots],
+            run.Dump)
         { Folder = folder };
         try
         {
@@ -406,22 +451,31 @@ public sealed partial class ShellHost
     /// <summary>Opens a session's report (once per session).</summary>
     public ProfilingReportViewModel OpenProfilingReport(ProfilerSession session)
     {
+        WireReports();
+        return OpenManagement(
+            "profilerReport:" + session.Folder,
+            () => new ProfilingReportViewModel(Profiling, session, OpenSourceLineAsync)
+            {
+                SaveFile = (title, name, filter, patterns) => Window?.SaveFileAsync(title, name, filter, patterns) ?? Task.FromResult<string?>(null),
+                OpenDump = path => OpenDumpAsync(path),
+            },
+            vm => "Report: " + vm.Session.ProcessName);
+    }
+
+    /// <summary>Reports and comparisons close their traces in the host when their documents close.</summary>
+    private void WireReports()
+    {
         if (!_reportsWired)
         {
             _reportsWired = true;
             Layout.DocumentClosed += (_, document) =>
             {
-                if (document is SolutionManagementDocument { ViewModel: ProfilingReportViewModel report })
+                if (document is SolutionManagementDocument { ViewModel: ProfilingReportViewModel or ProfilingComparisonViewModel } closed)
                 {
-                    _ = report.DisposeAsync().AsTask();
+                    _ = ((IAsyncDisposable)closed.ViewModel).DisposeAsync().AsTask();
                 }
             };
         }
-
-        return OpenManagement(
-            "profilerReport:" + session.Folder,
-            () => new ProfilingReportViewModel(Profiling, session, OpenSourceLineAsync),
-            vm => "Report: " + vm.Session.ProcessName);
     }
 
     /// <summary>Opens a saved session (its folder's session.json) or a <c>.nettrace</c> file someone recorded.</summary>
@@ -450,6 +504,16 @@ public sealed partial class ShellHost
         }
 
         Workbench.Notifications.Warning($"{Path.GetFileName(path)} is not a profiling session or a .nettrace file.");
+    }
+
+    /// <summary>Opens a comparison of two saved sessions (CPU functions and, with snapshots, the heap's growth).</summary>
+    public ProfilingComparisonViewModel OpenProfilingComparison(ProfilerSession baseline, ProfilerSession session)
+    {
+        WireReports();
+        return OpenManagement(
+            "profilerCompare:" + baseline.Folder + "|" + session.Folder,
+            () => new ProfilingComparisonViewModel(Profiling, baseline, session),
+            vm => "Compare: " + vm.Session.ProcessName);
     }
 
     /// <summary>On exit: a collection in progress is abandoned (its folder keeps what was written).</summary>

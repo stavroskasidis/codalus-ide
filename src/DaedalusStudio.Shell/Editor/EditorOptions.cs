@@ -209,6 +209,12 @@ public interface IEditorServices
     /// <summary>Runs a command on the active editor (CodeLens).</summary>
     void RunCommand(string commandId);
 
+    /// <summary>The benchmarks of the solution, for the benchmark glyphs (M18b).</summary>
+    DaedalusStudio.Workbench.Diagnostics.BenchmarkService Benchmarks { get; }
+
+    /// <summary>Runs a benchmark (or a class's) from its glyph in <paramref name="path"/>.</summary>
+    Task RunBenchmarkAsync(string path, DaedalusStudio.Workbench.Diagnostics.BenchmarkMethod benchmark);
+
     /// <summary>The profiler's hot lines for the gutter (M18).</summary>
     DaedalusStudio.Workbench.Diagnostics.HotLineStore HotLines { get; }
 

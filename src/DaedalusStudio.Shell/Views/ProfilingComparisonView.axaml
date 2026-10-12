@@ -1,0 +1,45 @@
+<local:LoadingView xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+                   xmlns:local="using:DaedalusStudio.Shell.Views"
+                   x:Class="DaedalusStudio.Shell.Views.ProfilingComparisonView"
+                   x:DataType="vm:ProfilingComparisonViewModel">
+  <DockPanel Margin="12,10">
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+      <TextBlock Classes="heading" Text="{Binding Title}" TextWrapping="Wrap" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
+    </StackPanel>
+    <TabControl Padding="0,6,0,0">
+      <TabItem Header="Functions">
+        <ListBox x:Name="FunctionList" ItemsSource="{Binding Functions}" AutomationProperties.Name="Functions, the largest changes first">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:CompareRowViewModel">
+              <Grid ColumnDefinitions="70,70,70,150,*" AutomationProperties.Name="{Binding AccessibleName}">
+                <TextBlock Text="{Binding Delta}" TextAlignment="Right" FontWeight="SemiBold" Foreground="{DynamicResource Shell.Error}" IsVisible="{Binding Worse}" />
+                <TextBlock Text="{Binding Delta}" TextAlignment="Right" FontWeight="SemiBold" IsVisible="{Binding !Worse}" />
+                <TextBlock Grid.Column="1" Text="{Binding Baseline}" TextAlignment="Right" Classes="muted" ToolTip.Tip="Total in the baseline" />
+                <TextBlock Grid.Column="2" Text="{Binding Current}" TextAlignment="Right" ToolTip.Tip="Total now" />
+                <TextBlock Grid.Column="3" Text="{Binding Self}" TextAlignment="Right" Classes="muted" ToolTip.Tip="Self: before → now" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="4" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </TabItem>
+      <TabItem Header="Heap Growth" IsVisible="{Binding HasHeap}">
+        <ListBox ItemsSource="{Binding HeapGrowth}" AutomationProperties.Name="Types by growth from the baseline's last snapshot to this session's">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:HeapTypeRow">
+              <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                <TextBlock Text="{Binding SizeDiff}" Width="90" TextAlignment="Right" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding CountDiff}" Width="80" TextAlignment="Right" Classes="muted" />
+                <TextBlock Text="{Binding Size}" Width="80" TextAlignment="Right" Classes="muted" />
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</local:LoadingView>

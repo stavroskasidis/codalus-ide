@@ -85,6 +85,42 @@ public sealed class CpuTrace : IAsyncDisposable
     public Task<CpuLinesResult> LinesAsync(CpuFilter filter, string file, CancellationToken cancellationToken) =>
         RequestAsync(DiagnosticsMethods.CpuLines, id => new CpuLinesParams(id, filter, file), Json.CpuLinesParams, Json.CpuLinesResult, cancellationToken);
 
+    /// <summary>The trace's functions against a baseline trace's (both open; comparing sessions).</summary>
+    public async Task<CpuCompareResult> CompareAsync(CpuTrace baseline, CpuFilter filter, int count, CancellationToken cancellationToken)
+    {
+        if (baseline._id is null || baseline._generation != _service.Generation)
+        {
+            await baseline.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return await RequestAsync(DiagnosticsMethods.CpuCompare, id => new CpuCompareParams(baseline._id!, id, filter, count), Json.CpuCompareParams, Json.CpuCompareResult, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<AsyncTasksResult> AsyncTasksAsync(CpuFilter filter, string? search, int offset, int count, CancellationToken cancellationToken) =>
+        RequestAsync(DiagnosticsMethods.AsyncTasks, id => new AsyncTasksParams(id, filter, search, offset, count), Json.AsyncTasksParams, Json.AsyncTasksResult, cancellationToken);
+
+    public Task<ThreadsResult> ThreadsAsync(int buckets, CancellationToken cancellationToken) =>
+        RequestAsync(DiagnosticsMethods.Threads, id => new ThreadsParams(id, buckets), Json.ThreadsParams, Json.ThreadsResult, cancellationToken);
+
+    public Task<ExceptionsResult> ExceptionsAsync(CpuFilter filter, CancellationToken cancellationToken) =>
+        RequestAsync(DiagnosticsMethods.Exceptions, id => new ExceptionsParams(id, filter), Json.ExceptionsParams, Json.ExceptionsResult, cancellationToken);
+
+    public Task<ActivitiesResult> ActivitiesAsync(string kind, CpuFilter filter, bool byTime, int offset, int count, CancellationToken cancellationToken) =>
+        RequestAsync(DiagnosticsMethods.Activities, id => new ActivitiesParams(id, kind, filter, byTime, offset, count), Json.ActivitiesParams, Json.ActivitiesResult, cancellationToken);
+
+    public Task<FileIoResult> FileIoAsync(CancellationToken cancellationToken) =>
+        RequestAsync(DiagnosticsMethods.FileIo, id => new TraceIdParams(id), Json.TraceIdParams, Json.FileIoResult, cancellationToken);
+
+    public Task<EventStatsResult> EventStatsAsync(CancellationToken cancellationToken) =>
+        RequestAsync(DiagnosticsMethods.EventStats, id => new TraceIdParams(id), Json.TraceIdParams, Json.EventStatsResult, cancellationToken);
+
+    public Task<EventsResult> EventsAsync(EventFilter filter, int offset, int count, CancellationToken cancellationToken) =>
+        RequestAsync(DiagnosticsMethods.Events, id => new EventsParams(id, filter, offset, count), Json.EventsParams, Json.EventsResult, cancellationToken);
+
+    /// <summary>Writes the filter's profile as Speedscope or Chromium trace JSON (<see cref="ExportFormats"/>).</summary>
+    public Task<ExportResult> ExportAsync(CpuFilter filter, string format, string outputPath, CancellationToken cancellationToken) =>
+        RequestAsync(DiagnosticsMethods.Export, id => new ExportParams(id, filter, format, outputPath), Json.ExportParams, Json.ExportResult, cancellationToken);
+
     public async ValueTask DisposeAsync()
     {
         if (_id is { } id && _generation == _service.Generation)

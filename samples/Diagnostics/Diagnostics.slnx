@@ -3,4 +3,6 @@
   <Project Path="Allocations/Allocations.csproj" />
   <Project Path="Leaky/Leaky.csproj" />
   <Project Path="AsyncHeavy/AsyncHeavy.csproj" />
+  <Project Path="Activities/Activities.csproj" />
+  <Project Path="Benchmarks/Benchmarks.csproj" />
 </Solution>

@@ -35,7 +35,7 @@ public sealed class ProfilerShellTests
 
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "Diagnostics.slnx"));
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 4 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 6 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
         f.Shell.SetStartupProject(Path.Combine(folder, "CpuBound", "CpuBound.csproj"));
         return folder;
     }

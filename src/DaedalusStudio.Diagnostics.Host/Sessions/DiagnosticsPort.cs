@@ -25,11 +25,92 @@ internal static class DiagnosticsPort
     /// <summary>GC (0x1) and exception (0x8000) events, for the Diagnostic Tools window.</summary>
     public const long RuntimeEventKeywords = 0x1 | 0x8000;
 
-    public static IReadOnlyList<EventPipeProvider> CpuProviders() =>
-    [
-        new EventPipeProvider(SampleProfilerProvider, EventLevel.Informational, 0xF00000000000),
-        new EventPipeProvider(RuntimeProvider, EventLevel.Verbose, CpuRuntimeKeywords),
-    ];
+    public static IReadOnlyList<EventPipeProvider> CpuProviders() => TraceProviders([TraceTools.Cpu], null);
+
+    public const string TplProvider = "System.Threading.Tasks.TplEventSource";
+    public const string HttpProvider = "System.Net.Http";
+    public const string DiagnosticSourceProvider = "Microsoft-Diagnostics-DiagnosticSource";
+
+    /// <summary>
+    /// What the activity views ask DiagnosticSource for: database commands of SqlClient and EF Core as start and stop
+    /// pairs (with their text), and every <c>ActivitySource</c>'s spans as they stop (with their ids, kind, duration,
+    /// status and tags).
+    /// </summary>
+    internal const string ActivitySpecs =
+        "SqlClientDiagnosticListener/System.Data.SqlClient.WriteCommandBefore@Activity1Start:-Command.CommandText;Command.Connection.Database\r\n" +
+        "SqlClientDiagnosticListener/System.Data.SqlClient.WriteCommandAfter@Activity1Stop:-OperationId\r\n" +
+        "SqlClientDiagnosticListener/System.Data.SqlClient.WriteCommandError@Activity1Stop:-Exception.Message\r\n" +
+        "SqlClientDiagnosticListener/Microsoft.Data.SqlClient.WriteCommandBefore@Activity1Start:-Command.CommandText;Command.Connection.Database\r\n" +
+        "SqlClientDiagnosticListener/Microsoft.Data.SqlClient.WriteCommandAfter@Activity1Stop:-OperationId\r\n" +
+        "SqlClientDiagnosticListener/Microsoft.Data.SqlClient.WriteCommandError@Activity1Stop:-Exception.Message\r\n" +
+        "Microsoft.EntityFrameworkCore/Microsoft.EntityFrameworkCore.Database.Command.CommandExecuting@Activity2Start:-Command.CommandText;Command.Connection.Database\r\n" +
+        "Microsoft.EntityFrameworkCore/Microsoft.EntityFrameworkCore.Database.Command.CommandExecuted@Activity2Stop:-Duration\r\n" +
+        "Microsoft.EntityFrameworkCore/Microsoft.EntityFrameworkCore.Database.Command.CommandError@Activity2Stop:-Exception.Message\r\n" +
+        "[AS]*/Stop:-TraceId;SpanId;ParentSpanId;Kind;DisplayName;Duration;Status;TagObjects";
+
+    /// <summary>
+    /// The providers of a trace of <paramref name="tools"/> (<see cref="TraceTools"/>): the runtime's method events for
+    /// names and source lines always (rundown adds the methods compiled earlier), plus each tool's events, plus any
+    /// <paramref name="extra"/> provider (the events viewer's).
+    /// </summary>
+    public static IReadOnlyList<EventPipeProvider> TraceProviders(IReadOnlyCollection<string> tools, IReadOnlyList<TraceProvider>? extra)
+    {
+        var providers = new List<EventPipeProvider>();
+        var runtime = CpuRuntimeKeywords;
+        if (tools.Contains(TraceTools.Cpu))
+        {
+            providers.Add(new EventPipeProvider(SampleProfilerProvider, EventLevel.Informational, 0xF00000000000));
+        }
+
+        if (tools.Contains(TraceTools.Allocations))
+        {
+            runtime |= 0x1; // GC: its allocation ticks are verbose
+        }
+
+        if (tools.Contains(TraceTools.Threads))
+        {
+            runtime |= 0x4000 /* Contention */ | 0x10000 /* Threading */;
+        }
+
+        if (tools.Contains(TraceTools.Exceptions))
+        {
+            runtime |= 0x8000;
+        }
+
+        providers.Add(new EventPipeProvider(RuntimeProvider, EventLevel.Verbose, runtime));
+        long tpl = 0;
+        if (tools.Contains(TraceTools.Async))
+        {
+            tpl |= 0x8 /* AsyncCausalityOperation */ | 0x10 /* AsyncCausalityRelation */;
+        }
+
+        if (tools.Contains(TraceTools.Activities))
+        {
+            tpl |= 0x80; // TasksFlowActivityIds: a request's start and stop share an activity id
+            providers.Add(new EventPipeProvider(HttpProvider, EventLevel.Informational, -1));
+            providers.Add(new EventPipeProvider(DiagnosticSourceProvider, EventLevel.Verbose, 0x2 /* Events */ | 0x800 /* IgnoreShortCutKeywords */, new Dictionary<string, string> { ["FilterAndPayloadSpecs"] = ActivitySpecs }));
+        }
+
+        if (tpl != 0)
+        {
+            providers.Add(new EventPipeProvider(TplProvider, EventLevel.Informational, tpl));
+        }
+
+        foreach (var provider in extra ?? [])
+        {
+            if (providers.FindIndex(p => p.Name.Equals(provider.Name, StringComparison.OrdinalIgnoreCase)) is >= 0 and var index)
+            {
+                var known = providers[index];
+                providers[index] = new EventPipeProvider(known.Name, (EventLevel)Math.Max((int)known.EventLevel, Math.Clamp(provider.Level, 0, 5)), known.Keywords | provider.Keywords, known.Arguments);
+            }
+            else
+            {
+                providers.Add(new EventPipeProvider(provider.Name, (EventLevel)Math.Clamp(provider.Level, 0, 5), provider.Keywords, provider.Arguments?.ToDictionary(a => a.Key, a => a.Value)));
+            }
+        }
+
+        return providers;
+    }
 
     /// <summary>The .NET processes with a diagnostics port, except this host, the shell (<paramref name="parent"/>) and the IDE's other hosts.</summary>
     public static IReadOnlyList<DotnetProcess> Processes(int parent)
