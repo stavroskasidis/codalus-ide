@@ -12,7 +12,6 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 var seconds = args.Length > 0 && double.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var given) ? given : 5;
-var until = seconds <= 0 ? DateTime.MaxValue : DateTime.UtcNow.AddSeconds(seconds);
 
 using var source = new ActivitySource("Daedalus.Samples.Activities");
 using var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -34,10 +33,13 @@ using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port
 var file = Path.Combine(Path.GetTempPath(), $"daedalus-activities-{Environment.ProcessId}.bin");
 var block = new byte[1024 * 1024];
 Console.WriteLine($"Activities {Environment.ProcessId} started");
+
+// The time counts from here (a cold EF Core start can take seconds on a busy machine), and at least three rounds run.
+var until = seconds <= 0 ? DateTime.MaxValue : DateTime.UtcNow.AddSeconds(seconds);
 var rounds = 0;
 try
 {
-    while (DateTime.UtcNow < until)
+    while (rounds < 3 || DateTime.UtcNow < until)
     {
         using (var round = source.StartActivity("round"))
         {

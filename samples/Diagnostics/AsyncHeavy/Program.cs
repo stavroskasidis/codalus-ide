@@ -16,7 +16,7 @@ var gate = new object();
 var shared = 0;
 var rounds = 0;
 var failures = 0;
-while (DateTime.UtcNow < until)
+while (rounds < 2 || DateTime.UtcNow < until) // at least two rounds, however slow the machine
 {
     var work = Enumerable.Range(0, 32).Select(i => (Task)Worker.FetchAsync(i, gate, () => shared++, () => Interlocked.Increment(ref failures))).ToList();
     work.Add(Worker.SlowChainAsync(3));
