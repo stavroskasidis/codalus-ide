@@ -87,6 +87,19 @@ public sealed partial class ShellHost
         };
 
         Builds.Finished += (_, _) => Ui.Post(ShowXamlBuildDiagnostics);
+        Solutions.SolutionChanged += (_, _) => Ui.Post(() =>
+        {
+            // Another solution (or none): the designer host of the last one goes.
+            _previewTarget = null;
+            if (!Solutions.IsOpen && _previewed is not null)
+            {
+                _previewed.ContentChanged -= OnPreviewedChanged;
+                _previewed = null;
+                XamlPreview.Clear("Open an .axaml file to preview it.");
+            }
+
+            _ = Previewer.InvalidateAsync();
+        });
     }
 
     private async Task<bool> BuildForPreviewAsync(string project, CancellationToken cancellationToken)
