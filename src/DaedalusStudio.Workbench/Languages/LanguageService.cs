@@ -423,10 +423,12 @@ public sealed class LanguageService : IAsyncDisposable
                 var isNew = !_clients.ContainsKey(descriptor.LanguageId);
                 _projects[inputs.Path] = data;
 
-                // A new client sends every known project once it has started.
-                if (await ClientAsync(descriptor.LanguageId).ConfigureAwait(false) is { } client && !isNew)
+                // A new client sends every known project once it has started. While a host starts (slowly, on a loaded
+                // machine) several builds' inputs wait for it here and resume in any order: each sends the newest
+                // inputs, never its own, or a design-time build from before a restore could replace the one after it.
+                if (await ClientAsync(descriptor.LanguageId).ConfigureAwait(false) is { } client && !isNew && _projects.TryGetValue(inputs.Path, out var latest))
                 {
-                    await client.UpdateProjectsAsync([data], _lifetime.Token).ConfigureAwait(false);
+                    await client.UpdateProjectsAsync([latest], _lifetime.Token).ConfigureAwait(false);
                 }
             }
             catch (Exception ex) when (ex is JsonRpcConnectionLostException or OperationCanceledException or InvalidOperationException)
