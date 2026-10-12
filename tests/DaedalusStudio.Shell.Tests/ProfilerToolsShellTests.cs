@@ -182,8 +182,8 @@ public sealed class ProfilerToolsShellTests
     {
         await using var f = ShellFixture.Create();
         var folder = await OpenDiagnosticsAsync(f, "CpuBound", "1");
-        await ShellFixture.PumpUntil(() => f.Shell.Benchmarks.All.Count >= 4, seconds: 60);
         var window = f.Shell.BenchmarksWindow;
+        await ShellFixture.PumpUntil(() => f.Shell.Benchmarks.All.Count >= 4 && window.Benchmarks.Count >= 4, seconds: 60);
         Assert.Contains(window.Benchmarks, b => b.Title == "StringBenchmarks.Concat");
         Assert.DoesNotContain(window.Benchmarks, b => b.Title.EndsWith(".Helper", StringComparison.Ordinal));
 
