@@ -289,7 +289,7 @@ public class UxPassTests
             var minimap = view.Minimap;
             var right = minimap.TranslatePoint(new Point(minimap.Bounds.Width, 0), view)!.Value.X;
             Assert.True(Math.Abs(right - view.Bounds.Width) <= 1, $"{name}: the minimap ends at {right}, the editor at {view.Bounds.Width}");
-            edges.Add(minimap.TranslatePoint(default, view)!.Value.X);
+            edges.Add(view.Bounds.Width - minimap.TranslatePoint(default, view)!.Value.X); // its offset from the editor's right edge
         }
 
         Assert.True(edges.Max() - edges.Min() <= 1, $"the minimap moved: {string.Join(", ", edges)}");
