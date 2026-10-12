@@ -21,6 +21,13 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
 {
     public const string ContextMenuLocation = "solutionExplorer/context";
 
+    /// <summary>The context menu's Add ▸, Git ▸ and Entity Framework ▸ submenus (M34a).</summary>
+    public const string AddMenuLocation = "solutionExplorer/context/add";
+
+    public const string GitMenuLocation = "solutionExplorer/context/git";
+
+    public const string EntityFrameworkMenuLocation = "solutionExplorer/context/entityFramework";
+
     /// <summary>Drag payload: paths of the dragged files and folders, within this process.</summary>
     private static readonly DataFormat<string[]> s_paths = DataFormat.CreateInProcessFormat<string[]>("daedalus.explorer.paths");
 
@@ -151,35 +158,9 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
             vm.Selected = row;
         }
 
-        var items = shell.Workbench.Menus.GetItems(ContextMenuLocation).Where(i => i.Submenu is null).ToList();
-        if (items.Count == 0)
+        if (MenuBuilder.Context(shell, ContextMenuLocation) is not { } menu)
         {
             return;
-        }
-
-        var menu = new ContextMenu();
-        string? group = null;
-        foreach (var item in items)
-        {
-            if (group is not null && item.Group != group)
-            {
-                menu.Items.Add(new Separator());
-            }
-
-            group = item.Group;
-            var header = new DockPanel();
-            if (item.KeyLabel is { } keys)
-            {
-                var label = new TextBlock { Text = keys, Margin = new Thickness(32, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-                label.Classes.Add("muted");
-                DockPanel.SetDock(label, Avalonia.Controls.Dock.Right);
-                header.Children.Add(label);
-            }
-
-            header.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center });
-            var entry = new MenuItem { Header = header, IsEnabled = item.Enabled, Command = shell.CommandFor(item.Command) };
-            AutomationProperties.SetName(entry, item.Title);
-            menu.Items.Add(entry);
         }
 
         menu.Open(List);

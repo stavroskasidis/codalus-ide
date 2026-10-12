@@ -12,12 +12,12 @@
       { "id": "templates.newSolution", "title": "New Solution…", "category": "File" }
     ],
     "menus": {
-      "menuBar/file": [
-        { "command": "templates.newProject", "group": "file", "order": -2 },
-        { "command": "templates.newSolution", "group": "file", "order": -1 }
+      "menuBar/file/new": [
+        { "command": "templates.newProject", "group": "1-new", "order": 1 },
+        { "command": "templates.newSolution", "group": "1-new", "order": 2 }
       ],
-      "solutionExplorer/context": [
-        { "command": "templates.newProject", "group": "1-new", "order": 5, "when": "explorerItemKind == solution || explorerItemKind == solutionFolder" }
+      "solutionExplorer/context/add": [
+        { "command": "templates.newProject", "group": "3-solution", "order": 0, "when": "explorerItemKind == solution || explorerItemKind == solutionFolder" }
       ]
     },
     "keybindings": [

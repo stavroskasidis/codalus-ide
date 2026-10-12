@@ -35,7 +35,7 @@
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
       <TabControl Grid.Column="2" Padding="0">
         <TabItem Header="Console">
-          <TextBox Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="The resource's console output" />
+          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="The resource's console output" />
         </TabItem>
         <TabItem Header="Environment">
           <ListBox ItemsSource="{Binding Environment}" Background="Transparent" AutomationProperties.Name="Environment variables">

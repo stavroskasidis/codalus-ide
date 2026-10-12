@@ -120,16 +120,9 @@ internal static partial class BuiltIns
 
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("project"), "ef.show", "ef", 1, "efProject"),
-            Item(MenuLocations.MenuBar("project"), "ef.addMigration", "ef", 2, "efProject"),
-            Item(MenuLocations.MenuBar("project"), "ef.updateDatabase", "ef", 3, "efProject"),
-            Item(MenuLocations.MenuBar("project"), "ef.scaffold", "ef", 4),
-            Item(SolutionExplorerView.ContextMenuLocation, "ef.show", "4-ef", 1, "explorerItemKind == project && efProject", "Entity Framework"),
-            Item(SolutionExplorerView.ContextMenuLocation, "ef.scaffold", "4-ef", 2, "explorerItemKind == project", "Reverse Engineer…"),
-
-            Item(MenuLocations.MenuBar("tools"), "data.explorer", "data", 1),
-            Item(MenuLocations.MenuBar("tools"), "data.addConnection", "data", 2),
-            Item(MenuLocations.MenuBar("tools"), "data.newQuery", "data", 3),
+            MenuItemRule.ForSubmenu(SolutionExplorerView.ContextMenuLocation, SolutionExplorerView.EntityFrameworkMenuLocation, "Entity Framework", shell) with { Group = "6-more", Order = 2 },
+            Item(SolutionExplorerView.EntityFrameworkMenuLocation, "ef.show", "1-ef", 1, "explorerItemKind == project && efProject", "Entity Framework Window"),
+            Item(SolutionExplorerView.EntityFrameworkMenuLocation, "ef.scaffold", "1-ef", 2, "explorerItemKind == project", "Reverse Engineer…"),
             Item(MenuLocations.EditorContext, "data.execute", "0-sql", 0, "editorLanguageId == sql"),
             Item(MenuLocations.EditorContext, "data.executeStatement", "0-sql", 1, "editorLanguageId == sql"),
             Item(MenuLocations.EditorContext, "data.estimatedPlan", "0-sql", 2, "editorLanguageId == sql"),

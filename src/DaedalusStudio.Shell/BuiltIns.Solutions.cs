@@ -113,7 +113,6 @@ internal static partial class BuiltIns
 
     public static void RegisterSolutionMenus(MenuRegistry menus)
     {
-        menus.AddMenuBarMenu(new MenuBarMenu("project", "_Project", 40));
         var shell = ContributionSource.Shell;
         MenuItemRule Item(string location, string command, string group, int order = 0, string? when = null, string? title = null) =>
             new(location, command, shell) { Group = group, Order = order, When = WhenClause.Parse(when), Title = title };
@@ -125,21 +124,13 @@ internal static partial class BuiltIns
         const string HasPath = "explorerItemKind == file || explorerItemKind == folder || explorerItemKind == project || explorerItemKind == solution || explorerItemKind == solutionItem";
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("file"), "workbench.openSolution", "solution", 1),
-            Item(MenuLocations.MenuBar("file"), "workbench.openRecent", "solution", 2),
-            Item(MenuLocations.MenuBar("file"), "workbench.closeSolution", "solution", 3),
-            Item(MenuLocations.MenuBar("project"), "solution.addExistingProject", "add", 1),
-            Item(MenuLocations.MenuBar("project"), "solution.addFolder", "add", 2),
-            Item(MenuLocations.MenuBar("project"), "project.addReference", "add", 3),
-            Item(MenuLocations.MenuBar("project"), "solution.selectConfiguration", "solution", 1),
-            Item(MenuLocations.MenuBar("project"), "solution.restore", "solution", 2),
-            Item(MenuLocations.MenuBar("project"), "solution.trust", "solution", 3),
-
-            Item(Context, "explorer.newFile", "1-new", 1, Containers),
-            Item(Context, "explorer.newFolder", "1-new", 2, Containers),
-            Item(Context, "solution.addExistingProject", "1-new", 3, SolutionLevel),
-            Item(Context, "solution.addFolder", "1-new", 4, SolutionLevel),
-            Item(Context, "project.addReference", "2-references", 1, "explorerItemKind == project || explorerItemKind == dependencies"),
+            // Add ▸ in the Solution Explorer's context menu (M34a), as a classic IDE groups it.
+            MenuItemRule.ForSubmenu(Context, SolutionExplorerView.AddMenuLocation, "Add", shell) with { Group = "1-new", Order = 0 },
+            Item(SolutionExplorerView.AddMenuLocation, "explorer.newFile", "1-new", 1, Containers),
+            Item(SolutionExplorerView.AddMenuLocation, "explorer.newFolder", "1-new", 2, Containers),
+            Item(SolutionExplorerView.AddMenuLocation, "solution.addExistingProject", "3-solution", 1, SolutionLevel, "Existing Project…"),
+            Item(SolutionExplorerView.AddMenuLocation, "solution.addFolder", "3-solution", 2, SolutionLevel),
+            Item(SolutionExplorerView.AddMenuLocation, "project.addReference", "2-references", 1, "explorerItemKind == project || explorerItemKind == dependencies", "Project Reference…"),
             Item(Context, "explorer.cut", "3-edit", 1, Files),
             Item(Context, "explorer.copy", "3-edit", 2, Files),
             Item(Context, "explorer.paste", "3-edit", 3, Containers),

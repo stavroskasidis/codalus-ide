@@ -39,7 +39,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
-        AddHandler(GotFocusEvent, (_, e) => OnFocusChanged(e.Source as Visual), RoutingStrategies.Bubble);
+        // handledEventsToo: the code editor's text area marks GotFocus handled, which left editorTextFocus unset, so the
+        // editor's key bindings (Ctrl+Space, F12…) never matched a focused editor (M34a).
+        AddHandler(GotFocusEvent, (_, e) => OnFocusChanged(e.Source as Visual), RoutingStrategies.Bubble, handledEventsToo: true);
         PaletteLayer.PointerPressed += (_, e) =>
         {
             if (e.Source == PaletteLayer)

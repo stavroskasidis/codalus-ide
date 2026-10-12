@@ -18,12 +18,13 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 14. [Older .NET versions: .NET Core 2.0 to .NET 9, and older SDKs in global.json](dotnet-versions.md)
 15. [Containers, Aspire and publishing](containers.md)
 16. [Profiling and diagnostics: the Performance Profiler, Diagnostic Tools and .NET Counters](profiling.md)
+17. [Keyboard shortcuts on each operating system: completion keys, and the shortcuts Windows, Linux and macOS keep](keyboard.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 
 ## Keyboard shortcuts at a glance
 
-`Ctrl` means `Cmd` on macOS. These are the default keyboard scheme's; the VS Code scheme differs where [settings.md](settings.md#keyboard-shortcuts) says. Every command is also in the search box (`Ctrl+Q`) and the command palette (`Ctrl+Shift+P`), and every shortcut can be changed (Tools → Keyboard Shortcuts).
+`Ctrl` means `Cmd` on macOS, except where [keyboard.md](keyboard.md) says (completion is the Control key, `⌃Space`). These are the default keyboard scheme's; the VS Code scheme differs where [settings.md](settings.md#keyboard-shortcuts) says. Every command is also in the search box (`Ctrl+Q`) and the command palette (`Ctrl+Shift+P`), and every shortcut can be changed (Tools → Keyboard Shortcuts).
 
 | Area | Shortcut | Command |
 |---|---|---|

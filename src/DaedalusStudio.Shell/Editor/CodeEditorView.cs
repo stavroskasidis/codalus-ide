@@ -67,12 +67,17 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _context.SelectionChanged += OnContextSelected;
         AutomationProperties.SetName(_context, "Project context");
 
-        var root = new DockPanel();
+        // The editors fill the dock panel; popups sit beside it in a plain panel. (They used to be the dock panel's
+        // last children: the last one took the fill, and the editors were docked left at their content's width, so the
+        // minimap followed the longest line instead of the editor's right edge; M34a.)
+        var layout = new DockPanel();
         DockPanel.SetDock(_contextBar, Avalonia.Controls.Dock.Top);
         DockPanel.SetDock(_navigationBar, Avalonia.Controls.Dock.Top);
-        root.Children.Add(_contextBar);
-        root.Children.Add(_navigationBar);
-        root.Children.Add(_editors);
+        layout.Children.Add(_contextBar);
+        layout.Children.Add(_navigationBar);
+        layout.Children.Add(_editors);
+        var root = new Panel();
+        root.Children.Add(layout);
         root.Children.Add(_hover);
         root.Children.Add(_exception);
         Content = root;

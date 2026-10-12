@@ -99,10 +99,43 @@
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
   <Style Selector="controls|Icon.start">
-    <Setter Property="Foreground" Value="{DynamicResource Shell.Diff.Added}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Run}" />
   </Style>
   <Style Selector="controls|Icon.stop">
-    <Setter Property="Foreground" Value="{DynamicResource Shell.Error}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Stop}" />
+  </Style>
+
+  <!-- Command families color their icons (M34a, D24): the tokens are monochrome in High Contrast. -->
+  <Style Selector="controls|Icon.accent-run">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Run}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-stop">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Stop}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-save">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Save}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-open">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Open}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-build">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Build}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-git">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Git}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-test">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Test}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-navigate">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Navigate}" />
+  </Style>
+  <!-- Disabled commands dim their icons, colored or not. -->
+  <Style Selector="MenuItem:disabled controls|Icon">
+    <Setter Property="Opacity" Value="0.4" />
+  </Style>
+  <Style Selector="Button:disabled controls|Icon">
+    <Setter Property="Opacity" Value="0.4" />
   </Style>
   <Style Selector="Button.searchBox">
     <Setter Property="Background" Value="{DynamicResource Shell.Search}" />

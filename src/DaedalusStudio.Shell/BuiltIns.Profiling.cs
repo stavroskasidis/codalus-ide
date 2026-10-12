@@ -16,8 +16,8 @@ internal static partial class BuiltIns
 {
     public const string ProfilingKeybindings = """
         [
-          { "key": "alt+f2", "command": "profiler.show" },
-          { "key": "ctrl+alt+f2", "command": "diagnostics.showDiagnosticTools" }
+          { "key": "alt+f2", "linux": "shift+alt+f2", "command": "profiler.show" },
+          { "key": "ctrl+alt+f2", "linux": "ctrl+shift+f2", "command": "diagnostics.showDiagnosticTools" }
         ]
         """;
 
@@ -95,10 +95,6 @@ internal static partial class BuiltIns
 
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("debug"), "profiler.show", "7-profiling", 1),
-            Item(MenuLocations.MenuBar("debug"), "profiler.stop", "7-profiling", 2, "profilerCollecting"),
-            Item(MenuLocations.MenuBar("debug"), "profiler.open", "7-profiling", 3),
-            Item(MenuLocations.MenuBar("debug"), "profiler.toggleHotLines", "7-profiling", 4),
             Item(DebugWindowsMenu, "diagnostics.showDiagnosticTools", "windows", AlphabeticalOrder("Diagnostic Tools")),
             Item(OtherWindowsMenu, "diagnostics.showCounters", "windows", AlphabeticalOrder(".NET Counters")),
         ]);

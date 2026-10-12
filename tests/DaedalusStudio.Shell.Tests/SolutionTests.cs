@@ -114,8 +114,10 @@ public class SolutionTests
         await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is DaedalusStudio.Shell.Editor.CodeEditorDocument { Title: "Order.cs" });
         Assert.Contains("namespace App;", File.ReadAllText(Path.Combine(appDir, "Order.cs")), StringComparison.Ordinal);
 
+        // The new file's editor took the focus (M34a: editors now report it); back to the Solution Explorer, as a user would.
         explorer.Reveal("f:" + Path.Combine(appDir, "appsettings.json"));
         Assert.Equal("appsettings.json", explorer.Selected?.Name);
+        f.Shell.Workbench.Context.Set("focusedView", SolutionExplorerViewModel.ToolWindowId);
         f.Shell.Run("explorer.rename");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.InputText = "Order.cs";
@@ -129,6 +131,7 @@ public class SolutionTests
 
         await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Name == "settings.json"), seconds: 30);
         explorer.Reveal("f:" + Path.Combine(appDir, "settings.json"));
+        f.Shell.Workbench.Context.Set("focusedView", SolutionExplorerViewModel.ToolWindowId);
         f.Shell.Run("explorer.delete");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         f.Shell.Dialogs.Accept();

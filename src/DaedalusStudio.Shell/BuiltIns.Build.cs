@@ -16,7 +16,7 @@ internal static partial class BuiltIns
           { "key": "primary+shift+b", "command": "build.buildSolution" },
           { "key": "ctrl+pause", "command": "build.cancel", "when": "buildRunning" },
           { "key": "ctrl+f5", "mac": "cmd+f5", "command": "run.startWithoutDebugging" },
-          { "key": "alt+f10", "command": "run.applyCodeChanges", "when": "hotReloadRunning" },
+          { "key": "alt+f10", "linux": "shift+alt+f10", "command": "run.applyCodeChanges", "when": "hotReloadRunning" },
           { "key": "shift+f5", "command": "run.stop", "when": "programRunning && !debugActive" }
         ]
         """;
@@ -200,8 +200,6 @@ internal static partial class BuiltIns
 
     public static void RegisterBuildMenus(MenuRegistry menus)
     {
-        menus.AddMenuBarMenu(new MenuBarMenu("build", "_Build", 50));
-        menus.AddMenuBarMenu(new MenuBarMenu("debug", "_Debug", 60));
         var shell = ContributionSource.Shell;
         MenuItemRule Item(string location, string command, string group, int order = 0, string? when = null, string? title = null) =>
             new(location, command, shell) { Group = group, Order = order, When = WhenClause.Parse(when), Title = title };
@@ -209,29 +207,7 @@ internal static partial class BuiltIns
         const string Context = SolutionExplorerView.ContextMenuLocation;
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("build"), "build.buildSolution", "1-solution", 1),
-            Item(MenuLocations.MenuBar("build"), "build.rebuildSolution", "1-solution", 2),
-            Item(MenuLocations.MenuBar("build"), "build.cleanSolution", "1-solution", 3),
-            Item(MenuLocations.MenuBar("build"), "build.buildProject", "2-project", 1),
-            Item(MenuLocations.MenuBar("build"), "build.rebuildProject", "2-project", 2),
-            Item(MenuLocations.MenuBar("build"), "build.cleanProject", "2-project", 3),
-            Item(MenuLocations.MenuBar("build"), "build.cancel", "3-cancel", 1),
-            Item(MenuLocations.MenuBar("build"), "solution.selectConfiguration", "4-configuration", 1, title: "Configuration…"),
-            Item(MenuLocations.MenuBar("build"), "build.batchBuild", "4-configuration", 2),
-            Item(MenuLocations.MenuBar("build"), "build.checkUpToDate", "5-insights", 1),
-            Item(MenuLocations.MenuBar("build"), "build.showTimings", "5-insights", 2),
-            Item(MenuLocations.MenuBar("build"), "build.buildWithBinaryLog", "5-insights", 3),
-            Item(MenuLocations.MenuBar("build"), "build.openBinaryLog", "5-insights", 4),
-            Item(MenuLocations.MenuBar("build"), "build.openBuildLog", "5-insights", 5),
-            Item(MenuLocations.MenuBar("debug"), "run.startWithoutDebugging", "1-run", 1),
-            Item(MenuLocations.MenuBar("debug"), "run.startWithHotReload", "1-run", 2, "hotReloadSupported"),
-            Item(MenuLocations.MenuBar("debug"), "run.startWithHotReload", "1-run", 2, "!hotReloadSupported", "Start with Hot Reload (needs .NET 6 or later)"),
-            Item(MenuLocations.MenuBar("debug"), "run.applyCodeChanges", "1-run", 3),
-            Item(MenuLocations.MenuBar("debug"), "run.stop", "1-run", 2),
-            Item(MenuLocations.MenuBar("debug"), "run.selectStartupProject", "2-startup", 1),
-            Item(MenuLocations.MenuBar("debug"), "run.selectLaunchProfile", "2-startup", 2),
-            Item(MenuLocations.MenuBar("debug"), "run.configureStartupProjects", "2-startup", 3),
-
+            // The menu bar is BuiltIns.Menus.cs.
             Item(Context, "build.buildSolution", "0-build", 1, "explorerItemKind == solution", "Build Solution"),
             Item(Context, "build.rebuildSolution", "0-build", 2, "explorerItemKind == solution", "Rebuild Solution"),
             Item(Context, "build.cleanSolution", "0-build", 3, "explorerItemKind == solution", "Clean Solution"),

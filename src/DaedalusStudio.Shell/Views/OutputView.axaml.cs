@@ -21,7 +21,16 @@ public sealed partial class OutputView : UserControl, IPaneView
     private OutputChannel? _channel;
     private int _flushScheduled;
 
-    public OutputView() => InitializeComponent();
+    private readonly FollowTail _tail;
+
+    public OutputView()
+    {
+        InitializeComponent();
+        _tail = FollowTail.Attach(Editor);
+    }
+
+    /// <summary>Whether the view sticks to the end of the output (tests).</summary>
+    public bool IsFollowing => _tail.IsFollowing;
 
     /// <summary>The text currently shown (for tests).</summary>
     public string Text => Editor.Text;
@@ -56,6 +65,10 @@ public sealed partial class OutputView : UserControl, IPaneView
         {
             Show(_viewModel?.Selected);
         }
+        else if (e.PropertyName == nameof(OutputViewModel.ScrollLock))
+        {
+            _tail.Enabled = _viewModel is not { ScrollLock: true };
+        }
     }
 
     private void Show(OutputChannel? channel)
@@ -73,7 +86,8 @@ public sealed partial class OutputView : UserControl, IPaneView
             channel.Appended += OnAppended;
         }
 
-        ScrollToEnd();
+        _tail.Enabled = _viewModel is not { ScrollLock: true };
+        _tail.Reset();
     }
 
     private void OnAppended(object? sender, string? text)
@@ -112,14 +126,6 @@ public sealed partial class OutputView : UserControl, IPaneView
             Editor.Document.Insert(Editor.Document.TextLength, appended.ToString());
         }
 
-        ScrollToEnd();
-    }
-
-    private void ScrollToEnd()
-    {
-        if (_viewModel is not { ScrollLock: true })
-        {
-            Editor.ScrollToEnd();
-        }
+        // FollowTail scrolls once layout knows the new end, if the user is still at the end.
     }
 }

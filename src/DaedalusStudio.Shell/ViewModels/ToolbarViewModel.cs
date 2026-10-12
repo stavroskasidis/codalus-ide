@@ -44,6 +44,9 @@ public sealed class ToolbarViewModel : ObservableObject
         RedoCommand = new RelayCommand(redo);
     }
 
+    /// <summary>A command's shortcut on this OS, for the buttons' tooltips (M34a); null when it has none.</summary>
+    public Func<string, string?>? KeyLabel { get; set; }
+
     public ICommand BackCommand => _command("workbench.navigateBack");
 
     public ICommand ForwardCommand => _command("workbench.navigateForward");
