@@ -39,7 +39,8 @@ public sealed class AvaloniaLanguageFixture : LanguageFixture
 
         var seen = false;
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        while (!seen && watch.Elapsed < Timeout)
+        // A loaded runner's first compilation of an Avalonia project (its generators included) can take minutes.
+        while (!seen && watch.Elapsed < 2 * Timeout)
         {
             seen = await SeesAsync(File("AvaloniaApp", "Views", "MainWindow.axaml"), "<DockPanel", 1, "Button")
                    && await SeesAsync(File("AvaloniaControls", "Themes", "Generic.axaml"), "<ControlTheme ", "<ControlTheme ".Length, "BasedOn");
@@ -49,7 +50,7 @@ public sealed class AvaloniaLanguageFixture : LanguageFixture
             }
         }
 
-        Assert.True(seen, "The language host doesn't see Avalonia's types in the fixture's XAML.\n" + string.Join('\n', Log.TakeLast(40)));
+        Assert.True(seen, $"The language host doesn't see Avalonia's types in the fixture's XAML after {watch.Elapsed.TotalSeconds:0} s.\n" + string.Join('\n', Log.TakeLast(40)));
     }
 }
 

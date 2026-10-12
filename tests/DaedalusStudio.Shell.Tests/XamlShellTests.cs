@@ -59,6 +59,11 @@ public sealed class XamlShellTests
         }
 
         Assert.NotNull(preview.Image);
+
+        // The preview fits the pane by default (never above 100%); 100% is the zoom button.
+        Assert.True(preview.FitToPane && preview.Zoom <= 1);
+        preview.ZoomResetCommand.Execute(null);
+        Assert.False(preview.FitToPane);
         Assert.Equal((480d, 360d), (preview.ImageWidth, preview.ImageHeight));
         Assert.Equal(path, f.Shell.PreviewedPath);
 
@@ -79,14 +84,24 @@ public sealed class XamlShellTests
         PreviewPathStep[] button = [new("MainWindow", 0), new("DockPanel", 0), new("StackPanel", 0), new("Button", 0)];
         var bounds = await session.BoundsAsync(button, ShellFixture.RequestTimeout());
         Assert.NotNull(bounds);
-        await f.Shell.SelectFromPreviewAsync(bounds.Value.X + bounds.Value.Width / 2, bounds.Value.Y + bounds.Value.Height / 2);
+        // Asked again while a slow machine is still rendering the edit (the hit test then finds nothing).
+        for (var attempt = 0; attempt < 20 && !editor.Editor.SelectedText.StartsWith("<Button", StringComparison.Ordinal); attempt++)
+        {
+            await f.Shell.SelectFromPreviewAsync(bounds.Value.X + bounds.Value.Width / 2, bounds.Value.Y + bounds.Value.Height / 2);
+            if (!editor.Editor.SelectedText.StartsWith("<Button", StringComparison.Ordinal))
+            {
+                await Task.Delay(500, TestContext.Current.CancellationToken);
+            }
+        }
+
+        Assert.True(editor.Editor.SelectedText.StartsWith("<Button", StringComparison.Ordinal), f.Shell.PreviewerLog.GetText());
         Assert.StartsWith("<Button x:Name=\"IncrementButton\"", editor.Editor.SelectedText, StringComparison.Ordinal);
         Assert.EndsWith("/>", editor.Editor.SelectedText, StringComparison.Ordinal);
 
         // The caret on the greeting outlines it in the preview.
         editor.Editor.SelectionLength = 0;
         editor.Editor.CaretOffset = model.Text.Text.IndexOf("x:Name=\"GreetingText\"", StringComparison.Ordinal);
-        await ShellFixture.PumpUntil(() => preview.Selection is { Y: < 20, Width: > 50 }, seconds: 30);
+        await ShellFixture.PumpUntil(() => preview.Selection is { Y: < 20, Width: > 50 }, seconds: 90);
         Assert.True(preview.HasSelection);
 
         // The loader's errors show with their line; fixing them renders again.
@@ -106,6 +121,10 @@ public sealed class XamlShellTests
         preview.SelectedScale = "200%";
         await ShellFixture.PumpUntil(() => preview.Frame is { Width: 960, Scale: 2 }, seconds: 60);
         Assert.Equal(480d, preview.ImageWidth);
+
+        // Fit again: the frame within the pane.
+        preview.FitCommand.Execute(null);
+        Assert.True(preview.FitToPane && preview.ImageWidth <= 480);
     }
 
     [AvaloniaFact]
@@ -119,6 +138,7 @@ public sealed class XamlShellTests
         f.Shell.ShowXamlPreview();
         var preview = f.Shell.XamlPreview;
         await ShellFixture.PumpUntil(() => preview.FrameCount > 0, seconds: 300);
+        preview.ZoomResetCommand.Execute(null);
         Assert.Equal((240d, 32d), (preview.ImageWidth, preview.ImageHeight));
         var firstFrame = preview.Frame!;
 
