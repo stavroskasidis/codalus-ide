@@ -333,8 +333,11 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             {
                 return _evaluator.Evaluate(project, configuration, platform, context);
             }
+            // The same race as the others: a file rewritten while it is read (a null target name in the evaluator, seen
+            // after Build Events rewrote the project on the hosted Linux and macOS runners).
             catch (Exception ex) when (attempt < 3 && (ex.GetType().Name == "InternalErrorException"
-                                                      || (ex is InvalidOperationException && ex.Message.Contains("equivalent project", StringComparison.Ordinal))))
+                                                      || (ex is InvalidOperationException && ex.Message.Contains("equivalent project", StringComparison.Ordinal))
+                                                      || (ex is ArgumentNullException && ex.StackTrace?.Contains("Microsoft.Build.Evaluation.Evaluator", StringComparison.Ordinal) == true)))
             {
                 Thread.Sleep(50 * attempt);
                 context = EvaluationContext.Create(EvaluationContext.SharingPolicy.Shared); // the shared one may have cached the old file
