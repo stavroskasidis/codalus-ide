@@ -300,6 +300,27 @@ internal sealed class LanguageServer : IAsyncDisposable
         _xamlDiagnostics.OthersChanged();
     }
 
+    private readonly HashSet<string> _xamlExplained = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Says once per file and state why a XAML file has no type information (not an additional file of a project, or no Avalonia in its references).</summary>
+    private void ExplainXaml(Xaml.XamlContext context, Solution solution)
+    {
+        string? reason = context.Project is null
+            ? $"isn't an additional file of a loaded project ({solution.Projects.Count()} projects, {solution.Projects.Sum(p => p.AdditionalDocuments.Count(d => d.FilePath?.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) == true))} .axaml additional files)"
+            : context.Types is { IsAvalonia: false }
+                ? $"is in {context.Project.Name}, whose compilation has no Avalonia ({context.Project.MetadataReferences.Count} references, {context.Project.MetadataReferences.Count(r => r.Display?.Contains("Avalonia", StringComparison.OrdinalIgnoreCase) == true)} of Avalonia)"
+                : null;
+        lock (_xamlExplained)
+        {
+            if (reason is null ? !_xamlExplained.Remove(context.Path) : !_xamlExplained.Add(context.Path))
+            {
+                return;
+            }
+        }
+
+        Log(MessageType.Log, reason is null ? $"XAML: {Path.GetFileName(context.Path)} has its project's types now." : $"XAML: {Path.GetFileName(context.Path)} {reason}.");
+    }
+
     /// <summary>An open XAML file changed (its own diagnostics), or another file did (theirs follow C#).</summary>
     private void XamlChanged(string path)
     {
@@ -334,9 +355,13 @@ internal sealed class LanguageServer : IAsyncDisposable
             if (DocumentUris.ToPath(identifier.Uri) is { } xamlPath && Xaml.XamlContext.IsXaml(xamlPath))
             {
                 // Avalonia XAML (ADR 0047): its own features, never C#'s on a Miscellaneous File.
-                return xaml is not null && await Xaml.XamlContext.CreateAsync(solution, xamlPath, _workspace.OpenText(xamlPath), ct).ConfigureAwait(false) is { } context
-                    ? await xaml(context, context.OffsetOf(position), p, ct).ConfigureAwait(false) ?? empty!
-                    : empty!;
+                var context = xaml is null ? null : await Xaml.XamlContext.CreateAsync(solution, xamlPath, _workspace.OpenText(xamlPath), ct).ConfigureAwait(false);
+                if (context is not null)
+                {
+                    ExplainXaml(context, solution);
+                }
+
+                return context is not null ? await xaml!(context, context.OffsetOf(position), p, ct).ConfigureAwait(false) ?? empty! : empty!;
             }
 
             if (razor is not null && DocumentUris.ToPath(identifier.Uri) is { } path && Razor.RazorFiles.IsRazor(path))
