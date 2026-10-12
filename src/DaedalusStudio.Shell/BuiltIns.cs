@@ -219,7 +219,7 @@ internal static partial class BuiltIns
         ["solutionExplorer", "git.changes", "testExplorer", "bookmarks", "codeDefinition", "errorList", "output", "taskList", "terminal", "notifications", "properties"];
 
     /// <summary>Tool windows whose menu entry is contributed explicitly (with a command that does more than show them).</summary>
-    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId };
+    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId, XamlPreviewViewModel.ToolWindowId };
 
     /// <summary>Where a tool window's <c>workbench.view.*</c> entry goes, or null when it has an explicit one.</summary>
     public static MenuItemRule? ViewMenuEntry(string windowId, string title, string command, ContributionSource source)
@@ -323,6 +323,7 @@ internal static partial class BuiltIns
             .. KeybindingService.ParseRules(WebKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(DataKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(ProfilingKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+        .. KeybindingService.ParseRules(XamlKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         ];
 
     private static CommandHandler Ui(Action action) => async (_, _) =>

@@ -499,7 +499,8 @@ internal static class XamlAnalysis
         XamlLogicalNode Node(XamlElement element, string? type)
         {
             var name = (element.Attribute("x:Name") ?? element.Attribute("Name"))?.Value;
-            return new XamlLogicalNode(type ?? element.LocalName, name, context.Range(element.Start, element.End < 0 ? context.TextString.Length : element.End), [.. Collect(element)]);
+            var end = element.End < 0 ? context.TextString.Length : element.End;
+            return new XamlLogicalNode(type ?? element.LocalName, name, context.Range(element.Start, end), context.Range(element.Start, element.StartTagEnd < 0 ? end : element.StartTagEnd), [.. Collect(element)]);
         }
 
         if (IsLogical(root))

@@ -17,6 +17,7 @@
     <Project Path="src/DaedalusStudio.Debugging/DaedalusStudio.Debugging.csproj" />
     <Project Path="src/DaedalusStudio.Debugging.Host/DaedalusStudio.Debugging.Host.csproj" />
     <Project Path="src/DaedalusStudio.Debugging.StartupHook/DaedalusStudio.Debugging.StartupHook.csproj" />
+    <Project Path="src/DaedalusStudio.Previewer.Agent/DaedalusStudio.Previewer.Agent.csproj" />
     <Project Path="src/DaedalusStudio.Diagnostics.BenchEvents/DaedalusStudio.Diagnostics.BenchEvents.csproj" />
     <Project Path="src/DaedalusStudio.Diagnostics.Host/DaedalusStudio.Diagnostics.Host.csproj" />
     <Project Path="src/DaedalusStudio.Diagnostics.Protocol/DaedalusStudio.Diagnostics.Protocol.csproj" />

@@ -20,6 +20,7 @@ public sealed class TextMateSupport : IRegistryOptions
     private static readonly Dictionary<string, string> s_aliases = new(StringComparer.Ordinal)
     {
         ["msbuild"] = "xml",
+        ["axaml"] = "xml",
         ["editorconfig"] = "ini",
         ["properties"] = "ini",
         ["javascriptreact"] = "javascript",

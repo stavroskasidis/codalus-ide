@@ -107,6 +107,7 @@ public sealed class ViewLocator : IDataTemplate
         AspireViewModel vm => new AspireView { DataContext = vm },
         DiagnosticToolsViewModel vm => new DiagnosticToolsView { DataContext = vm },
         CountersViewModel vm => new CountersView { DataContext = vm },
+        XamlPreviewViewModel vm => new XamlPreviewView { DataContext = vm },
         HttpResponseViewModel vm => new HttpResponseView { DataContext = vm },
         ThreadsViewModel vm => new ThreadsView { DataContext = vm },
         ModulesViewModel vm => new ModulesView { DataContext = vm },

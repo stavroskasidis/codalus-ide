@@ -16,11 +16,14 @@
     <ProjectReference Include="..\DaedalusStudio.Debugging\DaedalusStudio.Debugging.csproj" />
     <!-- Not used by the host: shipped beside it in debughost/, for programs debugged in the terminal (M14c). -->
     <ProjectReference Include="..\DaedalusStudio.Debugging.StartupHook\DaedalusStudio.Debugging.StartupHook.csproj" />
+    <!-- Likewise: the XAML previewer's agent, loaded into Avalonia's designer host (M19a, ADR 0047). -->
+    <ProjectReference Include="..\DaedalusStudio.Previewer.Agent\DaedalusStudio.Previewer.Agent.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- It loads into the user's program, on whatever .NET that runs: plain IL, not code compiled for ours. -->
     <PublishReadyToRunExclude Include="DaedalusStudio.Debugging.StartupHook.dll" />
+    <PublishReadyToRunExclude Include="DaedalusStudio.Previewer.Agent.dll" />
   </ItemGroup>
 
   <ItemGroup>
