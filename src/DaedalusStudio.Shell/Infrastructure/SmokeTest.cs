@@ -1627,8 +1627,26 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         Check(editor.Model.LanguageId == ShellHost.AxamlLanguageId, "the file is Avalonia XAML: " + editor.Model.LanguageId);
         var original = editor.Model.Text.Text;
         MoveCaret(editor, "Text=\"{Binding Greeting}\"", "Text=\"{Binding ".Length);
+        // Asked again every 10 s: on a slow runner the first answers come before the project's compilation is ready.
+        var asked = Stopwatch.StartNew();
         editor.ShowCompletion();
-        await WaitAsync(() => editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Greeting"), "the binding path completes the view model's properties", 120).ConfigureAwait(true);
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Greeting"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                MoveCaret(editor, "Text=\"{Binding Greeting}\"", "Text=\"{Binding ".Length);
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "the binding path completes the view model's properties", 360).ConfigureAwait(true);
         editor.CompletionWindow!.Close();
 
         var started = Stopwatch.StartNew();
