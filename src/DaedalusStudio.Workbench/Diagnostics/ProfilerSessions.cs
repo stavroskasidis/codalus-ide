@@ -9,12 +9,51 @@ public static class ProfilerTools
 {
     public const string Cpu = "cpu";
     public const string Counters = "counters";
+
+    /// <summary>.NET Object Allocation (allocation ticks with their stacks).</summary>
+    public const string Allocations = "allocations";
+
+    /// <summary>.NET Async (the TPL's tasks and async methods).</summary>
+    public const string Async = "async";
+
+    /// <summary>Threads and Contention (lock contention, the thread pool, thread states).</summary>
+    public const string Threads = "threads";
+
+    public const string Exceptions = "exceptions";
+
+    public const string FileIo = "fileio";
+
+    /// <summary>HTTP requests, database commands and <c>Activity</c> spans.</summary>
+    public const string Activities = "activities";
+
+    /// <summary>Memory Usage: GC heap snapshots taken while collecting.</summary>
+    public const string Memory = "memory";
+
+    /// <summary>The tools recorded in the session's trace (all but counters and memory).</summary>
+    public static readonly IReadOnlyList<string> Traced = [Cpu, Allocations, Async, Threads, Exceptions, FileIo, Activities];
+
+    /// <summary>A tool's name as the Performance Profiler shows it.</summary>
+    public static string Title(string tool) => tool switch
+    {
+        Cpu => "CPU Usage",
+        Counters => ".NET Counters",
+        Allocations => ".NET Object Allocation",
+        Async => ".NET Async",
+        Threads => "Threads and Contention",
+        Exceptions => "Exceptions",
+        FileIo => "File I/O",
+        Activities => "Activities",
+        Memory => "Memory Usage",
+        _ => tool,
+    };
 }
 
 /// <summary>
 /// A saved profiling session (the Performance Profiler hub, ADR 0045): a folder under the solution's
-/// <c>.daedalus/profiler/</c> with <c>session.json</c> (this), the CPU trace (<c>cpu.nettrace</c>) and the counters
-/// (<c>counters.json</c>, <see cref="CounterExport"/>'s format). <see cref="Folder"/> is where it was read from.
+/// <c>.daedalus/profiler/</c> with <c>session.json</c> (this), the trace (<c>trace.nettrace</c>; <c>cpu.nettrace</c>
+/// before M18b) with its I/O counters (<c>trace.io.json</c>), the counters (<c>counters.json</c>,
+/// <see cref="CounterExport"/>'s format), the heap snapshots (<c>heap-1.nettrace</c>…) and a full dump
+/// (<c>full.dmp</c>). <see cref="Folder"/> is where it was read from.
 /// </summary>
 public sealed record ProfilerSession(
     string Name,
@@ -26,7 +65,9 @@ public sealed record ProfilerSession(
     int ProcessId,
     IReadOnlyList<string> Tools,
     string? Trace,
-    string? Counters)
+    string? Counters,
+    IReadOnlyList<string>? Snapshots = null,
+    string? Dump = null)
 {
     public const string FileName = "session.json";
     public const string LaunchTarget = "launch";
@@ -42,8 +83,14 @@ public sealed record ProfilerSession(
     public string? CountersPath => Counters is null ? null : Path.Combine(Folder, Counters);
 
     [JsonIgnore]
+    public IReadOnlyList<string> SnapshotPaths => [.. (Snapshots ?? []).Select(s => Path.Combine(Folder, s))];
+
+    [JsonIgnore]
+    public string? DumpPath => Dump is null ? null : Path.Combine(Folder, Dump);
+
+    [JsonIgnore]
     public string Description =>
-        string.Create(CultureInfo.CurrentCulture, $"{StartedAt.LocalDateTime:g} · {DurationSeconds:0.#} s · {string.Join(", ", Tools.Select(t => t == ProfilerTools.Cpu ? "CPU Usage" : ".NET Counters"))}");
+        string.Create(CultureInfo.CurrentCulture, $"{StartedAt.LocalDateTime:g} · {DurationSeconds:0.#} s · {string.Join(", ", Tools.Select(ProfilerTools.Title))}");
 }
 
 /// <summary>Where profiling sessions are kept and how they are listed, saved and deleted.</summary>

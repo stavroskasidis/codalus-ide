@@ -75,6 +75,7 @@ public sealed class ViewLocator : IDataTemplate
         ServiceReferencesViewModel vm => new ServiceReferencesView { DataContext = vm },
         PerformanceProfilerViewModel vm => new PerformanceProfilerView { DataContext = vm },
         ProfilingReportViewModel vm => new ProfilingReportView { DataContext = vm },
+        ProfilingComparisonViewModel vm => new ProfilingComparisonView { DataContext = vm },
         _ => new TextBlock { Text = "This view is not available.", Margin = new Thickness(12) },
     };
 
@@ -107,6 +108,7 @@ public sealed class ViewLocator : IDataTemplate
         AspireViewModel vm => new AspireView { DataContext = vm },
         DiagnosticToolsViewModel vm => new DiagnosticToolsView { DataContext = vm },
         CountersViewModel vm => new CountersView { DataContext = vm },
+        BenchmarksViewModel vm => new BenchmarksView { DataContext = vm },
         XamlPreviewViewModel vm => new XamlPreviewView { DataContext = vm },
         HttpResponseViewModel vm => new HttpResponseView { DataContext = vm },
         ThreadsViewModel vm => new ThreadsView { DataContext = vm },

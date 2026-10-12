@@ -6,7 +6,12 @@
                    x:Class="DaedalusStudio.Shell.Views.ProfilingReportView"
                    x:DataType="vm:ProfilingReportViewModel">
   <local:LoadingView.Styles>
-    <Style Selector="TreeViewItem" x:DataType="vm:CpuTreeNodeViewModel">
+    <Style Selector="TreeView.cpu TreeViewItem" x:DataType="vm:CpuTreeNodeViewModel">
+      <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+      <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+      <Setter Property="MinHeight" Value="20" />
+    </Style>
+    <Style Selector="TreeView.heap TreeViewItem" x:DataType="vm:HeapReferrerNodeViewModel">
       <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
       <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
       <Setter Property="MinHeight" Value="20" />
@@ -32,6 +37,13 @@
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
+          <ComboBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" MinWidth="200" Margin="0,0,12,0" IsVisible="{Binding HasProfiles}" AutomationProperties.Name="Stacks of" ToolTip.Tip="What the call tree, bottom-up, functions and flame graph count">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ProfileChoice">
+                <TextBlock Text="{Binding Text}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
           <CheckBox Content="Include native code and waiting" IsChecked="{Binding IncludeExternal}" Margin="0,0,12,0" ToolTip.Tip="EventPipe samples every managed thread; samples outside managed code (native code, waits) are left out unless this is on." />
           <CheckBox Content="Show hot lines in the editor" IsChecked="{Binding ShowHotLines}" />
         </WrapPanel>
@@ -40,7 +52,7 @@
     </StackPanel>
     <TabControl x:Name="Tabs" SelectedIndex="{Binding SelectedTab}" Padding="0,6,0,0">
       <TabItem Header="Call Tree" IsVisible="{Binding HasCpu}">
-        <TreeView x:Name="CallTreeView" ItemsSource="{Binding CallTree}" AutomationProperties.Name="Call tree, top down">
+        <TreeView x:Name="CallTreeView" Classes="cpu" ItemsSource="{Binding CallTree}" AutomationProperties.Name="Call tree, top down">
           <TreeView.ItemTemplate>
             <TreeDataTemplate x:DataType="vm:CpuTreeNodeViewModel" ItemsSource="{Binding Children}">
               <StackPanel Orientation="Horizontal" Spacing="8">
@@ -54,7 +66,7 @@
         </TreeView>
       </TabItem>
       <TabItem Header="Bottom-Up" IsVisible="{Binding HasCpu}">
-        <TreeView x:Name="BottomUpView" ItemsSource="{Binding BottomUp}" AutomationProperties.Name="Hot functions and their callers, bottom up">
+        <TreeView x:Name="BottomUpView" Classes="cpu" ItemsSource="{Binding BottomUp}" AutomationProperties.Name="Hot functions and their callers, bottom up">
           <TreeView.ItemTemplate>
             <TreeDataTemplate x:DataType="vm:CpuTreeNodeViewModel" ItemsSource="{Binding Children}">
               <StackPanel Orientation="Horizontal" Spacing="8">
@@ -171,6 +183,282 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+      </TabItem>
+      <TabItem Header="Allocations" IsVisible="{Binding HasAllocations}">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,6" Text="The types allocated, by the KB their allocation samples stand for (the runtime samples about every 100 KB); expand a type for the stacks that allocate it. Choose Allocations above to see them in the call tree and the flame graph." />
+          <TreeView x:Name="AllocationTree" Classes="cpu" ItemsSource="{Binding AllocationTypes}" AutomationProperties.Name="Allocated types and their allocating stacks">
+            <TreeView.ItemTemplate>
+              <TreeDataTemplate x:DataType="vm:CpuTreeNodeViewModel" ItemsSource="{Binding Children}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Inclusive}" Width="56" TextAlignment="Right" ToolTip.Tip="Share of the KB allocated" />
+                  <TextBlock Text="{Binding Samples, StringFormat='{}{0} KB'}" Width="90" TextAlignment="Right" Classes="muted" />
+                  <TextBlock Text="{Binding Name}" MaxWidth="900" TextTrimming="CharacterEllipsis" Classes.muted="{Binding IsPlaceholder}" />
+                  <TextBlock Text="{Binding Module}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                </StackPanel>
+              </TreeDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="Memory" IsVisible="{Binding HasMemory}">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,6">
+            <WrapPanel Orientation="Horizontal">
+              <ComboBox ItemsSource="{Binding Snapshots}" SelectedItem="{Binding SelectedSnapshot}" MinWidth="280" Margin="0,0,8,0" AutomationProperties.Name="Heap snapshot">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:HeapSnapshotRow">
+                    <TextBlock Text="{Binding Text}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <ComboBox ItemsSource="{Binding Baselines}" SelectedItem="{Binding SelectedBaseline}" MinWidth="260" Margin="0,0,8,0" AutomationProperties.Name="Compare with">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:HeapBaselineChoice">
+                    <TextBlock Text="{Binding Text}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <TextBox Text="{Binding HeapSearch}" PlaceholderText="Search types" MinWidth="180" Margin="0,0,6,0" AutomationProperties.Name="Search types" />
+              <Button Content="Search" Command="{Binding SearchHeapCommand}" Margin="0,0,12,0" />
+              <Button Content="Inspect Objects in the Full Dump" Command="{Binding InspectDumpCommand}" IsVisible="{Binding HasDump}" />
+            </WrapPanel>
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding HeapSummary}" AutomationProperties.LiveSetting="Polite" />
+          </StackPanel>
+          <Grid ColumnDefinitions="3*,4,2*">
+            <ListBox x:Name="HeapTypeList" ItemsSource="{Binding HeapTypes}" SelectedItem="{Binding SelectedHeapType}" AutomationProperties.Name="Types in the snapshot">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:HeapTypeRow">
+                  <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                    <TextBlock Text="{Binding Size}" Width="80" TextAlignment="Right" />
+                    <TextBlock Text="{Binding Count}" Width="80" TextAlignment="Right" Classes="muted" />
+                    <TextBlock Text="{Binding SizeDiff}" Width="80" TextAlignment="Right" Foreground="{DynamicResource Shell.Error}" IsVisible="{Binding SizeDiff, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <TextBlock Text="{Binding CountDiff}" Width="70" TextAlignment="Right" Classes="muted" IsVisible="{Binding CountDiff, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <TextBlock Text="{Binding Name}" MaxWidth="700" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+            <DockPanel Grid.Column="2" Margin="6,0,0,0">
+              <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Paths to roots: what keeps them alive" Margin="0,0,0,4" />
+              <TreeView x:Name="RootsTree" Classes="heap" ItemsSource="{Binding Referrers}" AutomationProperties.Name="Paths to roots of the selected type">
+                <TreeView.ItemTemplate>
+                  <TreeDataTemplate x:DataType="vm:HeapReferrerNodeViewModel" ItemsSource="{Binding Children}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Count}" Width="100" TextAlignment="Right" />
+                      <TextBlock Text="{Binding Name}" FontWeight="{Binding IsRoot, Converter={x:Static local:ProfilingReportView.BoldWhen}}" MaxWidth="600" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Size}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </TreeDataTemplate>
+                </TreeView.ItemTemplate>
+              </TreeView>
+            </DockPanel>
+          </Grid>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header=".NET Async" IsVisible="{Binding HasAsync}">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,6">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Text="{Binding TaskSearch}" PlaceholderText="Search tasks and async methods" AutomationProperties.Name="Search tasks" />
+              <Button Grid.Column="1" Margin="6,0,0,0" Content="Search" Command="{Binding SearchTasksCommand}" />
+            </Grid>
+            <TextBlock Classes="muted" Text="{Binding AsyncSummary}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="3*,4,2*">
+            <ListBox x:Name="TaskList" ItemsSource="{Binding Tasks}" SelectedItem="{Binding SelectedTask}" AutomationProperties.Name="Tasks and async methods, the longest first">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:AsyncTaskRow">
+                  <Grid ColumnDefinitions="90,200,*" AutomationProperties.Name="{Binding AccessibleName}">
+                    <TextBlock Text="{Binding Duration}" TextAlignment="Right" Margin="0,0,8,0" />
+                    <controls:SpanBar Grid.Column="1" Start="{Binding BarStart}" Length="{Binding BarLength}" Fill="{DynamicResource Shell.Accent}" Height="14" Margin="0,0,8,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+            <DockPanel Grid.Column="2" Margin="6,0,0,0">
+              <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Started from" Margin="0,0,0,4" />
+              <ListBox ItemsSource="{Binding TaskStack}" AutomationProperties.Name="The stack that started the task" />
+            </DockPanel>
+          </Grid>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="Threads" IsVisible="{Binding HasThreads}">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Classes="muted" TextWrapping="Wrap" Margin="0,0,0,6" Text="{Binding ThreadsSummary}" />
+          <Grid RowDefinitions="2*,4,*">
+            <ListBox x:Name="ThreadList" ItemsSource="{Binding ThreadRows}" AutomationProperties.Name="Threads and their states over time">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ThreadTimelineRow">
+                  <Grid ColumnDefinitions="220,*,300" AutomationProperties.Name="{Binding AccessibleName}">
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    <controls:StateStrip Grid.Column="1" States="{Binding States}" Height="16" Margin="8,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding Summary}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <GridSplitter Grid.Row="1" ResizeDirection="Rows" />
+            <Grid Grid.Row="2" ColumnDefinitions="*,4,*">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Lock contention: the waiting stacks" Margin="0,4" />
+                <TreeView Classes="cpu" ItemsSource="{Binding ContentionTree}" AutomationProperties.Name="Lock contention and the stacks that waited">
+                  <TreeView.ItemTemplate>
+                    <TreeDataTemplate x:DataType="vm:CpuTreeNodeViewModel" ItemsSource="{Binding Children}">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding Inclusive}" Width="56" TextAlignment="Right" ToolTip.Tip="Share of the time waited" />
+                        <TextBlock Text="{Binding Name}" MaxWidth="700" TextTrimming="CharacterEllipsis" Classes.muted="{Binding IsPlaceholder}" />
+                      </StackPanel>
+                    </TreeDataTemplate>
+                  </TreeView.ItemTemplate>
+                </TreeView>
+              </DockPanel>
+              <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+              <DockPanel Grid.Column="2" Margin="6,0,0,0">
+                <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Thread pool" Margin="0,4" />
+                <ListBox ItemsSource="{Binding PoolEvents}" AutomationProperties.Name="Thread pool injections and retirements">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ThreadPoolRow">
+                      <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                        <TextBlock Text="{Binding Time}" Width="70" Classes="muted" />
+                        <TextBlock Text="{Binding Text}" FontWeight="{Binding IsStarvation, Converter={x:Static local:ProfilingReportView.BoldWhen}}" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </DockPanel>
+            </Grid>
+          </Grid>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="Exceptions" IsVisible="{Binding HasExceptions}">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,6">
+            <TextBlock Classes="muted" Text="{Binding ExceptionsSummary}" />
+            <controls:SampleTimeline Samples="{Binding ExceptionTimeline}" Height="40" BarBrush="{DynamicResource Shell.Error}" SelectionBrush="{DynamicResource Shell.Focus}"
+                                     AutomationProperties.Name="Exceptions over time" />
+          </StackPanel>
+          <Grid RowDefinitions="2*,4,*">
+            <ListBox x:Name="ExceptionGroupList" ItemsSource="{Binding ExceptionGroups}" AutomationProperties.Name="Exceptions by type and throw site; Enter opens the throw site">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ExceptionGroupRow">
+                  <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Count}" Width="56" TextAlignment="Right" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Type}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding ThrowSite, StringFormat='thrown by {0}'}" TextTrimming="CharacterEllipsis" MaxWidth="700" />
+                      <TextBlock Text="{Binding Location}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Message}" Classes="muted" FontSize="11" Margin="64,0,0,0" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <GridSplitter Grid.Row="1" ResizeDirection="Rows" />
+            <ListBox Grid.Row="2" ItemsSource="{Binding RecentExceptions}" AutomationProperties.Name="The last exceptions thrown">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ExceptionEventRow">
+                  <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                    <TextBlock Text="{Binding Time}" Width="70" Classes="muted" />
+                    <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Grid>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="File I/O" IsVisible="{Binding HasFileIo}">
+        <StackPanel Spacing="8">
+          <TextBlock FontWeight="SemiBold" Text="{Binding IoSummary}" AutomationProperties.LiveSetting="Polite" />
+          <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding IoSource}" />
+          <controls:TimeSeriesChart Caption="Read" Unit="KB/s" Points="{Binding IoRead}" WindowSeconds="{Binding IoWindow}" Height="90"
+                                    Stroke="{DynamicResource Shell.Info}" Foreground="{DynamicResource Shell.MutedForeground}" GridBrush="{DynamicResource Shell.Border}"
+                                    AutomationProperties.Name="Bytes read per second over the trace" />
+          <controls:TimeSeriesChart Caption="Written" Unit="KB/s" Points="{Binding IoWrite}" WindowSeconds="{Binding IoWindow}" Height="90"
+                                    Stroke="{DynamicResource Shell.Modified}" Foreground="{DynamicResource Shell.MutedForeground}" GridBrush="{DynamicResource Shell.Border}"
+                                    AutomationProperties.Name="Bytes written per second over the trace" />
+        </StackPanel>
+      </TabItem>
+      <TabItem Header="Activities" IsVisible="{Binding HasActivities}">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <ComboBox SelectedIndex="{Binding ActivityKind}" MinWidth="200" AutomationProperties.Name="Activities to show">
+                <ComboBoxItem Content="HTTP requests" />
+                <ComboBoxItem Content="Database commands" />
+                <ComboBoxItem Content="Activity spans" />
+              </ComboBox>
+              <CheckBox Content="In time order" IsChecked="{Binding ActivitiesByTime}" />
+            </StackPanel>
+            <TextBlock Classes="muted" Text="{Binding ActivitiesSummary}" AutomationProperties.LiveSetting="Polite" />
+          </StackPanel>
+          <ListBox x:Name="ActivityList" ItemsSource="{Binding Activities}" AutomationProperties.Name="Requests, commands or spans">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ActivityRow">
+                <Grid ColumnDefinitions="90,240,*" AutomationProperties.Name="{Binding AccessibleName}">
+                  <TextBlock Text="{Binding Duration}" TextAlignment="Right" Margin="0,0,8,0" Foreground="{DynamicResource Shell.Error}" IsVisible="{Binding Failed}" />
+                  <TextBlock Text="{Binding Duration}" TextAlignment="Right" Margin="0,0,8,0" IsVisible="{Binding !Failed}" />
+                  <controls:SpanBar Grid.Column="1" Start="{Binding BarStart}" Length="{Binding BarLength}" Fill="{DynamicResource Shell.Info}" Height="14" Margin="0,0,8,0" />
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" Margin="{Binding Indent}">
+                    <TextBlock Text="{Binding Name}" MaxWidth="700" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="11" VerticalAlignment="Center" MaxWidth="500" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+      <TabItem Header="Events" IsVisible="{Binding HasEvents}">
+        <Grid ColumnDefinitions="2*,4,5*">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Events by provider (double-click to filter)" Margin="0,0,0,4" />
+            <ListBox x:Name="EventCountList" ItemsSource="{Binding EventCounts}" AutomationProperties.Name="Event counts by provider and name">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:EventCountRow">
+                  <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.Name="{Binding AccessibleName}">
+                    <TextBlock Text="{Binding Text}" Width="70" TextAlignment="Right" />
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+          <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+          <DockPanel Grid.Column="2" Margin="6,0,0,0">
+            <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,6">
+              <WrapPanel Orientation="Horizontal">
+                <TextBox Text="{Binding EventProvider}" PlaceholderText="Providers" MinWidth="180" Margin="0,0,6,0" AutomationProperties.Name="Providers, comma-separated" />
+                <TextBox Text="{Binding EventName}" PlaceholderText="Event names" MinWidth="160" Margin="0,0,6,0" AutomationProperties.Name="Event names, comma-separated" />
+                <TextBox Text="{Binding EventText}" PlaceholderText="Text in the payload" MinWidth="160" Margin="0,0,6,0" AutomationProperties.Name="Text in the payload" />
+                <Button Content="Filter" Command="{Binding FilterEventsCommand}" Margin="0,0,12,0" />
+                <Button Content="Export for Speedscope…" Command="{Binding ExportSpeedscopeCommand}" Margin="0,0,6,0" ToolTip.Tip="The current stack profile and filter, in Speedscope's format" />
+                <Button Content="Export Chromium Trace…" Command="{Binding ExportChromiumCommand}" Margin="0,0,6,0" ToolTip.Tip="The current stack profile and the activities, in the Chromium trace event format (Perfetto)" />
+                <Button Content="Save Trace As…" Command="{Binding SaveTraceCommand}" />
+              </WrapPanel>
+              <TextBlock Classes="muted" Text="{Binding EventsSummary}" AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+            <Button DockPanel.Dock="Bottom" Content="Show More" Command="{Binding MoreEventsCommand}" IsVisible="{Binding HasMoreEvents}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+            <ListBox ItemsSource="{Binding Events}" AutomationProperties.Name="Events">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:TraceEventRowViewModel">
+                  <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Time}" Width="100" Classes="muted" />
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Thread, StringFormat='thread {0}'}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Payload}" Classes="muted" FontSize="11" Margin="108,0,0,0" TextWrapping="Wrap" MaxHeight="48" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+        </Grid>
       </TabItem>
     </TabControl>
   </DockPanel>

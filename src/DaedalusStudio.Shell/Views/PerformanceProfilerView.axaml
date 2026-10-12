@@ -10,12 +10,15 @@
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="Choose the tools and what to profile, then Start. Stop Collection (or the program ending) saves the session in the solution's .daedalus/profiler folder and opens its report." />
 
       <TextBlock FontWeight="SemiBold" Text="Tools" Margin="0,6,0,0" />
-      <CheckBox x:Name="CpuBox" IsChecked="{Binding UseCpu}" AutomationProperties.Name="CPU Usage">
-        <TextBlock TextWrapping="Wrap" Text="CPU Usage: where the time goes, as a call tree, hot paths, functions and a flame graph (EventPipe's sampling profiler)" />
-      </CheckBox>
-      <CheckBox IsChecked="{Binding UseCounters}" AutomationProperties.Name=".NET Counters">
-        <TextBlock TextWrapping="Wrap" Text=".NET Counters: CPU, memory, garbage collections and exceptions over time (the runtime's counters)" />
-      </CheckBox>
+      <ItemsControl x:Name="ToolList" ItemsSource="{Binding Tools}" Focusable="True">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ProfilerToolChoice">
+            <CheckBox IsChecked="{Binding IsSelected}" AutomationProperties.Name="{Binding Title}" Margin="0,2">
+              <TextBlock TextWrapping="Wrap" Text="{Binding Text}" />
+            </CheckBox>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
 
       <TextBlock FontWeight="SemiBold" Text="Target" Margin="0,6,0,0" />
       <ComboBox SelectedIndex="{Binding TargetIndex}" MinWidth="380" AutomationProperties.Name="What to profile">
@@ -45,6 +48,11 @@
         <Button Content="Stop Collection" Command="{Binding StopCommand}" />
         <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Elapsed}" IsVisible="{Binding IsCollecting}" AutomationProperties.Name="Time collecting" />
       </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanSnapshot}">
+        <Button Content="Take Snapshot" Command="{Binding SnapshotCommand}" ToolTip.Tip="A GC heap snapshot now (a full garbage collection that reports every live object)" />
+        <Button Content="Create Full Dump" Command="{Binding DumpCommand}" ToolTip.Tip="A full dump of the process, to inspect its objects in the report" />
+        <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding SnapshotText}" />
+      </StackPanel>
       <TextBlock TextWrapping="Wrap" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
 
       <TextBlock FontWeight="SemiBold" Text="Sessions" Margin="0,10,0,0" />
@@ -61,6 +69,15 @@
       <StackPanel Orientation="Horizontal" Spacing="6">
         <Button Content="Open Report" Command="{Binding OpenSessionCommand}" />
         <Button Content="Delete" Command="{Binding DeleteSessionCommand}" />
+        <TextBlock VerticalAlignment="Center" Margin="12,0,0,0" Text="Compare with" />
+        <ComboBox ItemsSource="{Binding Sessions}" SelectedItem="{Binding CompareBaseline}" MinWidth="240" AutomationProperties.Name="The session to compare with (the baseline)">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProfilerSessionRowViewModel">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Content="Compare" Command="{Binding CompareCommand}" ToolTip.Tip="The selected session against the baseline: functions and heap growth" />
       </StackPanel>
     </StackPanel>
   </ScrollViewer>

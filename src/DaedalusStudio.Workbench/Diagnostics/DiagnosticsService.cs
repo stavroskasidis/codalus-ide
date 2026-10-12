@@ -121,7 +121,14 @@ public sealed class DiagnosticsService : IAsyncDisposable
     }
 
     /// <summary>Starts recording a CPU trace of a process into <paramref name="outputPath"/>.</summary>
-    public async Task<TraceRecordingHandle> StartTraceAsync(int processId, string outputPath, CancellationToken cancellationToken)
+    public Task<TraceRecordingHandle> StartTraceAsync(int processId, string outputPath, CancellationToken cancellationToken) =>
+        StartTraceAsync(processId, outputPath, null, null, cancellationToken);
+
+    /// <summary>
+    /// Starts recording a trace of a process into <paramref name="outputPath"/>: the <paramref name="tools"/>
+    /// (<see cref="TraceTools"/>; null: CPU only) and any extra <paramref name="providers"/>.
+    /// </summary>
+    public async Task<TraceRecordingHandle> StartTraceAsync(int processId, string outputPath, IReadOnlyList<string>? tools, IReadOnlyList<TraceProvider>? providers, CancellationToken cancellationToken)
     {
         var host = await HostAsync(cancellationToken).ConfigureAwait(false);
         var id = "trace-" + Guid.NewGuid().ToString("N");
@@ -129,7 +136,7 @@ public sealed class DiagnosticsService : IAsyncDisposable
         _recordings[id] = recording;
         try
         {
-            var started = await host.InvokeAsync(DiagnosticsMethods.TraceStart, new TraceStartParams(id, processId, outputPath), Json.TraceStartParams, Json.SessionStartResult, cancellationToken).ConfigureAwait(false);
+            var started = await host.InvokeAsync(DiagnosticsMethods.TraceStart, new TraceStartParams(id, processId, outputPath, tools, providers), Json.TraceStartParams, Json.SessionStartResult, cancellationToken).ConfigureAwait(false);
             recording.ProcessName = started.ProcessName;
             return recording;
         }
@@ -159,6 +166,18 @@ public sealed class DiagnosticsService : IAsyncDisposable
         var trace = new CpuTrace(this, path);
         await trace.OpenAsync(cancellationToken).ConfigureAwait(false);
         return trace;
+    }
+
+    /// <summary>Takes a GC heap snapshot of a process (an induced full GC) into <paramref name="outputPath"/>.</summary>
+    public async Task<HeapSnapshotResult> TakeHeapSnapshotAsync(int processId, string outputPath, CancellationToken cancellationToken) =>
+        await InvokeAsync(DiagnosticsMethods.HeapSnapshot, new HeapSnapshotParams(processId, outputPath), Json.HeapSnapshotParams, Json.HeapSnapshotResult, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Opens a heap snapshot in the host (it stays there; its views are asked for a page at a time).</summary>
+    public async Task<HeapSnapshot> OpenHeapSnapshotAsync(string path, CancellationToken cancellationToken)
+    {
+        var snapshot = new HeapSnapshot(this, path);
+        await snapshot.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return snapshot;
     }
 
     internal async Task<TResult> InvokeAsync<TParams, TResult>(string method, TParams parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> parametersInfo, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken)

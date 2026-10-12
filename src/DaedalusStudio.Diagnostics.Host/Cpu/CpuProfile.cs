@@ -2,8 +2,11 @@ using System.Runtime.InteropServices;
 
 namespace DaedalusStudio.Diagnostics.Host.Cpu;
 
-/// <summary>A sample: when (milliseconds from the trace's start), which thread, its stack (leaf frame), and whether it was in native code.</summary>
-internal readonly record struct CpuSample(double Time, int Thread, int Stack, bool External);
+/// <summary>
+/// A sample: when (milliseconds from the trace's start), which thread, its stack (leaf frame), whether it was in
+/// native code, and its weight (1 for a CPU sample; KB for an allocation tick, microseconds for a contention).
+/// </summary>
+internal readonly record struct CpuSample(double Time, int Thread, int Stack, bool External, int Weight = 1);
 
 /// <summary>
 /// A CPU sampling profile, independent of where it came from (ADR 0044): the functions, the top-down call tree of
@@ -38,6 +41,9 @@ internal sealed class CpuProfile
     public int? ProcessId { get; set; }
 
     public double Duration { get; set; }
+
+    /// <summary>What a sample's weight counts (<c>samples</c>, <c>KB</c>, <c>µs</c>, <c>exceptions</c>).</summary>
+    public string Unit { get; set; } = "samples";
 
     public int FunctionCount => _functionNames.Count;
 
@@ -115,9 +121,9 @@ internal sealed class CpuProfile
         return _stackParent.Count - 1;
     }
 
-    public void AddSample(double time, int thread, int stack, bool external)
+    public void AddSample(double time, int thread, int stack, bool external, int weight = 1)
     {
-        _samples.Add(new CpuSample(time, thread, stack, external));
+        _samples.Add(new CpuSample(time, thread, stack, external, Math.Max(1, weight)));
         _threadNames.TryAdd(thread, "Thread " + thread.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 

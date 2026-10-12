@@ -423,6 +423,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             AspireViewModel.ToolWindowId => AspireWindow,
             DiagnosticToolsViewModel.ToolWindowId => DiagnosticTools,
             CountersViewModel.ToolWindowId => CountersWindow,
+            BenchmarksViewModel.ToolWindowId => BenchmarksWindow,
             XamlPreviewViewModel.ToolWindowId => XamlPreview,
             _ => null,
         },
