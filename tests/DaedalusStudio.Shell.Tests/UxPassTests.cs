@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using DaedalusStudio.Platform;
+using DaedalusStudio.Projects.Protocol;
 using DaedalusStudio.Shell.Controls;
 using DaedalusStudio.Shell.Editor;
 using DaedalusStudio.Shell.Theming;
@@ -93,7 +94,7 @@ public class UxPassTests
         var intelliSense = menus.GetItems(BuiltIns.EditIntelliSenseMenu);
         Assert.Equal(["editor.action.triggerSuggest", "editor.action.triggerParameterHints", "editor.action.showHover"], intelliSense.Take(3).Select(i => i.Command));
         var mac = f.Shell.Workbench.Platform == PlatformKind.MacOS;
-        Assert.Equal(mac ? "⌃Space" : "Ctrl+Space", intelliSense[0].KeyLabel);
+        Assert.Equal(mac ? "⌥⎋" : "Ctrl+Space", intelliSense[0].KeyLabel); // macOS takes ⌃Space for input sources by default
         Assert.Equal(mac ? "⌃⇧Space" : "Ctrl+Shift+Space", intelliSense[1].KeyLabel);
         Assert.Contains(menus.GetItems(BuiltIns.EditAdvancedMenu), i => i.Command == "editor.action.changeEndOfLine");
         Assert.Contains(menus.GetItems(BuiltIns.EditAdvancedMenu), i => i.Command == "editor.action.duplicateSelection");
@@ -169,12 +170,14 @@ public class UxPassTests
         {
             var icon = IconSet.GetFilled(name);
             Assert.True(icon is not null, $"{name} ({file}) has no compiled geometry");
-            var bounds = icon.Geometry.Bounds;
+            var bounds = icon.Bounds;
             Assert.True(bounds.Width > 1 && bounds.Height > 1 && bounds.Right <= icon.DesignSize + 0.01 && bounds.Bottom <= icon.DesignSize + 0.01, $"{name}: {bounds}");
         }
 
         Assert.All(CommandIcons.All, pair => Assert.True(IconSet.GetFilled(pair.Value.Kind) is not null || IconSet.Get(pair.Value.Kind) is not null, pair.Key));
-        Assert.All(FluentIcons.Names, name => Assert.Contains(name, File.ReadAllLines(Path.Combine(ShellFixture.RepoRoot, "src", "DaedalusStudio.Shell", "Icons", "fluent-icons.txt"))));
+        var listed = File.ReadAllLines(Path.Combine(ShellFixture.RepoRoot, "src", "DaedalusStudio.Shell", "Icons", "fluent-icons.txt"))
+            .Concat(File.ReadAllLines(Path.Combine(ShellFixture.RepoRoot, "src", "DaedalusStudio.Shell", "Icons", "material-icons.txt"))).ToHashSet(StringComparer.Ordinal);
+        Assert.All(CompiledIcons.Names, name => Assert.Contains(name, listed));
     }
 
     [AvaloniaFact]
@@ -318,10 +321,10 @@ public class UxPassTests
 
         Assert.Equal(["ctrl+shift+space"], Keys("editor.action.triggerParameterHints"));
 
-        // The menus show Ctrl+Space (the last binding wins the label).
+        // The menus show Ctrl+Space, and ⌥⎋ on macOS (the last binding wins the label).
         var service = new KeybindingService(new ContextKeyService(), platform);
         service.SetDefaults(rules);
-        Assert.Equal("ctrl+space", service.GetBinding("editor.action.triggerSuggest")!.ToString());
+        Assert.Equal(platform == PlatformKind.MacOS ? "alt+escape" : "ctrl+space", service.GetBinding("editor.action.triggerSuggest")!.ToString());
     }
 
     /// <summary>Shortcuts each OS keeps for itself (M34a's audit, docs/user-guide/keyboard.md).</summary>
@@ -385,14 +388,98 @@ public class UxPassTests
         Assert.True(Equals(f.Shell.Workbench.Context.GetValue("editorTextFocus"), true), $"the editor has the keyboard focus: {f.Shell.Workbench.Context.GetValue("focusedView")}, {f.Window.FocusManager?.GetFocusedElement()}, {editor.Editor.TextArea.IsFocused}, {PaneHost.Of(editor.Editor.TextArea)?.Dockable}");
         f.Press(Key.Space, RawInputModifiers.Control);
         Assert.Contains("editor.action.triggerSuggest", executed);
-        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Reporter"), seconds: 60);
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Reporter"), seconds: 60);
+        Assert.Equal("Reporter", editor.CompletionWindow!.CompletionList.SelectedItem?.Text); // the typed prefix's best match
         Assert.Equal(text, editor.Model.Text.Text); // no space typed
+        f.Press(Key.Escape);
+
+        // After "Con": the shortest of the equal matches, Console (not ConcurrentExclusiveSchedulerPair).
+        editor.Editor.CaretOffset = text.IndexOf("Console.WriteLine", StringComparison.Ordinal) + "Con".Length;
+        f.Press(Key.Space, RawInputModifiers.Control);
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Console"), seconds: 60);
+        Assert.Equal("Console", editor.CompletionWindow!.CompletionList.SelectedItem!.Text);
         f.Press(Key.Escape);
 
         // Ctrl+Shift+Space is Parameter Info.
         editor.Editor.CaretOffset = text.IndexOf("Describe(", StringComparison.Ordinal) + "Describe(".Length;
         f.Press(Key.Space, RawInputModifiers.Control | RawInputModifiers.Shift);
         await ShellFixture.PumpUntil(() => executed.Contains("editor.action.triggerParameterHints"));
+    }
+
+    // ------------------------------------------------------------------ file icons, the navigation bar, outlining
+
+    [AvaloniaFact]
+    public void File_folder_and_project_icons_are_colored_and_compiled()
+    {
+        Assert.Equal("mi:csharp", FileIcons.ForFile("Program.cs"));
+        Assert.Equal("mi:razor", FileIcons.ForFile("Counter.razor"));
+        Assert.Equal("mi:xaml", FileIcons.ForFile("MainWindow.axaml"));
+        Assert.Equal("mi:tune", FileIcons.ForFile("Directory.Build.props"));
+        Assert.Equal("mi:settings", FileIcons.ForFile("appsettings.Development.json"));
+        Assert.Equal("mi:json", FileIcons.ForFile("data.json"));
+        Assert.Equal("mi:yaml", FileIcons.ForFile("ci.yml"));
+        Assert.Equal("mi:readme", FileIcons.ForFile("README.md"));
+        Assert.Equal("mi:document", FileIcons.ForFile("unknown.xyz"));
+        Assert.Equal(FileIcons.Solution, FileIcons.ForFile("App.slnx"));
+        Assert.Equal("mi:folder-config", FileIcons.ForFolder("Properties", open: false));
+        Assert.Equal("mi:folder-public-open", FileIcons.ForFolder("wwwroot", open: true));
+        Assert.Equal("mi:folder-open", FileIcons.ForFolder("Anything", open: true));
+        ProjectInfo Info(string? outputType, bool test = false, params string[] items) =>
+            new("p.csproj", "p", "loaded", null, ["net10.0"], outputType, [.. items.Select(i => new ProjectItemInfo("Content", i, null, null))], [], [], true, test);
+        Assert.Equal("mi:lib", FileIcons.ForProject("Lib.csproj", Info("Library")));
+        Assert.Equal("mi:console", FileIcons.ForProject("App.csproj", Info("Exe")));
+        Assert.Equal("beaker@Test", FileIcons.ForProject("Tests.csproj", Info("Exe", test: true)));
+        Assert.Equal("globe@Navigate", FileIcons.ForProject("Web.csproj", Info("Exe", false, "wwwroot/site.css")));
+
+        // Every icon these produce exists, and Material's keep their own colors.
+        var names = File.ReadAllLines(Path.Combine(ShellFixture.RepoRoot, "src", "DaedalusStudio.Shell", "Icons", "material-icons.txt")).Where(l => l.Length > 0 && !l.StartsWith('#'));
+        foreach (var name in names)
+        {
+            var icon = IconSet.GetFilled(IconSet.MaterialPrefix + name);
+            Assert.True(icon is not null && icon.Layers.Count > 0 && icon.Layers.Any(l => l.Color != 0), name);
+            Assert.True(icon.Bounds.Right <= icon.DesignSize + 0.5 && icon.Bounds.Bottom <= icon.DesignSize + 0.5 && icon.Bounds.X >= -0.5, $"{name}: {icon.Bounds} in {icon.DesignSize}");
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_explorer_tabs_and_navigation_bar_show_file_and_symbol_icons_and_the_outlining_markers_follow_the_theme()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1400;
+        f.Window.Height = 900;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var explorer = f.Shell.Explorer;
+        var program = Path.Combine(folder, "src", "App", "Program.cs");
+        explorer.Reveal("f:" + program);
+        await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Name == "Program.cs"));
+        Assert.Equal("mi:csharp", explorer.Rows.First(r => r.Name == "Program.cs").Icon);
+        Assert.Equal(FileIcons.Solution, explorer.Rows.First(r => r.Node.Kind == DaedalusStudio.Workbench.Projects.ExplorerNodeKind.Solution).Icon);
+        Assert.Equal("mi:console", explorer.Rows.First(r => r.Name == "App").Icon);
+
+        var document = await f.Shell.OpenFileAsync(Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        Assert.NotNull(document);
+        Assert.Equal("mi:csharp", document.TabIcon);
+        await ShellFixture.PumpUntil(() => document.View is { NavigationBar.Types.Count: > 0 });
+        var bar = document.View!.NavigationBar;
+        var pickers = bar.GetVisualDescendants().OfType<ComboBox>().ToList();
+        Assert.Equal(2, pickers.Count);
+        Assert.All(pickers, p => Assert.True(p.Classes.Contains("navigationBar") && p.Bounds.Height <= 24, $"{p.Bounds}"));
+        Assert.Contains("@", bar.Types[0].Icon, StringComparison.Ordinal); // a colored symbol icon
+
+        // The outlining markers take the editor's background and a muted glyph, in every theme.
+        var margin = document.View.Editor.TextArea.LeftMargins.OfType<AvaloniaEdit.Folding.FoldingMargin>().FirstOrDefault();
+        Assert.NotNull(margin);
+        foreach (var theme in new[] { "dark", "light", "blue", "highContrast" })
+        {
+            await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+            await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == theme);
+            ShellFixture.Pump();
+            if (margin is not null)
+            {
+                Assert.Equal(((ISolidColorBrush)document.View.Editor.Background!).Color, ((ISolidColorBrush)margin.FoldingMarkerBackgroundBrush).Color);
+                Assert.NotEqual(Colors.White, theme is "dark" or "highContrast" ? ((ISolidColorBrush)margin.FoldingMarkerBackgroundBrush).Color : default);
+            }
+        }
     }
 
     // ------------------------------------------------------------------ helpers

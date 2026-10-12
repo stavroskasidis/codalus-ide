@@ -59,6 +59,9 @@ public sealed record MenuItem(string Command, string Title, string? KeyLabel, bo
 
     /// <summary>The command's full name (<c>Category: Title</c>) for tooltips.</summary>
     public string? Description { get; init; }
+
+    /// <summary>The keys shown (the command's binding, or the rule's <see cref="MenuItemRule.Keys"/>), for native menus.</summary>
+    public KeySequence? Keys { get; init; }
 }
 
 public sealed class MenuRegistry(CommandRegistry commands, KeybindingService keybindings, IContextKeyReader context)
@@ -175,15 +178,16 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
                 continue;
             }
 
+            var keys = keybindings.GetBinding(rule.Command) ?? (rule.Keys is { } hint ? KeySequence.Parse(hint, keybindings.Platform) : null);
             result.Add(new MenuItem(
                 rule.Command,
                 rule.Title ?? (location == MenuLocations.CommandPalette ? descriptor.DisplayTitle : descriptor.Title),
-                keybindings.GetBinding(rule.Command)?.ToLabel(keybindings.Platform)
-                    ?? (rule.Keys is { } keys ? KeySequence.Parse(keys, keybindings.Platform).ToLabel(keybindings.Platform) : null),
+                keys?.ToLabel(keybindings.Platform),
                 descriptor.Enablement.Evaluate(scope),
                 rule.Group)
             {
                 Description = descriptor.DisplayTitle,
+                Keys = keys,
             });
         }
 

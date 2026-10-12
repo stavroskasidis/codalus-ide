@@ -52,7 +52,7 @@ internal static partial class BuiltIns
     public const string EditorOutliningMenu = "editor/context/outlining";
     public const string EditorBreakpointMenu = "editor/context/breakpoint";
 
-    public static void RegisterMenuBar(MenuRegistry menus)
+    public static void RegisterMenuBar(MenuRegistry menus, DaedalusStudio.Platform.PlatformKind platform)
     {
         menus.AddMenuBarMenu(new MenuBarMenu("file", "_File", 10));
         menus.AddMenuBarMenu(new MenuBarMenu("edit", "_Edit", 20));
@@ -78,6 +78,9 @@ internal static partial class BuiltIns
             Debug = MenuLocations.MenuBar("debug"), Test = MenuLocations.MenuBar("test"), Analyze = MenuLocations.MenuBar("analyze"),
             Tools = MenuLocations.MenuBar("tools"), Window = MenuLocations.MenuBar("window"), Help = MenuLocations.MenuBar("help");
 
+        // macOS apps start Edit with Undo, Redo and the clipboard; a classic IDE starts it with Go To and Find.
+        string Undo = platform == DaedalusStudio.Platform.PlatformKind.MacOS ? "0a-undo" : "2-undo",
+            Clipboard = platform == DaedalusStudio.Platform.PlatformKind.MacOS ? "0b-clipboard" : "3-clipboard";
         menus.Add(
         [
             // File. New ▸ is filled by the templates plugin.
@@ -100,15 +103,15 @@ internal static partial class BuiltIns
             // Edit.
             Sub(Edit, EditGoToMenu, "Go To", "1-go"),
             Sub(Edit, EditFindMenu, "Find and Replace", "1-go"),
-            Item(Edit, "edit.undo", "2-undo", keys: "primary+z"),
-            Item(Edit, "edit.redo", "2-undo", keys: "primary+y"),
-            Item(Edit, "edit.cut", "3-clipboard", keys: "primary+x"),
-            Item(Edit, "edit.copy", "3-clipboard", keys: "primary+c"),
-            Item(Edit, "edit.paste", "3-clipboard", keys: "primary+v"),
-            Item(Edit, "editor.action.pasteFromClipboardRing", "3-clipboard", "Show Clipboard History"),
-            Sub(Edit, EditPasteSpecialMenu, "Paste Special", "3-clipboard"),
+            Item(Edit, "edit.undo", Undo, keys: EditKeys("edit.undo", platform)),
+            Item(Edit, "edit.redo", Undo, keys: EditKeys("edit.redo", platform)),
+            Item(Edit, "edit.cut", Clipboard, keys: EditKeys("edit.cut", platform)),
+            Item(Edit, "edit.copy", Clipboard, keys: EditKeys("edit.copy", platform)),
+            Item(Edit, "edit.paste", Clipboard, keys: EditKeys("edit.paste", platform)),
+            Item(Edit, "editor.action.pasteFromClipboardRing", Clipboard, "Show Clipboard History"),
+            Sub(Edit, EditPasteSpecialMenu, "Paste Special", Clipboard),
             Item(EditPasteSpecialMenu, "editor.action.pasteJsonAsClasses", "1-paste", "Paste JSON as Classes"),
-            Item(Edit, "edit.selectAll", "3-clipboard", keys: "primary+a"),
+            Item(Edit, "edit.selectAll", Clipboard, keys: EditKeys("edit.selectAll", platform)),
             Sub(Edit, EditAdvancedMenu, "Advanced", "4-more"),
             Sub(Edit, EditBookmarksMenu, "Bookmarks", "4-more"),
             Sub(Edit, EditIntelliSenseMenu, "IntelliSense", "4-more"),
@@ -419,7 +422,7 @@ internal static partial class BuiltIns
     /// The code editor's context menu (M34a): refactoring first, then navigation, tests, debugging, then submenus.
     /// Language-specific entries (.http, SQL, XAML) are contributed by their features.
     /// </summary>
-    public static void RegisterEditorContextMenu(MenuRegistry menus)
+    public static void RegisterEditorContextMenu(MenuRegistry menus, DaedalusStudio.Platform.PlatformKind platform)
     {
         var shell = ContributionSource.Shell;
         var order = 0;
@@ -461,9 +464,9 @@ internal static partial class BuiltIns
             Item(EditorOutliningMenu, "editor.action.toggleFold", "1-outlining"),
             Item(EditorOutliningMenu, "editor.action.foldAll", "1-outlining"),
             Item(EditorOutliningMenu, "editor.action.unfoldAll", "1-outlining"),
-            Item(Context, "edit.cut", "7-clipboard", keys: "primary+x"),
-            Item(Context, "edit.copy", "7-clipboard", keys: "primary+c"),
-            Item(Context, "edit.paste", "7-clipboard", keys: "primary+v"),
+            Item(Context, "edit.cut", "7-clipboard", keys: EditKeys("edit.cut", platform)),
+            Item(Context, "edit.copy", "7-clipboard", keys: EditKeys("edit.copy", platform)),
+            Item(Context, "edit.paste", "7-clipboard", keys: EditKeys("edit.paste", platform)),
 
             // The Solution Explorer's Git ▸ (its other entries live with their features).
             MenuItemRule.ForSubmenu(SolutionExplorerView.ContextMenuLocation, SolutionExplorerView.GitMenuLocation, "Git", shell) with { Group = "6-more", Order = 1 },
@@ -480,6 +483,7 @@ internal static partial class BuiltIns
     /// </summary>
     public static void RegisterEditCommands(ShellHost shell)
     {
+        var platform = shell.Workbench.Platform;
         void Add(string id, string title, Action<Views.EditTarget> action) =>
             shell.Workbench.Commands.Register(
                 new CommandDescriptor(id, title, ContributionSource.Shell) { Category = "Edit" },
@@ -488,6 +492,14 @@ internal static partial class BuiltIns
                     if (Views.EditTarget.Current(shell) is { } target)
                     {
                         action(target);
+                        return;
+                    }
+
+                    // Not a text control (the Solution Explorer's Cut, Copy and Paste…): what the same keys do there.
+                    var chord = DaedalusStudio.Platform.KeySequence.Parse(EditKeys(id, platform), platform).Chords[0];
+                    if (shell.Workbench.Keybindings.Peek(chord) is { Kind: Workbench.Keybindings.KeyDispatchKind.Command, Rule: { } rule } && !rule.Command.StartsWith("edit.", StringComparison.Ordinal))
+                    {
+                        shell.Run(rule.Command);
                     }
                 }));
 
@@ -498,4 +510,16 @@ internal static partial class BuiltIns
         Add("edit.paste", "Paste", t => t.Paste());
         Add("edit.selectAll", "Select All", t => t.SelectAll());
     }
+
+    /// <summary>The keys the text controls give Edit's commands on <paramref name="platform"/> (shown in the menus).</summary>
+    public static string EditKeys(string command, DaedalusStudio.Platform.PlatformKind platform) => command switch
+    {
+        "edit.undo" => "primary+z",
+        "edit.redo" => platform == DaedalusStudio.Platform.PlatformKind.MacOS ? "primary+shift+z" : "primary+y",
+        "edit.cut" => "primary+x",
+        "edit.copy" => "primary+c",
+        "edit.paste" => "primary+v",
+        "edit.selectAll" => "primary+a",
+        _ => throw new ArgumentOutOfRangeException(nameof(command)),
+    };
 }

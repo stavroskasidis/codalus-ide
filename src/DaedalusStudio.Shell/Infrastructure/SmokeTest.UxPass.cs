@@ -73,6 +73,9 @@ internal sealed partial class SmokeTest
             area.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Space, KeyModifiers = Avalonia.Input.KeyModifiers.Control, Source = area });
             await WaitAsync(() => program.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Console"), "completion lists Console", 90).ConfigureAwait(true);
             Check(program.Model.Text.Text == original, "Ctrl+Space typed nothing");
+            await WaitAsync(() => program.CompletionWindow?.CompletionList.SelectedItem?.Text == "Console", "the best match of the typed prefix, Console, is selected").ConfigureAwait(true);
+            var column = program.Caret.Column;
+            await WaitAsync(() => shell.StatusBar.Right.Concat(shell.StatusBar.Left).Any(i => i.Text?.Contains($"Col {column}", StringComparison.Ordinal) == true), $"the status bar shows column {column}").ConfigureAwait(true);
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-completion.png", program.CompletionWindow is Popup completion ? [completion] : []);
             program.CompletionWindow?.Close();
@@ -121,6 +124,29 @@ internal sealed partial class SmokeTest
 
             await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         }).ConfigureAwait(true);
+
+        await StepAsync("shell.fileIcons", "M34a", "File-type and project icons in the Solution Explorer and the tabs, the navigation bar and the outlining markers; the gallery in every theme", async () =>
+        {
+            var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(ViewModels.SolutionExplorerViewModel.ToolWindowId, focus: false);
+            shell.Explorer.Reveal("f:" + Program);
+            shell.Explorer.Reveal("f:" + Greeter);
+            await WaitAsync(() => shell.Explorer.Rows.Any(r => r.Name == "Greeter.cs" && r.Icon == "mi:csharp"), "Greeter.cs shows the C# file icon").ConfigureAwait(true);
+            Check(shell.Explorer.Rows.Any(r => r.Name == "Hello" && r.Icon == "mi:console"), "the console app shows its project icon");
+            Check(shell.Explorer.Rows.Any(r => r.Name == "Greetings" && r.Icon == "mi:lib"), "the library shows its project icon");
+            await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 60).ConfigureAwait(true);
+            greeter.Editor.TextArea.Focus();
+            var before = shell.Theme.Setting;
+            foreach (var theme in s_galleryThemes)
+            {
+                await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                await WaitAsync(() => shell.Theme.ActiveTheme == theme, $"the {theme} theme applies").ConfigureAwait(true);
+                await RenderedAsync().ConfigureAwait(true);
+                Screenshot($"smoke-test-m34a-explorer-{theme}.png");
+            }
+
+            await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }, "language.ready").ConfigureAwait(true);
     }
 
     private static bool AtEnd(OutputView view) =>

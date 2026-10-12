@@ -225,6 +225,13 @@ public sealed class CodeEditorView : UserControl, IPaneView
         editor.Bind(TextEditor.BackgroundProperty, this.GetResourceObservable("Shell.Editor.Background"));
         editor.Bind(TextEditor.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
         editor.Bind(TextEditor.LineNumbersForegroundProperty, this.GetResourceObservable("Shell.Editor.LineNumbers"));
+
+        // Outlining markers (M34a): the theme's muted glyph on the editor's background, brighter on hover (they were
+        // white boxes in the dark themes).
+        editor.Bind(AvaloniaEdit.Folding.FoldingMargin.FoldingMarkerBrushProperty, this.GetResourceObservable("Shell.Editor.Fold"));
+        editor.Bind(AvaloniaEdit.Folding.FoldingMargin.FoldingMarkerBackgroundBrushProperty, this.GetResourceObservable("Shell.Editor.Background"));
+        editor.Bind(AvaloniaEdit.Folding.FoldingMargin.SelectedFoldingMarkerBrushProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
+        editor.Bind(AvaloniaEdit.Folding.FoldingMargin.SelectedFoldingMarkerBackgroundBrushProperty, this.GetResourceObservable("Shell.Editor.Fold.Hover"));
         AutomationProperties.SetName(editor, _document.Model.Path);
         var controller = new CodeEditorController(editor, _document, _services, _hover, attach: primary, exceptionPopup: primary ? _exception : null);
         controller.ZoomChanged += (_, _) =>

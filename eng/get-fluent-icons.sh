@@ -2,7 +2,7 @@
 # Copies the shell's Fluent UI System Icons (Microsoft, MIT; D24, M34a) from the pinned npm package
 # @fluentui/svg-icons into src/DaedalusStudio.Shell/Icons/Fluent/, after checking the package's SHA-256.
 # The list is src/DaedalusStudio.Shell/Icons/fluent-icons.txt; the build compiles the copied SVGs into Avalonia
-# geometries (eng/icons/CompileFluentIcons.cs). Run it after adding a name to the list, and commit the SVGs.
+# geometries (eng/icons/CompileIcons.cs). Run it after adding a name to the list, and commit the SVGs.
 # Usage: eng/get-fluent-icons.sh
 set -euo pipefail
 

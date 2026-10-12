@@ -23,22 +23,22 @@ namespace DaedalusStudio.Shell.Editor;
 /// </summary>
 public sealed class NavigationBar : Border
 {
-    private readonly ComboBox _types = new() { MinWidth = 220, MaxWidth = 420, Margin = new Thickness(4, 2) };
-    private readonly ComboBox _members = new() { MinWidth = 220, MaxWidth = 520, Margin = new Thickness(4, 2) };
+    private readonly ComboBox _types = new() { Classes = { "navigationBar" } };
+    private readonly ComboBox _members = new() { Classes = { "navigationBar" } };
     private CodeEditorController? _controller;
     private bool _updating;
 
     public NavigationBar()
     {
-        BorderThickness = new Thickness(0, 0, 0, 1);
-        this.Bind(BorderBrushProperty, this.GetResourceObservable("Shell.Border"));
+        // A flat bar of two pickers (M34a): Border.navigationBar and ComboBox.navigationBar in ShellStyles.axaml.
+        Classes.Add("navigationBar");
         var template = new FuncDataTemplate<NavigationEntry>((entry, _) => entry is null ? new TextBlock() : new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 6,
+            Spacing = 5,
             Children =
             {
-                new Icon { Kind = entry.Icon, VerticalAlignment = VerticalAlignment.Center },
+                new Icon { Kind = entry.Icon, Width = 14, Height = 14, VerticalAlignment = VerticalAlignment.Center },
                 new TextBlock { Text = entry.Display, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis },
             },
         });
@@ -50,7 +50,10 @@ public sealed class NavigationBar : Border
         AutomationProperties.SetName(_members, "Members");
         _types.SelectionChanged += (_, _) => OnPicked(_types, members: false);
         _members.SelectionChanged += (_, _) => OnPicked(_members, members: true);
-        Child = new StackPanel { Orientation = Orientation.Horizontal, Children = { _types, _members } };
+        Grid.SetColumn(_members, 1);
+        Child = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), Children = { _types, _members } };
+        ToolTip.SetTip(_types, "Types");
+        ToolTip.SetTip(_members, "Members");
         IsVisible = false;
     }
 

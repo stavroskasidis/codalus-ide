@@ -175,7 +175,8 @@ internal static class MenuBuilder
                 continue;
             }
 
-            var binding = shell.Workbench.Keybindings.GetBinding(item.Command);
+            // The binding, or the keys the controls handle themselves (Edit's ⌘Z, ⌘C…), which macOS users expect shown.
+            var binding = item.Keys;
             menu.Items.Add(new NativeMenuItem(item.Title)
             {
                 IsEnabled = item.Enabled,
