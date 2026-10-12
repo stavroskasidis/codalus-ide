@@ -24,7 +24,7 @@ public sealed partial class ShellHost
     private CancellationTokenSource? _previewCaret;
     private (int Version, XamlLogicalNode[] Nodes)? _previewTree;
     private readonly HashSet<string> _buildXamlFiles = new(StringComparer.OrdinalIgnoreCase);
-    private bool _previewHighlightScheduled;
+    private int _previewHighlightSequence;
 
     public PreviewService Previewer { get; private set; } = null!;
 
@@ -254,8 +254,18 @@ public sealed partial class ShellHost
         }
 
         var version = model.Version;
-        if (Languages.RunningClient(AxamlLanguageId) is not { } client
-            || await client.XamlLogicalTreeAsync(model.Uri, CancellationToken.None).ConfigureAwait(true) is not { } tree)
+        XamlLogicalTreeResult? tree;
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            tree = Languages.RunningClient(AxamlLanguageId) is { } client ? await client.XamlLogicalTreeAsync(model.Uri, timeout.Token).ConfigureAwait(true) : null;
+        }
+        catch (OperationCanceledException)
+        {
+            tree = null;
+        }
+
+        if (tree is null)
         {
             return [];
         }
@@ -313,31 +323,23 @@ public sealed partial class ShellHost
 
     private void SchedulePreviewHighlight()
     {
-        if (_previewHighlightScheduled)
-        {
-            return;
-        }
-
-        _previewHighlightScheduled = true;
+        // The newest request wins: an earlier one still waiting is cancelled, one already asking the agent is ignored.
+        var sequence = ++_previewHighlightSequence;
         var cancellation = Restart(ref _previewCaret);
         _ = Task.Run(async () =>
         {
             try
             {
                 await Task.Delay(100, cancellation.Token).ConfigureAwait(false);
-                await Ui.RunAsync(HighlightCaretElementAsync).ConfigureAwait(false);
+                await Ui.RunAsync(() => HighlightCaretElementAsync(sequence)).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
             }
-            finally
-            {
-                _previewHighlightScheduled = false;
-            }
         });
     }
 
-    private async Task HighlightCaretElementAsync()
+    private async Task HighlightCaretElementAsync(int sequence)
     {
         if (_previewed is not { } model || Previewer.Session is not { HasExited: false } session
             || Editors.FirstOrDefault(e => e.Model == model && e.Controller is not null)?.Controller is not { } controller)
@@ -345,23 +347,20 @@ public sealed partial class ShellHost
             return;
         }
 
-        var at = PreviewSelection.At(await PreviewTreeAsync(model).ConfigureAwait(true), model.PositionAt(controller.Editor.CaretOffset));
-        if (at is null)
-        {
-            XamlPreview.Selection = null;
-            return;
-        }
-
         try
         {
-            XamlPreview.Selection = await session.BoundsAsync(at.Value.Path, CancellationToken.None).ConfigureAwait(true);
+            var at = PreviewSelection.At(await PreviewTreeAsync(model).ConfigureAwait(true), model.PositionAt(controller.Editor.CaretOffset));
+            var bounds = at is null ? null : await session.BoundsAsync(at.Value.Path, CancellationToken.None).ConfigureAwait(true);
+            if (sequence == _previewHighlightSequence)
+            {
+                XamlPreview.Selection = bounds;
+            }
         }
-        catch (PreviewerException ex)
+        catch (Exception ex) when (ex is PreviewerException or Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or InvalidOperationException)
         {
             PreviewerLog.AppendLine(ex.Message);
         }
     }
-
     // ------------------------------------------------------------------ the XAML compiler's errors
 
     /// <summary>The last build's AVLN errors as squiggles in their .axaml files, until the file changes or the next build.</summary>

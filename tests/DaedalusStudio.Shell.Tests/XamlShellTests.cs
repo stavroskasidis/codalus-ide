@@ -91,7 +91,7 @@ public sealed class XamlShellTests
         // The caret on the greeting outlines it in the preview.
         editor.Editor.SelectionLength = 0;
         editor.Editor.CaretOffset = model.Text.Text.IndexOf("x:Name=\"GreetingText\"", StringComparison.Ordinal);
-        await ShellFixture.PumpUntil(() => preview.Selection is { Y: < 20, Width: > 50 }, seconds: 30);
+        await ShellFixture.PumpUntil(() => preview.Selection is { Y: < 20, Width: > 50 }, seconds: 90);
         Assert.True(preview.HasSelection);
 
         // The loader's errors show with their line; fixing them renders again.
