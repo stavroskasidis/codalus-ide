@@ -128,6 +128,12 @@ internal sealed class XamlContext
             {
                 return ResolveTypeName(current, value);
             }
+
+            // A data template without a data type: its items' type is unknown (the compiler asks for one).
+            if (current.LocalName is "DataTemplate" or "TreeDataTemplate" && current != element)
+            {
+                return null;
+            }
         }
 
         return null;

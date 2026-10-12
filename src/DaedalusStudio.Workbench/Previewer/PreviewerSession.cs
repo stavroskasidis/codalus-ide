@@ -430,7 +430,10 @@ public sealed class PreviewerSession : IAsyncDisposable
 
             try
             {
-                var shown = await frame.Task.WaitAsync(timeoutSource.Token).ConfigureAwait(false);
+                // Loaded: the frame follows at once (a render), so a long wait means nothing changed on screen.
+                using var frameTimeout = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token);
+                frameTimeout.CancelAfter(TimeSpan.FromSeconds(10));
+                var shown = await frame.Task.WaitAsync(frameTimeout.Token).ConfigureAwait(false);
                 return new PreviewUpdateResult(null, null, null, shown, watch.Elapsed);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)

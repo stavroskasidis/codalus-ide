@@ -392,6 +392,7 @@ internal sealed class XamlDocument
         return prefix switch
         {
             "x" => XamlNames.XamlLanguage,
+            "xml" => XamlNames.Xml,
             _ => null,
         };
     }
@@ -422,4 +423,5 @@ internal static class XamlNames
     public const string XamlLanguage = "http://schemas.microsoft.com/winfx/2006/xaml";
     public const string Design = "http://schemas.microsoft.com/expression/blend/2008";
     public const string MarkupCompatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+    public const string Xml = "http://www.w3.org/XML/1998/namespace";
 }

@@ -36,7 +36,7 @@ internal static class XamlAnalysis
         var ignorable = (root.Attributes.FirstOrDefault(a => a.LocalName == "Ignorable" && XamlDocument.ResolvePrefix(root, a.Prefix) == XamlNames.MarkupCompatibility)?.Value ?? string.Empty)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
         bool Ignored(string? prefix, XamlElement scope) =>
-            prefix is not null && (ignorable.Contains(prefix) || XamlDocument.ResolvePrefix(scope, prefix) is XamlNames.Design or XamlNames.MarkupCompatibility or XamlNames.XamlLanguage);
+            prefix is not null && (ignorable.Contains(prefix) || XamlDocument.ResolvePrefix(scope, prefix) is XamlNames.Design or XamlNames.MarkupCompatibility or XamlNames.XamlLanguage or XamlNames.Xml);
 
         foreach (var element in context.Document.Elements)
         {

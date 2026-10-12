@@ -191,12 +191,15 @@ public sealed class XamlLanguageTests(AvaloniaLanguageFixture avalonia) : IClass
     {
         await FreshAsync(TodoItemView);
         await avalonia.EditAsync(TodoItemView, "<CheckBox IsChecked=\"{Binding IsDone}\" />",
-            "<CheckBox IsChecked=\"{Binding IsDoen}\" />\n    <Buton />\n    <TextBlock Colour=\"Red\" />\n    <StackPanel Orientation=\"Sideways\" />\n    <TextBlock Text=\"{Binding Priority.Missing}\" />");
+            "<CheckBox IsChecked=\"{Binding IsDoen}\" />\n    <Buton />\n    <TextBlock Colour=\"Red\" />\n    <StackPanel Orientation=\"Sideways\" />\n    <TextBlock Text=\"{Binding Priority.Missing}\" />\n    <ContentControl><ContentControl.ContentTemplate><DataTemplate><TextBlock xml:space=\"preserve\" Text=\"{Binding Anything}\" /></DataTemplate></ContentControl.ContentTemplate></ContentControl>");
         var diagnostics = await DiagnosticsAsync(TodoItemView, d => d.Count >= 4);
         Assert.Contains(diagnostics, d => d.Code == "XAML0006" && d.Message.Contains("'IsDoen'", StringComparison.Ordinal));
         Assert.Contains(diagnostics, d => d.Code == "XAML0003" && d.Message.Contains("'Buton'", StringComparison.Ordinal));
         Assert.Contains(diagnostics, d => d.Code == "XAML0004" && d.Message.Contains("'Colour'", StringComparison.Ordinal));
         Assert.Contains(diagnostics, d => d.Code == "XAML0005" && d.Message.Contains("'Sideways'", StringComparison.Ordinal));
+
+        // Not errors: a binding in a data template without a data type (unknown), the xml: prefix.
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("Anything", StringComparison.Ordinal) || d.Code == "XAML0002");
         var path = Assert.Single(diagnostics, d => d.Code == "XAML0006" && d.Message.Contains("'IsDoen'", StringComparison.Ordinal));
         Assert.Equal(avalonia.At(TodoItemView, "IsDoen").Character, path.Range.Start.Character);
 
@@ -207,6 +210,7 @@ public sealed class XamlLanguageTests(AvaloniaLanguageFixture avalonia) : IClass
         // Fixed: none left.
         await avalonia.EditAsync(TodoItemView, "{Binding IsDoen}", "{Binding IsDone}");
         await avalonia.EditAsync(TodoItemView, "\n    <Buton\n    <TextBlock Colour=\"Red\" />\n    <StackPanel Orientation=\"Sideways\" />\n    <TextBlock Text=\"{Binding Priority.Missing}\" />", string.Empty);
+        await avalonia.EditAsync(TodoItemView, "<TextBlock xml:space=\"preserve\" Text=\"{Binding Anything}\" />", "<TextBlock xml:space=\"preserve\" Text=\"Anything\" />");
         await LanguageFixture.WaitUntilAsync(() => avalonia.Languages.Diagnostics.Get(TodoItemView, "csharp") is null, TimeSpan.FromSeconds(60));
     }
 
