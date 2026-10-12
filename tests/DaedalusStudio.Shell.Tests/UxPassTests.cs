@@ -94,7 +94,7 @@ public class UxPassTests
         var intelliSense = menus.GetItems(BuiltIns.EditIntelliSenseMenu);
         Assert.Equal(["editor.action.triggerSuggest", "editor.action.triggerParameterHints", "editor.action.showHover"], intelliSense.Take(3).Select(i => i.Command));
         var mac = f.Shell.Workbench.Platform == PlatformKind.MacOS;
-        Assert.Equal(mac ? "⌃Space" : "Ctrl+Space", intelliSense[0].KeyLabel);
+        Assert.Equal(mac ? "⌥⎋" : "Ctrl+Space", intelliSense[0].KeyLabel); // macOS takes ⌃Space for input sources by default
         Assert.Equal(mac ? "⌃⇧Space" : "Ctrl+Shift+Space", intelliSense[1].KeyLabel);
         Assert.Contains(menus.GetItems(BuiltIns.EditAdvancedMenu), i => i.Command == "editor.action.changeEndOfLine");
         Assert.Contains(menus.GetItems(BuiltIns.EditAdvancedMenu), i => i.Command == "editor.action.duplicateSelection");
@@ -321,10 +321,10 @@ public class UxPassTests
 
         Assert.Equal(["ctrl+shift+space"], Keys("editor.action.triggerParameterHints"));
 
-        // The menus show Ctrl+Space (the last binding wins the label).
+        // The menus show Ctrl+Space, and ⌥⎋ on macOS (the last binding wins the label).
         var service = new KeybindingService(new ContextKeyService(), platform);
         service.SetDefaults(rules);
-        Assert.Equal("ctrl+space", service.GetBinding("editor.action.triggerSuggest")!.ToString());
+        Assert.Equal(platform == PlatformKind.MacOS ? "alt+escape" : "ctrl+space", service.GetBinding("editor.action.triggerSuggest")!.ToString());
     }
 
     /// <summary>Shortcuts each OS keeps for itself (M34a's audit, docs/user-guide/keyboard.md).</summary>
@@ -388,8 +388,16 @@ public class UxPassTests
         Assert.True(Equals(f.Shell.Workbench.Context.GetValue("editorTextFocus"), true), $"the editor has the keyboard focus: {f.Shell.Workbench.Context.GetValue("focusedView")}, {f.Window.FocusManager?.GetFocusedElement()}, {editor.Editor.TextArea.IsFocused}, {PaneHost.Of(editor.Editor.TextArea)?.Dockable}");
         f.Press(Key.Space, RawInputModifiers.Control);
         Assert.Contains("editor.action.triggerSuggest", executed);
-        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Reporter"), seconds: 60);
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Reporter"), seconds: 60);
+        Assert.Equal("Reporter", editor.CompletionWindow!.CompletionList.SelectedItem?.Text); // the typed prefix's best match
         Assert.Equal(text, editor.Model.Text.Text); // no space typed
+        f.Press(Key.Escape);
+
+        // After "Con": the shortest of the equal matches, Console (not ConcurrentExclusiveSchedulerPair).
+        editor.Editor.CaretOffset = text.IndexOf("Console.WriteLine", StringComparison.Ordinal) + "Con".Length;
+        f.Press(Key.Space, RawInputModifiers.Control);
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Console"), seconds: 60);
+        Assert.Equal("Console", editor.CompletionWindow!.CompletionList.SelectedItem!.Text);
         f.Press(Key.Escape);
 
         // Ctrl+Shift+Space is Parameter Info.

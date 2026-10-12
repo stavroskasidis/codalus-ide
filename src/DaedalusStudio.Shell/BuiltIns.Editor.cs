@@ -15,8 +15,8 @@ internal static partial class BuiltIns
     public const string EditorKeybindings = """
         [
           { "key": "ctrl+j", "command": "editor.action.triggerSuggest", "when": "editorTextFocus" },
-          { "mac": "alt+escape", "command": "editor.action.triggerSuggest", "when": "editorTextFocus" },
           { "key": "ctrl+space", "command": "editor.action.triggerSuggest", "when": "editorTextFocus" },
+          { "mac": "alt+escape", "command": "editor.action.triggerSuggest", "when": "editorTextFocus" },
           { "key": "ctrl+shift+space", "command": "editor.action.triggerParameterHints", "when": "editorTextFocus" },
           { "key": "primary+k primary+i", "command": "editor.action.showHover", "when": "editorTextFocus" },
           { "key": "f12", "command": "editor.action.revealDefinition", "when": "editorTextFocus" },

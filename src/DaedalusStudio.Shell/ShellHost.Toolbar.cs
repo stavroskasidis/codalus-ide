@@ -43,8 +43,7 @@ public sealed partial class ShellHost
             // Undo and Redo keep the editor's own keys; the rest are the commands' bindings on this OS.
             KeyLabel = id => (id switch
             {
-                "edit.undo" => DaedalusStudio.Platform.KeySequence.Parse("primary+z", Workbench.Platform),
-                "edit.redo" => DaedalusStudio.Platform.KeySequence.Parse("primary+y", Workbench.Platform),
+                "edit.undo" or "edit.redo" => DaedalusStudio.Platform.KeySequence.Parse(BuiltIns.EditKeys(id, Workbench.Platform), Workbench.Platform),
                 _ => Workbench.Keybindings.GetBinding(id),
             })?.ToLabel(Workbench.Platform),
         };

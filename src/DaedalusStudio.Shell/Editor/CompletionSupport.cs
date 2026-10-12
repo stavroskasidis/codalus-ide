@@ -38,7 +38,11 @@ internal sealed class CompletionData(LspCompletionItem item, Func<LspCompletionI
         ? new TextBlock { Text = PlainText(doc), TextWrapping = TextWrapping.Wrap, MaxWidth = 480 }
         : null;
 
-    public double Priority => Item.Preselect == true ? 1 : 0;
+    /// <summary>
+    /// Breaks ties between equally good matches of the typed text: the server's preselected item first, then the
+    /// shorter name (after "Con", Console before ConcurrentExclusiveSchedulerPair, as a classic IDE picks; M34a).
+    /// </summary>
+    public double Priority => Item.Preselect == true ? 1 : 0.5 / (1 + Text.Length);
 
     /// <summary>Starts resolving (description and edits) in the background.</summary>
     public Task<LspCompletionItem> Resolve() => _resolved ??= resolve(Item);

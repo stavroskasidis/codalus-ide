@@ -1,6 +1,6 @@
 # The Fluent UI System Icons (MIT, @fluentui/svg-icons) the shell ships, one file name per line (D24, M34a).
 # eng/get-fluent-icons.sh copies them from the pinned package into Fluent/; the build compiles Fluent/*.svg into
-# geometries (eng/icons/CompileFluentIcons.cs), so nothing parses SVG at runtime. Our icon names map onto these
+# geometries (eng/icons/CompileIcons.cs), so nothing parses SVG at runtime. Our icon names map onto these
 # in Controls/Icon.cs.
 alert_16_regular
 archive_16_regular

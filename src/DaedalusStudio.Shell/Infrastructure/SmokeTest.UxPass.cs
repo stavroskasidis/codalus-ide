@@ -73,6 +73,9 @@ internal sealed partial class SmokeTest
             area.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Space, KeyModifiers = Avalonia.Input.KeyModifiers.Control, Source = area });
             await WaitAsync(() => program.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Console"), "completion lists Console", 90).ConfigureAwait(true);
             Check(program.Model.Text.Text == original, "Ctrl+Space typed nothing");
+            await WaitAsync(() => program.CompletionWindow?.CompletionList.SelectedItem?.Text == "Console", "the best match of the typed prefix, Console, is selected").ConfigureAwait(true);
+            var column = program.Caret.Column;
+            await WaitAsync(() => shell.StatusBar.Right.Concat(shell.StatusBar.Left).Any(i => i.Text?.Contains($"Col {column}", StringComparison.Ordinal) == true), $"the status bar shows column {column}").ConfigureAwait(true);
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-completion.png", program.CompletionWindow is Popup completion ? [completion] : []);
             program.CompletionWindow?.Close();

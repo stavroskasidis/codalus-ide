@@ -148,8 +148,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterProjectManagementCommands(this);
         BuiltIns.RegisterProjectSystemCommands(this);
         BuiltIns.RegisterEditCommands(this);
-        BuiltIns.RegisterMenuBar(Workbench.Menus);
-        BuiltIns.RegisterEditorContextMenu(Workbench.Menus);
+        BuiltIns.RegisterMenuBar(Workbench.Menus, Workbench.Platform);
+        BuiltIns.RegisterEditorContextMenu(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
         BuiltIns.RegisterWebMenus(Workbench.Menus);
@@ -269,6 +269,9 @@ public sealed partial class ShellHost : IAsyncDisposable
     public StatusBarViewModel StatusBar { get; }
 
     public IShellWindow? Window { get; set; }
+
+    /// <summary>The element that last had the keyboard focus outside the menus (Edit → Cut, Copy, Paste act on it).</summary>
+    public Avalonia.Visual? LastFocus { get; set; }
 
     /// <summary>The window size and position saved with the layout, if any.</summary>
     public WindowPlacement? InitialPlacement { get; private set; }

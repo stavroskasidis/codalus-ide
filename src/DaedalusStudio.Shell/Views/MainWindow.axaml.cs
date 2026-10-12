@@ -369,6 +369,11 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void OnFocusChanged(Visual? source)
     {
+        if (source is not null and not MenuItem && source.FindAncestorOfType<MenuBase>() is null)
+        {
+            _shell.LastFocus = source; // Edit → Cut/Copy/Paste act on it after a menu took the focus (M34a)
+        }
+
         var pane = PaneHost.Of(source);
         var view = pane?.Dockable switch
         {

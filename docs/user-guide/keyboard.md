@@ -8,13 +8,17 @@ Some shortcuts belong to the operating system or the desktop, which takes them b
 
 | Command | Windows | Linux | macOS |
 |---|---|---|---|
-| Trigger Suggest (List Members) | Ctrl+Space, Ctrl+J | Ctrl+Space, Ctrl+J | ⌃Space (the Control key), ⌥⎋, ⌃J |
+| Trigger Suggest (List Members) | Ctrl+Space, Ctrl+J | Ctrl+Space, Ctrl+J | ⌥⎋ (the one the menus show), ⌃Space (the Control key), ⌃J |
 | Parameter Info | Ctrl+Shift+Space | Ctrl+Shift+Space | ⌃⇧Space |
 | Complete Word | Ctrl+Alt+Space | Ctrl+Alt+Space | ⌃. |
 
-- **macOS:** ⌘Space is Spotlight, so completion uses the Control key, as Xcode and VS Code do. When you have more than one input source, macOS's "Select the previous input source" also takes ⌃Space (System Settings → Keyboard → Keyboard Shortcuts → Input Sources); use ⌥⎋ or ⌃J then, or turn that shortcut off. ⌘⌥Space is Finder search, so Complete Word is ⌃. there.
+- **macOS:** ⌘Space is Spotlight. ⌃Space (the Control key, as in Xcode and VS Code) works only with one input source: with two or more, macOS's "Select the previous input source" takes it first (System Settings → Keyboard → Keyboard Shortcuts → Input Sources; on by default), and the app never sees it (seen on the maintainer's Mac: U.S. → Greek). So the menus show ⌥⎋, which always reaches the app; ⌃Space and ⌃J work too where macOS leaves them alone, or turn the input-source shortcut off. ⌘⌥Space is Finder search, so Complete Word is ⌃. there.
 - **Linux:** IBus and Fcitx switch input methods with Ctrl+Space (older setups) or Super+Space. If Ctrl+Space doesn't reach the editor, use Ctrl+J, or change the input method's trigger (`ibus-setup` → General → Next input method).
 - **Windows:** the Chinese, Japanese and Korean IMEs can toggle with Ctrl+Space; Ctrl+J works there.
+
+## Edit's clipboard keys
+
+Undo, Redo, Cut, Copy, Paste and Select All belong to the text controls (Ctrl+Z, Ctrl+Y, Ctrl+X, Ctrl+C, Ctrl+V, Ctrl+A; on macOS ⌘Z, ⇧⌘Z, ⌘X, ⌘C, ⌘V, ⌘A). The Edit menu shows them, and on macOS the global menu carries them as key equivalents, as Mac apps do, with Edit starting with them. They act on the focused text box, editor or terminal; elsewhere (the Solution Explorer) they run what the same keys do there.
 
 ## Other shortcuts that differ by OS
 
