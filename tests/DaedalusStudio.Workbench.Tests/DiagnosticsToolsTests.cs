@@ -387,7 +387,9 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
         await using var cpu = await TraceFromLaunchAsync("CpuBound", 2, TraceTools.Cpu);
         await using var async = await TraceFromLaunchAsync("AsyncHeavy", 2, TraceTools.Cpu);
         var result = await async.CompareAsync(cpu, new CpuFilter(), 500, Timeout());
-        Assert.True(result.BaselineTotal > 0 && result.Total > 0);
+        // AsyncHeavy mostly waits, and only running managed code is sampled: on a loaded runner its 2 s can hold no
+        // samples at all (the Windows runner), which still compares.
+        Assert.True(result.BaselineTotal > 0, $"the CpuBound baseline has samples ({result.BaselineTotal}, AsyncHeavy {result.Total})");
         var isPrime = result.Functions.First(f => f.Name.Contains("Primes.IsPrime", StringComparison.Ordinal));
         Assert.True(isPrime.BaselineSelf > 0.2, $"{isPrime.BaselineSelf:P0}");
         Assert.Equal(0, isPrime.Self);

@@ -15,7 +15,15 @@
       </StackPanel>
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
     </StackPanel>
-    <Grid ColumnDefinitions="*,4,2*,4,*">
+    <!-- The results' fixed columns need room: narrower, they spilled over the History header (seen on the Mac). -->
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="4" />
+        <ColumnDefinition Width="2*" MinWidth="480" />
+        <ColumnDefinition Width="4" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
       <DockPanel>
         <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Benchmarks" Margin="0,0,0,4" />
         <ListBox x:Name="BenchmarkList" ItemsSource="{Binding Benchmarks}" SelectedItem="{Binding SelectedBenchmark}" AutomationProperties.Name="Benchmarks in the solution; double-click opens one">
@@ -30,7 +38,7 @@
         </ListBox>
       </DockPanel>
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
-      <DockPanel Grid.Column="2" Margin="6,0">
+      <DockPanel Grid.Column="2" Margin="6,0" ClipToBounds="True">
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,90,80,90,80,60" Margin="4,0,4,4">
           <TextBlock FontWeight="SemiBold" Text="Method" />
           <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="Mean" TextAlignment="Right" />

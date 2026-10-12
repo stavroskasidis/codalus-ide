@@ -134,7 +134,7 @@ case "$rid" in
       [ -n "${DAEDALUS_NOTARY_PROFILE:-}" ] && sign_args+=(--notaryProfile "$DAEDALUS_NOTARY_PROFILE")
     fi
     "$vpk" pack "${vpk_args[@]}" --packDir "$app" --mainExe daedalus --icon "$stage/daedalus.icns" --plist "$stage/Info.plist" \
-      "${sign_args[@]}"
+      ${sign_args[@]+"${sign_args[@]}"} # macOS bash 3.2 calls an empty array unbound under set -u
     mv "$feed/DaedalusStudio-$channel-Setup.pkg" "$out/$name.pkg"
     mv "$feed/DaedalusStudio-$channel-Portable.zip" "$out/$name.app.zip"
     ;;
