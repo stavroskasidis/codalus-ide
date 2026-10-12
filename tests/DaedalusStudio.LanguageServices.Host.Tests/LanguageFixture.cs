@@ -43,7 +43,7 @@ public class LanguageFixture : IAsyncLifetime
         var policy = new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) };
         Solutions = new SolutionService(() => RepoPaths.BuildHostAssembly, policy);
         var registry = new LanguageServiceRegistry();
-        registry.Register(new LanguageServiceDescriptor("csharp", "C#", [".cs"], "C#", () => ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly)) { Languages = ["csharp", "razor"] });
+        registry.Register(new LanguageServiceDescriptor("csharp", "C#", [".cs"], "C#", () => ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly)) { Languages = ["csharp", "razor", "axaml"] });
         Languages = new LanguageService(registry, Solutions, policy);
         Solutions.Log += (_, line) => Record("[build] " + line);
         Languages.Log += (_, line) => Record("[lang] " + line);
@@ -55,12 +55,16 @@ public class LanguageFixture : IAsyncLifetime
             var projects = Sample.Projects;
             await WaitUntilAsync(() => Solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) == projects
                                        && Languages.Status("csharp") is { State: WorkspaceStates.Ready } status && status.Projects == projects);
+            await ReadyAsync();
         }
         else
         {
             await Languages.ClientAsync("csharp");
         }
     }
+
+    /// <summary>More to wait for once the projects are loaded (a fixture's own conditions).</summary>
+    protected virtual Task ReadyAsync() => Task.CompletedTask;
 
     private void Record(string line)
     {
@@ -98,7 +102,9 @@ public class LanguageFixture : IAsyncLifetime
 
     public async Task<string> OpenAsync(string path)
     {
-        var languageId = path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase) ? "razor" : "csharp";
+        var languageId = path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase) ? "razor"
+            : path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) ? "axaml"
+            : "csharp";
         var text = await System.IO.File.ReadAllTextAsync(path);
         lock (_texts)
         {

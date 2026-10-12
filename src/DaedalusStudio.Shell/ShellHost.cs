@@ -78,7 +78,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -120,6 +120,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeContainers();
         InitializeAspire();
         InitializeProfiling();
+        InitializeXaml();
         InitializeUpdates();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -140,6 +141,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterDataCommands(this);
         BuiltIns.RegisterContainerCommands(this);
         BuiltIns.RegisterProfilingCommands(this);
+        BuiltIns.RegisterXamlCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterPackageCommands(this);
@@ -154,6 +156,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterDataMenus(Workbench.Menus);
         BuiltIns.RegisterContainerMenus(Workbench.Menus);
         BuiltIns.RegisterProfilingMenus(Workbench.Menus);
+        BuiltIns.RegisterXamlMenus(Workbench.Menus);
         BuiltIns.RegisterGitMenus(Workbench.Menus);
         BuiltIns.RegisterTestingMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
@@ -421,6 +424,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             DiagnosticToolsViewModel.ToolWindowId => DiagnosticTools,
             CountersViewModel.ToolWindowId => CountersWindow,
             BenchmarksViewModel.ToolWindowId => BenchmarksWindow,
+            XamlPreviewViewModel.ToolWindowId => XamlPreview,
             _ => null,
         },
     };
@@ -793,6 +797,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         EntityFramework.Dispose();
         await Data.DisposeAsync().ConfigureAwait(false);
         await DisposeProfilingAsync().ConfigureAwait(false);
+        await DisposeXamlAsync().ConfigureAwait(false);
         await Languages.DisposeAsync().ConfigureAwait(false);
         await Solutions.DisposeAsync().ConfigureAwait(false);
         await Plugins.DisposeAsync().ConfigureAwait(false);

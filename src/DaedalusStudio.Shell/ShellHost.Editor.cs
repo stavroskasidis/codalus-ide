@@ -25,6 +25,9 @@ public sealed partial class ShellHost : IEditorServices
     public const string CSharpLanguageId = "csharp";
 
     public const string RazorLanguageId = "razor";
+
+    /// <summary>Avalonia XAML (M19a, ADR 0047), served by the C# host.</summary>
+    public const string AxamlLanguageId = "axaml";
     private const string StatusSource = "daedalus.editor";
 
     private readonly Dictionary<string, CodeDocument> _models = new(SolutionPaths.Comparer);
@@ -67,8 +70,9 @@ public sealed partial class ShellHost : IEditorServices
         var registry = Workbench.LanguageServers;
         registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve)
         {
-            // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023).
-            Languages = [CSharpLanguageId, RazorLanguageId],
+            // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023), and so
+            // does Avalonia XAML, on the same projects' type information (ADR 0047).
+            Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId],
         });
         registry.Register(new LanguageServiceDescriptor("markup", "JSON, XML and YAML", [], null, MarkupHostLaunch.Resolve)
         {
@@ -305,10 +309,12 @@ public sealed partial class ShellHost : IEditorServices
         {
             _snapshots[model] = model.Text.CreateSnapshot();
             _ = Languages.ChangeAsync(model.Path, e.Version, e.Changes);
+            ClearXamlBuildDiagnostics(model.Path);
         };
         model.Saved += (_, _) => _ = Languages.SavedAsync(model.Path);
         model.Saved += (_, _) => Ui.Post(() => OnWebDocumentSaved(model.Path));
         model.Saved += (_, _) => Ui.Post(() => RunCustomToolOnSave(model.Path));
+        model.Saved += (_, _) => Ui.Post(() => OnSavedForPreview(model.Path));
         model.ConflictDetected += (_, _) => _ = ResolveConflictAsync(model);
         if (model.LanguageId is { } languageId)
         {
@@ -807,10 +813,13 @@ public sealed partial class ShellHost : IEditorServices
         OnNavigationEditorChanged();
         TrackCopies(ActiveEditor?.Controller);
         Workbench.Context.Set("editorLanguageId", ActiveEditor?.Model.LanguageId);
+        FollowXamlEditor();
         if (ActiveEditor is { Controller: { } controller } editor)
         {
             controller.CaretChanged -= OnCaretChanged;
             controller.CaretChanged += OnCaretChanged;
+            controller.CaretChanged -= OnPreviewCaretChanged;
+            controller.CaretChanged += OnPreviewCaretChanged;
             UpdateEditorStatus(editor);
         }
         else

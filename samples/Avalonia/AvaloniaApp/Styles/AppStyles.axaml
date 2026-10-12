@@ -1,0 +1,23 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Design.PreviewWith>
+    <StackPanel Margin="8">
+      <TextBlock Classes="title" Text="A title" />
+      <TextBlock Classes="task" Text="A task" />
+    </StackPanel>
+  </Design.PreviewWith>
+
+  <Style Selector="TextBlock.title">
+    <Setter Property="FontSize" Value="20" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Margin" Value="0,0,0,8" />
+  </Style>
+
+  <Style Selector="TextBlock.task">
+    <Setter Property="FontStyle" Value="Normal" />
+  </Style>
+
+  <Style Selector="Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Opacity" Value="0.9" />
+  </Style>
+</Styles>

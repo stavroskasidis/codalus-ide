@@ -1057,6 +1057,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         await StepAsync("profiler.memory", "M18", "Memory Usage takes two heap snapshots of a leaking program; the report's diff shows the leaked type growing, with its paths to roots", ProfilerMemoryStepAsync).ConfigureAwait(true);
         await StepAsync("benchmarks.run", "M18", "A benchmark's gutter glyph runs it with BenchmarkDotNet; the Benchmarks window shows its result", BenchmarksStepAsync).ConfigureAwait(true);
 
+        // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
+        await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -1606,6 +1609,56 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         }
     }
 
+    private async Task XamlPreviewStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "Avalonia");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "Avalonia"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "Avalonia.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Avalonia solution is open (its packages restored)", 600).ConfigureAwait(true);
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready, Projects: 2 }, "the C# host has loaded both projects", 300).ConfigureAwait(true);
+
+        var path = Path.Combine(target, "AvaloniaApp", "Views", "MainWindow.axaml");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.AxamlLanguageId, "the file is Avalonia XAML: " + editor.Model.LanguageId);
+        var original = editor.Model.Text.Text;
+        MoveCaret(editor, "Text=\"{Binding Greeting}\"", "Text=\"{Binding ".Length);
+        editor.ShowCompletion();
+        await WaitAsync(() => editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Greeting"), "the binding path completes the view model's properties", 120).ConfigureAwait(true);
+        editor.CompletionWindow!.Close();
+
+        var started = Stopwatch.StartNew();
+        shell.ShowXamlPreview();
+        var preview = shell.XamlPreview;
+        await WaitAsync(() => preview.FrameCount > 0 || preview.HasError, "the previewer builds the app and shows its first frame: " + preview.Status, 600).ConfigureAwait(true);
+        Check(preview.FrameCount > 0, "the preview rendered: " + preview.Error + "\n" + Tail(shell.PreviewerLog.GetText(), 2000));
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  first frame (build included) in {started.Elapsed.TotalSeconds:0.0} s, {preview.ImageWidth}×{preview.ImageHeight}"));
+
+        var before = preview.Frame!;
+        var edit = Stopwatch.StartNew();
+        var text = editor.Model.Text.Text.IndexOf("Content=\"Increment\"", StringComparison.Ordinal);
+        Check(text >= 0, "the button's content is in the XAML");
+        editor.Model.Text.Replace(text, "Content=\"Increment\"".Length, "Content=\"Smoke test\"");
+        await WaitAsync(() => preview.Frame is { } shown && shown != before && !shown.Data.AsSpan().SequenceEqual(before.Data), "the edit shows in the preview", 60).ConfigureAwait(true);
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  edit to the frame showing it: {edit.Elapsed.TotalMilliseconds:0} ms (the editor waits 150 ms after the last keystroke)"));
+
+        var session = shell.Previewer.Session;
+        Check(session is not null, "the previewer runs");
+        Workbench.Previewer.PreviewPathStep[] button = [new("MainWindow", 0), new("DockPanel", 0), new("StackPanel", 0), new("Button", 0)];
+        var bounds = await session!.BoundsAsync(button, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(bounds is { Width: > 0 }, "the agent finds the button in the preview");
+        await shell.SelectFromPreviewAsync(bounds!.Value.X + bounds.Value.Width / 2, bounds.Value.Y + bounds.Value.Height / 2).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(editor.Editor.SelectedText.StartsWith("<Button x:Name=\"IncrementButton\"", StringComparison.Ordinal), "a click selects the button in the XAML: " + editor.Editor.SelectedText);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-xaml-preview.png");
+        shell.Layout.CloseToolWindow(ViewModels.XamlPreviewViewModel.ToolWindowId);
+        Restore(editor, original);
+        await shell.Previewer.InvalidateAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+    }
     private async Task ProfilerStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);

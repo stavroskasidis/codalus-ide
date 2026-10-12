@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:AvaloniaApp.ViewModels"
+        xmlns:views="using:AvaloniaApp.Views"
+        xmlns:controls="using:AvaloniaControls"
+        mc:Ignorable="d"
+        d:DesignWidth="480" d:DesignHeight="360"
+        d:DataContext="{x:Static vm:DesignData.Main}"
+        x:Class="AvaloniaApp.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Avalonia fixture"
+        Width="480" Height="360">
+
+  <DockPanel Margin="12">
+    <TextBlock x:Name="GreetingText" DockPanel.Dock="Top" Classes="title" Text="{Binding Greeting}" />
+
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="{StaticResource CardSpacing}">
+      <Button x:Name="IncrementButton" Content="Increment" Command="{Binding Increment}" />
+      <TextBlock VerticalAlignment="Center" Text="{Binding Count}" />
+      <controls:RatingControl Value="3" Maximum="5" />
+    </StackPanel>
+
+    <ListBox x:Name="Tasks" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:TodoItemViewModel">
+          <views:TodoItemView />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</Window>

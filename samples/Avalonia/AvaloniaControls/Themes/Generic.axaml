@@ -1,0 +1,17 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:AvaloniaControls">
+  <Design.PreviewWith>
+    <controls:RatingControl Value="2" Maximum="5" />
+  </Design.PreviewWith>
+
+  <SolidColorBrush x:Key="StarBrush" Color="Goldenrod" />
+
+  <ControlTheme x:Key="{x:Type controls:RatingControl}" TargetType="controls:RatingControl">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <TextBlock Foreground="{StaticResource StarBrush}" FontSize="16" Text="{TemplateBinding Stars}" />
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

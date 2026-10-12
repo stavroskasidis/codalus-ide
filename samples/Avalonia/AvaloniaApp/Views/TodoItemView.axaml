@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:AvaloniaApp.ViewModels"
+             mc:Ignorable="d"
+             d:DesignWidth="240" d:DesignHeight="32"
+             x:Class="AvaloniaApp.Views.TodoItemView"
+             x:DataType="vm:TodoItemViewModel">
+  <Design.DataContext>
+    <vm:TodoItemViewModel Title="A design-time task" Priority="High" />
+  </Design.DataContext>
+
+  <StackPanel Orientation="Horizontal" Spacing="6">
+    <CheckBox IsChecked="{Binding IsDone}" />
+    <TextBlock VerticalAlignment="Center" Classes="task" Text="{Binding Title}" />
+    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" Text="{Binding Priority}" />
+  </StackPanel>
+</UserControl>

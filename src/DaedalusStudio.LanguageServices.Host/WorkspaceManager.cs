@@ -327,7 +327,7 @@ internal sealed class WorkspaceManager : IDisposable
     {
         foreach (var (path, open) in _open.ToList())
         {
-            if (Razor.RazorFiles.IsRazor(path))
+            if (IsAdditionalText(path))
             {
                 continue; // additional documents, loaded with the open text; never in Miscellaneous Files
             }
@@ -352,6 +352,18 @@ internal sealed class WorkspaceManager : IDisposable
     private ImmutableArray<DocumentId> ProjectDocumentIds(Solution solution, string path) =>
         [.. solution.GetDocumentIdsWithFilePath(path).Where(id => id.ProjectId != _miscId && solution.ContainsDocument(id))];
 
+    /// <summary>Razor and XAML files are additional documents: the editor's text drives their source generators (ADR 0023, 0047).</summary>
+    public static bool IsAdditionalText(string path) => Razor.RazorFiles.IsRazor(path) || Xaml.XamlContext.IsXaml(path);
+
+    /// <summary>The editor's text of an open file, or null.</summary>
+    public SourceText? OpenText(string path)
+    {
+        lock (_gate)
+        {
+            return _open.TryGetValue(Path.GetFullPath(path), out var open) ? open.Text : null;
+        }
+    }
+
     /// <summary>A Razor file's additional documents (ADR 0023): its text drives the Razor source generator.</summary>
     private static Solution WithRazorText(Solution solution, string path, SourceText text, bool fromDisk = false)
     {
@@ -374,7 +386,7 @@ internal sealed class WorkspaceManager : IDisposable
         lock (_gate)
         {
             var solution = _workspace.CurrentSolution;
-            if (Razor.RazorFiles.IsRazor(path))
+            if (IsAdditionalText(path))
             {
                 _open[path] = new OpenDocument(version, sourceText, null);
                 _workspace.Replace(WithRazorText(solution, path, sourceText));
@@ -418,7 +430,7 @@ internal sealed class WorkspaceManager : IDisposable
             }
 
             var solution = _workspace.CurrentSolution;
-            if (Razor.RazorFiles.IsRazor(path))
+            if (IsAdditionalText(path))
             {
                 _workspace.Replace(WithRazorText(solution, path, text));
             }
@@ -444,7 +456,7 @@ internal sealed class WorkspaceManager : IDisposable
             }
 
             var solution = _workspace.CurrentSolution;
-            if (Razor.RazorFiles.IsRazor(path))
+            if (IsAdditionalText(path))
             {
                 solution = WithRazorText(solution, path, open.Text, fromDisk: true);
             }

@@ -79,4 +79,7 @@ public static class Methods
 
     /// <summary>Client → SQL server notification: a SQL document's dialect and schema (M27b).</summary>
     public const string SqlContext = "daedalus/sql/context";
+
+    /// <summary>An Avalonia XAML file's logical tree, for the previewer's selection (M19a, ADR 0047).</summary>
+    public const string XamlLogicalTree = "daedalus/xaml/logicalTree";
 }

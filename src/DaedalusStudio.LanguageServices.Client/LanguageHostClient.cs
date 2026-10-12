@@ -467,6 +467,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<EfDiscoveredContextsResult?> EfContextsAsync(string? projectPath, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.EfContexts, new EfContextsParams(projectPath), ProtocolJsonContext.Default.EfContextsParams, ProtocolJsonContext.Default.EfDiscoveredContextsResult, cancellationToken);
 
+    /// <summary>An <c>.axaml</c> file's logical tree, for the previewer's selection (M19a).</summary>
+    public Task<XamlLogicalTreeResult?> XamlLogicalTreeAsync(string uri, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.XamlLogicalTree, new XamlLogicalTreeParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.XamlLogicalTreeParams, ProtocolJsonContext.Default.XamlLogicalTreeResult, cancellationToken);
+
     public Task<CodeMetricsResult?> CodeMetricsAsync(string? uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.CodeMetrics, new CodeMetricsParams(uri is null ? null : new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.CodeMetricsParams, ProtocolJsonContext.Default.CodeMetricsResult, cancellationToken);
 
