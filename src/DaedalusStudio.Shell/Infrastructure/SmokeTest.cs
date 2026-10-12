@@ -1727,22 +1727,25 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     /// <summary>The Diagnostics solution open (the profiler.cpu step opened it), with a startup project and its arguments.</summary>
     private async Task<string> DiagnosticsStartupAsync(string project, string arguments)
     {
-        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && shell.ActiveProfiling is null && !shell.Builds.IsBuilding, $"the previous run, collection and build have stopped (collecting: {shell.ActiveProfiling?.Target}, building: {shell.Builds.IsBuilding})", 120).ConfigureAwait(true);
         var target = Path.Combine(_work, "Diagnostics");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Diagnostics"), target);
         }
 
-        if (shell.Solutions.Solution?.Path != Path.Combine(target, "Diagnostics.slnx"))
+        // Still open from profiler.cpu (its path is the real one, which differs from target's under macOS's /private).
+        if (!shell.Solutions.Projects.Values.Any(p => p.Name == "CpuBound"))
         {
             await shell.OpenSolutionAsync(Path.Combine(target, "Diagnostics.slnx")).ConfigureAwait(true);
-            await WaitAsync(() => shell.Solutions.Projects.Count == 6 && shell.Solutions.Progress is { Completed: true }, "the Diagnostics solution is open", 300).ConfigureAwait(true);
         }
 
+        await WaitAsync(() => shell.Solutions.Projects.Count == 6 && shell.Solutions.Progress is { Completed: true }, "the Diagnostics solution is open", 300).ConfigureAwait(true);
         Directory.CreateDirectory(Path.Combine(target, project, "Properties"));
         File.WriteAllText(Path.Combine(target, project, "Properties", "launchSettings.json"), $$"""{ "profiles": { "{{project}}": { "commandName": "Project", "commandLineArgs": "{{arguments}}" } } }""");
-        shell.SetStartupProject(Path.Combine(target, project, project + ".csproj"));
+        var path = shell.Solutions.Projects.Values.First(p => p.Name == project).Path;
+        shell.SetStartupProject(path);
+        Check(shell.Runs.StartupProject is { } startup && Workbench.Projects.SolutionService.PathComparer.Equals(startup, path), $"{project} is the startup project: {shell.Runs.StartupProject}");
         return target;
     }
 
@@ -1757,6 +1760,8 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         return hub;
     }
 
+    private string LastNotifications() => string.Join(" | ", shell.Workbench.Notifications.Items.TakeLast(3).Select(n => n.Message));
+
     private ProfilingReportViewModel? LatestReport() =>
         shell.Layout.Documents.OfType<SolutionManagementDocument>().Select(d => d.ViewModel).OfType<ProfilingReportViewModel>().LastOrDefault();
 
@@ -1766,7 +1771,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         var before = LatestReport();
         var hub = ProfilerWith(Workbench.Diagnostics.ProfilerTools.Cpu, Workbench.Diagnostics.ProfilerTools.Allocations, Workbench.Diagnostics.ProfilerTools.Async, Workbench.Diagnostics.ProfilerTools.Threads, Workbench.Diagnostics.ProfilerTools.Exceptions);
         var run = await hub.StartAsync().ConfigureAwait(true);
-        Check(run is not null, "profiling starts: " + hub.Status);
+        Check(run is not null, "profiling starts: " + hub.Status + " " + LastNotifications());
         await WaitAsync(() => !hub.IsCollecting, "AsyncHeavy runs its 3 seconds and the collection stops", 300).ConfigureAwait(true);
         await WaitAsync(() => LatestReport() is { } r && r != before && (r.ToolsLoaded || r.HasError), "the report loads every tool", 300).ConfigureAwait(true);
         var report = LatestReport()!;
@@ -1803,7 +1808,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         var before = LatestReport();
         var hub = ProfilerWith(Workbench.Diagnostics.ProfilerTools.Memory);
         var run = await hub.StartAsync().ConfigureAwait(true);
-        Check(run is not null, "profiling starts: " + hub.Status);
+        Check(run is not null, "profiling starts: " + hub.Status + " " + LastNotifications());
         try
         {
             await Task.Delay(1000).ConfigureAwait(true);
