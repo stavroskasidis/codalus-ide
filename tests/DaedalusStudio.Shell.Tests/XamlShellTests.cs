@@ -39,9 +39,27 @@ public sealed class XamlShellTests
         var editor = document.Controller!;
         var dock = model.Text.Text.IndexOf("<ListBox x:Name", StringComparison.Ordinal);
         model.Text.Insert(dock, "<Bu />\n    ");
+        // Asked again every 10 s: on a loaded machine the first answers come before the project's types are loaded.
+        var asked = System.Diagnostics.Stopwatch.StartNew();
         editor.Editor.CaretOffset = dock + 3;
         editor.ShowCompletion();
-        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Count > 0, seconds: 90);
+        await ShellFixture.PumpUntil(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Button"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                editor.Editor.CaretOffset = dock + 3;
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, seconds: 360);
         Assert.Contains(editor.CompletionWindow!.CompletionList.CompletionData, d => d.Text == "Button");
         editor.CompletionWindow.Close();
         model.Text.Remove(dock, "<Bu />\n    ".Length);

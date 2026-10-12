@@ -480,6 +480,10 @@ public sealed class LanguageService : IAsyncDisposable
         });
     }
 
+    /// <summary>
+    /// Sends what gathered. Flushes run one at a time and the pending set keeps each project's newest inputs, so a host
+    /// that starts slowly never gets a design-time build from before a restore after the one from after it.
+    /// </summary>
     private async Task FlushAsync()
     {
         var batch = new List<CompilerInputsInfo>();
