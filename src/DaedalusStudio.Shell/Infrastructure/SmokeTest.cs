@@ -1052,6 +1052,11 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         // M18a: profiling (ADR 0044 and 0045), in the diagnostics host.
         await StepAsync("profiler.cpu", "M18", "The Performance Profiler launches the startup project with CPU Usage and .NET Counters; the report shows the hot function, the flame graph and hot lines (the diagnostics host)", ProfilerStepAsync).ConfigureAwait(true);
 
+        // M18b: the other profiler tools (ADR 0046) and BenchmarkDotNet.
+        await StepAsync("profiler.tools", "M18", "The Performance Profiler records .NET Async, threads and contention, exceptions and allocations of an async program; the report shows each", ProfilerToolsStepAsync).ConfigureAwait(true);
+        await StepAsync("profiler.memory", "M18", "Memory Usage takes two heap snapshots of a leaking program; the report's diff shows the leaked type growing, with its paths to roots", ProfilerMemoryStepAsync).ConfigureAwait(true);
+        await StepAsync("benchmarks.run", "M18", "A benchmark's gutter glyph runs it with BenchmarkDotNet; the Benchmarks window shows its result", BenchmarksStepAsync).ConfigureAwait(true);
+
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
             // The UI on a stand-in backend: this published build isn't an install (eng/test-update.sh updates real ones).
@@ -1646,6 +1651,119 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         // Hot lines in the editor's gutter.
         var editor = await OpenAsync(Path.Combine(target, "CpuBound", "Program.cs")).ConfigureAwait(true);
         await WaitAsync(() => editor.HotLineMargin.Lines.Count > 0, "Program.cs shows its hot lines in the gutter", 60).ConfigureAwait(true);
+    }
+
+    /// <summary>The Diagnostics solution open (the profiler.cpu step opened it), with a startup project and its arguments.</summary>
+    private async Task<string> DiagnosticsStartupAsync(string project, string arguments)
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "Diagnostics");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "Diagnostics"), target);
+        }
+
+        if (shell.Solutions.Solution?.Path != Path.Combine(target, "Diagnostics.slnx"))
+        {
+            await shell.OpenSolutionAsync(Path.Combine(target, "Diagnostics.slnx")).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 6 && shell.Solutions.Progress is { Completed: true }, "the Diagnostics solution is open", 300).ConfigureAwait(true);
+        }
+
+        Directory.CreateDirectory(Path.Combine(target, project, "Properties"));
+        File.WriteAllText(Path.Combine(target, project, "Properties", "launchSettings.json"), $$"""{ "profiles": { "{{project}}": { "commandName": "Project", "commandLineArgs": "{{arguments}}" } } }""");
+        shell.SetStartupProject(Path.Combine(target, project, project + ".csproj"));
+        return target;
+    }
+
+    private PerformanceProfilerViewModel ProfilerWith(params string[] tools)
+    {
+        var hub = shell.OpenProfiler();
+        foreach (var tool in hub.Tools)
+        {
+            hub.Use(tool.Id, tools.Contains(tool.Id));
+        }
+
+        return hub;
+    }
+
+    private ProfilingReportViewModel? LatestReport() =>
+        shell.Layout.Documents.OfType<SolutionManagementDocument>().Select(d => d.ViewModel).OfType<ProfilingReportViewModel>().LastOrDefault();
+
+    private async Task ProfilerToolsStepAsync()
+    {
+        await DiagnosticsStartupAsync("AsyncHeavy", "3").ConfigureAwait(true);
+        var before = LatestReport();
+        var hub = ProfilerWith(Workbench.Diagnostics.ProfilerTools.Cpu, Workbench.Diagnostics.ProfilerTools.Allocations, Workbench.Diagnostics.ProfilerTools.Async, Workbench.Diagnostics.ProfilerTools.Threads, Workbench.Diagnostics.ProfilerTools.Exceptions);
+        var run = await hub.StartAsync().ConfigureAwait(true);
+        Check(run is not null, "profiling starts: " + hub.Status);
+        await WaitAsync(() => !hub.IsCollecting, "AsyncHeavy runs its 3 seconds and the collection stops", 300).ConfigureAwait(true);
+        await WaitAsync(() => LatestReport() is { } r && r != before && (r.ToolsLoaded || r.HasError), "the report loads every tool", 300).ConfigureAwait(true);
+        var report = LatestReport()!;
+        Check(!report.HasError, "the trace was read: " + report.Error);
+        Check(report.Tasks.Count > 0, ".NET Async lists the tasks");
+        Check(report.ThreadRows.Count > 0 && report.ContentionTree.Count > 0, "Threads shows the threads and the lock contention");
+        Check(report.ExceptionGroups.Count > 0 && report.ExceptionGroups[0].Type == "System.InvalidOperationException" && report.ExceptionGroups[0].ThrowSite.Contains("Worker.Validate", StringComparison.Ordinal), "Exceptions groups the fixture's exception at its throw site: " + report.ExceptionGroups.FirstOrDefault()?.AccessibleName);
+        Check(report.AllocationTypes.Count > 0, "Allocations lists the allocated types");
+        Check(report.EventCounts.Count > 0 && report.Events.Count > 0, "the events viewer lists the trace's events");
+        Console.Out.WriteLine($"  {report.Tasks.Count} tasks, {report.ThreadRows.Count} threads, {report.ExceptionGroups.Count} exception groups, {report.AllocationTypes.Count} allocated types, {report.EventCounts.Count} kinds of events");
+        report.SelectedTab = ProfilingReportViewModel.ThreadsTab;
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-profiler-threads.png");
+    }
+
+    private async Task ProfilerMemoryStepAsync()
+    {
+        await DiagnosticsStartupAsync("Leaky", "0").ConfigureAwait(true);
+        var before = LatestReport();
+        var hub = ProfilerWith(Workbench.Diagnostics.ProfilerTools.Memory);
+        var run = await hub.StartAsync().ConfigureAwait(true);
+        Check(run is not null, "profiling starts: " + hub.Status);
+        try
+        {
+            await Task.Delay(1000).ConfigureAwait(true);
+            var clock = Stopwatch.StartNew();
+            Check(await hub.TakeSnapshotAsync().ConfigureAwait(true) is not null, "the first snapshot is taken: " + hub.Status);
+            Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  heap snapshot in {clock.ElapsedMilliseconds} ms"));
+            await Task.Delay(2000).ConfigureAwait(true);
+            Check(await hub.TakeSnapshotAsync().ConfigureAwait(true) is not null, "the second snapshot is taken: " + hub.Status);
+        }
+        finally
+        {
+            await hub.StopAsync().ConfigureAwait(true);
+        }
+
+        await WaitAsync(() => !hub.IsCollecting, "the collection stops", 120).ConfigureAwait(true);
+        await WaitAsync(() => LatestReport() is { } r && r != before && (r.HeapTypes.Count > 0 || r.HeapSummary?.Contains("could not", StringComparison.Ordinal) == true), "the report reads the snapshots", 300).ConfigureAwait(true);
+        var report = LatestReport()!;
+        var order = report.HeapTypes.FirstOrDefault(t => t.Name == "Order");
+        Check(order is { Type.CountDelta: > 0 }, "the diff shows Order growing: " + report.HeapSummary);
+        report.SelectedHeapType = order;
+        await WaitAsync(() => report.Referrers.Count > 0, "the paths to roots of Order", 60).ConfigureAwait(true);
+        Console.Out.WriteLine($"  {report.HeapSummary}; Order {order!.CountDiff}, held by {report.Referrers[0].Name}");
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-profiler-memory.png");
+    }
+
+    private async Task BenchmarksStepAsync()
+    {
+        var target = await DiagnosticsStartupAsync("CpuBound", "1").ConfigureAwait(true);
+        await WaitAsync(() => shell.Benchmarks.All.Count >= 4, "the solution's benchmarks are found", 60).ConfigureAwait(true);
+        var file = Path.Combine(target, "Benchmarks", "StringBenchmarks.cs");
+        var editor = await OpenAsync(file).ConfigureAwait(true);
+        await WaitAsync(() => editor.BenchmarkMargin.Glyphs.Count > 0, "StringBenchmarks.cs shows benchmark glyphs", 30).ConfigureAwait(true);
+        var concat = editor.BenchmarkMargin.Glyphs.FirstOrDefault(g => g.Method == "Concat");
+        Check(concat is not null, "Concat has a glyph");
+        shell.BenchmarksWindow.Job = "Dry";
+        shell.BenchmarksWindow.InProcess = true;
+        var clock = Stopwatch.StartNew();
+        await shell.RunBenchmarkAsync(file, concat!).ConfigureAwait(true);
+        await WaitAsync(() => !shell.Benchmarks.IsRunning, "BenchmarkDotNet finishes", 600).ConfigureAwait(true);
+        var result = shell.BenchmarksWindow.Results.FirstOrDefault();
+        Check(result is { Result.Mean: > 0 }, "the result is shown: " + shell.BenchmarksWindow.Status + "\n" + Tail(shell.BenchmarkLog.GetText(), 2000));
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  {result!.Method}: {result.Mean}, allocated {result.Allocated}, in {clock.Elapsed.TotalSeconds:0.0} s"));
+        shell.ShowBenchmarks();
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("smoke-test-benchmarks.png");
     }
 
     private async Task DataExplorerStepAsync()
