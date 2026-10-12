@@ -29,9 +29,9 @@
             <DataTemplate x:DataType="vm:SdkRow">
               <StackPanel>
                 <TextBlock Text="{Binding Display}" />
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Support}" IsVisible="{Binding !IsOutOfSupport}" />
-                <TextBlock Foreground="{DynamicResource Shell.Warning}" FontSize="11" Text="{Binding Support}" IsVisible="{Binding IsOutOfSupport}" />
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Path}" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Support}" IsVisible="{Binding !IsOutOfSupport}" />
+                <TextBlock Foreground="{DynamicResource Shell.Warning}" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Support}" IsVisible="{Binding IsOutOfSupport}" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Path}" />
               </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>

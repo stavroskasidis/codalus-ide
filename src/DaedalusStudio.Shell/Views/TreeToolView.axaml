@@ -23,7 +23,7 @@
         </DataTemplate>
       </ItemsControl.ItemTemplate>
     </ItemsControl>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
     <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="{Binding ViewId}">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:TreeNodeViewModel">
@@ -37,7 +37,7 @@
           <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
             <controls:Icon Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Label}" VerticalAlignment="Center" Classes.muted="{Binding IsPlaceholder}" />
-            <TextBlock Classes="muted" FontSize="11" Text="{Binding Description}" IsVisible="{Binding HasDescription}" VerticalAlignment="Center" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Description}" IsVisible="{Binding HasDescription}" VerticalAlignment="Center" />
           </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>

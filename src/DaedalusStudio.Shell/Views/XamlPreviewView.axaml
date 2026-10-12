@@ -1,18 +1,29 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.XamlPreviewView"
              x:DataType="vm:XamlPreviewViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,4" Spacing="4">
-      <Button Content="Refresh" Command="{Binding RefreshCommand}" ToolTip.Tip="Build if needed and render again" />
-      <Button Content="−" Command="{Binding ZoomOutCommand}" ToolTip.Tip="Zoom out" AutomationProperties.Name="Zoom out" />
-      <Button Content="{Binding ZoomText}" Command="{Binding ZoomResetCommand}" MinWidth="52" ToolTip.Tip="The zoom: click for actual size" AutomationProperties.Name="Zoom; actual size" />
-      <Button Content="+" Command="{Binding ZoomInCommand}" ToolTip.Tip="Zoom in" AutomationProperties.Name="Zoom in" />
-      <Button Content="Fit" Command="{Binding FitCommand}" ToolTip.Tip="Fit the preview to the pane" AutomationProperties.Name="Fit to the pane" />
-      <ComboBox ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" ToolTip.Tip="Render scale (DPI)" AutomationProperties.Name="Render scale" />
-      <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}" ToolTip.Tip="Theme variant" AutomationProperties.Name="Theme variant" />
-    </StackPanel>
+    <!-- One toolbar row (M34d): icons with tooltips, and what doesn't fit a narrow pane goes to the overflow menu. -->
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh: build if needed and render again" AutomationProperties.Name="Refresh">
+        <controls:Icon Kind="refresh" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding ZoomOutCommand}" ToolTip.Tip="Zoom out" AutomationProperties.Name="Zoom out">
+        <controls:Icon Kind="zoom-out" />
+      </Button>
+      <Button Classes="toolbar" Content="{Binding ZoomText}" Command="{Binding ZoomResetCommand}" MinWidth="44" ToolTip.Tip="The zoom: click for actual size" AutomationProperties.Name="Zoom; actual size" />
+      <Button Classes="toolbar" Command="{Binding ZoomInCommand}" ToolTip.Tip="Zoom in" AutomationProperties.Name="Zoom in">
+        <controls:Icon Kind="zoom-in" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding FitCommand}" ToolTip.Tip="Fit the preview to the pane" AutomationProperties.Name="Fit to the pane">
+        <controls:Icon Kind="fit" />
+      </Button>
+      <Border Classes="toolbarSeparator" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" ToolTip.Tip="Render scale (DPI)" AutomationProperties.Name="Render scale" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}" ToolTip.Tip="Theme variant" AutomationProperties.Name="Theme variant" />
+    </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Margin="8,0,8,4" Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
     <Border DockPanel.Dock="Top" IsVisible="{Binding HasError}" Margin="8,0,8,6" Padding="8,6" BorderThickness="1" BorderBrush="{DynamicResource Shell.Error}" CornerRadius="2">
       <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />

@@ -33,7 +33,7 @@
                 <TextBlock Classes="muted" Text="{Binding Version}" />
                 <TextBlock Foreground="{DynamicResource Shell.Link}" Text="{Binding Latest, StringFormat='update: {0}'}" IsVisible="{Binding HasUpdate}" />
               </StackPanel>
-              <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" />
+              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" />
             </StackPanel>
           </DataTemplate>
         </ListBox.ItemTemplate>

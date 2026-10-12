@@ -253,6 +253,14 @@ internal static partial class BuiltIns
                 document.IsPreview = false;
             }
         }), "activeDocumentKind");
+        Add("workbench.pinEditor", "Pin or Unpin Tab", "Window", Ui(() =>
+        {
+            if (shell.Layout.ActiveDocument is { } document)
+            {
+                shell.Layout.SetPinned(document, !document.IsPinned);
+            }
+        }), "activeDocumentKind");
+        Add("workbench.closeUnpinnedDocuments", "Close All But Pinned", "Window", Ui(shell.CloseUnpinnedDocuments), "activeDocumentKind");
         Add("workbench.closeAllDocuments", "Close All Documents", "Window", Ui(() => shell.CloseAllDocuments(exceptActive: false)), "activeDocumentKind");
         Add("workbench.closeOtherDocuments", "Close All But This", "Window", Ui(() => shell.CloseAllDocuments(exceptActive: true)), "activeDocumentKind");
         Add("workbench.closeDocumentsToTheRight", "Close All to the Right", "Window", Ui(shell.CloseDocumentsToTheRight), "activeDocumentKind");

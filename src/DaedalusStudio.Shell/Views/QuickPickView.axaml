@@ -35,11 +35,11 @@
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <controls:Icon Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" VerticalAlignment="Center" />
                 <controls:HighlightedText Source="{Binding Label}" Highlights="{Binding Highlights}" VerticalAlignment="Center" />
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Grid.Column="1"
                          Classes="muted"
-                         FontSize="11"
+                         FontSize="{DynamicResource Shell.FontSize.Small}"
                          Margin="16,0,0,0"
                          VerticalAlignment="Center"
                          Text="{Binding KeyLabel}"

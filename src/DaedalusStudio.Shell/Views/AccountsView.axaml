@@ -6,7 +6,7 @@
              x:DataType="vm:AccountsViewModel">
   <ScrollViewer>
     <StackPanel Margin="24,18" Spacing="12" MaxWidth="780" HorizontalAlignment="Left">
-      <TextBlock Classes="heading" FontSize="18" Text="Git Hosting Accounts" />
+      <TextBlock Classes="heading" Text="Git Hosting Accounts" />
       <TextBlock TextWrapping="Wrap" Classes="muted"
                  Text="Sign in to see pull requests, review comments, CI status and work items, and to publish repositories. Nothing is sent to a host until you sign in to it." />
       <StackPanel Orientation="Horizontal" Spacing="6">
@@ -31,7 +31,7 @@
                   <StackPanel Orientation="Horizontal" Spacing="10">
                     <controls:Icon Kind="cloud" Width="20" Height="20" VerticalAlignment="Center" />
                     <StackPanel>
-                      <TextBlock Text="{Binding Label}" FontWeight="SemiBold" FontSize="14" />
+                      <TextBlock Text="{Binding Label}" Classes="subheading" />
                       <TextBlock Text="{Binding StatusText}" Classes="muted" />
                     </StackPanel>
                   </StackPanel>
@@ -53,7 +53,7 @@
                     <TextBox Text="{Binding Token}" PasswordChar="●" Width="340" PlaceholderText="Personal access token" AutomationProperties.Name="{Binding Label, StringFormat='Personal access token for {0}'}" />
                     <Button Content="Sign In with Token" Command="{Binding SignInWithTokenCommand}" />
                   </StackPanel>
-                  <TextBlock Classes="muted" FontSize="11" Text="{Binding ServerHint}" IsVisible="{Binding HasServerHint}" TextWrapping="Wrap" />
+                  <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding ServerHint}" IsVisible="{Binding HasServerHint}" TextWrapping="Wrap" />
                 </StackPanel>
                 <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
               </StackPanel>

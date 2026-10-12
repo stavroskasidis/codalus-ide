@@ -33,6 +33,8 @@ public sealed class CodeEditorDocument : ShellDocument
 
     public CodeDocument Model { get; }
 
+    public override string? FilePath => Model.Path;
+
     public IEditorServices Services { get; }
 
     public Infrastructure.EditorFont Font { get; }

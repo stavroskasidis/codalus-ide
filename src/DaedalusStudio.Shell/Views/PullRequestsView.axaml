@@ -5,7 +5,7 @@
              x:Class="DaedalusStudio.Shell.Views.PullRequestsView"
              x:DataType="vm:PullRequestsViewModel">
   <DockPanel>
-    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,3">
+    <controls:ToolbarPanel DockPanel.Dock="Top">
       <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" AutomationProperties.Name="Refresh Pull Requests">
         <controls:Icon Kind="refresh" />
       </Button>
@@ -14,7 +14,7 @@
       </Button>
       <ComboBox ItemsSource="{x:Static vm:PullRequestsViewModel.Filters}" SelectedIndex="{Binding FilterIndex}" MinWidth="150" Margin="4,0" AutomationProperties.Name="Filter pull requests" />
       <TextBlock Text="{Binding RepositoryText}" Classes="muted" VerticalAlignment="Center" Margin="6,0" />
-    </WrapPanel>
+    </controls:ToolbarPanel>
     <StackPanel DockPanel.Dock="Top" Margin="12,8" Spacing="8" IsVisible="{Binding HasMessage}">
       <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Classes="muted" />
       <Button Classes="accent" Content="{Binding SignInLabel}" Command="{Binding SignInCommand}" IsVisible="{Binding CanSignIn}" HorizontalAlignment="Left" />
@@ -34,10 +34,10 @@
                 <TextBlock Text="{Binding Reference}" Classes="muted" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <Border IsVisible="{Binding IsCurrent}" Background="{DynamicResource Shell.Accent}" CornerRadius="3" Padding="4,0" VerticalAlignment="Center">
-                  <TextBlock Text="current branch" FontSize="10" Foreground="{DynamicResource Shell.AccentForeground}" />
+                  <TextBlock Text="current branch" FontSize="{DynamicResource Shell.FontSize.Small}" Foreground="{DynamicResource Shell.AccentForeground}" />
                 </Border>
               </StackPanel>
-              <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="11" Margin="22,0,0,0" TextTrimming="CharacterEllipsis" />
+              <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="22,0,0,0" TextTrimming="CharacterEllipsis" />
             </StackPanel>
           </DataTemplate>
         </ListBox.ItemTemplate>
@@ -47,7 +47,7 @@
 
       <ScrollViewer Grid.Row="2" IsVisible="{Binding HasDetails}" AutomationProperties.Name="Pull request details">
         <StackPanel Margin="10,6" Spacing="8">
-          <SelectableTextBlock Text="{Binding DetailsTitle}" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" />
+          <SelectableTextBlock Text="{Binding DetailsTitle}" Classes="subheading" TextWrapping="Wrap" />
           <TextBlock Text="{Binding DetailsMeta}" Classes="muted" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Classes="accent" Content="Check Out" Command="{Binding CheckOutCommand}" ToolTip.Tip="Fetch the pull request's branch and switch to it" />
@@ -73,7 +73,7 @@
                           <StackPanel Spacing="1" Margin="22,2,0,2">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                               <TextBlock Text="{Binding Author}" FontWeight="SemiBold" />
-                              <TextBlock Text="{Binding When}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                              <TextBlock Text="{Binding When}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
                             </StackPanel>
                             <SelectableTextBlock Text="{Binding Body}" TextWrapping="Wrap" />
                           </StackPanel>
@@ -92,7 +92,7 @@
                 <StackPanel Spacing="1" Margin="0,2">
                   <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="{Binding Author}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding When}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding When}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
                   </StackPanel>
                   <SelectableTextBlock Text="{Binding Body}" TextWrapping="Wrap" />
                 </StackPanel>

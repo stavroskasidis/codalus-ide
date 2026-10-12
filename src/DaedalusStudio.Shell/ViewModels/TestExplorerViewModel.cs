@@ -140,7 +140,7 @@ public sealed class TestExplorerViewModel : ObservableObject
     private TestFilter _filter = TestFilter.Empty;
     private TestGrouping _grouping = TestGrouping.Hierarchy;
     private string _summary = string.Empty;
-    private bool _refreshQueued;
+    private int _refreshQueued;
     private Playlist? _playlist;
     private IReadOnlyList<Playlist> _playlists = [];
 
@@ -251,6 +251,12 @@ public sealed class TestExplorerViewModel : ObservableObject
 
     public void SetPlaylists(IReadOnlyList<Playlist> playlists, string? select = null)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => SetPlaylists(playlists, select));
+            return;
+        }
+
         _playlists = playlists;
         OnPropertyChanged(nameof(PlaylistNames));
         if (select is not null || (_playlist is not null && playlists.All(p => p.Name != _playlist.Name)))
@@ -422,23 +428,32 @@ public sealed class TestExplorerViewModel : ObservableObject
 
     // ------------------------------------------------------------------ rows
 
+    /// <summary>
+    /// Refreshes once on the UI thread for any number of changes. The test service raises Changed on its own threads,
+    /// so the flag is atomic and the refresh is always posted (a refresh off the UI thread crashed a run on Linux, M34d).
+    /// </summary>
     private void QueueRefresh()
     {
-        if (_refreshQueued)
+        if (Interlocked.Exchange(ref _refreshQueued, 1) == 1)
         {
             return;
         }
 
-        _refreshQueued = true;
-        Ui.Post(() =>
+        Dispatcher.UIThread.Post(() =>
         {
-            _refreshQueued = false;
+            Interlocked.Exchange(ref _refreshQueued, 0);
             Refresh();
         });
     }
 
     public void Refresh()
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            QueueRefresh();
+            return;
+        }
+
         var playlist = _playlist is null ? null : new HashSet<string>(_playlist.Tests, StringComparer.Ordinal);
         var (groups, summary) = _shell.Tests.Read(roots => (TestProjection.Build(roots, _grouping, _filter, playlist), TestProjection.Summary(roots)));
         Summary = summary;

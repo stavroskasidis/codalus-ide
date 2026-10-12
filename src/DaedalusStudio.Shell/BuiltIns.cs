@@ -94,6 +94,14 @@ internal static partial class BuiltIns
                 Scope = SettingScope.User,
                 Order = 2,
             },
+            SettingDescriptor.Create(ShellHost.ColorTabsByProjectSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "Color Document Tabs by Project",
+                Category = "Appearance",
+                Description = "Mark each document tab with its project's color, a stripe along the tab's bottom edge.",
+                Scope = SettingScope.User,
+                Order = 3,
+            },
             SettingDescriptor.Create("workbench.notifications.autoHideSeconds", "8", SettingType.Integer, shell) with
             {
                 Title = "Auto-Hide Informational Toasts",

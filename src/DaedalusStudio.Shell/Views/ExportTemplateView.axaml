@@ -31,7 +31,7 @@
       <TextBox Text="{Binding Description}" AutomationProperties.Name="Description" />
       <TextBlock Text="Author" />
       <TextBox Text="{Binding Author}" AutomationProperties.Name="Author" />
-      <TextBlock Classes="muted" FontSize="11" Text="{Binding Destination, StringFormat='Written to {0}'}" TextWrapping="Wrap" />
+      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Destination, StringFormat='Written to {0}'}" TextWrapping="Wrap" />
       <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
       <Button Classes="accent" HorizontalAlignment="Left" Margin="0,6,0,0" Content="Export and Install" Command="{Binding ExportCommand}" />
       <TextBlock TextWrapping="Wrap" Text="{Binding Status}" />

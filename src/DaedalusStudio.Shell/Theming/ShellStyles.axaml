@@ -7,17 +7,18 @@
   <Style Selector="Window">
     <Setter Property="Background" Value="{DynamicResource Shell.Background}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
-    <!-- A classic IDE's density: 9 pt UI text (M29). -->
-    <Setter Property="FontSize" Value="12" />
+    <!-- A classic IDE's density: 9 pt UI text (M29, the Shell.FontSize tokens since M34d). -->
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
   </Style>
 
-  <!-- Dock tab headers show the dockable title; preview tabs in italics. -->
+  <!-- Dock tab headers show the dockable title; preview tabs in italics, pinned tabs with a pin (M34d). -->
   <Style Selector="DocumentControl">
     <Setter Property="HeaderTemplate">
       <DataTemplate DataType="docking:ShellDocument">
-        <StackPanel Orientation="Horizontal" Spacing="4">
+        <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding FilePath}">
           <controls:Icon Kind="{Binding TabIcon}" IsVisible="{Binding HasTabIcon}" Width="14" Height="14" VerticalAlignment="Center" />
           <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
+          <controls:Icon Kind="pin" IsVisible="{Binding IsPinned}" Width="12" Height="12" VerticalAlignment="Center" AutomationProperties.Name="Pinned" />
         </StackPanel>
       </DataTemplate>
     </Setter>
@@ -30,22 +31,123 @@
     </Setter>
   </Style>
 
+  <!--
+    Document tabs (M34d): Dock's template, our colors in every state. Unselected tabs take Shell.Tab.Inactive (Blue's
+    dark tabs), the selected tab of a pane without the focus Shell.Tab.Selected (its title was white on light gray in
+    Light and black on black in High Contrast), the active one Shell.Tab.Active, or Shell.Tab.Preview when it previews.
+    A tab colored by project has a stripe along its bottom edge. Styles outrank the control theme in any state, so
+    every state is restated here, in order.
+  -->
+  <Style Selector="DocumentTabStripItem" x:DataType="docking:ShellDocument">
+    <Setter Property="Background" Value="{DynamicResource Shell.Tab.Inactive}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Inactive.Foreground}" />
+    <Setter Property="(controls:DocumentTab.IsPreview)" Value="{Binding IsPreview}" />
+    <Setter Property="(controls:DocumentTab.IsPinned)" Value="{Binding IsPinned}" />
+    <Setter Property="BorderBrush" Value="{Binding TabAccent}" />
+    <Setter Property="BorderThickness" Value="{Binding TabAccentThickness}" />
+  </Style>
+  <Style Selector="DocumentTabStripItem:pointerover:not(:selected)">
+    <Setter Property="Background" Value="{DynamicResource Shell.Tab.Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Hover.Foreground}" />
+  </Style>
+  <Style Selector="DocumentTabStripItem:selected">
+    <Setter Property="Background" Value="{DynamicResource Shell.Tab.Selected}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Selected.Foreground}" />
+  </Style>
+  <Style Selector="DocumentTabStripItem:active:selected">
+    <Setter Property="Background" Value="{DynamicResource Shell.Tab.Active}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Active.Foreground}" />
+  </Style>
+  <Style Selector="DocumentTabStripItem:active:selected[(controls|DocumentTab.IsPreview)=True]">
+    <Setter Property="Background" Value="{DynamicResource Shell.Tab.Preview}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Preview.Foreground}" />
+  </Style>
+
+  <!-- Tool window tabs: a hover that keeps its text readable, and the selected tab's title in the link color. -->
+  <Style Selector="ToolTabStripItem:pointerover:not(:selected)">
+    <Setter Property="Background" Value="{DynamicResource Shell.Tab.Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Hover.Foreground}" />
+  </Style>
+  <Style Selector="ToolTabStripItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Link}" />
+  </Style>
+
+  <!-- Tool window captions: Shell.Caption.Active with the focus, Shell.Caption.Inactive without (M34d). -->
+  <Style Selector="ToolChromeControl /template/ Grid#PART_Grip">
+    <Setter Property="Background" Value="{DynamicResource Shell.Caption.Inactive}" />
+  </Style>
+  <Style Selector="ToolChromeControl /template/ TextBlock#PART_Title">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Caption.Inactive.Foreground}" />
+  </Style>
+  <Style Selector="ToolChromeControl /template/ Path">
+    <Setter Property="Fill" Value="{DynamicResource Shell.Caption.Inactive.Foreground}" />
+  </Style>
+  <Style Selector="ToolChromeControl:active /template/ Grid#PART_Grip">
+    <Setter Property="Background" Value="{DynamicResource Shell.Caption.Active}" />
+  </Style>
+  <Style Selector="ToolChromeControl:active /template/ TextBlock#PART_Title">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Caption.Active.Foreground}" />
+  </Style>
+  <Style Selector="ToolChromeControl:active /template/ Path">
+    <Setter Property="Fill" Value="{DynamicResource Shell.Caption.Active.Foreground}" />
+  </Style>
+
+  <!-- Type (M34d): body text is the window's 12 px; .small for secondary text, .subheading and .heading for titles. -->
   <Style Selector="TextBlock.muted">
     <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
   </Style>
+  <Style Selector="TextBlock.small">
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+  </Style>
   <Style Selector="TextBlock.heading">
-    <Setter Property="FontSize" Value="18" />
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Title}" />
     <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
+  <Style Selector="TextBlock.subheading">
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Heading}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="SelectableTextBlock.subheading">
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Heading}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <!-- An empty or error state's message: muted, wrapped, with room around it; a next step goes below it. -->
+  <Style Selector="TextBlock.emptyState">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="Margin" Value="{DynamicResource Shell.Padding.EmptyState}" />
+  </Style>
 
-  <!-- Flat icon/text buttons in tool window toolbars. -->
+  <!-- Tool window toolbars (M34d): one row that never wraps (ToolbarPanel), 24 px buttons with 16 px icons. -->
+  <Style Selector="controls|ToolbarPanel">
+    <Setter Property="Margin" Value="{DynamicResource Shell.Padding.Toolbar}" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+  </Style>
+  <Style Selector="controls|ToolbarPanel > TextBox">
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Input}" />
+    <Setter Property="Padding" Value="6,3" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="controls|ToolbarPanel > ComboBox">
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Input}" />
+    <Setter Property="Height" Value="{DynamicResource Shell.Size.Input}" />
+    <Setter Property="Padding" Value="6,0" />
+  </Style>
+  <Style Selector="controls|ToolbarPanel > Button:not(.toolbar)">
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    <Setter Property="Padding" Value="8,2" />
+  </Style>
   <Style Selector="Button.toolbar">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="BorderBrush" Value="Transparent" />
-    <Setter Property="Padding" Value="4,2" />
-    <Setter Property="MinHeight" Value="0" />
-    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Padding" Value="{DynamicResource Shell.Padding.ToolbarButton}" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    <Setter Property="MinWidth" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
   </Style>
   <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
@@ -53,9 +155,14 @@
   </Style>
   <Style Selector="ToggleButton.toolbar">
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="Padding" Value="4,2" />
-    <Setter Property="MinHeight" Value="0" />
-    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Padding" Value="{DynamicResource Shell.Padding.ToolbarButton}" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    <Setter Property="MinWidth" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
+  </Style>
+  <Style Selector="ToolTip">
+    <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
   </Style>
 
   <!-- The status bar's color says the state: purple without a solution, the accent with one, orange while debugging. -->
@@ -94,8 +201,8 @@
     <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Border}" />
   </Style>
   <Style Selector="ComboBox.toolbar">
-    <Setter Property="MinHeight" Value="24" />
-    <Setter Property="Height" Value="24" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Input}" />
+    <Setter Property="Height" Value="{DynamicResource Shell.Size.Input}" />
     <Setter Property="Padding" Value="6,0" />
     <Setter Property="Margin" Value="2,0" />
     <Setter Property="FontSize" Value="12" />

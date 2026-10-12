@@ -19,7 +19,7 @@
           <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
             <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Label}" VerticalAlignment="Center" Classes.muted="{Binding IsPlaceholder}" />
-            <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
           </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>

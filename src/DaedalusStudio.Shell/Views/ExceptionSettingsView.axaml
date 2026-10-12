@@ -1,15 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.ExceptionSettingsView"
              x:DataType="vm:ExceptionSettingsViewModel">
   <DockPanel>
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" Margin="6,4">
+    <controls:ToolbarPanel DockPanel.Dock="Top" Spacing="4">
       <TextBox x:Name="Search" Text="{Binding Filter}" PlaceholderText="Search exception types" AutomationProperties.Name="Search exception types" />
-      <Button x:Name="CheckAll" Grid.Column="1" Margin="6,0,0,0" Content="Break on All" ToolTip.Tip="Break when any exception is thrown" AutomationProperties.Name="Break on all exceptions" />
-      <Button x:Name="UncheckAll" Grid.Column="2" Margin="6,0,0,0" Content="Break on None" ToolTip.Tip="Break only on user-unhandled exceptions" AutomationProperties.Name="Break on no thrown exceptions" />
-      <Button x:Name="Reset" Grid.Column="3" Margin="6,0,0,0" Content="Restore Defaults" AutomationProperties.Name="Restore the default exception settings" />
-    </Grid>
+      <Button x:Name="CheckAll" Content="Break on All" ToolTip.Tip="Break when any exception is thrown" AutomationProperties.Name="Break on all exceptions" />
+      <Button x:Name="UncheckAll" Content="Break on None" ToolTip.Tip="Break only on user-unhandled exceptions" AutomationProperties.Name="Break on no thrown exceptions" />
+      <Button x:Name="Reset" Content="Restore Defaults" AutomationProperties.Name="Restore the default exception settings" />
+    </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="10,2,10,4" TextWrapping="Wrap"
                Text="Checked types break when they are thrown, even if they are caught. User-unhandled exceptions always break. Types match exactly: a base type doesn't cover derived ones." />
     <CheckBox DockPanel.Dock="Top" Margin="10,2" IsChecked="{Binding BreakOnOthers}" Content="All other exception types (not in this list)" AutomationProperties.Name="Break on all other exception types" />

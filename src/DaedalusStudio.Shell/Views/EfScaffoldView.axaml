@@ -5,7 +5,7 @@
              x:DataType="vm:EfScaffoldViewModel">
   <ScrollViewer>
     <StackPanel Margin="24,18" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
-      <TextBlock Classes="heading" FontSize="18" Text="Reverse engineer a database" />
+      <TextBlock Classes="heading" Text="Reverse engineer a database" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="dotnet ef dbcontext scaffold generates entity types and a DbContext from the database's schema into the project. The project needs the provider's EF Core package and Microsoft.EntityFrameworkCore.Design." />
       <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4">
         <TextBlock Text="Project" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />

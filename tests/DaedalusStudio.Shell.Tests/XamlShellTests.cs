@@ -136,7 +136,7 @@ public sealed class XamlShellTests
         frames = preview.FrameCount;
         preview.SelectedTheme = "Dark";
         await ShellFixture.PumpUntil(() => preview.FrameCount > frames, seconds: 30);
-        preview.SelectedScale = "200%";
+        preview.SelectedScale = "2×";
         await ShellFixture.PumpUntil(() => preview.Frame is { Width: 960, Scale: 2 }, seconds: 60);
         Assert.Equal(480d, preview.ImageWidth);
 

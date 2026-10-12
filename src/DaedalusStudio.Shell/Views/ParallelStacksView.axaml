@@ -4,7 +4,7 @@
              x:Class="DaedalusStudio.Shell.Views.ParallelStacksView"
              x:DataType="vm:ParallelStacksViewModel">
   <DockPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="The threads' call stacks appear here, merged, while the program is paused." IsVisible="{Binding IsEmpty}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="The threads' call stacks appear here, merged, while the program is paused." IsVisible="{Binding IsEmpty}" />
     <TreeView ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="Parallel Stacks">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:ParallelStackNodeViewModel">

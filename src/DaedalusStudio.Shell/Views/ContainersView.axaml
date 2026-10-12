@@ -1,10 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.ContainersView"
              x:DataType="vm:ContainersViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
+    <controls:ToolbarPanel DockPanel.Dock="Top">
       <Button x:Name="Refresh" Content="Refresh" AutomationProperties.Name="Refresh the containers and images" />
       <Button x:Name="Start" Content="Start" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Start the selected container" />
       <Button x:Name="Stop" Content="Stop" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Stop the selected container" />
@@ -14,7 +15,7 @@
       <Button x:Name="Terminal" Content="Open Terminal" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Open a terminal in the selected container" />
       <Button x:Name="Attach" Content="Attach Debugger" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Attach the debugger to a process in the selected container" />
       <TextBlock Classes="muted" VerticalAlignment="Center" Text="Working…" IsVisible="{Binding IsBusy}" />
-    </StackPanel>
+    </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
     <Grid ColumnDefinitions="2*,4,3*">
       <TabControl Grid.Column="0" Padding="0">

@@ -5,8 +5,8 @@
              x:Class="DaedalusStudio.Shell.Views.TestExplorerView"
              x:DataType="vm:TestExplorerViewModel">
   <DockPanel>
-    <!-- Toolbar: run, debug, repeat, cancel; grouping, playlist and filter. -->
-    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,3">
+    <!-- Toolbar: run, debug, repeat, cancel; grouping and playlist. One row: what doesn't fit goes to the overflow menu (M34d). -->
+    <controls:ToolbarPanel DockPanel.Dock="Top">
       <Button Classes="toolbar" Command="{Binding RunAllCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="Run All Tests (Ctrl+R, A)" AutomationProperties.Name="Run All Tests">
         <controls:Icon Kind="run-all" />
       </Button>
@@ -37,15 +37,18 @@
       <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="Collapse All" AutomationProperties.Name="Collapse All">
         <controls:Icon Kind="collapse-all" />
       </Button>
-      <ComboBox ItemsSource="{Binding Groupings}" SelectedIndex="{Binding GroupingIndex}" MinWidth="120" Margin="4,0" ToolTip.Tip="Group by" AutomationProperties.Name="Group by" />
-      <ComboBox ItemsSource="{Binding PlaylistNames}" SelectedIndex="{Binding PlaylistIndex}" MinWidth="100" Margin="0,0,4,0" ToolTip.Tip="Playlist" AutomationProperties.Name="Playlist" />
-      <TextBox x:Name="Filter" Text="{Binding FilterText}" MinWidth="180" PlaceholderText="Search (outcome:failed trait:Category=Math project:Name)" AutomationProperties.Name="Search Test Explorer" />
-    </WrapPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" FontSize="11" Margin="8,0,8,3" Text="{Binding Summary}" />
+      <Border Classes="toolbarSeparator" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding Groupings}" SelectedIndex="{Binding GroupingIndex}" Width="176" ToolTip.Tip="Group by" AutomationProperties.Name="Group by" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding PlaylistNames}" SelectedIndex="{Binding PlaylistIndex}" Width="110" ToolTip.Tip="Playlist" AutomationProperties.Name="Playlist" />
+    </controls:ToolbarPanel>
+    <!-- The search box has its own row, the pane's width. -->
+    <TextBox x:Name="Filter" DockPanel.Dock="Top" Margin="4,0,4,4" Text="{Binding FilterText}" PlaceholderText="Search (outcome:failed trait:Category=Math project:Name)"
+             ToolTip.Tip="Search: outcome:failed trait:Category=Math project:Name" AutomationProperties.Name="Search Test Explorer" />
+    <TextBlock DockPanel.Dock="Top" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="8,0,8,3" TextWrapping="Wrap" Text="{Binding Summary}" />
 
     <Grid RowDefinitions="*,Auto,Auto">
       <Grid>
-        <TextBlock Classes="muted" Margin="12" TextWrapping="Wrap" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
+        <TextBlock Classes="emptyState" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
         <ListBox x:Name="List"
                  ItemsSource="{Binding Rows}"
                  SelectedItem="{Binding Selected}"
@@ -61,17 +64,20 @@
           </ListBox.Styles>
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:TestRowViewModel">
-              <StackPanel Orientation="Horizontal" Spacing="4" Margin="{Binding Indent}" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
-                <Border Classes="chevron" Width="16" Height="18" Background="Transparent">
+              <!-- The label trims with an ellipsis in a narrow pane; the row's tooltip has the full text (M34d). -->
+              <DockPanel Margin="{Binding Indent}" Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+                <Border DockPanel.Dock="Left" Classes="chevron" Width="16" Height="18" Background="Transparent">
                   <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
-                <controls:Icon Kind="{Binding OutcomeIcon}" VerticalAlignment="Center"
+                <controls:Icon DockPanel.Dock="Left" Margin="4,0" Kind="{Binding OutcomeIcon}" VerticalAlignment="Center"
                                Classes.passed="{Binding Style.IsPassed}" Classes.failed="{Binding Style.IsFailed}" Classes.skipped="{Binding Style.IsSkipped}"
                                Classes.running="{Binding Style.IsRunning}" Classes.none="{Binding Style.IsNone}" />
-                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
-                <controls:Icon Kind="warning" Classes="warning" IsVisible="{Binding HasError}" ToolTip.Tip="{Binding Error}" VerticalAlignment="Center" />
-              </StackPanel>
+                <controls:Icon DockPanel.Dock="Right" Margin="4,0" Kind="warning" Classes="warning" IsVisible="{Binding HasError}" ToolTip.Tip="{Binding Error}" VerticalAlignment="Center" />
+                <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                  <Run Text="{Binding Label}" />
+                  <Run Text="{Binding Detail}" FontSize="{DynamicResource Shell.FontSize.Small}" Foreground="{DynamicResource Shell.MutedForeground}" />
+                </TextBlock>
+              </DockPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>

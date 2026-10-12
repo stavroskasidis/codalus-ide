@@ -5,7 +5,7 @@
              x:DataType="vm:CreatePullRequestViewModel">
   <ScrollViewer>
     <StackPanel Margin="24,18" Spacing="10" MaxWidth="780" HorizontalAlignment="Left">
-      <TextBlock Classes="heading" FontSize="18" Text="{Binding Header}" TextWrapping="Wrap" />
+      <TextBlock Classes="heading" Text="{Binding Header}" TextWrapping="Wrap" />
       <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4">
         <TextBlock Text="From" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
         <TextBlock Grid.Column="1" Text="{Binding SourceBranch}" FontWeight="SemiBold" VerticalAlignment="Center" />

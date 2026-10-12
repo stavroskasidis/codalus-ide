@@ -631,6 +631,15 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    /// <summary>Closes every document that isn't pinned (M34d).</summary>
+    public void CloseUnpinnedDocuments()
+    {
+        foreach (var document in Layout.Documents.Where(d => !d.IsPinned).ToList())
+        {
+            Layout.CloseDocument(document);
+        }
+    }
+
     public bool HasUnsavedDocuments => _models.Values.Any(m => m.IsModified);
 
     /// <summary>Asks before quitting with unsaved changes; true when the window may close.</summary>

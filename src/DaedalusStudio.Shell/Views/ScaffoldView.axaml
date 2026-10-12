@@ -28,7 +28,7 @@
               <controls:Icon Kind="{Binding Icon}" Margin="0,0,8,0" VerticalAlignment="Top" />
               <StackPanel Grid.Column="1">
                 <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Engine}" TextWrapping="Wrap" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Engine}" TextWrapping="Wrap" />
               </StackPanel>
             </Grid>
           </DataTemplate>
@@ -52,7 +52,7 @@
                       <TextBox Text="{Binding Text}" PlaceholderText="{Binding Placeholder}" AutomationProperties.Name="{Binding Parameter.Label}" />
                       <ComboBox Grid.Column="1" Margin="6,0,0,0" MinWidth="150" ItemsSource="{Binding Suggestions}" SelectedItem="{Binding Suggestion}" PlaceholderText="From the project" IsVisible="{Binding HasSuggestions}" />
                     </Grid>
-                    <TextBlock Classes="muted" FontSize="11" Text="{Binding Description}" IsVisible="{Binding HasDescription}" TextWrapping="Wrap" />
+                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Description}" IsVisible="{Binding HasDescription}" TextWrapping="Wrap" />
                   </StackPanel>
                 </DataTemplate>
                 <DataTemplate x:DataType="vm:ScaffoldBoolField">
@@ -62,7 +62,7 @@
                   <StackPanel Spacing="2" Margin="0,2">
                     <TextBlock Text="{Binding Label}" />
                     <ComboBox MinWidth="200" ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{Binding Parameter.Label}" />
-                    <TextBlock Classes="muted" FontSize="11" Text="{Binding Description}" IsVisible="{Binding HasDescription}" TextWrapping="Wrap" />
+                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Description}" IsVisible="{Binding HasDescription}" TextWrapping="Wrap" />
                   </StackPanel>
                 </DataTemplate>
               </ItemsControl.DataTemplates>

@@ -5,7 +5,7 @@
              x:Class="DaedalusStudio.Shell.Views.CodeMetricsView"
              x:DataType="vm:CodeMetricsViewModel">
   <DockPanel>
-    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,3">
+    <controls:ToolbarPanel DockPanel.Dock="Top">
       <Button Classes="toolbar" Command="{Binding SolutionCommand}" ToolTip.Tip="Calculate Code Metrics for Solution" AutomationProperties.Name="Calculate Code Metrics for Solution">
         <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="solution" /><TextBlock Text="Solution" /></StackPanel>
       </Button>
@@ -15,51 +15,56 @@
       <Button Classes="toolbar" Command="{Binding CopyCommand}" ToolTip.Tip="Copy the results as tab-separated text" AutomationProperties.Name="Copy Results">
         <controls:Icon Kind="file-data" />
       </Button>
-    </WrapPanel>
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,90,90,80,80,80,90" Margin="8,2,24,2">
-      <TextBlock Classes="muted" Text="Hierarchy" />
-      <TextBlock Grid.Column="1" Classes="muted" Text="Maintainability" HorizontalAlignment="Right" ToolTip.Tip="Maintainability Index: 20–100 good, 10–19 moderate, 0–9 low" />
-      <TextBlock Grid.Column="2" Classes="muted" Text="Complexity" HorizontalAlignment="Right" ToolTip.Tip="Cyclomatic Complexity" />
-      <TextBlock Grid.Column="3" Classes="muted" Text="Inheritance" HorizontalAlignment="Right" ToolTip.Tip="Depth of Inheritance" />
-      <TextBlock Grid.Column="4" Classes="muted" Text="Coupling" HorizontalAlignment="Right" ToolTip.Tip="Class Coupling" />
-      <TextBlock Grid.Column="5" Classes="muted" Text="Source" HorizontalAlignment="Right" ToolTip.Tip="Lines of Source Code" />
-      <TextBlock Grid.Column="6" Classes="muted" Text="Executable" HorizontalAlignment="Right" ToolTip.Tip="Lines of Executable Code" />
-    </Grid>
-    <Grid>
-      <TextBlock Classes="muted" Margin="12,8" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
-      <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="Code Metrics Results">
-        <TreeView.Styles>
-          <Style Selector="TreeViewItem" x:DataType="vm:MetricsNodeViewModel">
-            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
-            <Setter Property="MinHeight" Value="20" />
-          </Style>
-          <!-- Stretch the header so the metric columns line up at the right whatever the depth. -->
-          <Style Selector="TreeViewItem /template/ ContentPresenter#PART_HeaderPresenter">
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-          </Style>
-        </TreeView.Styles>
-        <TreeView.ItemTemplate>
-          <TreeDataTemplate x:DataType="vm:MetricsNodeViewModel" ItemsSource="{Binding Children}">
-            <Grid ColumnDefinitions="*,90,90,80,80,80,90" Background="Transparent">
-              <StackPanel Orientation="Horizontal" Spacing="6">
-                <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-              </StackPanel>
-              <Panel Grid.Column="1" HorizontalAlignment="Right">
-                <TextBlock Text="{Binding Maintainability}" VerticalAlignment="Center" IsVisible="{Binding !IsLow}" />
-                <TextBlock Text="{Binding Maintainability}" VerticalAlignment="Center" Foreground="{DynamicResource Shell.Error}" FontWeight="SemiBold" IsVisible="{Binding IsLow}" />
-              </Panel>
-              <TextBlock Grid.Column="2" Text="{Binding Complexity}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="3" Text="{Binding Depth}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="4" Text="{Binding Coupling}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="5" Text="{Binding SourceLines}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="6" Text="{Binding ExecutableLines}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-            </Grid>
-          </TreeDataTemplate>
-        </TreeView.ItemTemplate>
-      </TreeView>
-    </Grid>
+    </controls:ToolbarPanel>
+    <!-- The columns keep their widths in a narrow pane and scroll sideways together (M34d). -->
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+      <DockPanel MinWidth="640">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,90,90,80,80,80,90" Margin="8,2,24,2">
+          <TextBlock Classes="muted" Text="Hierarchy" />
+          <TextBlock Grid.Column="1" Classes="muted" Text="Maintainability" HorizontalAlignment="Right" ToolTip.Tip="Maintainability Index: 20–100 good, 10–19 moderate, 0–9 low" />
+          <TextBlock Grid.Column="2" Classes="muted" Text="Complexity" HorizontalAlignment="Right" ToolTip.Tip="Cyclomatic Complexity" />
+          <TextBlock Grid.Column="3" Classes="muted" Text="Inheritance" HorizontalAlignment="Right" ToolTip.Tip="Depth of Inheritance" />
+          <TextBlock Grid.Column="4" Classes="muted" Text="Coupling" HorizontalAlignment="Right" ToolTip.Tip="Class Coupling" />
+          <TextBlock Grid.Column="5" Classes="muted" Text="Source" HorizontalAlignment="Right" ToolTip.Tip="Lines of Source Code" />
+          <TextBlock Grid.Column="6" Classes="muted" Text="Executable" HorizontalAlignment="Right" ToolTip.Tip="Lines of Executable Code" />
+        </Grid>
+        <Grid>
+          <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+          <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="Code Metrics Results">
+            <TreeView.Styles>
+              <Style Selector="TreeViewItem" x:DataType="vm:MetricsNodeViewModel">
+                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+                <Setter Property="MinHeight" Value="20" />
+              </Style>
+              <!-- Stretch the header so the metric columns line up at the right whatever the depth. -->
+              <Style Selector="TreeViewItem /template/ ContentPresenter#PART_HeaderPresenter">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+              </Style>
+            </TreeView.Styles>
+            <TreeView.ItemTemplate>
+              <TreeDataTemplate x:DataType="vm:MetricsNodeViewModel" ItemsSource="{Binding Children}">
+                <Grid ColumnDefinitions="*,90,90,80,80,80,90" Background="Transparent">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                  <Panel Grid.Column="1" HorizontalAlignment="Right">
+                    <TextBlock Text="{Binding Maintainability}" VerticalAlignment="Center" IsVisible="{Binding !IsLow}" />
+                    <TextBlock Text="{Binding Maintainability}" VerticalAlignment="Center" Foreground="{DynamicResource Shell.Error}" FontWeight="SemiBold" IsVisible="{Binding IsLow}" />
+                  </Panel>
+                  <TextBlock Grid.Column="2" Text="{Binding Complexity}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="3" Text="{Binding Depth}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="4" Text="{Binding Coupling}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="5" Text="{Binding SourceLines}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="6" Text="{Binding ExecutableLines}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+              </TreeDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
+        </Grid>
+      </DockPanel>
+    </ScrollViewer>
   </DockPanel>
 </UserControl>

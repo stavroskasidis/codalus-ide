@@ -11,7 +11,7 @@
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
           <TextBlock Text="{Binding Name}" />
           <Border IsVisible="{Binding HasBadge}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="3" Padding="3,0" VerticalAlignment="Center" ToolTip.Tip="{Binding BadgeTooltip}">
-            <TextBlock Text="{Binding Badge}" FontSize="10" Classes="muted" />
+            <TextBlock Text="{Binding Badge}" FontSize="{DynamicResource Shell.FontSize.Small}" Classes="muted" />
           </Border>
           <TextBlock Text="{Binding Folder}" Classes="muted" TextTrimming="CharacterEllipsis" />
         </StackPanel>
@@ -38,7 +38,7 @@
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <controls:Icon Kind="folder" />
                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding Path}" Classes="muted" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Path}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
               </StackPanel>
             </DataTemplate>
           </ComboBox.ItemTemplate>
@@ -78,7 +78,7 @@
                       <controls:Icon Kind="issue" />
                       <TextBlock Text="{Binding Reference}" FontWeight="SemiBold" />
                       <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                      <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
                     </StackPanel>
                   </DataTemplate>
                 </ListBox.ItemTemplate>

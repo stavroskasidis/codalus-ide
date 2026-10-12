@@ -8,7 +8,7 @@
       <TextBox x:Name="Search" Text="{Binding Filter}" PlaceholderText="Search routes and handlers" AutomationProperties.Name="Search endpoints" />
       <Button x:Name="Refresh" Grid.Column="1" Margin="6,0,0,0" Content="Refresh" AutomationProperties.Name="Refresh endpoints" />
     </Grid>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Status}" IsVisible="{Binding HasStatus}" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Endpoints">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:EndpointRow">

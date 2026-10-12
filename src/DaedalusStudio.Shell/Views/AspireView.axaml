@@ -1,16 +1,17 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.AspireView"
              x:DataType="vm:AspireViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
+    <controls:ToolbarPanel DockPanel.Dock="Top">
       <Button x:Name="Dashboard" Content="Open Dashboard" IsEnabled="{Binding HasDashboard}" AutomationProperties.Name="Open the Aspire dashboard in the browser" />
       <Button x:Name="Start" Content="Start" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Start the selected resource" />
       <Button x:Name="Stop" Content="Stop" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Stop the selected resource" />
       <Button x:Name="Restart" Content="Restart" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Restart the selected resource" />
       <Button x:Name="Browse" Content="Open Endpoint" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Open the selected resource's endpoint in the browser" />
-    </StackPanel>
+    </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
     <Grid ColumnDefinitions="2*,4,3*">
       <ListBox x:Name="ResourceList" ItemsSource="{Binding Resources}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Aspire resources">
