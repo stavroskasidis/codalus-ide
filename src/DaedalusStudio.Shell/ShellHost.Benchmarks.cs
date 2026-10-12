@@ -24,8 +24,8 @@ public sealed partial class ShellHost
         Benchmarks = new BenchmarkService(() => Solutions.Solution?.Path is { } path ? (Directory.Exists(path) ? path : Path.GetDirectoryName(path)) : null, Paths.State);
         Benchmarks.Output += (_, line) => BenchmarkLog.AppendLine(line);
         BenchmarksWindow = new BenchmarksViewModel(Benchmarks, RunBenchmarksAsync, OpenSourceLineAsync);
-        Solutions.SolutionChanged += (_, _) => ScanBenchmarks();
-        Solutions.ProjectChanged += (_, _) => ScanBenchmarks();
+        Solutions.SolutionChanged += (_, _) => Ui.Post(() => _ = ScanBenchmarks());
+        Solutions.ProjectChanged += (_, _) => Ui.Post(() => _ = ScanBenchmarks());
     }
 
     /// <summary>Finds the solution's benchmarks again, off the UI thread (the latest scan wins).</summary>

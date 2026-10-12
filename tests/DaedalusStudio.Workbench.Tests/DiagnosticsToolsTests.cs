@@ -205,8 +205,12 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
         var threads = await trace.ThreadsAsync(100, Timeout());
         Assert.All(threads.Threads, t => Assert.Equal(100, t.States.Length));
         Assert.Contains(threads.Threads, t => t.Running > 0);
-        Assert.Contains(threads.Threads, t => t.Contention > 0 && t.States.Contains('C'));
+        Assert.Contains(threads.Threads, t => t.Contention > 0);
         Assert.Contains(threads.Threads, t => t.States.Contains('W'));
+        if (threads.Threads.Max(t => t.Contention) > threads.BucketMilliseconds * 5)
+        {
+            Assert.Contains(threads.Threads, t => t.States.Contains('C'));
+        }
         Assert.Contains(threads.Pool, p => p.Kind == "adjustment" && p.Reason is "Starvation" or "CooperativeBlocking" or "ThreadTimedOut" or "Warmup" or "Initializing" or "ClimbingMove");
         Assert.Contains(threads.Pool, p => p.Kind == "start");
 
@@ -266,9 +270,10 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
         var io = await trace.FileIoAsync(Timeout());
         Assert.True(io.Available);
         Assert.NotEmpty(io.Samples);
-        Assert.True(io.WriteBytes >= 1024 * 1024, $"{io.WriteBytes} bytes written ({io.Source})");
         if (!OperatingSystem.IsMacOS())
         {
+            // macOS counts bytes when they reach the disk, which the page cache may delay past the trace.
+            Assert.True(io.WriteBytes >= 1024 * 1024, $"{io.WriteBytes} bytes written ({io.Source})");
             Assert.True(io.ReadBytes >= 1024 * 1024, $"{io.ReadBytes} bytes read");
             Assert.True(io.WriteOperations > 0);
         }

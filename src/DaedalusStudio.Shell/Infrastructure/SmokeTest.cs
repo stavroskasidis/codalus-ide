@@ -691,7 +691,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>
         {
             await shell.OpenSolutionAsync(PreparePackagesFixture()).ConfigureAwait(true);
-            await WaitAsync(() => shell.Solutions.Projects.Count == 6 && shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState == "succeeded", "the Packages solution is open and restored", 300).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState == "succeeded", "the Packages solution is open and restored", 300).ConfigureAwait(true);
             var vm = shell.OpenPackageManager(PlainProject) ?? throw new SmokeFailure("The NuGet Package Manager did not open.");
             await WaitAsync(() => vm.Sources.Contains("local"), "the package sources are listed").ConfigureAwait(true);
             vm.SelectedSource = "local";
@@ -1170,7 +1170,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         Check(File.Exists(Path.Combine(samples, "Debugging", "Sessions.slnx")), $"the samples folder {samples} has Debugging/Sessions.slnx");
         Copy(Path.Combine(samples, "Debugging"), Sessions);
         await shell.OpenSolutionAsync(Path.Combine(Sessions, "Sessions.slnx")).ConfigureAwait(true);
-        await WaitAsync(() => shell.Solutions.Projects.Count == 6 && shell.Solutions.Progress is { Completed: true }, "the Sessions solution is open", 300).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true }, "the Sessions solution is open", 300).ConfigureAwait(true);
 
         var page = shell.OpenStartupProjects() ?? throw new SmokeFailure("The Startup Projects page did not open.");
         await WaitAsync(() => window.GetVisualDescendants().OfType<StartupProjectsView>().Any() && page.Rows.Count == 4, "the Startup Projects page lists the four projects", 120).ConfigureAwait(true);
