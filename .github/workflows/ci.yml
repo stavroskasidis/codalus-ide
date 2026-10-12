@@ -89,6 +89,16 @@ jobs:
         run: dotnet restore DaedalusStudio.slnx
       - name: Build
         run: dotnet build DaedalusStudio.slnx -c Release --no-restore
+      - name: Developer tools access (macOS)
+        # Dumps (createdump) and attaching (netcoredbg) need it, in the tests and the smoke test; otherwise the system asks
+        # for a password that nobody answers on a runner, and they time out (as a person would approve once).
+        if: runner.os == 'macOS'
+        run: |
+          sudo DevToolsSecurity -enable
+          sudo dseditgroup -o edit -a "$USER" -t user _developer
+          # The windowed app runs in the runner's GUI session, where the task port right still asked (developer mode
+          # was already on). Only on this throwaway runner (the maintainer's decision, 2026-10-12).
+          sudo security authorizationdb write system.privilege.taskport allow
       - name: Test (unit, integration, headless UI)
         # A test process still running after 25 minutes (Shell.Tests normally takes 13) is dumped, and the tests that
         # were running are named, instead of the job timing out without a word.
@@ -111,13 +121,6 @@ jobs:
       - name: Display for the smoke test (Xvfb)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
-      - name: Developer tools access (macOS)
-        # Dumps (createdump) and attaching (netcoredbg) need it; otherwise the system asks for a password that nobody
-        # answers on a runner, and debug.companion, debug.roslyn and debug.remote time out (as a person would approve once).
-        if: runner.os == 'macOS'
-        run: |
-          sudo DevToolsSecurity -enable
-          sudo dseditgroup -o edit -a "$USER" -t user _developer
       - name: Stack traces for a smoke test failure (dotnet-stack)
         # The smoke test prints the C# host's stacks when a step fails: a host that stopped answering says where it is.
         if: runner.os != 'Windows'

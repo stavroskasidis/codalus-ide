@@ -102,6 +102,9 @@ jobs:
         run: |
           sudo DevToolsSecurity -enable
           sudo dseditgroup -o edit -a "$USER" -t user _developer
+          # The windowed app runs in the runner's GUI session, where the task port right still asked (developer mode
+          # was already on). Only on this throwaway runner (the maintainer's decision, 2026-10-12).
+          sudo security authorizationdb write system.privilege.taskport allow
       - name: Stack traces for a smoke test failure (dotnet-stack)
         if: runner.os != 'Windows'
         run: dotnet tool install -g dotnet-stack || true
