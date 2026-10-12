@@ -9,7 +9,7 @@ public sealed class AvaloniaLanguageFixture : LanguageFixture
 }
 
 /// <summary>
-/// M19a (ADR 0046): Avalonia XAML in the C# language host, on samples/Avalonia: completion from Roslyn's view of the
+/// M19a (ADR 0047): Avalonia XAML in the C# language host, on samples/Avalonia: completion from Roslyn's view of the
 /// project (Avalonia's types from metadata, the app's controls and view models from source), compiled binding paths,
 /// live diagnostics with no false alarms on the fixture, hover, Go to Definition, x:Name rename into the code-behind,
 /// formatting and the logical tree the previewer selects with.

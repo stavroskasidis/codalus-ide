@@ -87,7 +87,7 @@ public sealed class AvaloniaFixture : IAsyncLifetime
 }
 
 /// <summary>
-/// M19a (ADR 0047): the real designer host (Avalonia's <c>Avalonia.Designer.HostApp</c>) running samples/Avalonia,
+/// M19a (ADR 0048): the real designer host (Avalonia's <c>Avalonia.Designer.HostApp</c>) running samples/Avalonia,
 /// driven over the remote protocol by <see cref="PreviewerSession"/>, with the previewer agent loaded: frames for a
 /// window, a user control and a library's resource dictionary, edits, errors with positions, scale, theme variants,
 /// hit testing and bounds. The budgets (edit to preview p95 ≤ 300 ms, build to first frame ≤ 3 s) are asserted off CI

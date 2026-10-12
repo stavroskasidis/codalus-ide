@@ -6,7 +6,7 @@ using DaedalusStudio.Workbench.ToolWindows;
 
 namespace DaedalusStudio.Shell;
 
-/// <summary>Avalonia XAML (M19a, ADR 0046 and 0047): the XAML Previewer's tool window, commands, menus and key binding.</summary>
+/// <summary>Avalonia XAML (M19a, ADR 0047 and 0048): the XAML Previewer's tool window, commands, menus and key binding.</summary>
 internal static partial class BuiltIns
 {
     public const string XamlKeybindings = """

@@ -4,7 +4,7 @@ using System.Text;
 namespace DaedalusStudio.Workbench.Previewer;
 
 /// <summary>
-/// Avalonia's remote protocol (<c>Avalonia.Remote.Protocol</c>, MIT, ADR 0047), the messages the previewer uses: XAML
+/// Avalonia's remote protocol (<c>Avalonia.Remote.Protocol</c>, MIT, ADR 0048), the messages the previewer uses: XAML
 /// in, frames out. Each message on the wire is a little-endian int32 body length, the message type's 16-byte GUID
 /// (<c>[AvaloniaRemoteMessageGuid]</c>) and a BSON document of its public properties. Avalonia's own transport
 /// serializes with reflection, which the Native AOT shell can't use, so this is a small hand-written codec; the tests

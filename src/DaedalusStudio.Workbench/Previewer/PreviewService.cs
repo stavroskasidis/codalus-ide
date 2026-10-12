@@ -4,7 +4,7 @@ using DaedalusStudio.Workbench.Projects;
 namespace DaedalusStudio.Workbench.Previewer;
 
 /// <summary>
-/// What previewing a XAML file needs (ADR 0047): the project the file belongs to (its output is the assembly the XAML
+/// What previewing a XAML file needs (ADR 0048): the project the file belongs to (its output is the assembly the XAML
 /// is compiled into), the app that hosts the preview (that project when it is an executable, else an app that
 /// references it, the startup project first), and Avalonia's designer host from the app's packages.
 /// </summary>
@@ -33,7 +33,7 @@ public enum PreviewStage
 }
 
 /// <summary>
-/// The XAML previewer (M19a, ADR 0047): resolves a file's <see cref="PreviewTarget"/>, builds what the preview needs
+/// The XAML previewer (M19a, ADR 0048): resolves a file's <see cref="PreviewTarget"/>, builds what the preview needs
 /// (incrementally, and only when the sources are newer than the output), runs one <see cref="PreviewerSession"/> per
 /// app and sends it the editor's text. The designer host runs the user's code, so it starts only for trusted folders.
 /// A build first stops the session that holds the app's assemblies (Windows locks them).

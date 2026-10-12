@@ -26,7 +26,7 @@ public sealed partial class ShellHost : IEditorServices
 
     public const string RazorLanguageId = "razor";
 
-    /// <summary>Avalonia XAML (M19a, ADR 0046), served by the C# host.</summary>
+    /// <summary>Avalonia XAML (M19a, ADR 0047), served by the C# host.</summary>
     public const string AxamlLanguageId = "axaml";
     private const string StatusSource = "daedalus.editor";
 
@@ -71,7 +71,7 @@ public sealed partial class ShellHost : IEditorServices
         registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve)
         {
             // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023), and so
-            // does Avalonia XAML, on the same projects' type information (ADR 0046).
+            // does Avalonia XAML, on the same projects' type information (ADR 0047).
             Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId],
         });
         registry.Register(new LanguageServiceDescriptor("markup", "JSON, XML and YAML", [], null, MarkupHostLaunch.Resolve)

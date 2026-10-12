@@ -7,7 +7,7 @@ using System.Threading;
 using DaedalusStudio.Previewer.Agent;
 
 /// <summary>
-/// A .NET startup hook (<c>DOTNET_STARTUP_HOOKS</c>, M19a, ADR 0047) that Daedalus Studio loads into Avalonia's
+/// A .NET startup hook (<c>DOTNET_STARTUP_HOOKS</c>, M19a, ADR 0048) that Daedalus Studio loads into Avalonia's
 /// designer host when it previews XAML. Avalonia's remote protocol carries XAML in and frames out, but nothing about the
 /// elements, so this agent answers what the protocol can't: which element is at a point of the preview (click to
 /// select in the XAML), where an element is (the selection's adorner) and the theme variant. It connects back to the

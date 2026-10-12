@@ -333,7 +333,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             var (identifier, position) = where(p);
             if (DocumentUris.ToPath(identifier.Uri) is { } xamlPath && Xaml.XamlContext.IsXaml(xamlPath))
             {
-                // Avalonia XAML (ADR 0046): its own features, never C#'s on a Miscellaneous File.
+                // Avalonia XAML (ADR 0047): its own features, never C#'s on a Miscellaneous File.
                 return xaml is not null && await Xaml.XamlContext.CreateAsync(solution, xamlPath, _workspace.OpenText(xamlPath), ct).ConfigureAwait(false) is { } context
                     ? await xaml(context, context.OffsetOf(position), p, ct).ConfigureAwait(false) ?? empty!
                     : empty!;

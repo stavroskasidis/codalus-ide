@@ -4,7 +4,7 @@ using DaedalusStudio.Projects.Protocol;
 namespace DaedalusStudio.Workbench.Previewer;
 
 /// <summary>
-/// The previewer's selection both ways (ADR 0047): the XAML's logical tree (<c>daedalus/xaml/logicalTree</c>) against the
+/// The previewer's selection both ways (ADR 0048): the XAML's logical tree (<c>daedalus/xaml/logicalTree</c>) against the
 /// running preview's (the agent's paths). A step is a type and its index among its siblings of that type, which is
 /// what the XAML and the logical tree agree on: an element's children in XAML are its logical children, in order.
 /// </summary>

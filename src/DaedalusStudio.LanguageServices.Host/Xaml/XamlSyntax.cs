@@ -95,7 +95,7 @@ internal sealed class XamlElement
 internal sealed record XamlSyntaxError(int Start, int End, string Message);
 
 /// <summary>
-/// A tolerant XAML parser (M19a, ADR 0046): elements, attributes and their offsets from text being typed, with the
+/// A tolerant XAML parser (M19a, ADR 0047): elements, attributes and their offsets from text being typed, with the
 /// errors a strict XML parser would stop at. It never throws; unclosed tags and elements end at the text's end.
 /// </summary>
 internal sealed class XamlDocument

@@ -8,7 +8,7 @@ using Viewport = Avalonia.Remote.Protocol.Viewport;
 namespace DaedalusStudio.Workbench.Tests;
 
 /// <summary>
-/// M19a (ADR 0047): the previewer's hand-written codec of Avalonia's remote protocol against Avalonia's own transport
+/// M19a (ADR 0048): the previewer's hand-written codec of Avalonia's remote protocol against Avalonia's own transport
 /// (<c>Avalonia.Remote.Protocol</c>), in both directions, and the agent's reply parsing.
 /// </summary>
 public sealed class PreviewProtocolTests

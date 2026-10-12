@@ -4,7 +4,7 @@
          and Avalonia version that runs: plain IL, Avalonia reached through reflection only. -->
     <TargetFramework>netstandard2.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
-    <Description>Daedalus Studio: the XAML previewer's agent (M19a, ADR 0047): hit testing, element bounds and the theme variant inside Avalonia's designer host.</Description>
+    <Description>Daedalus Studio: the XAML previewer's agent (M19a, ADR 0048): hit testing, element bounds and the theme variant inside Avalonia's designer host.</Description>
     <IsTrimmable>false</IsTrimmable>
   </PropertyGroup>
 </Project>

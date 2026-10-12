@@ -23,7 +23,7 @@ internal sealed record XamlTarget(int Start, int End)
     public string? Description { get; init; }
 }
 
-/// <summary>Hover, Go to Definition and <c>x:Name</c> rename in XAML (M19a, ADR 0046).</summary>
+/// <summary>Hover, Go to Definition and <c>x:Name</c> rename in XAML (M19a, ADR 0047).</summary>
 internal static partial class XamlNavigation
 {
     private static readonly Dictionary<string, string> s_directives = new(StringComparer.Ordinal)

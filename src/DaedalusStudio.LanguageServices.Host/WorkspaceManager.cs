@@ -352,7 +352,7 @@ internal sealed class WorkspaceManager : IDisposable
     private ImmutableArray<DocumentId> ProjectDocumentIds(Solution solution, string path) =>
         [.. solution.GetDocumentIdsWithFilePath(path).Where(id => id.ProjectId != _miscId && solution.ContainsDocument(id))];
 
-    /// <summary>Razor and XAML files are additional documents: the editor's text drives their source generators (ADR 0023, 0046).</summary>
+    /// <summary>Razor and XAML files are additional documents: the editor's text drives their source generators (ADR 0023, 0047).</summary>
     public static bool IsAdditionalText(string path) => Razor.RazorFiles.IsRazor(path) || Xaml.XamlContext.IsXaml(path);
 
     /// <summary>The editor's text of an open file, or null.</summary>

@@ -26,7 +26,7 @@ internal sealed record XamlMember(string Name, ITypeSymbol? ValueType, XamlMembe
 }
 
 /// <summary>
-/// XAML's view of a Roslyn compilation (ADR 0046): XML namespaces to CLR namespaces through Avalonia's
+/// XAML's view of a Roslyn compilation (ADR 0047): XML namespaces to CLR namespaces through Avalonia's
 /// <c>[XmlnsDefinition]</c> attributes and <c>using:</c>/<c>clr-namespace:</c>, the types an element can name, the
 /// members an attribute can set (CLR properties, Avalonia properties, attached properties, events), content
 /// properties, pseudo-classes. Types come from source and from metadata alike, so the project's own controls and view

@@ -1,6 +1,6 @@
 # Avalonia fixture (M19)
 
-An Avalonia 12 MVVM app and a control library for XAML editing and the live previewer ([ADR 0046](../../docs/adr/0046-xaml-language-service.md), [ADR 0047](../../docs/adr/0047-avalonia-previewer-hosting.md)).
+An Avalonia 12 MVVM app and a control library for XAML editing and the live previewer ([ADR 0047](../../docs/adr/0047-xaml-language-service.md), [ADR 0048](../../docs/adr/0048-avalonia-previewer-hosting.md)).
 
 | Project | What it has | Used by |
 |---|---|---|

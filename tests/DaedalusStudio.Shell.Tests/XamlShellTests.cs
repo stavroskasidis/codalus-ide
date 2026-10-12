@@ -6,7 +6,7 @@ using DaedalusStudio.Workbench.Previewer;
 namespace DaedalusStudio.Shell.Tests;
 
 /// <summary>
-/// M19a (ADR 0046 and 0047) in the headless shell on samples/Avalonia: .axaml files are Avalonia XAML served by the C#
+/// M19a (ADR 0047 and 0048) in the headless shell on samples/Avalonia: .axaml files are Avalonia XAML served by the C#
 /// host (completion in the editor); the XAML Previewer builds the app, renders the editor's text, follows edits,
 /// selects in the XAML what is clicked and outlines what the caret is on, shows the loader's errors, rebuilds when the
 /// code-behind's project changes, and the XAML compiler's build errors land in their file.

@@ -5,7 +5,7 @@ using Range = DaedalusStudio.LanguageServices.Protocol.Range;
 
 namespace DaedalusStudio.Workbench.Tests;
 
-/// <summary>M19a (ADR 0047): the previewer's selection mapping between the XAML's logical tree and the preview's paths, and the XAML compiler's build errors as editor diagnostics.</summary>
+/// <summary>M19a (ADR 0048): the previewer's selection mapping between the XAML's logical tree and the preview's paths, and the XAML compiler's build errors as editor diagnostics.</summary>
 public sealed class PreviewSelectionTests
 {
     private static Range Lines(int from, int to) => new(new Position(from, 0), new Position(to, 0));

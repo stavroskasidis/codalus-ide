@@ -1,4 +1,4 @@
-# 0046. XAML language service
+# 0047. XAML language service
 
 - **Status:** accepted (M19a, 2026-10-12; the maintainer's standing go-ahead for the milestones)
 - **Date:** 2026-10-12
@@ -28,7 +28,7 @@ The shell registers the language `axaml` ("Avalonia XAML", TextMate's XML gramma
 - **Hover** (types, members with their documentation, resources and where they are defined, directives) and **Go to Definition** (types and members, in source or decompiled like C#'s, resource keys, style classes to their styles, binding path members, `x:Class`, named elements).
 - **Rename** of `x:Name`: the name, `#Name` in bindings and selectors, `ElementName=Name`, and the code-behind's uses of the generated field.
 - **Formatting** (document and range): elements indented by depth, attributes on their own lines under the first attribute (or one level in), trailing whitespace trimmed; only whitespace changes, nothing when the file doesn't parse. Folding ranges and document symbols (the Document Outline) come from the parse.
-- **`daedalus/xaml/logicalTree`** (docs/protocol.md): the controls a file declares, nested as their logical parents (through content property elements, not templates, styles or resources), with the root named by its `x:Class`, for the previewer's selection (ADR 0047).
+- **`daedalus/xaml/logicalTree`** (docs/protocol.md): the controls a file declares, nested as their logical parents (through content property elements, not templates, styles or resources), with the root named by its `x:Class`, for the previewer's selection (ADR 0048).
 
 ## Consequences
 

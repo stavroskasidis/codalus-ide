@@ -4,7 +4,7 @@ using DaedalusStudio.LanguageServices.Protocol;
 namespace DaedalusStudio.LanguageServices.Host.Xaml;
 
 /// <summary>
-/// Publishes open XAML files' live diagnostics (M19a, ADR 0046): 250 ms after an edit of the file, and 600 ms after an
+/// Publishes open XAML files' live diagnostics (M19a, ADR 0047): 250 ms after an edit of the file, and 600 ms after an
 /// edit of anything else (a view model's property renamed in C# changes what a binding path may say).
 /// </summary>
 internal sealed class XamlDiagnostics(WorkspaceManager workspace, Func<PublishDiagnosticsParams, Task> publish, Action<string> log) : IDisposable

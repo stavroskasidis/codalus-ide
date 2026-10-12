@@ -1,4 +1,4 @@
-# 0047. Avalonia previewer hosting
+# 0048. Avalonia previewer hosting
 
 - **Status:** accepted (M19a, 2026-10-12; the maintainer's standing go-ahead for the milestones)
 - **Date:** 2026-10-12
@@ -20,7 +20,7 @@ Avalonia ships the designer host in its package (`tools/net8.0/designer/Avalonia
 
 **The agent.** For selection and the theme variant the previewer needs the element tree, which the protocol doesn't carry. `DaedalusStudio.Previewer.Agent` (netstandard2.0, shipped in `debughost/` beside the debugging startup hook, `DAEDALUS_PREVIEWER_AGENT` to override) is a startup hook (`DOTNET_STARTUP_HOOKS`) loaded into the designer host. It connects back to the session's agent port and answers tab-separated lines: `hit x y` (the element under a point and its logical path from the previewed window: type, index among its same-type logical siblings, name), `bounds path` and `theme Default|Light|Dark`. It reaches Avalonia only by reflection (`Dispatcher.UIThread`, the designer's current window, the logical and visual trees, `Application.RequestedThemeVariant`), so one agent serves every Avalonia version. Without it the preview still renders, without selection and themes (the XAML Previewer output says why). M19b's Live Visual Tree takes the same technique into running apps.
 
-**Selection** maps paths, not coordinates: the C# host's `daedalus/xaml/logicalTree` (ADR 0046) gives the XAML's controls nested as their logical parents, with the root named by its `x:Class`; a step is a type and its index among siblings of that type, on which the XAML and the running tree agree (`PreviewSelection`). A click hit-tests in the agent and selects the deepest element the XAML declares on the path (a button's generated text selects the button) as its start tag; the caret's element is outlined in the preview through `bounds`.
+**Selection** maps paths, not coordinates: the C# host's `daedalus/xaml/logicalTree` (ADR 0047) gives the XAML's controls nested as their logical parents, with the root named by its `x:Class`; a step is a type and its index among siblings of that type, on which the XAML and the running tree agree (`PreviewSelection`). A click hit-tests in the agent and selects the deepest element the XAML declares on the path (a button's generated text selects the button) as its start tag; the caret's element is outlined in the preview through `bounds`.
 
 **The tool window** (XAML Previewer, docked right; Shift+F7 in an `.axaml` editor, View → Other Windows, the editor's context menu) follows the active `.axaml` editor while open, sends the editor's text 150 ms after the last edit, and has Refresh (rebuild and render), zoom (25–400%, the frame scaled in the window), the render scale (100–200%, the designer renders at that DPI) and the theme variant. The loader's error and its line show above the last good frame. Pointer moves go to the preview (hover styles); clicks select.
 

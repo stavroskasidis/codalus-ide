@@ -6,7 +6,7 @@ using System.Text;
 
 namespace DaedalusStudio.Workbench.Previewer;
 
-/// <summary>How to start Avalonia's designer host for an app (ADR 0047).</summary>
+/// <summary>How to start Avalonia's designer host for an app (ADR 0048).</summary>
 /// <param name="HostApp">Avalonia's <c>Avalonia.Designer.HostApp.dll</c> (the app's <c>AvaloniaPreviewerNetCoreToolPath</c>).</param>
 /// <param name="AppAssembly">The executable project's output (<c>TargetPath</c>); its runtimeconfig and deps.json start the host.</param>
 /// <param name="Agent">The previewer agent (a startup hook), or null to preview without selection and theme switching.</param>
@@ -40,7 +40,7 @@ public readonly record struct PreviewRect(double X, double Y, double Width, doub
 public sealed record PreviewPathStep(string Type, int Ordinal, string? Name = null);
 
 /// <summary>
-/// One designer host process (ADR 0047): the user's app started out of process under Avalonia's
+/// One designer host process (ADR 0048): the user's app started out of process under Avalonia's
 /// <c>Avalonia.Designer.HostApp</c>, connected back over the remote protocol on a local TCP port (XAML in, frames out),
 /// and the previewer agent on a second port (hit testing, bounds, theme). Every wait has a timeout, and the process
 /// ends with the session. It runs the user's code: callers start it for trusted folders only.

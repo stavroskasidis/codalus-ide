@@ -9,7 +9,7 @@ using SymbolKind = DaedalusStudio.LanguageServices.Protocol.SymbolKind;
 namespace DaedalusStudio.LanguageServices.Host.Xaml;
 
 /// <summary>
-/// Live XAML diagnostics, formatting, folding, document symbols and the logical tree (M19a, ADR 0046). Diagnostics are
+/// Live XAML diagnostics, formatting, folding, document symbols and the logical tree (M19a, ADR 0047). Diagnostics are
 /// what the XAML compiler would reject and the parse can see: syntax errors, undeclared prefixes, unknown types,
 /// members and enum values, and compiled bindings' paths that the data type doesn't have.
 /// </summary>

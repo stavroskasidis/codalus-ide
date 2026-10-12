@@ -1052,7 +1052,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         // M18a: profiling (ADR 0044 and 0045), in the diagnostics host.
         await StepAsync("profiler.cpu", "M18", "The Performance Profiler launches the startup project with CPU Usage and .NET Counters; the report shows the hot function, the flame graph and hot lines (the diagnostics host)", ProfilerStepAsync).ConfigureAwait(true);
 
-        // M19a: Avalonia XAML (ADR 0046 and 0047): the C# host's XAML service and the previewer.
+        // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
 
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>

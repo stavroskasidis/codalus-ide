@@ -9,7 +9,7 @@ using DaedalusStudio.Workbench.Projects;
 namespace DaedalusStudio.Shell;
 
 /// <summary>
-/// Avalonia XAML (M19a, ADR 0046 and 0047): the XAML Previewer tool window, which follows the active <c>.axaml</c>
+/// Avalonia XAML (M19a, ADR 0047 and 0048): the XAML Previewer tool window, which follows the active <c>.axaml</c>
 /// editor while it is open (the editor's text, 150 ms after the last edit), rebuilds when the code changes, selects in
 /// the XAML what is clicked in the preview and outlines in the preview the element at the caret; and the XAML
 /// compiler's errors of the last build as squiggles in their files.

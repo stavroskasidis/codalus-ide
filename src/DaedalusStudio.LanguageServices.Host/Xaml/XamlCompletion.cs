@@ -5,7 +5,7 @@ using Range = DaedalusStudio.LanguageServices.Protocol.Range;
 namespace DaedalusStudio.LanguageServices.Host.Xaml;
 
 /// <summary>
-/// XAML completion (M19a, ADR 0046): element names (types of the default and prefixed namespaces, property elements),
+/// XAML completion (M19a, ADR 0047): element names (types of the default and prefixed namespaces, property elements),
 /// attributes (properties, attached properties, events, directives), values (enums, booleans, colors, static
 /// instances, types, setters' properties and values, style classes, selectors, <c>xmlns</c>, <c>x:Class</c>), markup
 /// extensions and their arguments (resource keys, binding paths from <c>x:DataType</c>, binding modes, element

@@ -330,7 +330,7 @@ public sealed record SqlSchemaObject(string? Schema, string Name, string Kind, S
 
 public sealed record SqlSchemaColumn(string Name, string Type, bool IsKey, bool Nullable);
 
-/// <summary><c>daedalus/xaml/logicalTree</c> (M19a, ADR 0046): an <c>.axaml</c> file's controls as the previewer's logical tree.</summary>
+/// <summary><c>daedalus/xaml/logicalTree</c> (M19a, ADR 0047): an <c>.axaml</c> file's controls as the previewer's logical tree.</summary>
 public sealed record XamlLogicalTreeParams(TextDocumentIdentifier TextDocument);
 
 /// <summary>

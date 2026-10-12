@@ -10,7 +10,7 @@ using DaedalusStudio.Workbench.Previewer;
 namespace DaedalusStudio.Shell.ViewModels;
 
 /// <summary>
-/// The XAML Previewer tool window (M19a, ADR 0047): the designer host's frames, zoom, the render scale and the theme
+/// The XAML Previewer tool window (M19a, ADR 0048): the designer host's frames, zoom, the render scale and the theme
 /// variant, the loader's error, and the selected element's adorner. The shell (<c>ShellHost.Xaml.cs</c>) drives it.
 /// </summary>
 public sealed class XamlPreviewViewModel : ObservableObject
