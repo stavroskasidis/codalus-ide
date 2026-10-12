@@ -535,6 +535,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
                 keys[path] = (obj, entry, key);
             }
+            else
+            {
+                misses.Add($"{System.IO.Path.GetFileName(path)}: no cache key (no intermediate folder, or a referenced project has none)");
+            }
 
             requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework));
         }
@@ -571,13 +575,35 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             more = _designTimePending.Count > 0;
         }
 
-        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, total, !more)).ConfigureAwait(false);
+        // Hits and misses since the last completed progress go with the next one (M34c: benchmarks assert that warm opens
+        // hit the cache).
+        int hits;
+        string[] missed;
+        lock (_cacheStatistics)
+        {
+            _cacheHits += cached.Count;
+            _cacheStatistics.AddRange(misses);
+            hits = _cacheHits;
+            missed = [.. _cacheStatistics];
+            if (!more)
+            {
+                _cacheHits = 0;
+                _cacheStatistics.Clear();
+            }
+        }
+
+        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, total, !more)
+        {
+            CacheHits = more ? null : hits,
+            CacheMisses = more ? null : missed,
+        }).ConfigureAwait(false);
         await _events.LogAsync("info", $"Design-time build of {requests.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms"
                                        + (cached.Count > 0 ? $"; {cached.Count} unchanged project(s) from the cache." : ".")).ConfigureAwait(false);
-        if (misses.Count > 0)
+        if (cached.Count + misses.Count > 0)
         {
-            // Why each project built instead of coming from the cache (the Output window's build host log).
-            await _events.LogAsync("info", "Design-time build cache: " + string.Join("; ", misses.Take(20))).ConfigureAwait(false);
+            // Why each project built instead of coming from the cache (the build host log, in the Output window).
+            await _events.LogAsync("info", $"Design-time build cache: {cached.Count} hit(s), {misses.Count} miss(es)"
+                                           + (misses.Count > 0 ? ": " + string.Join("; ", misses.Take(20)) + (misses.Count > 20 ? $"; and {misses.Count - 20} more" : string.Empty) : ".")).ConfigureAwait(false);
         }
     }
 

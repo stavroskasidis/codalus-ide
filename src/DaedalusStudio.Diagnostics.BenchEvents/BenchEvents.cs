@@ -30,7 +30,10 @@ public static class BenchEvents
 
     public static void Emit(string name, string key, long value) => Emit(name, [(key, value)]);
 
-    public static void Emit(string name, ReadOnlySpan<(string Key, long Value)> fields)
+    public static void Emit(string name, ReadOnlySpan<(string Key, long Value)> fields) => Emit(name, fields, []);
+
+    /// <summary>An event with numeric <paramref name="fields"/> and string <paramref name="text"/> fields (the harness keeps both).</summary>
+    public static void Emit(string name, ReadOnlySpan<(string Key, long Value)> fields, ReadOnlySpan<(string Key, string Value)> text)
     {
         if (s_stream is null)
         {
@@ -49,6 +52,11 @@ public static class BenchEvents
             foreach (var (key, value) in fields)
             {
                 writer.WriteNumber(key, value);
+            }
+
+            foreach (var (key, value) in text)
+            {
+                writer.WriteString(key, value);
             }
 
             writer.WriteEndObject();
@@ -92,7 +100,11 @@ public static class BenchEventNames
 
     public const string SolutionLoaded = "solution_loaded";
 
-    /// <summary>Every project's compiler inputs are known: design-time builds (or their cache) finished once (M34b).</summary>
+    /// <summary>
+    /// Every project's compiler inputs are known: design-time builds (or their cache) finished once (M34b). Fields
+    /// <c>cache_hits</c> and <c>cache_misses</c>, and <c>cache_miss_reasons</c> (text, <c>Name: reason</c> joined by
+    /// <c>"; "</c>) when some missed (M34c).
+    /// </summary>
     public const string DesignTimeDone = "designtime_done";
 
     /// <summary>The language service compiled every project once (first background pass finished).</summary>

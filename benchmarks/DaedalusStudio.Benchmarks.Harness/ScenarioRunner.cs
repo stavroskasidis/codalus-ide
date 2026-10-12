@@ -355,6 +355,14 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
         if (target.Name == "shell" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.DesignTimeDone, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } designTime)
         {
             result.Add(prefix + "designtime_done_ms", Since(designTime));
+
+            // The design-time build cache's hits and misses (M34c): a warm open of an unchanged copy should only hit.
+            result.Add(prefix + "designtime_cache_hits", designTime.Field("cache_hits"));
+            result.Add(prefix + "designtime_cache_misses", designTime.Field("cache_misses"));
+            if (prefix.Length > 0 && designTime.Text.TryGetValue("cache_miss_reasons", out var reasons))
+            {
+                result.Notes.Add($"Run {run}, warm open: design-time build cache misses: {reasons}");
+            }
         }
 
         // Language services ready: every project's design-time build loaded and compiled once (ADR 0005).

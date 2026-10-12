@@ -56,7 +56,7 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 | `restore/output` | `{line}` |
 | `restore/state` | `{state: running \| succeeded \| failed, message?}` |
 | `project/compilerInputs` | `CompilerInputsInfo` (a design-time build finished) |
-| `solution/designTimeProgress` | `{built, total, completed}`; `completed` once nothing more is queued; `{0, 0, true}` when an evaluation leaves nothing to build (M34b) |
+| `solution/designTimeProgress` | `{built, total, completed}`; `completed` once nothing more is queued; `{0, 0, true}` when an evaluation leaves nothing to build (M34b); a completed progress also carries `cacheHits` and `cacheMisses` (`"Name: reason"` strings), the design-time build cache's results since the last completed one (M34c) |
 | `build/output` | `{line}`: a line for the Build output channel |
 | `build/diagnostic` | `BuildDiagnosticInfo` |
 | `log` | `{level, message}` |

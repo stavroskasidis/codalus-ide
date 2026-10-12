@@ -11,6 +11,10 @@ internal sealed partial class SolutionSession
 
     private readonly HashSet<string> _forcedDesignTime = new(s_pathComparer);
 
+    /// <summary>The design-time build cache's misses (<c>Name: reason</c>) and hits since the last completed progress (M34c).</summary>
+    private readonly List<string> _cacheStatistics = [];
+    private int _cacheHits;
+
     /// <summary>
     /// The number of projects whose packages are up to date, or null when any project may need a restore. A project is
     /// up to date when NuGet's last restore succeeded (<c>project.nuget.cache</c>), every package it expects is in the

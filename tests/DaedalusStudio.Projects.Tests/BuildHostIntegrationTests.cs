@@ -439,6 +439,9 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         var warm = await OpenAsync();
         Assert.True(warm.Contains("Design-time build of 0 project(s)", StringComparison.Ordinal), $"Cold:{Environment.NewLine}{cold}{Environment.NewLine}Warm:{Environment.NewLine}{warm}");
         Assert.Contains("3 unchanged project(s) from the cache", warm, StringComparison.Ordinal);
+        Assert.Contains("Design-time build cache: 3 hit(s), 0 miss(es).", warm, StringComparison.Ordinal);
+        Assert.Equal(3, _service.DesignTimeProgress?.CacheHits); // M34c: what the bench event designtime_done reports
+        Assert.Empty(_service.DesignTimeProgress?.CacheMisses ?? ["none sent"]);
         Assert.Equal(coldApp.Arguments, _service.CompilerInputs[AppProject].Arguments);
         lock (restoreStates)
         {
@@ -452,6 +455,7 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         Assert.DoesNotContain("Design-time build of 0 project(s)", changed, StringComparison.Ordinal);
         Assert.Contains(_service.CompilerInputs[CoreProject].Arguments, a => a.EndsWith("Added.cs", StringComparison.Ordinal));
         Assert.Contains("Design-time build of 3 project(s)", changed, StringComparison.Ordinal);
+        Assert.Contains(_service.DesignTimeProgress?.CacheMisses ?? [], m => m.StartsWith("Core.csproj: ", StringComparison.Ordinal));
 
         lock (log)
         {

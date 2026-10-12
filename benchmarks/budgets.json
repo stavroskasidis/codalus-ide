@@ -14,6 +14,7 @@
     { "target": "shell", "scenario": "open-solution-50", "metric": "language_ready_ms", "stat": "p50", "max": 15000, "source": "M34b (cold open)" },
     { "target": "shell", "scenario": "open-solution-50", "metric": "warm_solution_loaded_ms", "stat": "p50", "max": 5000, "source": "M34b (warm open, as ADR 0002 #4)" },
     { "target": "shell", "scenario": "open-solution-50", "metric": "warm_designtime_done_ms", "stat": "p50", "max": 3500, "source": "M34b (warm open: the design-time build cache)" },
+    { "target": "shell", "scenario": "open-solution-50", "metric": "warm_designtime_cache_misses", "stat": "max", "max": 0, "source": "M34c (a warm open of an unchanged copy takes every project from the design-time build cache)" },
     { "target": "shell", "scenario": "open-solution-50", "metric": "warm_language_ready_ms", "stat": "p50", "max": 10000, "source": "M34b (warm open)" },
 
     { "target": "shell", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p50", "max": 13, "os": "windows", "source": "ADR 0002 #2" },
