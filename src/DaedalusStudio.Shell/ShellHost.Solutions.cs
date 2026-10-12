@@ -21,6 +21,7 @@ public sealed partial class ShellHost
 
     private bool _structureReported;
     private bool _evaluationReported;
+    private bool _designTimeReported;
 
     public SolutionService Solutions { get; private set; } = null!;
 
@@ -45,6 +46,14 @@ public sealed partial class ShellHost
         Solutions.RestoreOutput += (_, line) => RestoreLog.AppendLine(line);
         Solutions.SolutionChanged += (_, _) => Ui.Post(OnSolutionChanged);
         Solutions.ProgressChanged += (_, progress) => Ui.Post(() => OnProgress(progress));
+        Solutions.DesignTimeProgressChanged += (_, progress) =>
+        {
+            if (progress is { Completed: true, Total: > 0 } && !_designTimeReported)
+            {
+                _designTimeReported = true;
+                BenchEvents.Emit(BenchEventNames.DesignTimeDone);
+            }
+        };
         Solutions.RestoreStateChanged += (_, e) => Ui.Post(() => OnRestoreState(e));
         Solutions.HostCrashed += (_, e) => CrashReporter.Write("host", $"The build host exited unexpectedly (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}); restart: {e.WillRestart}.");
         Solutions.HostCrashed += (_, e) => Workbench.Notifications.Show(
@@ -106,6 +115,7 @@ public sealed partial class ShellHost
 
         _structureReported = false;
         _evaluationReported = false;
+        _designTimeReported = false;
         if (Solutions.IsOpen)
         {
             await CloseSolutionAsync().ConfigureAwait(true);

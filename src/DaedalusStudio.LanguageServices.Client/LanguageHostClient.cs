@@ -83,6 +83,9 @@ public sealed class LanguageHostClient : IAsyncDisposable
     /// <summary>The current project data, replayed after a restart.</summary>
     public Func<IReadOnlyList<ProjectData>>? ProjectsProvider { get; set; }
 
+    /// <summary>Whether the solution is still loading (M34b), sent with the projects at start and after a restart.</summary>
+    public Func<bool?>? LoadingProvider { get; set; }
+
     public event EventHandler<PublishDiagnosticsParams>? Diagnostics;
 
     /// <summary>A server with pull diagnostics asked for them again (<c>workspace/diagnostic/refresh</c>).</summary>
@@ -281,9 +284,14 @@ public sealed class LanguageHostClient : IAsyncDisposable
             return;
         }
 
+        var loading = LoadingProvider?.Invoke();
         if (ProjectsProvider?.Invoke() is { Count: > 0 } projects)
         {
-            await connection.NotifyAsync(Methods.ProjectsUpdate, new ProjectsUpdateParams([.. projects]), json.ProjectsUpdateParams, cancellationToken).ConfigureAwait(false);
+            await connection.NotifyAsync(Methods.ProjectsUpdate, new ProjectsUpdateParams([.. projects]) { Loading = loading }, json.ProjectsUpdateParams, cancellationToken).ConfigureAwait(false);
+        }
+        else if (loading == true)
+        {
+            await connection.NotifyAsync(Methods.ProjectsUpdate, new ProjectsUpdateParams([]) { Loading = true }, json.ProjectsUpdateParams, cancellationToken).ConfigureAwait(false);
         }
 
         foreach (var document in OpenDocumentsProvider?.Invoke() ?? [])
@@ -317,8 +325,9 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task DidSaveAsync(string uri, CancellationToken cancellationToken) =>
         Notify(Methods.DidSave, new DidSaveTextDocumentParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.DidSaveTextDocumentParams, cancellationToken);
 
-    public Task UpdateProjectsAsync(IReadOnlyList<ProjectData> projects, CancellationToken cancellationToken) =>
-        Notify(Methods.ProjectsUpdate, new ProjectsUpdateParams([.. projects]), ProtocolJsonContext.Default.ProjectsUpdateParams, cancellationToken);
+    /// <param name="loading">Whether the solution is still loading (M34b); null leaves the server's state alone.</param>
+    public Task UpdateProjectsAsync(IReadOnlyList<ProjectData> projects, CancellationToken cancellationToken, bool? loading = null) =>
+        Notify(Methods.ProjectsUpdate, new ProjectsUpdateParams([.. projects]) { Loading = loading }, ProtocolJsonContext.Default.ProjectsUpdateParams, cancellationToken);
 
     public Task RemoveProjectsAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken) =>
         Notify(Methods.ProjectsRemove, new ProjectsRemoveParams([.. paths]), ProtocolJsonContext.Default.ProjectsRemoveParams, cancellationToken);

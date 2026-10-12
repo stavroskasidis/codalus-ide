@@ -32,8 +32,9 @@ internal sealed class LanguageServer : IAsyncDisposable
         _xamlDiagnostics = new Xaml.XamlDiagnostics(_workspace, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _cleanup = new CodeCleanupFeature(_diagnostics, message => Log(MessageType.Log, message));
-        _diagnostics.BackgroundPassCompleted += (projects, documents) =>
-            _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(WorkspaceStates.Ready, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
+        // Ready only once the solution has loaded: a pass over the projects that arrived so far is not the whole solution.
+        _diagnostics.BackgroundPassCompleted += (projects, documents, complete) =>
+            _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(complete ? WorkspaceStates.Ready : WorkspaceStates.Loading, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
         _workspace.Log += (_, message) => Log(MessageType.Warning, message);
         _connection.Slow += (_, message) => Log(MessageType.Warning, message);
         _workspace.FileReloaded += (_, _) => _diagnostics.ScheduleBackground();
@@ -125,8 +126,16 @@ internal sealed class LanguageServer : IAsyncDisposable
         _connection.OnNotification(Methods.DidSave, json.DidSaveTextDocumentParams, _ => { });
         _connection.OnNotification(Methods.ProjectsUpdate, json.ProjectsUpdateParams, p =>
         {
-            _workspace.UpdateProjects(p.Projects);
-            ProjectsChanged();
+            var loadingChanged = p.Loading is { } loading && _workspace.SetLoading(loading);
+            if (p.Projects.Length > 0)
+            {
+                _workspace.UpdateProjects(p.Projects);
+            }
+
+            if (p.Projects.Length > 0 || loadingChanged)
+            {
+                ProjectsChanged();
+            }
         });
         _connection.OnNotification(Methods.ProjectsRemove, json.ProjectsRemoveParams, p =>
         {

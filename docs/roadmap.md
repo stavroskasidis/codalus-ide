@@ -52,7 +52,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M31 | Automated release cycle and installers | at checkpoint ([m31](checkpoints/m31.md), ADR 0028): `develop`/`master`, `VERSION` and `daedalus-release`, Velopack installers on every platform, `.deb`/`.rpm`, signed apt and dnf repositories, `nightly.yml`/`release.yml`; the first published releases wait for the hosted runs at the end (the maintainer's call), Linux ARM64 and Pages for the public repository |
 | M32 | Self-update | at checkpoint ([m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
-| M34 | UI polish | planned, the last milestone before Visual Basic and F# |
+| M34 | UI polish | planned, the last milestone before Visual Basic and F#; M34b (performance pass, pulled forward 2026-10-12) at checkpoint ([m34b](checkpoints/m34b.md)): batched project loading in the language host, no false errors while loading, a parallel background pass, parallel design-time builds and their persisted cache, restore on open only when needed |
 | M35 | Visual Basic | planned, always second to last |
 | M36 | F# | planned, always last |
 
@@ -1684,6 +1684,18 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 - Report how much the icon assets add to the size of the shell.
 
 **Exit criteria.** Every surface in the inventory passes the checklist, and the maintainer has approved the gallery on three OSes.
+
+#### M34b — Performance pass (pulled forward 2026-10-12)
+
+**Why.** The maintainer's own 96-project web solution sat on "Loading C# projects…" for about two minutes, and its open files showed 78 errors on types that resolve.
+
+**Scope.**
+- Measure the cold and warm open phase by phase (solution file, evaluation, restore, design-time builds, the relay to the language host, the Roslyn workspace, first diagnostics) on that solution and on `Solution50`.
+- Fix the largest costs: the language host's project loading, the relay, the background diagnostics pass, the design-time builds (parallel, and a persisted cache keyed by their inputs), the restore on open, repeated evaluations.
+- No false errors while loading.
+- Benchmarks and budgets for the cold and warm open of `Solution50`; tests for the cache and its invalidation.
+
+**Status.** At checkpoint: [m34b](checkpoints/m34b.md).
 
 ---
 

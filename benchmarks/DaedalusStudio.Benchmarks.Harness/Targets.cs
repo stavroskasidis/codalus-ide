@@ -28,7 +28,8 @@ internal static class TargetCatalog
 {
     public static IReadOnlyList<Target> All(string repoRoot) =>
     [
-        Shell(Path.Combine(repoRoot, "artifacts", "shell")),
+        // DAEDALUS_BENCH_SHELL_DIR measures another published shell (an older build, for before/after numbers).
+        Shell(Environment.GetEnvironmentVariable("DAEDALUS_BENCH_SHELL_DIR") is { Length: > 0 } shellDir ? shellDir : Path.Combine(repoRoot, "artifacts", "shell")),
         VsCode(),
         Rider(),
         VisualStudio(),
