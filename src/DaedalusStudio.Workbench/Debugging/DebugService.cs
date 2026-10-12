@@ -240,6 +240,7 @@ public sealed class DebugService : IAsyncDisposable
             async ct =>
             {
                 var compound = new CompoundDebugAdapter(await parts[0].CreateAsync(ct).ConfigureAwait(false), parts[0].Name, independent: true);
+                compound.Reserve(parts.Count - 1); // the session waits for the others, even if the first program ends at once
                 compound.PartChanged += OnPartChanged;
                 return compound;
             },
@@ -255,6 +256,8 @@ public sealed class DebugService : IAsyncDisposable
             {
                 return; // the session ended meanwhile
             }
+
+            await using var released = new AsyncRelease(session);
 
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
             try
@@ -272,6 +275,12 @@ public sealed class DebugService : IAsyncDisposable
                 Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] Could not start: {ex.Message}\n"));
             }
         }
+    }
+
+    /// <summary>Releases a compound session's reserved place for a program once it joined or failed to.</summary>
+    private sealed class AsyncRelease(CompoundDebugAdapter session) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => new(session.ReleaseAsync());
     }
 
     /// <summary>
