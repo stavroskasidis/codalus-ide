@@ -13,6 +13,7 @@ namespace DaedalusStudio.LanguageServices.Host;
 internal sealed class DaedalusWorkspace(HostServices host) : Workspace(host, "Daedalus")
 {
     public void Replace(Solution solution) => SetCurrentSolution(solution);
+
 }
 
 /// <summary>
@@ -110,6 +111,25 @@ internal sealed class WorkspaceManager : IDisposable
         }
     }
 
+    private int _generation;
+
+    /// <summary>Changes whenever projects are added, updated or removed, or closed files change on disk (not for edits of open documents).</summary>
+    public int Generation => Volatile.Read(ref _generation);
+
+    /// <summary>A loaded project as its key sees it (M34c): its design-time build and the projects it references.</summary>
+    internal sealed record ProjectSnapshot(ProjectId Id, ProjectLoader.Parsed Parsed, IReadOnlyList<ProjectId> References);
+
+    /// <summary>The keys of the loaded projects as they are now (M34c, <see cref="LanguageStateCache"/>).</summary>
+    public ProjectKeys Keys()
+    {
+        lock (_gate)
+        {
+            return new ProjectKeys(
+                _projects.Values.Where(e => e.Parsed is not null).ToDictionary(e => e.Id, e => new ProjectSnapshot(e.Id, e.Parsed!, [.. e.AppliedProjects.Select(r => r.ProjectId)])),
+                _open.ToDictionary(o => o.Key, o => o.Value.Text, Paths.Comparer));
+        }
+    }
+
     /// <summary>The solution changed: projects were added, updated or removed (not raised for document edits).</summary>
     public event EventHandler? ProjectsChanged;
 
@@ -170,6 +190,7 @@ internal sealed class WorkspaceManager : IDisposable
             solution = ReconcileOpenDocuments(solution);
             _workspace.Replace(solution);
             _incomplete = Incomplete();
+            Interlocked.Increment(ref _generation);
         }
 
         if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalMilliseconds: > 1000 } elapsed)
@@ -209,6 +230,7 @@ internal sealed class WorkspaceManager : IDisposable
             solution = ReconcileOpenDocuments(solution);
             _workspace.Replace(solution);
             _incomplete = Incomplete();
+            Interlocked.Increment(ref _generation);
         }
 
         ProjectsChanged?.Invoke(this, EventArgs.Empty);
@@ -761,6 +783,10 @@ internal sealed class WorkspaceManager : IDisposable
             }
 
             _workspace.Replace(solution);
+            if (reloaded.Count > 0)
+            {
+                Interlocked.Increment(ref _generation);
+            }
         }
 
         foreach (var path in reloaded)

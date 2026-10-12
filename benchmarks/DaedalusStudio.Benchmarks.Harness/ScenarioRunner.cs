@@ -14,7 +14,7 @@ internal sealed record RunOptions(int? Runs, bool AllowInput, TextWriter Log, bo
 /// </summary>
 internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 {
-    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "self-driven", "test-explorer", "packages", "terminal", "markup-100k", "binary-size"];
+    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "completion-50", "self-driven", "test-explorer", "packages", "terminal", "markup-100k", "binary-size"];
 
     /// <summary>The tests in samples/Tests5k (FixtureGen <c>tests</c>) as found in source: 20 projects × 250 (a theory is one test until a runner lists its cases).</summary>
     private const int Tests5kLeaves = 20 * 10 * 25;
@@ -33,7 +33,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
     public static bool Applies(Target target, string scenario) => target.SupportedScenarios?.Contains(scenario) != false && scenario switch
     {
         "self-driven" => target.IsPrototype,
-        "test-explorer" or "packages" or "terminal" or "markup-100k" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
+        "test-explorer" or "packages" or "terminal" or "markup-100k" or "completion-50" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
         "open-solution-50" => target.Name != "vscode", // VS Code has no solution explorer without proprietary C# Dev Kit.
         "cold-start" or "editor-100k" => target.IsPrototype || OperatingSystem.IsWindows() || target.Name == "vscode",
         _ => true,
@@ -64,6 +64,9 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 break;
             case "open-solution-50":
                 await OpenSolutionAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
+                break;
+            case "completion-50":
+                await CompletionAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
                 break;
             case "self-driven":
                 await SelfDrivenAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
@@ -375,6 +378,55 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
         var memory = ProcessTree.Memory(session.Process.Id);
         result.Add(prefix + "memory_solution_private_mb", memory.PrivateBytes / 1048576.0);
         Log($"  {target.Name} open-solution-50 run {run}{(prefix.Length > 0 ? " (warm)" : string.Empty)}: loaded {Last(result, prefix + "solution_loaded_ms")} / design-time {Last(result, prefix + "designtime_done_ms")} / language {Last(result, prefix + "language_ready_ms")} ms");
+    }
+
+    // ------------------------------------------------------------------ completion and typing while a solution loads (M34c)
+
+    private async Task CompletionAsync(Target target, ScenarioResult result, int runs, CancellationToken cancellationToken)
+    {
+        var source = Path.Combine(repoRoot, "samples", "Solution50");
+        RequireFixture(source);
+        result.Notes.Add("Solution50 opened with a file of its last project (the top of the longest reference chain); from the file's opening, typing in it and "
+                         + "completion every 250 ms (--bench completion) until the C# service has been ready for 5 s. Cold: a fresh restored copy; warm: the same copy again.");
+        for (var run = 0; run < runs; run++)
+        {
+            var work = NewWorkDir();
+            var copy = CopyDirectory(source, Path.Combine(work, "Solution50"));
+            var solution = Path.Combine(copy, "Solution50.sln");
+            var file = Directory.EnumerateDirectories(copy).OrderBy(d => d, StringComparer.Ordinal).Last() is { } last ? Path.Combine(last, "Type00.cs") : throw new InvalidOperationException("No project.");
+            Machine.Run("dotnet", $"restore \"{solution}\" -v q");
+            foreach (var prefix in new[] { string.Empty, "warm_" })
+            {
+                File.Delete(Path.Combine(work, "events.jsonl"));
+                await using var session = await LaunchAsync(target, new LaunchRequest(work, File: file, Solution: solution, Bench: "completion", ExitOn: "done"), cancellationToken, keepWork: prefix.Length == 0).ConfigureAwait(false);
+                try
+                {
+                    await session.Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromMinutes(4), cancellationToken).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    result.Notes.Add($"run {run}{prefix}: did not finish within 4 minutes");
+                }
+
+                var events = BenchEventLog.Read(session.EventsFile);
+                var completions = events.Where(e => e.Name == "completion").ToList();
+                if (completions.FirstOrDefault(e => e.Field("items") > 0) is { } first)
+                {
+                    result.Add(prefix + "completion_first_ms", (first.WallMicros - session.LaunchWallMicros) / 1000.0);
+                }
+
+                result.AddRange(prefix + "completion_loading_ms", completions.Where(e => e.Field("ready") == 0 && e.Field("items") > 0).Select(e => e.Field("latency_us") / 1000.0));
+                result.AddRange(prefix + "completion_ready_ms", completions.Where(e => e.Field("ready") == 1).Select(e => e.Field("latency_us") / 1000.0));
+                result.AddRange(prefix + "loading_typing_ms", events.Where(e => e.Name == BenchEventNames.KeyLatency && e.Field("synthetic") == 1).Select(e => e.Field("latency_us") / 1000.0));
+                if (events.FirstOrDefault(e => e.Name == BenchEventNames.LanguageReady) is { } language)
+                {
+                    result.Add(prefix + "language_ready_ms", (language.WallMicros - session.LaunchWallMicros) / 1000.0);
+                }
+
+                Log($"  {target.Name} completion-50 run {run}{(prefix.Length > 0 ? " (warm)" : string.Empty)}: first completion {Last(result, prefix + "completion_first_ms")} ms, "
+                    + $"while loading p99 {Pct(result, prefix + "completion_loading_ms", 0.99)} ms, typing p99 {Pct(result, prefix + "loading_typing_ms", 0.99)} ms");
+            }
+        }
     }
 
     // ------------------------------------------------------------------ Test Explorer (M8)

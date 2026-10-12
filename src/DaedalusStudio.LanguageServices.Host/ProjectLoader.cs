@@ -36,6 +36,9 @@ internal sealed class ProjectLoader
 
         /// <summary>The compiler's reference assembly (<c>/refout:</c>), when the project produces one.</summary>
         public string? IntermediateRefAssembly { get; init; }
+
+        /// <summary>The documentation file the build writes (<c>/doc:</c>), when it writes one.</summary>
+        public string? DocumentationFile { get; init; }
     }
 
     /// <summary>Parses C# command lines; other languages are not supported by this host (null).</summary>
@@ -93,6 +96,7 @@ internal sealed class ProjectLoader
                 ? Path.GetFullPath(Path.Combine(outputDirectory, output))
                 : null,
             IntermediateRefAssembly = args.OutputRefFilePath is { Length: > 0 } refOutput ? Path.GetFullPath(Path.Combine(directory, refOutput)) : null,
+            DocumentationFile = args.DocumentationPath is { Length: > 0 } documentation ? Path.GetFullPath(Path.Combine(directory, documentation)) : null,
         };
     }
 

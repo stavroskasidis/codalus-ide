@@ -1699,6 +1699,19 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 **Status.** At checkpoint: [m34b](checkpoints/m34b.md).
 
+#### M34c — Performance pass, round 2 (2026-10-13)
+
+**Why.** After M34b, on the same 96-project solution, the open files' first real diagnostics came 35–38 s after a warm open (52 s cold) and the whole solution was ready after 53–58 s (76 s cold). What remained was Roslyn: compiling every project (about 16 s in parallel) and a serial chain of Razor projects (8–14 s each, mostly source generators) under the open files. And three CS4014 errors that the build doesn't report.
+
+**Scope.**
+- Open files first: semantic diagnostics, completion and Quick Info for an open document as soon as its own project can compile, without the chain of projects below it; requests served while the background pass runs.
+- The source generator chain: measure each generator; don't compile again what hasn't changed since the last session; compile against reference assemblies where the dependency graph allows.
+- Editor diagnostics consistent with the build (CS4014), with an ADR (ADR 0049).
+- Completion and typing latency while the background pass runs, startup and idle memory with the large solution open: measure, keep within budgets, fix waste.
+- Benchmarks and budgets with numbers before and after.
+
+**Status.** At checkpoint: [m34c](checkpoints/m34c.md).
+
 ---
 
 ## Phase 12: Visual Basic and F#

@@ -71,6 +71,19 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
         }
 
         var controller = await WaitForControllerAsync(document).ConfigureAwait(true);
+        if (shell.Options.Bench == "completion")
+        {
+            // While the solution loads and compiles (M34c): no waiting for highlighting.
+            await CompletionAsync(controller, file).ConfigureAwait(true);
+            BenchEvents.Emit(BenchEventNames.ScenarioDone);
+            if (shell.Options.ExitOn == "done")
+            {
+                Exit();
+            }
+
+            return;
+        }
+
         var highlighted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         controller.TokensApplied += (_, _) => highlighted.TrySetResult();
         if (controller.Colorizer.HasTokens)
@@ -362,6 +375,52 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
         }
 
         await Task.Delay(1000).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// <c>--bench completion</c> (M34c, with a solution and <c>--open</c>): from the moment the file opens, typing in it
+    /// (<c>key_latency</c>) and, every 250 ms, completion after a member access near its top (<c>completion</c>:
+    /// <c>latency_us</c>, <c>items</c>, <c>ready</c> once the C# language service is ready), until the service has been
+    /// ready for a few seconds.
+    /// </summary>
+    private async Task CompletionAsync(CodeEditorController controller, string file)
+    {
+        var text = controller.Editor.Document.Text;
+        var member = System.Text.RegularExpressions.Regex.Match(text, @"\b[A-Za-z_]\w*\.[A-Z]\w*\(");
+        var offset = member.Success ? member.Index + member.Value.IndexOf('.', StringComparison.Ordinal) + 1 : 0;
+        var location = controller.Editor.Document.GetLocation(offset);
+        var position = new Position(location.Line - 1, location.Column - 1);
+        var uri = DocumentUris.FromPath(Path.GetFullPath(file));
+        var typing = TypeAsync(controller);
+        var started = Stopwatch.GetTimestamp();
+        long? readyAt = null;
+        while (Stopwatch.GetElapsedTime(started) < TimeSpan.FromMinutes(3))
+        {
+            var ready = shell.Languages.Status("csharp") is { State: WorkspaceStates.Ready };
+            readyAt ??= ready ? Stopwatch.GetTimestamp() : null;
+            if (readyAt is { } since && Stopwatch.GetElapsedTime(since) > TimeSpan.FromSeconds(5) && typing.IsCompleted)
+            {
+                break;
+            }
+
+            if (shell.Languages.RunningClient("csharp") is { } client)
+            {
+                var t0 = Stopwatch.GetTimestamp();
+                try
+                {
+                    var list = await client.CompletionAsync(uri, position, new CompletionContext(2, "."), CancellationToken.None).ConfigureAwait(true);
+                    BenchEvents.Emit("completion", [("latency_us", (long)Stopwatch.GetElapsedTime(t0).TotalMicroseconds), ("items", list.Items.Length), ("ready", ready ? 1 : 0)]);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    BenchEvents.Emit("completion_failed");
+                }
+            }
+
+            await Task.Delay(250).ConfigureAwait(true);
+        }
+
+        await typing.ConfigureAwait(true);
     }
 
     private async Task ScrollAsync(CodeEditorController controller)

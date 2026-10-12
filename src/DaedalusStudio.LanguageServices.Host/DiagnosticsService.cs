@@ -28,6 +28,7 @@ internal sealed class DiagnosticsService : IDisposable
     private static readonly TimeSpan s_backgroundDelay = TimeSpan.FromMilliseconds(1500);
 
     private readonly WorkspaceManager _workspace;
+    private readonly AnalysisSolution _analysis;
     private readonly Func<PublishDiagnosticsParams, Task> _publish;
     private readonly Action<string> _log;
     private readonly Lock _gate = new();
@@ -40,9 +41,10 @@ internal sealed class DiagnosticsService : IDisposable
     private readonly MemoryTrimmer _trimmer = new();
     private CancellationTokenSource? _backgroundPass;
 
-    public DiagnosticsService(WorkspaceManager workspace, Func<PublishDiagnosticsParams, Task> publish, Action<string> log)
+    public DiagnosticsService(WorkspaceManager workspace, AnalysisSolution analysis, Func<PublishDiagnosticsParams, Task> publish, Action<string> log)
     {
         _workspace = workspace;
+        _analysis = analysis;
         _publish = publish;
         _log = log;
     }
@@ -79,6 +81,7 @@ internal sealed class DiagnosticsService : IDisposable
 
         _ = Task.Run(async () =>
         {
+            Interlocked.Increment(ref _documentPassesRunning);
             try
             {
                 await Task.Delay(delay, token).ConfigureAwait(false);
@@ -90,6 +93,10 @@ internal sealed class DiagnosticsService : IDisposable
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 _log($"Diagnostics failed for {Path.GetFileName(path)}: {ex.Message}");
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _documentPassesRunning);
             }
         }, CancellationToken.None);
         ScheduleBackground();
@@ -117,8 +124,13 @@ internal sealed class DiagnosticsService : IDisposable
 
     private async Task AnalyzeOpenDocumentAsync(string path, CancellationToken cancellationToken)
     {
-        var solution = _workspace.CurrentSolution;
+        // The analysis solution while the projects its project references haven't compiled (M34c).
         var version = _workspace.Version(path);
+        var solution = await _analysis.ForDocumentAsync(path, cancellationToken).ConfigureAwait(false);
+        if (_workspace.Version(path) != version)
+        {
+            return; // edited meanwhile: that edit scheduled its own pass
+        }
         if (Razor.RazorFiles.IsRazor(path))
         {
             await AnalyzeRazorAsync(solution, path, version, cancellationToken).ConfigureAwait(false);
@@ -192,7 +204,7 @@ internal sealed class DiagnosticsService : IDisposable
             return [];
         }
 
-        var diagnostics = model.GetDiagnostics(span, cancellationToken).ToList();
+        var diagnostics = model.GetDiagnostics(span, cancellationToken).Where(d => !BuildDivergence.IsCompilationReferenceArtifact(d, model.Compilation, cancellationToken)).ToList();
         var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
         var withIde = text.Lines.Count <= IdeAnalyzerLineLimit;
         var isMisc = document.Project.Id == _workspace.MiscellaneousProjectId;
@@ -279,14 +291,20 @@ internal sealed class DiagnosticsService : IDisposable
     private Dictionary<ProjectId, ProjectPass> _passes = [];
 
     /// <summary>
-    /// Compiles every project (in parallel, the open documents' projects first) and publishes the diagnostics of
-    /// closed files. It runs once the solution has loaded (M34b).
+    /// The background pass, once the solution has loaded (M34b): every project's diagnostics, published for closed files.
+    /// A project unchanged since the last pass keeps its diagnostics; so does one whose key matches what the last session
+    /// stored (M34c, <see cref="LanguageStateCache"/>), without being compiled. The rest compile in parallel, dependencies
+    /// first and the open documents' projects before the others, in the <see cref="AnalysisSolution"/> (against reference
+    /// assemblies of unchanged projects) when the projects they reference haven't compiled. Then the projects the open
+    /// documents reference compile in the workspace (<see cref="WarmUp"/>), for navigation.
     /// </summary>
     private async Task BackgroundPassAsync(CancellationToken cancellationToken)
     {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var reused = 0;
+        var persisted = 0;
         var solution = _workspace.CurrentSolution;
+        var generation = _workspace.Generation;
         var loading = _workspace.Loading;
         if (loading)
         {
@@ -303,14 +321,17 @@ internal sealed class DiagnosticsService : IDisposable
             .ToHashSet();
         var projects = Ordered(solution, included);
         Dictionary<ProjectId, ProjectPass> previous;
+        bool usePersisted;
         lock (_gate)
         {
             previous = _passes;
+            usePersisted = LanguageStateCache.Enabled && _persistedGeneration != generation;
         }
 
-        // First every compilation, dependencies before the projects that reference them, in parallel: a project's
-        // compilation needs those of the projects it references, which Roslyn otherwise builds one after another (the
-        // open documents' squiggles wait on them). Then each project's diagnostics.
+        // Keys only on the first pass of a set of projects: later passes follow edits, and the next session finds a
+        // project edited since then changed anyway.
+        var keys = usePersisted ? _workspace.Keys() : null;
+        var hasDependents = solution.Projects.SelectMany(p => p.ProjectReferences).Select(r => r.ProjectId).ToHashSet();
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2), CancellationToken = cancellationToken };
         var results = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, ProjectPass>();
         var versions = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, VersionStamp>();
@@ -325,59 +346,93 @@ internal sealed class DiagnosticsService : IDisposable
                 return;
             }
 
-            await project.GetCompilationAsync(token).ConfigureAwait(false);
+            if (keys?.Key(project.Id) is { } key && LanguageStateCache.Folder(keys.Project(project.Id)?.Parsed) is { } folder
+                && LanguageStateCache.Read(folder) is { } entry && entry.Key == key && entry.Scope == scope)
+            {
+                // Unchanged since the last session (M34c): its diagnostics without compiling it.
+                results[project.Id] = new ProjectPass(version, [.. project.MetadataReferences], [.. project.AnalyzerReferences], scope, entry.Documents,
+                    [.. entry.Files.Where(f => File.Exists(f.Path)).Select(f => (f.Path, f.Items))]);
+                Interlocked.Increment(ref persisted);
+            }
         }).ConfigureAwait(false);
 
-        await Parallel.ForEachAsync(
-            projects.Where(p => !results.ContainsKey(p.Id)),
-            parallel,
-            async (project, token) =>
+        // The rest compile: in the analysis solution when what they reference hasn't compiled in the workspace.
+        var compile = projects.Where(p => !results.ContainsKey(p.Id)).Select(p => p.Id).ToList();
+        var analysis = solution;
+        if (compile.Any(id => !AnalysisSolution.IsLive(solution, id)) && await _analysis.GetAsync(cancellationToken).ConfigureAwait(false) is { } forked)
+        {
+            analysis = forked;
+        }
+
+        var timings = new System.Collections.Concurrent.ConcurrentBag<(string Project, double Milliseconds)>();
+        var toCompile = compile.Select(analysis.GetProject).OfType<Project>().ToList();
+        await Parallel.ForEachAsync(toCompile, parallel, async (project, token) =>
+        {
+            var compiling = System.Diagnostics.Stopwatch.GetTimestamp();
+            await project.GetCompilationAsync(token).ConfigureAwait(false);
+            timings.Add((project.Name, System.Diagnostics.Stopwatch.GetElapsedTime(compiling).TotalMilliseconds));
+        }).ConfigureAwait(false);
+
+        await Parallel.ForEachAsync(toCompile, parallel, async (project, token) =>
+        {
+            var version = versions[project.Id];
+            if (await project.GetCompilationAsync(token).ConfigureAwait(false) is not { } compilation)
             {
-                var version = versions[project.Id];
+                return;
+            }
 
-                if (await project.GetCompilationAsync(token).ConfigureAwait(false) is not { } compilation)
+            var diagnostics = compilation.GetDiagnostics(token).Where(d => !BuildDivergence.IsCompilationReferenceArtifact(d, compilation, token)).ToList();
+            if (scope == ScopeSolution && Analyzers(project, compilation, includeProject: true, includeIde: false) is { } analyzers)
+            {
+                diagnostics.AddRange(await analyzers.GetAnalyzerDiagnosticsAsync(token).ConfigureAwait(false));
+            }
+
+            var found = new List<(string, Diagnostic[])>();
+            foreach (var group in diagnostics.Where(d => d.Location.IsInSource).GroupBy(d => d.Location.SourceTree!))
+            {
+                if (group.Key.FilePath is { Length: > 0 } path && File.Exists(path))
                 {
-                    return;
+                    found.Add((path, Convert(group, group.Key)));
                 }
-
-                var diagnostics = compilation.GetDiagnostics(token).ToList();
-                if (scope == ScopeSolution && Analyzers(project, compilation, includeProject: true, includeIde: false) is { } analyzers)
+                else if (Razor.RazorLocations.IsRazorGenerated(group.Key.FilePath) && Razor.RazorLocations.SourceFile(group.Key) is { } razor && File.Exists(razor))
                 {
-                    diagnostics.AddRange(await analyzers.GetAnalyzerDiagnosticsAsync(token).ConfigureAwait(false));
+                    found.Add((razor, ConvertRazor(group, razor)));
                 }
+            }
 
-                var found = new List<(string, Diagnostic[])>();
-                foreach (var group in diagnostics.Where(d => d.Location.IsInSource).GroupBy(d => d.Location.SourceTree!))
-                {
-                    if (group.Key.FilePath is { Length: > 0 } path && File.Exists(path))
-                    {
-                        found.Add((path, Convert(group, group.Key)));
-                    }
-                    else if (Razor.RazorLocations.IsRazorGenerated(group.Key.FilePath) && Razor.RazorLocations.SourceFile(group.Key) is { } razor && File.Exists(razor))
-                    {
-                        found.Add((razor, ConvertRazor(group, razor)));
-                    }
-                }
-
-                results[project.Id] = new ProjectPass(version, [.. project.MetadataReferences], [.. project.AnalyzerReferences], scope, project.DocumentIds.Count, found);
-            }).ConfigureAwait(false);
+            results[project.Id] = new ProjectPass(version, [.. project.MetadataReferences], [.. project.AnalyzerReferences], scope, project.DocumentIds.Count, found);
+            if (keys?.Key(project.Id) is { } key && LanguageStateCache.Folder(keys.Project(project.Id)?.Parsed) is { } folder)
+            {
+                // For the next session (M34c): the diagnostics and, for a project others reference, its reference assembly.
+                var reference = hasDependents.Contains(project.Id) && LanguageStateCache.WriteReference(folder, compilation, token);
+                LanguageStateCache.Write(folder, new LanguageStateCache.Entry(LanguageStateCache.Schema, key, scope, project.DocumentIds.Count,
+                    [.. found.Select(f => new LanguageStateCache.FileDiagnostics(f.Item1, f.Item2))]) { ReferenceKey = reference ? key : null });
+            }
+        }).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
-        var found = new Dictionary<string, Diagnostic[]>(Paths.Comparer);
+        var foundFiles = new Dictionary<string, Diagnostic[]>(Paths.Comparer);
         foreach (var (path, items) in results.Values.SelectMany(r => r.Found))
         {
-            found[path] = [.. (found.GetValueOrDefault(path) ?? []).Concat(items)];
+            foundFiles[path] = [.. (foundFiles.GetValueOrDefault(path) ?? []).Concat(items)];
         }
 
         var documents = results.Values.Sum(r => r.Documents);
         var compiled = results.Count;
-        if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalSeconds: > 5 } elapsed)
+        if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalSeconds: > 5 } || usePersisted)
         {
-            _log($"Solution diagnostics: {compiled} project(s) in {elapsed.TotalMilliseconds:0} ms ({reused} unchanged since the last pass).");
+            _log($"Solution diagnostics: {compiled} project(s) in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms ({reused} unchanged since the last pass, "
+                 + $"{persisted} since the last session, {toCompile.Count} compiled{(ReferenceEquals(analysis, solution) ? string.Empty : $", {_analysis.Images.Count} as reference assemblies")})."
+                 + (timings.IsEmpty ? string.Empty : " Slowest: " + string.Join(", ", timings.OrderByDescending(t => t.Milliseconds).Take(5).Select(t => $"{t.Project} {t.Milliseconds:0} ms")) + "."));
         }
+
         lock (_gate)
         {
             _passes = new Dictionary<ProjectId, ProjectPass>(results);
+            if (usePersisted)
+            {
+                _persistedGeneration = generation;
+            }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -385,10 +440,10 @@ internal sealed class DiagnosticsService : IDisposable
         lock (_gate)
         {
             // Only files whose diagnostics changed: unchanged projects keep the same diagnostics (the same instances).
-            changed = [.. _background.Keys.Union(found.Keys, Paths.Comparer)
-                .Where(p => !(_background.TryGetValue(p, out var before) && found.TryGetValue(p, out var after) && before.SequenceEqual(after)))];
+            changed = [.. _background.Keys.Union(foundFiles.Keys, Paths.Comparer)
+                .Where(p => !(_background.TryGetValue(p, out var before) && foundFiles.TryGetValue(p, out var after) && before.SequenceEqual(after)))];
             _background.Clear();
-            foreach (var (path, diagnostics) in found)
+            foreach (var (path, diagnostics) in foundFiles)
             {
                 _background[path] = diagnostics;
             }
@@ -396,11 +451,90 @@ internal sealed class DiagnosticsService : IDisposable
 
         foreach (var path in changed.Where(p => !_workspace.IsOpen(p)))
         {
-            await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), null, found.GetValueOrDefault(path) ?? [])).ConfigureAwait(false);
+            await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), null, foundFiles.GetValueOrDefault(path) ?? [])).ConfigureAwait(false);
         }
 
         BackgroundPassCompleted?.Invoke(compiled, documents, true);
         _trimmer.WorkDone();
+        if (GeneratorTimings.Enabled)
+        {
+            await GeneratorTimings.LogAsync(toCompile, _log, cancellationToken).ConfigureAwait(false);
+        }
+
+        WarmUp(generation);
+    }
+
+    private int _persistedGeneration = -1;
+    private int _documentPassesRunning;
+    private int _warmUpGeneration = -1;
+
+    /// <summary>
+    /// Compiles, in the workspace, the projects the open documents' projects reference (M34c), so navigation and the
+    /// open documents themselves move from the analysis solution to the workspace's sources. Edits don't cancel it: the
+    /// projects it compiles don't change with them. A change of projects does.
+    /// </summary>
+    private void WarmUp(int generation)
+    {
+        lock (_gate)
+        {
+            if (_warmUpGeneration == generation)
+            {
+                return;
+            }
+
+            _warmUpGeneration = generation;
+        }
+
+        var token = _lifetime.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // After the open documents' own diagnostics: they need the processors first.
+                while (Volatile.Read(ref _documentPassesRunning) > 0 && _workspace.Generation == generation)
+                {
+                    await Task.Delay(250, token).ConfigureAwait(false);
+                }
+
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                var solution = _workspace.CurrentSolution;
+                var graph = solution.GetProjectDependencyGraph();
+                var open = _workspace.OpenPaths.SelectMany(p => solution.GetDocumentIdsWithFilePath(p)).Select(d => d.ProjectId)
+                    .Where(id => id != _workspace.MiscellaneousProjectId).ToHashSet();
+                var needed = open.SelectMany(graph.GetProjectsThatThisProjectTransitivelyDependsOn).ToHashSet();
+                var ordered = graph.GetTopologicallySortedProjects().Where(needed.Contains).Select(solution.GetProject).OfType<Project>().Where(p => !p.TryGetCompilation(out _)).ToList();
+                if (ordered.Count == 0)
+                {
+                    _analysis.Release();
+                    return;
+                }
+
+                // Low priority: a quarter of the processors, behind the open documents' own work.
+                var parallel = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 4), CancellationToken = token };
+                await Parallel.ForEachAsync(ordered, parallel, async (project, ct) =>
+                {
+                    if (_workspace.Generation != generation)
+                    {
+                        return;
+                    }
+
+                    await project.GetCompilationAsync(ct).ConfigureAwait(false);
+                }).ConfigureAwait(false);
+                if (_workspace.Generation == generation)
+                {
+                    _analysis.Release();
+                    _log($"Workspace compilations of {ordered.Count} project(s) the open documents reference in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms.");
+                    _trimmer.WorkDone();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _log($"Compiling the open documents' references failed: {ex.Message}");
+            }
+        }, CancellationToken.None);
     }
 
     // ------------------------------------------------------------------ helpers

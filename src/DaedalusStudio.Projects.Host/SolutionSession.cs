@@ -335,7 +335,38 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         await _events.LogAsync("info", $"Evaluated {projects.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms ({Active.Name}).").ConfigureAwait(false);
         ScheduleDesignTimeBuilds(designTime == DesignTimeMode.Always
             ? projects
-            : [.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]);
+            : WithDependents([.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]));
+    }
+
+    /// <summary>
+    /// <paramref name="projects"/> and the loaded projects that reference them, directly or not (M34c): a project's
+    /// design-time result (and its cache key) includes what it references, so it is checked again when they change, or
+    /// its cache entry keeps the old key and the next open misses it (the Linux runner, where the restore's assets files
+    /// arrive one evaluation at a time).
+    /// </summary>
+    private IReadOnlyCollection<string> WithDependents(IReadOnlyCollection<string> projects)
+    {
+        if (projects.Count == 0)
+        {
+            return projects;
+        }
+
+        var result = new HashSet<string>(projects, s_pathComparer);
+        bool added;
+        do
+        {
+            added = false;
+            foreach (var (path, evaluated) in _evaluated)
+            {
+                if (!result.Contains(path) && evaluated.Info.References.Any(r => r.Kind == ReferenceKinds.Project && r.Path is not null && result.Contains(r.Path)))
+                {
+                    added |= result.Add(path);
+                }
+            }
+        }
+        while (added);
+
+        return result;
     }
 
     private static bool SameInfo(ProjectInfo a, ProjectInfo b) =>
