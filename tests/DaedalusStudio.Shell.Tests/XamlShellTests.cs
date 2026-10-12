@@ -84,7 +84,17 @@ public sealed class XamlShellTests
         PreviewPathStep[] button = [new("MainWindow", 0), new("DockPanel", 0), new("StackPanel", 0), new("Button", 0)];
         var bounds = await session.BoundsAsync(button, ShellFixture.RequestTimeout());
         Assert.NotNull(bounds);
-        await f.Shell.SelectFromPreviewAsync(bounds.Value.X + bounds.Value.Width / 2, bounds.Value.Y + bounds.Value.Height / 2);
+        // Asked again while a slow machine is still rendering the edit (the hit test then finds nothing).
+        for (var attempt = 0; attempt < 20 && !editor.Editor.SelectedText.StartsWith("<Button", StringComparison.Ordinal); attempt++)
+        {
+            await f.Shell.SelectFromPreviewAsync(bounds.Value.X + bounds.Value.Width / 2, bounds.Value.Y + bounds.Value.Height / 2);
+            if (!editor.Editor.SelectedText.StartsWith("<Button", StringComparison.Ordinal))
+            {
+                await Task.Delay(500, TestContext.Current.CancellationToken);
+            }
+        }
+
+        Assert.True(editor.Editor.SelectedText.StartsWith("<Button", StringComparison.Ordinal), f.Shell.PreviewerLog.GetText());
         Assert.StartsWith("<Button x:Name=\"IncrementButton\"", editor.Editor.SelectedText, StringComparison.Ordinal);
         Assert.EndsWith("/>", editor.Editor.SelectedText, StringComparison.Ordinal);
 

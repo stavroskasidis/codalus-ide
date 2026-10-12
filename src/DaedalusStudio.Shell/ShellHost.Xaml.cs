@@ -287,12 +287,14 @@ public sealed partial class ShellHost
             var hit = await session.HitTestAsync(x, y, CancellationToken.None).ConfigureAwait(true);
             if (hit is null)
             {
+                PreviewerLog.AppendLine($"Nothing selectable at {x:0},{y:0} in the preview.");
                 return;
             }
 
             var node = PreviewSelection.NodeFor(await PreviewTreeAsync(model).ConfigureAwait(true), hit.Path);
             if (node is null || model != _previewed)
             {
+                PreviewerLog.AppendLine("The element at the point isn't in the XAML: " + string.Join('/', hit.Path.Select(s => s.Type)));
                 return;
             }
 
