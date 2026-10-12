@@ -1638,13 +1638,13 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
         Check(preview.FrameCount > 0, "the preview rendered: " + preview.Error + "\n" + Tail(shell.PreviewerLog.GetText(), 2000));
         Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  first frame (build included) in {started.Elapsed.TotalSeconds:0.0} s, {preview.ImageWidth}×{preview.ImageHeight}"));
 
-        var frames = preview.FrameCount;
+        var before = preview.Frame!;
         var edit = Stopwatch.StartNew();
         var text = editor.Model.Text.Text.IndexOf("Content=\"Increment\"", StringComparison.Ordinal);
         Check(text >= 0, "the button's content is in the XAML");
         editor.Model.Text.Replace(text, "Content=\"Increment\"".Length, "Content=\"Smoke test\"");
-        await WaitAsync(() => preview.FrameCount > frames, "the edit shows in the preview", 60).ConfigureAwait(true);
-        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  edit to frame: {edit.Elapsed.TotalMilliseconds:0} ms (150 ms of it the debounce)"));
+        await WaitAsync(() => preview.Frame is { } shown && shown != before && !shown.Data.AsSpan().SequenceEqual(before.Data), "the edit shows in the preview", 60).ConfigureAwait(true);
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  edit to the frame showing it: {edit.Elapsed.TotalMilliseconds:0} ms (the editor waits 150 ms after the last keystroke)"));
 
         var session = shell.Previewer.Session;
         Check(session is not null, "the previewer runs");
