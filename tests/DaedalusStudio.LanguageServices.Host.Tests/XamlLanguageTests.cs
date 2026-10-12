@@ -6,6 +6,28 @@ namespace DaedalusStudio.LanguageServices.Host.Tests;
 public sealed class AvaloniaLanguageFixture : LanguageFixture
 {
     protected override (string Sample, string Solution, int Projects) Sample => ("Avalonia", "Avalonia.slnx", 2);
+
+    /// <summary>
+    /// Both projects' design-time builds after their restore: Avalonia's references and its targets' additional files
+    /// (a design-time build that ran before the restore finished has neither, and a later one replaces it).
+    /// </summary>
+    protected override async Task ReadyAsync()
+    {
+        static bool Restored(DaedalusStudio.Projects.Protocol.CompilerInputsInfo inputs) =>
+            inputs.Arguments.Any(a => a.Contains("Avalonia.Base.dll", StringComparison.OrdinalIgnoreCase))
+            && inputs.Arguments.Any(a => a.StartsWith("/additionalfile:", StringComparison.OrdinalIgnoreCase) && a.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase));
+        try
+        {
+            await WaitUntilAsync(() => Solutions.CompilerInputs.Count(i => Restored(i.Value)) == 2
+                                       && Languages.Status("csharp") is { State: Protocol.WorkspaceStates.Ready, Projects: 2 });
+        }
+        catch (Xunit.Sdk.XunitException)
+        {
+            Assert.Fail("The projects' design-time builds have no Avalonia references or XAML files: "
+                + string.Join("; ", Solutions.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)} {i.Value.State} restored={Restored(i.Value)}"))
+                + "\n" + string.Join('\n', Log.TakeLast(40)));
+        }
+    }
 }
 
 /// <summary>

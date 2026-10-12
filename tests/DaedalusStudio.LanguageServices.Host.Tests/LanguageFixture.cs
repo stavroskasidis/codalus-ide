@@ -55,12 +55,16 @@ public class LanguageFixture : IAsyncLifetime
             var projects = Sample.Projects;
             await WaitUntilAsync(() => Solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) == projects
                                        && Languages.Status("csharp") is { State: WorkspaceStates.Ready } status && status.Projects == projects);
+            await ReadyAsync();
         }
         else
         {
             await Languages.ClientAsync("csharp");
         }
     }
+
+    /// <summary>More to wait for once the projects are loaded (a fixture's own conditions).</summary>
+    protected virtual Task ReadyAsync() => Task.CompletedTask;
 
     private void Record(string line)
     {
