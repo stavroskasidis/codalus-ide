@@ -59,6 +59,11 @@ public sealed class XamlShellTests
         }
 
         Assert.NotNull(preview.Image);
+
+        // The preview fits the pane by default (never above 100%); 100% is the zoom button.
+        Assert.True(preview.FitToPane && preview.Zoom <= 1);
+        preview.ZoomResetCommand.Execute(null);
+        Assert.False(preview.FitToPane);
         Assert.Equal((480d, 360d), (preview.ImageWidth, preview.ImageHeight));
         Assert.Equal(path, f.Shell.PreviewedPath);
 
@@ -106,6 +111,10 @@ public sealed class XamlShellTests
         preview.SelectedScale = "200%";
         await ShellFixture.PumpUntil(() => preview.Frame is { Width: 960, Scale: 2 }, seconds: 60);
         Assert.Equal(480d, preview.ImageWidth);
+
+        // Fit again: the frame within the pane.
+        preview.FitCommand.Execute(null);
+        Assert.True(preview.FitToPane && preview.ImageWidth <= 480);
     }
 
     [AvaloniaFact]
@@ -119,6 +128,7 @@ public sealed class XamlShellTests
         f.Shell.ShowXamlPreview();
         var preview = f.Shell.XamlPreview;
         await ShellFixture.PumpUntil(() => preview.FrameCount > 0, seconds: 300);
+        preview.ZoomResetCommand.Execute(null);
         Assert.Equal((240d, 32d), (preview.ImageWidth, preview.ImageHeight));
         var firstFrame = preview.Frame!;
 

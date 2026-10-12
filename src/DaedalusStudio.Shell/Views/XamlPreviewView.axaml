@@ -7,9 +7,9 @@
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,4" Spacing="4">
       <Button Content="Refresh" Command="{Binding RefreshCommand}" ToolTip.Tip="Build if needed and render again" />
       <Button Content="−" Command="{Binding ZoomOutCommand}" ToolTip.Tip="Zoom out" AutomationProperties.Name="Zoom out" />
-      <TextBlock Text="{Binding ZoomText}" VerticalAlignment="Center" MinWidth="40" TextAlignment="Center" AutomationProperties.Name="Zoom" />
+      <Button Content="{Binding ZoomText}" Command="{Binding ZoomResetCommand}" MinWidth="52" ToolTip.Tip="The zoom: click for actual size" AutomationProperties.Name="Zoom; actual size" />
       <Button Content="+" Command="{Binding ZoomInCommand}" ToolTip.Tip="Zoom in" AutomationProperties.Name="Zoom in" />
-      <Button Content="100%" Command="{Binding ZoomResetCommand}" ToolTip.Tip="Actual size" AutomationProperties.Name="Actual size" />
+      <Button Content="Fit" Command="{Binding FitCommand}" ToolTip.Tip="Fit the preview to the pane" AutomationProperties.Name="Fit to the pane" />
       <ComboBox ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" ToolTip.Tip="Render scale (DPI)" AutomationProperties.Name="Render scale" />
       <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}" ToolTip.Tip="Theme variant" AutomationProperties.Name="Theme variant" />
     </StackPanel>
@@ -17,7 +17,7 @@
     <Border DockPanel.Dock="Top" IsVisible="{Binding HasError}" Margin="8,0,8,6" Padding="8,6" BorderThickness="1" BorderBrush="{DynamicResource Shell.Error}" CornerRadius="2">
       <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
     </Border>
-    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+    <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
       <Canvas x:Name="Surface" Margin="12" HorizontalAlignment="Left" VerticalAlignment="Top" Background="Transparent" Cursor="Hand"
               Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
               AutomationProperties.Name="The preview: click an element to select it in the XAML">
