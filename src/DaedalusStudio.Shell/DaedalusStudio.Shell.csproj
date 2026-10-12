@@ -98,7 +98,8 @@
       markuphost/                 daedalus-markuphost, JSON/XML/MSBuild/YAML/.editorconfig (likewise)
       datahost/                   daedalus-datahost, databases and the SQL language server (likewise)
       debughost/                  daedalus-debughost, the debug companion: debugger attributes, dumps (likewise),
-                                  and DaedalusStudio.Debugging.StartupHook.dll for programs debugged in the terminal
+                                  DaedalusStudio.Debugging.StartupHook.dll for programs debugged in the terminal, and
+                                  DaedalusStudio.Previewer.Agent.dll for Avalonia's designer host (the XAML previewer)
       diaghost/                   daedalus-diaghost, EventPipe sessions and trace processing for the profiler (likewise)
       plugins/<plugin id>/        built-in plugins
       terminal/                   shell integration scripts for the integrated terminal

@@ -11,6 +11,8 @@
     <PackageReference Include="Avalonia" Version="12.1.3" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
+    <!-- The same font on every OS, so the previews (and their tests) don't depend on the machine's fonts. -->
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.3" />
   </ItemGroup>
 
   <ItemGroup>
