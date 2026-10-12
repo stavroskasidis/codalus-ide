@@ -16,6 +16,11 @@
     <ProjectReference Include="..\..\src\DaedalusStudio.Diagnostics.Host\DaedalusStudio.Diagnostics.Host.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The previewer agent (a startup hook) next to the tests, where PreviewService finds it (M19a). -->
+    <ProjectReference Include="..\..\src\DaedalusStudio.Previewer.Agent\DaedalusStudio.Previewer.Agent.csproj" />
+    <PackageReference Include="Avalonia.Remote.Protocol" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
 </Project>

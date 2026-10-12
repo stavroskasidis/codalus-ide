@@ -329,3 +329,15 @@ public sealed record SqlContextParams(string Uri, string Dialect, string? Defaul
 public sealed record SqlSchemaObject(string? Schema, string Name, string Kind, SqlSchemaColumn[] Columns);
 
 public sealed record SqlSchemaColumn(string Name, string Type, bool IsKey, bool Nullable);
+
+/// <summary><c>daedalus/xaml/logicalTree</c> (M19a, ADR 0046): an <c>.axaml</c> file's controls as the previewer's logical tree.</summary>
+public sealed record XamlLogicalTreeParams(TextDocumentIdentifier TextDocument);
+
+/// <summary>
+/// A control the XAML declares: <see cref="Type"/> is the type's name (the root's <c>x:Class</c> name, which is what
+/// runs), <see cref="Name"/> its <c>x:Name</c>, <see cref="Range"/> the element from its start tag to its end tag, and
+/// <see cref="Children"/> its logical children (through content properties, not templates, styles or resources).
+/// </summary>
+public sealed record XamlLogicalNode(string Type, string? Name, Range Range, XamlLogicalNode[] Children);
+
+public sealed record XamlLogicalTreeResult(XamlLogicalNode[] Nodes);
