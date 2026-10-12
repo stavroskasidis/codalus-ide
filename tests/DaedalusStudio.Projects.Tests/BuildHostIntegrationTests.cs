@@ -413,10 +413,11 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
                 var lines = -1;
                 await WaitUntilAsync(() =>
                 {
-                    Thread.Sleep(1500);
+                    Thread.Sleep(3000);
                     lock (log)
                     {
-                        var settled = log.Count == lines && _service.DesignTimeProgress is { Completed: true };
+                        // An evaluation in progress (whose design-time builds come next) shows in Progress.
+                        var settled = log.Count == lines && _service.Progress is { Completed: true } && _service.DesignTimeProgress is { Completed: true };
                         lines = log.Count;
                         return settled;
                     }
@@ -425,7 +426,8 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
             lock (log)
             {
-                return string.Join(Environment.NewLine, log.Where(l => l.Contains("Design-time build of", StringComparison.Ordinal)));
+                return string.Join(Environment.NewLine, log.Where(l => l.Contains("Design-time build of", StringComparison.Ordinal)
+                                                                       || l.Contains("Evaluated", StringComparison.Ordinal) || l.Contains("Packages of", StringComparison.Ordinal)));
             }
         }
 
@@ -435,7 +437,7 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
         // Unchanged: nothing builds, the inputs are the same, and the packages restored a moment ago aren't restored again.
         var warm = await OpenAsync();
-        Assert.Contains("Design-time build of 0 project(s)", warm, StringComparison.Ordinal);
+        Assert.True(warm.Contains("Design-time build of 0 project(s)", StringComparison.Ordinal), $"Cold:{Environment.NewLine}{cold}{Environment.NewLine}Warm:{Environment.NewLine}{warm}");
         Assert.Contains("3 unchanged project(s) from the cache", warm, StringComparison.Ordinal);
         Assert.Equal(coldApp.Arguments, _service.CompilerInputs[AppProject].Arguments);
         lock (restoreStates)
