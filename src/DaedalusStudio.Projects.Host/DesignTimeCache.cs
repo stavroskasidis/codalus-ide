@@ -53,16 +53,39 @@ internal static class DesignTimeCache
     }
 
     /// <summary>The cached inputs for <paramref name="entry"/> when their key is <paramref name="key"/> and their files still exist.</summary>
-    public static CompilerInputsInfo? TryRead(string? directory, string entry, string key, string solutionDirectory)
+    public static CompilerInputsInfo? TryRead(string? directory, string entry, string key, string solutionDirectory) =>
+        TryRead(directory, entry, key, solutionDirectory, out _);
+
+    /// <summary>As <see cref="TryRead(string?, string, string, string)"/>; <paramref name="miss"/> says why there was no hit.</summary>
+    public static CompilerInputsInfo? TryRead(string? directory, string entry, string key, string solutionDirectory, out string? miss)
     {
-        if (!Enabled || directory is null || Read(Path.Combine(directory, FileName)) is not { } file
-            || !file.Entries.TryGetValue(entry, out var cached) || cached.Key != key || cached.Inputs.State != CompilerInputStates.Ok
-            || !InputsExist(cached.Inputs, solutionDirectory))
+        miss = null;
+        if (!Enabled)
         {
-            return null;
+            miss = "off";
+        }
+        else if (directory is null || Read(Path.Combine(directory, FileName)) is not { } file)
+        {
+            miss = "no cache";
+        }
+        else if (!file.Entries.TryGetValue(entry, out var cached) || cached.Inputs.State != CompilerInputStates.Ok)
+        {
+            miss = "no entry";
+        }
+        else if (cached.Key != key)
+        {
+            miss = "inputs changed";
+        }
+        else if (MissingInput(cached.Inputs, solutionDirectory) is { } missing)
+        {
+            miss = "missing " + missing;
+        }
+        else
+        {
+            return cached.Inputs;
         }
 
-        return cached.Inputs;
+        return null;
     }
 
     public static void Write(string? directory, string entry, string key, CompilerInputsInfo inputs)
@@ -110,7 +133,10 @@ internal static class DesignTimeCache
     /// analyzers, and references outside the solution (packages, reference packs). References inside it may be other
     /// projects' outputs, which needn't exist before a build.
     /// </summary>
-    internal static bool InputsExist(CompilerInputsInfo inputs, string solutionDirectory)
+    internal static bool InputsExist(CompilerInputsInfo inputs, string solutionDirectory) => MissingInput(inputs, solutionDirectory) is null;
+
+    /// <summary>The first file of <see cref="InputsExist"/> that is missing, or null.</summary>
+    private static string? MissingInput(CompilerInputsInfo inputs, string solutionDirectory)
     {
         var directory = Path.GetDirectoryName(inputs.Path)!;
         string Full(string path) => Path.GetFullPath(Path.Combine(directory, path.Trim('"')));
@@ -122,7 +148,7 @@ internal static class DesignTimeCache
                 var (name, value) = option;
                 if (name is "analyzer" or "a" && !File.Exists(Full(value)))
                 {
-                    return false;
+                    return Full(value);
                 }
 
                 if (name is "reference" or "r")
@@ -130,17 +156,17 @@ internal static class DesignTimeCache
                     var file = Full(value[(value.IndexOf('=', StringComparison.Ordinal) + 1)..]);
                     if (!Under(file, solutionDirectory) && !File.Exists(file))
                     {
-                        return false;
+                        return file;
                     }
                 }
             }
             else if (!File.Exists(Full(argument)))
             {
-                return false;
+                return Full(argument);
             }
         }
 
-        return true;
+        return null;
     }
 
     /// <summary>A compiler option's name and value (<c>/reference:x.dll</c>, <c>-nowarn:1</c>), or null for a source file.</summary>

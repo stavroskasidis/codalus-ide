@@ -493,6 +493,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var properties = SolutionProperties();
         var requests = new List<DesignTimeBuilder.Request>();
         var cached = new List<CompilerInputsInfo>();
+        var misses = new List<string>();
         var keys = new Dictionary<string, (string Directory, string Entry, string Key)>(s_pathComparer);
         HashSet<string> forced;
         lock (_designTimePending)
@@ -518,10 +519,18 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             if (project.IntermediateDirectory is { } obj && DesignTimeKey(path, framework, properties) is { } key)
             {
                 var entry = DesignTimeCache.Entry(configuration, platform, framework);
-                if (!forced.Contains(path) && DesignTimeCache.TryRead(obj, entry, key, SolutionDirectory) is { } hit)
+                if (forced.Contains(path))
+                {
+                    misses.Add($"{System.IO.Path.GetFileName(path)}: asked for");
+                }
+                else if (DesignTimeCache.TryRead(obj, entry, key, SolutionDirectory, out var miss) is { } hit)
                 {
                     cached.Add(hit);
                     continue;
+                }
+                else
+                {
+                    misses.Add($"{System.IO.Path.GetFileName(path)}: {miss}");
                 }
 
                 keys[path] = (obj, entry, key);
@@ -565,6 +574,11 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, total, !more)).ConfigureAwait(false);
         await _events.LogAsync("info", $"Design-time build of {requests.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms"
                                        + (cached.Count > 0 ? $"; {cached.Count} unchanged project(s) from the cache." : ".")).ConfigureAwait(false);
+        if (misses.Count > 0)
+        {
+            // Why each project built instead of coming from the cache (the Output window's build host log).
+            await _events.LogAsync("info", "Design-time build cache: " + string.Join("; ", misses.Take(20))).ConfigureAwait(false);
+        }
     }
 
     // ------------------------------------------------------------------ builds

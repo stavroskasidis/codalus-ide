@@ -427,7 +427,7 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
             lock (log)
             {
                 return string.Join(Environment.NewLine, log.Where(l => l.Contains("Design-time build of", StringComparison.Ordinal)
-                                                                       || l.Contains("Evaluated", StringComparison.Ordinal) || l.Contains("Packages of", StringComparison.Ordinal)));
+                                                                       || l.Contains("Evaluated", StringComparison.Ordinal) || l.Contains("Packages of", StringComparison.Ordinal) || l.Contains("build cache:", StringComparison.Ordinal)));
             }
         }
 
