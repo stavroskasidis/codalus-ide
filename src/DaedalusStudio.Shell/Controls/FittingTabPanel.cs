@@ -1,7 +1,5 @@
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
 using Avalonia.VisualTree;
@@ -31,10 +29,6 @@ public sealed class FittingTabPanel : Panel
 
     /// <summary>The narrowest a title gets before its tab shows only the icon.</summary>
     public const double MinTitleWidth = 24;
-
-    /// <summary>The gap between a tab's icon and its title, on the title.</summary>
-    public static readonly IValueConverter TitleMarginConverter =
-        new FuncValueConverter<bool, Thickness>(hasIcon => hasIcon ? new Thickness(4, 0, 0, 0) : default);
 
     public static bool GetIconOnly(Control control) => control.GetValue(IconOnlyProperty);
 
@@ -73,7 +67,8 @@ public sealed class FittingTabPanel : Panel
             changed = false;
             for (var i = 0; i < children.Count; i++)
             {
-                if (!iconOnly[i] && hasIcon[i] && naturals[i] > cap && Math.Max(cap, MinTabWidth) - overheads[i] < MinTitleWidth)
+                // The share the tab gets, not the text minimum: tabs that would only fit below it collapse to their icons.
+                if (!iconOnly[i] && hasIcon[i] && naturals[i] > cap && cap - overheads[i] - margins[i] < MinTitleWidth)
                 {
                     iconOnly[i] = true;
                     widths[i] = overheads[i];
