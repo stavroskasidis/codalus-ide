@@ -19,7 +19,7 @@ The program's output and the debugger's messages appear in the **Debug Console**
 
 ### The program's console
 
-By default a debugged console app writes to the Debug Console and gets no input. Set **`debug.console`** to `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Daedalus Studio starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS the setting has no effect yet: the debugger can't attach to a program held in the terminal there, so programs use the Debug Console.
+On Windows a debugged console or web app gets a **console window** of its own, as in Visual Studio: it takes input, the window stays open after the program ends until you press a key, Stop closes it, and a web app's browser opens once its address answers. Elsewhere it writes to the Debug Console and gets no input. Set **`debug.console`** to `internalConsole`, `integratedTerminal` or `externalConsole` (Windows) to choose; Run Without Debugging has the same choice in **`run.console`** (`outputWindow`, `integratedTerminal`, `externalConsole`). With `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Daedalus Studio starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS the setting has no effect yet: the debugger can't attach to a program held in the terminal there, so programs use the Debug Console.
 
 ### Several startup projects
 
@@ -159,7 +159,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
 - `debug.justMyCode` (Just My Code): step through and break in your own code only.
 - `debug.stepOverPropertiesAndOperators`: Step Into steps over property accessors and operators.
 - `debug.perfTips`: the PerfTips at the end of the current line.
-- `debug.console`: where a debugged console app's console is: `internalConsole` (the Debug Console) or `integratedTerminal`.
+- `debug.console`: where a debugged console or web app's console is: `internalConsole` (the Debug Console), `integratedTerminal`, or `externalConsole` (a console window; Windows' default).
 - `debug.containerTool`: the container command for attaching in containers (`docker`, `podman`, …).
 - `debug.sourceFileMap`: source folders of programs on other machines, as `"/folder/there=C:\\folder\\here"`.
 
@@ -176,7 +176,7 @@ These come from netcoredbg:
 - debugger type proxies (`[DebuggerTypeProxy]`) aren't applied: showing one means creating it, which netcoredbg can't evaluate. Use the Grid Visualizer for collections
 - no Make Object ID, no return values after Step Out, and no freezing of threads
 - no symbol servers or symbol paths: the debugger reads the PDBs next to the assemblies, and library sources come from embedded sources and Source Link
-- Detach All applies to attached programs and to programs launched in the integrated terminal: a program launched with the Debug Console has the debugger's console, so it can't keep running without it
+- Detach All applies to attached programs and to programs launched in the integrated terminal or a console window: a program launched with the Debug Console has the debugger's console, so it can't keep running without it
 - dumps written on another operating system don't open
 - no console input for a program debugged with the Debug Console (set `debug.console` to `integratedTerminal`)
 - with several startup projects, a stop in one program doesn't pause the others
