@@ -375,8 +375,9 @@ public sealed class RemoteServerTests
               esac
             done
             shift
-            exec sh -c "$*"
-            """.Replace("\r\n", "\n", StringComparison.Ordinal));
+            exec env HOME="{HOME}" sh -c "$*"
+            """.Replace("{HOME}", Path.Combine(folder, "home"), StringComparison.Ordinal).Replace("\r\n", "\n", StringComparison.Ordinal));
+        Directory.CreateDirectory(Path.Combine(folder, "home")); // never the real home (found on the Mac)
         File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return new SshTarget("stand-in", Program: script) { Options = ["BatchMode=yes"] };
     }
@@ -395,7 +396,9 @@ public sealed class RemoteServerTests
 
         Environment.SetEnvironmentVariable(RemoteServerBundle.ServerVariable, ServerDll);
         var version = "test-" + Guid.NewGuid().ToString("N")[..8];
-        var bundle = new RemoteServerBundle(Path.Combine(folder, "cache"), version, [], RemoteServerBundle.LocateServer);
+        // A home of its own on the target: never the real ~/.daedalus-server (WSL's on Windows, this machine's elsewhere).
+        var serverRoot = "/tmp/daedalus-server-tests-" + Guid.NewGuid().ToString("N")[..8];
+        var bundle = new RemoteServerBundle(Path.Combine(folder, "cache"), version, [], RemoteServerBundle.LocateServer, serverRoot + "/.daedalus-server");
         InstalledServer? installed = null;
         try
         {
@@ -418,10 +421,7 @@ public sealed class RemoteServerTests
         finally
         {
             Environment.SetEnvironmentVariable(RemoteServerBundle.ServerVariable, null);
-            if (installed is not null)
-            {
-                await RemoteShell.RunAsync(target, $"rm -rf \"{installed.Folder}\"", CancellationToken.None);
-            }
+            await RemoteShell.RunAsync(target, $"rm -rf \"{serverRoot}\"", CancellationToken.None);
 
             Directory.Delete(folder, recursive: true);
         }
@@ -439,7 +439,8 @@ public sealed class RemoteServerTests
             return;
         }
 
-        var home = "$HOME/.daedalus-server/test-damaged-" + Guid.NewGuid().ToString("N")[..8];
+        var root = "/tmp/daedalus-server-tests-" + Guid.NewGuid().ToString("N")[..8];
+        var home = root + "/.daedalus-server/test-damaged"; // never the real home
         try
         {
             using var damaged = new MemoryStream("not the archive"u8.ToArray());
@@ -450,7 +451,7 @@ public sealed class RemoteServerTests
         }
         finally
         {
-            await RemoteShell.RunAsync(target, $"rm -rf \"{home}\"*", CancellationToken.None);
+            await RemoteShell.RunAsync(target, $"rm -rf \"{root}\"", CancellationToken.None);
             Directory.Delete(folder, recursive: true);
         }
     }
