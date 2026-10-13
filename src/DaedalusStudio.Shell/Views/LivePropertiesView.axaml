@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -7,14 +8,14 @@
   <DockPanel>
     <TextBlock DockPanel.Dock="Top" Margin="8,4,8,0" Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
     <controls:ToolbarPanel DockPanel.Dock="Top" Margin="6,4">
-      <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="Search properties" MinWidth="80" AutomationProperties.Name="Search properties" />
+      <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="{l:T liveProperties.searchProperties}" MinWidth="80" AutomationProperties.Name="{l:T liveProperties.searchProperties}" />
     </controls:ToolbarPanel>
     <Grid DockPanel.Dock="Top" ColumnDefinitions="180,*,110" Margin="8,2">
-      <TextBlock Text="Property" Classes="muted" />
-      <TextBlock Grid.Column="1" Text="Value" Classes="muted" />
-      <TextBlock Grid.Column="2" Text="Source" Classes="muted" />
+      <TextBlock Text="{l:T liveProperties.property}" Classes="muted" />
+      <TextBlock Grid.Column="1" Text="{l:T liveProperties.value}" Classes="muted" />
+      <TextBlock Grid.Column="2" Text="{l:T liveProperties.source}" Classes="muted" />
     </Grid>
-    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Live properties">
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T liveProperties.liveProperties}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:LivePropertyRow">
           <Setter Property="Padding" Value="2" />
