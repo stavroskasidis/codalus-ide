@@ -53,7 +53,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M32 | Self-update | at checkpoint ([m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
 | M34 | UI polish | M34a at checkpoint ([m34a](checkpoints/m34a.md)), pulled forward by the maintainer on 2026-10-12: Fluent UI System Icons compiled at build time (D24) with command-family colors, every menu a tree like a classic IDE's, output windows that follow new output, the minimap docked at the editor's edge, completion keys per OS (the editor's key bindings now match a focused editor), then Material Icon Theme's file, folder and project icons, a flat navigation bar and themed outlining markers; M34b at checkpoint ([m34b](checkpoints/m34b.md)), pulled forward the same day: batched project loading in the language host, no false errors while loading, a parallel background pass, parallel design-time builds and their persisted cache, restore on open only when needed; M34d at checkpoint ([m34d](checkpoints/m34d.md)), 2026-10-13: spacing, size and type tokens, document tabs and captions in every state (selected without the focus, pinned, preview on the right, colored by project), toolbars that overflow instead of wrapping, High Contrast's black menus, the gallery in the smoke test, clipped-text and WCAG AA contrast tests, the UI guide; M34c at checkpoint ([m34c](checkpoints/m34c.md)), 2026-10-13: the language host keeps diagnostics and reference assemblies between sessions, open documents compile against unchanged projects' assemblies, and CS4014 the build wouldn't report is left out (ADR 0049); the rest of M34 stays the last milestone before Visual Basic and F# |
-| M39 | Rename to Codalus IDE | planned (2026-10-13), next: the clean rename of everything from Daedalus Studio to Codalus IDE (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs), with no compatibility (no users yet), as 0.2.0 |
+| M39 | Rename | waiting for the final name (2026-10-13; Codalus IDE was the first candidate): the clean rename of everything from Daedalus Studio (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs), with no compatibility (no users yet) |
 | M37 | Environment setup | planned (2026-10-13): detect a missing or mismatched .NET SDK, git and the optional tools, Help → Check Environment, and install them with the user's consent (winget, the official installers, `dotnet-install`, the distribution's package manager); later MAUI's workloads |
 | M38 | Start window | at checkpoint ([m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
 | M35 | Visual Basic | planned, always second to last |
@@ -1719,9 +1719,11 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 **Status.** At checkpoint: [m34c](checkpoints/m34c.md).
 
-### M39 — Rename to Codalus IDE
+### M39 — Rename (the new name is to be decided)
 
-**Why.** The maintainer renamed the project on 2026-10-13: **Codalus IDE**, from *Code* and *Daedalus*. There are no users yet, so the rename is a clean break: no compatibility with the old names, no migration of settings or data, no bridge release. It lands as 0.2.0, and it goes ahead of the remaining feature milestones so that nothing new is built under the old name.
+**Why.** The maintainer decided on 2026-10-13 that the project will be renamed; the final name is to be decided (the first candidate was **Codalus IDE**, from *Code* and *Daedalus*). Nothing is renamed until the name is final. There are no users yet, so the rename is a clean break: no compatibility with the old names, no migration of settings or data, no bridge release. It lands in the next minor release after the name is chosen.
+
+The table and the steps below use Codalus as the example; `<name>` stands for the final name.
 
 **Names.**
 
@@ -1761,9 +1763,9 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
    - the 0.2.0 release publishes everything under the new names. The 0.1.0 release and the old apt/dnf address stay as they are (no users to move).
 8. **Local environment**: the worktrees, the WSL mirror folder (`~/codalus`), the memory notes and the scripts that name the old folders.
 
-**Decided** (2026-10-13): the repository is `codalus-ide`, the CLI is `codalus`, and the logo gets a new mark too. Mark proposals (SVG, light and dark, at 16 to 256 px) come first, and the maintainer picks one before step 2.
+**Decided** (2026-10-13), to apply to the final name: the repository is `<name>-ide`, the CLI is `<name>`, and the logo gets a new mark too. Mark proposals (SVG, light and dark, at 16 to 256 px) come first, and the maintainer picks one before step 2; the first set, made for Codalus, waits for the name.
 
-**Status.** Planned (the maintainer's request, 2026-10-13).
+**Status.** Waiting for the final name (the maintainer's request, 2026-10-13).
 
 ### M37 — Environment setup
 
