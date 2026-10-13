@@ -372,6 +372,8 @@ public static class CommandIcons
         ["workbench.openKeyboardShortcuts"] = new("keyboard"),
         ["workbench.openOptions"] = new("gear"),
         ["welcome.show"] = new("home"),
+        ["welcome.showOnboarding"] = new("sparkle"),
+        ["welcome.chooseKeyboardScheme"] = new("keyboard"),
         ["workbench.showLogs"] = new("document-text"),
         ["help.about"] = new("info"),
         ["update.check"] = new("update"),

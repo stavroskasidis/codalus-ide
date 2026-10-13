@@ -3,18 +3,23 @@
   "version": "0.1.0",
   "displayName": "Welcome",
   "publisher": "daedalus",
-  "description": "The Start page: common actions, recent solutions and links to the documentation.",
+  "description": "The Start page: getting started, common actions, recent solutions, tips and links to the documentation.",
   "engines": { "daedalus": "^0.2.0" },
   "entry": { "runtime": "dotnet", "assembly": "DaedalusStudio.Plugins.Welcome.dll" },
   "activationEvents": [ "onStartup" ],
   "contributes": {
     "commands": [
       { "id": "welcome.show", "title": "Show Start Page", "category": "Welcome" },
+      { "id": "welcome.showOnboarding", "title": "Get Started", "category": "Welcome" },
+      { "id": "welcome.chooseKeyboardScheme", "title": "Choose a Keyboard Scheme", "category": "Preferences" },
       { "id": "welcome.toggleShowOnStartup", "title": "Toggle Start Page on Startup", "category": "Welcome" },
       { "id": "welcome.refresh", "title": "Refresh", "category": "Welcome" }
     ],
     "menus": {
-      "menuBar/help": [ { "command": "welcome.show", "group": "navigation", "order": 1 } ],
+      "menuBar/help": [
+        { "command": "welcome.show", "group": "navigation", "order": 1 },
+        { "command": "welcome.showOnboarding", "group": "navigation", "order": 2 }
+      ],
       "toolWindow/title": [
         { "command": "welcome.refresh", "when": "view == welcome.view" },
         { "command": "welcome.toggleShowOnStartup", "when": "view == welcome.view" }
@@ -31,6 +36,12 @@
           "default": true,
           "scope": "user",
           "description": "Show the Start page when Daedalus Studio starts."
+        },
+        "welcome.onboarded": {
+          "type": "boolean",
+          "default": false,
+          "scope": "user",
+          "description": "Get Started is done: the Start page no longer offers the theme, keyboard scheme and imports first (Help → Get Started shows them again)."
         }
       }
     }

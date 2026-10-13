@@ -248,8 +248,29 @@ public class ShellHeadlessTests
         await ShellFixture.PumpUntil(() => f.Shell.Layout.IsVisible("welcome.view"), seconds: 60);
         var tree = (TreeToolViewModel)f.Shell.Layout.OpenToolWindows.Single(t => t.Id == "welcome.view").Content!;
         await ShellFixture.PumpUntil(() => tree.Roots.Count > 0, seconds: 30);
-        Assert.Equal(["Start", "Recent", "Plugins", "Learn", "Show Start Page on Startup"], tree.Roots.Select(r => r.Label));
+        Assert.Equal(["Get Started", "Start", "Recent", "Tip", "Plugins", "Learn", "Show Start Page on Startup"], tree.Roots.Select(r => r.Label));
         Assert.Contains(f.Shell.StatusBar.Left, i => i.Text == "Start" && i.Icon == "home");
+
+        // Get Started (M23a): the keyboard scheme from a quick pick, shown next to the step; Done hides the group.
+        var getStarted = tree.Roots[0];
+        await ShellFixture.PumpUntil(() => getStarted.Children.Any(c => c.Label == "Choose a Keyboard Scheme"));
+        Assert.Equal("Default", getStarted.Children.Single(c => c.Label == "Choose a Keyboard Scheme").Description);
+        tree.Activate(getStarted.Children.Single(c => c.Label == "Choose a Keyboard Scheme"));
+        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen, seconds: 30);
+        f.Type("Emacs");
+        f.Press(Key.Enter);
+        await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("keyboardScheme"), "emacs"), seconds: 30);
+        await ShellFixture.PumpUntil(() => tree.Roots.Count > 0 && tree.Roots[0].Children.Any(c => c.Description == "Emacs"), seconds: 30);
+
+        var tip = tree.Roots.Single(r => r.Label == "Tip");
+        await ShellFixture.PumpUntil(() => tip.Children.Count == 2);
+        var firstTip = tip.Children[0].Label;
+        tree.Activate(tip.Children.Single(c => c.Label == "Next Tip"));
+        await ShellFixture.PumpUntil(() => tree.Roots.SingleOrDefault(r => r.Label == "Tip") is { Children: [var next, _] } && next.Label != firstTip, seconds: 30);
+
+        tree.Activate(tree.Roots[0].Children.Single(c => c.Label == "Done"));
+        await ShellFixture.PumpUntil(() => tree.Roots.Count > 0 && tree.Roots[0].Label == "Start", seconds: 30);
+        Assert.True(f.Shell.Workbench.Settings.GetBoolean("welcome.onboarded", false));
 
         var start = tree.Roots[0];
         await ShellFixture.PumpUntil(() => start.Children.Any(c => c.Label == "Open Settings"));
