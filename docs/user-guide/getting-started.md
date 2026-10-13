@@ -5,7 +5,7 @@
 - **The .NET SDK**, 10.0 or newer; .NET 11 works too, release candidates included. Daedalus Studio loads and builds solutions with the SDK's MSBuild, so it must be installed for any solution you open. It must also match the version a `global.json` asks for.
   - Older SDKs (8.0, 9.0) work for solutions that pin them in `global.json`, as long as .NET 10 or newer is also installed: Daedalus' helper processes run on it.
 - **git** (2.30 or newer) on the `PATH`, for the Git features.
-- A 64-bit OS: Windows 11 (x64); macOS 15 or newer on Apple silicon (the macOS versions .NET supports); or a current Linux distribution (x64 or arm64) with X11, or Wayland through XWayland. The arm64 Linux packages arrive with the first public release; until then arm64 builds from source.
+- A 64-bit OS: Windows 11 (x64); macOS 15 or newer on Apple silicon (the macOS versions .NET supports); or a current Linux distribution (x64 or arm64) with X11, or Wayland through XWayland.
 
 The debugger (netcoredbg) is included in the packages.
 
@@ -25,7 +25,7 @@ Every release on the [releases page](https://github.com/stavroskasidis/daedalus-
 
 **The installers aren't code-signed yet**, so the first start asks for confirmation:
 - **Windows** (SmartScreen, "Windows protected your PC"): choose **More info**, then **Run anyway**.
-- **macOS** (Gatekeeper, "can't be opened because it is from an unidentified developer"): right-click the installer or the app, choose **Open**, then **Open** again. Or allow it in System Settings → Privacy & Security.
+- **macOS** (Gatekeeper, "Apple could not verify…"): close the message, open System Settings → Privacy & Security, and choose **Open Anyway** next to the installer or the app, then open it again. (Since macOS 15, right-click → Open no longer skips the check.)
 
 From a Windows terminal, `daedalus` runs the installed app and waits for it, so `git config core.editor "daedalus --wait"` works. As a windowed program it prints `--version` and `--help` to the console window rather than to a pipe.
 
