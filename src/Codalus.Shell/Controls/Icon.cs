@@ -339,6 +339,33 @@ public static class IconSet
 
     private static readonly Dictionary<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);
 
+    private static readonly Dictionary<string, FilledIcon> s_vectors = new(StringComparer.Ordinal);
+
+    /// <summary>The prefix of icon themes' converted SVG icons (<c>vec:&lt;path&gt;</c>, M22b).</summary>
+    public const string VectorPrefix = "vec:";
+
+    /// <summary>Whether an icon theme's SVG icon has been converted and registered.</summary>
+    internal static bool HasVector(string svgPath)
+    {
+        lock (s_vectors)
+        {
+            return s_vectors.ContainsKey(VectorPrefix + svgPath);
+        }
+    }
+
+    /// <summary>
+    /// Registers an icon theme's SVG icon from its drawing operations (converted outside the shell, see
+    /// <see cref="Codalus.Workbench.Plugins.IconThemeCompiler"/>), replayed the way the shell's own icons are.
+    /// </summary>
+    internal static void RegisterVector(string svgPath, string ops, float[] numbers, uint[] colors, double designSize)
+    {
+        var icon = new FilledIcon(CompiledIcons.Build(ops, numbers, colors), designSize);
+        lock (s_vectors)
+        {
+            s_vectors[VectorPrefix + svgPath] = icon;
+        }
+    }
+
     /// <summary>Our Fluent icon names and the Fluent file each one uses (tests).</summary>
     public static IReadOnlyDictionary<string, string> FluentNames => s_fluent;
 
@@ -351,6 +378,14 @@ public static class IconSet
     /// </summary>
     internal static FilledIcon? GetFilled(string? name)
     {
+        if (name is not null && name.StartsWith(VectorPrefix, StringComparison.Ordinal))
+        {
+            lock (s_vectors)
+            {
+                return s_vectors.GetValueOrDefault(name);
+            }
+        }
+
         string? file = null;
         if (name is not null && !s_fluent.TryGetValue(name, out file) && name.StartsWith(MaterialPrefix, StringComparison.Ordinal))
         {

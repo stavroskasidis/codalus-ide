@@ -72,6 +72,9 @@ public interface ITestRunProfile : IDisposable
 /// What to run. <see cref="Include"/> null means every test of the controller; tests under an included item are
 /// included unless they (or an ancestor) are in <see cref="Exclude"/>.
 /// </summary>
+/// <param name="Include">The items to run, with the tests under them; null for every test of the controller.</param>
+/// <param name="Exclude">Items left out, with the tests under them.</param>
+/// <param name="Profile">The run profile the user chose (run, debug or coverage).</param>
 public sealed record TestRunRequest(IReadOnlyList<TestItem>? Include, IReadOnlyList<TestItem> Exclude, ITestRunProfile? Profile);
 
 /// <summary>Reports the progress and results of one run. Methods may be called from any thread.</summary>
@@ -112,6 +115,7 @@ public interface ITestRun
 }
 
 /// <summary>A failure or error message. <see cref="Uri"/> and <see cref="Range"/> locate it in source.</summary>
+/// <param name="Message">The failure's or error's text.</param>
 public sealed record TestMessage(string Message)
 {
     /// <summary>The expected value of a failed assertion, when the framework reports it.</summary>
@@ -131,21 +135,45 @@ public sealed record TestMessage(string Message)
 }
 
 /// <summary>A zero-based range in a document (LSP style).</summary>
+/// <param name="StartLine">The first line (zero-based).</param>
+/// <param name="StartCharacter">The first character on it (zero-based).</param>
+/// <param name="EndLine">The last line (zero-based).</param>
+/// <param name="EndCharacter">The character after the range on it (zero-based).</param>
 public sealed record TestRange(int StartLine, int StartCharacter, int EndLine, int EndCharacter);
 
 /// <summary>A trait (xUnit), category (NUnit, MSTest) or property; <see cref="Value"/> is null for plain categories.</summary>
+/// <param name="Name">The trait's or category's name.</param>
+/// <param name="Value">Its value; null for a plain category.</param>
 public sealed record TestTrait(string Name, string? Value);
 
 /// <summary>A file a run produced. <see cref="Uri"/> is a <c>file:</c> URI.</summary>
+/// <param name="Uri">The file, as a <c>file:</c> URI.</param>
+/// <param name="DisplayName">What the Test Explorer calls it (default: the file's name).</param>
 public sealed record TestAttachment(string Uri, string? DisplayName = null);
 
 /// <summary>Coverage of one line (zero-based). <see cref="BranchesTotal"/> is 0 for lines without branches.</summary>
+/// <param name="Line">The line (zero-based).</param>
+/// <param name="Hits">How many times it ran.</param>
+/// <param name="BranchesCovered">Its branches that ran.</param>
+/// <param name="BranchesTotal">Its branches; 0 when it has none.</param>
 public sealed record LineCoverage(int Line, int Hits, int BranchesCovered = 0, int BranchesTotal = 0);
 
 /// <summary>Coverage of one document.</summary>
+/// <param name="Uri">The document.</param>
+/// <param name="Lines">Its coverable lines.</param>
 public sealed record FileCoverage(string Uri, IReadOnlyList<LineCoverage> Lines);
 
 /// <summary>Coverage of one method, for the Coverage Results tree (assembly, namespace, class, method).</summary>
+/// <param name="Assembly">The assembly the method is in.</param>
+/// <param name="Namespace">Its namespace (null for the global namespace).</param>
+/// <param name="Class">Its class.</param>
+/// <param name="Method">Its name.</param>
+/// <param name="Uri">The document it is in, when known.</param>
+/// <param name="Line">Its first line (zero-based).</param>
+/// <param name="LinesCovered">Its lines that ran.</param>
+/// <param name="LinesTotal">Its coverable lines.</param>
+/// <param name="BranchesCovered">Its branches that ran.</param>
+/// <param name="BranchesTotal">Its branches.</param>
 public sealed record MethodCoverage(
     string Assembly,
     string? Namespace,
@@ -295,7 +323,7 @@ public sealed class TestItemCollection : IReadOnlyCollection<TestItem>
     /// <summary>Raised after items were added, replaced or removed.</summary>
     public event EventHandler<TestItemCollectionChangedEventArgs>? Changed;
 
-    /// <inheritdoc/>
+    /// <summary>How many items there are.</summary>
     public int Count
     {
         get

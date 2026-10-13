@@ -13,6 +13,17 @@ Plugins extend Codalus IDE with commands, menus, key bindings, settings, tool wi
 
 ## Project setup
 
+The quickest start is the template (since M22b):
+
+```bash
+dotnet new install Codalus.Templates
+dotnet new codalus-plugin -n Contoso.Greeter --publisher contoso
+```
+
+It makes `Contoso.Greeter.slnx` with the plugin (`src/Contoso.Greeter`: the manifest, a command, a setting and a status bar item) and its unit tests (`tests/Contoso.Greeter.Tests`, on [`Codalus.Plugins.Testing`](#testing-plugins); `--skipTests` leaves them out). The plugin's id is `<publisher>.<name>` in lower case. Until the packages are on nuget.org (M22c), install the template from a clone (`dotnet new install src/Codalus.Templates/content/CodalusPlugin`) and pack the two API packages into a local feed (`dotnet pack src/Codalus.Plugins.Abstractions -o feed`, and `Codalus.Plugins.Testing`).
+
+By hand, a plugin project is:
+
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -31,7 +42,7 @@ Plugins extend Codalus IDE with commands, menus, key bindings, settings, tool wi
 </Project>
 ```
 
-The `Codalus.Plugins.Abstractions` package isn't on nuget.org yet (it comes with the marketplace, M22c). Until then, reference the project directly, as the samples do.
+The `Codalus.Plugins.Abstractions` package isn't on nuget.org yet (it comes with the marketplace, M22c). Until then, reference the project directly, as the samples do. Every type and member is in the [API reference](user-guide/plugin-api.md).
 
 ## The manifest
 
@@ -90,7 +101,7 @@ A manifest string that is a whole `%key%` (VS Code's convention) is replaced whe
 - **propertyProviders** (since 0.2.8): rows for the Properties window, `{ command, when }`. The command gets `{ kind, path, project }` of the Solution Explorer's selection (`kind` as in `explorerItemKind`) and returns `[{ category, name, value, description }]`; the rows are read only and show under their category (default: the plugin's name). `when` limits the selections it is asked for.
 - **externalToolMacros** (since 0.2.8): macros for External Tools' command, arguments and initial directory, `{ name, command, description }`. A tool that uses `$(name)` runs the command first; its string result replaces the macro.
 - **themes** (since 1.0): color themes in VS Code's format, `{ id, label, uiTheme, path }`. `uiTheme` is the base (`vs`, `vs-dark`, `hc-black` or `hc-light`), and the file's `colors`, `tokenColors` and `semanticTokenColors` go over it: UI colors onto the shell's tokens (`sideBar.background`, `statusBar.background`, `editor.background` and the other keys in `Theming/ThemeFiles.cs`), TextMate scopes onto the editor's token types. `id` is a value of `workbench.colorTheme`; the user's color customizations apply over it (`"[Label]"`). `samples/plugins/MidnightTheme` is one.
-- **iconThemes** (since 1.0): file icon themes in VS Code's format, `{ id, label, path }`: `iconDefinitions` (`iconPath` relative to the file), `file`, `folder`, `folderExpanded`, `fileExtensions`, `fileNames`, `folderNames` and `folderNamesExpanded`. The Solution Explorer, tabs and pickers use it when `workbench.iconTheme` is its `id`. Icons are drawn as raster images (PNG, ICO, BMP, JPEG, WebP); an SVG icon falls back to the built-in one and is named in Output → Codalus. `samples/plugins/BlockIcons` is one.
+- **iconThemes** (since 1.0): file icon themes in VS Code's format, `{ id, label, path }`: `iconDefinitions` (`iconPath` relative to the file), `file`, `folder`, `folderExpanded`, `fileExtensions`, `fileNames`, `folderNames` and `folderNamesExpanded`. The Solution Explorer, tabs and pickers use it when `workbench.iconTheme` is its `id`. Raster icons (PNG, ICO, BMP, JPEG, WebP) are drawn as they are. SVG icons (since M22b) are converted once, outside the IDE's process, into vector drawings like the IDE's own icons; an SVG using more than paths and groups with fills falls back to the built-in icon and is named in Output → Codalus. `samples/plugins/BlockIcons` is one.
 - **debuggers** (since 1.0): debug adapters speaking DAP over stdio, `{ type, label, command, args, languages }`. `launch.json` configurations whose `type` is `type` start `command` (a file in the plugin's folder, a `.dll` running with `dotnet`, or a program on `PATH`; `${pluginDir}` is the plugin's folder), and the configuration, with `${workspaceFolder}` and the other variables expanded, is sent as the `launch` request. The session uses the debugger's windows like netcoredbg's: breakpoints, call stack, variables, the Debug Console.
 - **customEditors** (since 1.0): `{ viewType, displayName, filenamePatterns }`. Files whose names match open in the plugin's editor, a [declarative view](#declarative-views-and-custom-editors), unless the user picks Open With → Text Editor.
 - **authentication** (since 1.0): `{ id, label }` of the [authentication providers](#authentication) the plugin offers. The Accounts page lists them before the plugin loads.
@@ -286,16 +297,50 @@ A plugin can sign users in to a service for itself and for other plugins (`contr
 
 Proposed APIs are not covered by the versioning policy: they may change in any release, and are proved by built-in plugins before they become stable. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. 1.0 has none: they all became members of `IPluginContext`. Webviews are expected to start here.
 
+## Testing plugins
+
+`Codalus.Plugins.Testing` (since M22b) runs a plugin in memory, with no IDE and no plugin host, so its tests are ordinary unit tests:
+
+```csharp
+var context = new TestPluginContext("contoso.greeter");
+context.Window.NotificationResponder = n => n.Actions.FirstOrDefault(); // the user's answer
+await using var host = await PluginTestHost.ActivateAsync<GreeterPlugin>(context);
+
+context.Settings.Set("greeter.greeting", "Ahoy");                      // raises Settings.Changed
+Assert.Equal(1, await context.Commands.ExecuteAsync<int>("greeter.greet"));
+Assert.Equal("Ahoy!", Assert.Single(context.Window.Notifications).Message);
+```
+
+- **Commands:** `ExecuteAsync` runs the plugin's commands with arguments and results through JSON, as over the protocol. `OnShellCommand` answers the IDE's commands the plugin calls, and `Executed` records every call.
+- **Window:** responders answer notifications, quick picks and input boxes. The window records output channels, status bar items, Markdown and declarative views (`GetView`, `FindElement`) and tasks with their reports (`Progress`; `Cancel()` presses ✕).
+  - **Trees:** `GetTreeChildrenAsync` expands a tree as the IDE does, `ClickTreeItemAsync` runs a row's command, and `TreeRefreshes` counts its provider's `Changed`.
+  - **Views and custom editors:** `ClickAsync`, `ChangeAsync` and `RaiseViewEventAsync` act in a view; `OpenCustomEditorAsync` opens a file in a custom editor, and `GetCustomEditorText` gives its new text.
+- **Providers:** the file systems, authentication and source control providers the plugin registered are there to call (`context.FileSystems["scheme"]`, `context.Authentication.Providers`, `context.SourceControl.Providers` with each one's `State`). `context.Authentication.Sessions` supplies other plugins' sessions; `Consent` says whether the user allows them.
+- **Settings and secrets** are in memory. `Tests`, `Workspace`, `Build`, `Debug`, `Terminals` and `Hosting` are whatever the test sets (they throw `NotSupportedException` otherwise).
+- Disposing the `PluginTestHost` deactivates the plugin and disposes its subscriptions.
+
+`tests/Codalus.Plugins.Testing.Tests` tests the HelloWorld and TodoBoard samples this way.
+
 ## Running and debugging
 
+In Codalus IDE (since M22b): make the plugin's project the startup project. The project is a plugin when its folder has `codalus-plugin.json`. Then:
+- **Debug → Debug Plugin in Development Instance** builds it and starts a second Codalus IDE with the build output loaded. The plugin runs there in a plugin host of its own, activated at once, and this IDE's debugger attaches to that host before the plugin activates, so breakpoints in `ActivateAsync` are hit too. Activation has no time limit while you're stopped at a breakpoint.
+- **Debug → Run Plugin in Development Instance** does the same without the debugger.
+- The development instance keeps its settings and state in the solution's `.codalus/plugin-dev`, apart from yours, and passes `--enable-proposed-api` when the manifest asks for proposed APIs.
+
+By hand:
 1. Build the plugin.
 2. Start Codalus with the build output: `codalus --plugin-dir path/to/bin/Debug/net10.0`. `--plugin-dir` is repeatable and takes a plugin folder or a folder of plugins; it wins over installed copies with the same id.
 3. Check **View → Plugins** for its state, and **Output → Plugins** for the activation log and anything you write to `context.Log`.
-4. To debug, attach a .NET debugger to `codalus-pluginhost`.
+4. To debug, add `--debug-plugin-host <file>`: the `--plugin-dir` plugins then run in their own `codalus-pluginhost`, which writes its process id to the file and waits up to a minute for a debugger before activating them. Attach to that process.
 
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### M22b (no API version change)
+
+New packages and tools around API 1.0 ([ADR 0059](adr/0059-plugin-developer-experience.md)): [`Codalus.Plugins.Testing`](#testing-plugins), the `dotnet new codalus-plugin` template (`Codalus.Templates`), Run and Debug Plugin in Development Instance and `--debug-plugin-host` ([Running and debugging](#running-and-debugging)), the generated [API reference](user-guide/plugin-api.md), and SVG icons in icon themes. The API's documentation now covers every record parameter; its surface didn't change.
 
 ### 1.0.0 (M22a)
 

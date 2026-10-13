@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/MyPlugin/MyPlugin.csproj" />
+<!--#if (!skipTests) -->
+  <Project Path="tests/MyPlugin.Tests/MyPlugin.Tests.csproj" />
+<!--#endif -->
+</Solution>

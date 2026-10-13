@@ -1,6 +1,11 @@
 using Codalus.Plugins.Host;
 using Codalus.Rpc;
 
+if (args is ["--compile-icons", .. var iconArgs])
+{
+    return Codalus.Plugins.Host.IconConverter.Run(iconArgs);
+}
+
 // stdout carries the protocol; anything a plugin writes to Console goes to stderr (the shell logs it).
 var stdin = Console.OpenStandardInput();
 var stdout = Console.OpenStandardOutput();

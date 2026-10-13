@@ -89,7 +89,11 @@ public sealed partial class ShellHost : IAsyncDisposable
             Workbench.ToolWindows.Register(window);
         }
 
-        Plugins = new PluginManager(Workbench, _ => PluginHostLocator.Resolve(), ShellInfo.Version);
+        Plugins = new PluginManager(Workbench, _ => PluginHostLocator.Resolve(), ShellInfo.Version)
+        {
+            DebugHostFile = Options.DebugPluginHost,
+            DevelopmentDirs = Options.PluginDirs,
+        };
         Plugins.Prompts = new PluginPrompts(this);
         EditorFont = new EditorFont(Workbench.Settings);
         Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
@@ -134,6 +138,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializePluginFiles();
         HookAuthentication();
         InitializeSourceControlProviders();
+        InitializePluginDevelopment();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -352,6 +357,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
+        _ = Plugins.ActivateDebuggedPluginsAsync(CancellationToken.None);
         OnStartupWithoutSolution();
     }
 

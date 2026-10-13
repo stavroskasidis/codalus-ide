@@ -54,8 +54,14 @@ public sealed partial class PluginDescription
     /// <c>builtin</c>, <c>default</c>, or <c>dedicated:&lt;id&gt;</c> (ADR 0003); with <c>workspace:</c> before it for a
     /// plugin that runs on the workspace's machine (ADR 0057), which in a remote window is the server.
     /// </summary>
-    public string HostGroup => (RunsOnWorkspace ? WorkspaceGroupPrefix : string.Empty)
+    public string HostGroup => IsDebugged ? DebugGroup : (RunsOnWorkspace ? WorkspaceGroupPrefix : string.Empty)
         + (Manifest?.Isolation == "dedicated" ? "dedicated:" + Id : IsBuiltIn ? "builtin" : "default");
+
+    /// <summary>The host group of plugins under development with a debugger (<see cref="PluginManager.DebugHostFile"/>).</summary>
+    public const string DebugGroup = "debug";
+
+    /// <summary>A plugin under development in a debugged host of its own (M22b).</summary>
+    public bool IsDebugged { get; internal set; }
 
     public const string WorkspaceGroupPrefix = "workspace:";
 
@@ -142,6 +148,14 @@ public sealed partial class PluginDescription
         {
             Fail($"Entry assembly not found: {m.Entry.Assembly}");
             return;
+        }
+
+        foreach (var permission in m.Permissions ?? [])
+        {
+            if (permission is not ("network" or "processes" or "fileSystem" or "secrets"))
+            {
+                warnings.Add($"Unknown permission '{permission}': expected network, processes, fileSystem or secrets.");
+            }
         }
 
         if (m.Isolation is not (null or "shared" or "dedicated"))

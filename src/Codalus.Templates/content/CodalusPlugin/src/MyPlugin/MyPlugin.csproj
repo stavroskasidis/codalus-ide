@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Plugins load into a load context of their own in the plugin host. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The plugin host provides the API at run time, so it isn't copied next to the plugin. -->
+    <PackageReference Include="Codalus.Plugins.Abstractions" Version="0.0.0-codalus-version" ExcludeAssets="runtime" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="codalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

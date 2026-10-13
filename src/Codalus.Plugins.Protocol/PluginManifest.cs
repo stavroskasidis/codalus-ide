@@ -36,6 +36,12 @@ public sealed record PluginManifest
 
     public string[]? ActivationEvents { get; init; }
 
+    /// <summary>
+    /// What the plugin does beyond its contributions (M22c, ADR 0060): <c>network</c>, <c>processes</c>,
+    /// <c>fileSystem</c> (outside the workspace) and <c>secrets</c>. Shown before install; informative, not enforced.
+    /// </summary>
+    public string[]? Permissions { get; init; }
+
     public ManifestContributions? Contributes { get; init; }
 
     public bool EnableProposedApi { get; init; }
@@ -404,4 +410,5 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(HostingOwnersResult))]
 [JsonSerializable(typeof(HostingPublishParams))]
 [JsonSerializable(typeof(PublishedRepositoryDto))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 public sealed partial class PluginJsonContext : JsonSerializerContext;

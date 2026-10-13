@@ -379,4 +379,6 @@ public sealed record InputBoxOptions(string Title)
 }
 
 /// <summary>What a task reports: a message, and how far it is (0 to 100). A null keeps the previous value.</summary>
+/// <param name="Message">What the task is doing now; null keeps the previous message.</param>
+/// <param name="Percent">How far it is, 0 to 100; null keeps the previous value (or an indeterminate bar).</param>
 public sealed record ProgressReport(string? Message = null, double? Percent = null);

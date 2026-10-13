@@ -41,6 +41,6 @@ Activation is implicit, as for 0.x's contributions: `onAuthenticationRequest:<id
 
 - Plugins that asked for `^0.3.0` don't load on 1.0. They move to `^1.0.0` and use `context.Tests` and the other members instead of `context.Proposed().Tests`. Every built-in plugin and sample did so in M22a. 0.3.0 was current for a few hours, so the break costs little.
 - The declarative views are deliberately small. Forms, lists and tables cover the built-ins' and the samples' needs. Richer UI waits for webviews, which go in as a proposed API after 1.0.
-- Icon themes made of SVG icons, which most VS Code icon themes are, draw ours for those icons until M22b converts SVG to PNG when such a theme is installed. The shell itself still never parses SVG.
+- Icon themes made of SVG icons, which most VS Code icon themes are, drew ours for those icons in M22a. *Update (M22b, ADR 0059):* their SVG icons are converted outside the shell into vector drawings; the shell itself still never parses SVG.
 - The Source Control Providers window is separate from the Git window. Git stays built in and isn't rewritten on this API, so the API doesn't constrain Git's depth (ADR 0008, 0020, 0031).
 - The development experience (template, testing package, development instance, API reference) is M22b. Distribution (the NuGet marketplace, signatures, permissions, the Components page) is M22c.

@@ -432,6 +432,8 @@
   "command.packages.manageSolution": "Manage NuGet Packages for Solution…",
   "command.packages.sources": "Package Sources…",
   "command.packages.tools": ".NET Tools…",
+  "command.plugins.debugDevelopmentInstance": "Debug Plugin in Development Instance",
+  "command.plugins.runDevelopmentInstance": "Run Plugin in Development Instance",
   "command.profiler.open": "Open Profiling Session…",
   "command.profiler.show": "Performance Profiler…",
   "command.profiler.stop": "Stop Collection",

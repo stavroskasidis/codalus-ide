@@ -1,0 +1,23 @@
+{
+  "id": "my-publisher.myplugin",
+  "version": "0.1.0",
+  "displayName": "MyPlugin",
+  "publisher": "my-publisher",
+  "description": "A Codalus IDE plugin.",
+  "engines": { "codalus": "^1.0.0" },
+  "entry": { "runtime": "dotnet", "assembly": "MyPlugin.dll" },
+  "contributes": {
+    "commands": [
+      { "id": "myplugin.greet", "title": "Greet", "category": "MyPlugin" }
+    ],
+    "menus": {
+      "menuBar/tools": [ { "command": "myplugin.greet", "group": "plugins" } ]
+    },
+    "settings": {
+      "title": "MyPlugin",
+      "properties": {
+        "myplugin.greeting": { "type": "string", "default": "Hello", "description": "What the Greet command says." }
+      }
+    }
+  }
+}

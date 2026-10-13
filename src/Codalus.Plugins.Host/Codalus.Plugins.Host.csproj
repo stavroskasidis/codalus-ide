@@ -11,6 +11,13 @@
     <TieredPGO>true</TieredPGO>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+  <PropertyGroup>
+    <!-- The icon compiler's SVG parser, for icon themes' SVG icons (M22b, IconConverter). -->
+    <DefineConstants>$(DefineConstants);CODALUS_SVG_CONVERTER</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\eng\icons\CompileIcons.cs" Link="IconCompiler\CompileIcons.cs" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
     <ProjectReference Include="..\Codalus.Plugins.Protocol\Codalus.Plugins.Protocol.csproj" />

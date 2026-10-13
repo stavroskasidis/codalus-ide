@@ -4,6 +4,11 @@
 // fills' colors (constant data, no allocation), which the generated CompiledIcons.Create replays into geometries: the
 // shell never parses SVG or path data at runtime, and stays Native AOT clean. Only <svg>, <g> and <path> with fills
 // are accepted; anything else fails the build, so a new icon can't silently render wrong.
+// The same parser, built with CODALUS_SVG_CONVERTER into codalus-pluginhost (--compile-icons), converts the SVG icons of
+// plugins' icon themes into the same operations at run time, outside the shell (M22b).
+#if CODALUS_SVG_CONVERTER
+#pragma warning disable
+#endif
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -11,11 +16,18 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Xml.Linq;
+#if !CODALUS_SVG_CONVERTER
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
+#endif
 
+#if CODALUS_SVG_CONVERTER
+internal sealed class CompileIcons
+#else
 public sealed class CompileIcons : Task
+#endif
 {
+#if !CODALUS_SVG_CONVERTER
     [Required]
     public ITaskItem[] Icons { get; set; }
 
@@ -99,7 +111,8 @@ public sealed class CompileIcons : Task
         sb.AppendLine("        _ => null,");
         sb.AppendLine("    };");
         sb.AppendLine();
-        sb.AppendLine("    private static IconLayer[] Build(string ops, ReadOnlySpan<float> n, ReadOnlySpan<uint> colors)");
+        sb.AppendLine("    /// <summary>Replays drawing operations into geometries (also those of icon themes' SVG icons, converted outside the shell).</summary>");
+        sb.AppendLine("    internal static IconLayer[] Build(string ops, ReadOnlySpan<float> n, ReadOnlySpan<uint> colors)");
         sb.AppendLine("    {");
         sb.AppendLine("        var layers = new List<IconLayer>();");
         sb.AppendLine("        StreamGeometry? geometry = null;");
@@ -144,6 +157,23 @@ public sealed class CompileIcons : Task
 
     private static double Compile(string name, string svg, StringBuilder data)
     {
+        var ops = new StringBuilder();
+        var numbers = new List<double>();
+        var colors = new List<uint>();
+        var size = Parse(svg, ops, numbers, colors);
+        data.AppendLine();
+        data.AppendLine("    private const string " + MemberName("Ops_", name) + " = \"" + ops + "\";");
+        data.AppendLine();
+        data.AppendLine("    private static ReadOnlySpan<float> " + MemberName("Data_", name) + " => [" + string.Join(", ", numbers.Select(v => Number(v) + "f")) + "];");
+        data.AppendLine();
+        data.AppendLine("    private static ReadOnlySpan<uint> " + MemberName("Colors_", name) + " => [" + string.Join(", ", colors.Select(c => "0x" + c.ToString("X8", CultureInfo.InvariantCulture))) + "];");
+        return size;
+    }
+#endif
+
+    /// <summary>An icon's drawing operations, numbers and fill colors; returns its design size (the view box's width).</summary>
+    internal static double Parse(string svg, StringBuilder ops, List<double> numbers, List<uint> colors)
+    {
         var root = XDocument.Parse(svg).Root;
         if (root == null || root.Name.LocalName != "svg")
         {
@@ -157,21 +187,12 @@ public sealed class CompileIcons : Task
             throw new FormatException("expected a square viewBox");
         }
 
-        var ops = new StringBuilder();
-        var numbers = new List<double>();
-        var colors = new List<uint>();
         Walk(root, Fill(root, null), ops, numbers, colors, -viewBox[0], -viewBox[1]);
         if (colors.Count == 0)
         {
             throw new FormatException("nothing to draw");
         }
 
-        data.AppendLine();
-        data.AppendLine("    private const string " + MemberName("Ops_", name) + " = \"" + ops + "\";");
-        data.AppendLine();
-        data.AppendLine("    private static ReadOnlySpan<float> " + MemberName("Data_", name) + " => [" + string.Join(", ", numbers.Select(v => Number(v) + "f")) + "];");
-        data.AppendLine();
-        data.AppendLine("    private static ReadOnlySpan<uint> " + MemberName("Colors_", name) + " => [" + string.Join(", ", colors.Select(c => "0x" + c.ToString("X8", CultureInfo.InvariantCulture))) + "];");
         return viewBox[2];
     }
 

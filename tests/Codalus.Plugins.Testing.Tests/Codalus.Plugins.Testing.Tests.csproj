@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Plugins tested the way a plugin author would, with Codalus.Plugins.Testing (M22b). -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Codalus.Plugins.Testing\Codalus.Plugins.Testing.csproj" />
+    <ProjectReference Include="..\..\samples\plugins\HelloWorld\HelloWorld.csproj" />
+    <ProjectReference Include="..\..\samples\plugins\TodoBoard\TodoBoard.csproj" />
+  </ItemGroup>
+</Project>

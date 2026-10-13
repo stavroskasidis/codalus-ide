@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- dotnet new templates for Codalus IDE (M22b): codalus-plugin. Packed as a template package; content/ isn't compiled. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageType>Template</PackageType>
+    <PackageId>Codalus.Templates</PackageId>
+    <Version>1.0.0</Version>
+    <Title>Codalus IDE templates</Title>
+    <Description>Templates for Codalus IDE: dotnet new codalus-plugin, a plugin with unit tests.</Description>
+    <PackageTags>codalus;plugin;template</PackageTags>
+    <IsPackable>true</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <NoWarn>$(NoWarn);NU5128;NU5110;NU5111</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="content\**\*" Exclude="content\**\bin\**;content\**\obj\**" />
+  </ItemGroup>
+</Project>

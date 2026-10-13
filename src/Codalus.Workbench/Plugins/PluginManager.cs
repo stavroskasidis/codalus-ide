@@ -113,6 +113,16 @@ public sealed class PluginManager : IAsyncDisposable
     // A guard against a hung plugin, generous enough for a first activation on a busy machine (a build, a CI runner).
     private static readonly TimeSpan s_activationTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Debug Plugin in Development Instance (M22b, <c>--debug-plugin-host</c>): the plugins in <see cref="DevelopmentDirs"/>
+    /// run in a host of their own (<see cref="PluginDescription.DebugGroup"/>) that writes its process id to this file and
+    /// waits for the debugger; their activation has no time limit, since the developer may be stopped at a breakpoint.
+    /// </summary>
+    public string? DebugHostFile { get; init; }
+
+    /// <summary>The folders of the plugins under development (<c>--plugin-dir</c>).</summary>
+    public IReadOnlyList<string> DevelopmentDirs { get; init; } = [];
+
     /// <summary>How long a tree view waits for its plugin's answer; tests on loaded machines wait longer.</summary>
     internal TimeSpan TreeTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
@@ -197,14 +207,24 @@ public sealed class PluginManager : IAsyncDisposable
 
     public event EventHandler<string>? MarkdownChanged;
 
-    private Output.OutputChannel PluginLog => _workbench.Output.GetOrCreate("codalus.plugins", "Plugins");
+    /// <summary>Output → Plugins: activations, warnings, the gallery.</summary>
+    public Output.OutputChannel PluginLog => _workbench.Output.GetOrCreate("codalus.plugins", "Plugins");
 
     /// <summary>Registers plugins and applies their declarative contributions. Problems are logged and notified once.</summary>
+    private static bool IsUnder(string path, string folder)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        return full.Equals(root, comparison) || full.StartsWith(root + Path.DirectorySeparatorChar, comparison);
+    }
+
     public void AddPlugins(IEnumerable<PluginDescription> plugins)
     {
         var problems = new List<string>();
         foreach (var plugin in plugins)
         {
+            plugin.IsDebugged = DebugHostFile is not null && !plugin.IsBuiltIn && DevelopmentDirs.Any(dir => IsUnder(plugin.InstallPath, dir));
             lock (_gate)
             {
                 _plugins.Add(plugin);
@@ -503,6 +523,16 @@ public sealed class PluginManager : IAsyncDisposable
     public Task ActivateStartupPluginsAsync(CancellationToken cancellationToken) =>
         ActivateByEventAsync("onStartup", cancellationToken);
 
+    /// <summary>
+    /// Activates the plugins under development with a debugger (<see cref="DebugHostFile"/>) at once, so their host
+    /// starts and the debugger can attach before the developer uses them.
+    /// </summary>
+    public async Task ActivateDebuggedPluginsAsync(CancellationToken cancellationToken)
+    {
+        var targets = Plugins.Where(p => p.IsUsable && p.IsDebugged && !p.IsDeclarative).ToList();
+        await Task.WhenAll(targets.Select(p => ActivateAsync(p, "onDebugPlugin", cancellationToken))).ConfigureAwait(false);
+    }
+
     /// <summary>A plugin-contributed tool window was opened.</summary>
     public Task OnViewOpenedAsync(string viewId, CancellationToken cancellationToken) =>
         ActivateByEventAsync("onView:" + viewId, cancellationToken);
@@ -559,7 +589,7 @@ public sealed class PluginManager : IAsyncDisposable
             }
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(s_activationTimeout);
+            timeout.CancelAfter(plugin.IsDebugged ? Timeout.InfiniteTimeSpan : s_activationTimeout);
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             ActivatePluginResult result;
             try
@@ -957,6 +987,17 @@ public sealed class PluginManager : IAsyncDisposable
 
             launch = placed;
             pluginPath = placement.PluginPath;
+        }
+
+        if (group == PluginDescription.DebugGroup && DebugHostFile is { } debugFile)
+        {
+            launch = launch with
+            {
+                Environment = new Dictionary<string, string>(launch.Environment ?? new Dictionary<string, string>(), StringComparer.Ordinal)
+                {
+                    ["CODALUS_PLUGINHOST_DEBUG_FILE"] = debugFile,
+                },
+            };
         }
 
         var remote = launch.Launcher is not null;

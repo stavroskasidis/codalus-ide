@@ -20,8 +20,14 @@ public sealed class IconThemeTests
         Assert.Equal("json.png", Icon(theme.ForFile("global.json")!)); // by name
         Assert.Equal("json.png", Icon(theme.ForFile("appsettings.Development.json")!)); // the longest extension that has one
         Assert.Equal("file.png", Icon(theme.ForFile("README.txt")!)); // the default
-        Assert.Equal("file.png", Icon(theme.ForFile("NOTES.md")!)); // its SVG icon is skipped
+        Assert.Equal("file.png", Icon(theme.ForFile("NOTES.md")!)); // its SVG icon isn't converted yet
         Assert.Contains(theme.Skipped, s => s.StartsWith("_markdown", StringComparison.Ordinal));
+        Assert.Equal("markdown.svg", Path.GetFileName(Assert.Single(theme.SvgFiles)));
+
+        // Once converted (outside the shell), the SVG icon is a vector drawing.
+        var converted = IconTheme.Read(Path.Combine(BlockIconsDir, "blocks-icon-theme.json"), path => "vec:" + path);
+        Assert.Equal("vec:" + theme.SvgFiles[0], converted.ForFile("NOTES.md"));
+        Assert.DoesNotContain(converted.Skipped, s => s.StartsWith("_markdown", StringComparison.Ordinal));
 
         Assert.Equal("folder-src.png", Icon(theme.ForFolder("src", open: false)!));
         Assert.Equal("folder-src.png", Icon(theme.ForFolder("src", open: true)!));
@@ -42,6 +48,11 @@ public sealed class IconThemeTests
             await ShellFixture.PumpUntil(() => FileIcons.ForFile("Program.cs").StartsWith("img:", StringComparison.Ordinal));
             Assert.EndsWith("csharp.png", FileIcons.ForFile("Program.cs"), StringComparison.Ordinal);
             Assert.EndsWith("folder-src.png", FileIcons.ForFolder("src", open: false), StringComparison.Ordinal);
+
+            // The theme's SVG icon is converted by the plugin host and drawn from its operations.
+            await ShellFixture.PumpUntil(() => FileIcons.ForFile("NOTES.md").StartsWith(IconSet.VectorPrefix, StringComparison.Ordinal), seconds: 60);
+            var markdown = IconSet.GetFilled(FileIcons.ForFile("NOTES.md"));
+            Assert.NotNull(markdown);
 
             await f.Shell.Workbench.Settings.SetAsync(ShellHost.IconThemeSetting, "default", SettingScope.User, CancellationToken.None);
             await ShellFixture.PumpUntil(() => FileIcons.ForFile("Program.cs").StartsWith("mi:", StringComparison.Ordinal));

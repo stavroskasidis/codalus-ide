@@ -87,6 +87,12 @@ public sealed class DocumentsChangedEventArgs(IReadOnlyList<string> uris) : Even
 /// The open solution. <see cref="SdkPath"/> is the .NET SDK folder MSBuild uses (it contains
 /// <c>vstest.console.dll</c>). Projects are evaluated only when <see cref="Trusted"/>.
 /// </summary>
+/// <param name="Path">The solution file, or the folder in folder mode.</param>
+/// <param name="Trusted">Whether the user trusts its folder (only then are projects evaluated).</param>
+/// <param name="Configuration">The active configuration (<c>Debug</c>, <c>Release</c>…).</param>
+/// <param name="Platform">The active platform (<c>Any CPU</c>…).</param>
+/// <param name="SdkPath">The .NET SDK folder MSBuild uses.</param>
+/// <param name="Projects">Its projects.</param>
 public sealed record WorkspaceSolution(
     string Path,
     bool Trusted,
@@ -100,6 +106,15 @@ public sealed record WorkspaceSolution(
 /// Solution Explorer). <see cref="TestPlatform"/> is <c>vstest</c>, <c>mtp</c> (Microsoft.Testing.Platform) or null.
 /// <see cref="CompileFiles"/> are absolute paths.
 /// </summary>
+/// <param name="Path">The project file.</param>
+/// <param name="Name">Its name.</param>
+/// <param name="State"><c>loading</c>, <c>loaded</c>, <c>failed</c>… as in the Solution Explorer.</param>
+/// <param name="TargetFrameworks">Its target frameworks (<c>net10.0</c>…).</param>
+/// <param name="OutputType">Its <c>OutputType</c> (<c>Exe</c>, <c>Library</c>…).</param>
+/// <param name="IsTestProject">Whether it is a test project.</param>
+/// <param name="TestPlatform"><c>vstest</c>, <c>mtp</c> (Microsoft.Testing.Platform) or null.</param>
+/// <param name="CompileFiles">Its C# files, as absolute paths.</param>
+/// <param name="ProjectReferences">The project files it references.</param>
 public sealed record WorkspaceProject(
     string Path,
     string Name,
@@ -112,6 +127,12 @@ public sealed record WorkspaceProject(
     IReadOnlyList<string> ProjectReferences);
 
 /// <summary>What a build of the project produces and how <c>dotnet run</c> would start it.</summary>
+/// <param name="Path">The project file.</param>
+/// <param name="TargetFramework">The target framework built.</param>
+/// <param name="TargetPath">The assembly the build produces.</param>
+/// <param name="RunCommand">The program <c>dotnet run</c> starts.</param>
+/// <param name="RunArguments">Its arguments.</param>
+/// <param name="RunWorkingDirectory">Its working directory.</param>
 public sealed record ProjectOutput(
     string Path,
     string? TargetFramework,
@@ -125,6 +146,13 @@ public sealed record ProjectOutput(
 /// (<c>Namespace.Outer+Inner</c>); <see cref="Name"/> is the method name, or the class's simple name.
 /// <see cref="Parameterized"/> marks theories and data-driven tests, whose cases only a runner can list.
 /// </summary>
+/// <param name="Kind"><see cref="ClassKind"/> or <see cref="MethodKind"/>.</param>
+/// <param name="Name">The method's name, or the class's simple name.</param>
+/// <param name="Type">The managed type name runners report (<c>Namespace.Outer+Inner</c>).</param>
+/// <param name="Namespace">The namespace (null for the global namespace).</param>
+/// <param name="Range">The declaration's range.</param>
+/// <param name="SelectionRange">The name's range, where the editor's glyph goes.</param>
+/// <param name="Parameterized">Whether it is a theory or data-driven test, whose cases only a runner can list.</param>
 public sealed record TestCandidate(
     string Kind,
     string Name,
@@ -196,6 +224,9 @@ public interface IDebug
 }
 
 /// <summary>How to start a program. <see cref="Arguments"/> are passed as they are (no shell parsing).</summary>
+/// <param name="Program">The program to start.</param>
+/// <param name="Arguments">Its arguments, passed as they are.</param>
+/// <param name="WorkingDirectory">Its working directory.</param>
 public sealed record DebugLaunchOptions(string Program, IReadOnlyList<string> Arguments, string WorkingDirectory)
 {
     /// <summary>Environment variables added to the shell's environment.</summary>

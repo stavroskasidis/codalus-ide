@@ -16,6 +16,7 @@ public sealed record ShellOptions
           --locale <name>         The display language for this run (qps-ploc: pseudo-language).
           --plugin-dir <dir>      Load plugins from <dir> (a plugin folder or a folder of plugins). Repeatable.
           --enable-proposed-api   Allow plugins to use proposed APIs (development builds only).
+          --debug-plugin-host <file>  Run the --plugin-dir plugins in a plugin host that writes its process id to <file> and waits for a debugger.
           --dev                   Development mode: shows developer commands.
           --open <file>           Open a file in the editor.
           --remote <target>       Open [path] on another machine: ssh:user@host[:port] or wsl:<distribution>.
@@ -37,6 +38,12 @@ public sealed record ShellOptions
     public IReadOnlyList<string> PluginDirs { get; init; } = [];
 
     public bool EnableProposedApi { get; init; }
+
+    /// <summary>
+    /// <c>--debug-plugin-host &lt;file&gt;</c> (M22b, from Debug Plugin in Development Instance): the <c>--plugin-dir</c>
+    /// plugins run in a plugin host of their own that writes its process id to the file and waits for a debugger.
+    /// </summary>
+    public string? DebugPluginHost { get; init; }
 
     public bool Development { get; init; }
 
@@ -157,6 +164,9 @@ public sealed record ShellOptions
                         pluginDirs.Add(System.IO.Path.GetFullPath(dir));
                     }
 
+                    break;
+                case "--debug-plugin-host":
+                    options = options with { DebugPluginHost = Value() is { } debugFile ? System.IO.Path.GetFullPath(debugFile) : null };
                     break;
                 case "--enable-proposed-api":
                     options = options with { EnableProposedApi = true };

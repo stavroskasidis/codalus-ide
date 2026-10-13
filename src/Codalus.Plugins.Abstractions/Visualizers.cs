@@ -32,6 +32,8 @@ public interface IDebugVisualizerContext
 }
 
 /// <summary>An evaluated value.</summary>
+/// <param name="Value">The value as the debugger shows it.</param>
+/// <param name="Type">Its type, when the debugger knows it.</param>
 public sealed record DebugValue(string Value, string? Type);
 
 /// <summary>What a visualizer shows: text in a read-only editor (colored by <see cref="LanguageId"/>) or a table.</summary>

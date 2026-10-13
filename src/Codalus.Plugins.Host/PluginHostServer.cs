@@ -213,8 +213,41 @@ internal sealed class PluginHostServer : IAsyncDisposable
             : throw new InvalidOperationException($"Expected exactly one public ICodalusPlugin implementation in {assembly.GetName().Name}, found {candidates.Count}. Set entry.type in the manifest.");
     }
 
+    /// <summary>
+    /// A plugin under development (M22b, Debug Plugin in Development Instance): with <c>CODALUS_PLUGINHOST_DEBUG_FILE</c>
+    /// the host writes its process id there and holds activations until a debugger attaches, so breakpoints in
+    /// <c>ActivateAsync</c> are hit; after <c>CODALUS_PLUGINHOST_DEBUG_WAIT</c> seconds (default 60) it goes on without.
+    /// </summary>
+    private static readonly Lazy<Task> s_debugger = new(() =>
+    {
+        if (Environment.GetEnvironmentVariable("CODALUS_PLUGINHOST_DEBUG_FILE") is not { Length: > 0 } file)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            File.WriteAllText(file, Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Task.CompletedTask;
+        }
+
+        var wait = int.TryParse(Environment.GetEnvironmentVariable("CODALUS_PLUGINHOST_DEBUG_WAIT"), System.Globalization.CultureInfo.InvariantCulture, out var seconds) ? seconds : 60;
+        return Task.Run(async () =>
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(wait);
+            while (!System.Diagnostics.Debugger.IsAttached && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+        });
+    });
+
     private async Task<ActivatePluginResult> ActivateAsync(ActivatePluginParams request, CancellationToken cancellationToken)
     {
+        await s_debugger.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
         if (!_plugins.TryGetValue(request.Id, out var plugin))
         {
             throw new JsonRpcHandlerException(PluginErrorCodes.PluginNotFound, $"Plugin '{request.Id}' is not loaded.");

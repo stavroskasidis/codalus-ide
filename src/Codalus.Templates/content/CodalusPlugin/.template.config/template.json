@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Codalus IDE",
+  "classifications": [ "Codalus IDE", "Plugin", "Extension" ],
+  "identity": "Codalus.Plugin.CSharp",
+  "name": "Codalus IDE Plugin",
+  "description": "A plugin for Codalus IDE: a command, a setting and a status bar item, with unit tests on Codalus.Plugins.Testing.",
+  "shortName": "codalus-plugin",
+  "sourceName": "MyPlugin",
+  "preferNameDirectory": true,
+  "tags": { "language": "C#", "type": "solution" },
+  "symbols": {
+    "publisher": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "The publisher part of the plugin's id (publisher.name), lower case.",
+      "defaultValue": "my-publisher",
+      "replaces": "my-publisher"
+    },
+    "codalusVersion": {
+      "type": "parameter",
+      "datatype": "text",
+      "description": "The version of the Codalus.Plugins.Abstractions and Codalus.Plugins.Testing packages.",
+      "defaultValue": "1.0.0",
+      "replaces": "0.0.0-codalus-version"
+    },
+    "skipTests": {
+      "type": "parameter",
+      "datatype": "bool",
+      "description": "Leave out the test project.",
+      "defaultValue": "false"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        { "condition": "(skipTests)", "exclude": [ "tests/**" ] }
+      ]
+    }
+  ],
+  "primaryOutputs": [ { "path": "src/MyPlugin/MyPlugin.csproj" } ],
+  "postActions": []
+}

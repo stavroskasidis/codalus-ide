@@ -35,12 +35,14 @@
     <Project Path="src/Codalus.Plugins.Abstractions/Codalus.Plugins.Abstractions.csproj" />
     <Project Path="src/Codalus.Plugins.Host/Codalus.Plugins.Host.csproj" />
     <Project Path="src/Codalus.Plugins.Protocol/Codalus.Plugins.Protocol.csproj" />
+    <Project Path="src/Codalus.Plugins.Testing/Codalus.Plugins.Testing.csproj" />
     <Project Path="src/Codalus.Projects.Host/Codalus.Projects.Host.csproj" />
     <Project Path="src/Codalus.Projects.Protocol/Codalus.Projects.Protocol.csproj" />
     <Project Path="src/Codalus.Remote.Protocol/Codalus.Remote.Protocol.csproj" />
     <Project Path="src/Codalus.Remote.Server/Codalus.Remote.Server.csproj" />
     <Project Path="src/Codalus.Rpc/Codalus.Rpc.csproj" />
     <Project Path="src/Codalus.Shell/Codalus.Shell.csproj" />
+    <Project Path="src/Codalus.Templates/Codalus.Templates.csproj" />
     <Project Path="src/Codalus.Terminal/Codalus.Terminal.csproj" />
     <Project Path="src/Codalus.Workbench/Codalus.Workbench.csproj" />
   </Folder>
@@ -60,6 +62,7 @@
     <Project Path="tests/Codalus.LspConformance.Server/Codalus.LspConformance.Server.csproj" />
     <Project Path="tests/Codalus.Plugins.Tests/Codalus.Plugins.Tests.csproj" />
     <Project Path="tests/Codalus.Projects.Tests/Codalus.Projects.Tests.csproj" />
+    <Project Path="tests/Codalus.Plugins.Testing.Tests/Codalus.Plugins.Testing.Tests.csproj" />
     <Project Path="tests/Codalus.Release.Tests/Codalus.Release.Tests.csproj" />
     <Project Path="tests/Codalus.Rpc.Tests/Codalus.Rpc.Tests.csproj" />
     <Project Path="tests/Codalus.Shell.Tests/Codalus.Shell.Tests.csproj" />
