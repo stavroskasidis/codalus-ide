@@ -84,6 +84,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private CancellationTokenSource _evaluation = new();
     private Task _restore = Task.CompletedTask;
 
+    /// <summary>The running build's end: a restore asked for meanwhile waits for it (its `dotnet restore` would rewrite the
+    /// assets file without the build's RuntimeIdentifier: NETSDK1047 in publishes, on every OS).</summary>
+    private Task _building = Task.CompletedTask;
+
     public SolutionSession(ISessionEvents events, string dotnet)
     {
         _events = events;
@@ -711,6 +715,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             throw new InvalidOperationException("A build is already running.");
         }
 
+        var building = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _building = building.Task;
+
         // A background restore (the one after opening) finishes first: it would rewrite the assets file without the
         // build's own global properties (a publish's RuntimeIdentifier: NETSDK1047, seen on macOS).
         try
@@ -720,6 +727,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         catch (OperationCanceledException)
         {
             Interlocked.Exchange(ref _buildCancellation, null);
+            building.TrySetResult();
             return canceled;
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
@@ -735,6 +743,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         catch (OperationCanceledException)
         {
             Interlocked.Exchange(ref _buildCancellation, null);
+            building.TrySetResult();
             ScheduleDesignTimeBuilds(interrupted);
             return canceled;
         }
@@ -746,6 +755,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         finally
         {
             Interlocked.Exchange(ref _buildCancellation, null);
+            building.TrySetResult();
             _builder.Gate.Release();
             ScheduleDesignTimeBuilds(interrupted);
             var restored = ProjectPaths.Where(p => _builtAssets.TryGetValue(p, out var built) && built != AssetsStamp(p)).ToList();
@@ -937,7 +947,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             path = BuildEntryPoint(); // without the compose projects, which dotnet restore can't load
         }
 
-        _restore = _restore.ContinueWith(_ => RestoreAsync(path ?? Path), TaskScheduler.Default).Unwrap();
+        var building = _building;
+        _restore = Task.WhenAll(_restore.ContinueWith(_ => { }, TaskScheduler.Default), building)
+            .ContinueWith(_ => RestoreAsync(path ?? Path), TaskScheduler.Default).Unwrap();
     }
 
     private async Task RestoreAsync(string target)
