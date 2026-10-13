@@ -53,6 +53,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M32 | Self-update | at checkpoint ([m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
 | M34 | UI polish | M34a at checkpoint ([m34a](checkpoints/m34a.md)), pulled forward by the maintainer on 2026-10-12: Fluent UI System Icons compiled at build time (D24) with command-family colors, every menu a tree like a classic IDE's, output windows that follow new output, the minimap docked at the editor's edge, completion keys per OS (the editor's key bindings now match a focused editor), then Material Icon Theme's file, folder and project icons, a flat navigation bar and themed outlining markers; M34b at checkpoint ([m34b](checkpoints/m34b.md)), pulled forward the same day: batched project loading in the language host, no false errors while loading, a parallel background pass, parallel design-time builds and their persisted cache, restore on open only when needed; M34d at checkpoint ([m34d](checkpoints/m34d.md)), 2026-10-13: spacing, size and type tokens, document tabs and captions in every state (selected without the focus, pinned, preview on the right, colored by project), toolbars that overflow instead of wrapping, High Contrast's black menus, the gallery in the smoke test, clipped-text and WCAG AA contrast tests, the UI guide; M34c at checkpoint ([m34c](checkpoints/m34c.md)), 2026-10-13: the language host keeps diagnostics and reference assemblies between sessions, open documents compile against unchanged projects' assemblies, and CS4014 the build wouldn't report is left out (ADR 0049); the rest of M34 stays the last milestone before Visual Basic and F# |
+| M39 | Rename to Codalus IDE | planned (2026-10-13), next: the clean rename of everything from Daedalus Studio to Codalus IDE (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs), with no compatibility (no users yet), as 0.2.0 |
 | M37 | Environment setup | planned (2026-10-13): detect a missing or mismatched .NET SDK, git and the optional tools, Help → Check Environment, and install them with the user's consent (winget, the official installers, `dotnet-install`, the distribution's package manager); later MAUI's workloads |
 | M38 | Start window | at checkpoint ([m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
 | M35 | Visual Basic | planned, always second to last |
@@ -134,7 +135,7 @@ All seven are settled:
 | 8. Remote | M21 | SSH, WSL, Dev Containers. |
 | 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
 | 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
-| 11. Polish | M34, M37, M38 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38). |
+| 11. Polish | M34, M39, M37, M38 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38). |
 | 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
 Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. After M30a, the maintainer moved M16c ahead of the rest of phase 4 (M31–M33).
@@ -1717,6 +1718,52 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 - Benchmarks and budgets with numbers before and after.
 
 **Status.** At checkpoint: [m34c](checkpoints/m34c.md).
+
+### M39 — Rename to Codalus IDE
+
+**Why.** The maintainer renamed the project on 2026-10-13: **Codalus IDE**, from *Code* and *Daedalus*. There are no users yet, so the rename is a clean break: no compatibility with the old names, no migration of settings or data, no bridge release. It lands as 0.2.0, and it goes ahead of the remaining feature milestones so that nothing new is built under the old name.
+
+**Names.**
+
+| What | Now | After |
+|---|---|---|
+| Product (UI, docs, site) | Daedalus Studio | Codalus IDE (Codalus where it's short: the About box, the window title's suffix) |
+| CLI and executable | `daedalus` | `codalus` |
+| Assemblies, namespaces, projects, solution | `DaedalusStudio.*`, `DaedalusStudio.slnx` | `Codalus.*`, `Codalus.slnx` (NuGet has no `Codalus` package; reserve the prefix) |
+| Hosts | `daedalus-pluginhost`, `-buildhost`, `-lshost`, … | `codalus-pluginhost`, … |
+| Environment variables | `DAEDALUS_*` | `CODALUS_*` |
+| Protocol extensions | `daedalus/…` methods | `codalus/…` |
+| Plugin manifest and ids | `daedalus-plugin.json`, `daedalus.welcome`, … | `codalus-plugin.json`, `codalus.welcome`, … (the plugin API's version moves to 0.3.0: a breaking change) |
+| Per-solution folder | `.daedalus/` | `.codalus/` |
+| User data folders | `Daedalus Studio`, `daedalus-studio` | `Codalus`, `codalus` |
+| Container label, launch agents, bundle id | `dev.daedalus.*` | `dev.codalus.*` |
+| Credential store service, single-instance pipe | Daedalus Studio | Codalus |
+| Installers | Velopack `DaedalusStudio`, `daedalus-studio` packages, AUR `daedalus-studio-bin`, winget | Velopack `Codalus`, `codalus` deb/rpm/AppImage/tar.gz, AUR `codalus-bin`, winget `Codalus.Codalus` |
+| Repository and site | `stavroskasidis/daedalus-studio`, `stavroskasidis.com/daedalus-studio/` | `stavroskasidis/codalus`, `stavroskasidis.com/codalus/` |
+| Logo | the labyrinth mark, "Daedalus Studio" wordmark | the same mark; a new wordmark and the `.ico`/PNG sizes regenerated |
+
+**Steps.**
+1. **Freeze**: land or park the open branches, so that the rename is one change on `develop` with nothing in flight.
+2. **Mechanical rename**, scripted and reviewed (`eng/rename.py`, kept for the record):
+   - `git mv` of every path with the name: projects, folders, the solution, assets and fixtures;
+   - ordered text replacements: `DaedalusStudio` → `Codalus`, `Daedalus Studio` → `Codalus IDE`, `daedalus-studio` → `codalus`, `DAEDALUS_` → `CODALUS_`, `daedalus/` → `codalus/`, `daedalus-` hosts and files, `.daedalus` → `.codalus`, `daedalus.` ids, then the remaining `daedalus` and `Daedalus`. Every replacement rule has a test of what it must not touch.
+   - After the script, a search must find no `daedalus` anywhere except the ADRs and checkpoints (history) and the rename's own record.
+3. **By hand**: UI strings in the catalogues (`Localization/en.json` regenerated), the About box, the window title, the installers' titles and descriptions, the desktop entry and file associations, `Info.plist`, the Windows `PATH` entry, the AUR PKGBUILD, the winget manifests, `THIRD-PARTY-NOTICES.md` headers, `README.md`, `CHANGELOG.md` (a 0.2.0 entry that explains the rename), the logo's wordmark.
+4. **Docs**: every living document (user guide, plugins, protocols, CLAUDE.md, roadmap) says Codalus. ADRs and checkpoints keep their history as written, with a new ADR (0053) recording the rename and the names table.
+5. **Website**: titles, the hero, the Download page's commands, every screenshot again from the smoke test, the new base path.
+6. **Validation**: the full suite on Windows, Linux (WSL) and macOS, the smoke test on each, the packages built and installed (`eng/smoke-test.sh --packages`), the apt and dnf repositories tested (`eng/test-linux-repos.sh`), and the AUR package (`eng/test-aur.sh`).
+7. **Outside the repository**, in order, after the rename is merged (the maintainer's, or with the maintainer's go-ahead):
+   - rename the GitHub repository (GitHub redirects the old URLs, but not Pages);
+   - the Pages site moves to `/codalus/` (`linux-repos.yml` reads its address from `configure-pages`);
+   - re-point the local clones and the Mac's (`git remote set-url`);
+   - reserve the `Codalus` prefix on nuget.org;
+   - register `codalus-bin` on the AUR when `AUR_SSH_PRIVATE_KEY` exists;
+   - the 0.2.0 release publishes everything under the new names. The 0.1.0 release and the old apt/dnf address stay as they are (no users to move).
+8. **Local environment**: the worktrees, the WSL mirror folder (`~/codalus`), the memory notes and the scripts that name the old folders.
+
+**Decisions for the maintainer**: the repository's name (`codalus`, recommended, or `codalus-ide`); whether the CLI is `codalus` (recommended) or something shorter; a new wordmark only, or a new mark too.
+
+**Status.** Planned (the maintainer's request, 2026-10-13).
 
 ### M37 — Environment setup
 
