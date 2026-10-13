@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using Avalonia.Headless.XUnit;
+using DaedalusStudio.Debugging;
 using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Workbench.Node;
 
@@ -43,6 +44,8 @@ public sealed class CompoundDebugTests
     {
         Assert.SkipWhen(NodeRuntime.Platform is null, "No Node.js build for this platform.");
         Assert.SkipWhen(Browsers.Find() is null && Environment.GetEnvironmentVariable("CI") != "true", "No Chrome, Edge or Chromium is installed.");
+        // The server half runs under netcoredbg (a worktree has no .work/netcoredbg: this waited out its 600 s instead).
+        Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
         Environment.SetEnvironmentVariable(ShellHost.NodeCacheVariable, SharedCache);
         Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, "1");
         try
@@ -140,6 +143,8 @@ public sealed class CompoundDebugTests
     {
         Assert.SkipWhen(NodeRuntime.Platform is null, "No Node.js build for this platform.");
         Assert.SkipWhen(Browsers.Find() is null && Environment.GetEnvironmentVariable("CI") != "true", "No Chrome, Edge or Chromium is installed.");
+        // The server half runs under netcoredbg (a worktree has no .work/netcoredbg: this waited out its 600 s instead).
+        Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
         Environment.SetEnvironmentVariable(ShellHost.NodeCacheVariable, SharedCache);
         Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, "1");
         try

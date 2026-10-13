@@ -437,6 +437,19 @@ public partial class PolishTests
         Assert.All(shown, t => Assert.True(t.Bounds.Right <= panel.Bounds.Width + 1, $"a tab ends at {t.Bounds.Right:0} of {panel.Bounds.Width:0}"));
         var scroll = strip.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
         Assert.True(scroll is null || scroll.Offset.X == 0, "the strip doesn't scroll the pinned tab away");
+
+        // The tab's context menu is ours: right-clicking a tab makes its document the active one, and the menu has the
+        // document commands (Dock's had Float and Close only).
+        var commands = f.Shell.Workbench.Menus.GetItems(Workbench.Menus.MenuLocations.DocumentTabContext).Select(i => i.Command).ToList();
+        Assert.Contains("workbench.pinEditor", commands);
+        Assert.Contains("workbench.closeUnpinnedDocuments", commands);
+        Assert.Contains("workbench.copyDocumentPath", commands);
+        var pinnedTab = shown.First(t => DocumentTab.GetIsPinned(t));
+        var request = new Avalonia.Input.ContextRequestedEventArgs();
+        pinnedTab.RaiseEvent(request);
+        ShellFixture.Pump();
+        Assert.True(request.Handled, "our handler took the request");
+        Assert.Equal(files[0], f.Shell.Layout.ActiveDocument?.FilePath);
         if (Environment.GetEnvironmentVariable("DAEDALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
         {
             Directory.CreateDirectory(snapshots);

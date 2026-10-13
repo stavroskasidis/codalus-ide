@@ -855,6 +855,33 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    /// <summary>A document tab's Copy Full Path (M34e).</summary>
+    public async Task CopyActiveDocumentPathAsync()
+    {
+        if (Layout.ActiveDocument?.FilePath is { Length: > 0 } path && Window?.Clipboard is { } clipboard)
+        {
+            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, path).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>A document tab's Open Containing Folder (Reveal in Finder on macOS, M34e).</summary>
+    public void RevealActiveDocument()
+    {
+        if (Layout.ActiveDocument?.FilePath is not { Length: > 0 } path || !File.Exists(path))
+        {
+            return; // an unsaved document, or a remote window's (not on this machine)
+        }
+
+        try
+        {
+            DaedalusStudio.Platform.ShellIntegration.RevealInFileManager(path);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Workbench.Notifications.Error($"Could not open the file manager: {ex.Message}");
+        }
+    }
+
     /// <summary>Window → Split: a second editor of the same document inside the tab.</summary>
     public void ToggleEditorSplit() => ActiveEditor?.View?.ToggleSplit();
 
