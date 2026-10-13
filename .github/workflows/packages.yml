@@ -108,9 +108,13 @@ jobs:
       - name: A Chromium browser (Linux arm64)
         # Browser debugging (blazor.wasmDebug, blazor.compoundDebug) needs one. The x64 runners have Chrome; there's no
         # Chrome or Chrome for Testing for Linux arm64, and Ubuntu's chromium is a snap, so Playwright's build (pinned).
+        # Ubuntu 24.04's AppArmor denies unprivileged user namespaces to programs without a profile (Chrome's package
+        # brings one), so this build would abort with "No usable sandbox!" and js-debug time out connecting to it:
+        # allow them on this throwaway runner rather than run the browser without its sandbox.
         if: matrix.rid == 'linux-arm64'
         shell: bash
         run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           npx -y playwright@1.56.1 install --with-deps chromium
           chrome="$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux*/chrome' -type f | head -n 1)"
           [ -x "$chrome" ] || { echo "::error::Playwright's Chromium wasn't found"; exit 1; }
@@ -122,10 +126,6 @@ jobs:
       - name: Install, smoke-test and uninstall the packages
         shell: bash
         timeout-minutes: 40
-        env:
-          # A known gap of Linux arm64 (0.1.0): the page loads in Chromium but the WebAssembly breakpoint never binds.
-          # TODO(issue): investigate with DAEDALUS_JSDEBUG_TRACE, then drop this.
-          DAEDALUS_SMOKE_SKIP: ${{ matrix.rid == 'linux-arm64' && 'blazor.wasmDebug,blazor.compoundDebug=Browser debugging of Blazor WebAssembly is a known gap on Linux arm64 (the breakpoint never binds).' || '' }}
         run: bash eng/smoke-test.sh --packages artifacts/packages artifacts/smoke-test
       - uses: actions/upload-artifact@v4
         if: failure() || cancelled()

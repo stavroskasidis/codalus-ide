@@ -15,6 +15,6 @@ The first preview release of Daedalus Studio, an open-source (MIT), cross-platfo
 
 Installed builds update themselves from signed feeds (the Velopack installers and the AppImage), and `SHA256SUMS.txt` lists every file's checksum.
 
-**Platforms**: Windows 11 x64, macOS 15 or newer on Apple silicon, and Linux x64 and arm64. Windows on Arm and Intel Macs aren't built yet. On Linux arm64, debugging a Blazor WebAssembly page in the browser doesn't stop at breakpoints yet (the server side debugs).
+**Platforms**: Windows 11 x64, macOS 15 or newer on Apple silicon, and Linux x64 and arm64. Windows on Arm and Intel Macs aren't built yet.
 
 **Not in this release yet**: remote development (SSH, WSL, containers), Hot Reload while debugging, .NET MAUI, Visual Basic and F#; see the [roadmap](https://github.com/stavroskasidis/daedalus-studio/blob/master/docs/roadmap.md).

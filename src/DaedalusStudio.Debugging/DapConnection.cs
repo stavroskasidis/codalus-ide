@@ -160,7 +160,15 @@ public sealed class DapConnection : IAsyncDisposable
         }
         finally
         {
-            _writeLock.Release();
+            try
+            {
+                _writeLock.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Disposed during the write (the session ended): the lost connection above is the error to report,
+                // not the lock's (it hid js-debug's "Unable to launch browser" behind "Cannot access a disposed object").
+            }
         }
     }
 
