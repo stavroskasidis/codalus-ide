@@ -16,6 +16,7 @@ New since 0.1.0:
 - **Personalization** (M23): Fonts and Colors over any theme, the ReSharper and Emacs keyboard schemes, importing VS Code settings and `.vssettings`, Export and Import Settings, saved window layouts, full screen and distraction-free mode, profiles, settings sync with a folder or a Git repository, Tools → Customize for menus and toolbars, and the interface's text ready for translation.
 - **A start window** (M38) with recent solutions, projects and folders, and **Help → Check Environment** (M37), which finds and offers to install a missing .NET SDK, git and the optional tools.
 - **Avalonia**: the Live Visual Tree and Live Property Explorer for running apps (M19b), and the Avalonia templates in New Project.
+- **Fixed:** opening a project in an app started from the macOS Finder or a Linux desktop failed with "Path to dotnet executable is not set": the IDE now takes the login shell's PATH and finds the .NET SDK where its installers put it.
 - Document tabs that fit their group, with pinned and selected tabs always in view, and more polish (M34e); and the new mark.
 
 ## 0.1.0

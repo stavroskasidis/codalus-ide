@@ -26,8 +26,10 @@ public sealed partial class ShellHost
     private Workbench.Output.OutputChannel SetupLog => Workbench.Output.GetOrCreate("codalus.setup", Localizer.Get("msg.setup.channel", "Environment Setup"));
 
     /// <summary>
-    /// A .NET SDK installed only in the user's <c>~/.dotnet</c> (dotnet-install, M37's own installs) isn't on the system's
-    /// paths: the IDE's processes get it as <c>DOTNET_ROOT</c> and on <c>PATH</c>.
+    /// A .NET SDK that isn't on this process's <c>PATH</c> (one in the user's <c>~/.dotnet</c> from dotnet-install or
+    /// M37's own installs, or <c>/usr/local/share/dotnet</c> for an app started from the macOS Finder, whose PATH is the
+    /// system's minimal one) is found where the installers put it: the IDE's processes, the build host's MSBuildLocator
+    /// first, get it as <c>DOTNET_ROOT</c> and on <c>PATH</c>.
     /// </summary>
     private void UseUserDotnet()
     {
@@ -36,11 +38,13 @@ public sealed partial class ShellHost
             return;
         }
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var folder = Path.Combine(home, ".dotnet");
-        if (File.Exists(Path.Combine(folder, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")))
+        if (EnvironmentCheck.FindDotnet() is { } dotnet && Path.GetDirectoryName(dotnet) is { } folder)
         {
             AddDotnetToEnvironment(folder);
+        }
+        else
+        {
+            Workbench.Log.AppendLine("[setup] No .NET SDK found (DOTNET_ROOT, PATH, or where the installers put it); Help → Check Environment offers to install one.");
         }
     }
 

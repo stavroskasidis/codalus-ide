@@ -54,6 +54,8 @@ internal static partial class Program
             }
         }
 
+        // Started from the Finder, macOS gives the app only the system's PATH: take the login shell's (dotnet, git…).
+        Codalus.Workbench.Setup.LoginShellPath.Import();
         App.Options = options;
         try
         {

@@ -144,7 +144,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         {
             PlatformKind.Windows => [System.IO.Path.Combine(environment("ProgramFiles") ?? @"C:\Program Files", "dotnet"), System.IO.Path.Combine(environment("LOCALAPPDATA") ?? string.Empty, "Microsoft", "dotnet")],
             PlatformKind.MacOS => ["/usr/local/share/dotnet", System.IO.Path.Combine(home, ".dotnet")],
-            _ => [System.IO.Path.Combine(home, ".dotnet"), "/usr/share/dotnet", "/usr/lib/dotnet", "/usr/local/share/dotnet"],
+            _ => [System.IO.Path.Combine(home, ".dotnet"), "/usr/share/dotnet", "/usr/lib/dotnet", "/usr/lib64/dotnet", "/usr/local/share/dotnet", "/snap/dotnet-sdk/current"],
         };
         return candidates.Select(c => System.IO.Path.Combine(c, exe)).FirstOrDefault(_exists);
     }

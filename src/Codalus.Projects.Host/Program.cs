@@ -31,7 +31,16 @@ catch (Exception ex) when (ex is not OutOfMemoryException)
     // A global.json that asks for an SDK that isn't installed: the locator throws, as dotnet fails there (M33). The
     // SDKs are listed from a folder without one instead, and the solution is told.
     unresolved = ex.Message.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-    instances = Query(AppContext.BaseDirectory);
+    try
+    {
+        instances = Query(AppContext.BaseDirectory);
+    }
+    catch (InvalidOperationException)
+    {
+        // No dotnet at all where the locator looks (DOTNET_ROOT, DOTNET_HOST_PATH, PATH): say so instead of crashing.
+        await Console.Error.WriteLineAsync("No .NET SDK was found: dotnet isn't in DOTNET_ROOT or on the PATH. Install the .NET SDK (Help → Check Environment) to open solutions.").ConfigureAwait(false);
+        return 3;
+    }
 }
 
 // Below the floor (M33, ADR 0030), an SDK's MSBuild doesn't run here: the newest SDK that does stands in, and the
