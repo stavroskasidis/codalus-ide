@@ -27,6 +27,7 @@ internal static class MenuBuilder
         {
             menuBar.IsVisible = false;
             AttachApplicationMenu(shell);
+            window.Opened += (_, _) => AttachApplicationMenu(shell); // again, should Avalonia install its default after us
             var native = new NativeMenu();
             NativeMenu.SetMenu(window, native);
             void RebuildNative() => BuildNative(native, shell);
@@ -46,16 +47,39 @@ internal static class MenuBuilder
     /// </summary>
     private static void AttachApplicationMenu(ShellHost shell)
     {
-        if (Avalonia.Application.Current is not { } app || NativeMenu.GetMenu(app) is not null)
+        if (Avalonia.Application.Current is not { } app)
         {
             return;
         }
 
-        var menu = new NativeMenu();
-        menu.Add(new NativeMenuItem("About " + ShellInfo.ProductName) { Command = shell.CommandFor("help.about") });
-        menu.Add(new NativeMenuItemSeparator());
-        menu.Add(new NativeMenuItem("Settings…") { Command = shell.CommandFor("workbench.openOptions"), Gesture = new KeyGesture(Key.OemComma, Avalonia.Input.KeyModifiers.Meta) });
-        NativeMenu.SetMenu(app, menu);
+        // Avalonia may have installed its default (About Avalonia, Hide Others on ⌥⌘Q) already: edit that one, so the
+        // system's own entries stay, or make ours (found on the Mac: skipping when a menu existed left Avalonia's).
+        var menu = NativeMenu.GetMenu(app);
+        if (menu is null)
+        {
+            menu = new NativeMenu();
+            NativeMenu.SetMenu(app, menu);
+        }
+
+        foreach (var item in menu.Items.OfType<NativeMenuItem>().ToList())
+        {
+            if (item.Header?.StartsWith("About ", StringComparison.Ordinal) == true || item.Header == "Settings…")
+            {
+                menu.Items.Remove(item);
+            }
+            else if (item.Header == "Hide Others")
+            {
+                item.Gesture = new KeyGesture(Key.H, Avalonia.Input.KeyModifiers.Meta | Avalonia.Input.KeyModifiers.Alt); // macOS's ⌥⌘H
+            }
+        }
+
+        menu.Items.Insert(0, new NativeMenuItem("About " + ShellInfo.ProductName) { Command = shell.CommandFor("help.about") });
+        menu.Items.Insert(1, new NativeMenuItemSeparator());
+        menu.Items.Insert(2, new NativeMenuItem("Settings…") { Command = shell.CommandFor("workbench.openOptions"), Gesture = new KeyGesture(Key.OemComma, Avalonia.Input.KeyModifiers.Meta) });
+        if (menu.Items.Count > 3 && menu.Items[3] is not NativeMenuItemSeparator)
+        {
+            menu.Items.Insert(3, new NativeMenuItemSeparator());
+        }
     }
 
     /// <summary>

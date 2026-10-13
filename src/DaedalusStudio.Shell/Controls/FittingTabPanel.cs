@@ -45,16 +45,22 @@ public sealed class FittingTabPanel : Panel
         var overheads = new double[children.Count];
         var hasIcon = new bool[children.Count];
         var margins = new double[children.Count];
+        var iconWidths = new double[children.Count];
         for (var i = 0; i < children.Count; i++)
         {
             var child = children[i];
             child.Measure(Size.Infinity);
             var title = Title(child);
-            var titleNow = title?.DesiredSize.Width ?? 0;
-            overheads[i] = Math.Max(0, child.DesiredSize.Width - titleNow);
+            var titleNow = title is { IsVisible: true } ? title.DesiredSize.Width : 0;
+            // The tab's other parts without the icon, which shows only when the tab is collapsed: a collapsed tab's width
+            // is those and the icon (counted whether or not it shows now; the Mac's narrow panes cut the last icon).
+            var icon = child.GetVisualDescendants().OfType<Icon>().FirstOrDefault(c => c.Classes.Contains("tabIcon"));
+            var iconNow = icon is { IsVisible: true } ? icon.DesiredSize.Width : 0;
+            overheads[i] = Math.Max(0, child.DesiredSize.Width - titleNow - iconNow);
             naturals[i] = overheads[i] + (title is null ? titleNow : NaturalWidth(title));
             margins[i] = title is null ? 0 : title.Margin.Left + title.Margin.Right;
-            hasIcon[i] = title is not null && child.GetVisualDescendants().OfType<Icon>().Any(c => c.Classes.Contains("tabIcon") && c.Kind is not null);
+            hasIcon[i] = title is not null && icon?.Kind is not null;
+            iconWidths[i] = icon is null ? 0 : (double.IsNaN(icon.Width) ? 16 : icon.Width) + icon.Margin.Left + icon.Margin.Right;
         }
 
         // Tabs that would keep fewer than MinTitleWidth of their title show only their icon; the width they free goes
@@ -71,7 +77,7 @@ public sealed class FittingTabPanel : Panel
                 if (!iconOnly[i] && hasIcon[i] && naturals[i] > cap && cap - overheads[i] - margins[i] < MinTitleWidth)
                 {
                     iconOnly[i] = true;
-                    widths[i] = overheads[i];
+                    widths[i] = overheads[i] + iconWidths[i];
                     changed = true;
                 }
             }
@@ -99,9 +105,31 @@ public sealed class FittingTabPanel : Panel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        double x = 0;
-        foreach (var child in Children.Where(c => c.IsVisible))
+        // When even collapsed tabs don't fit, whole tabs are left out from the end (never the selected one) rather than
+        // cut at the edge; their windows stay in the View menu.
+        var children = Children.Where(c => c.IsVisible).ToList();
+        var shown = new HashSet<Control>(children);
+        var total = children.Sum(c => c.DesiredSize.Width);
+        for (var i = children.Count - 1; i >= 0 && total > finalSize.Width + 0.5; i--)
         {
+            if (children[i] is Avalonia.Controls.Primitives.TabStripItem { IsSelected: true })
+            {
+                continue;
+            }
+
+            shown.Remove(children[i]);
+            total -= children[i].DesiredSize.Width;
+        }
+
+        double x = 0;
+        foreach (var child in children)
+        {
+            if (!shown.Contains(child))
+            {
+                child.Arrange(default);
+                continue;
+            }
+
             child.Arrange(new Rect(x, 0, child.DesiredSize.Width, finalSize.Height));
             x += child.DesiredSize.Width;
         }

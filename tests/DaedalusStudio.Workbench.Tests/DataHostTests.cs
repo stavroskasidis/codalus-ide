@@ -221,7 +221,13 @@ public sealed class DataHostTests : IAsyncLifetime
     {
         await _data.ExecuteAsync(new ExecuteParams("inventory", "SELECT 1"), Timeout());
         var pid = _data.HostProcessId!.Value;
-        Process.GetProcessById(pid).Kill();
+        // Kill returns before the process is gone: wait, or the next query can still reach it (seen on the Mac).
+        using (var host = Process.GetProcessById(pid))
+        {
+            host.Kill();
+            host.WaitForExit(10_000);
+        }
+
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (true)
         {
