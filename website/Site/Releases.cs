@@ -1,8 +1,8 @@
-namespace DaedalusStudio.Website.Site;
+namespace Codalus.Website.Site;
 
 /// <summary>
 /// The release the download page offers: the newest stable one, else the newest nightly, else none (the links then lead
-/// to the releases page). Release files are named <c>daedalus-studio-&lt;version&gt;-&lt;rid&gt;&lt;suffix&gt;</c>
+/// to the releases page). Release files are named <c>codalus-&lt;version&gt;-&lt;rid&gt;&lt;suffix&gt;</c>
 /// (<c>eng/package.sh</c>), and the tag is <c>v&lt;version&gt;</c> (<c>eng/publish-release.sh</c>).
 /// </summary>
 internal sealed class Releases(SiteOptions options)
@@ -22,7 +22,7 @@ internal sealed class Releases(SiteOptions options)
     public string ReleaseUrl(string? version) => version is null ? ReleasesUrl : $"{ReleasesUrl}/tag/v{version}";
 
     /// <summary>The file name of one package of the offered release, <c>&lt;version&gt;</c> standing in without one.</summary>
-    public string FileName(string suffix) => $"daedalus-studio-{Offered ?? "<version>"}-{suffix}";
+    public string FileName(string suffix) => $"codalus-{Offered ?? "<version>"}-{suffix}";
 
     public string AssetUrl(string suffix) =>
         Offered is { } version ? $"{ReleasesUrl}/download/v{version}/{FileName(suffix)}" : ReleasesUrl;

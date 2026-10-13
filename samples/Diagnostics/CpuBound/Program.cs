@@ -1,7 +1,7 @@
 #nullable enable
 // CpuBound: busy work for the profiler and the counters (M18). Runs for the seconds given (default 5; 0: until
 // killed). The hot path is Primes.IsPrime's inner loop, marked [hot]; a second thread hashes. It publishes an
-// EventCounter (Daedalus-Samples-CpuBound/work-items) and a meter (Daedalus.Samples.CpuBound/items.processed,
+// EventCounter (Codalus-Samples-CpuBound/work-items) and a meter (Codalus.Samples.CpuBound/items.processed,
 // batch.duration).
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
@@ -12,7 +12,7 @@ var seconds = args.Length > 0 && double.TryParse(args[0], NumberStyles.Float, Cu
 var until = seconds <= 0 ? DateTime.MaxValue : DateTime.UtcNow.AddSeconds(seconds);
 Console.WriteLine($"CpuBound {Environment.ProcessId} started for {(seconds <= 0 ? "ever" : seconds + " s")}");
 
-using var meter = new Meter("Daedalus.Samples.CpuBound");
+using var meter = new Meter("Codalus.Samples.CpuBound");
 var processed = meter.CreateCounter<long>("items.processed", "{item}");
 var batches = meter.CreateHistogram<double>("batch.duration", "ms");
 
@@ -99,7 +99,7 @@ namespace CpuBound
     }
 
     /// <summary>A custom EventCounter for the Counters monitor.</summary>
-    [System.Diagnostics.Tracing.EventSource(Name = "Daedalus-Samples-CpuBound")]
+    [System.Diagnostics.Tracing.EventSource(Name = "Codalus-Samples-CpuBound")]
     internal sealed class WorkEvents : System.Diagnostics.Tracing.EventSource
     {
         public static readonly WorkEvents Log = new();

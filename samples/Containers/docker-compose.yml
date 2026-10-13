@@ -1,6 +1,6 @@
 services:
   web:
-    image: ${DOCKER_REGISTRY-}daedalus-sample-web
+    image: ${DOCKER_REGISTRY-}codalus-sample-web
     build:
       context: .
       dockerfile: Web/Dockerfile

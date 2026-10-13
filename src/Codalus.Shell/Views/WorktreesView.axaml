@@ -1,0 +1,43 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.WorktreesView"
+             x:DataType="vm:WorktreesViewModel">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button Classes="toolbar" Content="{l:T worktrees.add}" Command="{Binding AddCommand}" ToolTip.Tip="{l:T worktrees.addAWorktreeForANew}" />
+      <Button Classes="toolbar" Content="{l:T worktrees.open}" Command="{Binding OpenCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T worktrees.openTheWorktreeSSolutionIn}" />
+      <Button Classes="toolbar" Content="{l:T worktrees.openInNewWindow}" Command="{Binding OpenNewWindowCommand}" IsEnabled="{Binding HasSelection}" />
+      <Button Classes="toolbar" Content="{Binding LockText}" Command="{Binding LockCommand}" IsEnabled="{Binding HasSelection}" />
+      <Button Classes="toolbar" Content="{l:T worktrees.remove}" Command="{Binding RemoveCommand}" IsEnabled="{Binding HasSelection}" />
+      <Button Classes="toolbar" Content="{l:T worktrees.prune}" Command="{Binding PruneCommand}" ToolTip.Tip="{l:T worktrees.forgetWorktreesWhoseFoldersAreGone}" />
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T worktrees.refresh}" AutomationProperties.Name="{l:T worktrees.refreshWorktrees}">
+        <controls:Icon Kind="refresh" />
+      </Button>
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Text="{Binding Message}" IsVisible="{Binding HasMessage}" Classes="muted" TextWrapping="Wrap" Margin="12,6" />
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T worktrees.worktrees}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:WorktreeRow">
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:WorktreeRow">
+          <StackPanel Spacing="1">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <controls:Icon Kind="worktree" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <controls:Icon Kind="branch" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Branch}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Flags}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Text="{Binding Location}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="22,0,0,0" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

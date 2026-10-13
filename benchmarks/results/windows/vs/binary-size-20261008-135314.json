@@ -32,7 +32,7 @@
     }
   },
   "notes": [
-    "Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.",
+    "Experimental instance (/rootsuffix CodalusBench); first launch needs a one-time manual setup.",
     "Informative: whole install directory, including bundled runtimes and plugins."
   ],
   "discardedRuns": 0

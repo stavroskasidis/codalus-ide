@@ -1,0 +1,11 @@
+{
+  "id": "codalus-samples.dictionary-visualizer",
+  "version": "1.0.0",
+  "displayName": "Dictionary Visualizer",
+  "publisher": "codalus-samples",
+  "description": "A sample debugger visualizer: a Dictionary<TKey, TValue> as a table of keys and values.",
+  "engines": { "codalus": "^0.3.0" },
+  "entry": { "runtime": "dotnet", "assembly": "DictionaryVisualizer.dll" },
+  "enableProposedApi": true,
+  "activationEvents": [ "onDebug" ]
+}

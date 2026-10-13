@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>codalus-release</AssemblyName>
+    <RootNamespace>Codalus.Release</RootNamespace>
+    <Description>Release cycle helper (M31): versions, tags, the version bump and release notes. Run by the release workflows.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Release.Tests" />
+  </ItemGroup>
+</Project>

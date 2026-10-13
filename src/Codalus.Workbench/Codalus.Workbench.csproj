@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>UI-agnostic workbench services: commands, key bindings, menus, settings, notifications, output, status bar and the plugin manager.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.Platform\Codalus.Platform.csproj" />
+    <ProjectReference Include="..\Codalus.Terminal\Codalus.Terminal.csproj" />
+    <ProjectReference Include="..\Codalus.Interactive.Protocol\Codalus.Interactive.Protocol.csproj" />
+    <ProjectReference Include="..\Codalus.TextTemplating.Protocol\Codalus.TextTemplating.Protocol.csproj" />
+    <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
+    <ProjectReference Include="..\Codalus.Debugging\Codalus.Debugging.csproj" />
+    <ProjectReference Include="..\Codalus.Plugins.Protocol\Codalus.Plugins.Protocol.csproj" />
+    <ProjectReference Include="..\Codalus.Projects.Protocol\Codalus.Projects.Protocol.csproj" />
+    <ProjectReference Include="..\Codalus.Data.Protocol\Codalus.Data.Protocol.csproj" />
+    <ProjectReference Include="..\Codalus.Diagnostics.Protocol\Codalus.Diagnostics.Protocol.csproj" />
+    <ProjectReference Include="..\Codalus.LanguageServices.Client\Codalus.LanguageServices.Client.csproj" />
+    <ProjectReference Include="..\Codalus.Remote.Protocol\Codalus.Remote.Protocol.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
+    <InternalsVisibleTo Include="Codalus.Debugging.Tests" />
+  </ItemGroup>
+</Project>

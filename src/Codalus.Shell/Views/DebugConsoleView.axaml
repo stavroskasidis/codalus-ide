@@ -1,0 +1,27 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:ae="using:AvaloniaEdit"
+             x:Class="Codalus.Shell.Views.DebugConsoleView"
+             x:DataType="vm:DebugConsoleViewModel">
+  <DockPanel>
+    <TextBox x:Name="Input"
+             DockPanel.Dock="Bottom"
+             Margin="6,4"
+             Text="{Binding Input}"
+             FontFamily="{Binding Font.Family}"
+             PlaceholderText="{l:T debugConsole.evaluateAnExpressionInTheSelected}"
+             AutomationProperties.Name="{l:T debugConsole.debugConsoleInput}" />
+    <ae:TextEditor x:Name="Editor"
+                   IsReadOnly="True"
+                   ShowLineNumbers="False"
+                   WordWrap="True"
+                   FontFamily="{Binding Font.Family}"
+                   FontSize="{Binding Font.Size}"
+                   Background="{DynamicResource Shell.Editor.Background}"
+                   Foreground="{DynamicResource Shell.Editor.Foreground}"
+                   Padding="6,2"
+                   AutomationProperties.Name="{l:T debugConsole.debugConsoleOutput}" />
+  </DockPanel>
+</UserControl>

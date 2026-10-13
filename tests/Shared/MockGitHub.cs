@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
-namespace DaedalusStudio.Tests;
+namespace Codalus.Tests;
 
 /// <summary>A pull request on <see cref="MockGitHub"/>.</summary>
 internal sealed record MockPullRequest(int Number, string Title, string Author, string Head, string Base)
@@ -132,7 +132,7 @@ internal sealed class MockGitHub : IAsyncDisposable
 
         if (path == "/api/v3/user/orgs")
         {
-            return MockHttpResponse.Json("""[ { "login": "daedalus-org" } ]""");
+            return MockHttpResponse.Json("""[ { "login": "codalus-org" } ]""");
         }
 
         if (request.Method == "POST" && (path == "/api/v3/user/repos" || path.StartsWith("/api/v3/orgs/", StringComparison.Ordinal)))

@@ -11,16 +11,16 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
 
-    <Company>Daedalus Studio contributors</Company>
-    <Product>Daedalus Studio</Product>
-    <Copyright>Copyright (c) Daedalus Studio contributors</Copyright>
+    <Company>Codalus IDE contributors</Company>
+    <Product>Codalus IDE</Product>
+    <Copyright>Copyright (c) Codalus IDE contributors</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/stavroskasidis/daedalus-studio</RepositoryUrl>
+    <RepositoryUrl>https://github.com/stavroskasidis/codalus-ide</RepositoryUrl>
 
     <!-- Central place for repo-relative paths used by tests and benchmarks. -->
-    <DaedalusRepoRoot>$(MSBuildThisFileDirectory)</DaedalusRepoRoot>
+    <CodalusRepoRoot>$(MSBuildThisFileDirectory)</CodalusRepoRoot>
 
     <!-- The version of the next release (M31, D21). Release builds stamp it with -p:Version; local builds add -dev. -->
-    <DaedalusVersion>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</DaedalusVersion>
+    <CodalusVersion>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION').Trim())</CodalusVersion>
   </PropertyGroup>
 </Project>

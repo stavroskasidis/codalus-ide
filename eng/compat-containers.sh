@@ -4,7 +4,7 @@
 #
 # Usage: eng/compat-containers.sh            (Linux, with docker or podman; WSL works with rootless podman)
 #
-# Current distributions (Ubuntu 22.04 and later) have OpenSSL 3 and an ICU newer than these runtimes know. Daedalus
+# Current distributions (Ubuntu 22.04 and later) have OpenSSL 3 and an ICU newer than these runtimes know. Codalus
 # Studio sets CLR_ICU_VERSION_OVERRIDE for .NET Core 2.x to 3.1 when it runs them (the test suite covers that on the
 # host); OpenSSL 1.x, which .NET Core 2.x to .NET 5 need for cryptography and HTTPS, has no such switch. This script proves the
 # programs themselves on the distributions of their time, with what those distributions bring:
@@ -92,7 +92,7 @@ web() {
 # An image per distribution with what the runtimes need from it, built once (from an empty context).
 image() {
   local base="$2" packages="$3"
-  local tag="daedalus-compat-$1-$(printf '%s %s' "$base" "$packages" | sha256sum | cut -c1-8)"
+  local tag="codalus-compat-$1-$(printf '%s %s' "$base" "$packages" | sha256sum | cut -c1-8)"
   if ! "$engine" image inspect "$tag" > /dev/null 2>&1; then
     echo "== image $tag ($base: $packages)" >&2
     mkdir -p "$work/context"

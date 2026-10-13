@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# End-to-end smoke test of an installed Daedalus Studio: `daedalus --version`, then `daedalus --smoke-test samples`, which
+# End-to-end smoke test of an installed Codalus IDE: `codalus --version`, then `codalus --smoke-test samples`, which
 # drives the real app through each MVP milestone (shell, plugins, project system, editor and C# language service, build
-# and run, debugging, Git) and exits non-zero when a step fails (src/DaedalusStudio.Shell/Infrastructure/SmokeTest.cs).
+# and run, debugging, Git) and exits non-zero when a step fails (src/Codalus.Shell/Infrastructure/SmokeTest.cs).
 #
 # Usage:
-#   eng/smoke-test.sh <daedalus executable> [results dir]   test a published app (e.g. artifacts/shell/daedalus)
+#   eng/smoke-test.sh <codalus executable> [results dir]   test a published app (e.g. artifacts/shell/codalus)
 #   eng/smoke-test.sh --packages <dir> [results dir]         install this OS's packages from eng/package.sh as a user
 #       would, test them, uninstall them and check that nothing is left (M31): Windows: the Setup.exe (silent, per user;
-#       its `daedalus` command and uninstall entry) and the zip; macOS: the .pkg (in the user's home) and the .app zip;
+#       its `codalus` command and uninstall entry) and the zip; macOS: the .pkg (in the user's home) and the .app zip;
 #       Linux: the AppImage, the .deb and the .rpm (apt and dnf, on the host with passwordless sudo, otherwise in
 #       containers) and the tar.gz. The full smoke test runs on the Setup.exe, .pkg and AppImage installs.
 # Results (report, screenshots, logs): artifacts/smoke-test by default. With GITHUB_STEP_SUMMARY set, the report is added
@@ -19,15 +19,15 @@ repo="$(cd "$(dirname "$0")/.." && pwd)"
 # Node.js and the web language servers (M16b) download once into the repository's .work folder, not every run.
 node_cache="$repo/.work/node-cache"
 command -v cygpath > /dev/null && node_cache="$(cygpath -w "$node_cache")" # Git Bash on Windows: a Windows path for the app
-export DAEDALUS_NODE_CACHE="${DAEDALUS_NODE_CACHE:-$node_cache}"
+export CODALUS_NODE_CACHE="${CODALUS_NODE_CACHE:-$node_cache}"
 # Browser debugging (M16c) runs Chrome or Edge headless, so the test opens no browser window.
-export DAEDALUS_BROWSER_HEADLESS=1
+export CODALUS_BROWSER_HEADLESS=1
 # The hosting step (M13b) signs in to a mock GitHub. On Linux, a desktop's Secret Service may ask for the keyring's
 # password in a window, which an unattended run can't answer: keep the token in memory there (libsecret itself is
 # tested against a private keyring in CredentialStoreTests). Windows and macOS use their stores, under the profile's
 # own service name, and the step signs out at the end.
 if [ "$(uname -s)" = Linux ]; then
-  export DAEDALUS_CREDENTIAL_STORE="${DAEDALUS_CREDENTIAL_STORE:-memory}"
+  export CODALUS_CREDENTIAL_STORE="${CODALUS_CREDENTIAL_STORE:-memory}"
 fi
 
 # Runs one app: --version, then the smoke test. $1: executable; $2: results dir; $3: whether to run the full smoke test.
@@ -38,7 +38,7 @@ test_app() {
   local version
   version="$("$exe" --version)"
   echo "$version"
-  if [[ "$version" != "Daedalus Studio "* ]]; then
+  if [[ "$version" != "Codalus IDE "* ]]; then
     echo "error: unexpected --version output" >&2
     return 1
   fi
@@ -91,7 +91,7 @@ test_app() {
 }
 
 if [ "${1:-}" != "--packages" ]; then
-  exe="${1:?usage: eng/smoke-test.sh <daedalus executable> [results dir] | --packages <dir> [results dir]}"
+  exe="${1:?usage: eng/smoke-test.sh <codalus executable> [results dir] | --packages <dir> [results dir]}"
   [ -f "$exe" ] || [ ! -f "$exe.exe" ] || exe="$exe.exe"
   test_app "$exe" "${2:-$repo/artifacts/smoke-test}"
   exit $?
@@ -100,10 +100,10 @@ fi
 packages="$(cd "${2:?usage: eng/smoke-test.sh --packages <dir> [results dir]}" && pwd)"
 results="${3:-$repo/artifacts/smoke-test}"
 # Installed outside the source checkout, so nothing can fall back to the checkout (netcoredbg in .work/, for one).
-install="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/daedalus-package-XXXXXX")"
+install="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/codalus-package-XXXXXX")"
 
-# The one package of a kind in the folder (eng/package.sh names them daedalus-studio-<version>-<rid><suffix>).
-package() { ls "$packages"/daedalus-studio-*"$1" 2> /dev/null | head -n 1; }
+# The one package of a kind in the folder (eng/package.sh names them codalus-<version>-<rid><suffix>).
+package() { ls "$packages"/codalus-*"$1" 2> /dev/null | head -n 1; }
 fail() { echo "error: $*" >&2; exit 1; }
 
 case "$(uname -s)" in
@@ -115,12 +115,12 @@ case "$(uname -s)" in
     else
       powershell -NoProfile -Command "Expand-Archive -LiteralPath '$(cygpath -w "$zip")' -DestinationPath '$(cygpath -w "$install/zip")'"
     fi
-    test_app "$install/zip/daedalus-studio/daedalus.exe" "$results/zip" no
+    test_app "$install/zip/codalus/codalus.exe" "$results/zip" no
 
     setup="$(package -setup.exe)"
     root="$install/velopack"
     winroot="$(cygpath -w "$root")"
-    uninstall_key='HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DaedalusStudio'
+    uninstall_key='HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Codalus'
     # Whether the user's PATH (as the registry holds it) lists the install's bin folder. Compared in PowerShell: the
     # PATH may hold any characters, and Git Bash's grep aborts on some of them.
     on_path() { powershell -NoProfile -Command "if (((Get-Item 'HKCU:\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames') -split ';' | ForEach-Object { \$_.TrimEnd('\') }) -contains '$winroot\bin') { exit 0 } else { exit 1 }"; }
@@ -129,18 +129,18 @@ case "$(uname -s)" in
     echo "== Installing $setup (silent, per user)"
     "$setup" --silent --installto "$winroot"
     # Setup starts the app when it is done: only the smoke test's instance may run.
-    powershell -NoProfile -Command "Get-Process daedalus -ErrorAction SilentlyContinue | Where-Object { \$_.Path -like '$winroot*' } | Stop-Process -Force" || true
-    [ -f "$root/current/daedalus.exe" ] && [ -f "$root/Update.exe" ] || fail "the install has no current\\daedalus.exe and Update.exe"
+    powershell -NoProfile -Command "Get-Process codalus -ErrorAction SilentlyContinue | Where-Object { \$_.Path -like '$winroot*' } | Stop-Process -Force" || true
+    [ -f "$root/current/codalus.exe" ] && [ -f "$root/Update.exe" ] || fail "the install has no current\\codalus.exe and Update.exe"
     reg query "$uninstall_key" > /dev/null || fail "no uninstall entry ($uninstall_key)"
-    [ -f "$root/bin/daedalus.cmd" ] || fail "no bin\\daedalus.cmd"
+    [ -f "$root/bin/codalus.cmd" ] || fail "no bin\\codalus.cmd"
     on_path || fail "the user PATH has no $winroot\\bin"
-    echo "== daedalus --version through the command on the PATH"
+    echo "== codalus --version through the command on the PATH"
     # The app is a GUI program: cmd gives it no handles to capture, so its output goes to the console. Its bench event
     # file shows the command ran the installed app and waited for it (the event is there when cmd returns).
     events="$install/command-events.jsonl"
-    DAEDALUS_BENCH_EVENTS="$(cygpath -w "$events")" cmd //c "$winroot\\bin\\daedalus.cmd" --version > /dev/null
-    grep -q '"main_entered"' "$events" 2> /dev/null || fail "the daedalus command didn't run the installed app"
-    test_app "$root/current/daedalus.exe" "$results"
+    CODALUS_BENCH_EVENTS="$(cygpath -w "$events")" cmd //c "$winroot\\bin\\codalus.cmd" --version > /dev/null
+    grep -q '"main_entered"' "$events" 2> /dev/null || fail "the codalus command didn't run the installed app"
+    test_app "$root/current/codalus.exe" "$results"
 
     echo "== Uninstalling"
     "$root/Update.exe" --uninstall --silent
@@ -149,37 +149,37 @@ case "$(uname -s)" in
     [ ! -e "$root/current" ] || fail "uninstalling left $winroot\\current"
     ! reg query "$uninstall_key" > /dev/null 2>&1 || fail "uninstalling left the uninstall entry"
     ! on_path || fail "uninstalling left $winroot\\bin on the PATH"
-    [ ! -e "$APPDATA/Microsoft/Windows/Start Menu/Programs/Daedalus Studio.lnk" ] || fail "uninstalling left the Start menu entry"
+    [ ! -e "$APPDATA/Microsoft/Windows/Start Menu/Programs/Codalus IDE.lnk" ] || fail "uninstalling left the Start menu entry"
     ;;
   Darwin)
     appzip="$(package .app.zip)"
     echo "== Extracting $appzip"
     ditto -x -k "$appzip" "$install/zip"
-    test_app "$install/zip/Daedalus Studio.app/Contents/MacOS/daedalus" "$results/app-zip" no
+    test_app "$install/zip/Codalus IDE.app/Contents/MacOS/codalus" "$results/app-zip" no
 
     pkg="$(package .pkg)"
-    app="$HOME/Applications/Daedalus Studio.app"
+    app="$HOME/Applications/Codalus IDE.app"
     [ ! -e "$app" ] || fail "$app exists already: this test installs there"
-    remove() { rm -rf "$app"; pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i daedalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true; }
+    remove() { rm -rf "$app"; pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i codalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true; }
     trap remove EXIT
     echo "== Installing $pkg (current user's home)"
     installer -pkg "$pkg" -target CurrentUserHomeDirectory
-    pkill -f "$app/Contents/MacOS/daedalus" || true # the package starts the app when it is done
-    [ -x "$app/Contents/MacOS/daedalus" ] || fail "the package didn't install $app"
-    test_app "$app/Contents/MacOS/daedalus" "$results"
+    pkill -f "$app/Contents/MacOS/codalus" || true # the package starts the app when it is done
+    [ -x "$app/Contents/MacOS/codalus" ] || fail "the package didn't install $app"
+    test_app "$app/Contents/MacOS/codalus" "$results"
 
     echo "== Uninstalling (removing the app and the package receipt)"
     remove
     trap - EXIT
     [ ! -e "$app" ] || fail "$app is still there"
-    ! pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -qi daedalus || fail "a package receipt is still there"
+    ! pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -qi codalus || fail "a package receipt is still there"
     ;;
   Linux)
     tarball="$(package .tar.gz)"
     echo "== Extracting $tarball"
     mkdir -p "$install/tar"
     tar -C "$install/tar" -xzf "$tarball"
-    test_app "$install/tar/daedalus-studio/daedalus" "$results/tar.gz" no
+    test_app "$install/tar/codalus/codalus" "$results/tar.gz" no
 
     appimage="$(package .AppImage)"
     echo "== AppImage $appimage"
@@ -191,21 +191,21 @@ case "$(uname -s)" in
     # The .deb and .rpm: installed with the system's package manager, then removed, and nothing may be left. On the host
     # when sudo needs no password (CI), otherwise in a container of a distribution that uses the format.
     runtime="$(command -v podman || command -v docker || true)"
-    check_removed='test ! -e /opt/daedalus-studio && test ! -e /usr/bin/daedalus && test ! -e /usr/share/applications/daedalus-studio.desktop'
+    check_removed='test ! -e /opt/codalus && test ! -e /usr/bin/codalus && test ! -e /usr/share/applications/codalus.desktop'
     deb="$(package .deb)"
     if [ -n "$deb" ]; then
       if sudo -n true 2> /dev/null; then
         echo "== Installing $deb (apt)"
         sudo apt-get install -y "$deb"
-        test_app /usr/bin/daedalus "$results/deb" no
-        sudo apt-get remove --purge -y daedalus-studio
+        test_app /usr/bin/codalus "$results/deb" no
+        sudo apt-get remove --purge -y codalus
         bash -c "$check_removed" || fail "removing the .deb left files behind"
       elif [ -n "$runtime" ]; then
         echo "== Installing $deb (apt, in an Ubuntu container)"
         "$runtime" run --rm -v "$packages:/packages:ro" docker.io/library/ubuntu:24.04 bash -euc "
           apt-get update -qq && apt-get install -y -qq /packages/$(basename "$deb") > /dev/null
-          daedalus --version | grep -q '^Daedalus Studio '
-          apt-get remove --purge -y -qq daedalus-studio > /dev/null
+          codalus --version | grep -q '^Codalus IDE '
+          apt-get remove --purge -y -qq codalus > /dev/null
           $check_removed"
       else
         echo "warning: no passwordless sudo and no container runtime: the .deb wasn't installed" >&2
@@ -217,8 +217,8 @@ case "$(uname -s)" in
         echo "== Installing $rpm (dnf, in a Fedora container)"
         "$runtime" run --rm -v "$packages:/packages:ro" docker.io/library/fedora:42 bash -euc "
           dnf install -y -q /packages/$(basename "$rpm") > /tmp/dnf.log 2>&1 || { cat /tmp/dnf.log; exit 1; }
-          daedalus --version | grep -q '^Daedalus Studio '
-          dnf remove -y -q daedalus-studio > /tmp/dnf.log 2>&1 || { cat /tmp/dnf.log; exit 1; }
+          codalus --version | grep -q '^Codalus IDE '
+          dnf remove -y -q codalus > /tmp/dnf.log 2>&1 || { cat /tmp/dnf.log; exit 1; }
           $check_removed"
       else
         echo "warning: no container runtime: the .rpm wasn't installed" >&2

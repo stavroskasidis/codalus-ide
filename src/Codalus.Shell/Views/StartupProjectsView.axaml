@@ -1,0 +1,54 @@
+<local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:Codalus.Shell.ViewModels"
+                   xmlns:local="using:Codalus.Shell.Views"
+                   xmlns:protocol="using:Codalus.Projects.Protocol"
+                   x:Class="Codalus.Shell.Views.StartupProjectsView"
+                   x:DataType="vm:StartupProjectsViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
+      <TextBlock Classes="heading" Text="{l:T startupProjects.startupProjects}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T startupProjects.whatStartDebuggingF5AndStart}" />
+      <RadioButton GroupName="startup" Content="{l:T startupProjects.singleStartupProject}" IsChecked="{Binding IsSingle}" AutomationProperties.Name="{l:T startupProjects.singleStartupProject}" />
+      <ComboBox Margin="24,0,0,0" MinWidth="260" HorizontalAlignment="Left" ItemsSource="{Binding Projects}" SelectedItem="{Binding SingleProject}" IsEnabled="{Binding IsSingle}" AutomationProperties.Name="{l:T startupProjects.startupProject}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="protocol:SolutionProjectInfo">
+            <TextBlock Text="{Binding Name}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <RadioButton GroupName="startup" Content="{l:T startupProjects.multipleStartupProjects}" IsChecked="{Binding IsMultiple}" AutomationProperties.Name="{l:T startupProjects.multipleStartupProjects}" />
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+      <Button Content="{l:T startupProjects.apply}" Classes="accent" Command="{Binding ApplyCommand}" AutomationProperties.Name="{l:T startupProjects.applyStartupProjects}" />
+      <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" />
+    </StackPanel>
+    <Grid ColumnDefinitions="*,Auto" IsEnabled="{Binding IsMultiple}">
+      <Grid RowDefinitions="Auto,*">
+        <Grid ColumnDefinitions="*,190,200" Margin="8,2">
+          <TextBlock Classes="muted" Text="{l:T startupProjects.project}" />
+          <TextBlock Grid.Column="1" Classes="muted" Text="{l:T startupProjects.action}" />
+          <TextBlock Grid.Column="2" Classes="muted" Text="{l:T startupProjects.launchProfile}" />
+        </Grid>
+        <ListBox Grid.Row="1" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T startupProjects.startupProjectActions}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:StartupProjectRowViewModel">
+              <Grid ColumnDefinitions="*,190,200">
+                <TextBlock VerticalAlignment="Center" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <ComboBox Grid.Column="1" Margin="0,0,8,0" ItemsSource="{x:Static vm:StartupProjectRowViewModel.Actions}" SelectedIndex="{Binding ActionIndex}"
+                          AutomationProperties.Name="{Binding Name, StringFormat='{}{0} action'}" />
+                <ComboBox Grid.Column="2" ItemsSource="{Binding Profiles}" SelectedItem="{Binding Profile}" IsVisible="{Binding HasProfiles}"
+                          AutomationProperties.Name="{Binding Name, StringFormat='{}{0} launch profile'}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+      <StackPanel Grid.Column="1" Spacing="4" Margin="8,24,0,0">
+        <Button Content="{l:T startupProjects.moveUp}" Command="{Binding MoveUpCommand}" MinWidth="84" AutomationProperties.Name="{l:T startupProjects.moveUp2}" />
+        <Button Content="{l:T startupProjects.moveDown}" Command="{Binding MoveDownCommand}" MinWidth="84" AutomationProperties.Name="{l:T startupProjects.moveDown2}" />
+      </StackPanel>
+    </Grid>
+  </DockPanel>
+</local:LoadingView>

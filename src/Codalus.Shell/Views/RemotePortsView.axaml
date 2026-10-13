@@ -1,0 +1,40 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.RemotePortsView"
+             x:DataType="vm:RemotePortsViewModel">
+  <DockPanel>
+    <!-- One row that overflows into » in a narrow pane (M34d); the status is the empty state's message, wrapped. -->
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button x:Name="Forward" Classes="toolbar" ToolTip.Tip="{l:T remotePorts.forwardAPort}" AutomationProperties.Name="{l:T remotePorts.forwardAPortOfTheRemote}">
+        <controls:Icon Kind="link-add" />
+      </Button>
+      <Button x:Name="Stop" Classes="toolbar" IsEnabled="{Binding CanStop}" ToolTip.Tip="{l:T remotePorts.stopForwarding}" AutomationProperties.Name="{l:T remotePorts.stopForwardingTheSelectedPort}">
+        <controls:Icon Kind="stop" />
+      </Button>
+      <Button x:Name="Browse" Classes="toolbar" IsEnabled="{Binding CanStop}" ToolTip.Tip="{l:T remotePorts.openInBrowser}" AutomationProperties.Name="{l:T remotePorts.openTheSelectedForwardedPortIn}">
+        <controls:Icon Kind="globe" />
+      </Button>
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    <ListBox x:Name="PortList" ItemsSource="{Binding Ports}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T remotePorts.ports}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:RemotePortRow">
+          <Setter Property="Padding" Value="4,2" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:RemotePortRow">
+          <Grid ColumnDefinitions="80,180,*">
+            <TextBlock Text="{Binding Port}" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="{Binding LocalAddress}" Classes="accent" />
+            <TextBlock Grid.Column="2" Text="{Binding Detail}" Classes="muted" TextTrimming="CharacterEllipsis" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

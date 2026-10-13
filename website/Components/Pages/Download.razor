@@ -2,12 +2,12 @@
 @inject Releases Releases
 @inject SiteOptions Site
 
-<PageMeta Title="Download" Description="Download Daedalus Studio for Windows, macOS and Linux: installers that update themselves, a portable zip, an AppImage, and apt and dnf repositories." />
+<PageMeta Title="Download" Description="Download Codalus IDE for Windows, macOS and Linux: installers that update themselves, a portable zip, an AppImage, and apt and dnf repositories." />
 
 <div class="container">
     <section class="page-intro">
         <p class="eyebrow">Download@(Releases.Offered is { } offered ? $" · {offered}" : "")</p>
-        <h1 class="display display-l">Install Daedalus Studio</h1>
+        <h1 class="display display-l">Install Codalus IDE</h1>
         <p class="lead">Free and open source. The installers update themselves from signed feeds, and the debugger is included.</p>
     </section>
 
@@ -41,9 +41,9 @@
         <div class="os-panel" role="tabpanel" id="windows-panel" aria-labelledby="tab-windows">
             <div class="os-head"><h2 id="windows">Windows</h2><span>Windows 11, x64</span></div>
             <DownloadFile Kind="Installer" Suffix="win-x64-setup.exe" Recommended="true">
-                Installs for you alone, without administrator rights. Adds a Start menu entry and <code>daedalus</code> to your PATH, and updates itself.
+                Installs for you alone, without administrator rights. Adds a Start menu entry and <code>codalus</code> to your PATH, and updates itself.
             </DownloadFile>
-            <DownloadFile Kind="Portable zip" Suffix="win-x64.zip">Unzip anywhere and run daedalus.exe. It doesn't update itself.</DownloadFile>
+            <DownloadFile Kind="Portable zip" Suffix="win-x64.zip">Unzip anywhere and run codalus.exe. It doesn't update itself.</DownloadFile>
             <div class="os-foot">
                 <strong>First start: “Windows protected your PC”</strong>
                 <span>The installers aren't code-signed yet. Choose More info, then Run anyway. Windows asks only once.</span>
@@ -58,7 +58,7 @@
             <DownloadFile Kind="App bundle" Suffix="osx-arm64.app.zip">The app on its own: unzip it and move it where you like.</DownloadFile>
             <div class="os-foot">
                 <strong>First start: “Apple could not verify…”</strong>
-                <span>The installers aren't code-signed yet. Close the message, open System Settings → Privacy &amp; Security, choose Open Anyway next to Daedalus Studio, then open it again.</span>
+                <span>The installers aren't code-signed yet. Close the message, open System Settings → Privacy &amp; Security, choose Open Anyway next to Codalus IDE, then open it again.</span>
             </div>
         </div>
 
@@ -74,7 +74,7 @@
                 <code>sudo dnf install ./</code> the file, or use the dnf repository below.
             </DownloadFile>
             <DownloadFile Kind="Tarball" Suffix="linux-x64.tar.gz" Arm64Suffix="linux-arm64.tar.gz">
-                Extract it and run <code>daedalus-studio/daedalus</code>.
+                Extract it and run <code>codalus/codalus</code>.
             </DownloadFile>
             <div class="os-foot">
                 <strong>Package repositories</strong>
@@ -98,7 +98,7 @@
                 <div class="card card-outline">
                     <h3 id="aur">Arch Linux (AUR)</h3>
                     <Commands Text="@Aur" />
-                    <p>Or with an AUR helper: <code>yay -S daedalus-studio-bin</code>.</p>
+                    <p>Or with an AUR helper: <code>yay -S codalus-bin</code>.</p>
                 </div>
             </div>
         </div>
@@ -120,7 +120,7 @@
             <div class="card card-outline">
                 <h2>Check the download</h2>
                 <p>Every release lists the SHA-256 of each file in SHA256SUMS.txt. The .deb and .rpm packages and the repositories are signed with the project's key.</p>
-                <a class="link-arrow" href="@Site.Blob("eng/packaging/linux/daedalus-studio-packages.asc")">The signing key</a>
+                <a class="link-arrow" href="@Site.Blob("eng/packaging/linux/codalus-packages.asc")">The signing key</a>
             </div>
             <div class="card card-outline">
                 <h2>Build from source</h2>
@@ -133,7 +133,7 @@
         <div class="cta cta-row">
             <div>
                 <h2 id="next">Installed? Open a solution.</h2>
-                <p>File → Open Solution or Project (Ctrl+Shift+O), or <code>daedalus path/to/App.slnx</code>. Trust the folder, and the projects load, restore and light up.</p>
+                <p>File → Open Solution or Project (Ctrl+Shift+O), or <code>codalus path/to/App.slnx</code>. Trust the folder, and the projects load, restore and light up.</p>
             </div>
             <a class="button" href="docs/getting-started/#first-start">Getting started</a>
         </div>
@@ -143,30 +143,30 @@
 @code {
     // The repositories are served next to the site (eng/linux-repos.sh, .github/workflows/linux-repos.yml).
     private string Apt => $"""
-        curl -fsSL {Site.BaseUrl}daedalus-studio-packages.asc | sudo gpg --dearmor -o /usr/share/keyrings/daedalus-studio.gpg
-        echo "deb [signed-by=/usr/share/keyrings/daedalus-studio.gpg] {Site.BaseUrl}apt stable main" | sudo tee /etc/apt/sources.list.d/daedalus-studio.list
-        sudo apt update && sudo apt install daedalus-studio
+        curl -fsSL {Site.BaseUrl}codalus-packages.asc | sudo gpg --dearmor -o /usr/share/keyrings/codalus.gpg
+        echo "deb [signed-by=/usr/share/keyrings/codalus.gpg] {Site.BaseUrl}apt stable main" | sudo tee /etc/apt/sources.list.d/codalus.list
+        sudo apt update && sudo apt install codalus
         """;
 
     private string Dnf => $"""
-        sudo curl -fsSL -o /etc/yum.repos.d/daedalus-studio.repo {Site.BaseUrl}rpm/daedalus-studio-stable.repo
-        sudo dnf install daedalus-studio
+        sudo curl -fsSL -o /etc/yum.repos.d/codalus.repo {Site.BaseUrl}rpm/codalus-stable.repo
+        sudo dnf install codalus
         """;
 
     private string Zypper => $"""
-        sudo rpm --import {Site.BaseUrl}daedalus-studio-packages.asc
-        sudo zypper addrepo {Site.BaseUrl}rpm/daedalus-studio-stable.repo
-        sudo zypper install daedalus-studio
+        sudo rpm --import {Site.BaseUrl}codalus-packages.asc
+        sudo zypper addrepo {Site.BaseUrl}rpm/codalus-stable.repo
+        sudo zypper install codalus
         """;
 
     private const string Aur = """
-        git clone https://aur.archlinux.org/daedalus-studio-bin.git
-        cd daedalus-studio-bin && makepkg -si
+        git clone https://aur.archlinux.org/codalus-bin.git
+        cd codalus-bin && makepkg -si
         """;
 
     private string Source => $"""
         git clone {Site.GitHub}
-        cd daedalus-studio
-        dotnet run --project src/DaedalusStudio.Shell
+        cd codalus
+        dotnet run --project src/Codalus.Shell
         """;
 }

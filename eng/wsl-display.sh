@@ -9,16 +9,16 @@
 #   below) is unpacked into ~/.local/chrome-for-testing once.
 # The alternative, with root: sudo apt install xvfb (eng/smoke-test.sh then uses xvfb-run), and install Chrome.
 
-daedalus_x_server() {
+codalus_x_server() {
   local socket="/tmp/.X11-unix/X$1"
   [[ -S "$socket" ]] || grep -q " @$socket\$" /proc/net/unix 2> /dev/null
 }
 
-daedalus_wsl_display() {
+codalus_wsl_display() {
   local display="${DISPLAY:-:0}"
   display="${display#:}"
   display="${display%%.*}"
-  if daedalus_x_server "$display" || command -v xvfb-run > /dev/null; then
+  if codalus_x_server "$display" || command -v xvfb-run > /dev/null; then
     return 0
   fi
 
@@ -52,7 +52,7 @@ EOF
   mkdir -p /tmp/xkb
   ln -sf "$( [[ -x "$root/root/usr/bin/xkbcomp" ]] && echo "$root/root/usr/bin/xkbcomp" || echo /usr/bin/xkbcomp)" /tmp/xkb/xkbcomp
   export DISPLAY=:99
-  if daedalus_x_server 99; then
+  if codalus_x_server 99; then
     return 0
   fi
 
@@ -61,7 +61,7 @@ EOF
     nohup "$root/root/usr/bin/Xvfb-local" :99 -screen 0 1920x1080x24 -nolisten tcp > /tmp/xvfb-99.log 2>&1 &
   local i
   for i in $(seq 1 50); do
-    daedalus_x_server 99 && { echo "== Xvfb on :99"; return 0; }
+    codalus_x_server 99 && { echo "== Xvfb on :99"; return 0; }
     sleep 0.2
   done
 
@@ -70,7 +70,7 @@ EOF
   return 1
 }
 
-daedalus_wsl_browser() {
+codalus_wsl_browser() {
   local name
   for name in google-chrome google-chrome-stable microsoft-edge microsoft-edge-stable chromium chromium-browser; do
     command -v "$name" > /dev/null && return 0
@@ -93,9 +93,9 @@ daedalus_wsl_browser() {
 }
 
 if [[ " $* " == *" --display "* ]]; then
-  daedalus_wsl_display || return 1 2> /dev/null || exit 1
+  codalus_wsl_display || return 1 2> /dev/null || exit 1
 fi
 
 if [[ " $* " == *" --browser "* ]]; then
-  daedalus_wsl_browser || return 1 2> /dev/null || exit 1
+  codalus_wsl_browser || return 1 2> /dev/null || exit 1
 fi

@@ -169,7 +169,7 @@
     }
   },
   "notes": [
-    "Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.",
+    "Experimental instance (/rootsuffix CodalusBench); first launch needs a one-time manual setup.",
     "Run 0 is the first launch of the session (reported separately as *_first); distributions use runs 1..N-1. OS file caches are not flushed, so runs 1..N-1 are warm starts."
   ],
   "discardedRuns": 0

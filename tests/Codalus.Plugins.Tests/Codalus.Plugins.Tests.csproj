@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Codalus.Workbench\Codalus.Workbench.csproj" />
+    <ProjectReference Include="..\..\src\Codalus.Plugins.Abstractions\Codalus.Plugins.Abstractions.csproj" />
+    <!-- Built so the tests can launch them; not referenced as assemblies. -->
+    <ProjectReference Include="..\..\src\Codalus.Plugins.Host\Codalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Codalus.Projects.Host\Codalus.Projects.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Codalus.LanguageServices.Host\Codalus.LanguageServices.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\samples\plugins\HelloWorld\HelloWorld.csproj" ReferenceOutputAssembly="false" />
+    <!-- Referenced for their internals and launched in the host by the integration tests. -->
+    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.Templates\Codalus.Plugins.Templates.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.DotNetTest\Codalus.Plugins.DotNetTest.csproj" />
+    <!-- The hosting plugins (ADR 0031): their providers are tested directly and in the host, against mock servers. -->
+    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.Hosting\Codalus.Plugins.Hosting.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.GitLab\Codalus.Plugins.GitLab.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
+    <Compile Include="..\Shared\MockGitHub.cs" Link="Shared\MockGitHub.cs" />
+  </ItemGroup>
+</Project>

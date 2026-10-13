@@ -1,0 +1,37 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.ModulesView"
+             x:DataType="vm:ModulesViewModel">
+  <DockPanel>
+    <TextBox x:Name="Search" DockPanel.Dock="Top" Margin="6,4" Text="{Binding Filter}" PlaceholderText="{l:T modules.searchModules}" AutomationProperties.Name="{l:T modules.searchModules}" />
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="40,240,200,70,*" Margin="8,2" IsVisible="{Binding !IsEmpty}">
+      <TextBlock Text="#" Classes="muted" />
+      <TextBlock Grid.Column="1" Text="{l:T modules.name}" Classes="muted" />
+      <TextBlock Grid.Column="2" Text="{l:T modules.symbolStatus}" Classes="muted" />
+      <TextBlock Grid.Column="3" Text="{l:T modules.optimized}" Classes="muted" />
+      <TextBlock Grid.Column="4" Text="{l:T modules.path}" Classes="muted" />
+    </Grid>
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T modules.modulesAppearHereWhileDebugging}" IsVisible="{Binding IsEmpty}" />
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T modules.modules}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:ModuleRow">
+          <Setter Property="Padding" Value="2" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ModuleRow">
+          <Grid ColumnDefinitions="40,240,200,70,*">
+            <TextBlock Text="{Binding Order}" Classes="muted" />
+            <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Text="{Binding SymbolStatus}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="3" Text="{Binding Optimized}" />
+            <TextBlock Grid.Column="4" Text="{Binding Path}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

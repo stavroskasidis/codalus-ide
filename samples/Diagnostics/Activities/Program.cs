@@ -1,6 +1,6 @@
 // Activities: requests, database commands, spans and file I/O for the activity views (M18b). Each round it sends HTTP
 // requests to a tiny server of its own (System.Net.Http's events), runs EF Core queries against an in-memory SQLite
-// database (EF Core's DiagnosticSource events), wraps both in ActivitySource spans (Daedalus.Samples.Activities:
+// database (EF Core's DiagnosticSource events), wraps both in ActivitySource spans (Codalus.Samples.Activities:
 // "round" with "fetch" and "query" children), and writes and reads a 1 MB file. Runs for the seconds given (default
 // 5; 0: until killed).
 using System.Diagnostics;
@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 
 var seconds = args.Length > 0 && double.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var given) ? given : 5;
 
-using var source = new ActivitySource("Daedalus.Samples.Activities");
+using var source = new ActivitySource("Codalus.Samples.Activities");
 using var listener = new TcpListener(IPAddress.Loopback, 0);
 listener.Start();
 var port = ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -30,7 +30,7 @@ using (var setup = new Shop(options))
 }
 
 using var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{port}/") };
-var file = Path.Combine(Path.GetTempPath(), $"daedalus-activities-{Environment.ProcessId}.bin");
+var file = Path.Combine(Path.GetTempPath(), $"codalus-activities-{Environment.ProcessId}.bin");
 var block = new byte[1024 * 1024];
 Console.WriteLine($"Activities {Environment.ProcessId} started");
 

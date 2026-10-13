@@ -4,7 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
-namespace DaedalusStudio.Tests;
+namespace Codalus.Tests;
 
 /// <summary>A request the mock server received.</summary>
 internal sealed record MockHttpRequest(string Method, string Path, string Query, IReadOnlyDictionary<string, string> Headers, byte[] RawBody)

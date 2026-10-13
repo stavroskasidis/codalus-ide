@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\benchmarks\Codalus.Benchmarks.Harness\Codalus.Benchmarks.Harness.csproj" />
+    <ProjectReference Include="..\..\benchmarks\Codalus.Benchmarks.FixtureGen\Codalus.Benchmarks.FixtureGen.csproj" />
+  </ItemGroup>
+</Project>

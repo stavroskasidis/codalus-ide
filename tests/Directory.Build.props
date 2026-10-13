@@ -23,11 +23,11 @@
   <ItemGroup>
     <!-- Lets tests locate fixtures under samples/ and built binaries under src/. -->
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
-      <_Parameter1>DaedalusRepoRoot</_Parameter1>
-      <_Parameter2>$(DaedalusRepoRoot)</_Parameter2>
+      <_Parameter1>CodalusRepoRoot</_Parameter1>
+      <_Parameter2>$(CodalusRepoRoot)</_Parameter2>
     </AssemblyAttribute>
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
-      <_Parameter1>DaedalusConfiguration</_Parameter1>
+      <_Parameter1>CodalusConfiguration</_Parameter1>
       <_Parameter2>$(Configuration)</_Parameter2>
     </AssemblyAttribute>
   </ItemGroup>

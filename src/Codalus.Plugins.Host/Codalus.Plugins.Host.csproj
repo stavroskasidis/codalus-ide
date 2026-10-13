@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- On .NET 10 when installed, else the next newer .NET (ADR 0025). -->
+    <RollForward>Major</RollForward>
+    <AssemblyName>codalus-pluginhost</AssemblyName>
+    <RootNamespace>Codalus.Plugins.Host</RootNamespace>
+    <Description>Out-of-process plugin host (ADR 0003): loads plugins into isolated load contexts and speaks JSON-RPC with the shell over stdio.</Description>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
+    <ProjectReference Include="..\Codalus.Plugins.Protocol\Codalus.Plugins.Protocol.csproj" />
+    <ProjectReference Include="..\Codalus.Plugins.Abstractions\Codalus.Plugins.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

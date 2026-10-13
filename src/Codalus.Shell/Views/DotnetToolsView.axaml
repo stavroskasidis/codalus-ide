@@ -1,0 +1,51 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.DotnetToolsView"
+             x:DataType="vm:DotnetToolsViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+      <TextBlock Classes="heading" Text="{l:T dotnetTools.netTools}" />
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding ManifestText}" />
+        <Button Grid.Column="1" Classes="link" Content="{l:T dotnetTools.openManifest}" Command="{Binding OpenManifestCommand}" IsVisible="{Binding HasManifest}" />
+      </Grid>
+      <controls:ToolbarPanel>
+        <Button Content="{l:T dotnetTools.installLocalTool}" Command="{Binding InstallLocalCommand}" />
+        <Button Content="{l:T dotnetTools.installGlobalTool}" Command="{Binding InstallGlobalCommand}" />
+        <Button Content="{l:T dotnetTools.update}" Command="{Binding UpdateCommand}" />
+        <Button Content="{l:T dotnetTools.uninstall}" Command="{Binding UninstallCommand}" />
+        <Button Content="{l:T dotnetTools.restoreLocalTools}" Command="{Binding RestoreCommand}" />
+        <Button Content="{l:T dotnetTools.createManifest}" Command="{Binding CreateManifestCommand}" />
+        <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T dotnetTools.refresh}" AutomationProperties.Name="{l:T dotnetTools.refresh}">
+          <controls:Icon Kind="refresh" />
+        </Button>
+      </controls:ToolbarPanel>
+      <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsBusy}" />
+    </StackPanel>
+    <TextBox DockPanel.Dock="Bottom" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="160" Text="{Binding Output}" IsVisible="{Binding HasOutput}"
+             FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T dotnetTools.dotnetToolOutput}" />
+    <Grid RowDefinitions="Auto,*">
+      <Grid ColumnDefinitions="*,120,*,80" Margin="8,2">
+        <TextBlock Classes="muted" Text="{l:T dotnetTools.packageId}" />
+        <TextBlock Grid.Column="1" Classes="muted" Text="{l:T dotnetTools.version}" />
+        <TextBlock Grid.Column="2" Classes="muted" Text="{l:T dotnetTools.commands}" />
+        <TextBlock Grid.Column="3" Classes="muted" Text="{l:T dotnetTools.scope}" />
+      </Grid>
+      <ListBox Grid.Row="1" ItemsSource="{Binding Tools}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T dotnetTools.netTools2}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:DotnetToolRow">
+            <Grid ColumnDefinitions="*,120,*,80">
+              <TextBlock Text="{Binding Id}" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="1" Text="{Binding Version}" />
+              <TextBlock Grid.Column="2" Text="{Binding Commands}" TextTrimming="CharacterEllipsis" />
+              <TextBlock Grid.Column="3" Classes="muted" Text="{Binding Scope}" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </DockPanel>
+</UserControl>

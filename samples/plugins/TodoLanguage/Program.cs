@@ -6,9 +6,9 @@ using System.Text.RegularExpressions;
 namespace TodoLanguage;
 
 /// <summary>
-/// A small LSP server for <c>.todo</c> files, started by Daedalus Studio from the plugin's manifest
+/// A small LSP server for <c>.todo</c> files, started by Codalus IDE from the plugin's manifest
 /// (<c>contributes.languageServers</c>). It speaks JSON-RPC over stdin and stdout with <c>Content-Length</c> headers,
-/// like any LSP server, and needs nothing from Daedalus. Tasks are <c>- [ ] text</c> (open) or <c>- [x] text</c> (done),
+/// like any LSP server, and needs nothing from Codalus. Tasks are <c>- [ ] text</c> (open) or <c>- [x] text</c> (done),
 /// with <c>@tags</c>, <c>!high</c> priorities and <c>due:yyyy-mm-dd</c> dates.
 /// </summary>
 internal static partial class Program

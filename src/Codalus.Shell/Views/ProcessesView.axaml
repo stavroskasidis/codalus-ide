@@ -1,0 +1,48 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.ProcessesView"
+             x:DataType="vm:ProcessesViewModel">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button Content="{l:T processes.attachToProcess}" Click="OnAttach" AutomationProperties.Name="{l:T processes.attachToProcess2}" />
+      <Button Content="{l:T processes.detachAll}" Click="OnDetach" IsEnabled="{Binding CanDetach}" AutomationProperties.Name="{l:T processes.detachAll}"
+              ToolTip.Tip="{l:T processes.detachFromAnAttachedProgramAnd}" />
+      <Button Content="{l:T processes.terminateAll}" Click="OnTerminate" IsEnabled="{Binding !IsEmpty}" AutomationProperties.Name="{l:T processes.terminateAll}" />
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T processes.noProcessIsBeingDebugged}" IsVisible="{Binding IsEmpty}" />
+    <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+      <DockPanel MinWidth="560" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="160,70,80,80,*" Margin="8,2">
+          <TextBlock Text="{l:T processes.name}" Classes="muted" />
+          <TextBlock Grid.Column="1" Text="{l:T processes.id}" Classes="muted" />
+          <TextBlock Grid.Column="2" Text="{l:T processes.state}" Classes="muted" />
+          <TextBlock Grid.Column="3" Text="{l:T processes.debugging}" Classes="muted" />
+          <TextBlock Grid.Column="4" Text="{l:T processes.path}" Classes="muted" />
+        </Grid>
+        <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T processes.processes}">
+          <ListBox.Styles>
+            <Style Selector="ListBoxItem" x:DataType="vm:ProcessRow">
+              <Setter Property="Padding" Value="2" />
+              <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+            </Style>
+          </ListBox.Styles>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProcessRow">
+              <Grid ColumnDefinitions="160,70,80,80,*" ToolTip.Tip="{Binding Title}">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding IdText}" />
+                <TextBlock Grid.Column="2" Text="{Binding State}" />
+                <TextBlock Grid.Column="3" Text="{Binding Kind}" />
+                <TextBlock Grid.Column="4" Text="{Binding Path}" Classes="muted" TextTrimming="CharacterEllipsis" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

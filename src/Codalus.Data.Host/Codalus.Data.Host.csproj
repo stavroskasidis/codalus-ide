@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- On .NET 10 when installed, else the next newer .NET (ADR 0025). -->
+    <RollForward>Major</RollForward>
+    <AssemblyName>codalus-datahost</AssemblyName>
+    <RootNamespace>Codalus.Data.Host</RootNamespace>
+    <Description>Out-of-process data host (ADR 0037): database connections, schema, table data and queries through ADO.NET providers; with --lsp, the SQL language server (ADR 0038).</Description>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
+    <ProjectReference Include="..\Codalus.Data.Protocol\Codalus.Data.Protocol.csproj" />
+    <ProjectReference Include="..\Codalus.LanguageServices.Protocol\Codalus.LanguageServices.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <!-- Microsoft's native SNI isn't OSI-licensed: never shipped; managed SNI is switched on below (ADR 0037). -->
+    <PackageReference Include="Microsoft.Data.SqlClient.SNI.runtime" ExcludeAssets="all" PrivateAssets="all" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="MySqlConnector" />
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The markup host's open-document model (incremental sync, positions). -->
+    <Compile Include="..\Codalus.Markup.Host\TextDocuments.cs" Link="Sql\TextDocuments.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Switch.Microsoft.Data.SqlClient.UseManagedNetworkingOnWindows" Value="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
+  </ItemGroup>
+</Project>

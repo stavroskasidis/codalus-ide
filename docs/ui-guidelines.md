@@ -1,6 +1,6 @@
 # UI guidelines
 
-How Daedalus Studio's surfaces look and behave: the checklist every panel, window and dialog meets (D25), the tokens views use, and the icon rules (D24). It is for the shell's own views and for plugin authors whose views and contributions sit next to them. M34 (UI polish) wrote it down; M34a and M34d applied it.
+How Codalus IDE's surfaces look and behave: the checklist every panel, window and dialog meets (D25), the tokens views use, and the icon rules (D24). It is for the shell's own views and for plugin authors whose views and contributions sit next to them. M34 (UI polish) wrote it down; M34a and M34d applied it.
 
 ## The checklist
 
@@ -34,14 +34,14 @@ Review a surface against each line, in all four themes, at its narrowest and wid
   - Lists and trees have context menus where users expect them (`MenuBuilder.Context`, menu locations in `BuiltIns.Menus.cs`).
 - **Themes**
   - Colors come from tokens only (`{DynamicResource Shell.*}`), never literals, so Blue, Light, Dark and High Contrast switch live.
-  - Text meets WCAG AA (4.5:1) on what it is drawn on; icons, focus rings and other graphics 3:1. `tests/DaedalusStudio.Shell.Tests/TestData/contrast-pairs.txt` lists every pair; `PolishTests` checks it in every theme.
+  - Text meets WCAG AA (4.5:1) on what it is drawn on; icons, focus rings and other graphics 3:1. `tests/Codalus.Shell.Tests/TestData/contrast-pairs.txt` lists every pair; `PolishTests` checks it in every theme.
   - In High Contrast, color never carries meaning alone: icons are monochrome (shape carries it), and states also have a shape or a word.
 - **Operating systems and scales:** check Windows, Linux and macOS (Cmd shortcuts, the global menu) at 100 % to 200 %.
 - **Accessibility:** every control has a name (`AutomationProperties.Name`), live regions announce status (`AutomationProperties.LiveSetting`), and rows have an accessible name that reads like a sentence.
 
 ## Tokens
 
-All tokens are in `src/DaedalusStudio.Shell/Theming/Tokens.axaml`. Colors differ per theme; spacing, sizes and type are the same in every theme.
+All tokens are in `src/Codalus.Shell/Theming/Tokens.axaml`. Colors differ per theme; spacing, sizes and type are the same in every theme.
 
 ### Colors
 
@@ -104,7 +104,7 @@ otherwise). File, folder and project icons take the palette color nearest each o
 gray fills (outlines, pages) stay gray, as Visual Studio's do. Only chrome glyphs (chevrons, carets) stay in the text
 color, and High Contrast draws every icon in the foreground.
 
-- **Commands and tool windows:** Fluent UI System Icons (Microsoft, MIT), 16 px regular. Add the file name to `src/DaedalusStudio.Shell/Icons/fluent-icons.txt`, run `eng/get-fluent-icons.sh`, commit the SVG, and map our name to it in `IconSet` (`Controls/Icon.cs`). A few small glyphs (chevrons, zoom, fit) are 16×16 stroke drawings in the same file.
+- **Commands and tool windows:** Fluent UI System Icons (Microsoft, MIT), 16 px regular. Add the file name to `src/Codalus.Shell/Icons/fluent-icons.txt`, run `eng/get-fluent-icons.sh`, commit the SVG, and map our name to it in `IconSet` (`Controls/Icon.cs`). A few small glyphs (chevrons, zoom, fit) are 16×16 stroke drawings in the same file.
 - **File types, folders and projects:** Material Icon Theme (MIT), `Icons/material-icons.txt` and `eng/get-material-icons.sh`, mapped in `Controls/FileIcons.cs`. Their colors become the palette's nearest (above), except in High Contrast.
 - **Compiled at build time:** `eng/icons/CompileIcons.cs` turns the SVGs into drawing operations; nothing parses SVG at runtime, and the shell stays Native AOT clean. Only `<path d>` is supported; anything else fails the build.
 - **Color by family:** a command's icon takes its family's token through an `accent-*` class (`Controls/CommandIcons.cs`): run green, stop red, save and navigation blue, open folder tan, build purple, Git orange, tests green. Other icons take their kind's palette color. States use `info`, `warning`, `error`, and the test outcome classes (`passed`, `failed`, `skipped`, `running`, `none`).

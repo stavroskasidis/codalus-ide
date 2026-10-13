@@ -10,9 +10,9 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- The host provides the API at runtime, so it is not copied next to the plugin. -->
-    <ProjectReference Include="..\..\..\src\DaedalusStudio.Plugins.Abstractions\DaedalusStudio.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+    <ProjectReference Include="..\..\..\src\Codalus.Plugins.Abstractions\Codalus.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup>
-    <None Update="daedalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="codalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

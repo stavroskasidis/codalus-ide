@@ -6,21 +6,21 @@ View → Output (`Ctrl+Shift+U`) has a channel per component:
 
 | Channel | Shows |
 |---|---|
-| Daedalus Studio | The IDE's own log: unexpected errors and plugin messages. |
+| Codalus IDE | The IDE's own log: unexpected errors and plugin messages. |
 | Build Host | Solution loading, evaluation and design-time builds. |
 | Restore | `dotnet restore` output. |
 | Build | The last build. |
 | Language Services | The C# language service: analyzers that failed to load, project problems. |
 | Run: *project* | A program started with Ctrl+F5. |
 | Debug | The debug session (also in the Debug Console). |
-| Git | Every git command Daedalus Studio ran, and its errors. |
+| Git | Every git command Codalus IDE ran, and its errors. |
 | Plugins | Plugin activation and plugin logs. |
 
-Help → Show Logs opens the Daedalus Studio channel. Crash reports are saved in the logs folder:
+Help → Show Logs opens the Codalus IDE channel. Crash reports are saved in the logs folder:
 
-- Windows: `%LOCALAPPDATA%\Daedalus Studio\Logs`
-- macOS: `~/Library/Logs/Daedalus Studio`
-- Linux: `~/.local/state/daedalus-studio/logs`
+- Windows: `%LOCALAPPDATA%\Codalus\Logs`
+- macOS: `~/Library/Logs/Codalus`
+- Linux: `~/.local/state/codalus/logs`
 
 ## Common problems
 
@@ -31,8 +31,8 @@ Help → Show Logs opens the Daedalus Studio channel. Crash reports are saved in
 | Packages show as unresolved | Restore failed: see Output → Restore. |
 | No IntelliSense in a project | Its design-time build failed (Output → Build Host). It is often a missing restore or SDK. |
 | "The debugger (netcoredbg) was not found" | A source build: run `eng/get-netcoredbg.sh`. Packages include it. |
-| Git features missing | Install git and make sure it is on the `PATH` (or set `DAEDALUS_GIT`). |
-| Push or pull fails with an authentication error | Configure a git credential helper or SSH keys. Daedalus Studio doesn't prompt for passwords. |
+| Git features missing | Install git and make sure it is on the `PATH` (or set `CODALUS_GIT`). |
+| Push or pull fails with an authentication error | Configure a git credential helper or SSH keys. Codalus IDE doesn't prompt for passwords. |
 
 A helper process that crashes (build host, language service, plugin host) is restarted automatically, and a notification tells you.
 

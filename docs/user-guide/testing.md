@@ -1,6 +1,6 @@
 # Testing
 
-Daedalus Studio finds, runs and debugs **xUnit** (v2 and v3), **NUnit**, **MSTest** and **TUnit** tests, on both
+Codalus IDE finds, runs and debugs **xUnit** (v2 and v3), **NUnit**, **MSTest** and **TUnit** tests, on both
 test platforms: **VSTest** (the classic `Microsoft.NET.Test.Sdk` projects) and **Microsoft.Testing.Platform** (MTP:
 xUnit v3, `MSTest.Sdk`, TUnit, and projects that enable it). Each project uses the platform it is set up for. Run with
 Coverage measures code coverage with [Coverlet](https://github.com/coverlet-coverage/coverlet). Tests and coverage work on every .NET version from .NET Core 2.0, with the test SDK and adapter versions each one supports ([Older .NET versions](dotnet-versions.md)).
@@ -53,7 +53,7 @@ debugger ends the run.
 
 **Run with Coverage** (Test → Run All Tests with Coverage, the coverage button in the Test Explorer, or a test glyph's
 menu) runs the tests and measures which lines of your code they ran. It works for every framework and both test
-platforms, and your projects don't need to reference anything: Daedalus brings
+platforms, and your projects don't need to reference anything: Codalus brings
 [Coverlet](https://github.com/coverlet-coverage/coverlet) with it. (If an MTP project references `coverlet.mtp`, that
 is used instead.) Test projects themselves and the test frameworks are not measured.
 
@@ -93,8 +93,8 @@ A playlist is a saved set of tests: pick it in the Test Explorer's playlist box 
 
 - **Create**: select tests, right-click → Add to Playlist… (or Test → New Playlist…).
 - **Import** a Visual Studio `.playlist` file with Test → Import Test Playlist (.playlist)….
-- Playlists are saved as JSON in `.daedalus/playlists/` next to the solution, with paths relative to it, so you can
-  commit and share them. Add `.daedalus/` to `.gitignore` if you don't want to.
+- Playlists are saved as JSON in `.codalus/playlists/` next to the solution, with paths relative to it, so you can
+  commit and share them. Add `.codalus/` to `.gitignore` if you don't want to.
 
 ## Test results files (TRX)
 
@@ -127,26 +127,26 @@ The Test Explorer's toolbar then has a **target environment** list: **Local** an
 Each type of environment:
 - **WSL** runs the output through `/mnt/<drive>/`. Windows only.
 - **Docker** starts a container from the image (or builds `dockerFile`, relative to the solution) with your docker or podman. It mounts the solution's folder at `/workspaces/<folder>` and keeps the container for the next run. The project outputs must be under the solution's folder.
-- **SSH** copies each project's output to `~/.daedalus-tests/` there, with your own `ssh` and its keys or agent.
+- **SSH** copies each project's output to `~/.codalus-tests/` there, with your own `ssh` and its keys or agent.
 
 The environment needs the .NET SDK (`dotnet test`) and the runtime of the test projects' framework; `~/.dotnet` is used when it's there. Debugging and coverage run locally only, and Run Failed Tests, Run Tests That Have Not Run and Repeat Last Run run locally too.
 
 ## Create Unit Tests
 
-Right-click a class or method → **Create Unit Tests…** (also in the Test menu). Pick a test project; Daedalus writes
+Right-click a class or method → **Create Unit Tests…** (also in the Test menu). Pick a test project; Codalus writes
 `<Class>Tests.cs` there with a test per public method (or just the method under the cursor), in the project's
 framework, adds a reference to the code's project if needed, and opens the file. Each test is an Arrange, Act, Assert
 stub that fails until you write it.
 
-## Snapshot testing: Daedalus as a diff tool
+## Snapshot testing: Codalus as a diff tool
 
-`daedalus diff <left> <right>` shows two files side by side, in the running window if there is one. To use it for
+`codalus diff <left> <right>` shows two files side by side, in the running window if there is one. To use it for
 [Verify](https://github.com/VerifyTests/Verify) snapshots, register it once in your test project with DiffEngine's
 custom-tool API (shown for DiffEngine 15; check its documentation for your version):
 
 ```csharp
 DiffTools.AddTool(
-    name: "Daedalus Studio",
+    name: "Codalus IDE",
     autoRefresh: true,
     isMdi: false,
     supportsText: true,
@@ -154,12 +154,12 @@ DiffTools.AddTool(
     launchArguments: new(
         Left: (temp, target) => $"diff \"{target}\" \"{temp}\"",
         Right: (temp, target) => $"diff \"{temp}\" \"{target}\""),
-    exePath: @"C:\Program Files\Daedalus Studio\daedalus.exe", // where daedalus is installed
+    exePath: @"C:\Program Files\Codalus IDE\codalus.exe", // where codalus is installed
     binaryExtensions: []);
 ```
 
 ## Known limitations
 
-- .NET Framework test projects are not supported (Daedalus targets .NET 8 and later).
+- .NET Framework test projects are not supported (Codalus targets .NET 8 and later).
 - Tests that run in child processes they start themselves can't be debugged.
 - Tests in other environments run but can't be debugged or covered there yet. Live Unit Testing is not planned.

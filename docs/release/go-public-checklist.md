@@ -52,12 +52,12 @@ The workflows build, test and publish (ADR 0028); a dispatch without the dry run
 - [ ] Merge `develop` into `master`: `release.yml` publishes `vX.Y.Z`, the apt and dnf repositories follow, and `develop` moves to the next minor version.
 - [ ] Run `benchmarks check` on the reference machine (ADR 0002) and attach the summary.
 - [ ] Submit the winget manifests (`winget-manifests-<version>.zip` in the release) to `microsoft/winget-pkgs`: they point at the release's `Setup.exe`.
-- [ ] **Code signing** (D19): apply to SignPath Foundation (free for open source) or set up Azure Trusted Signing for Windows, and get an Apple Developer ID with a notary profile for macOS. The workflows pass `DAEDALUS_CODESIGN_IDENTITY` to `eng/package.sh` already; add the secrets and the Windows signing option then.
+- [ ] **Code signing** (D19): apply to SignPath Foundation (free for open source) or set up Azure Trusted Signing for Windows, and get an Apple Developer ID with a notary profile for macOS. The workflows pass `CODALUS_CODESIGN_IDENTITY` to `eng/package.sh` already; add the secrets and the Windows signing option then.
 - [ ] **Package key**: the apt and dnf repositories are signed with `PACKAGES_GPG_PRIVATE_KEY` (a repository secret, made 2026-10-11, with no expiry). Keep a copy of it somewhere safe outside GitHub: secrets can't be read back.
 
 ## 5a. NuGet package prefix
 
-See [nuget-prefix-reservation.md](nuget-prefix-reservation.md). Summary: `Daedalus.*` is already used on nuget.org by unrelated packages. Reserve `DaedalusStudio.*` instead, and decide whether the plugin SDK ships as `DaedalusStudio.Plugins.Abstractions`.
+See [nuget-prefix-reservation.md](nuget-prefix-reservation.md). Summary: `Codalus.*` is already used on nuget.org by unrelated packages. Reserve `Codalus.*` instead, and decide whether the plugin SDK ships as `Codalus.Plugins.Abstractions`.
 
 ## 6. History audit (done at M7)
 

@@ -1,0 +1,65 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.CoverageResultsView"
+             x:DataType="vm:CoverageResultsViewModel">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <ToggleButton Classes="toolbar" IsChecked="{Binding ShowColoring}" ToolTip.Tip="{l:T coverageResults.showCoverageColoringInTheEditor}" AutomationProperties.Name="{l:T coverageResults.showCoverageColoring}">
+        <controls:Icon Kind="coverage" />
+      </ToggleButton>
+      <Button Classes="toolbar" Command="{Binding ExportCommand}" IsEnabled="{Binding HasCoverage}" ToolTip.Tip="{l:T coverageResults.exportCoverageCobertura}" AutomationProperties.Name="{l:T coverageResults.exportCoverage}">
+        <controls:Icon Kind="arrow-down" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding ClearCommand}" IsEnabled="{Binding HasCoverage}" ToolTip.Tip="{l:T coverageResults.clearCoverage}" AutomationProperties.Name="{l:T coverageResults.clearCoverage}">
+        <controls:Icon Kind="clear-all" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="{l:T coverageResults.collapseAll}" AutomationProperties.Name="{l:T coverageResults.collapseAll}">
+        <controls:Icon Kind="collapse-all" />
+      </Button>
+      <TextBox x:Name="Filter" Text="{Binding FilterText}" MinWidth="180" Margin="4,0" PlaceholderText="{l:T coverageResults.searchCoverageResults}" AutomationProperties.Name="{l:T coverageResults.searchCoverageResults}" />
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="8,0,8,3" Text="{Binding Summary}" />
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,120,80,80" Margin="8,2" IsVisible="{Binding HasCoverage}">
+      <TextBlock Classes="muted" Text="{l:T coverageResults.name}" />
+      <TextBlock Grid.Column="1" Classes="muted" Text="{l:T coverageResults.lines}" />
+      <TextBlock Grid.Column="2" Classes="muted" Text="{l:T coverageResults.covered}" HorizontalAlignment="Right" />
+      <TextBlock Grid.Column="3" Classes="muted" Text="{l:T coverageResults.branches}" HorizontalAlignment="Right" />
+    </Grid>
+    <Grid>
+      <TextBlock Classes="emptyState" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
+      <ListBox x:Name="List"
+               ItemsSource="{Binding Rows}"
+               SelectedItem="{Binding Selected}"
+               IsVisible="{Binding HasCoverage}"
+               Background="Transparent"
+               AutomationProperties.Name="{l:T coverageResults.coverageResults}">
+        <ListBox.Styles>
+          <Style Selector="ListBoxItem" x:DataType="vm:CoverageRowViewModel">
+            <Setter Property="Padding" Value="0,1" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          </Style>
+        </ListBox.Styles>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:CoverageRowViewModel">
+            <Grid ColumnDefinitions="*,120,80,80" Margin="4,0" Background="Transparent">
+              <StackPanel Orientation="Horizontal" Spacing="4" Margin="{Binding Indent}">
+                <Border Classes="chevron" Width="16" Height="18" Background="Transparent">
+                  <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <ProgressBar Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding Ratio}" Height="6" MinHeight="6" Margin="0,0,8,0" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Text="{Binding LinePercent}" ToolTip.Tip="{Binding Lines}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="3" Text="{Binding BranchPercent}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </DockPanel>
+</UserControl>

@@ -1,0 +1,25 @@
+# winget installer manifest (filled in by eng/package.sh). The release URL is the GitHub release asset.
+PackageIdentifier: Codalus.Codalus
+PackageVersion: {{VERSION}}
+# The Velopack Setup.exe (M31): a per-user install that updates itself (M32) and puts `codalus` on the PATH.
+InstallerType: exe
+Scope: user
+InstallModes:
+  - silent
+  - silentWithProgress
+InstallerSwitches:
+  Silent: --silent
+  SilentWithProgress: --silent
+UpgradeBehavior: install
+# Windows 11 only (roadmap D26).
+MinimumOSVersion: 10.0.22000.0
+Dependencies:
+  PackageDependencies:
+    - PackageIdentifier: Microsoft.DotNet.SDK.10
+    - PackageIdentifier: Git.Git
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/stavroskasidis/codalus-ide/releases/download/v{{VERSION}}/{{FILE}}
+    InstallerSha256: {{SHA256}}
+ManifestType: installer
+ManifestVersion: 1.6.0

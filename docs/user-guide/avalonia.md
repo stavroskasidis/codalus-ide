@@ -1,6 +1,6 @@
 # Avalonia: XAML, the previewer and the live tools
 
-Daedalus Studio edits Avalonia's XAML (`.axaml`) with the same C# service as your code, previews it while you type, and shows a running app's elements and properties.
+Codalus IDE edits Avalonia's XAML (`.axaml`) with the same C# service as your code, previews it while you type, and shows a running app's elements and properties.
 
 ## Editing XAML
 

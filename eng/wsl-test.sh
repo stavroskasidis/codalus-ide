@@ -2,13 +2,13 @@
 # Builds and tests the current working tree (uncommitted changes included) on Linux under WSL.
 # Run from Windows:  wsl -d Ubuntu -- bash eng/wsl-test.sh [--smoke] [dotnet test arguments...]
 # Several checkouts at once (git worktrees): give each its own mirror, e.g.
-#   wsl -d Ubuntu -- env DAEDALUS_WSL_DIR=/home/<user>/daedalus-m33 bash eng/wsl-test.sh --smoke
-# It mirrors the repository into the Linux filesystem (~/daedalus-studio by default, DAEDALUS_WSL_DIR overrides) so the
+#   wsl -d Ubuntu -- env CODALUS_WSL_DIR=/home/<user>/codalus-m33 bash eng/wsl-test.sh --smoke
+# It mirrors the repository into the Linux filesystem (~/codalus by default, CODALUS_WSL_DIR overrides) so the
 # Linux build never shares bin/ and obj/ with the Windows one, then runs eng/validate.sh there (same arguments).
 set -euo pipefail
 
 src="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-dst="${DAEDALUS_WSL_DIR:-$HOME/daedalus-studio}"
+dst="${CODALUS_WSL_DIR:-$HOME/codalus}"
 
 # A git worktree made on Windows points at its repository with a Windows path, which Linux git can't follow: the files
 # are listed with Windows' git then (WSL runs Windows programs). Found before the Windows PATH is dropped below.

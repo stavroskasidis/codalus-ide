@@ -1,6 +1,6 @@
 # Shell ↔ build host protocol
 
-The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) owns MSBuild: solution files, project evaluation, file watching, restore and project-file edits. The shell starts one host per open solution (`--solution-dir <dir>`, so the solution's `global.json` picks the SDK) and talks to it over **stdio** with **JSON-RPC 2.0 and LSP framing**, like the other hosts. Contracts are in `src/DaedalusStudio.Projects.Protocol`; the shell side is `SolutionService` in `src/DaedalusStudio.Workbench/Projects`.
+The build host (`codalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) owns MSBuild: solution files, project evaluation, file watching, restore and project-file edits. The shell starts one host per open solution (`--solution-dir <dir>`, so the solution's `global.json` picks the SDK) and talks to it over **stdio** with **JSON-RPC 2.0 and LSP framing**, like the other hosts. Contracts are in `src/Codalus.Projects.Protocol`; the shell side is `SolutionService` in `src/Codalus.Workbench/Projects`.
 
 **Protocol version 0.1.** Parameters are single objects with camelCase names. Paths are absolute file system paths.
 
@@ -50,7 +50,7 @@ The build host (`daedalus-buildhost`, [ADR 0004](adr/0004-project-system.md)) ow
 
 | Method | Params |
 |---|---|
-| `solution/changed` | `SolutionInfo` (the solution file changed, by us or outside Daedalus) |
+| `solution/changed` | `SolutionInfo` (the solution file changed, by us or outside Codalus) |
 | `project/evaluated` | `ProjectInfo` |
 | `solution/evaluationProgress` | `{evaluated, total, completed}` |
 | `restore/output` | `{line}` |
@@ -81,15 +81,15 @@ Builds use a `BuildManager` of their own with MSBuild's out-of-process worker no
 
 After evaluation the host builds `Compile` and `CoreCompile` with `DesignTimeBuild`, `SkipCompilerExecution`, `ProvideCommandLineArgs` and `BuildingInsideVisualStudio` set (referenced projects are asked for their target path, not built), for each project's active target framework, and reports `project/compilerInputs`. Builds are queued and coalesced: changes during a batch are built right after it. They re-run after evaluations caused by project-file or folder changes, configuration and framework switches, and after a restore for projects whose assets file changed. Unrestored projects fail with MSBuild's error (for example NETSDK1004).
 
-Speed (M34b): a batch of six projects or more adds MSBuild worker nodes (half the processors at most; `DAEDALUS_DESIGNTIME_NODES` sets the most; MSBuild before 17 stays in process), and asks only for the items and properties it reads (`ProvideSubsetOfStateAfterBuild`). Successful results are cached in each project's `obj/daedalus.designtime.json`, per configuration, platform and target framework, under a key of the project's evaluation fingerprint (SDK, global properties, every evaluated item, the project file, its imports and the assets file with their timestamps and sizes), the solution's properties and the fingerprints of every project it references; an entry is used only while its sources, analyzers and references outside the solution exist. `build/designTime` (asked for by the user) never reads the cache; `DAEDALUS_DESIGNTIME_CACHE=0` turns it off. Environment variables are not part of the key.
+Speed (M34b): a batch of six projects or more adds MSBuild worker nodes (half the processors at most; `CODALUS_DESIGNTIME_NODES` sets the most; MSBuild before 17 stays in process), and asks only for the items and properties it reads (`ProvideSubsetOfStateAfterBuild`). Successful results are cached in each project's `obj/codalus.designtime.json`, per configuration, platform and target framework, under a key of the project's evaluation fingerprint (SDK, global properties, every evaluated item, the project file, its imports and the assets file with their timestamps and sizes), the solution's properties and the fingerprints of every project it references; an entry is used only while its sources, analyzers and references outside the solution exist. `build/designTime` (asked for by the user) never reads the cache; `CODALUS_DESIGNTIME_CACHE=0` turns it off. Environment variables are not part of the key.
 
-Restore on open (M34b) is skipped when every project's packages are up to date: NuGet's last restore succeeded (`project.nuget.cache`), every package file it expects exists, and the assets file (or `obj/daedalus.restore.stamp`, written after each restore the host runs) is newer than the project file and every import outside `obj/`. The host then reports `succeeded` without `running`. After a restore only projects whose assets file changed are evaluated again, and an evaluation that changes nothing sends no `project/evaluated`.
+Restore on open (M34b) is skipped when every project's packages are up to date: NuGet's last restore succeeded (`project.nuget.cache`), every package file it expects exists, and the assets file (or `obj/codalus.restore.stamp`, written after each restore the host runs) is newer than the project file and every import outside `obj/`. The host then reports `succeeded` without `running`. After a restore only projects whose assets file changed are evaluated again, and an evaluation that changes nothing sends no `project/evaluated`.
 
 The tree (nesting, Dependencies grouping) is derived in the shell (`SolutionTree`), not sent by the host.
 
 ## Packages and .NET tools
 
-NuGet package management ([ADR 0012](adr/0012-package-management.md)) uses the NuGet client libraries of the SDK the host loaded MSBuild from; all feed access happens in the host. Every request needs a trusted solution. Contracts are in `PackageMessages.cs`; the shell side is `PackageService` in `src/DaedalusStudio.Workbench/Packages`.
+NuGet package management ([ADR 0012](adr/0012-package-management.md)) uses the NuGet client libraries of the SDK the host loaded MSBuild from; all feed access happens in the host. Every request needs a trusted solution. Contracts are in `PackageMessages.cs`; the shell side is `PackageService` in `src/Codalus.Workbench/Packages`.
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
@@ -110,7 +110,7 @@ NuGet package management ([ADR 0012](adr/0012-package-management.md)) uses the N
 
 ## Project properties and solution management
 
-Property pages, references, configurations, dependencies, load/unload, solution filters and SDKs ([ADR 0013](adr/0013-project-properties-and-solution-management.md)). Contracts are in `ProjectManagementMessages.cs`; the shell side is `ProjectManagementService` in `src/DaedalusStudio.Workbench/Projects`.
+Property pages, references, configurations, dependencies, load/unload, solution filters and SDKs ([ADR 0013](adr/0013-project-properties-and-solution-management.md)). Contracts are in `ProjectManagementMessages.cs`; the shell side is `ProjectManagementService` in `src/Codalus.Workbench/Projects`.
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
@@ -122,7 +122,7 @@ Property pages, references, configurations, dependencies, load/unload, solution 
 | `solution/addConfiguration`, `solution/removeConfiguration` | `{dimension (buildType \| platform), name, copyFrom?}` | `{}` | A new one copies `copyFrom`'s project mappings. A solution keeps at least one of each. |
 | `solution/dependencies` | `{}` | `{projects: [{project, dependsOn}]}` | Explicit build dependencies of the solution file. |
 | `solution/setDependencies` | `{project, dependsOn}` | `{}` | |
-| `project/unload`, `project/reload` | `{path}` | `{}` | An unloaded project is reported with state `unloaded` and isn't evaluated, design-time built or built (solution builds use a generated `.daedalus/build.slnf`). Kept in `.daedalus/solution.json`. |
+| `project/unload`, `project/reload` | `{path}` | `{}` | An unloaded project is reported with state `unloaded` and isn't evaluated, design-time built or built (solution builds use a generated `.codalus/build.slnf`). Kept in `.codalus/solution.json`. |
 | `solution/saveFilter` | `{path, projects?}` | `{}` | Writes a `.slnf` (default: the loaded projects). |
 | `sdk/info` | `{}` | `{resolvedSdk?, resolvedVersion?, globalJson?, requestedVersion?, rollForward?, sdks: [{version, path}], workloads: [{id, version, source}], error?}` | `dotnet --list-sdks`, `dotnet workload list`, the `global.json` in effect and the SDK this host runs. |
 | `sdk/setGlobalJson` | `{version?, rollForward?}` | `{}` | Writes `sdk.version`/`sdk.rollForward` of the `global.json` in effect (or one next to the solution); `version` null removes the pin. The shell reopens the solution so a new host picks the SDK. |
@@ -131,7 +131,7 @@ Property pages, references, configurations, dependencies, load/unload, solution 
 
 ## Project items, Show All Files, folder mode and item templates
 
-The Properties window, Include and Exclude, links, moves between projects, Show All Files, folder mode and `dotnet new` item templates ([ADR 0033](adr/0033-project-items-templates-and-folder-mode.md)). Contracts are in `ItemMessages.cs`; the shell side is `ProjectItemService` in `src/DaedalusStudio.Workbench/Projects`. Item requests need a trusted solution; `fs/listTree` and `folder/discover` don't.
+The Properties window, Include and Exclude, links, moves between projects, Show All Files, folder mode and `dotnet new` item templates ([ADR 0033](adr/0033-project-items-templates-and-folder-mode.md)). Contracts are in `ItemMessages.cs`; the shell side is `ProjectItemService` in `src/Codalus.Workbench/Projects`. Item requests need a trusted solution; `fs/listTree` and `folder/discover` don't.
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
@@ -142,8 +142,8 @@ The Properties window, Include and Exclude, links, moves between projects, Show 
 | `items/addExisting` | `{project, targetFolder, files, asLink}` | `FileOperationResult` | Copies the files into the folder and makes sure they are items; with `asLink`, adds `<Type Include="..\x" Link="Folder\x" />` instead. |
 | `fs/listTree` | `{path, maxEntries?}` | `{entries: [{path, isDirectory}], truncated}` | Everything under a folder (Show All Files, the folder view) except `.git`, `.vs`, `.idea` and `node_modules`; at most 20,000 entries by default. |
 | `folder/discover` | `{}` | `{projects}` | Folder mode: the project files under the folder (not under `bin`, `obj` or those folders). |
-| `folder/setProjects` | `{projects}` | `{}` | Folder mode: the projects of the folder's in-memory solution, kept in `.daedalus/folder.json`. New ones are evaluated (and restored when the solution opened with `restore`). |
-| `templates/instantiate` | `{template, name, outputDirectory, project?, language?, arguments?}` | `{createdPaths, output}` | Runs `dotnet new <template>` with `--project`; a project that isn't restored is restored first (project-capability constraints read its assets). `DAEDALUS_TEMPLATE_HIVE` adds `--debug:custom-hive`. |
+| `folder/setProjects` | `{projects}` | `{}` | Folder mode: the projects of the folder's in-memory solution, kept in `.codalus/folder.json`. New ones are evaluated (and restored when the solution opened with `restore`). |
+| `templates/instantiate` | `{template, name, outputDirectory, project?, language?, arguments?}` | `{createdPaths, output}` | Runs `dotnet new <template>` with `--project`; a project that isn't restored is restored first (project-capability constraints read its assets). `CODALUS_TEMPLATE_HIVE` adds `--debug:custom-hive`. |
 
 | Notification | Params |
 |---|---|
@@ -151,14 +151,14 @@ The Properties window, Include and Exclude, links, moves between projects, Show 
 
 - **`ItemInfoResult`** `{project, path, itemType?, isLinked, link?, fromGlob, elements: [{operation (include \| update \| remove), itemType, value, line, condition?}], metadata: [{name, value, projectValue?}], itemTypes}`. `itemType` is null for a file that isn't an item. `metadata` has `CopyToOutputDirectory`, `Generator`, `CustomToolNamespace`, `Link` (linked files) and every metadata of the item; `projectValue` is what the project file sets. `itemTypes` are the Build Action choices (`None`, `Compile`, `Content`, `EmbeddedResource`, `AdditionalFiles`, then `AvailableItemName`).
 - **`fs/move` across projects:** when a file moves (or is copied) from one project's folder into another's, the source project's explicit items that name it are carried to the target project with `items/set`'s edit, and removed from the source on a move.
-- **Folder mode:** `solution/open` with a folder path answers `SolutionInfo` with `format: folder`, `path` the folder, and the loaded projects. `build/run` of the folder builds its one loaded project, or a generated `.daedalus/folder.slnx`; `solution/addProject` and `solution/removeProject` change the loaded projects; editing a solution file fails.
+- **Folder mode:** `solution/open` with a folder path answers `SolutionInfo` with `format: folder`, `path` the folder, and the loaded projects. `build/run` of the folder builds its one loaded project, or a generated `.codalus/folder.slnx`; `solution/addProject` and `solution/removeProject` change the loaded projects; editing a solution file fails.
 
 ## Build depth: options, the up-to-date check, batch builds, timings, build events and binary logs
 
-[ADR 0034](adr/0034-build-depth.md). Contracts are in `BuildDepthMessages.cs` (`BuildDepthJsonContext`); the shell side is `BuildService` and `BuildDepthService` in `src/DaedalusStudio.Workbench/Build`. Builds, the up-to-date check and build events need a trusted solution.
+[ADR 0034](adr/0034-build-depth.md). Contracts are in `BuildDepthMessages.cs` (`BuildDepthJsonContext`); the shell side is `BuildService` and `BuildDepthService` in `src/Codalus.Workbench/Build`. Builds, the up-to-date check and build events need a trusted solution.
 
 - **`build/run`** takes `options?: BuildOptions` `{verbosity?, logFile?, logFileVerbosity?, maxParallelProjects, binaryLog?, upToDateCheck (default true), properties?}`. Verbosities are `quiet`, `minimal` (the default), `normal`, `detailed` and `diagnostic`; `properties` are extra global properties. Without options the build runs as in M4. `BuildResultInfo` gains `upToDate` (the fast up-to-date check found nothing to build, so MSBuild didn't run) and `binaryLog` (the log the build wrote).
-- **The fast up-to-date check:** after a build with options, each built project (and the projects it references) records its inputs and outputs, with sizes and write times, in `obj/<configuration>/<framework>/daedalus.uptodate.json` (or forgets them after a failure or a clean). A Build with `upToDateCheck` skips MSBuild when every project in scope (the project and its references, or every project the solution's active configuration builds) is unchanged since. The output names the first out-of-date project and why.
+- **The fast up-to-date check:** after a build with options, each built project (and the projects it references) records its inputs and outputs, with sizes and write times, in `obj/<configuration>/<framework>/codalus.uptodate.json` (or forgets them after a failure or a clean). A Build with `upToDateCheck` skips MSBuild when every project in scope (the project and its references, or every project the solution's active configuration builds) is unchanged since. The output names the first out-of-date project and why.
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
@@ -176,7 +176,7 @@ The Properties window, Include and Exclude, links, moves between projects, Show 
 
 ## Entity Framework Core
 
-EF Core ([ADR 0036](adr/0036-ef-core-integration.md)) runs the user's own `dotnet ef` as a child process of the host, in the startup project's folder, with `--json --prefix-output` (one at a time: dotnet-ef copies its own build host into the project's output on every run). The model view's data comes from `daedalus-efagent` (`buildhost/efagent/`, net8.0), started like dotnet-ef starts its `ef.dll`: `dotnet exec --depsfile <app>.deps.json --runtimeconfig <app>.runtimeconfig.json`, so it runs on the app's runtime with the app's EF Core. Every request needs a trusted solution; cancelling one kills its process tree. Contracts are in `EntityFrameworkMessages.cs`; the shell side is `EntityFrameworkService` in `src/DaedalusStudio.Workbench/Data`, which builds the startup project first and passes `noBuild`.
+EF Core ([ADR 0036](adr/0036-ef-core-integration.md)) runs the user's own `dotnet ef` as a child process of the host, in the startup project's folder, with `--json --prefix-output` (one at a time: dotnet-ef copies its own build host into the project's output on every run). The model view's data comes from `codalus-efagent` (`buildhost/efagent/`, net8.0), started like dotnet-ef starts its `ef.dll`: `dotnet exec --depsfile <app>.deps.json --runtimeconfig <app>.runtimeconfig.json`, so it runs on the app's runtime with the app's EF Core. Every request needs a trusted solution; cancelling one kills its process tree. Contracts are in `EntityFrameworkMessages.cs`; the shell side is `EntityFrameworkService` in `src/Codalus.Workbench/Data`, which builds the startup project first and passes `noBuild`.
 
 **`EfTarget`** `{project, startupProject?, context?, connection?, noBuild}`: `--project`, `--startup-project` (default: the project), `--context` (full or short name), `--connection` (default: the app's configuration; only for the commands that take one, and never echoed in `ef/output`), `--no-build`. The startup project's configuration in the active solution configuration and its active target framework are passed too.
 
@@ -193,13 +193,13 @@ EF Core ([ADR 0036](adr/0036-ef-core-integration.md)) runs the user's own `dotne
 | `ef/bundle` | `{target, output, selfContained, runtime?, force}` | `{files}` | `migrations bundle`. |
 | `ef/scaffold` | `{project, startupProject?, connection, provider, outputDir?, contextDir?, contextName?, namespace?, contextNamespace?, tables?, schemas?, dataAnnotations, noOnConfiguring, useDatabaseNames, noPluralize, force, noBuild}` | `{files}` | `dbcontext scaffold`; empty `tables` and `schemas` mean everything. |
 | `ef/optimize` | `{target, outputDir?, namespace?}` | `{files}` | `dbcontext optimize`; `files` are the files written to the output folder. |
-| `ef/model` | `EfTarget` | `{context, provider?, productVersion?, entities, debugView?}` | The design-time model from `daedalus-efagent`. Each entity: `{name, clrType?, table?, schema?, view?, isOwned, owner?, baseType?, isKeyless, properties: [{name, clrType?, nullable, isKey, isForeignKey, isShadow, column?, columnType?, maxLength?}], keys: [{properties, isPrimary}], foreignKeys: [{properties, principal, principalProperties, deleteBehavior?, isUnique, isRequired, isOwnership, dependentToPrincipal?, principalToDependent?}], navigations: [{name, target?, isCollection, isOnDependent, inverse?, isSkip}], indexes: [{properties, isUnique, name?}]}`. |
+| `ef/model` | `EfTarget` | `{context, provider?, productVersion?, entities, debugView?}` | The design-time model from `codalus-efagent`. Each entity: `{name, clrType?, table?, schema?, view?, isOwned, owner?, baseType?, isKeyless, properties: [{name, clrType?, nullable, isKey, isForeignKey, isShadow, column?, columnType?, maxLength?}], keys: [{properties, isPrimary}], foreignKeys: [{properties, principal, principalProperties, deleteBehavior?, isUnique, isRequired, isOwnership, dependentToPrincipal?, principalToDependent?}], navigations: [{name, target?, isCollection, isOnDependent, inverse?, isSkip}], indexes: [{properties, isUnique, name?}]}`. |
 
 Notification (host → shell): **`ef/output`** `{level: info | warn | error | verbose, line}`, the running command's messages (the command line comes first as `> dotnet ef …`).
 
 ## Scaffolding and service references
 
-Scaffolding ([ADR 0041](adr/0041-scaffolding-and-service-references.md)) runs the user's own `dotnet aspnet-codegenerator` (a local or global tool) as a child process of the host, in the project's folder, one at a time; every request needs a trusted solution, and cancelling one kills its process tree. Scaffolders that need no tool go through `templates/instantiate` (the SDK's `apicontroller`, `mvccontroller`, `page`, `view` and `razorcomponent` item templates). Service references are project edits: the items `dotnet-openapi` writes, and the packages that generate the code at build time. Contracts are in `WebToolsMessages.cs`; the shell side is `ScaffoldingService` and `ServiceReferenceService` in `src/DaedalusStudio.Workbench/Web`, which also copies or downloads the documents into the project.
+Scaffolding ([ADR 0041](adr/0041-scaffolding-and-service-references.md)) runs the user's own `dotnet aspnet-codegenerator` (a local or global tool) as a child process of the host, in the project's folder, one at a time; every request needs a trusted solution, and cancelling one kills its process tree. Scaffolders that need no tool go through `templates/instantiate` (the SDK's `apicontroller`, `mvccontroller`, `page`, `view` and `razorcomponent` item templates). Service references are project edits: the items `dotnet-openapi` writes, and the packages that generate the code at build time. Contracts are in `WebToolsMessages.cs`; the shell side is `ScaffoldingService` and `ServiceReferenceService` in `src/Codalus.Workbench/Web`, which also copies or downloads the documents into the project.
 
 | Method | Params | Result | Notes |
 |---|---|---|---|

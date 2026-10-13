@@ -1,14 +1,14 @@
 # Web development
 
-Daedalus Studio runs ASP.NET Core projects with Kestrel, using their launch profiles: `applicationUrl` becomes the app's URLs, and `launchBrowser` opens your browser. Start with `F5` (debugging) or `Ctrl+F5`.
+Codalus IDE runs ASP.NET Core projects with Kestrel, using their launch profiles: `applicationUrl` becomes the app's URLs, and `launchBrowser` opens your browser. Start with `F5` (debugging) or `Ctrl+F5`.
 
 ## HTML, CSS, JavaScript and TypeScript
 
-Daedalus Studio colors these files out of the box. Completion, errors, hover, navigation and formatting come from the same open-source language servers VS Code uses:
+Codalus IDE colors these files out of the box. Completion, errors, hover, navigation and formatting come from the same open-source language servers VS Code uses:
 - VS Code's HTML and CSS servers, for HTML (with the CSS and JavaScript inside it), CSS, SCSS and Less;
 - `typescript-language-server` with TypeScript 5.9, for JavaScript, TypeScript, JSX and TSX.
 
-They run on Node.js. The first time you open such a file, Daedalus Studio offers to download Node.js and the servers once, about 70 MB, into its cache folder. It uses a pinned Node.js release, checks its checksum, and installs the servers from a lockfile. Your own Node.js installation isn't used or changed.
+They run on Node.js. The first time you open such a file, Codalus IDE offers to download Node.js and the servers once, about 70 MB, into its cache folder. It uses a pinned Node.js release, checks its checksum, and installs the servers from a lockfile. Your own Node.js installation isn't used or changed.
 - **Install** downloads them now. **Never** turns the offer off.
 - The **Web Language Servers** setting (`web.languageServers`) chooses between asking (the default), downloading without asking, and off.
 - **Install the Web Language Servers** in the command palette downloads them at any time.
@@ -17,7 +17,7 @@ The HTML server also serves the markup of Razor files: see [Razor and Blazor](#r
 
 ### ESLint
 
-When a JavaScript or TypeScript file is under an ESLint configuration (`eslint.config.js`, `.mjs`, `.cjs` or `.ts`, or an older `.eslintrc*`), Daedalus Studio lints it with the project's own ESLint (from its `node_modules`), as you type:
+When a JavaScript or TypeScript file is under an ESLint configuration (`eslint.config.js`, `.mjs`, `.cjs` or `.ts`, or an older `.eslintrc*`), Codalus IDE lints it with the project's own ESLint (from its `node_modules`), as you type:
 - **Problems** appear in the editor and the Error List next to TypeScript's, with the rule as the code (`no-unused-vars`).
 - **Quick actions** (`Ctrl+.`) offer the rule's fix when it has one, and disabling the rule for the line or the file.
 - **No ESLint installed** (`npm install` not run yet): nothing is linted, and the Language Services output says why.
@@ -32,7 +32,7 @@ When a project uses Prettier (installed in its `node_modules`, with a `.prettier
 **View → Other Windows → Task Runner Explorer** (`Ctrl+Alt+Backspace`) lists the scripts of the solution's `package.json` files (the solution's folder and its projects', not `node_modules`).
 - **Run a script:** double-click it. It runs as `npm run <script>` in a terminal of its own. **Run npm Script…** in the command palette picks one too.
 - **Restore Packages** (the Task Runner Explorer's button, a `package.json`'s context menu, or Project → Restore npm Packages) runs `npm install`, with its output in the npm output.
-- **Packages not installed when a solution opens:** Daedalus Studio offers to restore them. The **Restore npm Packages on Open** setting (`npm.restoreOnOpen`) can make it restore without asking, or never.
+- **Packages not installed when a solution opens:** Codalus IDE offers to restore them. The **Restore npm Packages on Open** setting (`npm.restoreOnOpen`) can make it restore without asking, or never.
 - **Bindings** in `package.json` run scripts on IDE events, in the format other IDEs' Task Runner Explorer writes:
 
   ```json
@@ -75,7 +75,7 @@ Not available in Razor files yet: rename, quick actions, formatting and folding.
 A standalone Blazor WebAssembly app (`dotnet new blazorwasm`) runs on the WebAssembly dev server, and its components run in the browser.
 - **Run** (`Ctrl+F5`) starts the dev server; the launch profile's `launchBrowser` opens the page.
 - **Debug** (`F5`) debugs the app in the browser:
-  - Daedalus starts the dev server, then opens the page in Chrome, Edge or Chromium through the dev server's debugging proxy (the profile's `inspectUri`, which `dotnet new` puts there).
+  - Codalus starts the dev server, then opens the page in Chrome, Edge or Chromium through the dev server's debugging proxy (the profile's `inspectUri`, which `dotnet new` puts there).
   - Breakpoints in `.razor` and `.cs` files stop the component's C# in the browser, with the call stack, locals, watches and stepping, as in any session. Breakpoints in the app's JavaScript files work in the same session.
   - The browser gets a temporary profile, so your own browser, its tabs and its extensions aren't touched. Stopping the session closes it and stops the dev server.
   - The first session downloads the browser debugger, vscode-js-debug (about 1.2 MB), and Node.js if the web language servers haven't already. The Debug Console shows the progress.
@@ -154,7 +154,7 @@ Debug → **Select the ASP.NET Core Environment** sets `ASPNETCORE_ENVIRONMENT` 
 
 ## HTTPS development certificate
 
-Before the first run of a project with an `https` URL, Daedalus Studio checks the ASP.NET Core development certificate and offers to trust it if needed. Debug → **Check the HTTPS Development Certificate** and **Trust the HTTPS Development Certificate** do it at any time. They use `dotnet dev-certs https`:
+Before the first run of a project with an `https` URL, Codalus IDE checks the ASP.NET Core development certificate and offers to trust it if needed. Debug → **Check the HTTPS Development Certificate** and **Trust the HTTPS Development Certificate** do it at any time. They use `dotnet dev-certs https`:
 - **Windows and macOS** ask you to confirm.
 - **Linux:** `--trust` covers .NET, and the browsers and OpenSSL where it can. If a browser still warns:
   1. Export the certificate: `dotnet dev-certs https --export-path ~/aspnetcore-dev.crt --format PEM`.

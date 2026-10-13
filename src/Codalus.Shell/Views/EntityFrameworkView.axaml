@@ -1,0 +1,77 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:data="using:Codalus.Workbench.Data"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.EntityFrameworkView"
+             x:DataType="vm:EntityFrameworkViewModel">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T entityFramework.buildAndRefreshTheContextsAnd}" AutomationProperties.Name="{l:T entityFramework.refreshEntityFramework}">
+        <controls:Icon Kind="refresh" />
+      </Button>
+      <Button Classes="toolbar" Content="{l:T entityFramework.addMigration}" Command="{Binding AddCommand}" IsEnabled="{Binding HasContext}" />
+      <Button Classes="toolbar" Content="{l:T entityFramework.updateDatabase}" Command="{Binding UpdateCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.applyThePendingMigrationsTheSql}" />
+      <Button Classes="toolbar" Content="{l:T entityFramework.script}" Command="{Binding ScriptCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.generateASqlScriptOfMigrations}" />
+      <Button Classes="toolbar" Content="{l:T entityFramework.model}" Command="{Binding ModelCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.theContextSModelADiagram}" />
+      <Button Classes="toolbar" Content="{l:T entityFramework.bundle}" Command="{Binding BundleCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.createAMigrationsBundleAnExecutable}" />
+      <Button Classes="toolbar" Content="{l:T entityFramework.compiledModel}" Command="{Binding OptimizeCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="{l:T entityFramework.generateACompiledModelDbcontextOptimize}" />
+      <Button Classes="toolbar" Content="{l:T entityFramework.reverseEngineer}" Command="{Binding ScaffoldCommand}" ToolTip.Tip="{l:T entityFramework.generateEntitiesAndAContextFrom}" />
+    </controls:ToolbarPanel>
+    <StackPanel DockPanel.Dock="Top" Margin="8,2,8,4" Spacing="4">
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+        <TextBlock Text="{l:T entityFramework.context}" Classes="muted" VerticalAlignment="Center" Margin="0,0,8,0" />
+        <ComboBox x:Name="ContextBox" Grid.Column="1" ItemsSource="{Binding Contexts}" SelectedItem="{Binding Context}" HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T entityFramework.dbcontext}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="data:EfContextEntry">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Grid.Row="1" Text="{l:T entityFramework.database}" Classes="muted" VerticalAlignment="Center" Margin="0,4,8,0" />
+        <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" ItemsSource="{Binding Connections}" SelectedItem="{Binding Connection}" HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T entityFramework.connectionTheMigrationsApplyTo}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:EfConnectionChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </Grid>
+      <TextBlock Text="{Binding Database}" IsVisible="{Binding HasDatabase}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextTrimming="CharacterEllipsis" />
+      <TextBlock Text="{Binding Status}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextTrimming="CharacterEllipsis" />
+      <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsBusy}">
+        <ProgressBar IsIndeterminate="True" Width="60" Height="4" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding Busy}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" />
+      </StackPanel>
+      <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Warning}" />
+      <Button Content="{l:T entityFramework.installDotnetEf}" Command="{Binding InstallCommand}" IsVisible="{Binding CanInstall}" HorizontalAlignment="Left" ToolTip.Tip="{l:T entityFramework.installDotnetEfAsALocal}" />
+    </StackPanel>
+    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0" Padding="4,3">
+      <controls:ToolbarPanel>
+        <Button Classes="toolbar" Content="{l:T entityFramework.updateToThisMigration}" Command="{Binding UpdateToCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T entityFramework.applyOrRevertMigrationsSoThe}" />
+        <Button Classes="toolbar" Content="{l:T entityFramework.removeLastMigration}" Command="{Binding RemoveCommand}" IsEnabled="{Binding HasContext}" />
+        <Button Classes="toolbar" Content="{l:T entityFramework.goToContext}" Command="{Binding OpenCommand}" IsEnabled="{Binding HasContext}" />
+      </controls:ToolbarPanel>
+    </Border>
+    <ListBox x:Name="List" ItemsSource="{Binding Migrations}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T entityFramework.migrations}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:EfMigrationRow">
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:EfMigrationRow">
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+            <controls:Icon Grid.RowSpan="2" Kind="{Binding Icon}" VerticalAlignment="Top" Margin="0,1,6,0" />
+            <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="{Binding State}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" />
+              <TextBlock Text="{Binding Created}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" />
+            </StackPanel>
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

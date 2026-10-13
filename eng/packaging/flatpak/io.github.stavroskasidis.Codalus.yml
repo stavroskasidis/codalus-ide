@@ -1,0 +1,32 @@
+# Flatpak manifest (ADR 0009): packages the Linux release tarball. Not built in CI yet (TODO(issue)): an IDE needs the
+# host's .NET SDK and git, so it runs with --filesystem=host and talks to host tools through flatpak-spawn; that needs
+# testing before it is published on Flathub.
+app-id: io.github.stavroskasidis.Codalus
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: codalus
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=host
+  - --talk-name=org.freedesktop.Flatpak
+modules:
+  - name: codalus
+    buildsystem: simple
+    build-commands:
+      - cp -R codalus /app/codalus
+      - mkdir -p /app/bin && ln -s /app/codalus/codalus /app/bin/codalus
+      - install -Dm644 codalus.desktop /app/share/applications/io.github.stavroskasidis.Codalus.desktop
+      - install -Dm644 codalus-256.png /app/share/icons/hicolor/256x256/apps/io.github.stavroskasidis.Codalus.png
+    sources:
+      - type: archive
+        path: ../../../artifacts/packages/codalus-0.1.0-linux-x64.tar.gz
+        strip-components: 0
+      - type: file
+        path: ../linux/codalus.desktop
+      - type: file
+        path: ../../../assets/logo/png/codalus-256.png

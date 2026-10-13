@@ -1,10 +1,10 @@
 # Containers, Aspire and publishing
 
-Daedalus Studio builds, runs and debugs your apps in containers with **your own Docker or Podman**, through its command line. Nothing runs in a daemon of ours.
+Codalus IDE builds, runs and debugs your apps in containers with **your own Docker or Podman**, through its command line. Nothing runs in a daemon of ours.
 
 ## The container engine
 
-The engine is the **Containers → Container Engine** setting (`containers.tool`): `docker`, `podman`, or a command line such as `wsl -d Ubuntu --exec podman`. When it is empty, Daedalus Studio uses `docker` if it is on your `PATH`, else `podman`. On Windows and macOS, Docker Desktop or a running Podman machine (`podman machine start`) is needed; the containers are Linux containers.
+The engine is the **Containers → Container Engine** setting (`containers.tool`): `docker`, `podman`, or a command line such as `wsl -d Ubuntu --exec podman`. When it is empty, Codalus IDE uses `docker` if it is on your `PATH`, else `podman`. On Windows and macOS, Docker Desktop or a running Podman machine (`podman machine start`) is needed; the containers are Linux containers.
 
 ## Add Docker Support
 
@@ -32,7 +32,7 @@ Compose files are checked against the Compose Specification's schema as you type
 
 ## The Containers window
 
-**View → Other Windows → Containers** lists your containers (Daedalus Studio's own first) and images. For the selected container:
+**View → Other Windows → Containers** lists your containers (Codalus IDE's own first) and images. For the selected container:
 - **Logs**, **Environment**, **Ports** (and mounts), **Labels**;
 - **Files**: browse its folders; a file opens as a local copy (changes aren't written back).
 
@@ -41,12 +41,12 @@ Toolbar: Start, Stop, Restart, Remove, Open in Browser (its first published port
 ## .NET Aspire
 
 Set an Aspire **AppHost** project as the startup project, then:
-- `Ctrl+F5` runs it. Its orchestrator asks Daedalus Studio to start each project of the app: they run like any program, each with its **Run** output, and their output also reaches the dashboard's console logs.
+- `Ctrl+F5` runs it. Its orchestrator asks Codalus IDE to start each project of the app: they run like any program, each with its **Run** output, and their output also reaches the dashboard's console logs.
 - `F5` debugs the AppHost and every project in **one debug session**: breakpoints in any project stop, and the Processes window lists each program.
 
 **View → Other Windows → Aspire Resources** (it opens on its own when an AppHost starts) lists the app's resources: projects, containers and executables, with their state and endpoints. For the selected one: its **Console** output, **Environment** and **Details** (endpoints, properties). **Start**, **Stop** and **Restart** are the resource's own commands (a container added with `WithExplicitStart()` starts from here); **Open Endpoint** opens its address. **Open Dashboard** (also on the Debug menu) opens the Aspire dashboard, already signed in; with `launchBrowser` in the AppHost's launch profile it opens when the app starts.
 
-Aspire's orchestrator and dashboard come with your AppHost's packages; Daedalus Studio talks to them, and ships neither.
+Aspire's orchestrator and dashboard come with your AppHost's packages; Codalus IDE talks to them, and ships neither.
 
 ## Publishing
 

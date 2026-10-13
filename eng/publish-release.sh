@@ -22,14 +22,14 @@ if [ "$kind" = stable ] && winget="$(ls -d "$downloaded"/*/winget-* 2> /dev/null
 fi
 # The AUR package (PKGBUILD and .SRCINFO) of a stable release with both Linux builds: release.yml pushes it to the
 # AUR, and Arch users can build it from the release page meanwhile.
-if [ "$kind" = stable ] && [ -f "$assets/daedalus-studio-$version-linux-x64.tar.gz" ] && [ -f "$assets/daedalus-studio-$version-linux-arm64.tar.gz" ]; then
+if [ "$kind" = stable ] && [ -f "$assets/codalus-$version-linux-x64.tar.gz" ] && [ -f "$assets/codalus-$version-linux-arm64.tar.gz" ]; then
   bash "$repo/eng/aur.sh" "$version" "$assets" "$work/aur"
-  (cd "$work/aur" && zip -q "$assets/aur-daedalus-studio-bin-$version.zip" PKGBUILD .SRCINFO)
+  (cd "$work/aur" && zip -q "$assets/aur-codalus-bin-$version.zip" PKGBUILD .SRCINFO)
 fi
 
-dotnet run --project "$repo/eng/DaedalusStudio.Release" -- notes "$kind" "$version" --repo "${GITHUB_REPOSITORY:-stavroskasidis/daedalus-studio}" --to "$ref" > "$work/notes.md"
+dotnet run --project "$repo/eng/Codalus.Release" -- notes "$kind" "$version" --repo "${GITHUB_REPOSITORY:-stavroskasidis/codalus-ide}" --to "$ref" > "$work/notes.md"
 # The workflow tagged the commit when it started (see nightly.yml): the release goes on that tag.
-flags=(--verify-tag --title "Daedalus Studio $version" --notes-file "$work/notes.md")
+flags=(--verify-tag --title "Codalus IDE $version" --notes-file "$work/notes.md")
 if [ "$kind" = nightly ]; then flags+=(--prerelease); else flags+=(--latest); fi
 
 echo "== Publishing $tag ($kind) from $ref with $(find "$assets" -type f | wc -l) assets"

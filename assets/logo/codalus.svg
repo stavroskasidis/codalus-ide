@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Codalus IDE">
+  <!-- Codalus' wings: each half of the delta is three feathers that shorten towards the centre. -->
+  <polygon fill="#9A6CFF" points="24,212 124,38.8 124,82.8 54,204"/>
+  <polygon fill="#8152F2" points="65.6,200 124,98.8 124,142.8 95.6,192"/>
+  <polygon fill="#6B3DDB" points="107.1,188 124,158.8 124,178"/>
+  <polygon fill="#5B2EC7" points="232,212 132,38.8 132,82.8 202,204"/>
+  <polygon fill="#4A24AD" points="190.4,200 132,98.8 132,142.8 160.4,192"/>
+  <polygon fill="#3D1D94" points="148.9,188 132,158.8 132,178"/>
+</svg>

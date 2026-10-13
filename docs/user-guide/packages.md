@@ -1,6 +1,6 @@
 # NuGet packages and .NET tools
 
-Daedalus Studio manages NuGet packages the way Visual Studio's NuGet Package Manager does. It works in trusted solutions. Feeds are searched by the build host with the NuGet that ships in your .NET SDK, so it uses the same `NuGet.Config` files, credentials and caches as `dotnet restore`.
+Codalus IDE manages NuGet packages the way Visual Studio's NuGet Package Manager does. It works in trusted solutions. Feeds are searched by the build host with the NuGet that ships in your .NET SDK, so it uses the same `NuGet.Config` files, credentials and caches as `dotnet restore`.
 
 ## The NuGet Package Manager
 
@@ -29,7 +29,7 @@ The project file is edited exactly as `dotnet add package` and `dotnet remove pa
 
 When a project manages versions centrally (`ManagePackageVersionsCentrally` in `Directory.Packages.props`):
 - installing adds a reference without a version to the project, and the version to `Directory.Packages.props`
-- changing a version changes the central `PackageVersion`, which every project using the package follows. Daedalus Studio lists those projects and asks first; **Override in This Project** writes a `VersionOverride` instead (also available as a checkbox in the details)
+- changing a version changes the central `PackageVersion`, which every project using the package follows. Codalus IDE lists those projects and asks first; **Override in This Project** writes a `VersionOverride` instead (also available as a checkbox in the details)
 - uninstalling removes the project's reference and keeps the central version, as the CLI does
 - `GlobalPackageReference` packages are listed as *global* and are edited in `Directory.Packages.props`
 

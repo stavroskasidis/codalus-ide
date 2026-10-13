@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Codalus.Debugging\Codalus.Debugging.csproj" />
+    <ProjectReference Include="..\..\src\Codalus.Workbench\Codalus.Workbench.csproj" />
+    <ProjectReference Include="..\..\src\Codalus.Debugging.Host\Codalus.Debugging.Host.csproj" />
+    <!-- Built so the plugin visualizer test can launch them; not referenced as assemblies. -->
+    <ProjectReference Include="..\..\src\Codalus.Plugins.Host\Codalus.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\samples\plugins\DictionaryVisualizer\DictionaryVisualizer.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

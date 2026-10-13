@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Built-in .NET test plugin (ADR 0010, 0011): discovers, runs and debugs VSTest and Microsoft.Testing.Platform tests and collects coverage with Coverlet, on the proposed test controller API.</Description>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The plugin host provides the API at runtime, so it is not copied next to the plugin. -->
+    <ProjectReference Include="..\..\Codalus.Plugins.Abstractions\Codalus.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+    <!-- JSON-RPC for Microsoft.Testing.Platform's server mode; the plugin loads its own copy. -->
+    <ProjectReference Include="..\..\Codalus.Rpc\Codalus.Rpc.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.TestPlatform.TranslationLayer" />
+  </ItemGroup>
+
+  <!--
+    Coverlet (ADR 0011), shipped in the plugin folder rather than referenced: coverage/collector is the VSTest data
+    collector (its net8.0 build, which loads into test hosts of .NET 8 and later) and coverage/console the console tool
+    that wraps Microsoft.Testing.Platform applications (net10.0, run on the SDK's runtime). Test hosts of older
+    frameworks (.NET Core 2.0 to .NET 7) get coverage/collector-netstandard2.0, the last collector built for
+    netstandard2.0 (M33, ADR 0030).
+  -->
+  <ItemGroup>
+    <PackageDownload Include="coverlet.collector" Version="[$(CoverletVersion)];[$(CoverletLegacyCollectorVersion)]" />
+    <PackageDownload Include="coverlet.console" Version="[$(CoverletVersion)]" />
+  </ItemGroup>
+  <Target Name="CodalusBundleCoverlet" AfterTargets="Build">
+    <ItemGroup>
+      <_CodalusCoverletCollector Include="$(NuGetPackageRoot)coverlet.collector/$(CoverletVersion)/build/net8.0/**/*" Exclude="$(NuGetPackageRoot)coverlet.collector/$(CoverletVersion)/build/net8.0/*.targets" />
+      <_CodalusCoverletLegacyCollector Include="$(NuGetPackageRoot)coverlet.collector/$(CoverletLegacyCollectorVersion)/build/netstandard2.0/**/*" Exclude="$(NuGetPackageRoot)coverlet.collector/$(CoverletLegacyCollectorVersion)/build/netstandard2.0/*.targets" />
+      <_CodalusCoverletConsole Include="$(NuGetPackageRoot)coverlet.console/$(CoverletVersion)/tools/net10.0/any/**/*" />
+    </ItemGroup>
+    <Error Condition="'@(_CodalusCoverletCollector)' == '' or '@(_CodalusCoverletLegacyCollector)' == '' or '@(_CodalusCoverletConsole)' == ''" Text="Coverlet $(CoverletVersion) (and the collector $(CoverletLegacyCollectorVersion)) was not restored into $(NuGetPackageRoot)." />
+    <Copy SourceFiles="@(_CodalusCoverletCollector)" DestinationFiles="@(_CodalusCoverletCollector->'$(OutDir)coverage/collector/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_CodalusCoverletLegacyCollector)" DestinationFiles="@(_CodalusCoverletLegacyCollector->'$(OutDir)coverage/collector-netstandard2.0/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_CodalusCoverletConsole)" DestinationFiles="@(_CodalusCoverletConsole->'$(OutDir)coverage/console/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <ItemGroup>
+    <None Update="codalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Plugins.Tests" />
+  </ItemGroup>
+</Project>

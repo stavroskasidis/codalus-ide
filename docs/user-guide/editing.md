@@ -11,7 +11,7 @@
 
 ## C# language services
 
-Daedalus Studio uses Roslyn, with your projects' analyzers and source generators:
+Codalus IDE uses Roslyn, with your projects' analyzers and source generators:
 
 - **Highlighting**, by meaning: types, members, locals, parameters, and more.
 - **Completion** (`Ctrl+Space`, and while you type). It can add the `using` an item needs.
@@ -33,7 +33,7 @@ Every file type gets the basics, and many get more:
 
 **Project and configuration files**
 - **MSBuild** (`.csproj`, `.props`, `.targets` and friends): completion of elements, properties, items, metadata and values (target frameworks, runtime identifiers, choices), and warnings for unknown values. Hovering a property shows its **evaluated value and where it is set**, when the folder is trusted.
-- **JSON**: syntax errors, and completion, hover and validation from a schema. Schemas come from `$schema`, from built-in schemas (`global.json`, `launchSettings.json`, `appsettings*.json`, `dotnet-tools.json`, `runtimeconfig.template.json`, `daedalus-plugin.json`), or from the SchemaStore catalog (setting **JSON → Schema Download**, on by default; schemas are cached for a week).
+- **JSON**: syntax errors, and completion, hover and validation from a schema. Schemas come from `$schema`, from built-in schemas (`global.json`, `launchSettings.json`, `appsettings*.json`, `dotnet-tools.json`, `runtimeconfig.template.json`, `codalus-plugin.json`), or from the SchemaStore catalog (setting **JSON → Schema Download**, on by default; schemas are cached for a week).
 - **YAML**: syntax errors, and validation and hover from a schema.
 - **`.editorconfig`**: completion and hover for EditorConfig and .NET options, and warnings for invalid values.
 - **Markdown**: Open Preview to the Side (`Ctrl+K V`) shows a live preview that follows your edits.
@@ -113,7 +113,7 @@ The light bulb also offers, for each diagnostic, **Suppress with #pragma** and *
 
 ## Safety nets
 
-- **AutoRecover**: unsaved changes are backed up every 30 seconds. After a crash, Daedalus Studio offers to restore them when it starts again (setting **Files → Auto Recover**).
+- **AutoRecover**: unsaved changes are backed up every 30 seconds. After a crash, Codalus IDE offers to restore them when it starts again (setting **Files → Auto Recover**).
 - **Local History** (File → Show Local History): every save keeps the previous version of the file, independent of Git (the last 50). Pick a version to compare it with the file, then restore it if you want.
 
 ## Bookmarks and the Task List

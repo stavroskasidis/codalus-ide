@@ -1,0 +1,138 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "codalus-plugin.json",
+  "description": "A Codalus IDE plugin manifest (docs/plugins.md).",
+  "type": "object",
+  "required": [ "id", "version", "engines" ],
+  "properties": {
+    "id": { "type": "string", "description": "`publisher.name`, in lower case.", "pattern": "^[a-z0-9-]+\\.[a-z0-9-.]+$", "patternErrorMessage": "Expected publisher.name in lower case." },
+    "version": { "type": "string", "description": "The plugin's version (SemVer)." },
+    "displayName": { "type": "string" },
+    "publisher": { "type": "string" },
+    "description": { "type": "string" },
+    "engines": {
+      "type": "object",
+      "required": [ "codalus" ],
+      "properties": { "codalus": { "type": "string", "description": "The plugin API versions it supports, e.g. `^0.2.5`." } }
+    },
+    "entry": {
+      "type": "object",
+      "description": "The plugin's code. Leave it out for a declarative plugin (languages, grammars, language servers).",
+      "required": [ "runtime", "assembly" ],
+      "properties": {
+        "runtime": { "type": "string", "const": "dotnet" },
+        "assembly": { "type": "string", "description": "The assembly, relative to the plugin folder." },
+        "type": { "type": "string", "description": "The full name of the ICodalusPlugin type, when the assembly has several." }
+      }
+    },
+    "isolation": { "type": "string", "enum": [ "shared", "dedicated" ], "description": "Whether the plugin shares a plugin host process." },
+    "enableProposedApi": { "type": "boolean", "description": "Use proposed APIs (third-party plugins also need --enable-proposed-api)." },
+    "activationEvents": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^(\\*|onStartup|onCommand:.+|onView:.+|onSettingChanged:.+|onTestProjects|onSolutionOpened|onDebug|onLanguage:.+|onHostingProvider:.+)$" },
+      "description": "When the plugin activates."
+    },
+    "contributes": {
+      "type": "object",
+      "properties": {
+        "commands": { "type": "array", "items": { "type": "object", "required": [ "id", "title" ], "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "category": { "type": "string" }, "enablement": { "type": "string" } } } },
+        "menus": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "object", "required": [ "command" ], "properties": { "command": { "type": "string" }, "group": { "type": "string" }, "order": { "type": "integer" }, "when": { "type": "string" } } } } },
+        "keybindings": { "type": "array", "items": { "type": "object", "required": [ "key", "command" ], "properties": { "key": { "type": "string" }, "win": { "type": "string" }, "mac": { "type": "string" }, "linux": { "type": "string" }, "command": { "type": "string" }, "when": { "type": "string" } } } },
+        "toolWindows": { "type": "array", "items": { "type": "object", "required": [ "id", "title" ], "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "location": { "type": "string", "enum": [ "left", "right", "bottom" ] }, "kind": { "type": "string", "enum": [ "tree", "markdown" ] }, "icon": { "type": "string" } } } },
+        "settings": { "type": "object", "properties": { "title": { "type": "string" }, "properties": { "type": "object" } } },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [ "id" ],
+            "properties": {
+              "id": { "type": "string" },
+              "aliases": { "type": "array", "items": { "type": "string" } },
+              "extensions": { "type": "array", "items": { "type": "string", "pattern": "^\\." } },
+              "filenames": { "type": "array", "items": { "type": "string" } },
+              "filenamePatterns": { "type": "array", "items": { "type": "string" } },
+              "firstLine": { "type": "string", "description": "A regular expression on a file's first line." },
+              "configuration": { "type": "string", "description": "A language-configuration.json, relative to the plugin folder." }
+            }
+          }
+        },
+        "grammars": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [ "scopeName", "path" ],
+            "properties": { "language": { "type": "string" }, "scopeName": { "type": "string" }, "path": { "type": "string" }, "embeddedLanguages": { "type": "object", "additionalProperties": { "type": "string" } } }
+          }
+        },
+        "hostingProviders": {
+          "type": "array",
+          "description": "Git hosting providers (API 0.2.6, proposed): known before the plugin loads; it activates when the shell needs one.",
+          "items": {
+            "type": "object",
+            "required": [ "id", "label" ],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+              "label": { "type": "string" },
+              "hosts": { "type": "array", "items": { "type": "string" }, "description": "The remotes' hosts it serves by default; *.example.com matches subdomains." },
+              "serverSetting": { "type": "string", "description": "A setting with an enterprise server's URL, whose host counts too." },
+              "icon": { "type": "string" }
+            }
+          }
+        },
+        "propertyProviders": {
+          "type": "array",
+          "description": "Rows for the Properties window (API 0.2.8): the command gets { kind, path, project } and returns [{ category, name, value, description }].",
+          "items": {
+            "type": "object",
+            "required": [ "command" ],
+            "properties": { "command": { "type": "string" }, "when": { "type": "string" } }
+          }
+        },
+        "externalToolMacros": {
+          "type": "array",
+          "description": "External Tools macros $(name) (API 0.2.8): the command returns the value as a string.",
+          "items": {
+            "type": "object",
+            "required": [ "name", "command" ],
+            "properties": { "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$" }, "command": { "type": "string" }, "description": { "type": "string" } }
+          }
+        },
+        "customTools": {
+          "type": "array",
+          "description": "Custom tools (API 0.2.8): the Generator name of project items; the command gets { path, content, namespace, project } and returns the generated text or { content, extension }.",
+          "items": {
+            "type": "object",
+            "required": [ "name", "command" ],
+            "properties": { "name": { "type": "string" }, "command": { "type": "string" }, "extension": { "type": "string", "description": "The output's extension, default .cs." }, "description": { "type": "string" } }
+          }
+        },
+        "snippets": {
+          "type": "array",
+          "description": "Snippet files in VS Code's format (API 0.2.5).",
+          "items": {
+            "type": "object",
+            "required": [ "language", "path" ],
+            "properties": { "language": { "type": "string" }, "path": { "type": "string", "description": "A JSON snippet file, relative to the plugin folder." } }
+          }
+        },
+        "languageServers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [ "id", "languages", "command" ],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "languages": { "type": "array", "items": { "type": "string" } },
+              "command": { "type": "string", "description": "A file in the plugin folder (a .dll runs with dotnet) or a program on PATH. `${pluginDir}` is the plugin folder." },
+              "args": { "type": "array", "items": { "type": "string" } },
+              "transport": { "type": "string", "enum": [ "stdio" ] },
+              "initializationOptions": { },
+              "settingsSection": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

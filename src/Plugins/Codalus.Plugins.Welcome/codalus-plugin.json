@@ -1,0 +1,49 @@
+{
+  "id": "codalus.welcome",
+  "version": "0.1.0",
+  "displayName": "%displayName%",
+  "publisher": "codalus",
+  "description": "%description%",
+  "engines": { "codalus": "^0.3.0" },
+  "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.Welcome.dll" },
+  "activationEvents": [ "onStartup" ],
+  "contributes": {
+    "commands": [
+      { "id": "welcome.show", "title": "%command.show%", "category": "Welcome" },
+      { "id": "welcome.showOnboarding", "title": "%command.showOnboarding%", "category": "Welcome" },
+      { "id": "welcome.chooseKeyboardScheme", "title": "%command.chooseKeyboardScheme%", "category": "Preferences" },
+      { "id": "welcome.toggleShowOnStartup", "title": "%command.toggleShowOnStartup%", "category": "Welcome" },
+      { "id": "welcome.refresh", "title": "%command.refresh%", "category": "Welcome" }
+    ],
+    "menus": {
+      "menuBar/help": [
+        { "command": "welcome.show", "group": "navigation", "order": 1 },
+        { "command": "welcome.showOnboarding", "group": "navigation", "order": 2 }
+      ],
+      "toolWindow/title": [
+        { "command": "welcome.refresh", "when": "view == welcome.view" },
+        { "command": "welcome.toggleShowOnStartup", "when": "view == welcome.view" }
+      ]
+    },
+    "toolWindows": [
+      { "id": "welcome.view", "title": "%view.start%", "location": "left", "kind": "tree", "icon": "home" }
+    ],
+    "settings": {
+      "title": "Welcome",
+      "properties": {
+        "welcome.showOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "scope": "user",
+          "description": "%setting.showOnStartup%"
+        },
+        "welcome.onboarded": {
+          "type": "boolean",
+          "default": false,
+          "scope": "user",
+          "description": "%setting.onboarded%"
+        }
+      }
+    }
+  }
+}

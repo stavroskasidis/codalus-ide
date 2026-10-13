@@ -1,6 +1,6 @@
 # Data and Entity Framework Core
 
-Daedalus Studio works with Entity Framework Core through your own `dotnet-ef` tool, the same one you would run in a terminal, so its behaviour always matches your EF Core version.
+Codalus IDE works with Entity Framework Core through your own `dotnet-ef` tool, the same one you would run in a terminal, so its behaviour always matches your EF Core version.
 
 ## The Entity Framework window
 
@@ -60,7 +60,7 @@ The generated context opens when it is done.
 
 Expanding a connection connects it and shows its databases (the connection's own first), then **Tables**, **Views**, **Procedures** and **Functions**, and for each table its columns (type, nullability, identity, foreign key), keys and indexes. The context menu has View Data, New Query, Reverse Engineer with EF Core (which fills the reverse engineering form with the connection and the selected tables), Refresh, Disconnect, Edit and Remove Connection.
 
-Database work happens in a separate process, `daedalus-datahost`: a query that hangs or a driver that crashes never stops the IDE. SQL Server is reached through managed networking on every OS: Microsoft's native networking library for Windows isn't open source, so it isn't shipped.
+Database work happens in a separate process, `codalus-datahost`: a query that hangs or a driver that crashes never stops the IDE. SQL Server is reached through managed networking on every OS: Microsoft's native networking library for Windows isn't open source, so it isn't shipped.
 
 ## Table data
 

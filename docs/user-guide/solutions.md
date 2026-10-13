@@ -1,6 +1,6 @@
 # Solutions and projects
 
-Daedalus Studio opens `.sln` and `.slnx` solutions and SDK-style projects (`.csproj`, and the structure of `.fsproj` and `.vbproj`). Legacy, non-SDK-style project files are shown but not loaded.
+Codalus IDE opens `.sln` and `.slnx` solutions and SDK-style projects (`.csproj`, and the structure of `.fsproj` and `.vbproj`). Legacy, non-SDK-style project files are shown but not loaded.
 
 ## Solution Explorer
 
@@ -27,7 +27,7 @@ The tree shows the solution, its solution folders, projects, project folders and
 | Add a project reference | Add Project Reference on a project. Remove one by deleting it under Dependencies. |
 | Make a project the one F5 and Ctrl+F5 start | **Set as Startup Project** (the startup project is bold). |
 
-Daedalus Studio watches the files: changes made outside the IDE (a `git pull`, another editor) are picked up, and the affected projects are evaluated again.
+Codalus IDE watches the files: changes made outside the IDE (a `git pull`, another editor) are picked up, and the affected projects are evaluated again.
 
 ## The Properties window
 
@@ -43,18 +43,18 @@ Values set in the project file are in bold. Changes are written the way Visual S
 
 ## Adding items and templates
 
-- **Add New Item** (`Ctrl+Shift+A`, Project or the context menu) lists item templates for the project's language and kind, with a search box, categories and a preview: Daedalus's own (class, interface, record, struct, enum, text, JSON, XML, Markdown, resources, text template, app settings, HTML, CSS, JavaScript and TypeScript) and the `dotnet new` item templates installed on the computer. Web, MAUI and test templates show for those projects; **Show templates for every kind of project** shows them all. New C# files get the folder's namespace. `dotnet new` templates run only in trusted folders.
+- **Add New Item** (`Ctrl+Shift+A`, Project or the context menu) lists item templates for the project's language and kind, with a search box, categories and a preview: Codalus's own (class, interface, record, struct, enum, text, JSON, XML, Markdown, resources, text template, app settings, HTML, CSS, JavaScript and TypeScript) and the `dotnet new` item templates installed on the computer. Web, MAUI and test templates show for those projects; **Show templates for every kind of project** shows them all. New C# files get the folder's namespace. `dotnet new` templates run only in trusted folders.
 - **Add Existing Item** copies files into the selected folder; **Add Existing Item As Link** adds links to them instead (`<Compile Include="..\Shared\A.cs" Link="Shared\A.cs" />`).
 - **Export Template** (Project menu) makes a project, or the selected file, into a `dotnet new` template in your templates folder and installs it: **New Project** and **Add New Item** offer it from then on.
 - **Tools → Templates** lists the installed template packages: install one (an id, `id@version`, a `.nupkg` or a folder), uninstall, check for updates and update them.
 
 ## Opening a folder
 
-**File → Open Folder** (`Ctrl+Shift+Alt+O`) opens a folder as it is, with or without a solution: the Solution Explorer shows the **folder view**, the files on disk, with project files marked "(not loaded)". Search, Git, the terminal and the editor work on the folder. `daedalus <folder>` opens the folder's solution when it has exactly one, and the folder otherwise.
+**File → Open Folder** (`Ctrl+Shift+Alt+O`) opens a folder as it is, with or without a solution: the Solution Explorer shows the **folder view**, the files on disk, with project files marked "(not loaded)". Search, Git, the terminal and the editor work on the folder. `codalus <folder>` opens the folder's solution when it has exactly one, and the folder otherwise.
 
-- **Load Project** (on a project file) or **Load All Projects** (on the folder) loads projects into an in-memory solution: they are evaluated, restored, built and get C# features like a solution's. **Switch Views** toggles between the folder view and the solution view. **Open Project** opens one project on its own instead. The loaded projects are remembered in `.daedalus/folder.json`.
-- **Tasks:** `.daedalus/tasks.json` (Build → Configure Tasks) holds commands to run, in VS Code's format: `label`, `type` (`process` or `shell`), `command`, `args`, `options.cwd` and `options.env`, and `group` (`build` or `test`, with `isDefault`). Build → Run Task runs one, with its output in Output → Tasks. In a folder, **Build** runs the default build task when there is one, and builds the loaded projects otherwise.
-- **Launch configurations:** `.daedalus/launch.json` (Debug → Configure Launch): `name`, `type` (`project`, with `project`; or `program`, with `program`: an executable or a `.dll`), `args`, `cwd`, `env` and `preLaunchTask`. The toolbar's startup list shows them; **Start** (F5) debugs and **Start Without Debugging** (Ctrl+F5) runs the selected one.
+- **Load Project** (on a project file) or **Load All Projects** (on the folder) loads projects into an in-memory solution: they are evaluated, restored, built and get C# features like a solution's. **Switch Views** toggles between the folder view and the solution view. **Open Project** opens one project on its own instead. The loaded projects are remembered in `.codalus/folder.json`.
+- **Tasks:** `.codalus/tasks.json` (Build → Configure Tasks) holds commands to run, in VS Code's format: `label`, `type` (`process` or `shell`), `command`, `args`, `options.cwd` and `options.env`, and `group` (`build` or `test`, with `isDefault`). Build → Run Task runs one, with its output in Output → Tasks. In a folder, **Build** runs the default build task when there is one, and builds the loaded projects otherwise.
+- **Launch configurations:** `.codalus/launch.json` (Debug → Configure Launch): `name`, `type` (`project`, with `project`; or `program`, with `program`: an executable or a `.dll`), `args`, `cwd`, `env` and `preLaunchTask`. The toolbar's startup list shows them; **Start** (F5) debugs and **Start Without Debugging** (Ctrl+F5) runs the selected one.
 - Variables: `${workspaceFolder}`, `${workspaceFolderBasename}`, `${file}`, `${fileDirname}`, `${fileBasename}`, `${fileBasenameNoExtension}`, `${fileExtname}`, `${relativeFile}`, `${lineNumber}`, `${selectedText}` and `${env:NAME}`.
 
 ## External tools
@@ -98,25 +98,25 @@ Packages are managed in the [NuGet Package Manager](packages.md).
 
 ## Unloading projects and solution filters
 
-- **Unload Project** (a project's context menu) stops loading, analyzing and building it; it shows dimmed as *(unloaded)*. **Reload Project** brings it back. Unloaded projects are remembered per user in `.daedalus/solution.json`.
+- **Unload Project** (a project's context menu) stops loading, analyzing and building it; it shows dimmed as *(unloaded)*. **Reload Project** brings it back. Unloaded projects are remembered per user in `.codalus/solution.json`.
 - **Save As Solution Filter…** (File menu, or the solution's context menu) writes the loaded projects to a `.slnf`. Opening a `.slnf` opens its solution with only those projects loaded.
 
 ## .NET SDKs
 
-A solution loads and builds with the same SDK as `dotnet build` in its folder: the one its `global.json` asks for, or else the newest one installed, previews included. A .NET 11 solution gets the .NET 11 SDK, while Daedalus itself runs on .NET 10.
+A solution loads and builds with the same SDK as `dotnet build` in its folder: the one its `global.json` asks for, or else the newest one installed, previews included. A .NET 11 solution gets the .NET 11 SDK, while Codalus itself runs on .NET 10.
 
 **.NET SDKs…** (Project menu) shows:
 - the SDK the solution builds with, and the `global.json` that chose it;
 - the installed SDKs, each with its support status: supported until a date, out of support since a date, or a preview;
 - the installed workloads;
-- a warning when Daedalus can't load the SDK the solution asks for, and which SDK it uses instead: an SDK whose runtime is missing, an SDK below the build host's floor (2.1.200), or a global.json that asks for an SDK that isn't installed. The same warning goes to the Output window (Build Host).
+- a warning when Codalus can't load the SDK the solution asks for, and which SDK it uses instead: an SDK whose runtime is missing, an SDK below the build host's floor (2.1.200), or a global.json that asks for an SDK that isn't installed. The same warning goes to the Output window (Build Host).
 
 SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own process; projects of every .NET version from .NET Core 2.0 work with the current SDK. [Older .NET versions](dotnet-versions.md) has the details.
 
 **Use This SDK** pins the selected SDK in `global.json` (with the roll-forward policy you choose) and reloads the solution with it. **Remove Pin** takes the version out again.
 
-**Known gaps with .NET 11** (until Daedalus moves to .NET 11 itself, when .NET 11 is released):
-- **Razor:** the .NET 11 SDK's Razor generator needs a newer C# compiler than Daedalus has. Daedalus uses the Razor generator of the .NET 10 SDK instead, also for `net11.0` projects, so keep the .NET 10 SDK installed. The Output window (Language Services) says which one is used.
+**Known gaps with .NET 11** (until Codalus moves to .NET 11 itself, when .NET 11 is released):
+- **Razor:** the .NET 11 SDK's Razor generator needs a newer C# compiler than Codalus has. Codalus uses the Razor generator of the .NET 10 SDK instead, also for `net11.0` projects, so keep the .NET 10 SDK installed. The Output window (Language Services) says which one is used.
 - **C# 15:** new C# 15 syntax shows errors in the editor, although it builds.
 
 ## New projects and solutions

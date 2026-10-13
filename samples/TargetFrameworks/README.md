@@ -1,6 +1,6 @@
 # TargetFrameworks fixture
 
-Every .NET (Core) version from 2.0 to 10.0 (M33, ADR 0030), with the current SDK. The runtimes come from `eng/get-runtimes.sh`; `tests/DaedalusStudio.TargetFrameworks.Tests` runs this fixture through Daedalus Studio, and `eng/compat-containers.sh` runs its programs in containers of the Linux distributions they supported.
+Every .NET (Core) version from 2.0 to 10.0 (M33, ADR 0030), with the current SDK. The runtimes come from `eng/get-runtimes.sh`; `tests/Codalus.TargetFrameworks.Tests` runs this fixture through Codalus IDE, and `eng/compat-containers.sh` runs its programs in containers of the Linux distributions they supported.
 
 - One folder per framework: `Core20` (`netcoreapp2.0`), `Core21`, `Core22`, `Core30`, `Core31`, `Net50` (`net5.0`) up to `Net100` (`net10.0`). Each has:
   - `<Id>.App`, a console app. Its `Program.cs` uses the newest C# feature of the framework's default C# version (nothing sets `LangVersion`), prints the runtime it runs on, the frameworks of its libraries and a greeting, and has a `// [next]` line where tests put a feature of the next C# version. `Net60.App` has a `Watch` launch profile that keeps printing `Message()`, for Hot Reload.

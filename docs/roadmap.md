@@ -38,22 +38,22 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M15 | ASP.NET Core and Hot Reload | M15a, M15b and M15c at checkpoint (done): Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch` (ADR 0022); scaffolding through the user's `dotnet-aspnet-codegenerator` and the SDK's item templates, OpenAPI and gRPC service references (ADR 0041) |
 | M16 | Razor, Blazor and web front-end | done (M16a–M16d at checkpoint): Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023); HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); Blazor WebAssembly debugging in the browser through vscode-js-debug (ADR 0026); compound server-and-page debugging, Debug a Web Page, HTML and CSS inside Razor, scoped CSS, npm scripts in the Task Runner Explorer, ESLint and Prettier (ADR 0027) |
 | M17 | Containers, Aspire and publishing | done (M17a–M17c at checkpoint): M17a ([m17a](checkpoints/m17a.md), ADR 0042): the Containers window, Add Docker Support, run and debug in a container (fast mode), compose up, down and debug, `.dcproj` as a solution item, the compose schema, Docker and Podman; M17b ([m17b](checkpoints/m17b.md), ADR 0043): Aspire AppHosts run and debug their projects through the IDE execution protocol, the Aspire window from the resource service, the dashboard; M17c ([m17c](checkpoints/m17c.md), ADR 0042): publish profiles and the Publish page, folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT and container publishing |
-| M18 | Profiling and diagnostics tools | M18a at checkpoint ([m18a](checkpoints/m18a.md), ADR 0044 and 0045): the supervised, lazy `daedalus-diaghost` (EventPipe through Microsoft.Diagnostics.NETCore.Client, traces through TraceEvent), the Performance Profiler with saved sessions, CPU Usage (call tree, bottom-up, functions with caller/callee, flame graph, time and thread filters, hot lines in the editor), .NET Counters (EventCounters and meters, CSV and JSON export), the Diagnostic Tools window; M18b at checkpoint ([m18b](checkpoints/m18b.md), ADR 0046): memory snapshots and diffs, allocations, .NET Async, threads and contention, exceptions, file I/O, the events viewer and exports, activity views, BenchmarkDotNet; M18 is complete |
+| M18 | Profiling and diagnostics tools | M18a at checkpoint ([m18a](checkpoints/m18a.md), ADR 0044 and 0045): the supervised, lazy `codalus-diaghost` (EventPipe through Microsoft.Diagnostics.NETCore.Client, traces through TraceEvent), the Performance Profiler with saved sessions, CPU Usage (call tree, bottom-up, functions with caller/callee, flame graph, time and thread filters, hot lines in the editor), .NET Counters (EventCounters and meters, CSV and JSON export), the Diagnostic Tools window; M18b at checkpoint ([m18b](checkpoints/m18b.md), ADR 0046): memory snapshots and diffs, allocations, .NET Async, threads and contention, exceptions, file I/O, the events viewer and exports, activity views, BenchmarkDotNet; M18 is complete |
 | M19 | Avalonia XAML editing and live previewer | M19a at checkpoint ([m19a](checkpoints/m19a.md), ADR 0047 and 0048): `.axaml` editing in the C# host on Roslyn's type information (completion, compiled binding paths, live diagnostics and the XAML compiler's errors from builds, hover, definition, `x:Name` rename, formatting), the XAML Previewer on Avalonia's designer host and remote protocol (debounced edits, design-time data, zoom, scale, theme variants, selection both ways through a startup-hook agent, rebuilds on code changes); M19b at checkpoint ([m19b](checkpoints/m19b.md), ADR 0052): the Live Visual Tree and Live Property Explorer for running Avalonia apps (the previewer's agent in a live mode: trees, properties with their sources, editing, highlight, pick, Go to XAML), the Avalonia templates in New Project |
 | M20 | .NET MAUI | planned (D6: go, for Android, iOS and Mac Catalyst), after M28 and before M34 |
-| M21 | Remote development | M21a at checkpoint ([m21a](checkpoints/m21a.md), ADR 0050 and 0051): `daedalus-server` (self-contained per platform, version-locked, copied and checked into `~/.daedalus-server/<version>/`), multiplexed channels with flow control over one stdio stream, remote windows over SSH (the system OpenSSH, keys and agents only) and WSL with the build, C# and markup hosts, terminals, netcoredbg and a file-system provider on the server, path mapping, port forwarding with detection, the Ports window and the remote status; M21b planned (Dev Containers, attaching to a running container, remote test environments, plugin placement `runsOn`, reconnect and resync) |
+| M21 | Remote development | M21a at checkpoint ([m21a](checkpoints/m21a.md), ADR 0050 and 0051): `codalus-server` (self-contained per platform, version-locked, copied and checked into `~/.codalus-server/<version>/`), multiplexed channels with flow control over one stdio stream, remote windows over SSH (the system OpenSSH, keys and agents only) and WSL with the build, C# and markup hosts, terminals, netcoredbg and a file-system provider on the server, path mapping, port forwarding with detection, the Ports window and the remote status; M21b planned (Dev Containers, attaching to a running container, remote test environments, plugin placement `runsOn`, reconnect and resync) |
 | M22 | Plugin platform 1.0 and marketplace | planned |
 | M23 | Personalization, settings sync and localization | M23a at checkpoint ([m23a](checkpoints/m23a.md)): Fonts and Colors over the theme (VS Code's two color settings), the ReSharper and Emacs keyboard schemes, importers for VS Code and `.vssettings`, Export and Import Settings, named window layouts, full screen and distraction-free mode, onboarding on the Start page with tips; M23b at checkpoint ([m23b](checkpoints/m23b.md)): profiles, settings sync with a folder or a Git repository, Tools → Customize for menus and toolbars, turning plugins off and File → Restart, the localization foundation (catalogues, the display language, pseudo-languages and right to left, plugin manifest placeholders, the test that stops new hard-coded strings); M23c at checkpoint ([m23c](checkpoints/m23c.md)): every view's text and the messages built in code in the catalogues, plugins' own text through `context.Localize` (API 0.2.9); Weblate waits for the maintainer's account |
 | M26 | Build and project-system depth | At checkpoint: M26a ([m26a](checkpoints/m26a.md), ADR 0033): the Properties window, Show All Files, Include and Exclude, links and moves between projects, Add New Item, Export Template, the template manager, folder mode with tasks and launch configurations, External Tools; M26b ([m26b](checkpoints/m26b.md), ADR 0034, 0035): build settings, the fast up-to-date check, Batch Build, Build Timings with the critical path, binary logs and their viewer, build events, custom tools (ResX, T4 in its own host, plugins) |
-| M27 | Data and Entity Framework Core tooling | done (M27a and M27b at checkpoint): the Entity Framework window over the user's dotnet-ef (migrations with their SQL shown first, scripts, bundles, compiled models, reverse engineering, the model view; [m27a](checkpoints/m27a.md), ADR 0036); the Database Explorer in `daedalus-datahost` (SQL Server, PostgreSQL, MySQL/MariaDB, SQLite), table data with explicit commit, CSV/JSON export and import, the query editor with results, messages, cancel, history and plans, the SQL language service (ScriptDom), `.sqlproj` loading and builds ([m27b](checkpoints/m27b.md), ADRs 0037 and 0038); schema compare and publish are a gap (D15: DacFx is proprietary) |
+| M27 | Data and Entity Framework Core tooling | done (M27a and M27b at checkpoint): the Entity Framework window over the user's dotnet-ef (migrations with their SQL shown first, scripts, bundles, compiled models, reverse engineering, the model view; [m27a](checkpoints/m27a.md), ADR 0036); the Database Explorer in `codalus-datahost` (SQL Server, PostgreSQL, MySQL/MariaDB, SQLite), table data with explicit commit, CSV/JSON export and import, the query editor with results, messages, cancel, history and plans, the SQL language service (ScriptDom), `.sqlproj` loading and builds ([m27b](checkpoints/m27b.md), ADRs 0037 and 0038); schema compare and publish are a gap (D15: DacFx is proprietary) |
 | M28 | AI assistance | planned (D7: opt-in, with any provider) |
 | M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
-| M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Daedalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
-| M31 | Automated release cycle and installers | at checkpoint ([m31](checkpoints/m31.md), ADR 0028): `develop`/`master`, `VERSION` and `daedalus-release`, Velopack installers on every platform, `.deb`/`.rpm`, signed apt and dnf repositories, `nightly.yml`/`release.yml`; M31b at checkpoint ([m31b](checkpoints/m31b.md)): the first published releases, pulled forward by the maintainer on 2026-10-13: nightlies from `develop`, 0.1.0 from `master`, Linux ARM64 packages, the apt and dnf repositories on Pages; unsigned until certificates (D19) |
+| M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Codalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
+| M31 | Automated release cycle and installers | at checkpoint ([m31](checkpoints/m31.md), ADR 0028): `develop`/`master`, `VERSION` and `codalus-release`, Velopack installers on every platform, `.deb`/`.rpm`, signed apt and dnf repositories, `nightly.yml`/`release.yml`; M31b at checkpoint ([m31b](checkpoints/m31b.md)): the first published releases, pulled forward by the maintainer on 2026-10-13: nightlies from `develop`, 0.1.0 from `master`, Linux ARM64 packages, the apt and dnf repositories on Pages; unsigned until certificates (D19) |
 | M32 | Self-update | at checkpoint ([m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
 | M34 | UI polish | M34a at checkpoint ([m34a](checkpoints/m34a.md)), pulled forward by the maintainer on 2026-10-12: Fluent UI System Icons compiled at build time (D24) with command-family colors, every menu a tree like a classic IDE's, output windows that follow new output, the minimap docked at the editor's edge, completion keys per OS (the editor's key bindings now match a focused editor), then Material Icon Theme's file, folder and project icons, a flat navigation bar and themed outlining markers; M34b at checkpoint ([m34b](checkpoints/m34b.md)), pulled forward the same day: batched project loading in the language host, no false errors while loading, a parallel background pass, parallel design-time builds and their persisted cache, restore on open only when needed; M34d at checkpoint ([m34d](checkpoints/m34d.md)), 2026-10-13: spacing, size and type tokens, document tabs and captions in every state (selected without the focus, pinned, preview on the right, colored by project), toolbars that overflow instead of wrapping, High Contrast's black menus, the gallery in the smoke test, clipped-text and WCAG AA contrast tests, the UI guide; M34c at checkpoint ([m34c](checkpoints/m34c.md)), 2026-10-13: the language host keeps diagnostics and reference assemblies between sessions, open documents compile against unchanged projects' assemblies, and CS4014 the build wouldn't report is left out (ADR 0049); the rest of M34 stays the last milestone before Visual Basic and F# |
-| M39 | Rename | waiting for the final name (2026-10-13; candidates: Codalus IDE, Akmon IDE stylized Akmωn, Akmonide or Akmon-ide, Einion): the clean rename of everything from Daedalus Studio (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs), with no compatibility (no users yet) |
+| M39 | Rename to Codalus IDE | in progress (the name chosen 2026-10-13, ADR 0056): the clean rename of everything from Daedalus Studio (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs) with `eng/rename.py`, with no compatibility (no users yet); the new mark is being chosen |
 | M37 | Environment setup | at checkpoint ([m37](checkpoints/m37.md)): a missing or mismatched .NET SDK (a solution's `global.json`), git, Git LFS, Docker, Podman and WSL found, Help → Check Environment, installs with the user's consent (winget, `dotnet-install` into `~/.dotnet`, `xcode-select`, the distribution's packages in the terminal); MAUI's workloads come with M20 |
 | M38 | Start window | at checkpoint ([m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
 | M35 | Visual Basic | planned, always second to last |
@@ -67,9 +67,9 @@ New milestones get the next free number and join the phase they belong to, so th
 
 This plan assumed that M7 would end with what the original project brief described. **At the M7 checkpoint, compare this list with what was actually built, and carry any deferred `TODO(issue)` items into the right post-MVP milestone.**
 
-- **Shell** (`DaedalusStudio.Shell`, Avalonia 12, Native AOT): docking with persisted layouts, commands, key bindings, the palette and menus, JSON settings with a UI, themes (light, dark, high contrast), status bar, Output window, notifications.
-- **Workbench services** (`DaedalusStudio.Workbench`) and the platform layer (`DaedalusStudio.Platform`: paths, file watching, process launching, shell integration, keys).
-- **Language service host** (`daedalus-lshost`): Roslyn C# with the M3 feature set (highlighting, completion, navigation, rename, code fixes with preview, formatting, Go To All, Find in Files, analyzers, source generators).
+- **Shell** (`Codalus.Shell`, Avalonia 12, Native AOT): docking with persisted layouts, commands, key bindings, the palette and menus, JSON settings with a UI, themes (light, dark, high contrast), status bar, Output window, notifications.
+- **Workbench services** (`Codalus.Workbench`) and the platform layer (`Codalus.Platform`: paths, file watching, process launching, shell integration, keys).
+- **Language service host** (`codalus-lshost`): Roslyn C# with the M3 feature set (highlighting, completion, navigation, rename, code fixes with preview, formatting, Go To All, Find in Files, analyzers, source generators).
 - **Build host**: MSBuild evaluation and builds, solution and project model, file nesting, project edits, `dotnet new` templates, configurations, multi-targeting.
 - **Debugging**: a DAP client plus netcoredbg, with the M5 feature list and a documented list of known gaps.
 - **Git**: the M6 feature set, using LibGit2Sharp or the git CLI as decided in the M6 ADR.
@@ -81,11 +81,11 @@ This plan assumed that M7 would end with what the original project brief describ
 These add to the architecture principles of the original project brief, which live on in the ADRs and in `CLAUDE.md`'s conventions. They don't replace them.
 
 - **Every feature names its process.** Each milestone says where its code runs: shell, an existing host, a new supervised host, or the user's process. A new host starts lazily, never at startup, so the idle-memory budget (ADR 0002, ≤ 250 MB) holds. It is supervised by `SupervisedProcess` and follows the crash-loop policy.
-- **Plugin first, where latency allows.** As ADR 0003 says, a new feature is a built-in plugin unless it sits on a latency-critical path. When a feature needs an API that doesn't exist yet, it is added under `DaedalusStudio.Plugins.Proposed` first. Built-ins using proposed APIs is how the API gets proved before 1.0 (M22).
+- **Plugin first, where latency allows.** As ADR 0003 says, a new feature is a built-in plugin unless it sits on a latency-critical path. When a feature needs an API that doesn't exist yet, it is added under `Codalus.Plugins.Proposed` first. Built-ins using proposed APIs is how the API gets proved before 1.0 (M22).
 - **The shell owns generic UI, providers own data.** Examples: the shell renders Test Explorer, and test controllers supply tests. The shell renders language features, and language services (Roslyn, LSP servers) supply data. This keeps large views virtualized and AOT-clean, and lets third parties plug in.
 - **Reuse before writing.** Prefer maintained MIT, Apache-2.0 or BSD components. When a VS feature is backed by something proprietary, say so, and either build an open replacement or record a known gap.
 - **Every interactive surface gets a budget.** Each milestone adds harness scenarios, measures VS Code where relevant, and proposes absolute budgets at its checkpoint. Editor surfaces must be at least as good as VS Code (ADR 0002). Rider is no longer a reference (D28): where a milestone below says "compare with Rider", it sets an absolute target instead.
-- **Every protocol extension is documented** in `docs/protocol.md` or `docs/plugin-protocol.md` with the `daedalus/` prefix. Plugin API changes are listed in the plugin changelog.
+- **Every protocol extension is documented** in `docs/protocol.md` or `docs/plugin-protocol.md` with the `codalus/` prefix. Plugin API changes are listed in the plugin changelog.
 
 ### Known proprietary traps
 
@@ -107,19 +107,19 @@ These decisions get more expensive with every milestone. **Raise them at the M7 
 
 | # | Decision | Why it matters | Recommendation |
 |---|---|---|---|
-| F1 | **Document identity: file paths or URIs.** The M0–M3 protocols identify documents by file path. | Remote development (M21), decompiled and Source Link documents (M12), Git revisions in diff views (M13), virtual and generated documents (Razor, M16), and untitled buffers all need non-file documents. LSP uses URIs. | Switch every shell↔host and plugin contract to URIs (`file:`, `untitled:`, `daedalus-decompiled:`, `daedalus-git:`, `daedalus-remote:`) before the plugin API reaches 1.0, ideally before going public. Keep path helpers in the SDK. |
-| F2 | **Virtual file system.** `DaedalusStudio.Platform` has a file watcher, but there is no file-system abstraction. | The same features as F1. Without this, remote development becomes a rewrite. | Add `IFileSystemProvider`, chosen by URI scheme, in `DaedalusStudio.Platform`. Route every editor, Solution Explorer and search read through it. |
+| F1 | **Document identity: file paths or URIs.** The M0–M3 protocols identify documents by file path. | Remote development (M21), decompiled and Source Link documents (M12), Git revisions in diff views (M13), virtual and generated documents (Razor, M16), and untitled buffers all need non-file documents. LSP uses URIs. | Switch every shell↔host and plugin contract to URIs (`file:`, `untitled:`, `codalus-decompiled:`, `codalus-git:`, `codalus-remote:`) before the plugin API reaches 1.0, ideally before going public. Keep path helpers in the SDK. |
+| F2 | **Virtual file system.** `Codalus.Platform` has a file watcher, but there is no file-system abstraction. | The same features as F1. Without this, remote development becomes a rewrite. | Add `IFileSystemProvider`, chosen by URI scheme, in `Codalus.Platform`. Route every editor, Solution Explorer and search read through it. |
 | F3 | **Rich plugin UI.** ADR 0003 requires a webview or remote-UI ADR by M6. | NuGet UI (if built as a plugin), test result details, profiler views, the previewer, and third-party tools. | Follow the M6 ADR. This plan assumes some rich surface exists by M9. If it doesn't, those UIs are built into the shell and move later. |
 | F4 | **Node.js policy.** | The best open web language servers (HTML, CSS, JSON, TypeScript) and debuggers (`vscode-js-debug`, which also bridges Blazor WebAssembly debugging) run on Node. So do the Dockerfile language server and the Dev Containers CLI. | Download a pinned, checksum-verified Node runtime on demand, the first time a feature needs it. Don't bundle it, and don't require a user install. This needs an ADR (D3). |
-| F5 | **Language host topology.** | VB, F#, Razor and LSP servers need a home. | Roslyn C# and VB share `daedalus-lshost`. Razor is cohosted in the same Roslyn host. F# runs in its own process (FsAutoComplete or our own FCS host). Everything else goes through the generic LSP bridge (M11). |
+| F5 | **Language host topology.** | VB, F#, Razor and LSP servers need a home. | Roslyn C# and VB share `codalus-lshost`. Razor is cohosted in the same Roslyn host. F# runs in its own process (FsAutoComplete or our own FCS host). Everything else goes through the generic LSP bridge (M11). |
 | F6 | **Workspace trust.** | Opening a solution runs MSBuild evaluation, analyzers and source generators, all of which can run arbitrary code. Plugins and tasks add more. That matters once the repository is public. | Add a "restricted mode" for untrusted folders before or with the public release. It parses but doesn't evaluate, build or load analyzers, generators or workspace plugins until the user trusts the folder. Raise this at the M7 checkpoint (D4). |
-| F7 | **Per-solution state.** | Breakpoints, open documents, layouts, test playlists, profiles and caches need a home. | `.daedalus/` next to the solution (git-ignored, like `.vs/`) for state the user may want to inspect or share. User-local caches go in the platform data directory, keyed by a solution hash. |
+| F7 | **Per-solution state.** | Breakpoints, open documents, layouts, test playlists, profiles and caches need a home. | `.codalus/` next to the solution (git-ignored, like `.vs/`) for state the user may want to inspect or share. User-local caches go in the platform data directory, keyed by a solution hash. |
 
 All seven are settled:
 - F1–F4 and F6 are D1–D4 in the [decision register](#decision-register).
 - F5 and F7 are as built:
   - F5: Razor is cohosted in the C# host, F# runs on FsAutoComplete (D10), and the LSP bridge serves the rest.
-  - F7: `.daedalus/` sits next to the solution.
+  - F7: `.codalus/` sits next to the solution.
 
 ## Phase overview
 
@@ -144,7 +144,7 @@ Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. 
 - Tests, NuGet and a terminal are what stop people from using the IDE every day.
 - The language platform (M11) comes early, because it proves the "pluggable language services" requirement and every later language and file type builds on it.
 - Platform and release (phase 4) comes next, by the maintainer's choice:
-  - .NET 11 (M30) goes first, so that Daedalus is ready when .NET 11 is released.
+  - .NET 11 (M30) goes first, so that Codalus is ready when .NET 11 is released.
   - Automated releases (M31) and self-update (M32) come before the repository goes public, so that the first public users get installers and updates.
   - The older-.NET validation (M33) builds on M30's hosts, which must start with any SDK.
 - Web development is the biggest .NET workload. It comes after depth work because Hot Reload and Blazor debugging build on M12 and M14. Data tooling (M27) sits with it, because EF Core and a database are part of most web apps.
@@ -216,12 +216,12 @@ A dashed edge means "better with", not "blocked by".
   - Grouping by project, namespace, class, trait, outcome or duration.
   - A filter syntax: free text, `trait:`, `outcome:`, `project:`.
   - Run all, failed, selected or not-run tests. Repeat the last run. Cancel.
-  - Playlists, saved as JSON under `.daedalus/`. VS `.playlist` files can be imported.
+  - Playlists, saved as JSON under `.codalus/`. VS `.playlist` files can be imported.
 - **Results:**
   - outcome, duration, message, stack trace with clickable frames, stdout and stderr, attachments
   - the history of the last N runs per test
   - export to TRX and import TRX files (for example from CI), shown in the same views
-  - snapshot-testing support: Daedalus can be registered as the diff tool for Verify and similar libraries, through the `daedalus diff` command line (see [Release, updates and the command line](#release-updates-and-the-command-line))
+  - snapshot-testing support: Codalus can be registered as the diff tool for Verify and similar libraries, through the `codalus diff` command line (see [Release, updates and the command line](#release-updates-and-the-command-line))
 - **Create Unit Tests:** a command on a method or type that generates a test stub in a chosen (or new) test project for the chosen framework, like Visual Studio's command.
 - **Remote test environments** (running tests in WSL, a container or over SSH, like Visual Studio's `testenvironments.json`) come with M21.
 - **Editor integration:** run, debug and status glyphs in the gutter. CodeLens entries ("Run | Debug | ✓ 12 ms") come once CodeLens lands in M12. Failed tests can be navigated to with F8-style "next failure" commands.
@@ -243,11 +243,11 @@ A dashed edge means "better with", not "blocked by".
 **Architecture.**
 - **Shell:** owns the Test Explorer view, the gutter glyphs, the result details view and the coverage overlay (generic, AOT-clean, virtualized).
 - **New plugin API (proposed):** a **test controller** API, modelled on VS Code's `TestController`, to report items, run requests, results and output. Test providers are plugins.
-- **Built-in plugin `DaedalusStudio.Plugins.DotNetTest`:**
+- **Built-in plugin `Codalus.Plugins.DotNetTest`:**
   - implements the controller with the VSTest translation layer and an MTP client
   - runs in a **dedicated** plugin host, because it can be heavy
   - gets two other new plugin APIs (proposed): `IBuild` to request builds, and `IDebug` to start a debug session with a launch configuration
-- **`daedalus-lshost`:** adds `daedalus/testCandidates` for source-based discovery: test methods per document, with ranges. The shell forwards the results to the controller.
+- **`codalus-lshost`:** adds `codalus/testCandidates` for source-based discovery: test methods per document, with ranges. The shell forwards the results to the controller.
 - **Coverage:** runs inside the test plugin. Line data is pushed to the shell as a decoration layer, keyed by document URI.
 
 **Dependencies.**
@@ -326,8 +326,8 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 **Architecture.**
 - **Build host:**
-  - `daedalus/packages/*`: search, metadata, install, update, uninstall and consolidate. Built on NuGet.Protocol. Edits go through MSBuild's `ProjectRootElement`, followed by a restore.
-  - `daedalus/projectProperties/*`: read evaluated and unevaluated values with provenance, and write them with a condition scope.
+  - `codalus/packages/*`: search, metadata, install, update, uninstall and consolidate. Built on NuGet.Protocol. Edits go through MSBuild's `ProjectRootElement`, followed by a restore.
+  - `codalus/projectProperties/*`: read evaluated and unevaluated values with provenance, and write them with a condition scope.
   - All network access happens here. It is cancellable, uses the system proxy, supports an offline mode, and caches results.
 - **UI:**
   - **NuGet manager:** if F3 delivered a rich plugin surface, the UI is a built-in plugin and the first real consumer of that surface. Otherwise it is a built-in shell view.
@@ -381,16 +381,16 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - **Accessibility:** a screen-reader mode that exposes the buffer through the same UIA/AX text-pattern peer the editor got in M3.
 - **Run in terminal:** console apps run with "Run without debugging" can use the integrated terminal for stdin and stdout, controlled by a setting (the external console is the alternative). The same option exists for debugging, through a netcoredbg console redirect.
 - **C# Interactive:**
-  - A REPL on Roslyn scripting, with its own editor input (highlighting, completion and signature help served by `daedalus-lshost` as script documents) and a history.
+  - A REPL on Roslyn scripting, with its own editor input (highlighting, completion and signature help served by `codalus-lshost` as script documents) and a history.
   - Supports `#r` and `#load`. `#r "nuget:"` uses the M9 package service.
   - "Initialize Interactive with Project" and "Send selection to Interactive".
 
 **Architecture.**
-- **PTY:** lives in `DaedalusStudio.Platform`, using ConPTY on Windows and `openpty` with `posix_spawn` on Unix through P/Invoke (never `forkpty`: managed code must not run in a forked child; ADR 0014). This is AOT-safe and needs no extra host.
+- **PTY:** lives in `Codalus.Platform`, using ConPTY on Windows and `openpty` with `posix_spawn` on Unix through P/Invoke (never `forkpty`: managed code must not run in a forked child; ADR 0014). This is AOT-safe and needs no extra host.
   - **Justification to record:** terminal I/O is latency-critical but light, and child processes are already isolated from the shell.
-  - If the ADR concludes that PTY handling must leave the shell (for example for crash isolation), it becomes `daedalus-ptyhost`.
+  - If the ADR concludes that PTY handling must leave the shell (for example for crash isolation), it becomes `codalus-ptyhost`.
 - **VT engine and renderer:** a VT parser and screen model, plus a custom Avalonia control that renders glyph runs with dirty-row invalidation and a glyph cache.
-- **REPL host:** a new `daedalus-replhost`, out of process. It runs user code, which must never run in the shell or the language host. It is supervised, so a crash or `Environment.Exit` in a script only restarts the REPL.
+- **REPL host:** a new `codalus-replhost`, out of process. It runs user code, which must never run in the shell or the language host. It is supervised, so a crash or `Environment.Exit` in a script only restarts the REPL.
 
 **Dependencies (candidates for the ADR).**
 - XtermSharp (MIT): VT engine. Check its maintenance and AOT compatibility.
@@ -420,7 +420,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 **Goal.** Make "a language" a pluggable unit, as the mission requires for F# and VB. Give first-class editing to the non-C# files every .NET repository has.
 
-**Status.** Built ([m11.md](checkpoints/m11.md), [ADR 0016](adr/0016-language-platform.md)). Deviations: LSP types stay narrowed and source-generated, with a normalizer instead of a `metaModel.json` generator; JSON, XML, MSBuild and YAML services run in a new `daedalus-markuphost`, which asks the build host for evaluated MSBuild values through the shell; JSON Schema validation is our own subset (JsonSchema.Net is no longer OSI-licensed). Deferred, each with a `TODO(issue)` in the checkpoint: XSD validation, the `.resx` editor, YAML completion, package completion in MSBuild, Go to Definition across imports, inlay hints, hierarchies, pull diagnostics, selection ranges, linked editing, CodeLens and document symbols for non-C# languages, snippet tab stops, several servers per language, and the PowerShell Editor Services sample (a smaller `.todo` sample with its own server proves the same path).
+**Status.** Built ([m11.md](checkpoints/m11.md), [ADR 0016](adr/0016-language-platform.md)). Deviations: LSP types stay narrowed and source-generated, with a normalizer instead of a `metaModel.json` generator; JSON, XML, MSBuild and YAML services run in a new `codalus-markuphost`, which asks the build host for evaluated MSBuild values through the shell; JSON Schema validation is our own subset (JsonSchema.Net is no longer OSI-licensed). Deferred, each with a `TODO(issue)` in the checkpoint: XSD validation, the `.resx` editor, YAML completion, package completion in MSBuild, Go to Definition across imports, inlay hints, hierarchies, pull diagnostics, selection ranges, linked editing, CodeLens and document symbols for non-C# languages, snippet tab stops, several servers per language, and the PowerShell Editor Services sample (a smaller `.todo` sample with its own server proves the same path).
 
 **Depends on.** M3 (the language-service abstraction), M9 (package and property data for MSBuild editing). F1 strongly recommended.
 
@@ -445,7 +445,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
     - Diagnostics for unknown items and invalid values.
     - This is a strength no other cross-platform editor has, because we own the evaluation.
   - **JSON with schemas:**
-    - `global.json`, `launchSettings.json`, `appsettings*.json`, `.config/dotnet-tools.json`, `daedalus-plugin.json`
+    - `global.json`, `launchSettings.json`, `appsettings*.json`, `.config/dotnet-tools.json`, `codalus-plugin.json`
     - `testconfig.json` and `runtimeconfig.template.json`
     - any file mapped through the SchemaStore catalogue (cached, with an offline fallback)
   - **XML with XSD validation:** `.runsettings`, `nuget.config`, `.slnx`, `.resx`, `.xsd` and `.xml`.
@@ -461,10 +461,10 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - **Samples:** a sample plugin that contributes a grammar plus an LSP server (for example PowerShell Editor Services, MIT) as an end-to-end proof, shipped under `samples/plugins/`.
 
 **Architecture.**
-- **New library `DaedalusStudio.LanguageServices.Lsp`:** LSP types are **source-generated from the LSP `metaModel.json`** (MIT, from `vscode-languageserver-node`), which keeps them AOT-safe. It also holds the client and the adapter to the shell's language-service abstraction.
+- **New library `Codalus.LanguageServices.Lsp`:** LSP types are **source-generated from the LSP `metaModel.json`** (MIT, from `vscode-languageserver-node`), which keeps them AOT-safe. It also holds the client and the adapter to the shell's language-service abstraction.
 - **LSP servers:** supervised child processes of the shell. They are declared by manifests, so no plugin code is loaded to start a server.
 - **TextMate tokenization:** runs off the UI thread, viewport first, like semantic tokens.
-- **MSBuild language service:** lives in the **build host**, next to the evaluator. JSON, XML and YAML services run in a small `daedalus-markuphost`, or in the plugin host. The ADR decides.
+- **MSBuild language service:** lives in the **build host**, next to the evaluator. JSON, XML and YAML services run in a small `codalus-markuphost`, or in the plugin host. The ADR decides.
 
 **Dependencies.**
 - TextMateSharp (MIT; AvaloniaEdit already integrates it).
@@ -552,7 +552,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - Change Signature, Extract Interface, Extract Class, Pull Members Up, Move Type and Move Static Members
   - Generate Overrides, Generate Equals/GetHashCode and Generate Constructor (member pickers)
   - Encapsulate Field, Introduce Parameter
-  - **Protocol:** a generic `daedalus/codeAction/resolveOptions`. The host returns an options schema, the shell renders a generic, accessible dialog, and the host applies the result with the usual diff preview.
+  - **Protocol:** a generic `codalus/codeAction/resolveOptions`. The host returns an options schema, the shell renders a generic, accessible dialog, and the host applies the result with the usual diff preview.
 - **Code Cleanup:** profiles (sets of fixers, as in `dotnet format`), run on demand or on save.
 - **Analysis configuration:**
   - "Configure severity" writes to `.editorconfig` or `.globalconfig`.
@@ -577,8 +577,8 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - debugging a generator or analyzer by running the compiler under the debugger (Visual Studio's `DebugRoslynComponent` launch profile) is in M14
 
 **Architecture.**
-- Mostly `daedalus-lshost` (Roslyn) and the shell.
-- Decompilation and Source Link resolution run in `daedalus-lshost` and produce `daedalus-decompiled:` and `daedalus-sourcelink:` documents (F1).
+- Mostly `codalus-lshost` (Roslyn) and the shell.
+- Decompilation and Source Link resolution run in `codalus-lshost` and produce `codalus-decompiled:` and `codalus-sourcelink:` documents (F1).
 - **Go To All index:** a persisted cache for fast reopen. Investigate Roslyn's own persistent storage before writing our own.
 
 **Dependencies.**
@@ -626,14 +626,14 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 **Goal.** Cover the Git workflows people currently leave the IDE for, starting with merge conflicts.
 
-**Depends on.** M6 (and its LibGit2Sharp-or-CLI ADR), F1 (`daedalus-git:` documents for revisions).
+**Depends on.** M6 (and its LibGit2Sharp-or-CLI ADR), F1 (`codalus-git:` documents for revisions).
 
 **Scope.**
 - **Repository lifecycle** (whatever M6 didn't cover):
   - clone, with a URL and a destination, plus browsing the user's repositories once a hosting provider is signed in
   - create a repository for a solution, with a `.gitignore` for .NET
   - publish a local repository to a hosting provider
-- **External tool integration:** `daedalus diff` and `daedalus merge` can be configured as git's `difftool` and `mergetool`, and `daedalus --wait` as `core.editor` (see [Release, updates and the command line](#release-updates-and-the-command-line)).
+- **External tool integration:** `codalus diff` and `codalus merge` can be configured as git's `difftool` and `mergetool`, and `codalus --wait` as `core.editor` (see [Release, updates and the command line](#release-updates-and-the-command-line)).
 - **Conflict resolution:**
   - a **3-way merge editor**: base, ours, theirs and the result
   - accept per hunk or per line, conflict navigation
@@ -657,7 +657,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - commit message templates
   - "Add to .gitignore" from Solution Explorer
   - solutions spanning several repositories
-- **Authentication:** honour the user's credential helper, such as Git Credential Manager (MIT). An IDE askpass prompt handles HTTPS and SSH passphrases. **Never store credentials ourselves.** Anything that must be stored goes through a `DaedalusStudio.Platform` credential-store abstraction: Windows Credential Manager, macOS Keychain, or libsecret on Linux.
+- **Authentication:** honour the user's credential helper, such as Git Credential Manager (MIT). An IDE askpass prompt handles HTTPS and SSH passphrases. **Never store credentials ourselves.** Anything that must be stored goes through a `Codalus.Platform` credential-store abstraction: Windows Credential Manager, macOS Keychain, or libsecret on Linux.
 - **Hosting integration** (D8). This is a built-in plugin for GitHub, GitLab and Azure DevOps. It stays inactive until the user signs in (OAuth device flow, with the token in the OS credential store).
   - list and check out pull requests
   - review comments shown inline in the editor
@@ -727,7 +727,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
   - attach over SSH (pipe transport), into a Docker container (`docker exec` with netcoredbg mounted or copied in), and into WSL
   - a **WSL launch profile**: run and debug a console or web project inside a WSL distribution from Windows, like Visual Studio's WSL launch profile
   - **Roslyn components:** debug a source generator or analyzer by running the compiler on a target project under the debugger (the `DebugRoslynComponent` launch profile)
-  - **Just-In-Time debugging:** optionally register Daedalus as the OS just-in-time debugger, so a crashing .NET process can be attached to. It is off by default, and needs explicit user consent on each OS.
+  - **Just-In-Time debugging:** optionally register Codalus as the OS just-in-time debugger, so a crashing .NET process can be attached to. It is off by default, and needs explicit user consent on each OS.
 - **Dumps:**
   - Open Windows minidumps and Linux or macOS core dumps with **ClrMD**: threads, managed stacks, the faulting exception, heap statistics and object inspection. This is a read-only "dump session" with the same windows.
   - "Create dump" for a running process, through DiagnosticsClient.
@@ -735,9 +735,9 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - **Not planned:** IntelliTrace and time-travel debugging (proprietary in Visual Studio, with no open-source .NET equivalent), and the Snapshot Debugger (an Azure service). They are listed as gaps.
 
 **Architecture.**
-- A new **debug companion host** (`daedalus-debughost`) sits between the shell and netcoredbg, or next to it. It:
+- A new **debug companion host** (`codalus-debughost`) sits between the shell and netcoredbg, or next to it. It:
   - proxies DAP
-  - adds `daedalus/` debug extensions (visualizer payloads, parallel stacks aggregation, dump sessions through ClrMD)
+  - adds `codalus/` debug extensions (visualizer payloads, parallel stacks aggregation, dump sessions through ClrMD)
   - downloads Source Link files
 - netcoredbg stays an unmodified adapter, unless we contribute upstream.
 
@@ -792,7 +792,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 - **Folder mode** (Visual Studio's "Open Folder"), for repositories without a solution:
   - file tree, search, Git and the terminal work without one
   - discovered projects can be opened individually, or as a generated in-memory solution
-  - per-folder build and launch configuration in `.daedalus/` (the equivalent of `tasks.vs.json` and `launch.vs.json`)
+  - per-folder build and launch configuration in `.codalus/` (the equivalent of `tasks.vs.json` and `launch.vs.json`)
 - **External Tools:**
   - user-defined commands with argument macros (`$(ItemPath)`, `$(SolutionDir)`, `$(CurLine)`, …)
   - options to capture output in the Output window and to prompt for arguments
@@ -822,25 +822,25 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 ## Phase 4: Platform and release
 
 The maintainer added this phase on 2026-10-10 and put it next, after M16b and before M16c. It has four goals:
-- keep Daedalus on the newest .NET
+- keep Codalus on the newest .NET
 - prove that the older versions of .NET work
 - automate releases and updates
 - have all of this in place before the repository goes public
 
 ### M30 — .NET 11 and following .NET releases
 
-**Goal.** Daedalus runs on .NET 11. On the day .NET 11 is released (GA is expected in November 2026), it fully supports .NET 11 projects. After that, Daedalus moves to every new .NET release (D22).
+**Goal.** Codalus runs on .NET 11. On the day .NET 11 is released (GA is expected in November 2026), it fully supports .NET 11 projects. After that, Codalus moves to every new .NET release (D22).
 
 **Split (ADR 0025, [checkpoint](checkpoints/m30a.md)).**
-- **M30a** (done, on the first release candidate): the hosts on any SDK, and .NET 11 projects while Daedalus still runs on .NET 10.
-- **M30b** (at GA): Daedalus on .NET 11, and Roslyn 5.11 in the language host and C# Interactive, which brings C# 15 and the .NET 11 SDK's Razor generator. Also the `net11.0` targets in the regular fixtures.
+- **M30a** (done, on the first release candidate): the hosts on any SDK, and .NET 11 projects while Codalus still runs on .NET 10.
+- **M30b** (at GA): Codalus on .NET 11, and Roslyn 5.11 in the language host and C# Interactive, which brings C# 15 and the .NET 11 SDK's Razor generator. Also the `net11.0` targets in the regular fixtures.
 
 **Depends on.** Nothing new, but it touches every host.
 
-**Decisions.** D22: Daedalus moves to each new .NET major version when it ships, starting with .NET 11.
+**Decisions.** D22: Codalus moves to each new .NET major version when it ships, starting with .NET 11.
 
 **Scope.**
-- **Daedalus on .NET 11:**
+- **Codalus on .NET 11:**
   - `global.json` uses the .NET 11 SDK, and `Directory.Build.props` targets `net11.0` for the shell and every host. The shell is Native AOT on 11, with no new trimming warnings.
   - Check every dependency on 11: Avalonia, Dock, the Roslyn, MSBuild and NuGet client packages, Microsoft.Testing.Platform, Coverlet, Velopack (M31) and the TextMate engine. Record any version changes in `THIRD-PARTY-NOTICES.md`.
   - CI, `eng/validate.sh`, `eng/wsl-test.sh` and the Mac validation install the .NET 11 SDK.
@@ -876,7 +876,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - Work can start on the release candidate, with `allowPrerelease` in `global.json` for the time being. The milestone isn't done until it builds on the GA SDK.
 
 **Exit criteria.**
-- Daedalus builds on .NET 11 and passes its tests and the smoke test on three OSes.
+- Codalus builds on .NET 11 and passes its tests and the smoke test on three OSes.
 - The `net11.0` fixtures open, build, run, debug, test and Hot Reload.
 
 ### M31 — Automated release cycle and installers
@@ -923,7 +923,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
     - Anonymous users can't download a private repository's releases, so until then the releases are for the maintainer.
 - **Installers** (D17, D18):
   - **Windows:**
-    - a Velopack `Setup.exe`: per-user, no administrator rights, a Start menu entry, an uninstall entry, and the `daedalus` command on the `PATH`
+    - a Velopack `Setup.exe`: per-user, no administrator rights, a Start menu entry, an uninstall entry, and the `codalus` command on the `PATH`
     - the portable zip, which stays
     - the winget manifests, which point at the installer
   - **macOS:** a Velopack `.pkg`, which replaces the `.dmg`, plus a zip of the `.app`.
@@ -965,7 +965,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 ### M32 — Self-update
 
-**Goal.** Daedalus keeps itself up to date without getting in the way. Updates download in the background and are applied at the next restart (D16).
+**Goal.** Codalus keeps itself up to date without getting in the way. Updates download in the background and are applied at the next restart (D16).
 
 **Depends on.** M31 (releases and the update feed).
 
@@ -1038,7 +1038,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 ### M33 — Older .NET: .NET Core 2.0 to .NET 10
 
-**Goal.** Prove that projects targeting every version of .NET (Core) from 2.0 to 10.0 work in Daedalus. Fix what doesn't work, or document it (D23).
+**Goal.** Prove that projects targeting every version of .NET (Core) from 2.0 to 10.0 work in Codalus. Fix what doesn't work, or document it (D23).
 
 **Status ([ADR 0030](adr/0030-older-dotnet.md), [checkpoint](checkpoints/m33.md)).** Built on 2026-10-11, in one checkpoint. The support table is [Older .NET versions](user-guide/dotnet-versions.md) in the user guide; the SDK floor is 2.1.200.
 
@@ -1063,7 +1063,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - **NuGet:** the package manager offers the versions that are compatible with the framework.
 - **Older SDKs pinned by `global.json`:**
   - Opening and building are checked down to the oldest SDK the build host can load. That floor is recorded in the ADR and the user guide.
-  - Below the floor, Daedalus names the SDK the solution asks for and says why it can't load it, instead of failing silently.
+  - Below the floor, Codalus names the SDK the solution asks for and says why it can't load it, instead of failing silently.
 - **Operating systems:** every OS where the framework's runtime installs.
   - **Windows x64:** all of the frameworks.
   - **Linux x64:**
@@ -1105,7 +1105,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Goal.** A productive ASP.NET Core loop: run, browse, call endpoints, change code, and see the change without a restart.
 
-**Split (ADR 0022).** **M15a** (done): the Endpoints Explorer (`daedalus/aspnet/endpoints`), `.http` files with environments, request variables and an HTTP Response window, the environment selector, the HTTPS development certificate and user secrets. **M15b**: Hot Reload through `dotnet watch` (Roslyn's hot-reload packages aren't on nuget.org), with browser refresh. **M15c** (done, [ADR 0041](adr/0041-scaffolding-and-service-references.md)): Add New Scaffolded Item, with the Entity Framework and Identity scaffolders run by the user's `dotnet-aspnet-codegenerator` (the ADR's pick over `dotnet scaffold`) as a child of the build host, empty items from the SDK's item templates, and a form generated from each scaffolder's parameters with M27's DbContext discovery; service references as `OpenApiReference` (NSwag, the ADR's pick over Kiota) and `Protobuf` (`Grpc.Tools`) items, from a file or a URL, with Refresh.
+**Split (ADR 0022).** **M15a** (done): the Endpoints Explorer (`codalus/aspnet/endpoints`), `.http` files with environments, request variables and an HTTP Response window, the environment selector, the HTTPS development certificate and user secrets. **M15b**: Hot Reload through `dotnet watch` (Roslyn's hot-reload packages aren't on nuget.org), with browser refresh. **M15c** (done, [ADR 0041](adr/0041-scaffolding-and-service-references.md)): Add New Scaffolded Item, with the Entity Framework and Identity scaffolders run by the user's `dotnet-aspnet-codegenerator` (the ADR's pick over `dotnet scaffold`) as a child of the build host, empty items from the SDK's item templates, and a form generated from each scaffolder's parameters with M27's DbContext discovery; service references as `OpenApiReference` (NSwag, the ADR's pick over Kiota) and `Protobuf` (`Grpc.Tools`) items, from a file or a URL, with Refresh.
 
 **Depends on.** M4, M5, M14 (only for the Hot-Reload-while-debugging result), M11 (JSON schemas).
 
@@ -1121,7 +1121,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - **User secrets:** initialize `UserSecretsId` and edit `secrets.json`.
 - **Configuration:** completion for `appsettings*.json` keys and values. This uses the ASP.NET schema, plus keys discovered from options classes where Roslyn can find them.
 - **Endpoints Explorer:**
-  - minimal API routes and controller actions, found by Roslyn analysis (`daedalus/aspnet/endpoints`)
+  - minimal API routes and controller actions, found by Roslyn analysis (`codalus/aspnet/endpoints`)
   - navigation from a route to its handler
   - "generate request" into a `.http` file
 - **`.http` files:**
@@ -1144,11 +1144,11 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Architecture.**
 - **Hot Reload, the same way `dotnet watch` (MIT) does it:**
-  - **Delta computation:** `daedalus-lshost` computes deltas with Roslyn's hot-reload service (the `ExternalAccess` watch/hot-reload API), comparing the current solution with the baseline from the launch.
+  - **Delta computation:** `codalus-lshost` computes deltas with Roslyn's hot-reload service (the `ExternalAccess` watch/hot-reload API), comparing the current solution with the baseline from the launch.
   - **Delivery:** an agent assembly is injected with `DOTNET_STARTUP_HOOKS`, and `DOTNET_MODIFIABLE_ASSEMBLIES=debug` is set. It is based on `Microsoft.Extensions.DotNetDeltaApplier` from `dotnet/sdk` (MIT; vendor or reference it). The agent applies deltas through `MetadataUpdater.ApplyUpdate`.
   - **Browser refresh:** for web apps, the agent cooperates with the browser-refresh middleware script (from `dotnet/sdk`, MIT).
   - **Orchestration:** the shell decides when to apply. The launcher (build host or shell) owns the process.
-- **Protocol:** `daedalus/hotReload/*` (start a session, apply, report rude edits, restart).
+- **Protocol:** `codalus/hotReload/*` (start a session, apply, report rude edits, restart).
 
 **Dependencies.**
 - The Roslyn `ExternalAccess` hot-reload packages (MIT). **Availability risk:** they may only be published on the .NET engineering feeds. Decide between the feed, building from source and vendoring, and record the supply-chain decision.
@@ -1220,11 +1220,11 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Goal.** Replace what Visual Studio's Server Explorer, SQL Server Object Explorer, SQL editor and EF Core integration give a .NET developer, for the databases .NET developers actually use.
 
-**Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038): the database explorer in `daedalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
+**Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038): the database explorer in `codalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
 
-**Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038): the database explorer in `daedalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
+**Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038): the database explorer in `codalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
 
-**Depends on.** M11 (language registry, LSP bridge), M15 (scaffolding uses DbContext discovery). M13's credential store (in `DaedalusStudio.Platform`) holds connection secrets.
+**Depends on.** M11 (language registry, LSP bridge), M15 (scaffolding uses DbContext discovery). M13's credential store (in `Codalus.Platform`) holds connection secrets.
 
 **Decisions.** D15: SQL Server, PostgreSQL, SQLite and MySQL/MariaDB first, T-SQL through SQL Tools Service, and DacFx only if its licence is OSI-approved.
 
@@ -1249,7 +1249,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - **Secrets:** connection passwords never go in settings. They stay in the source the user chose (user secrets, environment), or in the OS credential store.
 
 **Architecture.**
-- A new lazy `daedalus-datahost` holds the ADO.NET providers, the connections and query execution. It is supervised, so a hung query or a provider crash never reaches the shell. Every query is cancellable.
+- A new lazy `codalus-datahost` holds the ADO.NET providers, the connections and query execution. It is supervised, so a hung query or a provider crash never reaches the shell. Every query is cancellable.
 - The shell renders the explorer tree, the grids (virtualized) and the plan viewer.
 - EF commands run `dotnet-ef` as a child process of the build host, which has the project context.
 
@@ -1295,7 +1295,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - **.NET Aspire:**
   - Detect AppHost projects, and run the AppHost.
   - Show the **resource tree** (projects, containers and executables, with state, endpoints and logs) inside the IDE, and open the Aspire dashboard (MIT).
-  - Implement the IDE side of Aspire's **IDE execution protocol**, so the AppHost asks Daedalus to launch, and optionally debug, each project.
+  - Implement the IDE side of Aspire's **IDE execution protocol**, so the AppHost asks Codalus to launch, and optionally debug, each project.
   - Debug all services as one compound session.
 
 **Dependencies.** Docker.DotNet (MIT), if the Engine API is used rather than the CLIs. The Aspire packages are the user's dependencies, not ours.
@@ -1322,7 +1322,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 **Scope.**
 - **Performance Profiler hub:**
   - Like Visual Studio's Alt+F2 page: pick one or more tools, and a target (the startup project, a running process, or an executable with arguments).
-  - Results are saved as session files under `.daedalus/` that can be reopened and compared.
+  - Results are saved as session files under `.codalus/` that can be reopened and compared.
 - **Diagnostic Tools window** during debugging or a normal run:
   - CPU usage, GC heap and working set over time
   - GC events and an exceptions timeline
@@ -1359,7 +1359,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - **Out of scope:** kernel-level native profiling (ETW kernel stacks, `perf_events`). It is a candidate.
 
 **Architecture.**
-- A new `daedalus-diaghost` handles trace processing (TraceEvent is heavy and needs JIT). It is supervised and lazy.
+- A new `codalus-diaghost` handles trace processing (TraceEvent is heavy and needs JIT). It is supervised and lazy.
 - Large traces stay in the host. The shell asks for aggregated, paged views, so large trees and flame graphs never cross the wire in full.
 - The flame graph is a custom Avalonia control.
 
@@ -1373,7 +1373,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Fixtures.** `samples/Diagnostics/`: a CPU-bound app, an allocation-heavy app, a leaking app, an async-heavy app, and a benchmark project.
 
-**Split (rule 5).** **M18a** ([ADR 0044](adr/0044-diagnostics-host-and-trace-processing.md), [ADR 0045](adr/0045-profiler-views.md), [checkpoint](checkpoints/m18a.md)): `daedalus-diaghost`, the Performance Profiler hub and saved sessions, the Diagnostic Tools window, the counters monitor, CPU profiling with its views and hot lines; fixtures `CpuBound`, `Allocations`, `Leaky` and `AsyncHeavy`. **M18b** ([ADR 0046](adr/0046-profiler-tools.md), [checkpoint](checkpoints/m18b.md)): allocations, memory snapshots (gcdump) and their diffs, full-dump inspection shared with M14, .NET Async, threads and contention, exceptions, file I/O, the events viewer with Speedscope and Chromium export, activity views, BenchmarkDotNet (and its fixture), comparing sessions; fixtures `Activities` and `Benchmarks`.
+**Split (rule 5).** **M18a** ([ADR 0044](adr/0044-diagnostics-host-and-trace-processing.md), [ADR 0045](adr/0045-profiler-views.md), [checkpoint](checkpoints/m18a.md)): `codalus-diaghost`, the Performance Profiler hub and saved sessions, the Diagnostic Tools window, the counters monitor, CPU profiling with its views and hot lines; fixtures `CpuBound`, `Allocations`, `Leaky` and `AsyncHeavy`. **M18b** ([ADR 0046](adr/0046-profiler-tools.md), [checkpoint](checkpoints/m18b.md)): allocations, memory snapshots (gcdump) and their diffs, full-dump inspection shared with M14, .NET Async, threads and contention, exceptions, file I/O, the events viewer with Speedscope and Chromium export, activity views, BenchmarkDotNet (and its fixture), comparing sessions; fixtures `Activities` and `Benchmarks`.
 
 **Budgets to propose.**
 - Sampling overhead in the CPU fixture: ≤ 10%.
@@ -1437,7 +1437,7 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
 **Scope.**
 - **Split architecture:**
   - **Local:** the shell keeps the UI and the editor buffers, so typing never crosses the network.
-  - **Remote:** a version-locked **`daedalus-server`** runs on the remote machine and hosts:
+  - **Remote:** a version-locked **`codalus-server`** runs on the remote machine and hosts:
     - the language and build hosts
     - debug adapters and test runs
     - terminals (PTYs)
@@ -1449,10 +1449,10 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
   - **Dev Containers:** the `devcontainer.json` subset (image, Dockerfile, compose, features, ports, `postCreateCommand`). Use the Dev Containers CLI (MIT, Node, under D3), or implement the subset in C#. The ADR decides.
   - Attaching to a running container.
 - **Server installation:**
-  - The client copies or downloads a self-contained server bundle for the remote RID, verifies its checksum, and caches it in `~/.daedalus-server/<version>/`.
+  - The client copies or downloads a self-contained server bundle for the remote RID, verifies its checksum, and caches it in `~/.codalus-server/<version>/`.
   - Updates happen with the client.
 - **Port forwarding:** for web apps (M15) and debug sessions, with automatic detection of listening ports.
-- **Remote test environments:** run and debug tests from a local solution in WSL, a container or an SSH target, without opening the whole workspace remotely (Visual Studio's `testenvironments.json`). This reuses the M8 controller with a remote test runner started by `daedalus-server`.
+- **Remote test environments:** run and debug tests from a local solution in WSL, a container or an SSH target, without opening the whole workspace remotely (Visual Studio's `testenvironments.json`). This reuses the M8 controller with a remote test runner started by `codalus-server`.
 - **Plugin placement:** the manifest gets a field (for example `"runsOn": "ui" | "workspace"`) that says where a plugin runs.
 - **Resilience:** reconnect after a network drop, resynchronizing the open documents and sessions.
 - **Security:**
@@ -1486,7 +1486,7 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
 **Decisions.** D2 (declarative views first, webviews after 1.0), D5 (NuGet as the transport).
 
 **Scope.**
-- **Freeze API 1.0.** Promote the proved proposed APIs, and apply ADR 0003's post-1.0 policy (additive minor releases, the `DAEDALUS0001` deprecation diagnostics).
+- **Freeze API 1.0.** Promote the proved proposed APIs, and apply ADR 0003's post-1.0 policy (additive minor releases, the `CODALUS0001` deprecation diagnostics).
 - **Contribution points to complete:**
   - **From earlier milestones:** languages, grammars and language servers (M11), test controllers (M8), visualizers (M14), SCM providers (M13).
   - **Debuggers:** DAP adapter contributions.
@@ -1494,15 +1494,15 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
   - **UI:** quick picks and input boxes, progress, declarative views (D2: forms, lists, trees, tables and toolbars, rendered by the shell), and custom editors for file types. Webviews follow after 1.0 as a proposed API.
   - **Platform:** file-system providers, authentication providers.
 - **Developer experience:**
-  - a `dotnet new daedalus-plugin` template
-  - a `DaedalusStudio.Plugins.Testing` package for headless plugin tests
+  - a `dotnet new codalus-plugin` template
+  - a `Codalus.Plugins.Testing` package for headless plugin tests
   - "Run plugin in a development instance", with a debugger attached to its plugin host
   - an API reference generated from XML docs, plus samples
 - **Distribution (D5, decided):**
   - **NuGet is the transport.** Plugins use a dedicated package type, are discovered through nuget.org search filtered by that type, and reuse NuGet's author and repository signing. Private feeds work too.
   - **The UI:** a plugin browser in the IDE, auto-update (reusing M32's download and verification code), enable and disable per workspace, and a "bisect plugins" troubleshooting command.
 - **IDE components** (the equivalent of Visual Studio Installer's workloads and components):
-  - One "Components" page lists everything Daedalus downloads on demand: Node, FsAutoComplete, the web language servers, `vscode-js-debug`, the remote server bundles, grammars and schema caches.
+  - One "Components" page lists everything Codalus downloads on demand: Node, FsAutoComplete, the web language servers, `vscode-js-debug`, the remote server bundles, grammars and schema caches.
   - For each component: version, size, licence, and update or remove.
   - **Offline layout:** an exported folder of components for air-gapped machines.
 - **Plugin performance attribution,** like Visual Studio's "Manage Extension Performance":
@@ -1527,7 +1527,7 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
   - named window layouts (save, apply, switch per profile), full-screen mode, and a distraction-free editing mode
 - **Import and export settings,** as a file, choosing categories (Visual Studio's Import and Export Settings wizard).
 - **Managed settings for organizations:** an optional machine-wide policy file that locks settings, such as disabling network features or plugin installation (Visual Studio supports group policies). Not in M23: it is a candidate, reviewed after the last milestone (D30).
-- **Settings sync** with a **user-chosen backend**: a Git repository, a gist, or a synced folder. There is no Daedalus-hosted service, and nothing syncs until the user sets it up.
+- **Settings sync** with a **user-chosen backend**: a Git repository, a gist, or a synced folder. There is no Codalus-hosted service, and nothing syncs until the user sets it up.
 - **Localization:**
   - Move every UI string to resources (AOT-safe), with a pseudo-localization build and a test that catches hard-coded strings.
   - A community translation workflow on hosted Weblate (D11). It starts once the repository is public, and translations come back to the resource files.
@@ -1549,7 +1549,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
   - off by default, with no telemetry
   - the user picks a provider, and nothing is sent anywhere until then
   - a visible indicator and a per-workspace switch
-  - secrets and files that `.gitignore` or a `.daedalusignore` excludes are never sent
+  - secrets and files that `.gitignore` or a `.codalusignore` excludes are never sent
 - **Provider API** (plugin API, proposed first):
   - chat and completion models from any vendor, behind one interface
   - local models (for example through an OpenAI-compatible local server)
@@ -1560,7 +1560,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
   2. inline completions and next-edit suggestions, which must stay within budget 2 (never blocking typing; suggestions arrive asynchronously)
   3. AI actions on existing surfaces, each one opt-in: explain an exception or a failing test, propose a fix for a diagnostic, generate tests (M8's Create Unit Tests), draft commit messages and pull request descriptions (M13), and summarize a profile (M18)
   4. **agent mode:** multi-step edits and commands. Every file change goes through the preview, and every command through an approval prompt. It is bounded by workspace trust.
-- **MCP client:** connect user-configured MCP servers, and expose Daedalus' own context (solution model, diagnostics, tests, build) as an MCP server for external agents.
+- **MCP client:** connect user-configured MCP servers, and expose Codalus' own context (solution model, diagnostics, tests, build) as an MCP server for external agents.
 
 **ADRs.** "AI provider API and data boundaries". "Agent mode safety model".
 
@@ -1719,9 +1719,9 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 **Status.** At checkpoint: [m34c](checkpoints/m34c.md).
 
-### M39 — Rename (the new name is to be decided)
+### M39 — Rename to Codalus IDE
 
-**Why.** The maintainer decided on 2026-10-13 that the project will be renamed; the final name is to be decided, and the maintainer chooses it when the time comes. Candidates:
+**Why.** The maintainer decided on 2026-10-13 that the project will be renamed, and chose **Codalus IDE** the same day ("Treat the Codalus IDE as the final name", then "Do the rename as soon as possible"). The candidates were:
 - **Codalus IDE**, from *Code* and *Daedalus*.
 - **Akmon IDE**, from *ákmōn*, the anvil (Daedalus was a craftsman), stylized **Akmωn** with an omega. The omega would be in the wordmark and the display name only: identifiers, the CLI, package and file names stay ASCII (`Akmon`, `akmon`).
 - **Akmonide**, Akmon and IDE in one word, also written **Akmon-ide** (`Akmonide`, `akmonide`).
@@ -1771,11 +1771,11 @@ The table and the steps below use Codalus as the example; `<name>` stands for th
 
 **Decided** (2026-10-13), to apply to the final name: the repository is `<name>-ide`, the CLI is `<name>`, and the logo gets a new mark too. Mark proposals (SVG, light and dark, at 16 to 256 px) come first, and the maintainer picks one before step 2; the first set, made for Codalus, waits for the name.
 
-**Status.** Waiting for the final name (the maintainer's request, 2026-10-13).
+**Status.** In progress: the mechanical rename (`eng/rename.py`), the plugin API 0.3.0 and the manual steps are on `develop`; the mark is being chosen from proposals (rounds 1 to 5: the maintainer leans towards the two-feather wings, C1 and C4 without the cursor); the steps outside the repository wait for the maintainer.
 
 ### M37 — Environment setup
 
-**Why.** Daedalus Studio needs tools it doesn't ship: the .NET SDK (the one `global.json` pins, or any), git, and for some features Node.js, a container engine or WSL. Today a missing tool shows as a failed load or a log line. The maintainer asked (2026-10-13) for the IDE to notice what's missing and offer to install it, and to do the same later for MAUI's workloads.
+**Why.** Codalus IDE needs tools it doesn't ship: the .NET SDK (the one `global.json` pins, or any), git, and for some features Node.js, a container engine or WSL. Today a missing tool shows as a failed load or a log line. The maintainer asked (2026-10-13) for the IDE to notice what's missing and offer to install it, and to do the same later for MAUI's workloads.
 
 **Scope.**
 - **Detection**: when the IDE starts, when a solution opens, and when a feature first needs a tool.
@@ -1798,7 +1798,7 @@ The table and the steps below use Codalus as the example; `<name>` stands for th
 
 ### M38 — Start window
 
-**Why.** Opening Daedalus Studio should start with a window that asks what you want to do: your recent solutions, and the ways to start, as the classic IDE's start window does. The maintainer asked for it on 2026-10-13. Today the Start page is a tool window of the Welcome plugin.
+**Why.** Opening Codalus IDE should start with a window that asks what you want to do: your recent solutions, and the ways to start, as the classic IDE's start window does. The maintainer asked for it on 2026-10-13. Today the Start page is a tool window of the Welcome plugin.
 
 **Scope.**
 - **When it shows**: a start window ("What would you like to do?") when the IDE starts without a solution, and from File → Start Window. It closes when a choice opens something. **Continue without code** opens the empty IDE. A setting turns it off (then the IDE opens empty, or reopens the last solution, as chosen).
@@ -1831,7 +1831,7 @@ These two milestones are always last (see [Status](#status)).
 **Depends on.** M3, M11 (language registry). Not much new infrastructure: Roslyn already contains VB.
 
 **Scope.**
-- Enable the VB language in `daedalus-lshost`, in the same workspace as C#:
+- Enable the VB language in `codalus-lshost`, in the same workspace as C#:
   - classification (append VB-specific token types to the legend; the legend is append-only)
   - completion, Quick Info, signature help, diagnostics, navigation, rename
   - code fixes and refactorings, formatting
@@ -1860,7 +1860,7 @@ These two milestones are always last (see [Status](#status)).
 **Scope.**
 - **Language service** (D10):
   - Run **FsAutoComplete** (Apache-2.0, built on FSharp.Compiler.Service, MIT) as a built-in plugin, through the M11 LSP bridge. Pin its version, and update it together with the SDK's F# version.
-  - Add `daedalus/` extensions through a thin wrapper, or upstream them, where LSP isn't enough.
+  - Add `codalus/` extensions through a thin wrapper, or upstream them, where LSP isn't enough.
 - **Features:**
   - semantic highlighting, completion (including unopened namespaces), tooltips with signatures and XML docs
   - signature help, diagnostics, go to definition and references, rename
@@ -1899,7 +1899,7 @@ These two milestones are always last (see [Status](#status)).
 
 ### Plugin API evolution
 
-New APIs start in `DaedalusStudio.Plugins.Proposed` and are promoted in M22.
+New APIs start in `Codalus.Plugins.Proposed` and are promoted in M22.
 
 | Milestone | API additions |
 |---|---|
@@ -1941,7 +1941,7 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
 ### Security
 
 - **Workspace trust** (F6). Applies to MSBuild evaluation, analyzers, source generators, F# type providers, workspace plugins, Hot Reload agents and the previewer.
-- **Credential store abstraction** in `DaedalusStudio.Platform` (M13 onward). Never store a secret in settings files.
+- **Credential store abstraction** in `Codalus.Platform` (M13 onward). Never store a secret in settings files.
 - **Downloaded tools** (Node, FsAutoComplete, netcoredbg, the server bundle, grammars, schemas):
   - pinned versions, verified checksums (and signatures where they exist)
   - an offline path
@@ -1961,9 +1961,9 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
   - Windows ARM64 waits for a netcoredbg build. Intel Macs aren't supported.
   - Linux runs on X11, and on Wayland through XWayland. It moves to Avalonia's native Wayland backend once that is stable.
   - Each milestone lists any OS-specific behaviour.
-- **OS versions** (D26): Windows 11 only. macOS and Linux versions follow what the .NET that Daedalus runs on supports: macOS 15 or newer today, which the app bundle's `Info.plist` requires.
+- **OS versions** (D26): Windows 11 only. macOS and Linux versions follow what the .NET that Codalus runs on supports: macOS 15 or newer today, which the app bundle's `Info.plist` requires.
 - **.NET versions** (D22, D23):
-  - Daedalus itself runs on the newest .NET. It moves to each new major version when it ships, following M30's checklist.
+  - Codalus itself runs on the newest .NET. It moves to each new major version when it ships, following M30's checklist.
   - User projects are supported from `netcoreapp2.0` to the newest .NET, on every OS where their runtime installs. The support table is in the user guide ([Older .NET versions](user-guide/dotnet-versions.md), M33).
 - **Windows:** ConPTY versions and dev-certificate trust.
 - **macOS:** the Keychain, notarization of downloaded tools, and the login-shell environment.
@@ -1982,11 +1982,11 @@ M7 delivers packages. Visual Studio parity also needs the following.
   - a "Restart to update" status bar item that never interrupts work
   - Installs from the apt and dnf repositories update through the package manager instead. Homebrew is a candidate.
 - **Offline installs:** the Velopack installers contain the full app. M22 adds the components layout for air-gapped machines.
-- **The `daedalus` command line,** for the integrations other tools expect:
-  - `daedalus <path>[:line[:col]]` opens a file, folder or solution in the running instance
+- **The `codalus` command line,** for the integrations other tools expect:
+  - `codalus <path>[:line[:col]]` opens a file, folder or solution in the running instance
   - `--new-window`
   - `--wait`, for `core.editor` and `$EDITOR`
-  - `daedalus diff <a> <b>` and `daedalus merge <base> <ours> <theirs> <result>`, for git and for snapshot-testing libraries
+  - `codalus diff <a> <b>` and `codalus merge <base> <ours> <theirs> <result>`, for git and for snapshot-testing libraries
   - `--list-plugins` and `--install-plugin`
   - shell integration installs the command on the `PATH` on each OS
 - **Help and feedback:**
@@ -2007,7 +2007,7 @@ Each milestone updates:
 
 The fixtures to add under `samples/` are named in each milestone. Rules:
 - They stay standalone (see `CLAUDE.md`).
-- Large fixtures are generated by `DaedalusStudio.Benchmarks.FixtureGen`.
+- Large fixtures are generated by `Codalus.Benchmarks.FixtureGen`.
 - Network-dependent tests use local mock servers (NuGet, Git hosting, HTTP).
 
 ---
@@ -2016,7 +2016,7 @@ The fixtures to add under `samples/` are named in each milestone. Rules:
 
 This table lists Visual Studio 2026's features by area, and says where each one is delivered. Visual Studio's own menus and tool windows were the checklist, so a feature missing here is a gap in this plan. Add it.
 
-The "Daedalus" column uses these terms:
+The "Codalus" column uses these terms:
 - **M1–M7:** the MVP, per the original project brief.
 - **M8 and later:** the milestones in this document.
 - **Candidate:** unscheduled, see [candidates](#unscheduled-candidates).
@@ -2028,7 +2028,7 @@ The "Daedalus" column uses these terms:
 
 ### Environment and shell
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Start window, recent solutions, clone or open | M1 (Welcome plugin); clone M6/M13 |
 | Docking, floating windows, layout persistence | M1; documents floating on other monitors M12; named layouts M23 |
@@ -2050,11 +2050,11 @@ The "Daedalus" column uses these terms:
 | Installer, workloads and components, updates, offline layout | M7 (packages); M31 (setup installers, release channels); M32 (updates); M22 (components, offline layout) |
 | Consistent, polished UI across every tool window and dialog | M29 (look and feel); M34 (polish) |
 | Group policy and managed settings | Candidate (D30) |
-| `devenv` command-line switches | Release track (`daedalus` CLI) |
+| `devenv` command-line switches | Release track (`codalus` CLI) |
 
 ### Solutions and projects
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Open `.sln`, `.slnx` and SDK-style projects | M2 |
 | Solution folders, nested projects, Dependencies node, file nesting | M2 |
@@ -2090,7 +2090,7 @@ The "Daedalus" column uses these terms:
 
 ### Build and run
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Build, Rebuild and Clean for the solution and for projects; cancel | M4 |
 | Structured build output, Error List navigation | M4 |
@@ -2108,7 +2108,7 @@ The "Daedalus" column uses these terms:
 
 ### Editor
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Tabs, preview tab, split views, multi-caret, folding, minimap, find and replace | M3 |
 | Pinned and vertical tabs, tab colouring, Ctrl+Tab window switcher | M12 |
@@ -2137,7 +2137,7 @@ The "Daedalus" column uses these terms:
 
 ### Navigation and search
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Go To All, file, type, member, symbol and line | M3 |
 | Go to Definition and Implementation, Find All References | M3; grouping, read/write and filters M12 |
@@ -2153,7 +2153,7 @@ The "Daedalus" column uses these terms:
 
 ### Code analysis and refactoring
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Live diagnostics, Roslyn analyzers, source generators | M3 |
 | Light bulb code fixes and refactorings with preview | M3 |
@@ -2168,7 +2168,7 @@ The "Daedalus" column uses these terms:
 
 ### Languages
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | C# | M3 |
 | Visual Basic | M35 (load, build and run since M2) |
@@ -2186,7 +2186,7 @@ The "Daedalus" column uses these terms:
 
 ### Debugging
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Launch and attach; line, conditional and hit-count breakpoints; tracepoints | M5 |
 | Stepping, Call Stack, Locals, Autos, Watch, debug console, data tips, threads | M5 |
@@ -2215,7 +2215,7 @@ The "Daedalus" column uses these terms:
 
 ### Testing
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Test Explorer: discover, run, debug, group, filter, playlists | M8 (done) |
 | Code coverage | M8 (done: Coverlet, editor coloring, Coverage Results, Cobertura export; the HTML report is deferred) |
@@ -2229,7 +2229,7 @@ The "Daedalus" column uses these terms:
 
 ### Profiling and diagnostics
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Diagnostic Tools window while debugging | M18 |
 | Performance Profiler hub and sessions | M18 |
@@ -2242,7 +2242,7 @@ The "Daedalus" column uses these terms:
 
 ### Packages and tools
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | NuGet Package Manager (Browse, Installed, Updates, Consolidate), CPM, sources, credentials | M9 |
 | Package Manager Console | Not planned: covered by M9, M27 and the M10 terminal |
@@ -2253,7 +2253,7 @@ The "Daedalus" column uses these terms:
 
 ### Web and cloud
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | ASP.NET Core templates, run on Kestrel, launch browser, HTTPS dev certificates | M15 |
 | IIS and IIS Express | Non-goal |
@@ -2270,7 +2270,7 @@ The "Daedalus" column uses these terms:
 
 ### Data
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Server Explorer, SQL Server Object Explorer | M27b (done: the Database Explorer, ADR 0037) |
 | SQL editor, results grid, execution plans | M27b (done: the query editor and Query Results; plans as trees, ADRs 0037 and 0038) |
@@ -2281,7 +2281,7 @@ The "Daedalus" column uses these terms:
 
 ### UI frameworks and designers
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | WinForms, WPF, UWP and WinUI designers | Non-goal |
 | XAML editing, previewer, Live Visual Tree and Live Property Explorer (Avalonia) | M19 |
@@ -2291,7 +2291,7 @@ The "Daedalus" column uses these terms:
 
 ### Version control
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Changes, per-file and per-hunk staging, commit and amend, branches, fetch, pull, push | M6 |
 | Diff viewer, gutter change markers, blame | M6 |
@@ -2307,14 +2307,14 @@ The "Daedalus" column uses these terms:
 
 ### Collaboration and AI
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | GitHub Copilot: completions, next-edit suggestions, chat, agent mode, MCP | M28, with an open design (D7) |
 | Live Share | Trap; an open alternative is a candidate |
 
 ### Extensibility
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | Out-of-process extensions (VisualStudio.Extensibility) | M1 (plugin host v0); 1.0 in M22 |
 | Extension Manager, Marketplace | M22 |
@@ -2324,7 +2324,7 @@ The "Daedalus" column uses these terms:
 
 ### Remote development
 
-| Visual Studio feature | Daedalus |
+| Visual Studio feature | Codalus |
 |---|---|
 | WSL, SSH and container targets | M21 |
 | Dev Containers | M21 |
@@ -2371,7 +2371,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 
 | ID | Question | Needed by | Recommendation | Status |
 |---|---|---|---|---|
-| D1 | Switch document identity to URIs and add a VFS (F1, F2)? | M7 checkpoint | Yes, before going public and before API 1.0 | decided 2026-10-10: the contracts already use URIs (`file:`, `daedalus-generated:`, `daedalus-metadata:`). The file-system provider (F2) comes with M21, and its plugin API with M22. Settled as recommended, without a separate question. |
+| D1 | Switch document identity to URIs and add a VFS (F1, F2)? | M7 checkpoint | Yes, before going public and before API 1.0 | decided 2026-10-10: the contracts already use URIs (`file:`, `codalus-generated:`, `codalus-metadata:`). The file-system provider (F2) comes with M21, and its plugin API with M22. Settled as recommended, without a separate question. |
 | D2 | Rich plugin UI: webview, remote UI, or both (F3)? | M6 (ADR 0003) | Per the M6 ADR | decided 2026-10-10: declarative views first. Plugins describe forms, lists, trees, tables and toolbars as data, and the shell renders them with its own controls, so they are themed, accessible and AOT-clean. They are a proposed API before M22 and frozen in 1.0. Webviews follow as a proposed API after 1.0, for UI that needs full freedom. |
 | D3 | Node.js policy (F4) | M16 (M11 if a Node LSP is wanted earlier) | Pinned, verified, on-demand download | decided (ADR 0024): Node.js 24.21.0 from nodejs.org, SHA-256 pinned; servers from a shipped lockfile with `npm ci`; the user's consent on first use |
 | D4 | Workspace trust and restricted mode (F6) | M7 checkpoint | Yes, with the public release | decided (ADR 0004, built in M2): a trust prompt per folder, and restricted mode for untrusted folders, showing the structure only. Every later feature that runs workspace code checks trust (Security track). |
@@ -2392,11 +2392,11 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D19 | Code signing of the installers | M31 | Sign on both OSes (an Apple Developer ID, and SignPath Foundation or Azure Trusted Signing) | decided 2026-10-10: unsigned for now. Checksums and a signed update feed. Revisit when the repository goes public. |
 | D20 | Releases while the repository is private | M31 | Build everything now, and switch it on when the repository goes public | decided 2026-10-10: as recommended. Manual dispatch while private; the nightly schedule and the release on push to `master` switch on automatically once public. |
 | D21 | Branches and versioning | M31 | `develop` for daily work and nightlies, `master` for stable releases; the version in a file, bumped after each release | decided 2026-10-10: as recommended. The version is in the `VERSION` file; the next minor version is committed to `develop` automatically after each stable release; nightlies are `X.Y.Z-nightly.YYYYMMDD.N`. |
-| D22 | Which .NET Daedalus itself runs on | M30 | Support .NET 11 projects, and keep Daedalus on .NET 10 LTS until .NET 12 | decided 2026-10-10: Daedalus follows the newest .NET and moves to each major version when it ships, starting with .NET 11. |
+| D22 | Which .NET Codalus itself runs on | M30 | Support .NET 11 projects, and keep Codalus on .NET 10 LTS until .NET 12 | decided 2026-10-10: Codalus follows the newest .NET and moves to each major version when it ships, starting with .NET 11. |
 | D23 | How far to validate older versions of .NET | M33 | Every target framework from 2.0 to 10.0 with the current SDK; older SDKs pinned by `global.json` only opened and built | decided 2026-10-10: as recommended. Built in M33 (ADR 0030): the floor is the .NET SDK 2.1.200. |
 | D24 | Icon sets | M34 | Fluent UI System Icons (MIT) for commands, and Material Icon Theme (MIT) for file types | decided 2026-10-10: as recommended. Check both licences again at M34. |
 | D25 | What "polished" means | M34 | A written checklist per surface, and a screenshot gallery that the maintainer approves | decided 2026-10-10: as recommended. Every milestone reviews its own panels against the checklist until M34. |
-| D26 | Supported OS versions | M30 | Windows 10 22H2 and Windows 11; macOS and Linux as the .NET that Daedalus runs on supports | decided 2026-10-10: Windows 11 only. That changed the same day from "Windows 10 22H2 and 11", because .NET 10 supports Windows 10 only in its LTSC and IoT editions. macOS and Linux follow what the .NET that Daedalus runs on supports: macOS 15 or newer today, which `Info.plist` requires. |
+| D26 | Supported OS versions | M30 | Windows 10 22H2 and Windows 11; macOS and Linux as the .NET that Codalus runs on supports | decided 2026-10-10: Windows 11 only. That changed the same day from "Windows 10 22H2 and 11", because .NET 10 supports Windows 10 only in its LTSC and IoT editions. macOS and Linux follow what the .NET that Codalus runs on supports: macOS 15 or newer today, which `Info.plist` requires. |
 | D27 | Which builds ship: architectures and Wayland | M31 | Add Linux ARM64. Windows ARM64 waits for a netcoredbg build | decided 2026-10-10: Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. There are no Windows ARM64 or Intel Mac builds for now. Linux runs on X11 and on Wayland through XWayland, and moves to Avalonia's native Wayland backend once it is stable (the Wayland part settled without a separate question). |
 | D28 | Approving the proposed budgets, and the Rider comparison of ADR 0002 | Now | Approve them, and the maintainer measures Rider once | decided 2026-10-10: the budgets proposed at M8–M16 are approved as gates, and budget 4 is final as it stands. Rider is no longer a reference. Where a milestone says "compare with Rider", it sets an absolute target instead. |
 | D29 | When the repository goes public | M32 | After M32 | decided 2026-10-10: after M32's checkpoint, through the go-public checklist. Changing the visibility stays the maintainer's action. |
@@ -2414,13 +2414,13 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Additions to existing milestones:** Create Unit Tests and TRX (M8), local tools (M9), resx code generation (M11), about thirty editor and navigation features (M12), clone, publish and difftool integration (M13), PerfTips, QuickWatch, Make Object ID, Parallel Watch, symbol settings and JIT debugging (M14), scaffolding (M15), `.dcproj` (M17), the profiler hub plus the async, contention, exceptions and file I/O tools (M18), Live Visual Tree (M19), remote test environments (M21), IDE components and plugin performance (M22), Fonts and Colors and menu customization (M23).
 - 2026-10-09: M8 built and at its checkpoint, as M8a (Test Explorer, ADR 0010) and M8b (coverage, ADR 0011). The status table now also records M1–M7 as done. The proposed plugin API gained test controllers, `IWorkspace`, `IBuild` and `IDebug` (API 0.2.1). No decisions in the register changed.
 - 2026-10-09: M9 built and at its checkpoint, as M9a (NuGet package management, ADR 0012) and M9b (project properties and solution management, ADR 0013). The NuGet manager is a built-in shell document because D2 (rich plugin UI) is still open. The proposed plugin API gained read-only package and property queries (API 0.2.2). Shared projects and workload management are deferred (`TODO(issue)` in the checkpoint).
-- 2026-10-10: M10 built and at its checkpoint: the integrated terminal (our own VT engine, ConPTY and `posix_spawn` pseudo-terminals, shell integration, run in terminal; ADR 0014) and C# Interactive in a new supervised host, `daedalus-replhost` (ADR 0015). The REPL host serves the input's completion itself instead of the language host. The proposed plugin API gained terminals (API 0.2.3). Deferred: screen-reader announcements, the debugger's console redirect, real-program VT recordings and a newer ConPTY on Windows (`TODO(issue)` in the checkpoint).
-- 2026-10-10: M11 built and at its checkpoint (ADR 0016): the language registry, TextMate grammars for about forty languages, language configurations (comments, auto-closing, folding, word completion), a generic LSP bridge with result normalization, and a new supervised `daedalus-markuphost` for JSON (schemas), XML/MSBuild (evaluated values on hover), YAML and `.editorconfig`, plus a Markdown preview. Plugins can contribute languages, grammars and language servers without code (API 0.2.4). New budget scenario `markup-100k`. The XSD, `.resx` and YAML-completion work, and the remaining LSP features, are deferred (`TODO(issue)` in the checkpoint).
+- 2026-10-10: M10 built and at its checkpoint: the integrated terminal (our own VT engine, ConPTY and `posix_spawn` pseudo-terminals, shell integration, run in terminal; ADR 0014) and C# Interactive in a new supervised host, `codalus-replhost` (ADR 0015). The REPL host serves the input's completion itself instead of the language host. The proposed plugin API gained terminals (API 0.2.3). Deferred: screen-reader announcements, the debugger's console redirect, real-program VT recordings and a newer ConPTY on Windows (`TODO(issue)` in the checkpoint).
+- 2026-10-10: M11 built and at its checkpoint (ADR 0016): the language registry, TextMate grammars for about forty languages, language configurations (comments, auto-closing, folding, word completion), a generic LSP bridge with result normalization, and a new supervised `codalus-markuphost` for JSON (schemas), XML/MSBuild (evaluated values on hover), YAML and `.editorconfig`, plus a Markdown preview. Plugins can contribute languages, grammars and language servers without code (API 0.2.4). New budget scenario `markup-100k`. The XSD, `.resx` and YAML-completion work, and the remaining LSP features, are deferred (`TODO(issue)` in the checkpoint).
 - 2026-10-10: M12a built and at its checkpoint (ADR 0017): document symbols (Document Outline, navigation bar, sticky scroll), Peek Definition, Go to Base, call and type hierarchy, Find All References with read/write classification and kept result sets, a Code Definition window, F1 help, inlay hints, end-of-line CodeLens, an inheritance margin, indentation guides, bracket pair colors, an overview ruler, and library sources from embedded PDB sources or Source Link before decompiling. The standard LSP requests give plugin language servers the same UI. Deferred: Solution Explorer members, Class View and the Object Browser, symbol servers (`TODO(issue)` in the checkpoint).
 - 2026-10-10: added M29 (Visual Studio look and feel: themes, title bar and search, the standard toolbar, document well, tool window captions, Visual Studio's keyboard scheme as the default, an Options tree), at the maintainer's request. It goes after M12b and before M13.
-- 2026-10-10: M12b built and at its checkpoint (ADR 0018): snippets (VS Code's format, Visual Studio import, plugin contributions, API 0.2.5), editing commands (duplicate and move lines, Expand Selection over `textDocument/selectionRange`, doc comment templates, a clipboard ring, Paste JSON as Classes, per-editor zoom), Code Cleanup and format on save, refactorings with options through a generic `daedalus/codeActionOptions` dialog, suppression and severity configuration, AutoRecover and local history, bookmarks, the Task List, Code Metrics, a Syntax Visualizer, Compare Files, Close All to the Right and an image viewer. Deferred: the Snippets Manager, the remaining dialog refactorings, the EditorConfig UI, Error List grouping, spell checking (D9), pinned and vertical tabs, the hex viewer and analyzer templates (`TODO(issue)` in the checkpoint).
+- 2026-10-10: M12b built and at its checkpoint (ADR 0018): snippets (VS Code's format, Visual Studio import, plugin contributions, API 0.2.5), editing commands (duplicate and move lines, Expand Selection over `textDocument/selectionRange`, doc comment templates, a clipboard ring, Paste JSON as Classes, per-editor zoom), Code Cleanup and format on save, refactorings with options through a generic `codalus/codeActionOptions` dialog, suppression and severity configuration, AutoRecover and local history, bookmarks, the Task List, Code Metrics, a Syntax Visualizer, Compare Files, Close All to the Right and an image viewer. Deferred: the Snippets Manager, the remaining dialog refactorings, the EditorConfig UI, Error List grouping, spell checking (D9), pinned and vertical tabs, the hex viewer and analyzer templates (`TODO(issue)` in the checkpoint).
 - 2026-10-10: M29 built and at its checkpoint (ADR 0019): the menu, a search box (Ctrl+Q) and the solution's name in the title row (the window's title bar on Windows), a standard toolbar (configuration, platform, startup project, Start; the debug commands while debugging), Blue, Light and Dark themes with Dock's tabs and captions mapped onto them, a status bar colored by state, the classic keyboard scheme by default with VS Code's as an option, the Solution Explorer on the right with a toolbar and search, an Options tree, and 9 pt UI text. Deferred: Blue's dark inactive tabs, pinned and colored tabs, inactive caption colors, file-type icons, customizable toolbars (M23) (`TODO(issue)` in the checkpoint).
-- 2026-10-10: M13a built and at its checkpoint (ADR 0020): a paged history graph with filters, file and line history, revision comparisons, a 3-way merge editor working from git's conflict markers, continue/skip/abort for merges, rebases, cherry-picks and reverts, interactive rebase without an editor, stash, cherry-pick, revert, reset, tags, remotes, per-line staging, clone, init, Add to .gitignore, commit templates, submodule updates, and `daedalus merge`/`--wait` as git's merge tool and editor. M13b (hosting integration, askpass, worktrees, LFS) follows.
+- 2026-10-10: M13a built and at its checkpoint (ADR 0020): a paged history graph with filters, file and line history, revision comparisons, a 3-way merge editor working from git's conflict markers, continue/skip/abort for merges, rebases, cherry-picks and reverts, interactive rebase without an editor, stash, cherry-pick, revert, reset, tags, remotes, per-line staging, clone, init, Add to .gitignore, commit templates, submodule updates, and `codalus merge`/`--wait` as git's merge tool and editor. M13b (hosting integration, askpass, worktrees, LFS) follows.
 - 2026-10-10: M14a built and at its checkpoint (ADR 0021): exception settings per type (conditions on netcoredbg's `all` filter), an exception helper with the inner-exception chain, Run to Cursor, Force Run to Cursor and Run to Click, function, temporary and dependent breakpoints, breakpoint labels, search, import and export, QuickWatch, editing values in Watch, QuickWatch and data tips (`setExpression`), data tips as trees, Text, JSON, XML and HTML visualizers, PerfTips, the Threads and Modules windows, and Reattach to Process. M14 is split into M14a, M14b (companion host, dumps) and M14c (remote and special sessions).
 - 2026-10-10: M15a built and at its checkpoint (ADR 0022): an Endpoints Explorer from Roslyn (minimal APIs with `MapGroup` prefixes, controller attribute and conventional routes) with Generate Request, `.http` files (grammar, send glyphs, file, environment and request variables, dynamic variables, `< file` bodies) run in the shell with an HTTP Response window and history, an ASP.NET Core environment selector for Run and Debug, the HTTPS development certificate (check, trust, an offer before the first https run), and user secrets. Hot Reload (M15b) will use `dotnet watch` instead of Roslyn's unpublished hot-reload API.
 - 2026-10-10: M15b built and at its checkpoint (ADR 0022): Start with Hot Reload runs the startup project under `dotnet watch` with the plan Run would use, Apply Code Changes (`Alt+F10`), a status bar item that follows the watch's output, a notification on rude edits, and a setting for Hot Reload on `Ctrl+F5`. Not while debugging (netcoredbg can't apply updates).
@@ -2428,7 +2428,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-10: M16b built and at its checkpoint (ADR 0024, settling D3): a pinned Node.js 24.21.0 downloaded on demand from nodejs.org and verified by SHA-256, VS Code's HTML and CSS servers and `typescript-language-server` with TypeScript 5.9.3 installed with `npm ci` from a shipped lockfile, registered as LSP language services, offered on the first web file (setting `web.languageServers`). Also fixed: file URIs with an escaped drive colon from such servers now reach Windows files.
 - 2026-10-10: at the maintainer's request:
   - **New phase 4, platform and release, placed next (after M16b, before M16c):**
-    - M30: .NET 11, and Daedalus following every new .NET release
+    - M30: .NET 11, and Codalus following every new .NET release
     - M31: an automated release cycle, with `develop` publishing nightlies, `master` publishing stable releases, the version in a `VERSION` file, and setup installers on GitHub releases
     - M32: self-update
     - M33: proof that .NET Core 2.0 to .NET 10 projects work
@@ -2460,7 +2460,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Hosts:** they roll forward. The build host uses the SDK that `dotnet` resolves for the solution's folder, `global.json` included, and runs on the .NET 11 runtime for the .NET 11 SDK.
   - **.NET 11 projects:** they open, build, run, debug, test (VSTest and MTP, with coverage) and Hot Reload. Razor uses the .NET 10 SDK's generator until the language host's Roslyn catches up.
   - **The rest:** New Project's framework choice; `net11.0` and C# 15 in the lists; each SDK's support status in the .NET SDKs panel; `samples/Net11`; the checklist `docs/release/dotnet-upgrade.md`.
-  - **M30b** (Daedalus on .NET 11, Roslyn 5.11) waits for .NET 11 GA in November 2026.
+  - **M30b** (Codalus on .NET 11, Roslyn 5.11) waits for .NET 11 GA in November 2026.
 - 2026-10-10: the maintainer moved M16c (Blazor WebAssembly, browser debugging) ahead of M31–M33, so it comes next.
 - 2026-10-10: D26 changed to Windows 11 only. .NET 10 supports Windows 10 only in its LTSC and IoT editions. The macOS app bundle now requires macOS 15 (`Info.plist`), which matches .NET's supported macOS versions. The winget manifest requires Windows 11 (build 22000).
 - 2026-10-10: M16c built and at its checkpoint (ADR 0026): Blazor WebAssembly debugging in Chrome, Edge or Chromium through vscode-js-debug 1.140.0 (on the M16b Node.js) and the dev server's debugging proxy, with JavaScript breakpoints in the same session; Hot Reload for WebAssembly with the page open; `samples/BlazorWasm`. M16d (compound sessions, scoped CSS, npm scripts, HTML and CSS inside Razor) is next. M31 follows.
@@ -2472,23 +2472,23 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Fixtures:** `samples/BlazorHosted`, `samples/WebScripts` and `samples/WebLint`.
   - **Next:** M31 (the release cycle), which publishes, so the maintainer confirms it first.
 - 2026-10-11: the maintainer's goal: complete every milestone, each validated in every environment (Windows here, WSL and the Mac), with one hosted 3-OS matrix at the end. They approved the GitHub-side steps of M31 (`develop` as the default branch, private releases, signing keys as secrets) and allowed parallel milestones on branches in worktrees; M33 and M13b are built that way, beside M31 and M32.
-- 2026-10-11: M31 built and at its checkpoint (ADR 0028): `develop` is the default branch; `VERSION` and `eng/DaedalusStudio.Release`; Velopack installers (Setup.exe, .pkg, AppImage) with the zip, the `.app` zip, the tar.gz, a `.deb` and a new `.rpm`; installer smoke tests that install, test and uninstall; `packages.yml`, `nightly.yml`, `release.yml` and `linux-repos.yml` (signed apt and dnf repositories). The published releases, Linux ARM64 and Pages wait (D20 and the hosted batch at the end).
-- 2026-10-11: M14b built and at its checkpoint (ADR 0032): the debug companion host (`daedalus-debughost`: debugger attributes from metadata, dumps through ClrMD, Create Dump through the diagnostics IPC), `[DebuggerDisplay]` and `[DebuggerBrowsable(Never)]` applied through evaluation, grid and image visualizers, the proposed visualizer plugin API (0.2.7, `onDebug`) with a sample Dictionary visualizer, pinned data tips with comments, Parallel Stacks, Parallel Watch, the Processes window and the Debug Location toolbar, breakpoint filters, exception conditions by module, step over properties and operators. Gaps: type proxies, Make Object ID, return values, thread freezing, symbol servers, cross-OS dumps, and Detach All for launched programs.
+- 2026-10-11: M31 built and at its checkpoint (ADR 0028): `develop` is the default branch; `VERSION` and `eng/Codalus.Release`; Velopack installers (Setup.exe, .pkg, AppImage) with the zip, the `.app` zip, the tar.gz, a `.deb` and a new `.rpm`; installer smoke tests that install, test and uninstall; `packages.yml`, `nightly.yml`, `release.yml` and `linux-repos.yml` (signed apt and dnf repositories). The published releases, Linux ARM64 and Pages wait (D20 and the hosted batch at the end).
+- 2026-10-11: M14b built and at its checkpoint (ADR 0032): the debug companion host (`codalus-debughost`: debugger attributes from metadata, dumps through ClrMD, Create Dump through the diagnostics IPC), `[DebuggerDisplay]` and `[DebuggerBrowsable(Never)]` applied through evaluation, grid and image visualizers, the proposed visualizer plugin API (0.2.7, `onDebug`) with a sample Dictionary visualizer, pinned data tips with comments, Parallel Stacks, Parallel Watch, the Processes window and the Debug Location toolbar, breakpoint filters, exception conditions by module, step over properties and operators. Gaps: type proxies, Make Object ID, return values, thread freezing, symbol servers, cross-OS dumps, and Detach All for launched programs.
 - 2026-10-11: M32 built and at its checkpoint (ADR 0029): self-update through Velopack from GitHub releases, the feeds signed with ECDSA P-256 (.NET 10 has no Ed25519), the update policy in the workbench (`UpdateService`), `update.mode` and `update.channel`, Restart to update, What's New, and an end-to-end update test (`eng/test-update.sh`).
 - 2026-10-11: M13b built and at its checkpoint (ADR 0031), which completes M13:
-  - **Credential store:** `DaedalusStudio.Platform` stores secrets in Windows Credential Manager, the macOS Keychain or the Secret Service (libsecret); never in a file.
+  - **Credential store:** `Codalus.Platform` stores secrets in Windows Credential Manager, the macOS Keychain or the Secret Service (libsecret); never in a file.
   - **Hosting:** built-in GitHub, Azure DevOps and GitLab plugins on a proposed hosting API (plugin API 0.2.6), inactive until sign-in (device flow or a personal access token): pull requests (list, details, check out, create), review comments in the editor, CI status, work items and `#` completion, publishing.
   - **Git:** an askpass prompt behind the user's credential helper, worktrees, Git LFS awareness (pointer files, locks), solutions spanning several repositories.
   - **Open:** the project's OAuth apps (client ids) are to be registered; until then device sign-in needs a client id in settings, and a personal access token works.
-- 2026-10-11: M26 split into M26a (project system) and M26b (build depth). M26a built and at its checkpoint (ADR 0033): the Properties window (F4) with Build Action, Copy to Output Directory, Custom Tool and every item metadata, written as Visual Studio writes them under globbing (`items/*` in the build host, which evaluates each edit in memory); Show All Files with Include and Exclude From Project; Add Existing Item and links; moves between projects that carry a file's items; Add New Item (a built-in set and `dotnet new`'s item templates); Export Template and the template manager; folder mode (Open Folder, an in-memory solution of the loaded projects, `.daedalus/tasks.json` and `launch.json`); External Tools with macros. Plugin API 0.2.8: `contributes.propertyProviders` and `contributes.externalToolMacros`.
-- 2026-10-11: M26b built and at its checkpoint (ADR 0034, 0035): build options with every build (verbosity, a log file, parallel projects, binary logs, code analysis on build) from settings, and what F5 does before running; the fast up-to-date check, which records each project's inputs and outputs after a build and skips MSBuild when none changed (verified against real MSBuild runs); Batch Build; Build Timings with the critical path and the slowest targets and tasks; a binary log viewer on MSBuild.StructuredLogger in the build host; the Build Events page (PreBuild/PostBuild targets); custom tools: the ResX generators, T4 templates in a new supervised host (`daedalus-t4host`, Mono.TextTemplating) and plugins' generators (`contributes.customTools`, plugin API 0.2.8), run on demand and on save; the `t4` language.
-- 2026-10-11: M27a built and at its checkpoint (ADR 0036): EF Core through the user's own `dotnet ef`, run by the build host in trusted solutions (`ef/*`), and a model agent (`daedalus-efagent`) on the app's runtime for the model view. The Entity Framework window lists the DbContexts (found by Roslyn with their provider and connection name, `daedalus/ef/contexts`) and their migrations on a chosen connection (the app's configuration, `appsettings*.json` or user secrets); Update Database and reverts show their SQL before applying it; Add and Remove Migration, scripts (idempotent, without transactions), bundles, compiled models, reverse engineering (`dbcontext scaffold`) and installing dotnet-ef as a local tool. `samples/Data`. M27b (the database explorer, the query editor, the SQL language service, `.sqlproj`) follows.
+- 2026-10-11: M26 split into M26a (project system) and M26b (build depth). M26a built and at its checkpoint (ADR 0033): the Properties window (F4) with Build Action, Copy to Output Directory, Custom Tool and every item metadata, written as Visual Studio writes them under globbing (`items/*` in the build host, which evaluates each edit in memory); Show All Files with Include and Exclude From Project; Add Existing Item and links; moves between projects that carry a file's items; Add New Item (a built-in set and `dotnet new`'s item templates); Export Template and the template manager; folder mode (Open Folder, an in-memory solution of the loaded projects, `.codalus/tasks.json` and `launch.json`); External Tools with macros. Plugin API 0.2.8: `contributes.propertyProviders` and `contributes.externalToolMacros`.
+- 2026-10-11: M26b built and at its checkpoint (ADR 0034, 0035): build options with every build (verbosity, a log file, parallel projects, binary logs, code analysis on build) from settings, and what F5 does before running; the fast up-to-date check, which records each project's inputs and outputs after a build and skips MSBuild when none changed (verified against real MSBuild runs); Batch Build; Build Timings with the critical path and the slowest targets and tasks; a binary log viewer on MSBuild.StructuredLogger in the build host; the Build Events page (PreBuild/PostBuild targets); custom tools: the ResX generators, T4 templates in a new supervised host (`codalus-t4host`, Mono.TextTemplating) and plugins' generators (`contributes.customTools`, plugin API 0.2.8), run on demand and on save; the `t4` language.
+- 2026-10-11: M27a built and at its checkpoint (ADR 0036): EF Core through the user's own `dotnet ef`, run by the build host in trusted solutions (`ef/*`), and a model agent (`codalus-efagent`) on the app's runtime for the model view. The Entity Framework window lists the DbContexts (found by Roslyn with their provider and connection name, `codalus/ef/contexts`) and their migrations on a chosen connection (the app's configuration, `appsettings*.json` or user secrets); Update Database and reverts show their SQL before applying it; Add and Remove Migration, scripts (idempotent, without transactions), bundles, compiled models, reverse engineering (`dbcontext scaffold`) and installing dotnet-ef as a local tool. `samples/Data`. M27b (the database explorer, the query editor, the SQL language service, `.sqlproj`) follows.
 - 2026-10-11: M15c built and at its checkpoint (ADR 0041), which completes M15: Add New Scaffolded Item (API, MVC, Razor Pages, Blazor, minimal API and Identity scaffolders; empty items from the SDK's item templates, the Entity Framework and Identity ones through the user's `dotnet-aspnet-codegenerator` in the build host, `scaffold/*`, trusted solutions only; a form generated from each scaffolder's parameters, models and contexts offered from DbContext discovery, Install for the tool and its packages), and service references (`serviceReferences/*`: `OpenApiReference` items with NSwag and `Protobuf` items with `Grpc.Tools`, from a file or a URL, with Refresh, Save and Remove; a `.proto` grammar). Fixture `samples/Scaffolding`; smoke step `web.scaffolding`.
 - 2026-10-11: M33 built and at its checkpoint (ADR 0030, D23):
   - **Target frameworks:** `netcoreapp2.0` to `net10.0` and .NET Standard 2.0 and 2.1 open, build, run, debug, test (with coverage) and get each framework's default C# version in the editor, with the current SDK. Hot Reload from .NET 6, disabled with its reason before. The package manager marks the versions that don't support a project's frameworks.
   - **Older SDKs in `global.json`:** they open and build down to the .NET SDK 2.1.200; those before 6.0 build in the build host's own node, because their MSBuild can't start nodes for a host on .NET 10. Below the floor, or when the SDK isn't installed, the newest SDK stands in and the solution is told why.
   - **Operating systems:** programs start on the SDK's runtimes (`DOTNET_ROOT` for apphosts); on Apple silicon, .NET 5 and earlier run as x64 with the x64 netcoredbg (shipped in the macOS package); on Linux, .NET Core 2.x and 3.x get the system's ICU (`CLR_ICU_VERSION_OVERRIDE`), and the need of .NET Core 2.x to .NET 5 for OpenSSL 1.x is documented.
-  - **Keeping it checked:** `samples/TargetFrameworks`, `eng/get-runtimes.sh`, the `DaedalusStudio.TargetFrameworks.Tests` suite (WSL and Mac validation, and the manual CI matrix), `eng/compat-containers.sh`, and the support table in the user guide.
+  - **Keeping it checked:** `samples/TargetFrameworks`, `eng/get-runtimes.sh`, the `Codalus.TargetFrameworks.Tests` suite (WSL and Mac validation, and the manual CI matrix), `eng/compat-containers.sh`, and the support table in the user guide.
 - 2026-10-11: M14c built and at its checkpoint (ADR 0039 and 0040), which completes M14:
   - **Sessions:** multiple startup projects (a Startup Projects page, saved with the solution) debug as one compound session; console apps can be debugged in the integrated terminal, held by a startup hook until netcoredbg attaches, so they take input and Detach All leaves them running (the M14b gap).
   - **Remote:** attach over SSH, into Docker or Podman containers and into WSL through pipe transports, with netcoredbg copied to the target on first use and source paths mapped; the `WSL2` launch profile runs and debugs a project in a WSL distribution.
@@ -2496,22 +2496,22 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Just-In-Time:** opt-in crash dumps per user (no administrator rights), offered for opening in the dump view; a live system JIT debugger is a gap.
   - **Hot Reload while debugging:** researched; the runtime refuses `dotnet watch`'s updates under a debugger, and netcoredbg applies deltas only through its MI interpreter. A gap until a DAP request exists upstream.
   - **Found:** netcoredbg ended an apphost detached while stopped at a breakpoint (Windows); detaches are now prepared.
-- 2026-10-11: M27b built and at its checkpoint (ADRs 0037 and 0038), which completes M27: a new supervised, lazy `daedalus-datahost` with SQL Server (Microsoft.Data.SqlClient on managed networking: its native SNI is proprietary and excluded), PostgreSQL (Npgsql), MySQL/MariaDB (MySqlConnector) and SQLite (Microsoft.Data.Sqlite); the Database Explorer (your connections, passwords in the OS credential store, and the solution's from appsettings, user secrets and Aspire AppHosts), table data (paged, edited, committed in one transaction, CSV/JSON export and import), the query editor (Query Results with grids, messages, time, cancel, history, estimated and actual plans as trees), the SQL language server (`daedalus-datahost --lsp`: schema completion and hover, T-SQL diagnostics and formatting through ScriptDom), and SDK-style `.sqlproj` load and build. D15: DacFx's licence is proprietary, so schema compare and publish are a gap; SQL Tools Service wasn't integrated (a 100 MB download per platform and its own connection protocol; `TODO(issue)`).
+- 2026-10-11: M27b built and at its checkpoint (ADRs 0037 and 0038), which completes M27: a new supervised, lazy `codalus-datahost` with SQL Server (Microsoft.Data.SqlClient on managed networking: its native SNI is proprietary and excluded), PostgreSQL (Npgsql), MySQL/MariaDB (MySqlConnector) and SQLite (Microsoft.Data.Sqlite); the Database Explorer (your connections, passwords in the OS credential store, and the solution's from appsettings, user secrets and Aspire AppHosts), table data (paged, edited, committed in one transaction, CSV/JSON export and import), the query editor (Query Results with grids, messages, time, cancel, history, estimated and actual plans as trees), the SQL language server (`codalus-datahost --lsp`: schema completion and hover, T-SQL diagnostics and formatting through ScriptDom), and SDK-style `.sqlproj` load and build. D15: DacFx's licence is proprietary, so schema compare and publish are a gap; SQL Tools Service wasn't integrated (a 100 MB download per platform and its own connection protocol; `TODO(issue)`).
 - 2026-10-11: M17 split into M17a (containers), M17b (Aspire) and M17c (publishing). M17a built and at its checkpoint (ADR 0042):
   - **Engine:** the user's `docker` or `podman` CLI (`containers.tool`), one process per operation, never the Engine API.
   - **Run and debug:** the "Container (Dockerfile)" launch profile; fast mode runs the build output on the Dockerfile's `base` stage, and F5 launches the app under netcoredbg copied into the container.
   - **Add Docker Support:** the .NET templates' Dockerfile, `.dockerignore` and profile.
   - **Compose:** up, down and debug a service; `.dcproj` loads from its XML and is left out of builds and restores; compose files get the Compose Specification's schema.
   - **The Containers window:** containers and images, logs, environment, ports, labels, files, a terminal in the container, attach.
-- 2026-10-11: M17b built and at its checkpoint (ADR 0043): an Aspire AppHost (`IsAspireHost`) runs (Ctrl+F5) and debugs (F5) with Daedalus Studio as its IDE: our IDE execution protocol server starts each project resource as a program of ours, in the AppHost's compound debug session when debugging; the Aspire window reads the AppHost's resource service with our own gRPC client (no Grpc.Net.Client in the Native AOT shell): resources, state, endpoints, console output, start, stop and restart; the dashboard opens signed in. D12 checked: DCP is the user's (Microsoft's EULA), never ours.
+- 2026-10-11: M17b built and at its checkpoint (ADR 0043): an Aspire AppHost (`IsAspireHost`) runs (Ctrl+F5) and debugs (F5) with Codalus IDE as its IDE: our IDE execution protocol server starts each project resource as a program of ours, in the AppHost's compound debug session when debugging; the Aspire window reads the AppHost's resource service with our own gRPC client (no Grpc.Net.Client in the Native AOT shell): resources, state, endpoints, console output, start, stop and restart; the dashboard opens signed in. D12 checked: DCP is the user's (Microsoft's EULA), never ours.
 - 2026-10-11: M17c built and at its checkpoint (ADR 0042), which completes M17: publish profiles (`.pubxml`) and the Publish page (folder or container image; configuration, framework, runtime, self-contained, single-file, trimmed, ReadyToRun, Native AOT), published by the build host's `Publish` and `Publish;PublishContainer` targets with the profile, so trim and AOT warnings reach the Error List.
-- 2026-10-11: M18 split into M18a and M18b. M18a built and at its checkpoint (ADRs 0044 and 0045): a new supervised, lazy `daedalus-diaghost` (Microsoft.Diagnostics.NETCore.Client for EventPipe sessions, TraceEvent for reading them, its proprietary native Windows binaries excluded); the Performance Profiler (Alt+F2: CPU Usage and .NET Counters on the startup project, launched held before `Main`, or a running process; sessions in `.daedalus/profiler/`); reports with a call tree, bottom-up, functions with caller/callee, a flame graph control, time-range and thread filters, and hot lines in the editor gutter, all computed in the host and sent a page at a time; the Diagnostic Tools window (CPU, GC heap, working set, GC and exception events, the runtime's counters) following runs and debug sessions; the .NET Counters window (EventCounters and meters, CSV and JSON export); fixtures in `samples/Diagnostics`.
+- 2026-10-11: M18 split into M18a and M18b. M18a built and at its checkpoint (ADRs 0044 and 0045): a new supervised, lazy `codalus-diaghost` (Microsoft.Diagnostics.NETCore.Client for EventPipe sessions, TraceEvent for reading them, its proprietary native Windows binaries excluded); the Performance Profiler (Alt+F2: CPU Usage and .NET Counters on the startup project, launched held before `Main`, or a running process; sessions in `.codalus/profiler/`); reports with a call tree, bottom-up, functions with caller/callee, a flame graph control, time-range and thread filters, and hot lines in the editor gutter, all computed in the host and sent a page at a time; the Diagnostic Tools window (CPU, GC heap, working set, GC and exception events, the runtime's counters) following runs and debug sessions; the .NET Counters window (EventCounters and meters, CSV and JSON export); fixtures in `samples/Diagnostics`.
 - 2026-10-12: the maintainer pulled part of M34 forward as M34a (the UX pass), ahead of the remaining milestones, from their report on the Windows app. Built and at its checkpoint ([m34a](checkpoints/m34a.md)):
   - **Icons (D24):** Fluent UI System Icons 1.1.344 (MIT, checked again), 125 SVGs compiled into geometries at build time by an MSBuild inline task, so nothing parses SVG at runtime; menus, context menus and the standard toolbar show them, colored by command family (run, stop, save, open, build, Git, tests, navigation) from `Shell.Icon.*` tokens, monochrome in High Contrast. Material Icon Theme's file-type icons stay with M34.
   - **Menus:** every top-level menu and the big context menus are trees like a classic IDE's (Edit → Go To ▸, Find and Replace ▸, IntelliSense ▸, Refactor ▸, Advanced ▸, Outlining ▸, Multiple Carets ▸, Bookmarks ▸; Git, Project, Build, Debug, Test, Analyze and Tools likewise; the Solution Explorer's Add ▸, Git ▸, Entity Framework ▸), declared in one place (`BuiltIns.Menus.cs`); Edit gained Undo, Redo, Cut, Copy, Paste and Select All; compact rows; tooltips with the command's full name and shortcut; plugins may contribute to the submenus.
   - **Output:** Output, the Debug Console, C# Interactive and the container and Aspire logs follow new output while the user is at the end (`FollowTail`), and never scroll sideways.
   - **Editor:** the minimap stays docked at the editor's right edge; the editor's key bindings (Ctrl+Space, F12…) now match a focused editor (the window ignored the text area's handled focus event); completion keys and OS-reserved shortcuts per OS (`docs/user-guide/keyboard.md`).
   - **Follow-up (same day):** Material Icon Theme 5.39.0 (MIT) file, folder and project icons in the Solution Explorer, tabs, Go To and search; a flat navigation bar with colored symbol icons; themed outlining markers; the Mac's findings (⌥⎋ shown for completion on macOS, Edit's ⌘ key equivalents in the global menu, completion selecting the best match).
-- 2026-10-12: M34b (performance pass) pulled forward by the maintainer, beside M34a, and at its checkpoint ([m34b](checkpoints/m34b.md)). A 96-project web solution took about two minutes on "Loading C# projects…", with 78 false errors from its open files compiled in Miscellaneous Files meanwhile. Now: design-time build results go to the language host in batches and an update costs about a second (it was quadratic), documents whose projects are still loading get syntax diagnostics only, the background pass waits for loading and then compiles in parallel, dependencies and open documents first, design-time builds use worker nodes and a cache in `obj/daedalus.designtime.json` keyed by their inputs, and restore on open runs only when packages may have changed. On that solution the first real diagnostics of the open files came after 35–38 s instead of 89–109 s (warm), and on `Solution50` the language service is ready in 6.7 s warm and 9.0 s cold instead of 19 s. New budgets for the cold and warm open.
+- 2026-10-12: M34b (performance pass) pulled forward by the maintainer, beside M34a, and at its checkpoint ([m34b](checkpoints/m34b.md)). A 96-project web solution took about two minutes on "Loading C# projects…", with 78 false errors from its open files compiled in Miscellaneous Files meanwhile. Now: design-time build results go to the language host in batches and an update costs about a second (it was quadratic), documents whose projects are still loading get syntax diagnostics only, the background pass waits for loading and then compiles in parallel, dependencies and open documents first, design-time builds use worker nodes and a cache in `obj/codalus.designtime.json` keyed by their inputs, and restore on open runs only when packages may have changed. On that solution the first real diagnostics of the open files came after 35–38 s instead of 89–109 s (warm), and on `Solution50` the language service is ready in 6.7 s warm and 9.0 s cold instead of 19 s. New budgets for the cold and warm open.
 - 2026-10-13: M34c (performance pass, round 2) at its checkpoint ([m34c](checkpoints/m34c.md), ADR 0049). The language host keeps each project's diagnostics and reference assembly between sessions under a key of its inputs, so a warm open of the 96-project web solution compiles nothing and is ready in about 7 s (53–58 s before); the open documents compile against unchanged projects' assemblies (first diagnostics after about 12 s, 35–38 s before); the three CS4014 errors were the workspace's compilation references, not the compiler's version, and are left out where the build doesn't report them.
 - 2026-10-13: M34d (UI polish, round 2) at its checkpoint ([m34d](checkpoints/m34d.md)). Spacing, size and type tokens next to the colors, applied through classes; document tabs and captions in every state (the selected tab of a pane without the focus readable in Light and High Contrast, Blue's dark inactive tabs, pinned tabs, the preview tab on the right, tabs colored by project, inactive captions); High Contrast's black menus, drop-downs, buttons and combo boxes; tool window toolbars that overflow into a menu instead of wrapping (`ToolbarPanel`), and tables that scroll sideways in narrow panes; the gallery in the smoke test (every tool window, the main documents and the window, empty, with data and in an error state, in four themes); `PolishTests` for WCAG AA contrast of every token pair and text cut off at 280 px; the UI guide, [`ui-guidelines.md`](ui-guidelines.md).

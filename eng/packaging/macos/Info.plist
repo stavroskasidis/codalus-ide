@@ -3,19 +3,19 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key>
-  <string>Daedalus Studio</string>
+  <string>Codalus IDE</string>
   <key>CFBundleDisplayName</key>
-  <string>Daedalus Studio</string>
+  <string>Codalus IDE</string>
   <key>CFBundleIdentifier</key>
-  <string>io.github.stavroskasidis.daedalus-studio</string>
+  <string>io.github.stavroskasidis.codalus</string>
   <key>CFBundleVersion</key>
   <string>{{BUNDLE_VERSION}}</string>
   <key>CFBundleShortVersionString</key>
   <string>{{BUNDLE_VERSION}}</string>
   <key>CFBundleExecutable</key>
-  <string>daedalus</string>
+  <string>codalus</string>
   <key>CFBundleIconFile</key>
-  <string>daedalus.icns</string>
+  <string>codalus.icns</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>

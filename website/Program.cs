@@ -1,4 +1,4 @@
-using DaedalusStudio.Website.Site;
+using Codalus.Website.Site;
 
 // The website. Develop with live reload:  dotnet watch --project website
 // Export for GitHub Pages:                dotnet run --project website --no-launch-profile -- --export <dir>

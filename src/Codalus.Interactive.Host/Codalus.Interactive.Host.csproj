@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- On .NET 10 when installed, else the next newer .NET (ADR 0025). -->
+    <RollForward>Major</RollForward>
+    <AssemblyName>codalus-replhost</AssemblyName>
+    <RootNamespace>Codalus.Interactive.Host</RootNamespace>
+    <Description>Out-of-process C# Interactive host (Roslyn scripting, ADR 0015). Runs user code, never the shell's.</Description>
+    <!-- Roslyn scripting compiles and loads assemblies at run time; the host runs on the regular JIT runtime. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
+    <ProjectReference Include="..\Codalus.Interactive.Protocol\Codalus.Interactive.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
+  </ItemGroup>
+</Project>

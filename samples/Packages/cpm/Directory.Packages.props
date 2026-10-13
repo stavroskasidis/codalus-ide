@@ -3,6 +3,6 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="Daedalus.Sample.Greeting" Version="1.0.0" />
+    <PackageVersion Include="Codalus.Sample.Greeting" Version="1.0.0" />
   </ItemGroup>
 </Project>

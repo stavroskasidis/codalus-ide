@@ -53,7 +53,7 @@ jobs:
           if [[ "${{ github.event_name }}" == "schedule" && -n "$previous" && "$(git rev-parse "$previous^{commit}")" == "$ref" ]]; then
             build=false
           fi
-          version="$(dotnet run --project eng/DaedalusStudio.Release -- version nightly --run "${{ github.run_number }}")"
+          version="$(dotnet run --project eng/Codalus.Release -- version nightly --run "${{ github.run_number }}")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "previous=$previous" >> "$GITHUB_OUTPUT"

@@ -6,7 +6,7 @@ using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 
-namespace DaedalusStudio.Website.Site;
+namespace Codalus.Website.Site;
 
 /// <summary>One page of the user guide, rendered.</summary>
 /// <param name="Slug">The page's name in its address: <c>docs/&lt;slug&gt;/</c>; empty for the README (<c>docs/</c>).</param>

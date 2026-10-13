@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- On .NET 10 when installed, else the next newer .NET (ADR 0025). -->
+    <RollForward>Major</RollForward>
+    <AssemblyName>codalus-buildhost</AssemblyName>
+    <RootNamespace>Codalus.Projects.Host</RootNamespace>
+    <Description>Out-of-process build host (ADR 0004): solution files, MSBuild evaluation, file watching, restore and project-file edits, over JSON-RPC on stdio.</Description>
+    <!-- MSBuild relies on reflection and the installed SDK; the host runs on the regular JIT runtime. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
+    <ProjectReference Include="..\Codalus.Projects.Protocol\Codalus.Projects.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.SolutionPersistence" />
+    <!-- MSBuild assemblies come from the installed SDK at runtime via Microsoft.Build.Locator. -->
+    <PackageReference Include="Microsoft.Build.Locator" />
+    <PackageReference Include="Microsoft.Build" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NET.StringTools" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" ExcludeAssets="runtime" PrivateAssets="all" />
+    <!-- Reads binary logs (ADR 0034) against the SDK's MSBuild. -->
+    <PackageReference Include="MSBuild.StructuredLogger" />
+    <!-- NuGet's client libraries also come from the SDK at run time (ADR 0012), next to MSBuild. -->
+    <PackageReference Include="NuGet.Credentials" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="NuGet.Protocol" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Projects.Tests" />
+  </ItemGroup>
+
+  <!--
+    The EF Core model agent (ADR 0036) runs on the user's application's runtime, so it is built for net8.0 on its own
+    and shipped in efagent/ next to the host: referenced for build order only.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.EntityFramework.Agent\Codalus.EntityFramework.Agent.csproj" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishReadyToRun" />
+  </ItemGroup>
+
+  <Target Name="CodalusEfAgentFiles">
+    <ItemGroup>
+      <_CodalusEfAgentFiles Include="$(MSBuildThisFileDirectory)..\Codalus.EntityFramework.Agent\bin\$(Configuration)\net8.0\codalus-efagent.*" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CodalusCopyEfAgent" AfterTargets="Build" DependsOnTargets="CodalusEfAgentFiles" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Copy SourceFiles="@(_CodalusEfAgentFiles)" DestinationFolder="$(OutDir)efagent" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CodalusPublishEfAgent" AfterTargets="Publish" DependsOnTargets="CodalusEfAgentFiles">
+    <Copy SourceFiles="@(_CodalusEfAgentFiles)" DestinationFolder="$(PublishDir)efagent" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

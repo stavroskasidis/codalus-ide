@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in Daedalus Studio. The MVP (milestones M0–M7) is done, and later work follows the [roadmap](docs/roadmap.md). These guidelines describe how changes get in.
+Thanks for your interest in Codalus IDE. The MVP (milestones M0–M7) is done, and later work follows the [roadmap](docs/roadmap.md). These guidelines describe how changes get in.
 
 ## Ground rules
 
@@ -19,7 +19,7 @@ Thanks for your interest in Daedalus Studio. The MVP (milestones M0–M7) is don
 4. Keep changes covered by tests: unit tests, integration tests against the `samples/` fixtures, and headless UI tests where the UI stack allows them.
 5. Never block the UI thread. All I/O and analysis is asynchronous and cancellable, and long operations report progress.
 6. No silent stubs. If you defer something, leave a `TODO(issue)` that names the tracking issue.
-7. The plugin API (`DaedalusStudio.Plugins.Abstractions`) is a public contract: changes follow ADR 0003's versioning policy and go into the changelog in `docs/plugins.md`.
+7. The plugin API (`Codalus.Plugins.Abstractions`) is a public contract: changes follow ADR 0003's versioning policy and go into the changelog in `docs/plugins.md`.
 
 ## Building
 

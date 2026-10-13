@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copies the shell's file-type icons from Material Icon Theme (Material Extensions, MIT; D24, M34a), the npm package
-# material-icon-theme, into src/DaedalusStudio.Shell/Icons/Material/, after checking the package's SHA-256.
-# The list is src/DaedalusStudio.Shell/Icons/material-icons.txt; the build compiles the copied SVGs into Avalonia
+# material-icon-theme, into src/Codalus.Shell/Icons/Material/, after checking the package's SHA-256.
+# The list is src/Codalus.Shell/Icons/material-icons.txt; the build compiles the copied SVGs into Avalonia
 # geometries with their colors (eng/icons/CompileIcons.cs). Run it after adding a name to the list, and commit the SVGs.
 # Usage: eng/get-material-icons.sh
 set -euo pipefail
@@ -9,7 +9,7 @@ set -euo pipefail
 version="5.39.0"
 sha="73bd2c6bfeea79ec1f7122445b7ff808c46e8b30097a11ae779ff683d7ad1ba4"
 repo="$(cd "$(dirname "$0")/.." && pwd)"
-icons="$repo/src/DaedalusStudio.Shell/Icons"
+icons="$repo/src/Codalus.Shell/Icons"
 work="$repo/.work/material-icons-$version"
 
 mkdir -p "$work"

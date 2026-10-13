@@ -1,7 +1,7 @@
 using System.Reflection;
 using System.Text.Json.Nodes;
 
-namespace DaedalusStudio.Tests;
+namespace Codalus.Tests;
 
 /// <summary>
 /// Pins the repository's SDK (the <c>sdk</c> section of its <c>global.json</c>) above fixtures copied out of the
@@ -12,7 +12,7 @@ internal static class FixtureSdk
 {
     private static readonly Lazy<string> s_globalJson = new(() =>
     {
-        var repo = typeof(FixtureSdk).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "DaedalusRepoRoot").Value!;
+        var repo = typeof(FixtureSdk).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusRepoRoot").Value!;
         var sdk = JsonNode.Parse(File.ReadAllText(Path.Combine(repo, "global.json")))!["sdk"]!.DeepClone();
         return new JsonObject { ["sdk"] = sdk }.ToJsonString() + "\n";
     });

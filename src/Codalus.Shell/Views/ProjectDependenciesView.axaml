@@ -1,0 +1,43 @@
+<local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:Codalus.Shell.ViewModels"
+                   xmlns:local="using:Codalus.Shell.Views"
+                   xmlns:protocol="using:Codalus.Projects.Protocol"
+                   x:Class="Codalus.Shell.Views.ProjectDependenciesView"
+                   x:DataType="vm:ProjectDependenciesViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+      <TextBlock Classes="heading" Text="{l:T projectDependencies.projectDependencies}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T projectDependencies.projectsBuildAfterTheProjectsThey}" />
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock VerticalAlignment="Center" Text="{l:T projectDependencies.project}" />
+        <ComboBox MinWidth="240" ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T projectDependencies.project2}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="protocol:SolutionProjectInfo">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+    </StackPanel>
+    <Grid ColumnDefinitions="*,16,*">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="{l:T projectDependencies.dependsOn}" />
+        <Button DockPanel.Dock="Bottom" HorizontalAlignment="Left" Margin="0,8,0,0" Content="{l:T projectDependencies.apply}" Command="{Binding ApplyCommand}" AutomationProperties.Name="{l:T projectDependencies.applyDependencies}" />
+        <ListBox ItemsSource="{Binding DependsOn}" AutomationProperties.Name="{l:T projectDependencies.dependsOn}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ReferenceChoiceViewModel">
+              <CheckBox Content="{Binding Name}" IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Name}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <DockPanel Grid.Column="2">
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="{l:T projectDependencies.buildOrder}" />
+        <ListBox ItemsSource="{Binding BuildOrder}" AutomationProperties.Name="{l:T projectDependencies.buildOrder}" />
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</local:LoadingView>

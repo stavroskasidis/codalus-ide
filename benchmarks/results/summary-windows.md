@@ -26,7 +26,7 @@ Machine: 13th Gen Intel(R) Core(TM) i5-13600KF, 20 logical cores, 32 GB RAM, GPU
 - vscode: No extensions: TextMate highlighting only, no C# language service.
 - vscode: Run 0 is the first launch of the session (reported separately as *_first); distributions use runs 1..N-1. OS file caches are not flushed, so runs 1..N-1 are warm starts.
 - vscode: startup_selfreported_ms: VS Code's own --prof-append-timers measurement (process start to workbench restored).
-- vs: Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.
+- vs: Experimental instance (/rootsuffix CodalusBench); first launch needs a one-time manual setup.
 - vs: Run 0 is the first launch of the session (reported separately as *_first); distributions use runs 1..N-1. OS file caches are not flushed, so runs 1..N-1 are warm starts.
 
 ### editor-100k
@@ -45,7 +45,7 @@ Machine: 13th Gen Intel(R) Core(TM) i5-13600KF, 20 logical cores, 32 GB RAM, GPU
 | typing_input_to_display_ms | 13.6 / 24.9 / 31.7 (600) | 11.3 / 18.8 / 19.4 (600) | 13.2 / 20.0 / 23.4 (600) | 17.0 / 201 / 288 (600) |
 
 - vscode: No extensions: TextMate highlighting only, no C# language service.
-- vs: Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.
+- vs: Experimental instance (/rootsuffix CodalusBench); first launch needs a one-time manual setup.
 
 ### open-solution-50
 
@@ -57,7 +57,7 @@ Machine: 13th Gen Intel(R) Core(TM) i5-13600KF, 20 logical cores, 32 GB RAM, GPU
 
 - avalonia: The fixture copy is restored (dotnet restore) before each launch; restore time is not measured.
 - gpui: The fixture copy is restored (dotnet restore) before each launch; restore time is not measured.
-- vs: Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.
+- vs: Experimental instance (/rootsuffix CodalusBench); first launch needs a one-time manual setup.
 - vs: The fixture copy is restored (dotnet restore) before each launch; restore time is not measured.
 
 ### self-driven
@@ -90,7 +90,7 @@ Machine: 13th Gen Intel(R) Core(TM) i5-13600KF, 20 logical cores, 32 GB RAM, GPU
 - vscode: Informative: whole install directory, including bundled runtimes and plugins.
 - rider: User's configuration; 'Reopen projects on startup' must be off (see benchmarks/README.md).
 - rider: Informative: whole install directory, including bundled runtimes and plugins.
-- vs: Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.
+- vs: Experimental instance (/rootsuffix CodalusBench); first launch needs a one-time manual setup.
 - vs: Informative: whole install directory, including bundled runtimes and plugins.
 
 Cells: p50 / p99 / max (n). Single-sample metrics show the value only. Times in ms, memory in MB.

@@ -1,0 +1,121 @@
+<Window xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="using:Codalus.Shell"
+        xmlns:vm="using:Codalus.Shell.ViewModels"
+        xmlns:views="using:Codalus.Shell.Views"
+        xmlns:controls="using:Codalus.Shell.Controls"
+        x:Class="Codalus.Shell.Views.MainWindow"
+        x:DataType="shell:ShellHost"
+        Title="{l:T main.codalusStudio}"
+        Icon="avares://codalus/Assets/codalus.ico"
+        Width="1280" Height="800" MinWidth="640" MinHeight="400"
+        WindowStartupLocation="CenterScreen"
+        AutomationProperties.Name="{l:T main.codalusStudio}">
+
+  <Window.Resources>
+    <DataTemplate x:Key="StatusItemTemplate" x:DataType="vm:StatusItemViewModel">
+      <Button Classes="statusbar"
+              Command="{Binding Command}"
+              IsTabStop="{Binding IsInteractive}"
+              ToolTip.Tip="{Binding Tooltip}"
+              AutomationProperties.Name="{Binding AccessibleName}">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="14" Height="14" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Text}" IsVisible="{Binding HasText}" VerticalAlignment="Center" />
+        </StackPanel>
+      </Button>
+    </DataTemplate>
+  </Window.Resources>
+
+  <DockPanel>
+    <!-- The title row (M29): the menu, the search box and the solution's name. On Windows it is the window's title
+         bar (the client area extends into it); elsewhere it sits under the system's title bar. -->
+    <Border x:Name="TitleBar" DockPanel.Dock="Top" Classes="titleBar">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+        <Image x:Name="TitleIcon" Width="16" Height="16" Margin="10,0,2,0" VerticalAlignment="Center" IsVisible="False"
+               Source="avares://codalus/Assets/codalus.ico" />
+        <Menu Grid.Column="1" x:Name="MenuBar" VerticalAlignment="Center" AutomationProperties.Name="{l:T main.menuBar}" />
+        <Button Grid.Column="2" x:Name="SearchBox" Classes="searchBox" Command="{Binding Toolbar.SearchCommand}" Margin="8,3"
+                ToolTip.Tip="{l:T main.searchCommandsSettingsFilesAndCode}" AutomationProperties.Name="{l:T main.searchCtrlQ}">
+          <Grid ColumnDefinitions="Auto,*">
+            <controls:Icon Kind="search" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Classes="muted" Text="{l:T main.searchCtrlQ}" Margin="6,0,0,0" VerticalAlignment="Center" />
+          </Grid>
+        </Button>
+        <Border Grid.Column="3" Classes="solutionName" IsVisible="{Binding Toolbar.HasSolution}" VerticalAlignment="Center">
+          <TextBlock Text="{Binding Toolbar.SolutionName}" AutomationProperties.Name="{l:T main.solutionName}" />
+        </Border>
+        <Panel Grid.Column="4" x:Name="TitleDragArea" Background="Transparent" />
+        <Panel Grid.Column="5" x:Name="CaptionButtonsSpace" Width="0" />
+      </Grid>
+    </Border>
+    <views:StandardToolbar DockPanel.Dock="Top" DataContext="{Binding Toolbar}" IsVisible="{Binding IsVisible}" />
+
+    <Border x:Name="StatusBarHost"
+            DockPanel.Dock="Bottom"
+            Classes.empty="{Binding StatusBar.IsEmptyState}"
+            Classes.debugging="{Binding StatusBar.IsDebugging}"
+            BorderBrush="{DynamicResource Shell.StatusBar.Border}"
+            BorderThickness="0,1,0,0"
+            MinHeight="24"
+            IsVisible="{Binding StatusBar.IsVisible}"
+            AutomationProperties.Name="{l:T main.statusBar}">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <ItemsControl ItemsSource="{Binding StatusBar.Left}" ItemTemplate="{StaticResource StatusItemTemplate}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+        </ItemsControl>
+        <TextBlock Grid.Column="1"
+                   Text="{Binding StatusBar.DisplayMessage}"
+                   Foreground="{DynamicResource Shell.StatusBar.Foreground}"
+                   FontSize="12"
+                   Margin="12,0"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis"
+                   AutomationProperties.LiveSetting="Polite" />
+        <ItemsControl Grid.Column="2" ItemsSource="{Binding StatusBar.Right}" ItemTemplate="{StaticResource StatusItemTemplate}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+        </ItemsControl>
+      </Grid>
+    </Border>
+
+    <Grid>
+      <DockControl x:Name="Dock" Layout="{Binding Layout.Root}" Factory="{Binding Layout.Factory}" />
+
+      <ItemsControl x:Name="Toasts"
+                    ItemsSource="{Binding Notifications.Toasts}"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Width="440"
+                    Margin="0,0,14,14"
+                    AutomationProperties.Name="{l:T main.notificationToasts}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:NotificationViewModel">
+            <views:NotificationCard Margin="0,8,0,0" Floating="True" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <Panel x:Name="DialogLayer" Background="#60000000" IsVisible="{Binding Dialogs.IsOpen}" ZIndex="2">
+        <views:DialogView DataContext="{Binding Dialogs}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Panel>
+
+      <Panel x:Name="PaletteLayer" Background="Transparent" IsVisible="{Binding Palette.IsOpen}">
+        <views:QuickPickView x:Name="Palette"
+                             DataContext="{Binding Palette}"
+                             Width="640"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Top"
+                             Margin="0,6,0,0" />
+      </Panel>
+    </Grid>
+  </DockPanel>
+</Window>

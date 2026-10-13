@@ -1,0 +1,184 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>codalus</AssemblyName>
+    <RootNamespace>Codalus.Shell</RootNamespace>
+    <Description>Codalus IDE: the Avalonia shell (Native AOT).</Description>
+    <VersionPrefix>$(CodalusVersion)</VersionPrefix>
+    <VersionSuffix>dev</VersionSuffix>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\logo\codalus.ico</ApplicationIcon>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- LibraryImport (AttachConsole) generates unsafe marshalling code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The plugin host is referenced only for build order; it is published framework-dependent next to the shell. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <!-- Third-party trim/AOT warnings (Dock default templates, reflection bindings in library XAML) are
+         reported, not fatal. Our own code must stay warning-free; see docs/adr/0001-ui-stack.md. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL3050</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.Workbench\Codalus.Workbench.csproj" />
+    <ProjectReference Include="..\Codalus.Diagnostics.BenchEvents\Codalus.Diagnostics.BenchEvents.csproj" />
+  </ItemGroup>
+
+  <!-- Shipped next to the shell but not referenced: helper processes and the built-in plugins. -->
+  <ItemGroup>
+    <HelperProcess Include="..\Codalus.Plugins.Host\Codalus.Plugins.Host.csproj" Folder="pluginhost" />
+    <HelperProcess Include="..\Codalus.Projects.Host\Codalus.Projects.Host.csproj" Folder="buildhost" />
+    <HelperProcess Include="..\Codalus.LanguageServices.Host\Codalus.LanguageServices.Host.csproj" Folder="lshost" />
+    <HelperProcess Include="..\Codalus.Interactive.Host\Codalus.Interactive.Host.csproj" Folder="replhost" />
+    <HelperProcess Include="..\Codalus.Markup.Host\Codalus.Markup.Host.csproj" Folder="markuphost" />
+    <HelperProcess Include="..\Codalus.Data.Host\Codalus.Data.Host.csproj" Folder="datahost" />
+    <HelperProcess Include="..\Codalus.Debugging.Host\Codalus.Debugging.Host.csproj" Folder="debughost" />
+    <HelperProcess Include="..\Codalus.TextTemplating.Host\Codalus.TextTemplating.Host.csproj" Folder="t4host" />
+    <HelperProcess Include="..\Codalus.Diagnostics.Host\Codalus.Diagnostics.Host.csproj" Folder="diaghost" />
+    <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
+    <!-- The remote development server (M21, ADR 0050): remote/server/ (framework-dependent, any OS) and remote/<rid>/ (self-contained). -->
+    <RemoteServer Include="..\Codalus.Remote.Server\Codalus.Remote.Server.csproj" />
+    <ProjectReference Include="@(RemoteServer)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Welcome\Codalus.Plugins.Welcome.csproj" PluginId="codalus.welcome" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Templates\Codalus.Plugins.Templates.csproj" PluginId="codalus.templates" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.DotNetTest\Codalus.Plugins.DotNetTest.csproj" PluginId="codalus.dotnettest" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" PluginId="codalus.github" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" PluginId="codalus.azuredevops" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitLab\Codalus.Plugins.GitLab.csproj" PluginId="codalus.gitlab" />
+    <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" />
+    <PackageReference Include="AvaloniaEdit.TextMate" />
+    <PackageReference Include="Dock.Avalonia" />
+    <PackageReference Include="Dock.Model.Mvvm" />
+    <PackageReference Include="Dock.Avalonia.Themes.Fluent" />
+    <PackageReference Include="Velopack" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Shell.Tests" />
+  </ItemGroup>
+
+  <!-- Icons (D24, M34a): Icons/Fluent and Icons/Material SVGs compiled into geometries at build time. -->
+  <Import Project="..\..\eng\icons\Icons.targets" />
+
+  <!-- The smoke test's mock GitHub (M13b): the same source as the tests' mock servers, so nothing reaches GitHub. -->
+  <ItemGroup>
+    <Compile Include="..\..\tests\Shared\MockHttpServer.cs" Link="Infrastructure\Mocks\MockHttpServer.cs" />
+    <Compile Include="..\..\tests\Shared\MockGitHub.cs" Link="Infrastructure\Mocks\MockGitHub.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="..\..\assets\logo\codalus.ico" Link="Assets\codalus.ico" />
+    <!-- Built-in snippets, one file per language (M12b). -->
+    <EmbeddedResource Include="Editor\Snippets\*.json" LogicalName="Codalus.Shell.Snippets.%(Filename).json" />
+    <EmbeddedResource Include="Localization\*.json" LogicalName="Codalus.Shell.Localization.%(Filename).json" />
+  </ItemGroup>
+
+  <!-- Terminal shell integration scripts (ADR 0014), next to the shell in terminal/. Dotfiles are listed explicitly. -->
+  <ItemGroup>
+    <None Include="WebServers\package.json" Link="web-servers\package.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="WebServers\package-lock.json" Link="web-servers\package-lock.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Grammars\http.tmLanguage.json" Link="grammars\http.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Grammars\t4.tmLanguage.json" Link="grammars\t4.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Grammars\proto.tmLanguage.json" Link="grammars\proto.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ShellIntegration\codalus-bash.sh" Link="terminal\codalus-bash.sh" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ShellIntegration\codalus.ps1" Link="terminal\codalus.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ShellIntegration\zsh\.zshrc" Link="terminal\zsh\.zshrc" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ShellIntegration\zsh\.zshenv" Link="terminal\zsh\.zshenv" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    Layout next to the shell executable:
+      pluginhost/                 codalus-pluginhost (framework-dependent, ReadyToRun when published)
+      buildhost/                  codalus-buildhost (likewise; MSBuild comes from the installed SDK)
+      lshost/                     codalus-lshost, the C# language service (likewise)
+      replhost/                   codalus-replhost, C# Interactive (likewise)
+      markuphost/                 codalus-markuphost, JSON/XML/MSBuild/YAML/.editorconfig (likewise)
+      datahost/                   codalus-datahost, databases and the SQL language server (likewise)
+      debughost/                  codalus-debughost, the debug companion: debugger attributes, dumps (likewise),
+                                  Codalus.Debugging.StartupHook.dll for programs debugged in the terminal, and
+                                  Codalus.Previewer.Agent.dll for Avalonia's designer host (the XAML previewer)
+      diaghost/                   codalus-diaghost, EventPipe sessions and trace processing for the profiler (likewise)
+      plugins/<plugin id>/        built-in plugins
+      terminal/                   shell integration scripts for the integrated terminal
+      remote/server/              codalus-server, the remote development server, framework-dependent for any OS (M21)
+      remote/<rid>/               codalus-server self-contained for a remote platform ($(CodalusServerRids), publish only)
+  -->
+  <PropertyGroup>
+    <!-- The remote platforms that get a self-contained server in a published install (empty: none; remote machines then need .NET). -->
+    <CodalusServerRids Condition="'$(CodalusServerRids)' == ''">linux-x64;linux-arm64</CodalusServerRids>
+  </PropertyGroup>
+
+  <Target Name="CodalusRemoteServerForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_CodalusServerFiles Include="%(RemoteServer.RootDir)%(RemoteServer.Directory)bin\$(Configuration)\net10.0\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_CodalusServerFiles)" DestinationFiles="@(_CodalusServerFiles->'$(OutDir)remote\server\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CodalusRemoteServerForPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_CodalusRemoteDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)', 'remote'))</_CodalusRemoteDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_CodalusServerRid Include="$(CodalusServerRids)" />
+    </ItemGroup>
+    <!--
+      Each server is its own `dotnet publish`, with its own restore phase: in one MSBuild call (or one build's
+      project instances) Publish reads the assets file as it was before that call's restore, and a restore for one
+      platform replaces another's (NETSDK1047, found on the Mac).
+    -->
+    <PropertyGroup>
+      <_CodalusDotnet>$(DOTNET_HOST_PATH)</_CodalusDotnet>
+      <_CodalusDotnet Condition="'$(_CodalusDotnet)' == ''">dotnet</_CodalusDotnet>
+      <_CodalusServerProject>@(RemoteServer->'%(FullPath)')</_CodalusServerProject>
+    </PropertyGroup>
+    <Exec Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusServerProject)&quot; -c $(Configuration) --no-self-contained -p:UseAppHost=false -o &quot;$(_CodalusRemoteDir)server&quot; -nologo" />
+    <Exec Condition="'@(_CodalusServerRid)' != ''"
+          Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusServerProject)&quot; -c $(Configuration) -r %(_CodalusServerRid.Identity) --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o &quot;$(_CodalusRemoteDir)%(_CodalusServerRid.Identity)&quot; -nologo" />
+  </Target>
+  <Target Name="CodalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_CodalusHostFiles Include="%(HelperProcess.RootDir)%(HelperProcess.Directory)bin\$(Configuration)\net10.0\**\*">
+        <Folder>%(HelperProcess.Folder)</Folder>
+      </_CodalusHostFiles>
+    </ItemGroup>
+    <Copy SourceFiles="@(_CodalusHostFiles)" DestinationFiles="@(_CodalusHostFiles->'$(OutDir)%(Folder)\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="CodalusCopyBuiltInPlugins" Properties="CodalusPluginTarget=$(OutDir)plugins\" />
+  </Target>
+
+  <Target Name="CodalusBundleForPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_CodalusPublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))</_CodalusPublishDir>
+    </PropertyGroup>
+    <MSBuild Projects="%(HelperProcess.FullPath)" Targets="Restore;Publish"
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=false;PublishReadyToRun=true;PublishDir=$(_CodalusPublishDir)%(HelperProcess.Folder)\"
+             RemoveProperties="PublishAot;_IsPublishing" />
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="CodalusCopyBuiltInPlugins" Properties="CodalusPluginTarget=$(_CodalusPublishDir)plugins\" />
+  </Target>
+
+  <Target Name="CodalusCopyBuiltInPlugins">
+    <ItemGroup>
+      <_CodalusPluginFiles Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.dll;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.pdb;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\codalus-plugin.json;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\codalus-plugin.nls*.json">
+        <PluginId>%(BuiltInPlugin.PluginId)</PluginId>
+      </_CodalusPluginFiles>
+    </ItemGroup>
+    <Copy SourceFiles="@(_CodalusPluginFiles)" DestinationFiles="@(_CodalusPluginFiles->'$(CodalusPluginTarget)%(PluginId)\%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <!-- Tools a plugin bundles in a coverage/ subfolder (the .NET test plugin's Coverlet, ADR 0011). -->
+    <ItemGroup>
+      <_CodalusPluginTools Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\coverage\**\*">
+        <PluginId>%(BuiltInPlugin.PluginId)</PluginId>
+      </_CodalusPluginTools>
+    </ItemGroup>
+    <Copy SourceFiles="@(_CodalusPluginTools)" DestinationFiles="@(_CodalusPluginTools->'$(CodalusPluginTarget)%(PluginId)\coverage\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

@@ -13,10 +13,10 @@
 Tools → Options… lists every setting in a tree of groups (Environment, Text Editor, Projects and Solutions, Debugging, Source Control, Testing, Terminal and Interactive), with a search box. Choosing a group shows all its settings. Changes apply immediately.
 
 - **User settings** live in `settings.json` in the user configuration folder:
-  - Windows: `%APPDATA%\Daedalus Studio`
-  - macOS: `~/Library/Application Support/Daedalus Studio`
-  - Linux: `~/.config/daedalus-studio`
-- **Solution settings** live in `.daedalus/settings.json` next to the solution and override the user settings for that solution.
+  - Windows: `%APPDATA%\Codalus`
+  - macOS: `~/Library/Application Support/Codalus`
+  - Linux: `~/.config/codalus`
+- **Solution settings** live in `.codalus/settings.json` next to the solution and override the user settings for that solution.
 - **Editing the JSON**: open it with "Open User Settings (JSON)" in the command palette.
 
 Settings you may want first:
@@ -50,7 +50,7 @@ Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme**
 - **From VS Code** (Tools → Import Settings from VS Code): its user `settings.json` and `keybindings.json` (VS Code, Insiders or VSCodium; the first one found).
   - Settings that are also ours come over with their values, including the two color settings. Its built-in themes become ours.
   - Key bindings whose commands exist here come over too.
-  - You confirm first. The Daedalus Studio log (Help → Show Logs) lists each skipped setting and why.
+  - You confirm first. The Codalus IDE log (Help → Show Logs) lists each skipped setting and why.
 - **From a classic IDE** (Tools → Import a .vssettings File): a file exported with that IDE's Import and Export Settings.
   - The text editor's font and size, and its colors for syntax and editor elements. Colors are added to yours; "automatic" colors stay with the theme.
   - Tab size, tabs or spaces, word wrap and line numbers (All Languages, else C#).
@@ -61,7 +61,7 @@ Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme**
 
 ## Window layouts
 
-- **Save and apply** (Window → Save Window Layout, Apply Window Layout, Delete Window Layout): name the current arrangement of tool windows and bring it back later. Default is the layout Daedalus Studio starts with. Layouts are kept in the state folder's `layouts.json`.
+- **Save and apply** (Window → Save Window Layout, Apply Window Layout, Delete Window Layout): name the current arrangement of tool windows and bring it back later. Default is the layout Codalus IDE starts with. Layouts are kept in the state folder's `layouts.json`.
 - **Full Screen** (Window → Full Screen, `Shift+Alt+Enter`, `⌃⌘F` on macOS).
 - **Distraction-Free Mode** (Window): only the documents, full screen, without the toolbar or status bar. Run it again to get your tool windows and window back as they were.
 
@@ -89,16 +89,16 @@ The status bar names the active profile unless it's Default. Each profile's file
 
 ## Settings Sync
 
-Settings Sync keeps your settings, keyboard shortcuts, snippets and saved window layouts the same on several machines. There's no Daedalus Studio service: you choose where they're kept, and nothing syncs until you turn it on.
+Settings Sync keeps your settings, keyboard shortcuts, snippets and saved window layouts the same on several machines. There's no Codalus IDE service: you choose where they're kept, and nothing syncs until you turn it on.
 - **Turn on** (Settings Sync: Turn On in the command palette): pick a folder that another tool syncs (OneDrive, Dropbox, iCloud Drive, Syncthing…), or give a Git repository's URL. A private repository works, and so does a secret gist's clone URL. Git uses your own credentials.
-- **When it syncs**: when Daedalus Studio starts, a few seconds after you change something, and with Tools → Settings Sync: Sync Now. A change on one side goes to the other. If both changed since the last sync, you choose **Use Synced** or **Keep Mine**.
+- **When it syncs**: when Codalus IDE starts, a few seconds after you change something, and with Tools → Settings Sync: Sync Now. A change on one side goes to the other. If both changed since the last sync, you choose **Use Synced** or **Keep Mine**.
 - **What stays on each machine**: the sync settings themselves, and the settings you list in Settings Sync → Settings Not Synced (`settingsSync.ignoredSettings`), such as paths that differ between machines. The window's current layout isn't synced either.
 - **Profiles**: each profile syncs on its own, to the target set in it.
 - **Turn off** (Settings Sync: Turn Off): what was synced stays where it is.
 
 ## Display language
 
-Environment → Display Language (`workbench.locale`) chooses the language of menus, commands, settings and windows. Empty uses the operating system's language when Daedalus Studio has it. It applies at the next start (File → Restart). `--locale <name>` overrides it for one run.
+Environment → Display Language (`workbench.locale`) chooses the language of menus, commands, settings and windows. Empty uses the operating system's language when Codalus IDE has it. It applies at the next start (File → Restart). `--locale <name>` overrides it for one run.
 
 Translations come from the community; [Translating](../translating.md) explains how to help. Until a language is complete, its missing strings show in English. Two pseudo-languages are for checking translations:
 - `qps-ploc` shows every translatable string accented and longer, so untranslated or clipped text stands out.
@@ -106,7 +106,7 @@ Translations come from the community; [Translating](../translating.md) explains 
 
 ## Plugins
 
-The Plugins window lists the installed plugins. **Turn Off** keeps a plugin from loading, and **Turn On** brings it back. It takes effect at the next start, and the window says so until then. The list is the setting `plugins.disabled`, so profiles can differ. File → Restart restarts Daedalus Studio on the same solution.
+The Plugins window lists the installed plugins. **Turn Off** keeps a plugin from loading, and **Turn On** brings it back. It takes effect at the next start, and the window says so until then. The list is the setting `plugins.disabled`, so profiles can differ. File → Restart restarts Codalus IDE on the same solution.
 
 ## Keyboard shortcuts
 
@@ -138,7 +138,7 @@ Tools → Keyboard Shortcuts lists every command with its shortcut.
 - **Other installs**: the `.deb` and `.rpm` update with the system (`apt upgrade`, `dnf upgrade`); the zip, `.app` zip and tar.gz say that a release is out and link to it. Development builds never check.
 - **What's New** (Help → What's New): the release notes of the versions you skipped, shown once after an update.
 
-**Network access.** Daedalus Studio connects to these places, and each can be turned off:
+**Network access.** Codalus IDE connects to these places, and each can be turned off:
 
 | What | Where | When | Off |
 |---|---|---|---|
@@ -149,4 +149,4 @@ Tools → Keyboard Shortcuts lists every command with its shortcut.
 | JSON schemas | `www.schemastore.org` | JSON files without a bundled schema, when downloads are allowed | the bundled schemas only |
 | Help for a keyword (F1) | `learn.microsoft.com` | when you press F1 | — |
 
-Daedalus Studio itself has no telemetry. The tools it runs connect on their own terms: git talks to your remotes, and the .NET SDK has its own telemetry, which `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns off.
+Codalus IDE itself has no telemetry. The tools it runs connect on their own terms: git talks to your remotes, and the .NET SDK has its own telemetry, which `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns off.

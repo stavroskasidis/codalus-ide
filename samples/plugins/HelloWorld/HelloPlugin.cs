@@ -1,12 +1,12 @@
-using DaedalusStudio.Plugins;
+using Codalus.Plugins;
 
 namespace HelloWorld;
 
 /// <summary>
 /// The sample plugin. Everything visible before activation (menus, the key binding, the tool window, the
-/// settings) comes from daedalus-plugin.json; this code only provides behavior.
+/// settings) comes from codalus-plugin.json; this code only provides behavior.
 /// </summary>
-public sealed class HelloPlugin : IDaedalusPlugin
+public sealed class HelloPlugin : ICodalusPlugin
 {
     private int _greetings;
 
@@ -26,8 +26,8 @@ public sealed class HelloPlugin : IDaedalusPlugin
             var greeting = context.Settings.GetValue("hello.greeting", "Hello");
             _greetings++;
             status.Text = $"Hello: {_greetings}";
-            output.AppendLine($"{greeting}, Daedalus! (#{_greetings})");
-            var choice = await context.Window.ShowNotificationAsync(NotificationSeverity.Info, $"{greeting}, Daedalus!", ["Show Output"], ct);
+            output.AppendLine($"{greeting}, Codalus! (#{_greetings})");
+            var choice = await context.Window.ShowNotificationAsync(NotificationSeverity.Info, $"{greeting}, Codalus!", ["Show Output"], ct);
             if (choice == "Show Output")
             {
                 output.Show();

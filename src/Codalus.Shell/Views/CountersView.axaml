@@ -1,0 +1,46 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.CountersView"
+             x:DataType="vm:CountersViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Margin="6,4" Spacing="4">
+      <controls:ToolbarPanel>
+        <TextBox x:Name="TargetBox" Text="{Binding Target}" Width="180" PlaceholderText="{l:T counters.processIdOrName}" AutomationProperties.Name="{l:T counters.processIdOrName}" />
+        <ComboBox ItemsSource="{Binding Processes}" SelectedItem="{Binding SelectedProcess}" MinWidth="220" PlaceholderText="{l:T counters.runningNetProcesses}" AutomationProperties.Name="{l:T counters.runningNetProcesses}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProcessRowViewModel">
+              <TextBlock Text="{Binding Text}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Content="{l:T counters.refresh}" Command="{Binding RefreshCommand}" />
+        <Button Content="{l:T counters.start}" Command="{Binding StartCommand}" />
+        <Button Content="{l:T counters.stop}" Command="{Binding StopCommand}" />
+        <Button Content="{l:T counters.exportCsv}" Command="{Binding ExportCsvCommand}" />
+        <Button Content="{l:T counters.exportJson}" Command="{Binding ExportJsonCommand}" />
+      </controls:ToolbarPanel>
+      <Grid ColumnDefinitions="*,*,Auto,70">
+        <TextBox Text="{Binding EventSources}" Margin="0,0,6,0" PlaceholderText="{l:T counters.eventsourcesSystemRuntimeMycompanyMylibraryRequests}" AutomationProperties.Name="{l:T counters.eventsourcesWhoseCountersToWatchComma}" ToolTip.Tip="{l:T counters.eventsourcesWhoseCountersToWatchComma2}" />
+        <TextBox Grid.Column="1" Text="{Binding Meters}" Margin="0,0,6,0" PlaceholderText="{l:T counters.metersSystemNetHttpMyappOrders}" AutomationProperties.Name="{l:T counters.systemDiagnosticsMetricsMetersToWatch}" ToolTip.Tip="{l:T counters.systemDiagnosticsMetricsMetersToWatch2}" />
+        <TextBlock Grid.Column="2" Text="{l:T counters.everyS}" VerticalAlignment="Center" Margin="0,0,6,0" />
+        <TextBox Grid.Column="3" Text="{Binding Interval}" AutomationProperties.Name="{l:T counters.intervalInSeconds}" />
+      </Grid>
+      <TextBlock Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+    </StackPanel>
+    <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T counters.countersAndTheirLatestValues}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:CounterRowViewModel">
+          <Grid ColumnDefinitions="220,*,120,Auto" AutomationProperties.Name="{Binding AccessibleName}">
+            <TextBlock Text="{Binding Provider}" Classes="muted" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Text="{Binding Value}" TextAlignment="Right" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="3" Text="{Binding Unit}" Classes="muted" Margin="6,0,0,0" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

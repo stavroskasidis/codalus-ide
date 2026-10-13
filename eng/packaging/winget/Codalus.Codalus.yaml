@@ -1,0 +1,7 @@
+# winget version manifest (filled in by eng/package.sh). Submit with the installer and locale manifests to
+# https://github.com/microsoft/winget-pkgs once a public release exists.
+PackageIdentifier: Codalus.Codalus
+PackageVersion: {{VERSION}}
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

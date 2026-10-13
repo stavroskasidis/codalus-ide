@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The metadata navigation tests read this assembly's own sources from its embedded PDB. -->
+    <DebugType>embedded</DebugType>
+    <EmbedAllSources>true</EmbedAllSources>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Codalus.LanguageServices.Host\Codalus.LanguageServices.Host.csproj" />
+    <ProjectReference Include="..\..\src\Codalus.Workbench\Codalus.Workbench.csproj" />
+    <!-- Built so the tests can launch it; not referenced as an assembly. -->
+    <ProjectReference Include="..\..\src\Codalus.Projects.Host\Codalus.Projects.Host.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

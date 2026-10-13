@@ -1,6 +1,6 @@
 # Profiling and diagnostics
 
-Daedalus Studio profiles .NET programs with the runtime's own **EventPipe**, on Windows, macOS and Linux. The work happens in a separate process, `daedalus-diaghost`, started the first time you use a profiling tool: a trace being read never slows the IDE down, and a large trace stays there while you look at it a view at a time.
+Codalus IDE profiles .NET programs with the runtime's own **EventPipe**, on Windows, macOS and Linux. The work happens in a separate process, `codalus-diaghost`, started the first time you use a profiling tool: a trace being read never slows the IDE down, and a large trace stays there while you look at it a view at a time.
 
 What you can profile: programs on .NET Core 3.0 or later (profiling from launch needs .NET 5 or later) running on this machine. Programs in containers, in WSL or over SSH aren't reachable yet.
 
@@ -23,7 +23,7 @@ What you can profile: programs on .NET Core 3.0 or later (profiling from launch 
    - **A running .NET process**: pick it from the list (type part of its name or its process id to filter).
 3. **Start**. While collecting, the status bar says so; click it, or **Stop Collection** on the page or the Debug menu, to stop. A program that ends stops the collection too.
 
-The session is saved in your solution's `.daedalus/profiler` folder (one folder per session: `session.json`, `trace.nettrace` with the tools' events, `counters.json`, `heap-1.nettrace`… for snapshots, `full.dmp`), and its report opens. The page lists the saved sessions to open again or delete, and **Compare** shows the selected session against another one (the functions whose share changed most, and the heap's growth when both have snapshots); **Debug → Open Profiling Session…** opens one from anywhere, or any `.nettrace` file recorded by another tool (such as `dotnet-trace`). You may want to add `.daedalus/profiler/` to your `.gitignore`.
+The session is saved in your solution's `.codalus/profiler` folder (one folder per session: `session.json`, `trace.nettrace` with the tools' events, `counters.json`, `heap-1.nettrace`… for snapshots, `full.dmp`), and its report opens. The page lists the saved sessions to open again or delete, and **Compare** shows the selected session against another one (the functions whose share changed most, and the heap's growth when both have snapshots); **Debug → Open Profiling Session…** opens one from anywhere, or any `.nettrace` file recorded by another tool (such as `dotnet-trace`). You may want to add `.codalus/profiler/` to your `.gitignore`.
 
 ## The report
 
@@ -76,4 +76,4 @@ Meters show counters as their change per interval, gauges as their value, and hi
 
 ## Benchmarks
 
-Projects that reference **BenchmarkDotNet** get a stopwatch in the gutter of each `[Benchmark]` method and of each class with benchmarks. Click it to run that benchmark (or the class's): the project is built in Release and run with BenchmarkDotNet, its output goes to the **Benchmarks** output, and the results open in **View → Other Windows → Benchmarks** (mean, error, standard deviation, allocations). The window lists the solution's benchmarks (double-click one to open it), runs all of them or the selected one, chooses BenchmarkDotNet's **job** (Dry for a quick check, Short by default, Medium or Default for numbers to trust) and whether to run **in process** (faster, no separate build). Select a result for its **history**: every earlier run of that benchmark, with the change from the run before, kept in `.daedalus/benchmarks/history.json`. Running benchmarks builds and runs your code, so it needs a trusted solution.
+Projects that reference **BenchmarkDotNet** get a stopwatch in the gutter of each `[Benchmark]` method and of each class with benchmarks. Click it to run that benchmark (or the class's): the project is built in Release and run with BenchmarkDotNet, its output goes to the **Benchmarks** output, and the results open in **View → Other Windows → Benchmarks** (mean, error, standard deviation, allocations). The window lists the solution's benchmarks (double-click one to open it), runs all of them or the selected one, chooses BenchmarkDotNet's **job** (Dry for a quick check, Short by default, Medium or Default for numbers to trust) and whether to run **in process** (faster, no separate build). Select a result for its **history**: every earlier run of that benchmark, with the change from the run before, kept in `.codalus/benchmarks/history.json`. Running benchmarks builds and runs your code, so it needs a trusted solution.

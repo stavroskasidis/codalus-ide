@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared by the built-in GitHub, Azure DevOps and GitLab plugins (ADR 0031): the OAuth device flow, sessions in the OS credential store, and HTTP and JSON helpers. Copied next to each of them.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The plugin host provides the API at runtime, so it is not copied next to the plugins. -->
+    <ProjectReference Include="..\..\Codalus.Plugins.Abstractions\Codalus.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Plugins.GitHub" />
+    <InternalsVisibleTo Include="Codalus.Plugins.AzureDevOps" />
+    <InternalsVisibleTo Include="Codalus.Plugins.GitLab" />
+    <InternalsVisibleTo Include="Codalus.Plugins.Tests" />
+  </ItemGroup>
+</Project>

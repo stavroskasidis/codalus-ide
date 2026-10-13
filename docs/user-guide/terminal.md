@@ -7,7 +7,7 @@
 - `` Ctrl+Shift+` `` opens another terminal.
 
 **Shells (profiles)**
-- Daedalus Studio finds the shells installed on your machine: PowerShell (`pwsh`), Windows PowerShell and Command Prompt on Windows; bash, zsh and fish on Linux and macOS.
+- Codalus IDE finds the shells installed on your machine: PowerShell (`pwsh`), Windows PowerShell and Command Prompt on Windows; bash, zsh and fish on Linux and macOS.
 - **.NET Developer** starts your default shell with the .NET SDK of the open solution first on `PATH` (`DOTNET_ROOT` set).
 - Choose the default with the `terminal.defaultProfile` setting. Or pick a shell with **Terminal: New Terminal** from the command palette.
 
@@ -92,5 +92,5 @@
   ```
 
 **Isolation**
-- Your code runs in a separate process (`daedalus-replhost`), never in the IDE itself.
+- Your code runs in a separate process (`codalus-replhost`), never in the IDE itself.
 - If it crashes or calls `Environment.Exit`, C# Interactive restarts with an empty state and says so. The IDE keeps running.

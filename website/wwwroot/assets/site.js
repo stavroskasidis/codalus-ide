@@ -1,4 +1,4 @@
-// Daedalus Studio website: tabs, the visitor's OS, copy buttons, heading anchors and the docs search.
+// Codalus IDE website: tabs, the visitor's OS, copy buttons, heading anchors and the docs search.
 // Every page works without it: tab panels are all shown, and the docs search box stays hidden.
 // Pages have a <base href>, so links within a page carry its path ("#x" alone would lead to the home page).
 (() => {

@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Daedalus.Sample.Greeting" Version="1.0.0" />
+    <PackageReference Include="Codalus.Sample.Greeting" Version="1.0.0" />
   </ItemGroup>
 
 </Project>

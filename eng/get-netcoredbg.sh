@@ -2,12 +2,12 @@
 # Downloads netcoredbg (Samsung, MIT; ADR 0007), verifies its SHA-256 and unpacks it.
 # Usage: eng/get-netcoredbg.sh [--x64 | --platform linux-x64|linux-arm64|osx-arm64|win-x64] [destination]
 #   (default: this machine's platform, into .work/netcoredbg)
-# The debugger ends up in <destination>/netcoredbg[.exe]; point DAEDALUS_NETCOREDBG at it, or copy the folder to
+# The debugger ends up in <destination>/netcoredbg[.exe]; point CODALUS_NETCOREDBG at it, or copy the folder to
 # debugger/ next to the shell. Keep the version and checksums in step with RemoteDebuggers in the workbench.
 #
 # --x64 (Apple silicon only, M33, ADR 0030): the x64 build, which debugs the programs of .NET 5 and earlier that run as
 # x64 under Rosetta 2. netcoredbg 3.2.0 has no macOS x64 build, so it is the last one (3.1.3-1062). Point
-# DAEDALUS_NETCOREDBG_X64 at it, or copy it to debugger/x64/ next to the shell. On other machines the regular
+# CODALUS_NETCOREDBG_X64 at it, or copy it to debugger/x64/ next to the shell. On other machines the regular
 # debugger already matches the programs' architecture, and --x64 does nothing.
 #
 # --platform (M14c, ADR 0039): another platform's build, into .work/netcoredbg-<platform>, which remote debugging

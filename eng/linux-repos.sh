@@ -31,14 +31,14 @@ if [ -n "${PACKAGES_GPG_PRIVATE_KEY:-}" ]; then
   printf '%s\n' "$PACKAGES_GPG_PRIVATE_KEY" | gpg --batch --quiet --import
 else
   echo "warning: PACKAGES_GPG_PRIVATE_KEY isn't set: a throwaway key signs this site (for tests only)" >&2
-  gpg --batch --quiet --pinentry-mode loopback --passphrase '' --quick-gen-key "Daedalus Studio test packages" rsa3072 sign 1d
+  gpg --batch --quiet --pinentry-mode loopback --passphrase '' --quick-gen-key "Codalus IDE test packages" rsa3072 sign 1d
 fi
 fingerprint="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')"
 gpg_sign=(gpg --batch --yes --pinentry-mode loopback --passphrase '' --local-user "$fingerprint")
 
 rm -rf "$out"
 mkdir -p "$out"
-gpg --armor --export "$fingerprint" > "$out/daedalus-studio-packages.asc"
+gpg --armor --export "$fingerprint" > "$out/codalus-packages.asc"
 
 for channel in stable nightly; do
   packages="$([ "$channel" = stable ] && echo "$stable" || echo "$nightly")"
@@ -59,7 +59,7 @@ for channel in stable nightly; do
     gzip -9kn "$dir/Packages"
   done
   (cd "$apt" && apt-ftparchive \
-    -o APT::FTPArchive::Release::Origin="Daedalus Studio" -o APT::FTPArchive::Release::Label="Daedalus Studio" \
+    -o APT::FTPArchive::Release::Origin="Codalus IDE" -o APT::FTPArchive::Release::Label="Codalus IDE" \
     -o APT::FTPArchive::Release::Suite="$channel" -o APT::FTPArchive::Release::Codename="$channel" \
     -o APT::FTPArchive::Release::Components=main -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
     release "dists/$channel") > "$apt/dists/$channel/Release.tmp"
@@ -79,14 +79,14 @@ for channel in stable nightly; do
   done
   createrepo_c --quiet "$rpm"
   "${gpg_sign[@]}" --armor --detach-sign -o "$rpm/repodata/repomd.xml.asc" "$rpm/repodata/repomd.xml"
-  cat > "$out/rpm/daedalus-studio-$channel.repo" << EOF
-[daedalus-studio-$channel]
-name=Daedalus Studio ($channel)
+  cat > "$out/rpm/codalus-$channel.repo" << EOF
+[codalus-$channel]
+name=Codalus IDE ($channel)
 baseurl=$base_url/rpm/$channel
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=$base_url/daedalus-studio-packages.asc
+gpgkey=$base_url/codalus-packages.asc
 EOF
 done
 

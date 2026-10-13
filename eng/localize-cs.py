@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Moves user-facing messages built in C# into the catalogue's keys (M23c).
 
-    python3 eng/localize-cs.py src/DaedalusStudio.Shell/ShellHost.Git.cs [...]
+    python3 eng/localize-cs.py src/Codalus.Shell/ShellHost.Git.cs [...]
 
 The messages of Notifications.Info/Warning/Error (the message, not the buttons: code compares the chosen button's text),
 StatusBar.ShowMessage, Dialogs.ConfirmAsync (title, message, action) and Dialogs.InputAsync (title, prompt) become
@@ -177,10 +177,10 @@ def main(files):
             continue
         for a, b, text in sorted(edits, reverse=True):
             s = s[:a] + text + s[b:]
-        if 'using DaedalusStudio.Workbench.Localization;' not in s:
+        if 'using Codalus.Workbench.Localization;' not in s:
             usings = list(re.finditer(r'^using [^;]+;\r?\n', s, re.M))
             at = usings[-1].end() if usings else 0
-            s = s[:at] + 'using DaedalusStudio.Workbench.Localization;\n' + s[at:]
+            s = s[:at] + 'using Codalus.Workbench.Localization;\n' + s[at:]
         path.write_text(s, encoding='utf-8', newline='')
         total += len(edits)
         print(f'{file}: {len(edits)} messages')

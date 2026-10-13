@@ -1,13 +1,13 @@
-Package: daedalus-studio
+Package: codalus
 Version: {{VERSION}}
 Section: devel
 Priority: optional
 Architecture: {{ARCH}}
 Depends: git, libicu-dev | libicu74 | libicu72 | libicu70, libfontconfig1
 Recommends: dotnet-sdk-10.0
-Maintainer: Daedalus Studio contributors <https://github.com/stavroskasidis/daedalus-studio>
-Homepage: https://github.com/stavroskasidis/daedalus-studio
+Maintainer: Codalus IDE contributors <https://github.com/stavroskasidis/codalus-ide>
+Homepage: https://github.com/stavroskasidis/codalus-ide
 Description: Cross-platform, open-source IDE for .NET
- Daedalus Studio is an MIT-licensed .NET IDE with solutions, C# language
+ Codalus IDE is an MIT-licensed .NET IDE with solutions, C# language
  services, build and run, debugging on netcoredbg, and Git. It needs the
  .NET SDK to open and build solutions.

@@ -1,0 +1,69 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.AspireView"
+             x:DataType="vm:AspireViewModel">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button x:Name="Dashboard" Content="{l:T aspire.openDashboard}" IsEnabled="{Binding HasDashboard}" AutomationProperties.Name="{l:T aspire.openTheAspireDashboardInThe}" />
+      <Button x:Name="Start" Content="{l:T aspire.start}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.startTheSelectedResource}" />
+      <Button x:Name="Stop" Content="{l:T aspire.stop}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.stopTheSelectedResource}" />
+      <Button x:Name="Restart" Content="{l:T aspire.restart}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.restartTheSelectedResource}" />
+      <Button x:Name="Browse" Content="{l:T aspire.openEndpoint}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.openTheSelectedResourceSEndpoint}" />
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
+    <Grid ColumnDefinitions="2*,4,3*">
+      <ListBox x:Name="ResourceList" ItemsSource="{Binding Resources}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T aspire.aspireResources}">
+        <ListBox.Styles>
+          <Style Selector="ListBoxItem" x:DataType="vm:AspireResourceRow">
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          </Style>
+        </ListBox.Styles>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:AspireResourceRow">
+            <Grid ColumnDefinitions="Auto,*">
+              <TextBlock Text="{Binding StateGlyph}" Classes="accent" Margin="0,0,6,0" />
+              <StackPanel Grid.Column="1">
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Detail}" Classes="muted" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      <TabControl Grid.Column="2" Padding="0">
+        <TabItem Header="{l:T aspire.console}">
+          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="{l:T aspire.theResourceSConsoleOutput}" />
+        </TabItem>
+        <TabItem Header="{l:T aspire.environment}">
+          <ListBox ItemsSource="{Binding Environment}" Background="Transparent" AutomationProperties.Name="{l:T aspire.environmentVariables}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ContainerPropertyRow">
+                <Grid ColumnDefinitions="260,*">
+                  <TextBlock Text="{Binding Name}" Classes="accent" TextTrimming="CharacterEllipsis" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </TabItem>
+        <TabItem Header="{l:T aspire.details}">
+          <ListBox ItemsSource="{Binding Properties}" Background="Transparent" AutomationProperties.Name="{l:T aspire.endpointsAndProperties}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ContainerPropertyRow">
+                <Grid ColumnDefinitions="220,*">
+                  <TextBlock Text="{Binding Name}" Classes="accent" TextTrimming="CharacterEllipsis" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </TabItem>
+      </TabControl>
+    </Grid>
+  </DockPanel>
+</UserControl>

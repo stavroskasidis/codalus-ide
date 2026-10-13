@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] Tests cover the change, and `dotnet test --solution DaedalusStudio.slnx` passes locally
+- [ ] Tests cover the change, and `dotnet test --solution Codalus.slnx` passes locally
 - [ ] No new warnings (builds treat warnings as errors); the shell still publishes with Native AOT
 - [ ] New dependencies are MIT-compatible and recorded in `THIRD-PARTY-NOTICES.md`
 - [ ] Docs updated (README, `docs/`, plugin API changelog for API changes), and an ADR for significant decisions

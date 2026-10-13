@@ -1,0 +1,213 @@
+using System.Diagnostics;
+using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
+using Codalus.Shell.ViewModels;
+using Codalus.Shell.Views;
+using Codalus.Workbench.Git;
+
+namespace Codalus.Shell.Tests;
+
+/// <summary>M13 in the shell: the history window, the merge editor, the operation banner, interactive rebase and per-line staging.</summary>
+public sealed class GitDepthShellTests
+{
+    private static string Git(string directory, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("git") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error}");
+        return output;
+    }
+
+    /// <summary>BuildAndRun as a repository with a feature branch that conflicts with main in Greeter.cs.</summary>
+    private static async Task<(ShellFixture Fixture, string Folder, string Greeter)> OpenRepositoryAsync()
+    {
+        var f = ShellFixture.Create();
+        var folder = f.CopySample("BuildAndRun");
+        Git(folder, "init", "-q", "-b", "main");
+        Git(folder, "config", "user.name", "Ada Tester");
+        Git(folder, "config", "user.email", "ada@example.com");
+        Git(folder, "config", "commit.gpgsign", "false");
+        Git(folder, "config", "core.autocrlf", "false");
+        File.WriteAllText(Path.Combine(folder, ".gitignore"), "bin/\nobj/\n");
+        Git(folder, "add", ".");
+        Git(folder, "commit", "-q", "-m", "initial");
+        var greeter = Path.Combine(folder, "src", "Greetings", "Greeter.cs");
+        var original = File.ReadAllText(greeter);
+
+        Git(folder, "switch", "-q", "-c", "feature");
+        File.WriteAllText(greeter, original.Replace("Hello from", "Howdy from", StringComparison.Ordinal));
+        Git(folder, "commit", "-q", "-am", "Say howdy");
+        Git(folder, "switch", "-q", "main");
+        File.WriteAllText(greeter, original.Replace("Hello from", "Greetings from", StringComparison.Ordinal));
+        Git(folder, "commit", "-q", "-am", "Say greetings");
+
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "main" } && Equals(f.Shell.Workbench.Context.GetValue("gitRepository"), true));
+        return (f, folder, greeter);
+    }
+
+    [AvaloniaFact]
+    public async Task The_history_window_shows_the_graph_details_and_a_commit_file_diff()
+    {
+        var (f, _, greeter) = await OpenRepositoryAsync();
+        await using var fixture = f;
+
+        f.Shell.Run("git.history");
+        try
+        {
+            await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d.ViewModel.Rows.Count == 3));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            var documents = string.Join(", ", f.Shell.Layout.Documents.Select(d => $"{d.GetType().Name}:{(d as GitHistoryDocument)?.ViewModel.Rows.Count}"));
+            throw new InvalidOperationException($"Documents: {documents}; active {f.Shell.Layout.ActiveDocument?.GetType().Name}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}; git log: {f.Shell.GitLog.GetText()}", ex);
+        }
+
+        var history = f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Single().ViewModel;
+        Assert.Equal(2, history.Lanes); // main and feature side by side
+        Assert.Contains(history.Rows, r => r.Refs.Contains("main"));
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitHistoryView>().Any());
+
+        // Selecting a commit shows its message and files; a file opens as a diff against the parent.
+        history.Selected = history.Rows.Single(r => r.Subject == "Say howdy");
+        await ShellFixture.PumpUntil(() => history.Files.Any(file => file.Name == "Greeter.cs"));
+        Assert.Contains("Say howdy", history.DetailsText, StringComparison.Ordinal);
+        await history.OpenFileAsync(history.Files.Single());
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any(v => v.RightText.Contains("Howdy from", StringComparison.Ordinal)));
+        var diff = f.Window.GetVisualDescendants().OfType<DiffView>().First(v => v.RightText.Contains("Howdy from", StringComparison.Ordinal));
+        Assert.Contains("Hello from", diff.LeftText, StringComparison.Ordinal);
+
+        // Filters: by message.
+        f.Shell.Layout.OpenDocument(f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Single());
+        history.MessageFilter = "greetings";
+        await history.ReloadAsync();
+        Assert.Equal(["Say greetings"], history.Rows.Select(r => r.Subject));
+
+        // File history and line history.
+        await f.Shell.OpenFileAsync(greeter);
+        f.Shell.Run("git.fileHistory");
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d is { Title: "History: Greeter.cs", ViewModel.Rows.Count: 2 }));
+        await f.Shell.OpenFileAsync(greeter);
+        await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("activeDocumentKind"), "textFile"));
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null);
+        Assert.True(f.Shell.Workbench.Commands.Find("git.lineHistory")!.Enablement.Evaluate(f.Shell.Workbench.Context), "git.lineHistory is disabled");
+        f.Shell.Run("git.lineHistory");
+        try
+        {
+            await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d is { ViewModel.Lines: not null, ViewModel.Rows.Count: > 0 }));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            var documents = string.Join(", ", f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Select(d => $"{d.Title}:{d.ViewModel.Lines}:{d.ViewModel.Rows.Count}"));
+            throw new InvalidOperationException($"Histories: {documents}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}", ex);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_conflict_is_resolved_in_the_merge_editor_and_the_merge_continued()
+    {
+        var (f, folder, greeter) = await OpenRepositoryAsync();
+        await using var fixture = f;
+
+        await Assert.ThrowsAsync<GitException>(() => f.Shell.Git.MergeAsync("feature"));
+        await ShellFixture.PumpUntil(() => f.Shell.GitChanges is { HasOperation: true, HasConflicts: true });
+        Assert.Equal("merge", f.Shell.Workbench.Context.GetValue("gitOperation"));
+        Assert.Contains("Resolve the conflicts", f.Shell.GitChanges.OperationText, StringComparison.Ordinal);
+
+        var document = await f.Shell.OpenMergeEditorAsync(greeter);
+        Assert.NotNull(document);
+        Assert.Equal(1, document.ViewModel.Remaining);
+        Assert.Contains("Greetings from", document.ViewModel.Ours, StringComparison.Ordinal);
+        Assert.Contains("Howdy from", document.ViewModel.Theirs, StringComparison.Ordinal);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<MergeEditorView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<MergeEditorView>().Single();
+
+        view.Accept("incoming");
+        Assert.Equal(0, document.ViewModel.Remaining);
+        Assert.Contains("Howdy from", view.ResultText, StringComparison.Ordinal);
+        Assert.DoesNotContain("<<<<<<<", view.ResultText, StringComparison.Ordinal);
+        await view.AcceptMergeAsync();
+        await ShellFixture.PumpUntil(() => !f.Shell.GitChanges.HasConflicts);
+        Assert.Contains("Howdy from", File.ReadAllText(greeter), StringComparison.Ordinal);
+
+        f.Shell.Run("git.continue");
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Operation: null });
+        Assert.Contains("Merge branch 'feature'", Git(folder, "log", "-1", "--format=%s"), StringComparison.Ordinal);
+        await ShellFixture.PumpUntil(() => !f.Shell.GitChanges.HasOperation); // the view model follows through Ui.Post
+    }
+
+    [AvaloniaFact]
+    public async Task The_merge_editor_parses_markers_with_a_base_and_accepts_both()
+    {
+        const string text = "a\n<<<<<<< HEAD\nours\n||||||| base\nold\n=======\ntheirs\n>>>>>>> feature\nb\n";
+        var conflict = Assert.Single(MergeEditorViewModel.Parse(text));
+        Assert.Equal(("ours\n", "old\n", "theirs\n", "HEAD", "feature"), (conflict.Ours, conflict.Base, conflict.Theirs, conflict.OursLabel, conflict.TheirsLabel));
+        Assert.Equal("a\nours\ntheirs\nb\n", text[..conflict.Start] + MergeEditorViewModel.ReplacementFor(conflict, "both") + text[(conflict.Start + conflict.Length)..]);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new MergeEditorViewModel("x", text, null, null, null, _ => Task.CompletedTask).AcceptAsync(text));
+    }
+
+    [AvaloniaFact]
+    public async Task Interactive_rebase_editor_squashes_and_rewords()
+    {
+        var (f, folder, _) = await OpenRepositoryAsync();
+        await using var fixture = f;
+        File.WriteAllText(Path.Combine(folder, "one.txt"), "1");
+        Git(folder, "add", ".");
+        Git(folder, "commit", "-q", "-m", "one");
+        File.WriteAllText(Path.Combine(folder, "two.txt"), "2");
+        Git(folder, "add", ".");
+        Git(folder, "commit", "-q", "-m", "two");
+        await f.Shell.Git.RefreshAsync();
+
+        f.Shell.Run("git.history");
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d.ViewModel.Rows.Count > 3));
+        var history = f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Single().ViewModel;
+        history.Selected = history.Rows.Single(r => r.Subject == "Say greetings");
+        await history.RunAsync("rebaseInteractive");
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<InteractiveRebaseDocument>().Any());
+        var rebase = f.Shell.Layout.Documents.OfType<InteractiveRebaseDocument>().Single().ViewModel;
+        Assert.Equal(["one", "two"], rebase.Steps.Select(s => s.Subject));
+
+        rebase.Steps[0].Action = "reword";
+        rebase.Steps[0].Message = "one and two";
+        rebase.Steps[1].Action = "fixup";
+        await rebase.StartAsync();
+        Assert.False(rebase.HasError, rebase.Error);
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<InteractiveRebaseDocument>().Any() == false);
+        Assert.Equal(["one and two", "Say greetings", "initial"], Git(folder, "log", "--format=%s").Split('\n', StringSplitOptions.RemoveEmptyEntries));
+        Assert.True(File.Exists(Path.Combine(folder, "two.txt")));
+    }
+
+    [AvaloniaFact]
+    public async Task Selected_lines_of_a_diff_are_staged_alone()
+    {
+        var (f, folder, greeter) = await OpenRepositoryAsync();
+        await using var fixture = f;
+        var lines = File.ReadAllLines(greeter).ToList();
+        lines.Insert(0, "// first added line");
+        lines.Insert(1, "// second added line");
+        File.WriteAllText(greeter, string.Join('\n', lines) + "\n");
+        await f.Shell.Git.RefreshAsync();
+
+        await f.Shell.OpenDiffAsync(greeter, staged: false);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any(v => v.RightText.StartsWith("// first", StringComparison.Ordinal)));
+        var view = f.Window.GetVisualDescendants().OfType<DiffView>().Single(v => v.RightText.StartsWith("// first", StringComparison.Ordinal));
+        var right = view.ActiveEditor;
+        right.TextArea.Caret.Line = 1; // the first added line only
+        await view.LineActionAsync("stage");
+
+        var staged = Git(folder, "diff", "--cached");
+        Assert.Contains("+// first added line", staged, StringComparison.Ordinal);
+        Assert.DoesNotContain("second added line", staged, StringComparison.Ordinal);
+        Assert.Contains("+// second added line", Git(folder, "diff"), StringComparison.Ordinal);
+    }
+}

@@ -42,7 +42,7 @@ public class CalculatorTests
     [TestMethod]
     public void Hangs()
     {
-        if (Environment.GetEnvironmentVariable("DAEDALUS_FIXTURE_HANG") == "1")
+        if (Environment.GetEnvironmentVariable("CODALUS_FIXTURE_HANG") == "1")
         {
             Thread.Sleep(TimeSpan.FromMinutes(10));
         }

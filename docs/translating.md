@@ -1,6 +1,6 @@
-# Translating Daedalus Studio
+# Translating Codalus IDE
 
-Daedalus Studio's text is in JSON catalogues (M23b): `src/DaedalusStudio.Shell/Localization/<locale>.json`, a flat `{ "key": "text" }` object per language. `en.json` is the source every translation follows. A string missing from a translation shows in English, so a partial translation works.
+Codalus IDE's text is in JSON catalogues (M23b): `src/Codalus.Shell/Localization/<locale>.json`, a flat `{ "key": "text" }` object per language. `en.json` is the source every translation follows. A string missing from a translation shows in English, so a partial translation works.
 
 ## For translators
 
@@ -8,11 +8,11 @@ Translations are planned on hosted Weblate, which reads and writes these files (
 1. Copy `en.json` to `<locale>.json`, named by its BCP 47 name: `de`, `pt-BR`, `zh-Hans`.
 2. Translate the values; leave the keys.
 3. Keep `{0}`-style placeholders, `$(icon)` names and the leading `_` of menu mnemonics (`_File`).
-4. Run Daedalus Studio with `--locale <locale>` to see it.
+4. Run Codalus IDE with `--locale <locale>` to see it.
 
 A regional file falls back to its language: `pt-BR`, then `pt`, then English. Right-to-left languages (Arabic, Hebrew, Persian, Urdu and others) lay the window out right to left.
 
-Plugins carry their own translations next to their manifests (`daedalus-plugin.nls.<locale>.json`, see [Plugins](plugins.md#translating-the-manifest)).
+Plugins carry their own translations next to their manifests (`codalus-plugin.nls.<locale>.json`, see [Plugins](plugins.md#translating-the-manifest)).
 
 ## For developers
 
@@ -21,14 +21,14 @@ Plugins carry their own translations next to their manifests (`daedalus-plugin.n
   - `command.<id>`, `category.<category>`
   - `setting.<key>.title`, `.description`, `.enum.<value>`, `settingCategory.<category>`
   - `menu.<menu or submenu location>`, `toolWindow.<id>`
-- **Views** use `{l:T <view>.<words>}` (`xmlns:l="using:DaedalusStudio.Shell.Infrastructure"`). Their English lives only in `en.json`. `python3 eng/localize-xaml.py <view.axaml>…` moves a view's literal text there.
+- **Views** use `{l:T <view>.<words>}` (`xmlns:l="using:Codalus.Shell.Infrastructure"`). Their English lives only in `en.json`. `python3 eng/localize-xaml.py <view.axaml>…` moves a view's literal text there.
 - **Code**: `Localizer.Get("<key>", "English")` for a string, and `Localizer.Format("<key>", "English {0}", value)` for one with placeholders.
 
-**Tests.** `LocalizationCatalogTests` keeps `en.json` equal to what the code and the views have, and stops any view gaining a hard-coded string (`tests/DaedalusStudio.Shell.Tests/localization-literals.txt`, the count left in each view, may only go down). After changing UI text, run the shell tests with `DAEDALUS_UPDATE_LOCALIZATION=1` to regenerate both files, and commit them.
+**Tests.** `LocalizationCatalogTests` keeps `en.json` equal to what the code and the views have, and stops any view gaining a hard-coded string (`tests/Codalus.Shell.Tests/localization-literals.txt`, the count left in each view, may only go down). After changing UI text, run the shell tests with `CODALUS_UPDATE_LOCALIZATION=1` to regenerate both files, and commit them.
 
 **Checking.** The pseudo-languages show what isn't translatable yet:
-- `daedalus --locale qps-ploc` accents and lengthens every string that goes through the catalogues, so English text stands out. Clipping shows where text grows.
-- `daedalus --locale qps-plocm` does the same right to left.
+- `codalus --locale qps-ploc` accents and lengthens every string that goes through the catalogues, so English text stands out. Clipping shows where text grows.
+- `codalus --locale qps-plocm` does the same right to left.
 - `--screenshot <png>` captures the window.
 
 - **Messages built in code** (notifications, status bar messages, dialogs) use `Localizer.Get("msg.<file>.<words>", "English")` or `Localizer.Format(…, "English {0}", value)`. `python3 eng/localize-cs.py <file.cs>…` converts those calls' literals, and the catalogue test reads their English into `en.json`.

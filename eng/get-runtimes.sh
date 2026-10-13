@@ -6,7 +6,7 @@
 #
 # The root holds the SDK the repository builds with (global.json), the runtimes of netcoreapp2.0 to net9.0, the
 # ASP.NET Core runtimes of the 2.1 and 3.1 fixtures, and the older SDKs that samples/TargetFrameworks/Sdks pins in
-# global.json. The suite in tests/DaedalusStudio.TargetFrameworks.Tests runs against it: point DAEDALUS_DOTNET_COMPAT
+# global.json. The suite in tests/Codalus.TargetFrameworks.Tests runs against it: point CODALUS_DOTNET_COMPAT
 # at another root to use that one.
 #
 # macOS on Apple silicon: .NET 6 and later run natively. Earlier versions have no Arm64 build; their x64 runtimes go
@@ -151,7 +151,7 @@ fi
   echo "runtimes=${runtimes[*]}"
   echo "aspnetcore=${aspnetcore[*]}"
   echo "sdks=${installed_sdks[*]:-}"
-} > "$destination/.daedalus-compat"
+} > "$destination/.codalus-compat"
 echo "== $destination"
 exe=dotnet; [ "$os" = windows ] && exe=dotnet.exe
 "$destination/$exe" --list-sdks

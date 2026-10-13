@@ -1,6 +1,6 @@
 # Debugging
 
-Daedalus Studio debugs .NET programs with **netcoredbg**, the open-source .NET debugger from Samsung, which is bundled with the packages. It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and the macOS package bundles the x64 netcoredbg for them ([Older .NET versions](dotnet-versions.md)).
+Codalus IDE debugs .NET programs with **netcoredbg**, the open-source .NET debugger from Samsung, which is bundled with the packages. It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and the macOS package bundles the x64 netcoredbg for them ([Older .NET versions](dotnet-versions.md)).
 
 ## Starting
 
@@ -19,7 +19,7 @@ The program's output and the debugger's messages appear in the **Debug Console**
 
 ### The program's console
 
-On Windows a debugged console or web app gets a **console window** of its own, as in Visual Studio: it takes input, the window stays open after the program ends until you press a key, Stop closes it, and a web app's browser opens once its address answers. Elsewhere it writes to the Debug Console and gets no input. Set **`debug.console`** to `internalConsole`, `integratedTerminal` or `externalConsole` (Windows) to choose; Run Without Debugging has the same choice in **`run.console`** (`outputWindow`, `integratedTerminal`, `externalConsole`). With `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Daedalus Studio starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS the setting has no effect yet: the debugger can't attach to a program held in the terminal there, so programs use the Debug Console.
+On Windows a debugged console or web app gets a **console window** of its own, as in Visual Studio: it takes input, the window stays open after the program ends until you press a key, Stop closes it, and a web app's browser opens once its address answers. Elsewhere it writes to the Debug Console and gets no input. Set **`debug.console`** to `internalConsole`, `integratedTerminal` or `externalConsole` (Windows) to choose; Run Without Debugging has the same choice in **`run.console`** (`outputWindow`, `integratedTerminal`, `externalConsole`). With `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Codalus IDE starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS the setting has no effect yet: the debugger can't attach to a program held in the terminal there, so programs use the Debug Console.
 
 ### Several startup projects
 
@@ -42,7 +42,7 @@ Debug → **Attach to Process on a Remote Machine** debugs a .NET program runnin
 - **Docker or Podman container**: pick a running container. The `debug.containerTool` setting is the container command: `docker` (default), `podman`, or one inside WSL such as `wsl -d Ubuntu --exec podman`.
 - **WSL distribution** (Windows): pick a distribution.
 
-Then pick the process (.NET processes come first). The first time, Daedalus Studio offers to copy the debugger (netcoredbg, about 15 MB) to the machine: into `~/.daedalus/netcoredbg`, or `/tmp/.daedalus/netcoredbg` in a container. The machine needs `tar` and `gzip`, but no internet access. Linux on x64 and Arm64, and macOS on Apple silicon, are supported.
+Then pick the process (.NET processes come first). The first time, Codalus IDE offers to copy the debugger (netcoredbg, about 15 MB) to the machine: into `~/.codalus/netcoredbg`, or `/tmp/.codalus/netcoredbg` in a container. The machine needs `tar` and `gzip`, but no internet access. Linux on x64 and Arm64, and macOS on Apple silicon, are supported.
 
 **Source files**: frames of a program built elsewhere carry that machine's paths (`/src/App/Program.cs`). A file that isn't here is found in your solution by its folder and name, and its folder is then mapped for your breakpoints. To map folders yourself, add entries to **`debug.sourceFileMap`**, such as `"/src=C:\\work\\App"`.
 
@@ -73,13 +73,13 @@ To debug an analyzer or a source generator, give its project a profile that runs
 }
 ```
 
-Make the analyzer project the startup project and press F5. Daedalus Studio runs the SDK's compiler on the target project, with the target's own command line, under the debugger. Breakpoints in your generator stop as it runs. The compiler's output goes to a temporary folder, so your project's build output isn't touched.
+Make the analyzer project the startup project and press F5. Codalus IDE runs the SDK's compiler on the target project, with the target's own command line, under the debugger. Breakpoints in your generator stop as it runs. The compiler's output goes to a temporary folder, so your project's build output isn't touched.
 
 ### Just-In-Time debugging
 
 Debug → **Just-In-Time Debugging** turns crash dumps of your .NET programs on or off. It is off by default, and the dialog says exactly what it changes before you agree.
 
-When it's on, a .NET program you start that crashes writes a full dump to the `logs/crash-dumps` folder of your user data. Daedalus Studio then offers to **open the dump** (see [Dumps](#dumps)). It works through the .NET runtime's crash-dump variables, set for your user only, with no administrator rights:
+When it's on, a .NET program you start that crashes writes a full dump to the `logs/crash-dumps` folder of your user data. Codalus IDE then offers to **open the dump** (see [Dumps](#dumps)). It works through the .NET runtime's crash-dump variables, set for your user only, with no administrator rights:
 - **Windows**: your user environment variables;
 - **Linux**: `~/.config/environment.d` and `~/.profile`;
 - **macOS**: `launchctl` and a login item.

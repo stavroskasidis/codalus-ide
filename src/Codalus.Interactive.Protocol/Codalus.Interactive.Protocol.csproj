@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Wire contracts between the Codalus shell and the C# Interactive host (docs/interactive-protocol.md).</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.LanguageServices.Protocol\Codalus.LanguageServices.Protocol.csproj" />
+  </ItemGroup>
+</Project>

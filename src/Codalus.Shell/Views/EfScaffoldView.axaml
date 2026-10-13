@@ -1,0 +1,54 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.EfScaffoldView"
+             x:DataType="vm:EfScaffoldViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="24,18" Spacing="8" MaxWidth="780" HorizontalAlignment="Left">
+      <TextBlock Classes="heading" Text="{l:T efScaffold.reverseEngineerADatabase}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T efScaffold.dotnetEfDbcontextScaffoldGeneratesEntity}" />
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,4">
+        <TextBlock Text="{l:T efScaffold.project}" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
+        <ComboBox x:Name="ProjectBox" Grid.Column="1" ItemsSource="{Binding Projects}" SelectedItem="{Binding SelectedProject}" MinWidth="320" AutomationProperties.Name="{l:T efScaffold.project}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:EfProjectChoice">
+              <TextBlock Text="{Binding Name}" ToolTip.Tip="{Binding Path}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Grid.Row="1" Text="{l:T efScaffold.knownConnection}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" ItemsSource="{Binding KnownConnections}" SelectedItem="{Binding KnownConnection}" MinWidth="320" PlaceholderText="{l:T efScaffold.fromAppsettingsOrUserSecrets}" AutomationProperties.Name="{l:T efScaffold.knownConnection}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:EfConnectionChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <TextBlock Grid.Row="2" Text="{l:T efScaffold.connectionString}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" Text="{Binding ConnectionString}" AutomationProperties.Name="{l:T efScaffold.connectionString}" />
+        <TextBlock Grid.Row="3" Text="{l:T efScaffold.provider}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <ComboBox Grid.Row="3" Grid.Column="1" Margin="0,6,0,0" ItemsSource="{Binding Providers}" SelectedItem="{Binding Provider}" MinWidth="320" AutomationProperties.Name="{l:T efScaffold.provider}" />
+        <TextBlock Grid.Row="4" Text="{l:T efScaffold.outputFolder}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="4" Grid.Column="1" Margin="0,6,0,0" Text="{Binding OutputDir}" AutomationProperties.Name="{l:T efScaffold.outputFolder}" />
+        <TextBlock Grid.Row="5" Text="{l:T efScaffold.contextName}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="5" Grid.Column="1" Margin="0,6,0,0" Text="{Binding ContextName}" PlaceholderText="{l:T efScaffold.fromTheDatabaseSName}" AutomationProperties.Name="{l:T efScaffold.contextName}" />
+        <TextBlock Grid.Row="6" Text="{l:T efScaffold.tables}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
+        <TextBox Grid.Row="6" Grid.Column="1" Margin="0,6,0,0" Text="{Binding Tables}" PlaceholderText="{l:T efScaffold.allTablesOrACommaSeparated}" AutomationProperties.Name="{l:T efScaffold.tables}" />
+      </Grid>
+      <TextBlock Text="{l:T efScaffold.schemasCommaSeparatedEmptyAll}" Classes="muted" />
+      <TextBox Text="{Binding Schemas}" AutomationProperties.Name="{l:T efScaffold.schemas}" />
+      <CheckBox Content="{l:T efScaffold.useDataAnnotationsWherePossibleInstead}" IsChecked="{Binding DataAnnotations}" />
+      <CheckBox Content="{l:T efScaffold.donTGenerateOnconfiguringKeepsThe}" IsChecked="{Binding NoOnConfiguring}" />
+      <CheckBox Content="{l:T efScaffold.useTheDatabaseSNamesFor}" IsChecked="{Binding UseDatabaseNames}" />
+      <CheckBox Content="{l:T efScaffold.donTPluralizeOrSingularizeNames}" IsChecked="{Binding NoPluralize}" />
+      <CheckBox Content="{l:T efScaffold.overwriteExistingFiles}" IsChecked="{Binding Force}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Classes="accent" Content="{l:T efScaffold.generate}" Command="{Binding RunCommand}" IsEnabled="{Binding !IsBusy}" />
+        <TextBlock Text="{l:T efScaffold.buildingAndGenerating}" Classes="muted" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Result}" IsVisible="{Binding HasResult}" FontWeight="SemiBold" TextWrapping="Wrap" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -1,8 +1,8 @@
 # Shell ↔ data host protocol
 
-`daedalus-datahost` ([ADR 0037](adr/0037-data-host-and-providers.md)) holds the database providers (SQL Server through Microsoft.Data.SqlClient with managed networking, PostgreSQL through Npgsql, MySQL and MariaDB through MySqlConnector, SQLite through Microsoft.Data.Sqlite), the connections and query execution. It speaks JSON-RPC 2.0 with LSP framing (`DaedalusStudio.Rpc`) over stdio. The shell starts it on the first database action (`DataService` in `src/DaedalusStudio.Workbench/Data`) and supervises it with `SupervisedProcess`: after a crash it restarts and the open connections are registered again. `DAEDALUS_DATAHOST` points at another build (an apphost or a `.dll`); otherwise `datahost/` next to the shell is used. Contracts are in `src/DaedalusStudio.Data.Protocol/DataMessages.cs`.
+`codalus-datahost` ([ADR 0037](adr/0037-data-host-and-providers.md)) holds the database providers (SQL Server through Microsoft.Data.SqlClient with managed networking, PostgreSQL through Npgsql, MySQL and MariaDB through MySqlConnector, SQLite through Microsoft.Data.Sqlite), the connections and query execution. It speaks JSON-RPC 2.0 with LSP framing (`Codalus.Rpc`) over stdio. The shell starts it on the first database action (`DataService` in `src/Codalus.Workbench/Data`) and supervises it with `SupervisedProcess`: after a crash it restarts and the open connections are registered again. `CODALUS_DATAHOST` points at another build (an apphost or a `.dll`); otherwise `datahost/` next to the shell is used. Contracts are in `src/Codalus.Data.Protocol/DataMessages.cs`.
 
-The same executable with `--lsp` is the SQL language server ([ADR 0038](adr/0038-sql-language-service-and-database-projects.md)); see [protocol.md](protocol.md) for `daedalus/sql/context`.
+The same executable with `--lsp` is the SQL language server ([ADR 0038](adr/0038-sql-language-service-and-database-projects.md)); see [protocol.md](protocol.md) for `codalus/sql/context`.
 
 ## Conventions
 

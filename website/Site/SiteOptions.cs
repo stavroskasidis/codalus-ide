@@ -1,11 +1,11 @@
-namespace DaedalusStudio.Website.Site;
+namespace Codalus.Website.Site;
 
 /// <summary>What the site is built from: the configuration section <c>Site</c> (or <c>--stable</c>, <c>--nightly</c>,
 /// <c>--ref</c>, <c>--base-url</c> and <c>--repo</c> on the command line).</summary>
 internal sealed record SiteOptions
 {
-    public const string DefaultRepository = "stavroskasidis/daedalus-studio";
-    public const string DefaultBaseUrl = "https://stavroskasidis.com/daedalus-studio/";
+    public const string DefaultRepository = "stavroskasidis/codalus-ide";
+    public const string DefaultBaseUrl = "https://stavroskasidis.com/codalus-ide/";
 
     /// <summary>The repository checkout: <c>website/wwwroot</c> and <c>docs/user-guide</c> are read from it.</summary>
     public string RepoRoot { get; init; } = "";
@@ -54,14 +54,14 @@ internal sealed record SiteOptions
         {
             for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
             {
-                if (File.Exists(Path.Combine(dir.FullName, "DaedalusStudio.slnx")))
+                if (File.Exists(Path.Combine(dir.FullName, "Codalus.slnx")))
                 {
                     return dir.FullName;
                 }
             }
         }
 
-        throw new SiteException("run it inside the repository (no DaedalusStudio.slnx above here), or set Site:RepoRoot");
+        throw new SiteException("run it inside the repository (no Codalus.slnx above here), or set Site:RepoRoot");
     }
 }
 

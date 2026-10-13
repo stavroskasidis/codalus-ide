@@ -1,0 +1,82 @@
+<local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:Codalus.Shell.ViewModels"
+                   xmlns:local="using:Codalus.Shell.Views"
+                   x:Class="Codalus.Shell.Views.BuildTimingsView"
+                   x:DataType="vm:BuildTimingsViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
+      <TextBlock Classes="heading" Text="{l:T buildTimings.buildTimings}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T buildTimings.theLastBuildSProjectBuilds}" />
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button x:Name="RefreshButton" Content="{l:T buildTimings.refresh}" Command="{Binding RefreshCommand}" />
+        <Button Content="{l:T buildTimings.openBinaryLog}" Command="{Binding OpenBinaryLogCommand}" IsVisible="{Binding HasBinaryLog}" />
+        <CheckBox Content="{l:T buildTimings.showShortBuildsToo}" IsChecked="{Binding ShowAll}" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Summary}" />
+      </StackPanel>
+      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Classes="muted" Text="{l:T buildTimings.criticalPath}" />
+        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="{Binding CriticalPathText}" AutomationProperties.Name="{l:T buildTimings.criticalPath2}" />
+      </StackPanel>
+    </StackPanel>
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,*" Height="220" Margin="0,10,0,0">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{l:T buildTimings.slowestTargets}" Margin="0,0,0,4" />
+        <ListBox ItemsSource="{Binding Targets}" AutomationProperties.Name="{l:T buildTimings.slowestTargets}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:DurationRowViewModel">
+              <Grid ColumnDefinitions="*,Auto" AutomationProperties.Name="{Binding Name}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="{Binding Name}" />
+                  <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Text="{Binding Detail}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding Duration}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <DockPanel Grid.Column="1" Margin="10,0,0,0">
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{l:T buildTimings.slowestTasksAllRuns}" Margin="0,0,0,4" />
+        <ListBox ItemsSource="{Binding Tasks}" AutomationProperties.Name="{l:T buildTimings.slowestTasks}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:DurationRowViewModel">
+              <Grid ColumnDefinitions="*,Auto" AutomationProperties.Name="{Binding Name}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="{Binding Name}" />
+                  <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Text="{Binding Detail}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding Duration}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Grid>
+    <ListBox ItemsSource="{Binding Projects}" AutomationProperties.Name="{l:T buildTimings.projectBuilds}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ProjectTimingRowViewModel">
+          <Grid ColumnDefinitions="220,80,570,*" AutomationProperties.Name="{Binding AccessibleName}" ToolTip.Tip="{Binding Targets}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Classes.muted="{Binding !IsCritical}" VerticalAlignment="Center" />
+              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Node}" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{Binding Duration}" />
+            <Border Grid.Column="2" Height="12" HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="2"
+                    Margin="{Binding BarMargin}" Width="{Binding BarWidth}"
+                    Background="{DynamicResource Shell.Accent}" Opacity="0.45" Classes.critical="{Binding IsCritical}">
+              <Border.Styles>
+                <Style Selector="Border.critical">
+                  <Setter Property="Opacity" Value="1" />
+                </Style>
+              </Border.Styles>
+            </Border>
+            <TextBlock Grid.Column="3" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Text="{Binding StartText}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</local:LoadingView>

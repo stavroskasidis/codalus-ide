@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Codalus IDE
+GenericName=Integrated Development Environment
+Comment=A cross-platform, open-source IDE for .NET
+Exec=codalus %F
+Icon=codalus
+Terminal=false
+Categories=Development;IDE;
+MimeType=text/x-csharp;application/x-csproj;
+StartupWMClass=codalus
+Keywords=dotnet;csharp;ide;

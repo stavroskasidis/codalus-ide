@@ -1,15 +1,15 @@
 # Writing plugins
 
-Plugins extend Daedalus Studio with commands, menus, key bindings, settings, tool windows, notifications, output channels and status bar items. This guide walks through the sample in [`samples/plugins/HelloWorld`](../samples/plugins/HelloWorld). The design and its reasons are in [ADR 0003](adr/0003-plugin-api.md), and the wire protocol is in [plugin-protocol.md](plugin-protocol.md).
+Plugins extend Codalus IDE with commands, menus, key bindings, settings, tool windows, notifications, output channels and status bar items. This guide walks through the sample in [`samples/plugins/HelloWorld`](../samples/plugins/HelloWorld). The design and its reasons are in [ADR 0003](adr/0003-plugin-api.md), and the wire protocol is in [plugin-protocol.md](plugin-protocol.md).
 
 **API version 0.2.0.** The API is pre-1.0: a minor release (0.3) may break plugins, while patch releases (0.2.x) only add. Ask for `^0.2.0`. See the [changelog](#changelog).
 
 ## How plugins run
 
-- A plugin is a .NET 10 class library. It runs in a **plugin host** process (`daedalus-pluginhost`), never in the IDE process, so a slow or crashing plugin can't freeze the UI. Built-in plugins share one host, and third-party plugins share another. A plugin can ask for a host of its own with `"isolation": "dedicated"`.
-- Everything a user can see before your code runs comes from the **manifest** (`daedalus-plugin.json`): commands in the palette and menus, key bindings, tool windows and settings, including the Settings UI.
+- A plugin is a .NET 10 class library. It runs in a **plugin host** process (`codalus-pluginhost`), never in the IDE process, so a slow or crashing plugin can't freeze the UI. Built-in plugins share one host, and third-party plugins share another. A plugin can ask for a host of its own with `"isolation": "dedicated"`.
+- Everything a user can see before your code runs comes from the **manifest** (`codalus-plugin.json`): commands in the palette and menus, key bindings, tool windows and settings, including the Settings UI.
 - Your code is loaded on the first **activation event**: a contributed command is run, a contributed tool window is opened, a setting changes, or startup. Until then no host process runs at all.
-- If a host crashes, Daedalus restarts it and reactivates its plugins, and the user is notified. If it keeps crashing, the host is stopped for the session and its plugins are marked failed.
+- If a host crashes, Codalus restarts it and reactivates its plugins, and the user is notified. If it keeps crashing, the host is stopped for the session and its plugins are marked failed.
 
 ## Project setup
 
@@ -23,25 +23,25 @@ Plugins extend Daedalus Studio with commands, menus, key bindings, settings, too
   </PropertyGroup>
   <ItemGroup>
     <!-- The host provides the API at runtime, so it is not copied next to the plugin. -->
-    <PackageReference Include="DaedalusStudio.Plugins.Abstractions" Version="0.1.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Codalus.Plugins.Abstractions" Version="0.1.0" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup>
-    <None Update="daedalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="codalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
 ```
 
-The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repository is private until M7). Until then, reference the project directly, as the sample does.
+The `Codalus.Plugins.Abstractions` package is not published yet (the repository is private until M7). Until then, reference the project directly, as the sample does.
 
 ## The manifest
 
 ```json
 {
-  "id": "daedalus-samples.hello",
+  "id": "codalus-samples.hello",
   "version": "1.0.0",
   "displayName": "Hello World",
-  "publisher": "daedalus-samples",
-  "engines": { "daedalus": "^0.1.0" },
+  "publisher": "codalus-samples",
+  "engines": { "codalus": "^0.1.0" },
   "entry": { "runtime": "dotnet", "assembly": "HelloWorld.dll" },
   "activationEvents": [ "onSettingChanged:hello.announce" ],
   "contributes": {
@@ -67,15 +67,15 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 |---|---|
 | `id` | `publisher.name`, lower case. Unique. |
 | `version` | SemVer. |
-| `engines.daedalus` | An npm-style range over the **plugin API version** (`^0.1.0`, `~0.1.2`, `>=0.1.0 <0.3.0`, `0.1.x`, `a \|\| b`). Plugins whose range doesn't include the running API are not loaded; the user is told why. |
-| `entry` | `runtime` is `dotnet`; `assembly` is the plugin DLL next to the manifest. If it contains more than one public `IDaedalusPlugin`, name one with `type`. |
+| `engines.codalus` | An npm-style range over the **plugin API version** (`^0.1.0`, `~0.1.2`, `>=0.1.0 <0.3.0`, `0.1.x`, `a \|\| b`). Plugins whose range doesn't include the running API are not loaded; the user is told why. |
+| `entry` | `runtime` is `dotnet`; `assembly` is the plugin DLL next to the manifest. If it contains more than one public `ICodalusPlugin`, name one with `type`. |
 | `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, `onTestProjects` (the open solution has a test project; since 0.2.1), `onHostingProvider:<id>` (the shell needs a hosting provider the plugin declares; since 0.2.7, implicit), and `onDebug` (a debug session starts; since 0.2.7). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
 | `isolation` | `shared` (default) or `dedicated` (a host process of its own). |
-| `enableProposedApi` | Use [proposed APIs](#proposed-apis). Honored for built-in plugins, and for others when Daedalus runs with `--enable-proposed-api`. |
+| `enableProposedApi` | Use [proposed APIs](#proposed-apis). Honored for built-in plugins, and for others when Codalus runs with `--enable-proposed-api`. |
 
 ### Translating the manifest
 
-A manifest string that is a whole `%key%` (VS Code's convention) is replaced when the manifest loads. The text comes from `daedalus-plugin.nls.<locale>.json` for the display language (`pt-BR`, then `pt`), else from `daedalus-plugin.nls.json` (English) next to the manifest. Each file is a flat `{ "key": "text" }` object. Titles, descriptions, categories, setting texts and anything else the manifest shows can be translated this way. A key no file has stays as written. Ship the `nls` files next to the manifest; the built-in Welcome plugin does. A plugin's own text (tree labels, messages) uses the same files through `context.Localize("key", "English")` (since 0.2.9). The display language is the setting `workbench.locale` (or `--locale`); `qps-ploc` shows every replaced string pseudo-translated, so untranslated text stands out.
+A manifest string that is a whole `%key%` (VS Code's convention) is replaced when the manifest loads. The text comes from `codalus-plugin.nls.<locale>.json` for the display language (`pt-BR`, then `pt`), else from `codalus-plugin.nls.json` (English) next to the manifest. Each file is a flat `{ "key": "text" }` object. Titles, descriptions, categories, setting texts and anything else the manifest shows can be translated this way. A key no file has stays as written. Ship the `nls` files next to the manifest; the built-in Welcome plugin does. A plugin's own text (tree labels, messages) uses the same files through `context.Localize("key", "English")` (since 0.2.9). The display language is the setting `workbench.locale` (or `--locale`); `qps-ploc` shows every replaced string pseudo-translated, so untranslated text stands out.
 
 ### Contribution points
 
@@ -97,7 +97,7 @@ A manifest string that is a whole `%key%` (VS Code's convention) is replaced whe
 ## The code
 
 ```csharp
-public sealed class HelloPlugin : IDaedalusPlugin
+public sealed class HelloPlugin : ICodalusPlugin
 {
     public Task ActivateAsync(IPluginContext context, CancellationToken cancellationToken)
     {
@@ -105,8 +105,8 @@ public sealed class HelloPlugin : IDaedalusPlugin
         context.Subscriptions.Add(context.Commands.Register("hello.sayHello", async (_, ct) =>
         {
             var greeting = context.Settings.GetValue("hello.greeting", "Hello");
-            output.AppendLine($"{greeting}, Daedalus!");
-            await context.Window.ShowNotificationAsync(NotificationSeverity.Info, $"{greeting}, Daedalus!", ["Show Output"], ct);
+            output.AppendLine($"{greeting}, Codalus!");
+            await context.Window.ShowNotificationAsync(NotificationSeverity.Info, $"{greeting}, Codalus!", ["Show Output"], ct);
             return null;
         }));
         context.Subscriptions.Add(context.Window.RegisterTreeDataProvider("hello.view", new GreetingTree(context.Settings)));
@@ -159,7 +159,7 @@ Icons are names from the shell's set, so they follow the theme, including high c
 | `file.saveAll`, `workbench.navigateBack`, `workbench.navigateForward`, `workbench.splitEditorRight`, `workbench.splitEditorDown`, `workbench.view.errorList` | none |
 | `workbench.showCommandPalette`, `workbench.openSettings`, `workbench.openKeyboardShortcuts`, `workbench.selectTheme`, `workbench.showLogs`, `workbench.view.plugins` | none |
 
-The built-in Welcome plugin (`src/Plugins/DaedalusStudio.Plugins.Welcome`) and Templates plugin (`src/Plugins/DaedalusStudio.Plugins.Templates`: New Project and New Solution with quick picks, input boxes and `dotnet new`) are complete examples that reach the shell only through these commands.
+The built-in Welcome plugin (`src/Plugins/Codalus.Plugins.Welcome`) and Templates plugin (`src/Plugins/Codalus.Plugins.Templates`: New Project and New Solution with quick picks, input boxes and `dotnet new`) are complete examples that reach the shell only through these commands.
 
 ## Languages, grammars and language servers
 
@@ -169,7 +169,7 @@ Since 0.2.4 a plugin can add a language without any code ([ADR 0016](adr/0016-la
 {
   "id": "contoso.todo",
   "version": "1.0.0",
-  "engines": { "daedalus": "^0.2.4" },
+  "engines": { "codalus": "^0.2.4" },
   "contributes": {
     "languages": [
       { "id": "todo", "aliases": ["Todo"], "extensions": [".todo"], "filenames": ["TODO"], "configuration": "language-configuration.json" }
@@ -219,7 +219,7 @@ The file maps names to `{ "prefix", "body", "description" }`; `prefix` and `body
 
 ## Proposed APIs
 
-Proposed APIs are not covered by the versioning policy (ADR 0003): they may change in any release, and are meant to be proved by built-in plugins before plugin API 1.0. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `DaedalusStudio.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. Since 0.2.1:
+Proposed APIs are not covered by the versioning policy (ADR 0003): they may change in any release, and are meant to be proved by built-in plugins before plugin API 1.0. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. Since 0.2.1:
 
 - **`Tests`: test controllers** (ADR 0010), modelled on VS Code's testing API. `CreateController(id, label)` returns a controller whose `Items` (a tree of `TestItem`: id, label, URI, range, traits, children) appear in the Test Explorer, with editor glyphs on the items' ranges. `CreateRunProfile(label, Run|Debug|Coverage, handler)` adds a way to run tests: the handler gets a `TestRunRequest` (included and excluded items; `Include` null means all) and a token that the user's Cancel cancels. `CreateRun(request)` reports progress: `Enqueued`, `Started`, `Passed`, `Failed`/`Errored` with `TestMessage`s (message, expected, actual, stack trace, location), `Skipped`, `AppendOutput`, `AddAttachment`, `AddCoverage` (ADR 0011), then `Complete`. Item ids are unique within a controller; changes are sent to the shell in batches.
 - **`Workspace`:** the open solution (`GetSolutionAsync`: projects with target frameworks, test project and test platform, compile files and project references), `GetProjectOutputAsync` (the build output per target framework), `FindTestCandidatesAsync` (test classes and methods found in source by the language service, before any build), `GetTypeOutlineAsync` (the type at a position and its methods), and the events `SolutionChanged` and `DocumentsChanged`.
@@ -228,7 +228,7 @@ Proposed APIs are not covered by the versioning policy (ADR 0003): they may chan
   - **Visualizers** (0.2.7, ADR 0032): `RegisterVisualizer(new DebugVisualizerOptions(id, title, types), visualize)` adds a visualizer to the View menu of the debugger's variable trees, for values whose type is in `types` (a name ending in `*` is a prefix: `System.Collections.Generic.Dictionary<*`). When the user picks it, `visualize` gets the value's expression, type and text, and `EvaluateAsync` to read more of the paused program (members, indexers, method calls and private fields; no `new`, casts or lambdas). It returns `VisualizerView.FromText(text, languageId)` (a read-only document) or `VisualizerView.FromTable(columns, rows)`. Activate with `onDebug`. `samples/plugins/DictionaryVisualizer` shows a `Dictionary<TKey, TValue>` as a key/value table.
 - **`Terminals`** (0.2.3): `CreateAsync(new TerminalOptions { Program = "dotnet", Arguments = ["watch"] })` runs a command in an integrated terminal (ADR 0014); without `Program` it opens the user's shell (`Profile`, or the default). The `ITerminal` takes typed input (`SendTextAsync("dir\r")`), raises `Output` with the program's text when `ReportOutput` is set, completes `Exited` with the exit code, and closes on `KillAsync` or disposal.
 
-The built-in .NET test plugin (`src/Plugins/DaedalusStudio.Plugins.DotNetTest`) uses all of them.
+The built-in .NET test plugin (`src/Plugins/Codalus.Plugins.DotNetTest`) uses all of them.
 
 Since 0.2.6 ([ADR 0031](adr/0031-git-hosting-and-repository-features.md)):
 
@@ -238,27 +238,37 @@ Since 0.2.6 ([ADR 0031](adr/0031-git-hosting-and-repository-features.md)):
   - Throw `HostingAuthenticationException` when the stored session is no longer valid: the shell forgets the account and asks the user to sign in again.
 - **`Secrets`: the plugin's own secrets** (`GetAsync`, `StoreAsync`, `DeleteAsync` by key), kept in the OS credential store: Windows Credential Manager, the macOS Keychain, or the Secret Service through libsecret. Never write a token anywhere else.
 
-The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/DaedalusStudio.Plugins.GitHub`, `.AzureDevOps`, `.GitLab`, on the shared `DaedalusStudio.Plugins.Hosting`) are complete examples.
+The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/Codalus.Plugins.GitHub`, `.AzureDevOps`, `.GitLab`, on the shared `Codalus.Plugins.Hosting`) are complete examples.
 
 ## Running and debugging
 
 1. Build the plugin.
-2. Start Daedalus with the build output: `daedalus --plugin-dir path/to/bin/Debug/net10.0`. `--plugin-dir` is repeatable and takes a plugin folder or a folder of plugins; it wins over installed copies with the same id.
+2. Start Codalus with the build output: `codalus --plugin-dir path/to/bin/Debug/net10.0`. `--plugin-dir` is repeatable and takes a plugin folder or a folder of plugins; it wins over installed copies with the same id.
 3. Check **View → Plugins** for its state, and **Output → Plugins** for the activation log and anything you write to `context.Log`.
-4. To debug, attach a .NET debugger to `daedalus-pluginhost`.
+4. To debug, attach a .NET debugger to `codalus-pluginhost`.
 
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
 
+### 0.3.0 (M39)
+
+Breaking: the product is renamed from Daedalus Studio to Codalus IDE ([ADR 0056](adr/0056-rename-to-codalus.md)). Plugins built for 0.2.x need to be rebuilt:
+- the package and namespaces are `Codalus.Plugins.Abstractions` (`ICodalusPlugin`, was `IDaedalusPlugin` in `DaedalusStudio.Plugins.Abstractions`);
+- the manifest is `codalus-plugin.json` (and `codalus-plugin.nls*.json`), its engine `"codalus": "^0.3.0"`;
+- activation events, ids and context keys keep their shapes, with `codalus` for `daedalus` (`codalus.welcome`);
+- environment variables are `CODALUS_*`, and protocol extensions `codalus/…`.
+
+Nothing else changed: a plugin that builds against 0.3.0 behaves as it did on 0.2.9.
+
 ### 0.2.9 (M23c)
 
-Additive (plugins built for 0.2.0–0.2.8 keep working): `context.Localize(key, english)` and `context.Localize(key, english, args…)` (`PluginLocalization`) give a plugin's own text in the display language. The text comes from the same `daedalus-plugin.nls.<locale>.json` files as the [manifest's](#translating-the-manifest), else `english`. The display language reaches the plugin host as `DAEDALUS_DISPLAY_LOCALE`. The built-in Welcome plugin translates its Start page this way.
+Additive (plugins built for 0.2.0–0.2.8 keep working): `context.Localize(key, english)` and `context.Localize(key, english, args…)` (`PluginLocalization`) give a plugin's own text in the display language. The text comes from the same `codalus-plugin.nls.<locale>.json` files as the [manifest's](#translating-the-manifest), else `english`. The display language reaches the plugin host as `CODALUS_DISPLAY_LOCALE`. The built-in Welcome plugin translates its Start page this way.
 
 ### M23b (no version change)
 
 Additive (manifests for 0.2.0–0.2.8 keep working):
-- [Manifest translation](#translating-the-manifest): `%key%` placeholders with `daedalus-plugin.nls.json` and `daedalus-plugin.nls.<locale>.json`.
+- [Manifest translation](#translating-the-manifest): `%key%` placeholders with `codalus-plugin.nls.json` and `codalus-plugin.nls.<locale>.json`.
 - Users can turn plugins off: the setting `plugins.disabled` (ids), which the Plugins window edits. A turned-off plugin is discovered but its contributions aren't applied, and it doesn't activate. It applies at the next start (File → Restart).
 - Shell commands `workbench.restart`, `workbench.customize`, `workbench.profiles.switch`, `.new`, `.delete`, `.export` and `.import`, and `settingsSync.turnOn`, `.syncNow` and `.turnOff`. The context keys `profile` (the active profile's name) and `locale` (the display language).
 - The settings `workbench.locale`, `workbench.commandBarCustomizations` (the user's menu and toolbar changes; a plugin's menu items can be removed and moved like the shell's), `settingsSync.target` and `settingsSync.ignoredSettings`. The settings, keyboard shortcuts and snippets that a profile holds include a plugin's own settings.
@@ -333,10 +343,10 @@ Additive (plugins built for 0.2.0 keep working):
 
 ### 0.2.0 (after M7): breaking
 
-The SDK is now the assembly and NuGet package **`DaedalusStudio.Plugins.Abstractions`**, with the namespace **`DaedalusStudio.Plugins`**; it was `Daedalus.Plugins.Abstractions` and `Daedalus.Plugins`. The `Daedalus.*` package prefix on nuget.org belongs to unrelated packages, so every Daedalus Studio assembly and namespace now uses `DaedalusStudio.*`. To update a plugin:
-1. Reference `DaedalusStudio.Plugins.Abstractions`.
-2. Replace `using Daedalus.Plugins;` with `using DaedalusStudio.Plugins;`.
-3. Set `"engines": { "daedalus": "^0.2.0" }`.
+The SDK is now the assembly and NuGet package **`Codalus.Plugins.Abstractions`**, with the namespace **`Codalus.Plugins`**; it was `Codalus.Plugins.Abstractions` and `Codalus.Plugins`. The `Codalus.*` package prefix on nuget.org belongs to unrelated packages, so every Codalus IDE assembly and namespace now uses `Codalus.*`. To update a plugin:
+1. Reference `Codalus.Plugins.Abstractions`.
+2. Replace `using Codalus.Plugins;` with `using Codalus.Plugins;`.
+3. Set `"engines": { "codalus": "^0.2.0" }`.
 
 Plugins built for 0.1.x are refused with a message: they reference an assembly that no longer exists. Nothing else changed: the protocol, the manifest format and the API surface are the same.
 

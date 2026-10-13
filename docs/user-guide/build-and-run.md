@@ -30,11 +30,11 @@ Under **Settings → Build and Run**:
 
 ### The fast up-to-date check
 
-After each build, Daedalus Studio records what every project was built from (its files, project file and imports, packages, and the projects it references) and what it built. The next Build skips MSBuild entirely when none of it changed: Output → Build then says *up to date, so MSBuild didn't run*. When something did change, it names the first out-of-date project and why, and MSBuild builds as usual. **Build → Check Whether Projects Are Up to Date** lists each project's verdict. A project can opt out with `<DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>`; files a custom target reads can be declared as `UpToDateCheckInput` items.
+After each build, Codalus IDE records what every project was built from (its files, project file and imports, packages, and the projects it references) and what it built. The next Build skips MSBuild entirely when none of it changed: Output → Build then says *up to date, so MSBuild didn't run*. When something did change, it names the first out-of-date project and why, and MSBuild builds as usual. **Build → Check Whether Projects Are Up to Date** lists each project's verdict. A project can opt out with `<DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>`; files a custom target reads can be declared as `UpToDateCheckInput` items.
 
 ### Batch Build
 
-**Build → Batch Build…** lists every project with each configuration and platform it has. Check the ones you want and choose Build, Rebuild or Clean: they build one after another, each with a result. Your checks are kept until you close Daedalus Studio.
+**Build → Batch Build…** lists every project with each configuration and platform it has. Check the ones you want and choose Build, Rebuild or Clean: they build one after another, each with a result. Your checks are kept until you close Codalus IDE.
 
 ### Build timings and binary logs
 
@@ -68,4 +68,4 @@ Errors go to Output → Custom Tool.
   - `launchBrowser`, which opens the app's URL once it is listening
 - **Output**: the program's output appears in View → Output → Run: *project*. It has no console input there (reads see end of input). On Windows, the setting **Run Console Apps in an External Console** gives console apps a window of their own instead.
 - **Stop**: Debug → Stop Running Programs (`Shift+F5`), or the status bar item. This ends the program and the processes it started.
-- **The runtime**: a program runs on the runtimes of the SDK the solution builds with, as with `dotnet run`: its apphost gets that SDK's folder in `DOTNET_ROOT` unless you set it. On Apple silicon, .NET 5 and earlier run as x64 programs on the x64 runtime; on Linux, .NET Core 2.x and 3.x get the system's ICU. The output says when Daedalus changed something, and [Older .NET versions](dotnet-versions.md) says why.
+- **The runtime**: a program runs on the runtimes of the SDK the solution builds with, as with `dotnet run`: its apphost gets that SDK's folder in `DOTNET_ROOT` unless you set it. On Apple silicon, .NET 5 and earlier run as x64 programs on the x64 runtime; on Linux, .NET Core 2.x and 3.x get the system's ICU. The output says when Codalus changed something, and [Older .NET versions](dotnet-versions.md) says why.

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Built-in GitHub plugin (ADR 0031): pull requests, review comments, checks, issues and publishing for GitHub and GitHub Enterprise Server, on the proposed hosting API. Inactive until the user signs in.</Description>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The plugin host provides the API at runtime, so it is not copied next to the plugin. -->
+    <ProjectReference Include="..\..\Codalus.Plugins.Abstractions\Codalus.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+    <ProjectReference Include="..\Codalus.Plugins.Hosting\Codalus.Plugins.Hosting.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="codalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Plugins.Tests" />
+  </ItemGroup>
+</Project>

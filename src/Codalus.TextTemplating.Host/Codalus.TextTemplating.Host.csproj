@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- On .NET 10 when installed, else the next newer .NET (ADR 0025). -->
+    <RollForward>Major</RollForward>
+    <AssemblyName>codalus-t4host</AssemblyName>
+    <RootNamespace>Codalus.TextTemplating.Host</RootNamespace>
+    <Description>Out-of-process T4 host (ADR 0035): runs text templates with Mono.TextTemplating. Template code runs here, never in the shell.</Description>
+    <!-- Templates compile and load assemblies at run time; the host runs on the regular JIT runtime. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
+    <ProjectReference Include="..\Codalus.TextTemplating.Protocol\Codalus.TextTemplating.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mono.TextTemplating" />
+    <PackageReference Include="Mono.TextTemplating.Roslyn" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
+  </ItemGroup>
+</Project>

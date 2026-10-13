@@ -6,7 +6,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: The version to stamp (daedalus-release version …)
+        description: The version to stamp (codalus-release version …)
         type: string
         required: true
       kind:
@@ -82,16 +82,16 @@ jobs:
             || echo "No $channel files in ${{ inputs.previous }}: no delta package this time."
       - name: Release notes
         shell: bash
-        run: dotnet run --project eng/DaedalusStudio.Release -- notes "${{ inputs.kind }}" "${{ inputs.version }}" --repo "${{ github.repository }}" > release-notes.md
+        run: dotnet run --project eng/Codalus.Release -- notes "${{ inputs.kind }}" "${{ inputs.version }}" --repo "${{ github.repository }}" > release-notes.md
       - name: Package
         shell: bash
         env:
-          DAEDALUS_PREVIOUS_RELEASE: ${{ github.workspace }}/previous-release
-          DAEDALUS_RELEASE_NOTES: ${{ github.workspace }}/release-notes.md
+          CODALUS_PREVIOUS_RELEASE: ${{ github.workspace }}/previous-release
+          CODALUS_RELEASE_NOTES: ${{ github.workspace }}/release-notes.md
           # The update feed's signature (M32): installed builds refuse a feed without it.
-          DAEDALUS_FEED_KEY: ${{ secrets.FEED_SIGNING_KEY }}
+          CODALUS_FEED_KEY: ${{ secrets.FEED_SIGNING_KEY }}
           # Code signing (D19) waits behind these until the repository is public.
-          DAEDALUS_CODESIGN_IDENTITY: ${{ secrets.DAEDALUS_CODESIGN_IDENTITY }}
+          CODALUS_CODESIGN_IDENTITY: ${{ secrets.CODALUS_CODESIGN_IDENTITY }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
           bash eng/package.sh "${{ inputs.version }}" "${{ inputs.kind }}"

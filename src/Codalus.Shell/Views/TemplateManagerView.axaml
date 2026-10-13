@@ -1,0 +1,51 @@
+<local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:Codalus.Shell.ViewModels"
+                   xmlns:local="using:Codalus.Shell.Views"
+                   x:Class="Codalus.Shell.Views.TemplateManagerView"
+                   x:DataType="vm:TemplateManagerViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
+      <TextBlock Classes="heading" Text="{l:T templateManager.templates}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T templateManager.theDotnetNewTemplatePackagesInstalled}" />
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBox x:Name="PackageBox" Text="{Binding Package}" PlaceholderText="{l:T templateManager.aPackageIdIdOrId}" AutomationProperties.Name="{l:T templateManager.templatePackageToInstall}" />
+        <Button Grid.Column="1" Margin="6,0,0,0" Content="{l:T templateManager.install}" Command="{Binding InstallCommand}" AutomationProperties.Name="{l:T templateManager.installTemplatePackage}" />
+      </Grid>
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="{l:T templateManager.uninstall}" Command="{Binding UninstallCommand}" />
+        <Button Content="{l:T templateManager.checkForUpdates}" Command="{Binding CheckUpdatesCommand}" />
+        <Button Content="{l:T templateManager.updateAll}" Command="{Binding UpdateAllCommand}" />
+        <Button Content="{l:T templateManager.refresh}" Command="{Binding RefreshCommand}" />
+        <ProgressBar IsIndeterminate="True" Width="80" Height="2" MinHeight="2" VerticalAlignment="Center" IsVisible="{Binding IsBusy}" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Status}" />
+      </StackPanel>
+    </StackPanel>
+    <TextBox DockPanel.Dock="Bottom" Height="110" Margin="0,8,0,0" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" Text="{Binding Output}"
+             FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T templateManager.dotnetNewOutput}" />
+    <Grid ColumnDefinitions="*,*">
+      <ListBox ItemsSource="{Binding Packages}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T templateManager.installedTemplatePackages}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:TemplatePackageRowViewModel">
+            <StackPanel Margin="0,2" AutomationProperties.Name="{Binding AccessibleName}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock FontWeight="SemiBold" Text="{Binding Id}" />
+                <TextBlock Classes="muted" Text="{Binding Version}" />
+                <TextBlock Foreground="{DynamicResource Shell.Link}" Text="{Binding Latest, StringFormat='update: {0}'}" IsVisible="{Binding HasUpdate}" />
+              </StackPanel>
+              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <Border Grid.Column="1" Margin="8,0,0,0" Padding="10" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}">
+        <StackPanel Spacing="4">
+          <TextBlock FontWeight="SemiBold" Text="{Binding Selected.Id}" />
+          <TextBlock Classes="muted" Text="{l:T templateManager.templates2}" />
+          <TextBlock TextWrapping="Wrap" Text="{Binding Selected.TemplatesText}" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </DockPanel>
+</local:LoadingView>

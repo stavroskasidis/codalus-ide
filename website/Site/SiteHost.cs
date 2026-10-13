@@ -1,9 +1,9 @@
 using System.Text;
-using DaedalusStudio.Website.Components;
+using Codalus.Website.Components;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 
-namespace DaedalusStudio.Website.Site;
+namespace Codalus.Website.Site;
 
 /// <summary>
 /// The website as an ASP.NET Core app: Razor components rendered on the server (static SSR, no interactivity), the

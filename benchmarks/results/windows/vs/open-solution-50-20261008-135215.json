@@ -49,7 +49,7 @@
     }
   },
   "notes": [
-    "Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup.",
+    "Experimental instance (/rootsuffix CodalusBench); first launch needs a one-time manual setup.",
     "The fixture copy is restored (dotnet restore) before each launch; restore time is not measured."
   ],
   "discardedRuns": 0

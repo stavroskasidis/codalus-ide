@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Loaded into the Avalonia previewer's process (the user's app under Avalonia's designer host), whatever .NET
+         and Avalonia version that runs: plain IL, Avalonia reached through reflection only. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Description>Codalus IDE: the XAML previewer's agent (M19a, ADR 0048): hit testing, element bounds and the theme variant inside Avalonia's designer host.</Description>
+    <IsTrimmable>false</IsTrimmable>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
+    <InternalsVisibleTo Include="Codalus.Shell.Tests" />
+  </ItemGroup>
+</Project>

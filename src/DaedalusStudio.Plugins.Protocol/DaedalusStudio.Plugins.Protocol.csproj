@@ -1,7 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <Description>Wire contracts between the Daedalus shell and plugin hosts, and the plugin manifest model (docs/plugin-protocol.md).</Description>
-    <IsAotCompatible>true</IsAotCompatible>
-    <IsTrimmable>true</IsTrimmable>
-  </PropertyGroup>
-</Project>

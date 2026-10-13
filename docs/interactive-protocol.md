@@ -1,14 +1,14 @@
 # Shell ↔ C# Interactive host protocol
 
-C# Interactive runs submissions in **`daedalus-replhost`** ([ADR 0015](adr/0015-interactive-host.md)), a supervised process speaking JSON-RPC 2.0 over **stdio** with `Content-Length` framing, like the other hosts.
-- The shell's client is `InteractiveService` in `src/DaedalusStudio.Workbench/Interactive` (AOT-safe).
-- The host is `src/DaedalusStudio.Interactive.Host` (Roslyn scripting).
-- The contracts are in `src/DaedalusStudio.Interactive.Protocol`.
+C# Interactive runs submissions in **`codalus-replhost`** ([ADR 0015](adr/0015-interactive-host.md)), a supervised process speaking JSON-RPC 2.0 over **stdio** with `Content-Length` framing, like the other hosts.
+- The shell's client is `InteractiveService` in `src/Codalus.Workbench/Interactive` (AOT-safe).
+- The host is `src/Codalus.Interactive.Host` (Roslyn scripting).
+- The contracts are in `src/Codalus.Interactive.Protocol`.
 
 ## Process model
 
 **Starting and restarting**
-- The shell starts the host when the C# Interactive window first shows. `DAEDALUS_REPLHOST` points at another host (`.exe` or `.dll`); otherwise the shell uses `replhost/` next to it.
+- The shell starts the host when the C# Interactive window first shows. `CODALUS_REPLHOST` points at another host (`.exe` or `.dll`); otherwise the shell uses `replhost/` next to it.
 - After every (re)start the client sends `repl/reset` with the current configuration. On a crash (including a script calling `Environment.Exit`) the host restarts with an empty state, up to 5 times a minute.
 - **Reset** disposes the process and starts a new one. This is also how a runaway submission is stopped: the shell sends `exit` and kills the process if it doesn't stop within 2 seconds.
 
@@ -38,7 +38,7 @@ C# Interactive runs submissions in **`daedalus-replhost`** ([ADR 0015](adr/0015-
 
 - `#r "path"` and `#load "path"` resolve relative to the working directory.
 - `#r "nuget: Id, Version"` (or `Id/Version`, or `Id` for the latest stable version) restores a throwaway `net<runtime>.0` project with the SDK's `dotnet restore`:
-  - in `%TEMP%/daedalus-replhost/nuget/<hash>`;
+  - in `%TEMP%/codalus-replhost/nuget/<hash>`;
   - with the nearest `nuget.config` above the working directory, if there is one;
   - without the folder's `Directory.Build.*` or `Directory.Packages.props`.
 - The runtime assemblies of the package and its dependencies are added to the state.

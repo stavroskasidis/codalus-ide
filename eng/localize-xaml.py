@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Moves a view's literal UI text into the English catalogue (M23b).
 
-    python3 eng/localize-xaml.py src/DaedalusStudio.Shell/Views/PluginsView.axaml [...]
+    python3 eng/localize-xaml.py src/Codalus.Shell/Views/PluginsView.axaml [...]
 
 Each literal Text, Content, Header, Title, ToolTip.Tip, PlaceholderText, Watermark and AutomationProperties.Name becomes
-{l:T <view>.<words>}, and its text goes into src/DaedalusStudio.Shell/Localization/en.json (sorted). Values without
+{l:T <view>.<words>}, and its text goes into src/Codalus.Shell/Localization/en.json (sorted). Values without
 letters (symbols, numbers) stay. LocalizationTests keeps the catalogue and the views in step and stops new literals.
 """
 import html
@@ -15,7 +15,7 @@ from pathlib import Path
 
 ATTRIBUTES = r'(?:Text|Content|Header|Title|ToolTip\.Tip|PlaceholderText|Watermark|AutomationProperties\.Name)'
 LITERAL = re.compile(r'(?<![\w.])(' + ATTRIBUTES + r')="([^"{][^"]*)"')
-CATALOG = Path('src/DaedalusStudio.Shell/Localization/en.json')
+CATALOG = Path('src/Codalus.Shell/Localization/en.json')
 
 
 def camel(words):
@@ -58,7 +58,7 @@ def main(files):
 
         changed = LITERAL.sub(replace, text)
         if changed != text and 'xmlns:l=' not in changed:
-            changed = re.sub(r'(<[A-Za-z:]+\s)', r'\1xmlns:l="using:DaedalusStudio.Shell.Infrastructure"\n             ', changed, count=1)
+            changed = re.sub(r'(<[A-Za-z:]+\s)', r'\1xmlns:l="using:Codalus.Shell.Infrastructure"\n             ', changed, count=1)
         if changed != text:
             path.write_text(changed, encoding='utf-8', newline='')
             print(f'{file}: {len(keys_by_text)} strings')

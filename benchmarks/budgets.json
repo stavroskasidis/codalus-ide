@@ -1,5 +1,5 @@
-// ADR 0002 in machine-readable form. `daedalus-bench check` applies the absolute budgets (reference hardware);
-// `daedalus-bench compare --baseline DIR` applies the regression policy (CI runners). Editor budgets are measured on
+// ADR 0002 in machine-readable form. `codalus-bench check` applies the absolute budgets (reference hardware);
+// `codalus-bench compare --baseline DIR` applies the regression policy (CI runners). Editor budgets are measured on
 // the shell since M3 (before, on the M0 spike "avalonia").
 {
   "budgets": [

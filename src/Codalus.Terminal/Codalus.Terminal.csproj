@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>The terminal emulator (ADR 0014): an xterm-compatible VT parser, screen model with scrollback, input encoding and link detection. UI-agnostic; the shell renders it.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
+  </ItemGroup>
+</Project>

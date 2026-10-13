@@ -1,6 +1,6 @@
 # Keyboard shortcuts on each operating system
 
-Daedalus Studio uses a classic IDE's shortcuts by default (Tools → Options → Keyboard → Keyboard Scheme offers VS Code's, and ReSharper's and Emacs's over the default; see [Settings](settings.md#keyboard-shortcuts)). `primary` in the key bindings is ⌘ on macOS and Ctrl elsewhere; `ctrl` is always the physical Control key. Your own bindings (Tools → Open Keyboard Shortcuts) override any default.
+Codalus IDE uses a classic IDE's shortcuts by default (Tools → Options → Keyboard → Keyboard Scheme offers VS Code's, and ReSharper's and Emacs's over the default; see [Settings](settings.md#keyboard-shortcuts)). `primary` in the key bindings is ⌘ on macOS and Ctrl elsewhere; `ctrl` is always the physical Control key. Your own bindings (Tools → Open Keyboard Shortcuts) override any default.
 
 Some shortcuts belong to the operating system or the desktop, which takes them before any application sees them. The defaults avoid those, and where a classic shortcut collides, the OS gets a different default (M34a, 2026-10-12). `UxPassTests.No_default_binding_takes_a_shortcut_the_OS_keeps` keeps the list below checked.
 

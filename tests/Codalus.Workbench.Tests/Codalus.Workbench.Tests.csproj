@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- The Secret Service test sets the native environment (LibraryImport of setenv). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Codalus.Workbench\Codalus.Workbench.csproj" />
+    <ProjectReference Include="..\..\src\Codalus.Platform\Codalus.Platform.csproj" />
+    <!-- Built so the tests can launch it; not referenced as an assembly. -->
+    <ProjectReference Include="..\..\src\Codalus.Interactive.Host\Codalus.Interactive.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Codalus.LspConformance.Server\Codalus.LspConformance.Server.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Codalus.Markup.Host\Codalus.Markup.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Codalus.Remote.Server\Codalus.Remote.Server.csproj" ReferenceOutputAssembly="false" />
+    <!-- Launched by the tests, and referenced for its plan parsers (internals visible to these tests). -->
+    <ProjectReference Include="..\..\src\Codalus.Data.Host\Codalus.Data.Host.csproj" />
+    <!-- Launched by the tests, and referenced for its profile views (internals visible to these tests). -->
+    <ProjectReference Include="..\..\src\Codalus.Diagnostics.Host\Codalus.Diagnostics.Host.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The previewer agent (a startup hook) next to the tests, where PreviewService finds it (M19a). -->
+    <ProjectReference Include="..\..\src\Codalus.Previewer.Agent\Codalus.Previewer.Agent.csproj" />
+    <PackageReference Include="Avalonia.Remote.Protocol" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
+  </ItemGroup>
+</Project>

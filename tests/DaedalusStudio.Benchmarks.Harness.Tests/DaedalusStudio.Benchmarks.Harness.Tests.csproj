@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <ProjectReference Include="..\..\benchmarks\DaedalusStudio.Benchmarks.Harness\DaedalusStudio.Benchmarks.Harness.csproj" />
-    <ProjectReference Include="..\..\benchmarks\DaedalusStudio.Benchmarks.FixtureGen\DaedalusStudio.Benchmarks.FixtureGen.csproj" />
-  </ItemGroup>
-</Project>

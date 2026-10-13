@@ -1,0 +1,56 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.DiagnosticToolsView"
+             x:DataType="vm:DiagnosticToolsViewModel">
+  <DockPanel>
+    <StackPanel DockPanel.Dock="Top" Margin="8,6" Spacing="4">
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button x:Name="RecordButton" Content="{Binding RecordText}" Command="{Binding RecordCommand}" ToolTip.Tip="{l:T diagnosticTools.recordACpuProfileOfThe}" />
+        <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding EventSummary}" />
+      </StackPanel>
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="8,0,8,6">
+      <controls:TimeSeriesChart x:Name="CpuChart" Caption="CPU" Unit="%" Maximum="100" Points="{Binding Cpu}" Marks="{Binding ExceptionMarks}" Height="70"
+                                Stroke="{DynamicResource Shell.Accent}" MarkBrush="{DynamicResource Shell.Error}" Foreground="{DynamicResource Shell.MutedForeground}" GridBrush="{DynamicResource Shell.Border}"
+                                AutomationProperties.Name="{l:T diagnosticTools.cpuUsageOverTheLastMinute}" />
+      <controls:TimeSeriesChart Caption="GC Heap" Unit="MB" Points="{Binding Heap}" Marks="{Binding GcMarks}" Height="70"
+                                Stroke="{DynamicResource Shell.Info}" MarkBrush="{DynamicResource Shell.Warning}" Foreground="{DynamicResource Shell.MutedForeground}" GridBrush="{DynamicResource Shell.Border}"
+                                AutomationProperties.Name="{l:T diagnosticTools.gcHeapSizeOverTheLast}" />
+      <controls:TimeSeriesChart Caption="Working Set" Unit="MB" Points="{Binding WorkingSet}" Height="70"
+                                Stroke="{DynamicResource Shell.Modified}" Foreground="{DynamicResource Shell.MutedForeground}" GridBrush="{DynamicResource Shell.Border}"
+                                AutomationProperties.Name="{l:T diagnosticTools.workingSetOverTheLastMinute}" />
+    </StackPanel>
+    <TabControl Padding="0">
+      <TabItem Header="{l:T diagnosticTools.events}">
+        <ListBox ItemsSource="{Binding Events}" Background="Transparent" AutomationProperties.Name="{l:T diagnosticTools.garbageCollectionsAndExceptionsTheNewest}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:RuntimeEventRowViewModel">
+              <Grid ColumnDefinitions="60,70,*" AutomationProperties.Name="{Binding AccessibleName}">
+                <TextBlock Text="{Binding Time}" Classes="muted" />
+                <TextBlock Grid.Column="1" Text="{Binding Kind}" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="2" Text="{Binding Text}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Text}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </TabItem>
+      <TabItem Header="{l:T diagnosticTools.counters}">
+        <ListBox ItemsSource="{Binding Counters}" Background="Transparent" AutomationProperties.Name="{l:T diagnosticTools.theRuntimeSCounters}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:CounterRowViewModel">
+              <Grid ColumnDefinitions="*,90,Auto" AutomationProperties.Name="{Binding AccessibleName}">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding Value}" TextAlignment="Right" />
+                <TextBlock Grid.Column="2" Text="{Binding Unit}" Classes="muted" Margin="6,0,0,0" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</UserControl>

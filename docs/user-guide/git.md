@@ -1,6 +1,6 @@
 # Git
 
-When the open solution is in a git repository, Daedalus Studio shows its state and lets you work with it. Git operations run the `git` you have installed, so your configuration, credential helper, SSH keys, hooks and commit signing all apply.
+When the open solution is in a git repository, Codalus IDE shows its state and lets you work with it. Git operations run the `git` you have installed, so your configuration, credential helper, SSH keys, hooks and commit signing all apply.
 
 ## The Git Changes window
 
@@ -20,13 +20,13 @@ The merge editor shows the current version (yours) and the incoming one side by 
 - **Previous Conflict** and **Next Conflict** move between them; the toolbar says how many are left.
 - **Accept Merge** (once none are left) saves the file and stages it. When every conflict is resolved, **Continue** in Git Changes finishes the merge, rebase, cherry-pick or revert.
 
-**Using Daedalus Studio as git's merge tool and editor:**
+**Using Codalus IDE as git's merge tool and editor:**
 
 ```
-git config --global merge.tool daedalus
-git config --global mergetool.daedalus.cmd "daedalus merge \"$LOCAL\" \"$REMOTE\" \"$BASE\" \"$MERGED\""
-git config --global mergetool.daedalus.trustExitCode true
-git config --global core.editor "daedalus --wait"
+git config --global merge.tool codalus
+git config --global mergetool.codalus.cmd "codalus merge \"$LOCAL\" \"$REMOTE\" \"$BASE\" \"$MERGED\""
+git config --global mergetool.codalus.trustExitCode true
+git config --global core.editor "codalus --wait"
 ```
 
 `git mergetool` then opens each conflict in the merge editor of your running window, and the merge counts when you Accept Merge. Commit messages and interactive rebases from the command line open as tabs, and git continues when you close them.
@@ -63,12 +63,12 @@ Git → View History (`Ctrl+0 Ctrl+H`) shows the commits of every branch as a gr
 
 Git → Worktrees lists the repository's worktrees: their folder, branch, and whether one is the main worktree, the one open here, locked, or gone.
 - **Add** a worktree for a new branch or an existing one, in a folder next to the repository.
-- **Open** opens its solution in this window; **Open in New Window** starts another Daedalus Studio on it.
+- **Open** opens its solution in this window; **Open in New Window** starts another Codalus IDE on it.
 - **Lock** (with a reason) and **Unlock**; **Remove** (a worktree with changes asks again before forcing); **Prune** forgets worktrees whose folders are gone.
 
 ## Git LFS
 
-Daedalus Studio reads which files Git LFS tracks from `.gitattributes`, so it works whether or not git-lfs is installed.
+Codalus IDE reads which files Git LFS tracks from `.gitattributes`, so it works whether or not git-lfs is installed.
 - In Git Changes, LFS files are marked **LFS**; a file whose content wasn't downloaded (only its pointer is in the working tree) is marked **LFS pointer**, and a locked file says who holds the lock.
 - With git-lfs installed: **Git LFS Locks** lists the locks (pick one to unlock it, or force-unlock someone else's), **Git LFS: Lock File** and **Unlock File** act on the active file or the Solution Explorer's selection, and **Git LFS: Download Files** runs `git lfs pull`.
 
@@ -79,7 +79,7 @@ Built-in plugins connect to GitHub (and GitHub Enterprise Server), Azure DevOps 
 **Signing in** (Git → Git Hosting Accounts):
 - **Sign In** shows a code: **Copy Code and Open Browser**, enter it on the host's page and approve. The page shows *Waiting for approval…* until you do; **Cancel** stops.
 - **Or paste a personal access token**: GitHub needs the `repo`, `read:org` and `workflow` scopes; GitLab the `api` scope; Azure DevOps Code (read and write), Build (read) and Work Items (read).
-- Tokens are kept in the operating system's credential store: Windows Credential Manager, the macOS Keychain, or the Secret Service (GNOME Keyring, KWallet…) through libsecret on Linux. Daedalus Studio never writes them to a file. Where no credential store is available, a sign-in lasts until Daedalus Studio closes; the environment variable `DAEDALUS_CREDENTIAL_STORE=memory` does that on purpose (tests). A `--user-data-dir` profile keeps its sign-ins apart from the default profile's.
+- Tokens are kept in the operating system's credential store: Windows Credential Manager, the macOS Keychain, or the Secret Service (GNOME Keyring, KWallet…) through libsecret on Linux. Codalus IDE never writes them to a file. Where no credential store is available, a sign-in lasts until Codalus IDE closes; the environment variable `CODALUS_CREDENTIAL_STORE=memory` does that on purpose (tests). A `--user-data-dir` profile keeps its sign-ins apart from the default profile's.
 - **Servers**: `github.serverUrl`, `gitlab.serverUrl`, and `azureDevOps.serverUrl` (with `azureDevOps.authorityUrl` and `azureDevOps.profileUrl`) point at an enterprise or self-managed server. Device sign-in needs the server's OAuth app: its client id goes in `github.oauthClientId`, `gitlab.oauthClientId` or `azureDevOps.oauthClientId`. Without one, sign in with a token.
 - **Sign Out** deletes the token. A session that expires or is revoked asks you to sign in again.
 
@@ -95,7 +95,7 @@ The repository's host is found from its remotes (`origin` first). Then:
 
 ## Credentials and SSH passphrases
 
-Git asks your credential helper first (Git Credential Manager, the macOS Keychain helper, …). When none answers, or an SSH key needs its passphrase, or ssh asks whether to trust a new host, Daedalus Studio asks in a dialog (passwords and passphrases are masked). The answer goes to git once and isn't stored; your credential helper may store it, as it would in a terminal.
+Git asks your credential helper first (Git Credential Manager, the macOS Keychain helper, …). When none answers, or an SSH key needs its passphrase, or ssh asks whether to trust a new host, Codalus IDE asks in a dialog (passwords and passphrases are masked). The answer goes to git once and isn't stored; your credential helper may store it, as it would in a terminal.
 
 ## Diffs
 

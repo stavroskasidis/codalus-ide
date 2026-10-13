@@ -1,0 +1,66 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.PackageSourcesView"
+             x:DataType="vm:PackageSourcesViewModel">
+  <DockPanel Margin="16,12">
+    <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,8">
+      <TextBlock Classes="heading" Text="{l:T packageSources.packageSources}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T packageSources.sourcesAreSearchedAndRestoredIn}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,8,0,0">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Content="{l:T packageSources.save}" Command="{Binding SaveCommand}" AutomationProperties.Name="{l:T packageSources.savePackageSources}" />
+        <Button Content="{l:T packageSources.revert}" Command="{Binding RevertCommand}" />
+      </StackPanel>
+      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{Binding ConfigFiles}" />
+      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{Binding GlobalPackagesFolder}" />
+    </StackPanel>
+    <Grid ColumnDefinitions="280,*">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="2" Margin="0,0,0,4">
+          <Button Classes="toolbar" Command="{Binding AddCommand}" ToolTip.Tip="{l:T packageSources.addSource}" AutomationProperties.Name="{l:T packageSources.addSource2}">
+            <TextBlock Text="+" FontWeight="Bold" />
+          </Button>
+          <Button Classes="toolbar" Command="{Binding RemoveCommand}" ToolTip.Tip="{l:T packageSources.removeSource}" AutomationProperties.Name="{l:T packageSources.removeSource2}">
+            <controls:Icon Kind="trash" />
+          </Button>
+          <Button Classes="toolbar" Command="{Binding MoveUpCommand}" ToolTip.Tip="{l:T packageSources.moveUp}" AutomationProperties.Name="{l:T packageSources.moveUp2}">
+            <TextBlock Text="▲" FontSize="10" />
+          </Button>
+          <Button Classes="toolbar" Command="{Binding MoveDownCommand}" ToolTip.Tip="{l:T packageSources.moveDown}" AutomationProperties.Name="{l:T packageSources.moveDown2}">
+            <TextBlock Text="▼" FontSize="10" />
+          </Button>
+        </StackPanel>
+        <ListBox ItemsSource="{Binding Sources}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T packageSources.packageSources2}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:PackageSourceRowViewModel">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <CheckBox IsChecked="{Binding Enabled}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Name, StringFormat='Enable {0}'}" />
+                <StackPanel>
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                  <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Url}" TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                </StackPanel>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+      <Panel Grid.Column="1" IsVisible="{Binding HasSelection}">
+      <StackPanel Margin="16,0,0,0" Spacing="6" DataContext="{Binding Selected}" x:DataType="vm:PackageSourceRowViewModel">
+        <TextBlock Text="{l:T packageSources.name}" />
+        <TextBox Text="{Binding Name}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T packageSources.sourceName}" />
+        <TextBlock Text="{l:T packageSources.sourceUrlOrFolder}" />
+        <TextBox Text="{Binding Url}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T packageSources.sourceUrl}" />
+        <CheckBox Content="{l:T packageSources.enabled}" IsChecked="{Binding Enabled}" IsEnabled="{Binding CanEdit}" />
+        <TextBlock Text="{l:T packageSources.packageSourceMappingPatternsOfPackages}" TextWrapping="Wrap" />
+        <TextBox Text="{Binding Patterns}" AcceptsReturn="True" MinHeight="80" AutomationProperties.Name="{l:T packageSources.mappedPackagePatterns}" />
+        <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{Binding Origin}" />
+      </StackPanel>
+      </Panel>
+    </Grid>
+  </DockPanel>
+</UserControl>

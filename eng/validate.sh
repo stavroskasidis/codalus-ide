@@ -46,20 +46,20 @@ echo "== $(uname -sm), .NET SDK $(dotnet --version), $(git --version)"
 
 echo "== netcoredbg"
 bash eng/get-netcoredbg.sh
-export DAEDALUS_NETCOREDBG="$repo/.work/netcoredbg"
+export CODALUS_NETCOREDBG="$repo/.work/netcoredbg"
 # The x64 debugger on Apple silicon, for .NET 5 and earlier under Rosetta 2 (M33; does nothing elsewhere).
 bash eng/get-netcoredbg.sh --x64
 
 # The target framework matrix (M33, ADR 0030): .NET Core 2.0 to .NET 9 and older SDKs, pinned, in .work/dotnet-compat.
-# The first run downloads about 1.5 GB; DaedalusStudio.TargetFrameworks.Tests runs against it.
+# The first run downloads about 1.5 GB; Codalus.TargetFrameworks.Tests runs against it.
 echo "== target framework matrix"
 bash eng/get-runtimes.sh > /dev/null
-export DAEDALUS_DOTNET_COMPAT="$repo/.work/dotnet-compat"
+export CODALUS_DOTNET_COMPAT="$repo/.work/dotnet-compat"
 
 echo "== restore / build / test"
-dotnet restore DaedalusStudio.slnx
-dotnet build DaedalusStudio.slnx -c Release --no-restore
-dotnet test --solution DaedalusStudio.slnx -c Release --no-build "$@"
+dotnet restore Codalus.slnx
+dotnet build Codalus.slnx -c Release --no-restore
+dotnet test --solution Codalus.slnx -c Release --no-build "$@"
 
 [ "$smoke" = yes ] || exit 0
 # Native AOT links with the selected Xcode's clang and ld; use that Xcode's SDK too. Otherwise clang may pick a newer
@@ -70,6 +70,6 @@ if [ "$(uname -s)" = Darwin ] && [ -z "${SDKROOT:-}" ] && command -v xcrun > /de
 fi
 echo "== Native AOT publish"
 rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
-dotnet publish src/DaedalusStudio.Shell -c Release -r "$rid" -o artifacts/shell
+dotnet publish src/Codalus.Shell -c Release -r "$rid" -o artifacts/shell
 echo "== smoke test"
-bash eng/smoke-test.sh artifacts/shell/daedalus artifacts/smoke-test
+bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test

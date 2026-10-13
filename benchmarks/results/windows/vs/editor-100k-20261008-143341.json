@@ -1183,7 +1183,7 @@
     }
   },
   "notes": [
-    "Experimental instance (/rootsuffix DaedalusBench); first launch needs a one-time manual setup."
+    "Experimental instance (/rootsuffix CodalusBench); first launch needs a one-time manual setup."
   ],
   "discardedRuns": 0
 }

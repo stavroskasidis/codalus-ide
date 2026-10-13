@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>codalus-fixturegen</AssemblyName>
+    <Description>Generates deterministic benchmark fixtures (large C# file, large solution).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Benchmarks.Harness.Tests" />
+  </ItemGroup>
+</Project>

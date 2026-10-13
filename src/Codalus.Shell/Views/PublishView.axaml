@@ -1,0 +1,51 @@
+<local:LoadingView xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                   xmlns:vm="using:Codalus.Shell.ViewModels"
+                   xmlns:local="using:Codalus.Shell.Views"
+                   x:Class="Codalus.Shell.Views.PublishView"
+                   x:DataType="vm:PublishViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="16,12" Spacing="8" MaxWidth="760" HorizontalAlignment="Left">
+      <TextBlock Classes="heading" Text="{Binding ProjectName, StringFormat='Publish {0}'}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T publish.publishProfilesAreSavedInProperties}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <ComboBox x:Name="ProfileBox" MinWidth="240" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedName}" AutomationProperties.Name="{l:T publish.publishProfile}" />
+        <Button Content="{l:T publish.newProfile}" Command="{Binding NewCommand}" AutomationProperties.Name="{l:T publish.addAPublishProfile}" />
+        <Button Content="{l:T publish.save}" Command="{Binding SaveCommand}" AutomationProperties.Name="{l:T publish.saveThePublishProfile}" />
+      </StackPanel>
+      <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,8,0,0">
+        <TextBlock Text="{l:T publish.target}" VerticalAlignment="Center" />
+        <ComboBox Grid.Column="1" MinWidth="240" ItemsSource="{Binding Targets}" SelectedIndex="{Binding TargetIndex}" AutomationProperties.Name="{l:T publish.publishTarget}" />
+        <TextBlock Grid.Row="1" Text="{l:T publish.configuration}" VerticalAlignment="Center" />
+        <ComboBox Grid.Row="1" Grid.Column="1" MinWidth="240" ItemsSource="{Binding Configurations}" SelectedItem="{Binding Configuration}" AutomationProperties.Name="{l:T publish.configuration}" />
+        <TextBlock Grid.Row="2" Text="{l:T publish.targetFramework}" VerticalAlignment="Center" />
+        <ComboBox Grid.Row="2" Grid.Column="1" MinWidth="240" ItemsSource="{Binding Frameworks}" SelectedItem="{Binding TargetFramework}" AutomationProperties.Name="{l:T publish.targetFramework}" />
+        <TextBlock Grid.Row="3" Text="{l:T publish.targetRuntime}" VerticalAlignment="Center" />
+        <AutoCompleteBox Grid.Row="3" Grid.Column="1" MinWidth="240" ItemsSource="{Binding Runtimes}" Text="{Binding RuntimeIdentifier}" PlaceholderText="{l:T publish.portableAnyRuntime}" AutomationProperties.Name="{l:T publish.targetRuntimeIdentifier}" />
+      </Grid>
+      <CheckBox Content="{l:T publish.selfContainedIncludesTheNetRuntime}" IsChecked="{Binding SelfContained}" AutomationProperties.Name="{l:T publish.selfContained}" />
+      <CheckBox Content="{l:T publish.produceASingleFile}" IsChecked="{Binding SingleFile}" AutomationProperties.Name="{l:T publish.singleFile}" />
+      <CheckBox Content="{l:T publish.trimUnusedCode}" IsChecked="{Binding Trimmed}" AutomationProperties.Name="{l:T publish.trimmed}" />
+      <CheckBox Content="{l:T publish.readytorunPrecompiledCodeFasterStartup}" IsChecked="{Binding ReadyToRun}" AutomationProperties.Name="{l:T publish.readytorun}" />
+      <CheckBox Content="{l:T publish.nativeAotANativeExecutableNo}" IsChecked="{Binding NativeAot}" AutomationProperties.Name="{l:T publish.nativeAot}" />
+      <Grid ColumnDefinitions="200,*" IsVisible="{Binding IsFolder}">
+        <TextBlock Text="{l:T publish.folder}" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding Folder}" AutomationProperties.Name="{l:T publish.publishFolderRelativeToTheProject}" />
+      </Grid>
+      <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" IsVisible="{Binding IsContainer}">
+        <TextBlock Text="{l:T publish.registry}" VerticalAlignment="Center" />
+        <TextBox Grid.Column="1" Text="{Binding ContainerRegistry}" PlaceholderText="{l:T publish.emptyYourLocalDockerOrPodman}" AutomationProperties.Name="{l:T publish.containerRegistry}" />
+        <TextBlock Grid.Row="1" Text="{l:T publish.repository}" VerticalAlignment="Center" />
+        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ContainerRepository}" AutomationProperties.Name="{l:T publish.imageRepository}" />
+        <TextBlock Grid.Row="2" Text="{l:T publish.tag}" VerticalAlignment="Center" />
+        <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ContainerImageTag}" AutomationProperties.Name="{l:T publish.imageTag}" />
+      </Grid>
+      <TextBlock Classes="muted" Foreground="{DynamicResource ErrorForegroundBrush}" Text="{Binding Problem}" IsVisible="{Binding HasProblem}" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+        <Button x:Name="PublishButton" Content="{l:T publish.publish}" Classes="accent" Command="{Binding PublishCommand}" AutomationProperties.Name="{l:T publish.publishWithThisProfile}" />
+        <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</local:LoadingView>

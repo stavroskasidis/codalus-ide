@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     A sample declarative plugin (docs/plugins.md, ADR 0016): a language, its TextMate grammar and configuration, and an
-    LSP server. The plugin has no code that Daedalus loads; this project builds the language server, and its output
-    folder is the plugin (daedalus-plugin.json next to TodoLanguage.dll).
+    LSP server. The plugin has no code that Codalus loads; this project builds the language server, and its output
+    folder is the plugin (codalus-plugin.json next to TodoLanguage.dll).
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -13,7 +13,7 @@
     <RootNamespace>TodoLanguage</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <None Update="daedalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="codalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="language-configuration.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="syntaxes\todo.tmLanguage.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

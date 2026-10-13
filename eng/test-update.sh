@@ -7,8 +7,8 @@
 #   3. runs N with `--update-now` on a tampered copy of the feed: it must refuse it (exit code 2);
 #   4. runs N with `--update-now` on the feed: it downloads N+1 and has it applied once it exits;
 #   5. checks that the installed app is now N+1, then uninstalls it.
-# The app reads the feed from a folder (DAEDALUS_UPDATE_SOURCE) and trusts the throwaway key for that folder only
-# (DAEDALUS_UPDATE_TEST_KEY).
+# The app reads the feed from a folder (CODALUS_UPDATE_SOURCE) and trusts the throwaway key for that folder only
+# (CODALUS_UPDATE_TEST_KEY).
 # Usage: eng/test-update.sh [work folder]   (default: artifacts/update-test). Needs what eng/package.sh needs, and openssl.
 set -euo pipefail
 
@@ -26,16 +26,16 @@ mkdir -p "$work"
 echo "== A throwaway feed key"
 openssl ecparam -name prime256v1 -genkey -noout -out "$work/key.pem" 2> /dev/null
 public_key="$(openssl pkey -in "$work/key.pem" -pubout -outform DER | openssl base64 -A)"
-DAEDALUS_FEED_KEY="$(cat "$work/key.pem")"
-export DAEDALUS_FEED_KEY
+CODALUS_FEED_KEY="$(cat "$work/key.pem")"
+export CODALUS_FEED_KEY
 # Its own output folder: the release packages in artifacts/packages stay as they are.
-export DAEDALUS_PACKAGES_OUT="$work/out"
+export CODALUS_PACKAGES_OUT="$work/out"
 
 echo "== Building $old"
 bash "$repo/eng/package.sh" "$old" test > "$work/package-old.log" 2>&1 || { tail -40 "$work/package-old.log"; fail "packaging $old failed"; }
 cp -R "$work/out" "$work/old"
 echo "== Building $new (with a delta against $old)"
-DAEDALUS_PREVIOUS_RELEASE="$work/old/velopack" bash "$repo/eng/package.sh" "$new" test > "$work/package-new.log" 2>&1 \
+CODALUS_PREVIOUS_RELEASE="$work/old/velopack" bash "$repo/eng/package.sh" "$new" test > "$work/package-new.log" 2>&1 \
   || { tail -40 "$work/package-new.log"; fail "packaging $new failed"; }
 cp -R "$work/out" "$work/new"
 feed="$work/new/velopack"
@@ -53,23 +53,23 @@ echo "== Installing $old"
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*)
     root="$work/install"
-    "$work/old/daedalus-studio-$old-$rid-setup.exe" --silent --installto "$(native "$root")"
-    powershell -NoProfile -Command "Get-Process daedalus -ErrorAction SilentlyContinue | Where-Object { \$_.Path -like '$(native "$root")*' } | Stop-Process -Force" || true
-    app="$root/current/daedalus.exe"
+    "$work/old/codalus-$old-$rid-setup.exe" --silent --installto "$(native "$root")"
+    powershell -NoProfile -Command "Get-Process codalus -ErrorAction SilentlyContinue | Where-Object { \$_.Path -like '$(native "$root")*' } | Stop-Process -Force" || true
+    app="$root/current/codalus.exe"
     uninstall() { "$root/Update.exe" --uninstall --silent > /dev/null 2>&1 || true; }
     ;;
   Darwin)
-    bundle="$HOME/Applications/Daedalus Studio.app"
+    bundle="$HOME/Applications/Codalus IDE.app"
     [ ! -e "$bundle" ] || fail "$bundle exists already: this test installs there"
-    installer -pkg "$work/old/daedalus-studio-$old-$rid.pkg" -target CurrentUserHomeDirectory
-    pkill -f "$bundle/Contents/MacOS/daedalus" || true
-    app="$bundle/Contents/MacOS/daedalus"
-    uninstall() { rm -rf "$bundle"; pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i daedalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true; }
+    installer -pkg "$work/old/codalus-$old-$rid.pkg" -target CurrentUserHomeDirectory
+    pkill -f "$bundle/Contents/MacOS/codalus" || true
+    app="$bundle/Contents/MacOS/codalus"
+    uninstall() { rm -rf "$bundle"; pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i codalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true; }
     ;;
   Linux)
     mkdir -p "$work/install"
-    app="$work/install/daedalus-studio.AppImage"
-    cp "$work/old/daedalus-studio-$old-$rid.AppImage" "$app"
+    app="$work/install/codalus.AppImage"
+    cp "$work/old/codalus-$old-$rid.AppImage" "$app"
     chmod +x "$app"
     export APPIMAGE_EXTRACT_AND_RUN=1 # no FUSE in CI runners and containers
     uninstall() { rm -f "$app"; }
@@ -77,23 +77,23 @@ case "$(uname -s)" in
 esac
 trap uninstall EXIT
 installed_version() { "$app" --version 2> /dev/null | head -n 1; }
-[ "$(installed_version)" = "Daedalus Studio $old" ] || fail "the installed app says '$(installed_version)', not $old"
+[ "$(installed_version)" = "Codalus IDE $old" ] || fail "the installed app says '$(installed_version)', not $old"
 
 echo "== A tampered feed is refused"
 status=0
-DAEDALUS_UPDATE_SOURCE="$(native "$tampered")" DAEDALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now || status=$?
+CODALUS_UPDATE_SOURCE="$(native "$tampered")" CODALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now || status=$?
 [ "$status" -eq 2 ] || fail "the tampered feed wasn't refused (exit code $status)"
-[ "$(installed_version)" = "Daedalus Studio $old" ] || fail "the tampered feed changed the install"
+[ "$(installed_version)" = "Codalus IDE $old" ] || fail "the tampered feed changed the install"
 
 echo "== Updating $old to $new"
-DAEDALUS_UPDATE_SOURCE="$(native "$feed")" DAEDALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now \
+CODALUS_UPDATE_SOURCE="$(native "$feed")" CODALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now \
   || fail "--update-now failed (exit code $?)"
 # Velopack's updater applies the package once the app has exited.
 for _ in $(seq 90); do
-  [ "$(installed_version)" = "Daedalus Studio $new" ] && break
+  [ "$(installed_version)" = "Codalus IDE $new" ] && break
   sleep 2
 done
-[ "$(installed_version)" = "Daedalus Studio $new" ] || fail "after the update the app says '$(installed_version)', not $new"
+[ "$(installed_version)" = "Codalus IDE $new" ] || fail "after the update the app says '$(installed_version)', not $new"
 echo "== The installed app is $new"
 
 echo "== Uninstalling"

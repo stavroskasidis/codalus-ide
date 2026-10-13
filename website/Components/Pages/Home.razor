@@ -2,8 +2,8 @@
 @inject Releases Releases
 @inject SiteOptions Site
 
-<PageMeta Exact="true" Title="Daedalus Studio: the open-source .NET IDE for Windows, macOS and Linux"
-          Description="Daedalus Studio is a free, open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git, native on Windows, macOS and Linux." />
+<PageMeta Exact="true" Title="Codalus IDE: the open-source .NET IDE for Windows, macOS and Linux"
+          Description="Codalus IDE is a free, open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git, native on Windows, macOS and Linux." />
 
 <div class="container">
     <section class="hero">
@@ -16,7 +16,7 @@
             <a class="pill" href="@Releases.ReleaseUrl(Releases.Nightly)"><span class="pill-tag">PREVIEW</span>Nightly builds are available while 0.x takes shape <Icon Name="arrow" Size="14" /></a>
         }
         <h1 class="display display-xl">A real .NET IDE, native on Windows, macOS and Linux.</h1>
-        <p class="lead">Daedalus Studio is an open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git. Free, MIT-licensed, and without telemetry.</p>
+        <p class="lead">Codalus IDE is an open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git. Free, MIT-licensed, and without telemetry.</p>
         <div class="hero-actions">
             <a class="button" href="download/" data-download-os>
                 <Icon Name="download" Size="18" />
@@ -26,7 +26,7 @@
         </div>
         <p class="fineprint">Windows 11 x64 · macOS 15+ on Apple silicon · Linux x64 and arm64 · needs the .NET SDK 10.0+</p>
         <figure class="shot shot-hero">
-            <img src="assets/screenshots/editor-dark.png" width="1280" height="800" alt="Daedalus Studio with a C# solution open: the Start page, the editor with inlay hints, Find Results and the Solution Explorer" />
+            <img src="assets/screenshots/editor-dark.png" width="1280" height="800" alt="Codalus IDE with a C# solution open: the Start page, the editor with inlay hints, Find Results and the Solution Explorer" />
         </figure>
     </section>
 
@@ -77,7 +77,7 @@
                 <p>The window is a Native AOT app. Roslyn, MSBuild, the debugger and plugins each run in their own supervised process. If one crashes, it restarts, and the editor never goes down with it.</p>
             </div>
             <div class="arch-diagram">
-                <div class="arch-shell"><strong>daedalus</strong><span>UI shell · Native AOT</span></div>
+                <div class="arch-shell"><strong>codalus</strong><span>UI shell · Native AOT</span></div>
                 <div class="arch-wire" aria-hidden="true">JSON-RPC · LSP · DAP</div>
                 <ul class="arch-hosts" aria-label="Processes the shell supervises">
                     @foreach (var (name, role) in s_hosts)
@@ -112,7 +112,7 @@
 
     <section class="section" aria-labelledby="cta">
         <div class="cta">
-            <h2 class="heading" id="cta">Open your solution in Daedalus Studio.</h2>
+            <h2 class="heading" id="cta">Open your solution in Codalus IDE.</h2>
             <p>Installers for Windows, macOS and Linux that update themselves, plus apt and dnf repositories. You need the .NET SDK 10.0 or newer and git 2.30 or newer.</p>
             <div class="hero-actions">
                 <a class="button" href="download/">Download for your platform</a>

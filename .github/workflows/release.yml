@@ -49,8 +49,8 @@ jobs:
       - id: plan
         shell: bash
         run: |
-          version="$(dotnet run --project eng/DaedalusStudio.Release -- version stable)"
-          dotnet run --project eng/DaedalusStudio.Release -- check-tag "$version"
+          version="$(dotnet run --project eng/Codalus.Release -- version stable)"
+          dotnet run --project eng/Codalus.Release -- check-tag "$version"
           previous="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -113,7 +113,7 @@ jobs:
               echo "::error::Merging master into develop conflicts beyond VERSION; merge it by hand." && exit 1
             fi
           fi
-          next="$(dotnet run --project eng/DaedalusStudio.Release -- bump --after "${{ needs.plan.outputs.version }}")"
+          next="$(dotnet run --project eng/Codalus.Release -- bump --after "${{ needs.plan.outputs.version }}")"
           if ! git diff --quiet VERSION; then
             git commit -m "Start $next after the ${{ needs.plan.outputs.version }} release" VERSION
           fi
@@ -135,7 +135,7 @@ jobs:
     needs: [plan, publish]
     runs-on: ubuntu-latest
     steps:
-      - name: Push the AUR package (daedalus-studio-bin)
+      - name: Push the AUR package (codalus-bin)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -144,16 +144,16 @@ jobs:
         run: |
           # The maintainer's AUR account key (a repository secret). Without it the package is on the release page only.
           if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
-            echo "::notice::AUR_SSH_PRIVATE_KEY isn't set: daedalus-studio-bin $VERSION is attached to the release, not pushed to the AUR."
+            echo "::notice::AUR_SSH_PRIVATE_KEY isn't set: codalus-bin $VERSION is attached to the release, not pushed to the AUR."
             exit 0
           fi
-          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" -p "aur-daedalus-studio-bin-$VERSION.zip" -D package
-          unzip -q "package/aur-daedalus-studio-bin-$VERSION.zip" -d package
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" -p "aur-codalus-bin-$VERSION.zip" -D package
+          unzip -q "package/aur-codalus-bin-$VERSION.zip" -d package
           install -d -m 700 ~/.ssh
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur && chmod 600 ~/.ssh/aur
           ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2> /dev/null
           export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
-          git clone -q ssh://aur@aur.archlinux.org/daedalus-studio-bin.git aur
+          git clone -q ssh://aur@aur.archlinux.org/codalus-bin.git aur
           cp package/PKGBUILD package/.SRCINFO aur/
           cd aur
           git config user.name "github-actions[bot]"

@@ -1,0 +1,133 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.GitChangesView"
+             x:DataType="vm:GitChangesViewModel">
+  <UserControl.Resources>
+    <DataTemplate x:Key="FileRow" x:DataType="vm:GitFileRow">
+      <Grid ColumnDefinitions="18,*,Auto" Background="Transparent">
+        <TextBlock Text="{Binding Letter}" FontWeight="SemiBold" ToolTip.Tip="{Binding Description}" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="{Binding Name}" />
+          <Border IsVisible="{Binding HasBadge}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="3" Padding="3,0" VerticalAlignment="Center" ToolTip.Tip="{Binding BadgeTooltip}">
+            <TextBlock Text="{Binding Badge}" FontSize="{DynamicResource Shell.FontSize.Small}" Classes="muted" />
+          </Border>
+          <TextBlock Text="{Binding Folder}" Classes="muted" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+          <Button Classes="toolbar" Content="+" ToolTip.Tip="{l:T gitChanges.stage}" IsVisible="{Binding CanStage}" Tag="stage" Click="OnRowAction" AutomationProperties.Name="{l:T gitChanges.stage}" />
+          <Button Classes="toolbar" Content="−" ToolTip.Tip="{l:T gitChanges.unstage}" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnRowAction" AutomationProperties.Name="{l:T gitChanges.unstage}" />
+          <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.discardChanges}" IsVisible="{Binding CanStage}" Tag="discard" Click="OnRowAction" AutomationProperties.Name="{l:T gitChanges.discardChanges}">
+            <controls:Icon Kind="discard" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+  <Panel>
+    <StackPanel Margin="12" Spacing="8" IsVisible="{Binding HasNoRepository}">
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T gitChanges.theOpenSolutionIsNotIn}" />
+      <!-- The empty state's next step (M34d). -->
+      <Button Content="{l:T gitChanges.createGitRepository}" Tag="git.init" Click="OnCommand" HorizontalAlignment="Left" AutomationProperties.Name="{l:T gitChanges.createGitRepository}" />
+    </StackPanel>
+    <DockPanel IsVisible="{Binding HasRepository}">
+      <StackPanel DockPanel.Dock="Top" Margin="6,4" Spacing="4">
+        <ComboBox ItemsSource="{Binding Repositories}" SelectedItem="{Binding SelectedRepository}" IsVisible="{Binding HasSeveralRepositories}"
+                  HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T gitChanges.repository}" ToolTip.Tip="{l:T gitChanges.theSolutionSpansSeveralRepositoriesThe}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:GitRepositoryChoice">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <controls:Icon Kind="folder" />
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Path}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
+            <Button Classes="toolbar" Content="{l:T gitChanges.fetch}" Tag="git.fetch" Click="OnCommand" />
+            <Button Classes="toolbar" Content="{l:T gitChanges.pull}" Tag="git.pull" Click="OnCommand" />
+            <Button Classes="toolbar" Content="{l:T gitChanges.push}" Tag="git.push" Click="OnCommand" />
+          </StackPanel>
+          <Button Classes="toolbar" Tag="git.switchBranch" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.switchBranch}" AutomationProperties.Name="{l:T gitChanges.branch}">
+            <TextBlock Text="{Binding BranchText}" FontWeight="SemiBold" />
+          </Button>
+        </DockPanel>
+        <WrapPanel Orientation="Horizontal" IsVisible="{Binding HasCi}">
+          <Button Classes="link" Tag="hosting.showChecks" Click="OnCommand" ToolTip.Tip="{Binding CiTooltip}" AutomationProperties.Name="{Binding CiText}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <controls:Icon Kind="{Binding CiIcon}" Classes.passed="{Binding IsCiPassed}" Classes.failed="{Binding IsCiFailed}" Classes.running="{Binding IsCiPending}" />
+              <TextBlock Text="{Binding CiText}" />
+            </StackPanel>
+          </Button>
+        </WrapPanel>
+        <Button Classes="link" Tag="git.pullRequests" Click="OnCommand" IsVisible="{Binding HasPullRequest}" ToolTip.Tip="{l:T gitChanges.theCurrentBranchSPullRequest}" AutomationProperties.Name="{Binding PullRequestText}">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <controls:Icon Kind="pull-request" />
+            <TextBlock Text="{Binding PullRequestText}" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </Button>
+        <Panel>
+          <TextBox x:Name="Message" Text="{Binding Message}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" MaxHeight="160" PlaceholderText="{l:T gitChanges.commitMessageCtrlEnterToCommit}" AutomationProperties.Name="{l:T gitChanges.commitMessage}" />
+          <Popup x:Name="CompletionPopup" PlacementTarget="{Binding #Message}" Placement="Bottom" IsLightDismissEnabled="True">
+            <Border Classes="overlay" Padding="2" MinWidth="280" MaxWidth="520">
+              <ListBox x:Name="CompletionList" MaxHeight="220" Background="Transparent" AutomationProperties.Name="{l:T gitChanges.issuesAndWorkItems}">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:CommitCompletion">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <controls:Icon Kind="issue" />
+                      <TextBlock Text="{Binding Reference}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Border>
+          </Popup>
+        </Panel>
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Button Classes="accent" Content="{l:T gitChanges.commitStaged}" Tag="staged" Click="OnCommit" IsEnabled="{Binding HasStaged}" />
+          <Button Content="{l:T gitChanges.commitAll}" Tag="all" Click="OnCommit" />
+          <CheckBox Content="{l:T gitChanges.amend}" IsChecked="{Binding Amend}" />
+        </StackPanel>
+        <Border IsVisible="{Binding HasOperation}" Background="{DynamicResource Shell.Hover}" CornerRadius="3" Padding="6,4">
+          <StackPanel Spacing="4">
+            <TextBlock Text="{Binding OperationText}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Button Classes="accent" Content="{l:T gitChanges.continue}" Tag="git.continue" Click="OnCommand" />
+              <Button Content="{l:T gitChanges.skip}" Tag="git.skip" Click="OnCommand" IsVisible="{Binding CanSkip}" />
+              <Button Content="{l:T gitChanges.abort}" Tag="git.abort" Click="OnCommand" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+        <StackPanel Orientation="Horizontal" Spacing="2">
+          <Button Classes="toolbar" Content="{l:T gitChanges.stash}" Tag="git.stash" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.stashTheChanges}" />
+          <Button Classes="toolbar" Content="{l:T gitChanges.stashes}" Tag="git.stashes" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.applyPopOrDropAStash}" />
+          <Button Classes="toolbar" Content="{l:T gitChanges.history}" Tag="git.history" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.viewTheHistory}" />
+        </StackPanel>
+      </StackPanel>
+      <ScrollViewer>
+        <StackPanel Margin="4,0" Spacing="2">
+          <StackPanel IsVisible="{Binding HasConflicts}">
+            <TextBlock Text="{Binding ConflictsHeader}" FontWeight="SemiBold" Margin="2,6,2,2" />
+            <ListBox x:Name="ConflictList" ItemsSource="{Binding Conflicts}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
+          </StackPanel>
+          <DockPanel IsVisible="{Binding HasStaged}">
+            <Button DockPanel.Dock="Right" Classes="toolbar" Content="{l:T gitChanges.unstageAll}" Tag="unstageAll" Click="OnAll" />
+            <TextBlock Text="{Binding StagedHeader}" FontWeight="SemiBold" Margin="2,6,2,2" />
+          </DockPanel>
+          <ListBox x:Name="StagedList" ItemsSource="{Binding Staged}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" IsVisible="{Binding HasStaged}" AutomationProperties.Name="{l:T gitChanges.stagedChanges}" />
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="toolbar" Content="{l:T gitChanges.stageAll}" Tag="stageAll" Click="OnAll" IsVisible="{Binding HasChanges}" />
+            <TextBlock Text="{Binding ChangesHeader}" FontWeight="SemiBold" Margin="2,6,2,2" />
+          </DockPanel>
+          <ListBox x:Name="ChangesList" ItemsSource="{Binding Changes}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" AutomationProperties.Name="{l:T gitChanges.changes}" />
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+  </Panel>
+</UserControl>

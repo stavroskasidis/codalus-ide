@@ -1,0 +1,38 @@
+{
+  "id": "codalus.templates",
+  "version": "0.1.0",
+  "displayName": "Templates",
+  "publisher": "codalus",
+  "description": "New projects and solutions from dotnet new templates.",
+  "engines": { "codalus": "^0.3.0" },
+  "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.Templates.dll" },
+  "contributes": {
+    "commands": [
+      { "id": "templates.newProject", "title": "New Project…", "category": "File" },
+      { "id": "templates.newSolution", "title": "New Solution…", "category": "File" }
+    ],
+    "menus": {
+      "menuBar/file/new": [
+        { "command": "templates.newProject", "group": "1-new", "order": 1 },
+        { "command": "templates.newSolution", "group": "1-new", "order": 2 }
+      ],
+      "solutionExplorer/context/add": [
+        { "command": "templates.newProject", "group": "3-solution", "order": 0, "when": "explorerItemKind == solution || explorerItemKind == solutionFolder" }
+      ]
+    },
+    "keybindings": [
+      { "key": "primary+shift+n", "command": "templates.newProject" }
+    ],
+    "settings": {
+      "title": "Templates",
+      "properties": {
+        "templates.defaultLocation": {
+          "type": "string",
+          "default": "",
+          "scope": "user",
+          "description": "Folder for new solutions and projects when no solution is open. Empty: a 'source/repos' folder in your home folder."
+        }
+      }
+    }
+  }
+}

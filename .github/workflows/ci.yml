@@ -81,17 +81,17 @@ jobs:
         run: eng/get-netcoredbg.sh
       - name: Target framework matrix (M33, ADR 0030; manual runs only)
         # .NET Core 2.0 to .NET 9 and older SDKs in .work/dotnet-compat: slow to install, so only in the matrix run.
-        # Without it the DaedalusStudio.TargetFrameworks.Tests suite skips; with DAEDALUS_DOTNET_COMPAT it must pass.
+        # Without it the Codalus.TargetFrameworks.Tests suite skips; with CODALUS_DOTNET_COMPAT it must pass.
         if: github.event_name == 'workflow_dispatch' && matrix.shard == 'others'
         shell: bash
         run: |
           bash eng/get-runtimes.sh
-          echo "DAEDALUS_DOTNET_COMPAT=${{ github.workspace }}/.work/dotnet-compat" >> "$GITHUB_ENV"
+          echo "CODALUS_DOTNET_COMPAT=${{ github.workspace }}/.work/dotnet-compat" >> "$GITHUB_ENV"
           bash eng/get-netcoredbg.sh --x64
       - name: Restore
-        run: dotnet restore DaedalusStudio.slnx
+        run: dotnet restore Codalus.slnx
       - name: Build
-        run: dotnet build DaedalusStudio.slnx -c Release --no-restore
+        run: dotnet build Codalus.slnx -c Release --no-restore
       - name: Developer tools access (macOS)
         # Dumps (createdump) and attaching (netcoredbg) need it; otherwise the system asks for a password that nobody
         # answers on a runner, and they time out (as a person would approve once).
@@ -165,7 +165,7 @@ jobs:
         shell: bash
         run: |
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
-          dotnet publish src/DaedalusStudio.Shell -c Release -r "$rid" -o artifacts/shell
+          dotnet publish src/Codalus.Shell -c Release -r "$rid" -o artifacts/shell
       - name: Display for the smoke test (Xvfb)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
@@ -177,8 +177,8 @@ jobs:
         shell: bash
         timeout-minutes: 25
         env:
-          DAEDALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
-        run: bash eng/smoke-test.sh artifacts/shell/daedalus artifacts/smoke-test
+          CODALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
+        run: bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test
       - name: Old runtimes in containers of their distributions (M33, ADR 0030; manual runs only)
         if: github.event_name == 'workflow_dispatch' && runner.os == 'Linux'
         shell: bash

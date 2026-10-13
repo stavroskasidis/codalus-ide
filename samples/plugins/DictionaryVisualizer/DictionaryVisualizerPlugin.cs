@@ -1,6 +1,6 @@
 using System.Globalization;
-using DaedalusStudio.Plugins;
-using DaedalusStudio.Plugins.Proposed;
+using Codalus.Plugins;
+using Codalus.Plugins.Proposed;
 
 namespace DictionaryVisualizer;
 
@@ -9,7 +9,7 @@ namespace DictionaryVisualizer;
 /// type proxies, so the entries are read from the dictionary's own fields: <c>_count</c> slots of <c>_entries</c>, where
 /// a free slot has <c>next</c> below -1.
 /// </summary>
-public sealed class DictionaryVisualizerPlugin : IDaedalusPlugin
+public sealed class DictionaryVisualizerPlugin : ICodalusPlugin
 {
     private const int MaxEntries = 200;
 

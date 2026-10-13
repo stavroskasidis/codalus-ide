@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Routing.Patterns;
 
-namespace DaedalusStudio.Website.Site;
+namespace Codalus.Website.Site;
 
 /// <summary>
 /// Writes the running site to static files, the way GitHub Pages serves them: a page at <c>download/</c> becomes

@@ -25,16 +25,16 @@ case "$shard" in
     flag=--filter-class
     [[ "$shard" == shell-1 ]] && flag=--filter-not-class
     filters=()
-    for class in "${second[@]}"; do filters+=("$flag" "DaedalusStudio.Shell.Tests.$class"); done
-    dotnet test --project tests/DaedalusStudio.Shell.Tests "${common[@]}" "${filters[@]}"
+    for class in "${second[@]}"; do filters+=("$flag" "Codalus.Shell.Tests.$class"); done
+    dotnet test --project tests/Codalus.Shell.Tests "${common[@]}" "${filters[@]}"
     ;;
   others)
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The
     # Windows runner has four cores, where all the projects at once timed out at random: three at a time there.
     extra=()
     [[ "${RUNNER_OS:-}" == "Windows" ]] && extra=(--max-parallel-test-modules 3)
-    dotnet test --solution DaedalusStudio.slnx -c "$configuration" --no-build ${extra[@]+"${extra[@]}"} -- \
-      --hangdump --hangdump-timeout 25m --hangdump-type Mini --filter-not-namespace DaedalusStudio.Shell.Tests --ignore-exit-code 8
+    dotnet test --solution Codalus.slnx -c "$configuration" --no-build ${extra[@]+"${extra[@]}"} -- \
+      --hangdump --hangdump-timeout 25m --hangdump-type Mini --filter-not-namespace Codalus.Shell.Tests --ignore-exit-code 8
     ;;
   *)
     echo "Unknown shard: $shard" >&2

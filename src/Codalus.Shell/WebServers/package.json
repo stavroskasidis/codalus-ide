@@ -1,0 +1,11 @@
+{
+  "name": "codalus-web-language-servers",
+  "private": true,
+  "description": "The web language servers Codalus IDE installs on demand (ADR 0024): HTML, CSS, SCSS and Less from VS Code (vscode-langservers-extracted, MIT), and JavaScript and TypeScript (typescript-language-server and TypeScript, Apache-2.0).",
+  "license": "MIT",
+  "dependencies": {
+    "typescript": "5.9.3",
+    "typescript-language-server": "6.0.2",
+    "vscode-langservers-extracted": "4.10.0"
+  }
+}

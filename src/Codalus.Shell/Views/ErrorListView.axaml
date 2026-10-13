@@ -1,0 +1,73 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.ErrorListView"
+             x:DataType="vm:ErrorListViewModel">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <ComboBox SelectedIndex="0" x:Name="Scope" MinWidth="130" AutomationProperties.Name="{l:T errorList.scope}" ToolTip.Tip="{l:T errorList.scope}">
+        <ComboBoxItem Content="{l:T errorList.entireSolution}" />
+        <ComboBoxItem Content="{l:T errorList.currentDocument}" />
+      </ComboBox>
+      <ComboBox SelectedIndex="{Binding SourceFilter}" MinWidth="130" AutomationProperties.Name="{l:T errorList.source}" ToolTip.Tip="{l:T errorList.source}">
+        <ComboBoxItem Content="{l:T errorList.buildIntellisense}" />
+        <ComboBoxItem Content="{l:T errorList.buildOnly}" />
+        <ComboBoxItem Content="{l:T errorList.intellisenseOnly}" />
+      </ComboBox>
+      <ToggleButton Classes="toolbar" IsChecked="{Binding ShowErrors}" AutomationProperties.Name="{Binding ErrorsLabel}" ToolTip.Tip="{Binding ErrorsLabel}">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="error" Classes="error" />
+          <TextBlock Text="{Binding ErrorsLabel}" />
+        </StackPanel>
+      </ToggleButton>
+      <ToggleButton Classes="toolbar" IsChecked="{Binding ShowWarnings}" AutomationProperties.Name="{Binding WarningsLabel}" ToolTip.Tip="{Binding WarningsLabel}">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="warning" Classes="warning" />
+          <TextBlock Text="{Binding WarningsLabel}" />
+        </StackPanel>
+      </ToggleButton>
+      <ToggleButton Classes="toolbar" IsChecked="{Binding ShowMessages}" AutomationProperties.Name="{Binding MessagesLabel}" ToolTip.Tip="{Binding MessagesLabel}">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="info" />
+          <TextBlock Text="{Binding MessagesLabel}" />
+        </StackPanel>
+      </ToggleButton>
+      <TextBox Text="{Binding Filter}" PlaceholderText="{l:T errorList.searchErrorList}" MinWidth="120" AutomationProperties.Name="{l:T errorList.searchErrorList}" />
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T errorList.noProblems}" IsVisible="{Binding IsEmpty}" />
+    <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+      <DockPanel MinWidth="620" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="28,90,*,140,200,130" Margin="8,2" >
+          <TextBlock Grid.Column="1" Classes="muted" Text="{l:T errorList.code}" />
+          <TextBlock Grid.Column="2" Classes="muted" Text="{l:T errorList.description}" />
+          <TextBlock Grid.Column="3" Classes="muted" Text="{l:T errorList.project}" />
+          <TextBlock Grid.Column="4" Classes="muted" Text="{l:T errorList.file}" />
+          <TextBlock Grid.Column="5" Classes="muted" Text="{l:T errorList.source}" />
+        </Grid>
+        <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T errorList.errorList}">
+          <ListBox.Styles>
+            <Style Selector="ListBoxItem" x:DataType="vm:ErrorListRow">
+              <Setter Property="Padding" Value="2" />
+              <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+            </Style>
+          </ListBox.Styles>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ErrorListRow">
+              <Grid ColumnDefinitions="28,90,*,140,200,130">
+                <controls:Icon Kind="{Binding Icon}" Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
+                <TextBlock Grid.Column="1" Text="{Binding Code}" />
+                <TextBlock Grid.Column="2" Text="{Binding Description}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
+                <TextBlock Grid.Column="3" Text="{Binding Project}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Project}" />
+                <TextBlock Grid.Column="4" Text="{Binding Location}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+                <TextBlock Grid.Column="5" Text="{Binding Source}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Source}" Classes="muted" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>
