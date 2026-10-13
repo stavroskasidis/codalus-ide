@@ -4,7 +4,7 @@
   "displayName": "%displayName%",
   "publisher": "daedalus",
   "description": "%description%",
-  "engines": { "daedalus": "^0.2.0" },
+  "engines": { "daedalus": "^0.2.9" },
   "entry": { "runtime": "dotnet", "assembly": "DaedalusStudio.Plugins.Welcome.dll" },
   "activationEvents": [ "onStartup" ],
   "contributes": {
