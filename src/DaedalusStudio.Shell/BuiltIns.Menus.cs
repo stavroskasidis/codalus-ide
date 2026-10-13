@@ -21,6 +21,7 @@ internal static partial class BuiltIns
     public const string EditFindMenu = "menuBar/edit/find";
     public const string EditPasteSpecialMenu = "menuBar/edit/pasteSpecial";
     public const string EditAdvancedMenu = "menuBar/edit/advanced";
+    public const string FileProfilesMenu = "menuBar/file/profiles";
     public const string EditBookmarksMenu = "menuBar/edit/bookmarks";
     public const string EditIntelliSenseMenu = "menuBar/edit/intelliSense";
     public const string EditCaretsMenu = "menuBar/edit/multipleCarets";
@@ -98,6 +99,13 @@ internal static partial class BuiltIns
             Item(File, "workbench.action.localHistory", "4-history"),
             Item(File, "workbench.compareFiles", "4-history"),
             Item(File, "workbench.compareActiveWith", "4-history"),
+            Sub(File, FileProfilesMenu, "Profiles", "5-profiles"),
+            Item(FileProfilesMenu, "workbench.profiles.switch", "1-switch"),
+            Item(FileProfilesMenu, "workbench.profiles.new", "2-manage"),
+            Item(FileProfilesMenu, "workbench.profiles.delete", "2-manage"),
+            Item(FileProfilesMenu, "workbench.profiles.export", "3-transfer"),
+            Item(FileProfilesMenu, "workbench.profiles.import", "3-transfer"),
+            Item(File, "workbench.restart", "exit"),
             Item(File, "workbench.quit", "exit"),
 
             // Edit.
@@ -395,6 +403,13 @@ internal static partial class BuiltIns
             Item(Tools, "workbench.openPluginsFolder", "plugins") with { Order = 100 },
             Item(Tools, "workbench.selectTheme", "z-preferences"),
             Item(Tools, "workbench.openKeyboardShortcuts", "z-preferences"),
+            Item(Tools, "workbench.openFontsAndColors", "z-preferences"),
+            Item(Tools, "workbench.customize", "z-preferences"),
+            Item(Tools, "workbench.importSettings", "z-preferences"),
+            Item(Tools, "workbench.exportSettings", "z-preferences"),
+            Item(Tools, "workbench.importVsCodeSettings", "z-preferences"),
+            Item(Tools, "settingsSync.syncNow", "z-preferences"),
+            Item(Tools, "workbench.importVsSettings", "z-preferences"),
             Item(Tools, "workbench.openOptions", "z-preferences"),
 
             // Window.
@@ -410,7 +425,12 @@ internal static partial class BuiltIns
             Item(Window, "workbench.closeAllDocuments", "3-close"),
             Item(Window, "workbench.closeUnpinnedDocuments", "3-close"),
             Item(Window, "workbench.closeDocumentsToTheRight", "3-close"),
+            Item(Window, "workbench.saveWindowLayout", "4-layout"),
+            Item(Window, "workbench.applyWindowLayout", "4-layout"),
+            Item(Window, "workbench.deleteWindowLayout", "4-layout"),
             Item(Window, "workbench.resetLayout", "4-layout"),
+            Item(Window, "workbench.toggleFullScreen", "5-screen"),
+            Item(Window, "workbench.toggleDistractionFree", "5-screen"),
 
             // Help. The Start page comes from the welcome plugin ("navigation").
             Item(Help, "workbench.showLogs", "help"),

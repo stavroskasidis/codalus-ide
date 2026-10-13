@@ -61,7 +61,7 @@ public sealed class OutputViewModel : ObservableObject
     public ICommand ClearCommand { get; }
 }
 
-public sealed class PluginRowViewModel(PluginDescription plugin)
+public sealed class PluginRowViewModel(PluginDescription plugin, bool turnedOff, Action<string, bool>? setTurnedOff)
 {
     public string Name => plugin.DisplayName;
 
@@ -69,7 +69,16 @@ public sealed class PluginRowViewModel(PluginDescription plugin)
 
     public string Version => plugin.Manifest?.Version ?? "?";
 
-    public string State => plugin.State.ToString();
+    /// <summary>The state, and what changes at the next start when the user turned the plugin off or on (M23b).</summary>
+    public string State => turnedOff == (plugin.State == PluginState.Disabled)
+        ? plugin.State.ToString()
+        : $"{plugin.State}, turned {(turnedOff ? "off" : "on")} from the next start";
+
+    public string ToggleTitle => turnedOff ? "Turn On" : "Turn Off";
+
+    public bool CanToggle => setTurnedOff is not null && plugin.State is not (PluginState.Invalid or PluginState.Incompatible);
+
+    public ICommand ToggleCommand => new RelayCommand(_ => setTurnedOff?.Invoke(plugin.Id, !turnedOff));
 
     public string? Error => plugin.Error;
 
@@ -84,10 +93,12 @@ public sealed class PluginRowViewModel(PluginDescription plugin)
 public sealed class PluginsViewModel : ObservableObject
 {
     private readonly PluginManager _manager;
+    private readonly Action<string, bool>? _setTurnedOff;
 
-    public PluginsViewModel(PluginManager manager)
+    public PluginsViewModel(PluginManager manager, Action<string, bool>? setTurnedOff = null)
     {
         _manager = manager;
+        _setTurnedOff = setTurnedOff;
         manager.PluginsChanged += (_, _) => Ui.Post(Refresh);
         Refresh();
     }
@@ -96,12 +107,12 @@ public sealed class PluginsViewModel : ObservableObject
 
     public bool IsEmpty => Plugins.Count == 0;
 
-    private void Refresh()
+    public void Refresh()
     {
         Plugins.Clear();
         foreach (var plugin in _manager.Plugins.OrderBy(p => p.DisplayName, StringComparer.CurrentCultureIgnoreCase))
         {
-            Plugins.Add(new PluginRowViewModel(plugin));
+            Plugins.Add(new PluginRowViewModel(plugin, _manager.IsTurnedOff(plugin.Id), _setTurnedOff));
         }
 
         OnPropertyChanged(nameof(IsEmpty));

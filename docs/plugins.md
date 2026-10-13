@@ -73,6 +73,10 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 | `isolation` | `shared` (default) or `dedicated` (a host process of its own). |
 | `enableProposedApi` | Use [proposed APIs](#proposed-apis). Honored for built-in plugins, and for others when Daedalus runs with `--enable-proposed-api`. |
 
+### Translating the manifest
+
+A manifest string that is a whole `%key%` (VS Code's convention) is replaced when the manifest loads. The text comes from `daedalus-plugin.nls.<locale>.json` for the display language (`pt-BR`, then `pt`), else from `daedalus-plugin.nls.json` (English) next to the manifest. Each file is a flat `{ "key": "text" }` object. Titles, descriptions, categories, setting texts and anything else the manifest shows can be translated this way. A key no file has stays as written. Ship the `nls` files next to the manifest; the built-in Welcome plugin does. The display language is the setting `workbench.locale` (or `--locale`); `qps-ploc` shows every replaced string pseudo-translated, so untranslated text stands out.
+
 ### Contribution points
 
 - **commands:** `id`, `title`, `category` (shown as "Category: Title"), `enablement` (a when-clause; disabled commands are hidden from the palette and greyed in menus).
@@ -246,6 +250,14 @@ The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/DaedalusStudi
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### M23b (no version change)
+
+Additive (manifests for 0.2.0–0.2.8 keep working):
+- [Manifest translation](#translating-the-manifest): `%key%` placeholders with `daedalus-plugin.nls.json` and `daedalus-plugin.nls.<locale>.json`.
+- Users can turn plugins off: the setting `plugins.disabled` (ids), which the Plugins window edits. A turned-off plugin is discovered but its contributions aren't applied, and it doesn't activate. It applies at the next start (File → Restart).
+- Shell commands `workbench.restart`, `workbench.customize`, `workbench.profiles.switch`, `.new`, `.delete`, `.export` and `.import`, and `settingsSync.turnOn`, `.syncNow` and `.turnOff`. The context keys `profile` (the active profile's name) and `locale` (the display language).
+- The settings `workbench.locale`, `workbench.commandBarCustomizations` (the user's menu and toolbar changes; a plugin's menu items can be removed and moved like the shell's), `settingsSync.target` and `settingsSync.ignoredSettings`. The settings, keyboard shortcuts and snippets that a profile holds include a plugin's own settings.
 
 ### M34e (no version change)
 

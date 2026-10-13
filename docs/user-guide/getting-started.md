@@ -35,7 +35,7 @@ To build from source, see the repository's README.
 
 ## First start
 
-The Start page offers to open a solution, the command palette, settings, keyboard shortcuts and color themes.
+The Start page opens with **Get Started**: choose a color theme and a keyboard scheme (Default, VS Code, ReSharper or Emacs), import your VS Code settings and key bindings or a file exported from another machine, and adjust Fonts and Colors. **Done** hides these steps (Help → Get Started shows them again). Below them are the common actions, recent solutions and a tip that runs what it describes.
 
 1. **Open a solution**: File → Open Solution or Project (`Ctrl+Shift+O`). Pick a `.sln`, `.slnx` or a project file (`.csproj`). You can also pass one on the command line: `daedalus path/to/App.sln`.
 2. **Trust the folder.** Opening a solution runs code from it: MSBuild evaluates its project files and imports, and restore runs NuGet targets. The first time you open a folder, Daedalus Studio asks whether you trust its authors.

@@ -29,6 +29,7 @@ internal static partial class BuiltIns
           { "key": "primary+shift+p", "command": "workbench.showCommandPalette" },
           { "key": "ctrl+q", "command": "workbench.action.featureSearch", "when": "keyboardScheme != vscode" },
           { "key": "f1", "command": "workbench.showCommandPalette", "when": "keyboardScheme == vscode" },
+          { "key": "shift+alt+enter", "mac": "ctrl+cmd+f", "command": "workbench.toggleFullScreen" },
           { "key": "f1", "command": "editor.action.showHelp", "when": "keyboardScheme != vscode && editorTextFocus" },
           { "key": "primary+,", "command": "workbench.openSettings", "when": "keyboardScheme == vscode" },
           { "key": "primary+,", "command": "workbench.action.gotoAll", "when": "keyboardScheme != vscode" },
@@ -66,13 +67,42 @@ internal static partial class BuiltIns
                 Category = "Privacy",
                 Description = "When Daedalus Studio crashes, save a report (version, OS, the error and recent log lines) in the logs folder on this computer. Nothing is sent anywhere.",
             },
+            SettingDescriptor.Create(Workbench.Plugins.PluginManager.DisabledSetting, "[]", SettingType.StringArray, shell) with
+            {
+                Title = "Turned-Off Plugins",
+                Category = "Plugins",
+                Description = "The ids of plugins that don't load (the Plugins window turns them off and on). Changes apply when Daedalus Studio starts again.",
+                Scope = SettingScope.User,
+            },
+            SettingDescriptor.Create(Workbench.Menus.MenuCustomizations.SettingKey, "{}", SettingType.Object, shell) with
+            {
+                Title = "Menu and Toolbar Customizations",
+                Category = "Appearance",
+                Description = "Commands added to and removed from menus, context menus and the standard toolbar, their order, and your own toolbars: { \"locations\": { \"menuBar/tools\": { \"add\": [], \"remove\": [], \"order\": [] } }, \"toolbars\": { \"Name\": [] } }. Tools → Customize edits it.",
+                Scope = SettingScope.User,
+                Order = 6,
+            },
+            SettingDescriptor.Create(ShellHost.SyncTargetSetting, "\"\"", SettingType.String, shell) with
+            {
+                Title = "Sync Target",
+                Category = "Settings Sync",
+                Description = "Where your settings, keyboard shortcuts, snippets and saved layouts sync: a folder (one a cloud drive syncs) or a Git repository's URL (a gist's clone URL works). Empty: sync is off. Each profile has its own.",
+                Scope = SettingScope.User,
+            },
+            SettingDescriptor.Create(ShellHost.SyncIgnoredSetting, "[]", SettingType.StringArray, shell) with
+            {
+                Title = "Settings Not Synced",
+                Category = "Settings Sync",
+                Description = "Settings that stay on this machine (the sync settings always do), such as paths that differ between machines.",
+                Scope = SettingScope.User,
+            },
             SettingDescriptor.Create(KeyboardSchemeSetting, "\"default\"", SettingType.String, shell) with
             {
                 Title = "Keyboard Scheme",
                 Category = "Keyboard",
-                Description = "Default: the classic IDE shortcuts (F6 builds, Ctrl+Q searches, Ctrl+, goes to anything, F1 is help). VS Code: VS Code's (F1 is the command palette, Ctrl+, opens Settings, Ctrl+W closes). Your own key bindings apply on top of either.",
-                Enum = ["default", "vscode"],
-                EnumDescriptions = ["Default", "VS Code"],
+                Description = "Default: the classic IDE shortcuts (F6 builds, Ctrl+Q searches, Ctrl+, goes to anything, F1 is help). VS Code: VS Code's (F1 is the command palette, Ctrl+, opens Settings, Ctrl+W closes). ReSharper: the default with ReSharper's (Ctrl+Shift+R refactors, Ctrl+W expands the selection, Alt+F7 finds usages). Emacs: the default with Emacs's editing keys (Ctrl+F/B/N/P move, Ctrl+K kills to the line's end, Ctrl+Space sets the mark, Ctrl+X Ctrl+S saves, Alt+X runs a command). Your own key bindings apply on top of any of them.",
+                Enum = ["default", "vscode", "resharper", "emacs"],
+                EnumDescriptions = ["Default", "VS Code", "ReSharper", "Emacs"],
                 Scope = SettingScope.User,
                 Order = 2,
             },
@@ -101,6 +131,22 @@ internal static partial class BuiltIns
                 Description = "Mark each document tab with its project's color, a stripe along the tab's bottom edge.",
                 Scope = SettingScope.User,
                 Order = 3,
+            },
+            SettingDescriptor.Create(Theming.ColorCustomizations.TokensKey, "{}", SettingType.Object, shell) with
+            {
+                Title = "Syntax Colors",
+                Category = "Appearance",
+                Description = "Colors over the theme's for kinds of code, as VS Code writes them: \"comments\", \"strings\", \"keywords\", \"numbers\", \"types\", \"functions\", \"variables\", or \"semanticTokenColors\" by token type; under \"[Dark]\" (a theme's name) for one theme only. Tools → Fonts and Colors edits them.",
+                Scope = SettingScope.User,
+                Order = 4,
+            },
+            SettingDescriptor.Create(Theming.ColorCustomizations.WorkbenchKey, "{}", SettingType.Object, shell) with
+            {
+                Title = "Editor and Window Colors",
+                Category = "Appearance",
+                Description = "Colors over the theme's for the editor (VS Code's ids, such as \"editor.selectionBackground\") and the window (resource keys such as \"Shell.Background\"); under \"[Dark]\" for one theme only. Tools → Fonts and Colors edits them.",
+                Scope = SettingScope.User,
+                Order = 5,
             },
             SettingDescriptor.Create("workbench.notifications.autoHideSeconds", "8", SettingType.Integer, shell) with
             {
@@ -174,9 +220,20 @@ internal static partial class BuiltIns
         Add("workbench.openOptions", "Options…", string.Empty, Ui(shell.OpenSettings), palette: false);
         Add("workbench.openSettingsJson", "Open User Settings (JSON)", "Preferences", Ui(shell.OpenSettingsJsonAsync));
         Add("workbench.openKeyboardShortcuts", "Open Keyboard Shortcuts", "Preferences", Ui(shell.OpenKeyboardShortcuts));
+        Add("workbench.openFontsAndColors", "Fonts and Colors", "Preferences", Ui(shell.OpenFontsAndColors));
+        Add("workbench.customize", "Customize…", "Preferences", Ui(shell.OpenCustomize));
+        Add("workbench.exportSettings", "Export Settings…", "Preferences", Ui(() => shell.ExportSettingsAsync()));
+        Add("workbench.importSettings", "Import Settings…", "Preferences", Ui(() => shell.ImportSettingsAsync()));
+        Add("workbench.importVsCodeSettings", "Import Settings from VS Code…", "Preferences", Ui(() => shell.ImportVsCodeSettingsAsync()));
+        Add("workbench.importVsSettings", "Import a .vssettings File…", "Preferences", Ui(() => shell.ImportVsSettingsAsync()));
         Add("workbench.openKeybindingsJson", "Open Keyboard Shortcuts (JSON)", "Preferences", Ui(shell.OpenKeybindingsJsonAsync));
         Add("workbench.selectTheme", "Color Theme", "Preferences", Ui(shell.SelectThemeAsync));
         Add("workbench.resetLayout", "Reset Layout", "View", Ui(shell.Layout.ResetLayout));
+        Add("workbench.saveWindowLayout", "Save Window Layout…", "View", Ui(() => shell.SaveWindowLayoutAsync()));
+        Add("workbench.applyWindowLayout", "Apply Window Layout…", "View", Ui(() => shell.ApplyWindowLayoutAsync()));
+        Add("workbench.deleteWindowLayout", "Delete Window Layout…", "View", Ui(() => shell.DeleteWindowLayoutAsync()));
+        Add("workbench.toggleFullScreen", "Full Screen", "View", Ui(shell.ToggleFullScreen));
+        Add("workbench.toggleDistractionFree", "Distraction-Free Mode", "View", Ui(shell.ToggleDistractionFree));
         Add("workbench.focusNextPane", "Focus Next Pane", "View", Ui(() => shell.Window?.FocusPane(backwards: false)));
         Add("workbench.focusPreviousPane", "Focus Previous Pane", "View", Ui(() => shell.Window?.FocusPane(backwards: true)));
         Add("workbench.clearNotifications", "Clear All Notifications", "Notifications", Ui(shell.Workbench.Notifications.DismissAll));
@@ -191,6 +248,15 @@ internal static partial class BuiltIns
         Add("update.check", "Check for Updates", "Help", Ui(() => _ = shell.CheckForUpdatesAsync()));
         Add("update.whatsNew", "What's New", "Help", Ui(() => shell.ShowWhatsNew()));
         Add("update.restart", "Restart to Update", "Help", Ui(shell.RestartToUpdate));
+        Add("workbench.restart", "Restart", "File", Ui(shell.Restart));
+        Add("settingsSync.turnOn", "Settings Sync: Turn On…", "Preferences", Ui(() => shell.TurnOnSettingsSyncAsync()));
+        Add("settingsSync.syncNow", "Settings Sync: Sync Now", "Preferences", Ui(() => shell.SyncSettingsAsync()));
+        Add("settingsSync.turnOff", "Settings Sync: Turn Off", "Preferences", Ui(shell.TurnOffSettingsSyncAsync));
+        Add("workbench.profiles.switch", "Switch Profile…", "Profiles", Ui(() => shell.SwitchProfileAsync()));
+        Add("workbench.profiles.new", "New Profile…", "Profiles", Ui(() => shell.NewProfileAsync()));
+        Add("workbench.profiles.delete", "Delete Profile…", "Profiles", Ui(() => shell.DeleteProfileAsync()));
+        Add("workbench.profiles.export", "Export Profile…", "Profiles", Ui(() => shell.ExportSettingsAsync()));
+        Add("workbench.profiles.import", "Import Profile…", "Profiles", Ui(() => shell.ImportProfileAsync()));
 
         // Helpers for plugins (not in the palette): plugins reach shell features through commands.
         Add("workbench.openExternal", "Open URL", "Developer", async (args, _) =>
@@ -280,7 +346,8 @@ internal static partial class BuiltIns
         },
     ];
 
-    public static IReadOnlyList<KeybindingRule> ParseDefaultKeybindings(PlatformKind platform) =>
+    /// <summary>The default key bindings, with the keyboard scheme's own (ReSharper, Emacs) last, so they win.</summary>
+    public static IReadOnlyList<KeybindingRule> ParseDefaultKeybindings(PlatformKind platform, string scheme = "default") =>
         [
             .. KeybindingService.ParseRules(DefaultKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(SolutionKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
@@ -297,6 +364,8 @@ internal static partial class BuiltIns
         .. KeybindingService.ParseRules(DataKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(ProfilingKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(XamlKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+        .. KeybindingService.ParseRules(SchemeKeybindings, KeybindingSource.Default, platform, null, diagnostics: null)
+            .Where(r => r.When.Text.Contains($"keyboardScheme == {scheme}", StringComparison.Ordinal)),
         ];
 
     private static CommandHandler Ui(Action action) => async (_, _) =>

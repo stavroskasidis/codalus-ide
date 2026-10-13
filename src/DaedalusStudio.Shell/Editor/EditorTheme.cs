@@ -11,22 +11,75 @@ namespace DaedalusStudio.Shell.Editor;
 /// </summary>
 public sealed class EditorTheme
 {
+    /// <summary>
+    /// The editor's own colors by name (VS Code's color ids, so <c>workbench.colorCustomizations</c> and its importer
+    /// share them), in the order of the constructor's parameters.
+    /// </summary>
+    public static IReadOnlyList<string> Elements { get; } =
+    [
+        "editor.selectionBackground", "editor.lineHighlightBackground", "editor.wordHighlightBackground",
+        "editor.wordHighlightStrongBackground", "editorBracketMatch.background", "editorError.foreground",
+        "editorWarning.foreground", "editorInfo.foreground", "editorHint.foreground", "editor.findMatchHighlightBackground",
+    ];
+
     private readonly IBrush?[] _tokens;
+    private readonly Dictionary<string, uint> _tokenColors;
+    private readonly Dictionary<string, uint> _elementColors;
 
     private EditorTheme(string id, Dictionary<string, uint> tokens, uint selection, uint currentLine, uint highlightRead, uint highlightWrite, uint bracket, uint error, uint warning, uint info, uint hint, uint findMatch)
+        : this(id, tokens, Elements.Zip([selection, currentLine, highlightRead, highlightWrite, bracket, error, warning, info, hint, findMatch]).ToDictionary(e => e.First, e => e.Second, StringComparer.Ordinal))
+    {
+    }
+
+    private EditorTheme(string id, Dictionary<string, uint> tokens, Dictionary<string, uint> elements)
     {
         Id = id;
+        _tokenColors = tokens;
+        _elementColors = elements;
         _tokens = [.. TokenTypes.All.Select(name => tokens.TryGetValue(name, out var argb) ? new ImmutableSolidColorBrush(argb) : (IBrush?)null)];
-        Selection = new ImmutableSolidColorBrush(selection);
-        CurrentLine = new ImmutableSolidColorBrush(currentLine);
-        HighlightRead = new ImmutableSolidColorBrush(highlightRead);
-        HighlightWrite = new ImmutableSolidColorBrush(highlightWrite);
-        Bracket = new ImmutableSolidColorBrush(bracket);
-        Error = new ImmutableSolidColorBrush(error);
-        Warning = new ImmutableSolidColorBrush(warning);
-        Info = new ImmutableSolidColorBrush(info);
-        Hint = new ImmutableSolidColorBrush(hint);
-        FindMatch = new ImmutableSolidColorBrush(findMatch);
+        IBrush Brush(int index) => new ImmutableSolidColorBrush(elements[Elements[index]]);
+        Selection = Brush(0);
+        CurrentLine = Brush(1);
+        HighlightRead = Brush(2);
+        HighlightWrite = Brush(3);
+        Bracket = Brush(4);
+        Error = Brush(5);
+        Warning = Brush(6);
+        Info = Brush(7);
+        Hint = Brush(8);
+        FindMatch = Brush(9);
+    }
+
+    /// <summary>A semantic token type's color (ARGB), or null when the theme leaves it to the text's.</summary>
+    public uint? TokenColor(string type) => _tokenColors.TryGetValue(type, out var argb) ? argb : null;
+
+    /// <summary>An editor element's color (ARGB) by its name in <see cref="Elements"/>.</summary>
+    public uint ElementColor(string element) => _elementColors[element];
+
+    /// <summary>
+    /// This theme with the user's colors over it (Fonts and Colors, M23a): token types and editor elements by name;
+    /// unknown names are ignored.
+    /// </summary>
+    public EditorTheme WithOverrides(IReadOnlyDictionary<string, uint> tokens, IReadOnlyDictionary<string, uint> elements)
+    {
+        if (tokens.Count == 0 && elements.Count == 0)
+        {
+            return this;
+        }
+
+        var tokenColors = new Dictionary<string, uint>(_tokenColors, StringComparer.Ordinal);
+        foreach (var (name, argb) in tokens.Where(t => TokenTypes.All.Contains(t.Key)))
+        {
+            tokenColors[name] = argb;
+        }
+
+        var elementColors = new Dictionary<string, uint>(_elementColors, StringComparer.Ordinal);
+        foreach (var (name, argb) in elements.Where(e => elementColors.ContainsKey(e.Key)))
+        {
+            elementColors[name] = argb;
+        }
+
+        return new EditorTheme(Id, tokenColors, elementColors);
     }
 
     public string Id { get; }

@@ -11,6 +11,9 @@ public enum SettingType
     Integer,
     Number,
     StringArray,
+
+    /// <summary>A JSON object (M23a: the color customizations), edited as JSON.</summary>
+    Object,
 }
 
 public static class SettingTypes
@@ -23,6 +26,7 @@ public static class SettingTypes
         "integer" => SettingType.Integer,
         "number" => SettingType.Number,
         "string[]" or "array" => SettingType.StringArray,
+        "object" => SettingType.Object,
         _ => null,
     };
 }
@@ -87,6 +91,8 @@ public sealed record SettingDescriptor(string Key, SettingType Type, JsonElement
                 return "Expected a number.";
             case SettingType.StringArray when value.ValueKind != JsonValueKind.Array || value.EnumerateArray().Any(e => e.ValueKind != JsonValueKind.String):
                 return "Expected an array of strings.";
+            case SettingType.Object when value.ValueKind != JsonValueKind.Object:
+                return "Expected an object.";
         }
 
         if (Type is SettingType.Integer or SettingType.Number)

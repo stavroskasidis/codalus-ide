@@ -35,6 +35,9 @@ public interface IShellWindow
     /// <summary>Shows and activates the window (another process asked this one to open something).</summary>
     void BringToFront();
 
+    /// <summary>Full screen (M23a): the window covers the screen, without its frame; false returns to how it was.</summary>
+    bool IsFullScreen { get; set; }
+
     /// <summary>Asks for an existing file (null: cancelled).</summary>
     Task<string?> PickFileAsync(string title, string filterName, string[] patterns);
 
@@ -69,7 +72,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         Paths.EnsureCreated();
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
-        Workbench.Settings.Register([.. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings()]);
+        LoadLocalization();
+        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
@@ -88,11 +92,12 @@ public sealed partial class ShellHost : IAsyncDisposable
         EditorFont = new EditorFont(Workbench.Settings);
         Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
         Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));
-        PluginList = new PluginsViewModel(Plugins);
+        PluginList = new PluginsViewModel(Plugins, (id, off) => _ = SetPluginTurnedOffAsync(id, off));
         Palette = new QuickPickViewModel();
         Dialogs = new DialogViewModel();
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
         InitializeToolbar();
+        InitializeCustomizations();
         InitializeSolutions();
         InitializeBuild();
         InitializePackages();
@@ -287,6 +292,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         _ = OfferRecoveryAsync();
         StartUpdates();
+        _ = SyncSettingsAsync(quiet: true);
         foreach (var error in Options.Errors)
         {
             Workbench.Notifications.Warning(error);
@@ -567,6 +573,20 @@ public sealed partial class ShellHost : IAsyncDisposable
         Theme.Preview(null);
     }
 
+    /// <summary>Settings, searched for <paramref name="search"/> (Fonts and Colors' link to the font settings).</summary>
+    public void OpenSettings(string search)
+    {
+        OpenSettings();
+        if (Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId) is { } settings)
+        {
+            settings.ViewModel.Search = search;
+        }
+    }
+
+    /// <summary>Tools → Fonts and Colors (M23a).</summary>
+    public void OpenFontsAndColors() =>
+        Layout.OpenDocument(Layout.FindDocument<FontsAndColorsDocument>(FontsAndColorsDocument.DocumentId) ?? new FontsAndColorsDocument(new FontsAndColorsViewModel(this)));
+
     public void OpenSettings() =>
         Layout.OpenDocument(Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId)
             ?? new SettingsDocument(new SettingsViewModel(Workbench.Settings, () => Run("workbench.openSettingsJson"))));
@@ -699,8 +719,21 @@ public sealed partial class ShellHost : IAsyncDisposable
     }
 
     /// <summary>The <c>keyboardScheme</c> context key, which the default key bindings depend on (M29).</summary>
-    private void ApplyKeyboardScheme() =>
-        Workbench.Context.Set("keyboardScheme", Workbench.Settings.GetString(BuiltIns.KeyboardSchemeSetting, "default") == "vscode" ? "vscode" : "default");
+    private string _keyboardScheme = "default";
+
+    private void ApplyKeyboardScheme()
+    {
+        var scheme = Workbench.Settings.GetString(BuiltIns.KeyboardSchemeSetting, "default");
+        scheme = scheme is "vscode" or "resharper" or "emacs" ? scheme : "default";
+        if (scheme != _keyboardScheme)
+        {
+            // Only the active scheme's own bindings are among the defaults: menus and the shortcuts editor show its keys.
+            _keyboardScheme = scheme;
+            Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform, scheme));
+        }
+
+        Workbench.Context.Set("keyboardScheme", scheme);
+    }
 
     private void OnSettingsChanged(SettingsChangedEventArgs e)
     {
@@ -782,6 +815,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
         if (SelfUpdate is not null)
         {
@@ -807,5 +841,6 @@ public sealed partial class ShellHost : IAsyncDisposable
         await Solutions.DisposeAsync().ConfigureAwait(false);
         await Plugins.DisposeAsync().ConfigureAwait(false);
         Workbench.Dispose();
+        RestartIfRequested(openSolution);
     }
 }

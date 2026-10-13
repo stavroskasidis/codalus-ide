@@ -1,0 +1,12 @@
+{
+  "displayName": "Welcome",
+  "description": "The Start page: getting started, common actions, recent solutions, tips and links to the documentation.",
+  "command.show": "Show Start Page",
+  "command.showOnboarding": "Get Started",
+  "command.chooseKeyboardScheme": "Choose a Keyboard Scheme",
+  "command.toggleShowOnStartup": "Toggle Start Page on Startup",
+  "command.refresh": "Refresh",
+  "view.start": "Start",
+  "setting.showOnStartup": "Show the Start page when Daedalus Studio starts.",
+  "setting.onboarded": "Get Started is done: the Start page no longer offers the theme, keyboard scheme and imports first (Help → Get Started shows them again)."
+}

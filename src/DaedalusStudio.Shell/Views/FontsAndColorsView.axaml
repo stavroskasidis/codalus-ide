@@ -1,0 +1,45 @@
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.FontsAndColorsView"
+             x:DataType="vm:FontsAndColorsViewModel">
+  <DockPanel Margin="12,8">
+    <StackPanel DockPanel.Dock="Top" Spacing="6">
+      <TextBlock Classes="heading" Text="{l:T fontsAndColors.fontsAndColors}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap"
+                 Text="{l:T fontsAndColors.colorsOverTheThemeSFor}" />
+      <controls:ToolbarPanel>
+        <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="{l:T fontsAndColors.searchColors}" MinWidth="120" AutomationProperties.Name="{l:T fontsAndColors.searchColors}" />
+        <CheckBox IsChecked="{Binding ForAllThemes}" Content="{l:T fontsAndColors.forEveryTheme}" AutomationProperties.Name="{l:T fontsAndColors.forEveryTheme}"
+                  ToolTip.Tip="{l:T fontsAndColors.offColorsSetHereApplyTo}" />
+        <Button Content="{l:T fontsAndColors.fonts}" Command="{Binding OpenFontSettingsCommand}" ToolTip.Tip="{l:T fontsAndColors.theEditorSFontFamilyAnd}" />
+      </controls:ToolbarPanel>
+      <TextBlock Classes="muted">
+        <Run Text="{l:T fontsAndColors.theme}" /> <Run Text="{Binding ThemeTitle}" />
+      </TextBlock>
+    </StackPanel>
+    <ListBox x:Name="List" ItemsSource="{Binding Items}" Background="Transparent" Margin="0,6,0,0" AutomationProperties.Name="{l:T fontsAndColors.colors}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:ColorItemViewModel">
+          <Setter Property="Padding" Value="2" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ColorItemViewModel">
+          <Grid ColumnDefinitions="70,220,26,110,Auto" RowDefinitions="Auto,Auto">
+            <TextBlock Text="{Binding Group}" Classes="muted" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" ToolTip.Tip="{Binding Key}" TextTrimming="CharacterEllipsis" />
+            <Border Grid.Column="2" Width="18" Height="14" Background="{Binding Swatch}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" VerticalAlignment="Center" />
+            <TextBox Grid.Column="3" Classes="cell" Text="{Binding Hex, UpdateSourceTrigger=LostFocus}" VerticalAlignment="Center"
+                     AutomationProperties.Name="{Binding Title}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+            <Button Grid.Column="4" Classes="link" Content="{l:T fontsAndColors.reset}" Command="{Binding ResetCommand}" IsVisible="{Binding IsCustom}" Margin="6,0,0,0" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

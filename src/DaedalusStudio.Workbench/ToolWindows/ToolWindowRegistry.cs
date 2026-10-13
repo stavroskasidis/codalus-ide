@@ -63,7 +63,9 @@ public sealed class ToolWindowRegistry
     {
         lock (_gate)
         {
-            _windows[descriptor.Id] = descriptor;
+            _windows[descriptor.Id] = descriptor.Source == Commands.ContributionSource.Shell
+                ? descriptor with { Title = Localization.Localizer.Get($"toolWindow.{descriptor.Id}", descriptor.Title) }
+                : descriptor;
         }
 
         Changed?.Invoke(this, EventArgs.Empty);

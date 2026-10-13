@@ -489,11 +489,12 @@ public sealed class TextSettingViewModel : SettingItemViewModel
         set => SetField(ref _text, value ?? string.Empty);
     }
 
-    public bool IsMultiline => Descriptor.Type == SettingType.StringArray;
+    public bool IsMultiline => Descriptor.Type is SettingType.StringArray or SettingType.Object;
 
     public string? Watermark => Descriptor.Type switch
     {
         SettingType.StringArray => "One value per line",
+        SettingType.Object => "A JSON object, such as { \"comments\": \"#6A9955\" }",
         SettingType.Integer => "An integer" + Range(),
         SettingType.Number => "A number" + Range(),
         _ => null,
@@ -523,6 +524,25 @@ public sealed class TextSettingViewModel : SettingItemViewModel
             case SettingType.Number:
                 Error = "Expected a number.";
                 return;
+            case SettingType.Object:
+                try
+                {
+                    using var document = JsonDocument.Parse(text.Length == 0 ? "{}" : text);
+                    if (document.RootElement.ValueKind != JsonValueKind.Object)
+                    {
+                        Error = "Expected a JSON object.";
+                        return;
+                    }
+
+                    value = document.RootElement.Clone();
+                }
+                catch (JsonException ex)
+                {
+                    Error = "Not valid JSON: " + ex.Message;
+                    return;
+                }
+
+                break;
             case SettingType.StringArray:
                 value = JsonSerializer.SerializeToElement(
                     _text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), ShellJsonContext.Default.StringArray);
@@ -543,6 +563,7 @@ public sealed class TextSettingViewModel : SettingItemViewModel
             JsonValueKind.String => value.GetString()!,
             JsonValueKind.Number => value.GetRawText(),
             JsonValueKind.Array => string.Join('\n', value.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText())),
+            JsonValueKind.Object => value.GetRawText(),
             _ => string.Empty,
         };
         _committed = _text;

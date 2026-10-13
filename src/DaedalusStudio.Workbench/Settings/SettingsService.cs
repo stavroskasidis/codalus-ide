@@ -118,11 +118,31 @@ public sealed class SettingsService : IDisposable
         }
     }
 
+    /// <summary>The shell's settings in the display language (M23b; plugins translate theirs in their manifests).</summary>
+    private static SettingDescriptor Localized(SettingDescriptor descriptor)
+    {
+        if (descriptor.Source != Commands.ContributionSource.Shell)
+        {
+            return descriptor;
+        }
+
+        var key = descriptor.Key;
+        return descriptor with
+        {
+            Title = descriptor.Title is { } title ? Localization.Localizer.Get($"setting.{key}.title", title) : null,
+            Description = descriptor.Description is { } description ? Localization.Localizer.Get($"setting.{key}.description", description) : null,
+            Category = descriptor.Category is { } category ? Localization.Localizer.Get($"settingCategory.{category}", category) : null,
+            EnumDescriptions = descriptor.EnumDescriptions is { } names && descriptor.Enum is { } values && names.Count == values.Count
+                ? [.. names.Select((name, i) => Localization.Localizer.Get($"setting.{key}.enum.{values[i]}", name))]
+                : descriptor.EnumDescriptions,
+        };
+    }
+
     public void Register(IEnumerable<SettingDescriptor> descriptors) => Recompute(() =>
     {
         foreach (var descriptor in descriptors)
         {
-            _descriptors[descriptor.Key] = descriptor;
+            _descriptors[descriptor.Key] = Localized(descriptor);
         }
     });
 
@@ -386,4 +406,6 @@ public sealed class SettingsService : IDisposable
 [System.Text.Json.Serialization.JsonSerializable(typeof(bool))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(double))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(string[]))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(JsonElement))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, string>))]
 internal sealed partial class SettingsJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
