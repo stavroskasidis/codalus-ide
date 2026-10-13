@@ -71,9 +71,9 @@ internal static partial class BuiltIns
             {
                 Title = "Keyboard Scheme",
                 Category = "Keyboard",
-                Description = "Default: the classic IDE shortcuts (F6 builds, Ctrl+Q searches, Ctrl+, goes to anything, F1 is help). VS Code: VS Code's (F1 is the command palette, Ctrl+, opens Settings, Ctrl+W closes). Your own key bindings apply on top of either.",
-                Enum = ["default", "vscode"],
-                EnumDescriptions = ["Default", "VS Code"],
+                Description = "Default: the classic IDE shortcuts (F6 builds, Ctrl+Q searches, Ctrl+, goes to anything, F1 is help). VS Code: VS Code's (F1 is the command palette, Ctrl+, opens Settings, Ctrl+W closes). ReSharper: the default with ReSharper's (Ctrl+Shift+R refactors, Ctrl+W expands the selection, Alt+F7 finds usages). Emacs: the default with Emacs's editing keys (Ctrl+F/B/N/P move, Ctrl+K kills to the line's end, Ctrl+Space sets the mark, Ctrl+X Ctrl+S saves, Alt+X runs a command). Your own key bindings apply on top of any of them.",
+                Enum = ["default", "vscode", "resharper", "emacs"],
+                EnumDescriptions = ["Default", "VS Code", "ReSharper", "Emacs"],
                 Scope = SettingScope.User,
                 Order = 2,
             },
@@ -306,7 +306,8 @@ internal static partial class BuiltIns
         },
     ];
 
-    public static IReadOnlyList<KeybindingRule> ParseDefaultKeybindings(PlatformKind platform) =>
+    /// <summary>The default key bindings, with the keyboard scheme's own (ReSharper, Emacs) last, so they win.</summary>
+    public static IReadOnlyList<KeybindingRule> ParseDefaultKeybindings(PlatformKind platform, string scheme = "default") =>
         [
             .. KeybindingService.ParseRules(DefaultKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
             .. KeybindingService.ParseRules(SolutionKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
@@ -323,6 +324,8 @@ internal static partial class BuiltIns
         .. KeybindingService.ParseRules(DataKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(ProfilingKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(XamlKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+        .. KeybindingService.ParseRules(SchemeKeybindings, KeybindingSource.Default, platform, null, diagnostics: null)
+            .Where(r => r.When.Text.Contains($"keyboardScheme == {scheme}", StringComparison.Ordinal)),
         ];
 
     private static CommandHandler Ui(Action action) => async (_, _) =>

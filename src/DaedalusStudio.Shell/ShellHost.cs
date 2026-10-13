@@ -713,8 +713,21 @@ public sealed partial class ShellHost : IAsyncDisposable
     }
 
     /// <summary>The <c>keyboardScheme</c> context key, which the default key bindings depend on (M29).</summary>
-    private void ApplyKeyboardScheme() =>
-        Workbench.Context.Set("keyboardScheme", Workbench.Settings.GetString(BuiltIns.KeyboardSchemeSetting, "default") == "vscode" ? "vscode" : "default");
+    private string _keyboardScheme = "default";
+
+    private void ApplyKeyboardScheme()
+    {
+        var scheme = Workbench.Settings.GetString(BuiltIns.KeyboardSchemeSetting, "default");
+        scheme = scheme is "vscode" or "resharper" or "emacs" ? scheme : "default";
+        if (scheme != _keyboardScheme)
+        {
+            // Only the active scheme's own bindings are among the defaults: menus and the shortcuts editor show its keys.
+            _keyboardScheme = scheme;
+            Workbench.Keybindings.SetDefaults(BuiltIns.ParseDefaultKeybindings(Workbench.Platform, scheme));
+        }
+
+        Workbench.Context.Set("keyboardScheme", scheme);
+    }
 
     private void OnSettingsChanged(SettingsChangedEventArgs e)
     {
