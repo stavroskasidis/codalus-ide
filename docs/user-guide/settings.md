@@ -35,6 +35,36 @@ Settings you may want first:
 
 Tools → Color Theme (`Ctrl+K Ctrl+T`): Blue, Light, Dark, High Contrast, or Follow System (Light or Dark, as the operating system is set).
 
+**Fonts and Colors** (Tools → Fonts and Colors): change any color over the theme's:
+- **Syntax**: comments, strings, keywords, numbers, types, functions and variables, or one semantic token type.
+- **The editor**: selection, current line, highlighted references, matching braces, find matches, and the error, warning, info and hint squiggles.
+- **The window**: its background, text, borders, accents and the other main colors. The setting below takes any of the theme's `Shell.*` resource keys.
+
+Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For All Themes** applies it to every theme instead of the current one, and Reset goes back to the theme's color. The colors are saved in VS Code's shape, so they can also be edited as JSON:
+- `editor.tokenColorCustomizations`: `{ "comments": "#6A9955", "semanticTokenColors": { "property": "#9CDCFE" } }`.
+- `workbench.colorCustomizations`: `{ "editor.selectionBackground": "#26496980" }`, alpha last.
+- Put either under `"[Dark]"` (a theme's name) to apply to that theme only.
+
+## Moving your settings
+
+- **From VS Code** (Tools → Import Settings from VS Code): its user `settings.json` and `keybindings.json` (VS Code, Insiders or VSCodium; the first one found).
+  - Settings that are also ours come over with their values, including the two color settings. Its built-in themes become ours.
+  - Key bindings whose commands exist here come over too.
+  - You confirm first. The Daedalus Studio log (Help → Show Logs) lists each skipped setting and why.
+- **From a classic IDE** (Tools → Import a .vssettings File): a file exported with that IDE's Import and Export Settings.
+  - The text editor's font and size, and its colors for syntax and editor elements. Colors are added to yours; "automatic" colors stay with the theme.
+  - Tab size, tabs or spaces, word wrap and line numbers (All Languages, else C#).
+  - Your own keyboard shortcuts, for commands with an equivalent here.
+  - Everything else in the file, such as tool window layouts and other components' options, has no counterpart. The log lists what was skipped.
+- **Between machines** (Tools → Export Settings, Import Settings): one JSON file with your settings, keyboard shortcuts and saved window layouts.
+  - Importing asks which of the three to take. Settings this version doesn't know are skipped and logged, shortcuts replace yours, and layouts are added.
+
+## Window layouts
+
+- **Save and apply** (Window → Save Window Layout, Apply Window Layout, Delete Window Layout): name the current arrangement of tool windows and bring it back later. Default is the layout Daedalus Studio starts with. Layouts are kept in the state folder's `layouts.json`.
+- **Full Screen** (Window → Full Screen, `Shift+Alt+Enter`, `⌃⌘F` on macOS).
+- **Distraction-Free Mode** (Window): only the documents, full screen, without the toolbar or status bar. Run it again to get your tool windows and window back as they were.
+
 ## Keyboard shortcuts
 
 **Keyboard scheme** (setting Environment → Keyboard → Keyboard Scheme):

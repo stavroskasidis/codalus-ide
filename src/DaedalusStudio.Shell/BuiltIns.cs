@@ -195,6 +195,7 @@ internal static partial class BuiltIns
         Add("workbench.exportSettings", "Export Settings…", "Preferences", Ui(() => shell.ExportSettingsAsync()));
         Add("workbench.importSettings", "Import Settings…", "Preferences", Ui(() => shell.ImportSettingsAsync()));
         Add("workbench.importVsCodeSettings", "Import Settings from VS Code…", "Preferences", Ui(() => shell.ImportVsCodeSettingsAsync()));
+        Add("workbench.importVsSettings", "Import a .vssettings File…", "Preferences", Ui(() => shell.ImportVsSettingsAsync()));
         Add("workbench.openKeybindingsJson", "Open Keyboard Shortcuts (JSON)", "Preferences", Ui(shell.OpenKeybindingsJsonAsync));
         Add("workbench.selectTheme", "Color Theme", "Preferences", Ui(shell.SelectThemeAsync));
         Add("workbench.resetLayout", "Reset Layout", "View", Ui(shell.Layout.ResetLayout));
