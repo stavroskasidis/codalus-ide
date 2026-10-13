@@ -105,6 +105,17 @@ jobs:
           # The windowed app runs in the runner's GUI session, where the task port right still asked (developer mode
           # was already on). Only on this throwaway runner (the maintainer's decision, 2026-10-12).
           sudo security authorizationdb write system.privilege.taskport allow
+      - name: A Chromium browser (Linux arm64)
+        # Browser debugging (blazor.wasmDebug, blazor.compoundDebug) needs one. The x64 runners have Chrome; there's no
+        # Chrome or Chrome for Testing for Linux arm64, and Ubuntu's chromium is a snap, so Playwright's build (pinned).
+        if: matrix.rid == 'linux-arm64'
+        shell: bash
+        run: |
+          npx -y playwright@1.56.1 install --with-deps chromium
+          chrome="$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux*/chrome' -type f | head -n 1)"
+          [ -x "$chrome" ] || { echo "::error::Playwright's Chromium wasn't found"; exit 1; }
+          sudo ln -sf "$chrome" /usr/local/bin/chromium
+          chromium --version
       - name: Stack traces for a smoke test failure (dotnet-stack)
         if: runner.os != 'Windows'
         run: dotnet tool install -g dotnet-stack || true

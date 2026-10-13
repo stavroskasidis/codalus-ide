@@ -1093,14 +1093,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
 
         const string wasmTitle = "F5 debugs a Blazor WebAssembly app in the browser: a breakpoint in a .razor file stops";
-        if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null && Environment.GetEnvironmentVariable("CI") != "true")
+        const string compoundTitle = "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each";
+        if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null)
         {
-            Report("blazor.wasmDebug", "M16", wasmTitle, "skipped", 0, "No Chrome, Edge or Chromium is installed.");
+            // Skipped here, a failure in CI (which must prove it), at once rather than after the steps' timeouts.
+            var (outcome, reason) = Environment.GetEnvironmentVariable("CI") == "true"
+                ? ("failed", "No Chrome, Edge or Chromium is installed, and CI must run browser debugging.")
+                : ("skipped", "No Chrome, Edge or Chromium is installed.");
+            Report("blazor.wasmDebug", "M16", wasmTitle, outcome, 0, reason);
+            Report("blazor.compoundDebug", "M16", compoundTitle, outcome, 0, reason);
         }
         else
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
-            await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
+            await StepAsync("blazor.compoundDebug", "M16", compoundTitle, CompoundDebugStepAsync).ConfigureAwait(true);
         }
 
         // Last: it opens a solution of 38 projects, and nothing after it depends on what it leaves behind.

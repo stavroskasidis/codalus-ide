@@ -39,7 +39,8 @@ vpk_version="1.2.161" # the Velopack library's version in Directory.Packages.pro
 
 # Paths for the Windows tools (vpk, tar) from Git Bash.
 native() { if command -v cygpath > /dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
-sha256() { (sha256sum "$1" 2> /dev/null || shasum -a 256 "$1") | cut -d' ' -f1; }
+# sha256sum escapes a name with backslashes (a Windows path) by starting its line with one: only the hex digits count.
+sha256() { (sha256sum "$1" 2> /dev/null || shasum -a 256 "$1") | cut -d' ' -f1 | tr -d '\\'; }
 
 rm -rf "$stage" "$feed"
 # This platform's earlier packages go, so versions never mix in the output (other platforms' stay, for CI artifacts).
