@@ -90,7 +90,8 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
         {
             await second.ReadyAsync();
             await LanguageFixture.WaitUntilAsync(() => second.Logged("2 since the last session, 0 compiled"), TimeSpan.FromSeconds(60));
-            Assert.True(second.Logged("1 kept from the last session"), string.Join(Environment.NewLine, second.Log));
+            // The open document's diagnostics build the analysis solution, in their own time (after the pass on macOS).
+            await LanguageFixture.WaitUntilAsync(() => second.Logged("1 kept from the last session"), TimeSpan.FromSeconds(60));
             Assert.Contains(second.For(Path.Combine(_root, "App", "Closed.cs")), d => d.Code == "CS0219");
             Assert.Contains(second.For(Path.Combine(_root, "Lib", "Warnings.cs")), d => d.Code == "CS0219");
             await LanguageFixture.WaitUntilAsync(() => second.Has(page, "CS4014"), TimeSpan.FromSeconds(60));
