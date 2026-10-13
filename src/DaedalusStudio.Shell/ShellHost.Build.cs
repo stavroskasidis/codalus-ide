@@ -18,6 +18,13 @@ public sealed partial class ShellHost
     public const string SaveAllBeforeBuildSetting = "build.saveAllBeforeBuild";
     public const string ExternalConsoleSetting = "run.externalConsole";
 
+    /// <summary>Run Without Debugging's console: a console window on Windows, as a classic IDE; the Output window elsewhere.</summary>
+    public static string DefaultRunConsole => OperatingSystem.IsWindows() ? "externalConsole" : "outputWindow";
+
+    /// <summary>Whether Run Without Debugging opens console windows (Windows; <c>run.console</c>, or the older <c>run.externalConsole</c>).</summary>
+    private bool RunsInConsoleWindow =>
+        Workbench.Settings.GetString(RunConsoleSetting, DefaultRunConsole) == "externalConsole" || Workbench.Settings.GetBoolean(ExternalConsoleSetting, false);
+
     private const string BuildStatusItem = "daedalus.build";
     private const string StartupStatusItem = "daedalus.startup";
 
@@ -236,14 +243,14 @@ public sealed partial class ShellHost
                 }
             }
 
-            var console = Workbench.Settings.GetString(RunConsoleSetting, "outputWindow");
+            var console = Workbench.Settings.GetString(RunConsoleSetting, DefaultRunConsole);
             if (console == "integratedTerminal" && Runs.IsExecutable(project) && !hotReload)
             {
                 await RunInTerminalAsync(project).ConfigureAwait(true);
                 return;
             }
 
-            var program = await Runs.StartAsync(project, console == "externalConsole" || Workbench.Settings.GetBoolean(ExternalConsoleSetting, false), CancellationToken.None, hotReload).ConfigureAwait(true);
+            var program = await Runs.StartAsync(project, RunsInConsoleWindow, CancellationToken.None, hotReload).ConfigureAwait(true);
             if (withoutHotReload is not null)
             {
                 program.Channel?.AppendLine(withoutHotReload);

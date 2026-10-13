@@ -135,6 +135,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         Console.Out.WriteLine($"Smoke test: {ShellInfo.VersionText.Replace('\n', ' ')}");
 
+        // The steps read programs' output in the IDE: Windows' default console windows (a classic IDE's) would keep it
+        // from them and open on the desktop.
+        await shell.Workbench.Settings.SetAsync(ShellHost.RunConsoleSetting, "outputWindow", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugConsoleSetting, "internalConsole", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
         // M1: shell and plugin foundation.
         await StepAsync("shell.window", "M1", "Main window, status bar and default commands", () =>
         {

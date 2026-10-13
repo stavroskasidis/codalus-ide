@@ -497,14 +497,18 @@ public sealed class RunService : IDisposable
 
         if (!browserOpened)
         {
-            // Servers that don't log "Now listening on" still get their browser.
-            _ = Task.Delay(TimeSpan.FromSeconds(10), CancellationToken.None).ContinueWith(_ =>
+            // In a console window (whose output isn't read here), or a server that doesn't log "Now listening on": the
+            // browser opens once the launch profile's address accepts connections.
+            if (Uri.TryCreate(plan.BrowserUrl, UriKind.Absolute, out var address))
             {
-                if (!program.HasExited)
+                _ = Task.Run(async () =>
                 {
-                    OpenBrowserOnce();
-                }
-            }, TaskScheduler.Default);
+                    if (await ServerProbe.WaitUntilListeningAsync(address, TimeSpan.FromMinutes(2), () => !program.HasExited && !browserOpened, CancellationToken.None).ConfigureAwait(false))
+                    {
+                        OpenBrowserOnce();
+                    }
+                }, CancellationToken.None);
+            }
         }
 
         lock (_gate)
@@ -537,11 +541,8 @@ public sealed class RunService : IDisposable
         if (console)
         {
             // cmd keeps the window open after the program ends, as an IDE's console runs do.
-            start = new ProcessStartInfo("cmd.exe", $"/s /c \"\"{plan.FileName}\" {plan.Arguments} & echo. & pause\"")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = false,
-            };
+            return ConsoleWindow.StartInfo(Path.GetFileNameWithoutExtension(plan.FileName), plan.FileName, plan.ArgumentList ?? Debugging.CommandLine.Split(plan.Arguments), plan.WorkingDirectory,
+                plan.Environment.Select(e => new KeyValuePair<string, string?>(e.Key, e.Value)));
         }
         else
         {

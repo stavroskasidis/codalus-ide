@@ -38,6 +38,16 @@ internal sealed class ShellFixture : IAsyncDisposable
 
         // Hosting tokens stay in this process: the tests never touch the OS credential store (M13b).
         Environment.SetEnvironmentVariable(DaedalusStudio.Platform.Credentials.CredentialStore.EnvironmentVariable, "memory");
+
+        // Programs run and debug with their output in the IDE: Windows' default console windows would open on the
+        // desktop and keep the output from the tests (a test that wants them sets the settings).
+        var settings = DaedalusStudio.Platform.AppPaths.Resolve(DaedalusStudio.Platform.PlatformInfo.Current, _ => null, userData).SettingsFile;
+        if (!File.Exists(settings))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
+            File.WriteAllText(settings, "{ \"run.console\": \"outputWindow\", \"debug.console\": \"internalConsole\" }");
+        }
+
         Shell = new ShellHost(Application.Current!, new ShellOptions
         {
             UserDataDir = userData,

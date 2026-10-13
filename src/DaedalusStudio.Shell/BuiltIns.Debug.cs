@@ -91,13 +91,13 @@ internal static partial class BuiltIns
             Description = "Show the time elapsed since the program was resumed at the end of the current statement's line.",
             Order = 2,
         },
-        SettingDescriptor.Create(ShellHost.DebugConsoleSetting, "\"internalConsole\"", SettingType.String, ContributionSource.Shell) with
+        SettingDescriptor.Create(ShellHost.DebugConsoleSetting, $"\"{ShellHost.DefaultDebugConsole}\"", SettingType.String, ContributionSource.Shell) with
         {
             Title = "Console of debugged programs",
             Category = "Debugging",
-            Description = "Where a console app debugged with Start Debugging gets its console: the Debug Console (output only), or the integrated terminal (a real console that takes input; Detach All then leaves the program running).",
-            Enum = ["internalConsole", "integratedTerminal"],
-            EnumDescriptions = ["Debug Console", "Integrated terminal"],
+            Description = "Where a console or web app debugged with Start Debugging gets its console: the Debug Console (output only), the integrated terminal, or a console window of its own (Windows, the default there). The terminal and the console window take input, and Detach All leaves the program running.",
+            Enum = ["internalConsole", "integratedTerminal", "externalConsole"],
+            EnumDescriptions = ["Debug Console", "Integrated terminal", "Console window (Windows)"],
             Order = 5,
         },
         SettingDescriptor.Create(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, "\"docker\"", SettingType.String, ContributionSource.Shell) with

@@ -156,24 +156,24 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// A server that never logs "Now listening on" (its logging filters the host's messages) still gets its browser, ten
-    /// seconds after it starts, as Run Without Debugging does.
+    /// A server whose output the Debug Console doesn't show (a console window of its own), or that never logs "Now
+    /// listening on", still gets its browser: once the launch profile's address accepts connections.
     /// </summary>
     private void OpenBrowserLater()
     {
-        if (Volatile.Read(ref _pendingBrowserUrl) is null)
+        if (Volatile.Read(ref _pendingBrowserUrl) is not { } pending || !Uri.TryCreate(pending, UriKind.Absolute, out var address))
         {
             return;
         }
 
-        _ = Task.Delay(TimeSpan.FromSeconds(10)).ContinueWith(_ => Ui.Post(() =>
+        _ = Task.Run(async () =>
         {
-            if (Debugger.State != DebugState.Idle && Interlocked.Exchange(ref _pendingBrowserUrl, null) is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            if (await ServerProbe.WaitUntilListeningAsync(address, TimeSpan.FromMinutes(2), () => Debugger.State != DebugState.Idle && Volatile.Read(ref _pendingBrowserUrl) is not null, CancellationToken.None).ConfigureAwait(false)
+                && Interlocked.Exchange(ref _pendingBrowserUrl, null) is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                DebugLog.AppendLine($"The server didn't log the address it listens on; opening {url}.");
-                ShellIntegration.OpenUrl(uri);
+                Ui.Post(() => ShellIntegration.OpenUrl(uri));
             }
-        }), TaskScheduler.Default);
+        });
     }
 
     // ------------------------------------------------------------------ start and stop

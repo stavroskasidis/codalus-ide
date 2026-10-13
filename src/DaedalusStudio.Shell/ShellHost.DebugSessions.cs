@@ -19,8 +19,14 @@ namespace DaedalusStudio.Shell;
 /// </summary>
 public sealed partial class ShellHost
 {
-    /// <summary>Where a debugged console app's console is: <c>internalConsole</c> (the Debug Console) or <c>integratedTerminal</c>.</summary>
+    /// <summary>
+    /// Where a debugged console or web app's console is: <c>internalConsole</c> (the Debug Console),
+    /// <c>integratedTerminal</c>, or <c>externalConsole</c> (a console window of its own, Windows' default, as a classic IDE).
+    /// </summary>
     public const string DebugConsoleSetting = "debug.console";
+
+    /// <summary>A console window on Windows, as a classic IDE; the Debug Console elsewhere.</summary>
+    public static string DefaultDebugConsole => OperatingSystem.IsWindows() ? "externalConsole" : "internalConsole";
 
     private CrashDumpWatcher? _crashWatcher;
     private (RemoteTarget Target, string Name)? _lastRemote;
@@ -44,6 +50,7 @@ public sealed partial class ShellHost
             TerminalWindow.Show(session);
         }));
         Debugger.Terminal = DebugTerminal;
+        Debugger.ConsoleWindows = OperatingSystem.IsWindows() ? new ConsoleWindowLauncher() : null;
         Debugger.StartupHook = HeldLaunch.ResolveHook();
         var cache = Environment.GetEnvironmentVariable(NodeCacheVariable) is { Length: > 0 } shared ? shared : Paths.Cache;
         RemoteDebuggers = new RemoteDebuggers(cache);
@@ -70,8 +77,20 @@ public sealed partial class ShellHost
     /// </summary>
     private DebugConsoleKind ConsoleFor(RunInfo info)
     {
-        if (Workbench.Settings.GetString(DebugConsoleSetting, "internalConsole") != "integratedTerminal" || !string.Equals(info.OutputType, "Exe", StringComparison.OrdinalIgnoreCase))
+        var console = Workbench.Settings.GetString(DebugConsoleSetting, DefaultDebugConsole);
+        if (console is not ("integratedTerminal" or "externalConsole") || !string.Equals(info.OutputType, "Exe", StringComparison.OrdinalIgnoreCase))
         {
+            return DebugConsoleKind.Internal;
+        }
+
+        if (console == "externalConsole")
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return DebugConsoleKind.Window;
+            }
+
+            DebugLog.AppendLine("Console windows are for Windows: the program uses the Debug Console.");
             return DebugConsoleKind.Internal;
         }
 
@@ -152,7 +171,7 @@ public sealed partial class ShellHost
                 }
                 else
                 {
-                    var program = await Runs.StartAsync(target.Project, Workbench.Settings.GetBoolean(ExternalConsoleSetting, false), CancellationToken.None).ConfigureAwait(true);
+                    var program = await Runs.StartAsync(target.Project, RunsInConsoleWindow, CancellationToken.None).ConfigureAwait(true);
                     if (program.Channel is { } channel && launches.Count == 0 && !debug)
                     {
                         Workbench.Output.Show(channel);
