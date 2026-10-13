@@ -14,7 +14,7 @@ version="$(sed -n 's/^pkgver=//p' "$aur/PKGBUILD")"
 
 echo "== makepkg and pacman (daedalus-studio-bin $version) in Arch Linux"
 "$runtime" run --rm -v "$aur:/aur:ro" -v "$packages:/packages:ro" -v "$repo:/repo:ro" docker.io/library/archlinux:latest bash -euc "
-  pacman -Syu --noconfirm --needed --quiet base-devel > /dev/null
+  pacman -Syu --noconfirm --needed base-devel > /dev/null
   useradd -m builder
   install -d -o builder /build
   cp /aur/PKGBUILD /aur/.SRCINFO /build/
@@ -28,9 +28,9 @@ echo "== makepkg and pacman (daedalus-studio-bin $version) in Arch Linux"
   su builder -c 'makepkg --printsrcinfo' > /tmp/srcinfo
   diff -u /build/.SRCINFO /tmp/srcinfo || { echo 'error: .SRCINFO differs from makepkg --printsrcinfo' >&2; exit 1; }
   su builder -c 'makepkg --noconfirm --nodeps' > /tmp/makepkg.log 2>&1 || { cat /tmp/makepkg.log; exit 1; }
-  pacman -U --noconfirm --quiet /build/daedalus-studio-bin-$version-1-x86_64.pkg.tar.zst > /tmp/pacman.log 2>&1 || { cat /tmp/pacman.log; exit 1; }
+  pacman -U --noconfirm /build/daedalus-studio-bin-$version-1-x86_64.pkg.tar.zst > /tmp/pacman.log 2>&1 || { cat /tmp/pacman.log; exit 1; }
   daedalus --version
   test -f /usr/share/applications/daedalus-studio.desktop && test -f /usr/share/licenses/daedalus-studio-bin/LICENSE
-  pacman -R --noconfirm --quiet daedalus-studio-bin > /dev/null
+  pacman -R --noconfirm daedalus-studio-bin > /dev/null
   test ! -e /opt/daedalus-studio && test ! -e /usr/bin/daedalus"
 echo "== daedalus-studio-bin builds, installs, runs and uninstalls"
