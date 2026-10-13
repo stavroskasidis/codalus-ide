@@ -173,6 +173,12 @@ public interface IEditorServices
     /// <summary>Writes to the Language Services log.</summary>
     void Log(string message);
 
+    /// <summary>
+    /// The AI's suggestion for the text at <paramref name="offset"/> (M28b), or null when inline suggestions are off,
+    /// the file may not be sent, or there's none.
+    /// </summary>
+    Task<string?> SuggestInlineAsync(CodeDocument document, int offset, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+
     /// <summary>The lightbulb: code fixes and refactorings at the active editor's caret.</summary>
     Task ShowCodeActionsAsync();
 

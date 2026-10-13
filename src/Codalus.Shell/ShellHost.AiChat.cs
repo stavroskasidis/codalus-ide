@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Plugins.Protocol;
 using Codalus.Shell.Controls;
+using Codalus.Shell.Editor;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Ai;
 using Codalus.Workbench.Commands;
@@ -27,6 +28,7 @@ public sealed partial class ShellHost
     public const string AiEnabledSetting = "ai.enabled";
     public const string AiProviderSetting = "ai.provider";
     public const string AiModelSetting = "ai.model";
+    public const string AiInlineSetting = "ai.inlineSuggestions";
     private const string AiStatusItem = "ai.status";
 
     private readonly AiChatState _ai = new();
@@ -92,6 +94,11 @@ public sealed partial class ShellHost
                 Title = "AI Model", Category = "AI", Scope = SettingScope.User,
                 Description = "The provider's model. The AI Chat window lists them.",
             },
+            SettingDescriptor.Create(AiInlineSetting, "false", SettingType.Boolean, ContributionSource.Shell) with
+            {
+                Title = "AI Inline Suggestions", Category = "AI", Scope = SettingScope.Workspace,
+                Description = "While AI is on, suggest code at the caret after a pause in typing, as ghost text: Tab accepts it. Each suggestion sends the file around the caret to the AI provider.",
+            },
         ]);
         Workbench.ToolWindows.Register(new ToolWindowDescriptor(AiChatWindow, "AI Chat", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "comment" });
         Workbench.Commands.Register(new CommandDescriptor("ai.chat", "AI Chat", ContributionSource.Shell) { Category = "AI" }, (_, _) =>
@@ -143,6 +150,76 @@ public sealed partial class ShellHost
         _ai.Turns.Clear();
         _ai.Status = null;
         _ai.Changed?.Invoke();
+    }
+
+    // ------------------------------------------------------------------ inline suggestions (M28b)
+
+    /// <summary>What a suggestion is asked with: the system prompt, then the file around the caret marked where it goes.</summary>
+    internal const string InlineSystemPrompt =
+        "You complete code in an IDE. Reply with only the text to insert at <CURSOR>: no explanation, no code fences, nothing "
+        + "that is already before or after the cursor. Keep it short: the rest of the statement or a few lines. Reply with nothing if unsure.";
+
+    async Task<string?> IEditorServices.SuggestInlineAsync(CodeDocument document, int offset, CancellationToken cancellationToken)
+    {
+        if (!AiEnabled || !Workbench.Settings.GetBoolean(AiInlineSetting) || AiProvider.Length == 0 || AiModel.Length == 0 || document.Path.Length == 0)
+        {
+            return null;
+        }
+
+        if (await new AiContext(Solutions.Solution?.Directory).RefusalAsync(document.Path, cancellationToken).ConfigureAwait(true) is not null)
+        {
+            return null;
+        }
+
+        var text = document.Text.Text;
+        var before = text[Math.Max(0, offset - 4000)..offset];
+        var after = text[offset..Math.Min(text.Length, offset + 1500)];
+        var user = $"{Path.GetFileName(document.Path)}:\n{before}<CURSOR>{after}";
+        var answer = new StringBuilder();
+        try
+        {
+            await Plugins.ChatAsync(AiProvider, AiModel, [new AiMessageDto("system", InlineSystemPrompt), new AiMessageDto("user", user)], piece =>
+            {
+                lock (answer)
+                {
+                    answer.Append(piece);
+                }
+            }, cancellationToken, maxTokens: 256).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Codalus.Rpc.JsonRpcRemoteException or Codalus.Rpc.JsonRpcConnectionLostException)
+        {
+            Workbench.Log.AppendLine("[ai] An inline suggestion failed: " + ex.Message);
+            return null;
+        }
+
+        return CleanSuggestion(answer.ToString(), before, after);
+    }
+
+    /// <summary>A model's reply as text to insert: without code fences, and without what's already before or after the caret.</summary>
+    internal static string? CleanSuggestion(string reply, string before, string after)
+    {
+        var text = reply;
+        if (text.TrimStart().StartsWith("```", StringComparison.Ordinal))
+        {
+            text = SplitAnswer(text).FirstOrDefault(p => p.Code).Text ?? string.Empty;
+        }
+
+        text = text.TrimEnd();
+        // Some models repeat the start of the line before the caret.
+        var lineStart = before[(before.LastIndexOf('\n') + 1)..];
+        if (lineStart.Trim().Length > 0 && text.StartsWith(lineStart, StringComparison.Ordinal))
+        {
+            text = text[lineStart.Length..];
+        }
+
+        // ...or run into what follows it.
+        var lineEnd = after.Split('\n')[0].Trim();
+        if (lineEnd.Length > 0 && text.EndsWith(lineEnd, StringComparison.Ordinal))
+        {
+            text = text[..^lineEnd.Length];
+        }
+
+        return text.Trim().Length == 0 ? null : text;
     }
 
     // ------------------------------------------------------------------ the view

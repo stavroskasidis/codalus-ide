@@ -28,6 +28,12 @@ Each message lists what it carried ("Sent with: …"). Some files are **never se
 
 When something is left out, the chat says why ("Not sent: …").
 
+## Inline suggestions
+
+With **AI Inline Suggestions** on (`ai.inlineSuggestions`, off by default, and only while AI is on), the model proposes code at the caret when you pause typing: it shows in gray italics after the caret, with the number of further lines when it has more than one. **Tab** inserts it; typing on, moving the caret or **Esc** dismisses it. Typing never waits for a suggestion.
+
+Each suggestion sends the file around the caret (about 4,000 characters before it and 1,500 after) to your provider, under the same rules as the chat: files that are secrets or ignored are never sent, so they get no suggestions. A workspace can turn suggestions off for itself, as it can AI.
+
 ## The chat
 
 Type a question and press Enter. The answer streams in, and **Stop** ends it. **New Chat** starts over; the conversation so far goes with each message, so a new chat sends less.

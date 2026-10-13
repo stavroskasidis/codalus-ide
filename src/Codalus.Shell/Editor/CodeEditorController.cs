@@ -130,6 +130,7 @@ public sealed partial class CodeEditorController : IDisposable
         document.TextChanged += OnGitTextChanged;
         _gitTimer.Start();
         _insights = new EditorInsights(editor, () => Model, () => Client, services);
+        Suggestions = new InlineSuggestions(editor, () => Model, services, () => _completion is not null);
         editor.TextArea.LeftMargins.Insert(2, _insights.Margin);
         _folding = FoldingManager.Install(editor.TextArea);
         _search = SearchPanel.Install(editor);
@@ -172,6 +173,9 @@ public sealed partial class CodeEditorController : IDisposable
     }
 
     public TextEditor Editor { get; }
+
+    /// <summary>AI inline suggestions (M28b).</summary>
+    internal InlineSuggestions Suggestions { get; }
 
     /// <summary>The test margin (tests and the headless UI test).</summary>
     public TestMargin TestMargin => _testMargin;
@@ -1821,6 +1825,7 @@ public sealed partial class CodeEditorController : IDisposable
         Editor.TextArea.TextEntering -= OnTextEntering;
         Editor.TextArea.TextEntered -= OnTextEntered;
         Editor.TextArea.RemoveHandler(InputElement.KeyDownEvent, OnKeyDown);
+        Suggestions.Dispose();
     }
 }
 
