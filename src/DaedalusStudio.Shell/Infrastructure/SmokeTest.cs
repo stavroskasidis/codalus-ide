@@ -224,6 +224,30 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => tree.Roots.Count > 0, "the Start page has items").ConfigureAwait(true);
         }).ConfigureAwait(true);
 
+        // M23: personalization in the shipped app; the screenshots are the website's.
+        await StepAsync("shell.personalization", "M23", "Fonts and Colors, Customize, and a profile switched to and back", async () =>
+        {
+            shell.Run("workbench.openFontsAndColors");
+            await WaitAsync(() => shell.Layout.ActiveDocument is FontsAndColorsDocument { ViewModel.Items.Count: > 0 }, "Fonts and Colors lists the colors").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("personalization-fonts-and-colors.png");
+            shell.Run("workbench.closeActiveDocument");
+
+            shell.Run("workbench.customize");
+            await WaitAsync(() => shell.Layout.ActiveDocument is CustomizeDocument { ViewModel.Items.Count: > 0 }, "Customize lists the standard toolbar").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("personalization-customize.png");
+            shell.Run("workbench.closeActiveDocument");
+
+            var fontSize = shell.Workbench.Settings.GetValue("editor.fontSize").GetRawText();
+            await shell.NewProfileAsync("Smoke", copyActive: false).ConfigureAwait(true);
+            Check(shell.Profiles.Active == "Smoke" && Equals(shell.Workbench.Context.GetValue("profile"), "Smoke"), "a new profile is active");
+            await shell.SwitchProfileAsync(Workbench.Settings.ProfileStore.DefaultName).ConfigureAwait(true);
+            await shell.DeleteProfileAsync("Smoke", confirm: false).ConfigureAwait(true);
+            Check(shell.Profiles.Active == Workbench.Settings.ProfileStore.DefaultName && !shell.Profiles.Exists("Smoke"), "back on Default, the profile deleted");
+            Check(shell.Workbench.Settings.GetValue("editor.fontSize").GetRawText() == fontSize, "Default's settings came back");
+        }).ConfigureAwait(true);
+
         // M34d: the UI gallery's empty states, before a solution opens.
         await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
 
