@@ -706,7 +706,7 @@ public sealed partial class ShellHost : IEditorServices
             .Select(e =>
             {
                 var caret = e.Controller is { } controller ? e.Model.PositionAt(controller.Editor.CaretOffset) : new Position(0, 0);
-                return new Docking.SessionDocument(e.Model.Path, caret.Line, caret.Character);
+                return new Docking.SessionDocument(e.Model.Path, caret.Line, caret.Character) { Pinned = e.IsPinned ? true : null };
             })
             .ToList();
         WriteJson(file, new Docking.EditorSession(documents, ActiveEditor?.Model.Path)
@@ -753,7 +753,10 @@ public sealed partial class ShellHost : IEditorServices
 
         foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))
         {
-            await OpenFileAsync(document.Path, preview: false, new Position(document.Line, document.Character)).ConfigureAwait(true);
+            if (await OpenFileAsync(document.Path, preview: false, new Position(document.Line, document.Character)).ConfigureAwait(true) is { } opened && document.Pinned == true)
+            {
+                Layout.SetPinned(opened, true);
+            }
         }
 
         if (session.Active is { } active && Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, active)) is { } editor)

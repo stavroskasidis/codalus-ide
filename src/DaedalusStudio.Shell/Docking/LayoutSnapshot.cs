@@ -126,7 +126,11 @@ public sealed record SessionFunctionBreakpoint(string Name, string? Condition = 
 public sealed record BreakpointExport(IReadOnlyList<SessionBreakpoint> Breakpoints, IReadOnlyList<SessionFunctionBreakpoint>? FunctionBreakpoints);
 
 /// <summary>An open file and its caret (zero-based line and character).</summary>
-public sealed record SessionDocument(string Path, int Line, int Character);
+public sealed record SessionDocument(string Path, int Line, int Character)
+{
+    /// <summary>A pinned tab (M34d), pinned again when the session is restored.</summary>
+    public bool? Pinned { get; init; }
+}
 
 /// <summary>Small bits of per-user state that survive restarts (<c>state.json</c>).</summary>
 public sealed record ShellState
