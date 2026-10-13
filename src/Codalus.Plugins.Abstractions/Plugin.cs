@@ -156,6 +156,21 @@ public interface IWindow
     Task<T> WithProgressAsync<T>(string title, Func<IProgress<ProgressReport>, CancellationToken, Task<T>> work, bool cancellable = false, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("This window has no progress.");
 
+    /// <summary>
+    /// Sets a declarative view's content (since 1.0): a tool window of kind <c>view</c>, or a custom editor's document.
+    /// Setting it again replaces it; the user's input in elements that stay (by <see cref="ViewNode.Id"/>) is kept.
+    /// </summary>
+    void SetView(string viewId, ViewNode root) => throw new NotSupportedException("This window has no declarative views.");
+
+    /// <summary>What the user does in a declarative view (since 1.0).</summary>
+    IDisposable OnViewEvent(string viewId, Func<ViewEvent, CancellationToken, Task> handler) => throw new NotSupportedException("This window has no declarative views.");
+
+    /// <summary>Provides the custom editor <paramref name="viewType"/> of the manifest's <c>customEditors</c> (since 1.0).</summary>
+    IDisposable RegisterCustomEditor(string viewType, ICustomEditorProvider provider) => throw new NotSupportedException("This window has no custom editors.");
+
+    /// <summary>A custom editor's file has new text: its document shows as modified, and Save writes it (since 1.0).</summary>
+    void SetCustomEditorText(string viewId, string text) => throw new NotSupportedException("This window has no custom editors.");
+
     /// <summary>A channel of the Output window, shown as "&lt;plugin&gt;: &lt;name&gt;".</summary>
     IOutputChannel CreateOutputChannel(string name);
 

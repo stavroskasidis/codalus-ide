@@ -174,6 +174,34 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
 
     public IOutputChannel CreateOutputChannel(string name) => new OutputChannel(_server, Id, name);
 
+    public void SetView(string viewId, ViewNode root) =>
+        _server.Post(PluginMethods.ViewSet, new ViewSetParams(Id, viewId, ToDto(root)), PluginJsonContext.Default.ViewSetParams);
+
+    public IDisposable OnViewEvent(string viewId, Func<ViewEvent, CancellationToken, Task> handler) =>
+        Own(_server.RegisterViewHandler(viewId, handler));
+
+    public IDisposable RegisterCustomEditor(string viewType, ICustomEditorProvider provider) =>
+        Own(_server.RegisterCustomEditor(viewType, provider));
+
+    public void SetCustomEditorText(string viewId, string text) =>
+        _server.Post(PluginMethods.CustomEditorSetText, new CustomEditorTextParams(Id, viewId, text), PluginJsonContext.Default.CustomEditorTextParams);
+
+    private static ViewNodeDto ToDto(ViewNode node) => new(node.Kind)
+    {
+        Id = node.Id,
+        Text = node.Text,
+        Style = node.Style,
+        Value = node.Value,
+        Placeholder = node.Placeholder,
+        Checked = node.Checked,
+        Disabled = node.Disabled,
+        Options = node.Options is { } options ? [.. options] : null,
+        Columns = node.Columns is { } columns ? [.. columns] : null,
+        Rows = node.Rows is { } rows ? [.. rows.Select(r => r.ToArray())] : null,
+        Children = node.Children is { } children ? [.. children.Select(ToDto)] : null,
+        Orientation = node.Orientation,
+    };
+
     public IStatusBarItem CreateStatusBarItem(string id, StatusBarAlignment alignment = StatusBarAlignment.Left, int priority = 0) =>
         Own(new StatusBarItem(_server, Id, id, alignment, priority));
 

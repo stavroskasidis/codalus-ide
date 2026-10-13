@@ -74,6 +74,33 @@ internal sealed class PluginHostServer : IAsyncDisposable
             return new GetTreeChildrenResult([.. await tree.GetChildrenAsync(p.Handle, ct).ConfigureAwait(false)]);
         });
         _connection.OnNotification(PluginMethods.SettingsDidChange, json.SettingsDidChangeParams, p => Settings.Apply(p.Changes));
+        _connection.OnRequest(PluginMethods.ViewEvent, json.ViewEventParams, json.EmptyResult, async (p, ct) =>
+        {
+            if (_viewHandlers.TryGetValue(p.ViewId, out var handler))
+            {
+                await handler(new ViewEvent(p.ElementId, p.Kind, p.Value, p.Row), ct).ConfigureAwait(false);
+            }
+
+            return new EmptyResult();
+        });
+        _connection.OnRequest(PluginMethods.CustomEditorOpen, json.CustomEditorOpenParams, json.EmptyResult, async (p, ct) =>
+        {
+            if (!_customEditors.TryGetValue(p.ViewType, out var provider))
+            {
+                throw new JsonRpcHandlerException(PluginErrorCodes.PluginNotActivated, $"No custom editor '{p.ViewType}' is registered.");
+            }
+
+            _openCustomEditors[p.ViewId] = provider;
+            await provider.OpenAsync(new CustomEditorDocument(p.ViewId, p.Path, p.Text), ct).ConfigureAwait(false);
+            return new EmptyResult();
+        });
+        _connection.OnNotification(PluginMethods.CustomEditorClose, json.ViewIdParams, p =>
+        {
+            if (_openCustomEditors.TryRemove(p.ViewId, out var provider))
+            {
+                _ = provider.CloseAsync(p.ViewId, CancellationToken.None);
+            }
+        });
         _connection.OnNotification(PluginMethods.ProgressCancel, json.ProgressIdParams, p =>
         {
             if (_progress.TryGetValue(p.Id, out var cancel))
@@ -246,6 +273,22 @@ internal sealed class PluginHostServer : IAsyncDisposable
     {
         _progress[id] = cancel;
         return new Disposable(() => _progress.TryRemove(id, out _));
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<ViewEvent, CancellationToken, Task>> _viewHandlers = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ICustomEditorProvider> _customEditors = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ICustomEditorProvider> _openCustomEditors = new(StringComparer.Ordinal);
+
+    internal IDisposable RegisterViewHandler(string viewId, Func<ViewEvent, CancellationToken, Task> handler)
+    {
+        _viewHandlers[viewId] = handler;
+        return new Disposable(() => _viewHandlers.TryRemove(new KeyValuePair<string, Func<ViewEvent, CancellationToken, Task>>(viewId, handler)));
+    }
+
+    internal IDisposable RegisterCustomEditor(string viewType, ICustomEditorProvider provider)
+    {
+        _customEditors[viewType] = provider;
+        return new Disposable(() => _customEditors.TryRemove(new KeyValuePair<string, ICustomEditorProvider>(viewType, provider)));
     }
 
     internal IDisposable RegisterTree(string viewId, ITreeAdapter adapter)

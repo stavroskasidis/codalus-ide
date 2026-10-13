@@ -39,6 +39,21 @@ public static class PluginMethods
 
     /// <summary>Shell → host: the user cancelled a cancellable task.</summary>
     public const string ProgressCancel = "window/progressCancel";
+
+    /// <summary>Host → shell: a declarative view's content (API 1.0).</summary>
+    public const string ViewSet = "view/set";
+
+    /// <summary>Shell → host (request): the user acted in a declarative view.</summary>
+    public const string ViewEvent = "view/event";
+
+    /// <summary>Shell → host (request): a file opens in the plugin's custom editor.</summary>
+    public const string CustomEditorOpen = "customEditor/open";
+
+    /// <summary>Shell → host: a custom editor's document closed.</summary>
+    public const string CustomEditorClose = "customEditor/close";
+
+    /// <summary>Host → shell: a custom editor's file has new text.</summary>
+    public const string CustomEditorSetText = "customEditor/setText";
     public const string OutputAppend = "output/append";
     public const string OutputClear = "output/clear";
     public const string OutputShow = "output/show";

@@ -177,12 +177,19 @@ public sealed partial class ShellHost : IEditorServices
     /// Opens a file in the editor (or shows its open tab). <paramref name="preview"/> opens it in the group's preview
     /// tab; <paramref name="at"/> moves the caret there.
     /// </summary>
-    public async Task<CodeEditorDocument?> OpenFileAsync(string path, bool preview = false, Position? at = null, string? initialContent = null)
+    public async Task<CodeEditorDocument?> OpenFileAsync(string path, bool preview = false, Position? at = null, string? initialContent = null, bool textEditor = false)
     {
         path = Path.GetFullPath(path);
         if (initialContent is null && Views.ImageDocument.IsImage(path) && File.Exists(path))
         {
             OpenImage(path, preview);
+            return null;
+        }
+
+        // A plugin's custom editor claims the file (API 1.0), unless the text editor was asked for.
+        if (initialContent is null && !textEditor && at is null && Plugins.CustomEditorFor(path) is { } custom && File.Exists(path)
+            && await OpenInCustomEditorAsync(path, custom, preview).ConfigureAwait(true))
+        {
             return null;
         }
 
@@ -552,7 +559,8 @@ public sealed partial class ShellHost : IEditorServices
         {
             if (choice == "Save")
             {
-                if (document is CodeEditorDocument code && await SaveAsync(code.Model).ConfigureAwait(true))
+                if ((document is CodeEditorDocument code && await SaveAsync(code.Model).ConfigureAwait(true))
+                    || (document is Views.CustomEditorDocument custom && await SaveCustomEditorAsync(custom).ConfigureAwait(true)))
                 {
                     document.CloseConfirmed();
                 }
@@ -570,6 +578,10 @@ public sealed partial class ShellHost : IEditorServices
         {
             await SaveAsync(editor.Model).ConfigureAwait(true);
         }
+        else if (Layout.ActiveDocument is Views.CustomEditorDocument custom)
+        {
+            await SaveCustomEditorAsync(custom).ConfigureAwait(true);
+        }
     }
 
     public async Task SaveAllAsync()
@@ -577,6 +589,11 @@ public sealed partial class ShellHost : IEditorServices
         foreach (var model in _models.Values.Where(m => m.IsModified).ToList())
         {
             await SaveAsync(model).ConfigureAwait(true);
+        }
+
+        foreach (var custom in Layout.Documents.OfType<Views.CustomEditorDocument>().Where(d => d.IsModified).ToList())
+        {
+            await SaveCustomEditorAsync(custom).ConfigureAwait(true);
         }
     }
 

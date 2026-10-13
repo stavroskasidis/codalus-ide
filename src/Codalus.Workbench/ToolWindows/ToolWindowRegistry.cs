@@ -19,6 +19,9 @@ public enum ToolWindowKind
 
     /// <summary>A plugin-provided Markdown view.</summary>
     Markdown,
+
+    /// <summary>A plugin's declarative view (D2, API 1.0): elements the shell renders.</summary>
+    View,
 }
 
 public sealed record ToolWindowDescriptor(string Id, string Title, ToolWindowLocation Location, ToolWindowKind Kind, ContributionSource Source)

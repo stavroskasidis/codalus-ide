@@ -222,9 +222,9 @@ public sealed partial class PluginDescription
 
         foreach (var window in c?.ToolWindows ?? [])
         {
-            if (window.Location is not (null or "left" or "right" or "bottom") || window.Kind is not (null or "tree" or "markdown"))
+            if (window.Location is not (null or "left" or "right" or "bottom") || window.Kind is not (null or "tree" or "markdown" or "view"))
             {
-                warnings.Add($"Tool window '{window.Id}': location must be left/right/bottom and kind tree/markdown.");
+                warnings.Add($"Tool window '{window.Id}': location must be left/right/bottom and kind tree/markdown/view.");
             }
 
             // Opening a contributed view always activates its plugin.
@@ -236,6 +236,15 @@ public sealed partial class PluginDescription
             if (Settings.SettingTypes.Parse(setting.Type) is null)
             {
                 warnings.Add($"Setting '{key}': unknown type '{setting.Type}'.");
+            }
+        }
+
+        // Opening a file in a contributed custom editor activates its plugin (API 1.0).
+        foreach (var editor in c?.CustomEditors ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(editor.ViewType))
+            {
+                events.Add("onCustomEditor:" + editor.ViewType);
             }
         }
 

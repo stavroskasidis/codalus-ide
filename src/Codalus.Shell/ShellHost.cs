@@ -139,6 +139,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         Layout = new LayoutManager(Workbench.ToolWindows, CreateToolContent);
+        InitializeCustomEditors();
         WireEditorToLayout();
 
         BuiltIns.RegisterCommands(this);
@@ -418,6 +419,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         ToolWindowKind.Tree => new TreeToolViewModel(window.Id, Plugins, Run, () => TitleActions(window.Id)),
         ToolWindowKind.Markdown => new MarkdownToolViewModel(window.Id, Plugins, Run),
+        ToolWindowKind.View => new Views.DeclarativeToolViewModel(window.Id, Plugins),
         _ => window.Id switch
         {
             BuiltIns.OutputWindow => Output,

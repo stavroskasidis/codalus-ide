@@ -46,6 +46,7 @@ internal static partial class BuiltIns
           { "key": "alt+f6", "command": "workbench.focusNextPane", "when": "keyboardScheme != vscode" },
           { "key": "alt+shift+f6", "command": "workbench.focusPreviousPane", "when": "keyboardScheme != vscode" },
           { "key": "primary+s", "command": "file.save", "when": "activeDocumentKind == textFile" },
+          { "key": "primary+s", "command": "file.save", "when": "activeDocumentKind == customEditor" },
           { "key": "primary+w", "command": "workbench.closeActiveDocument", "when": "activeDocumentKind && keyboardScheme == vscode" },
           { "win": "ctrl+f4", "linux": "ctrl+f4", "mac": "cmd+f4", "command": "workbench.closeActiveDocument", "when": "activeDocumentKind" },
           { "mac": "cmd+q", "command": "workbench.quit" },

@@ -9,6 +9,7 @@
   <Folder Name="/samples/">
     <Project Path="samples/plugins/DictionaryVisualizer/DictionaryVisualizer.csproj" />
     <Project Path="samples/plugins/HelloWorld/HelloWorld.csproj" />
+    <Project Path="samples/plugins/TodoBoard/TodoBoard.csproj" />
     <Project Path="samples/plugins/TodoLanguage/TodoLanguage.csproj" />
   </Folder>
   <Folder Name="/src/">

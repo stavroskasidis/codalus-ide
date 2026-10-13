@@ -39,6 +39,16 @@ public interface IPluginPrompts
 /// </summary>
 public sealed record WorkspacePlacement(Func<ProcessLaunchInfo, ProcessLaunchInfo?> Place, Func<string, string> PluginPath);
 
+/// <summary>A plugin's custom editor: the files it opens, by name pattern (<c>*.todo.json</c>, <c>TODO</c>).</summary>
+public sealed record ContributedCustomEditor(string ViewType, string DisplayName, IReadOnlyList<string> FilenamePatterns, string PluginId)
+{
+    public bool Matches(string path)
+    {
+        var name = Path.GetFileName(path);
+        return FilenamePatterns.Any(pattern => System.IO.Enumeration.FileSystemName.MatchesSimpleExpression(pattern, name, ignoreCase: true));
+    }
+}
+
 /// <summary>A plugin's debug adapter: the launch configuration type it serves, and how to start it (<c>dotnet</c> for a <c>.dll</c>).</summary>
 public sealed record ContributedDebugger(string Type, string Label, string Command, IReadOnlyList<string> Args, IReadOnlyList<string> Languages, string PluginId)
 {
@@ -282,7 +292,7 @@ public sealed class PluginManager : IAsyncDisposable
                 window.Id,
                 window.Title,
                 window.Location switch { "left" => ToolWindowLocation.Left, "bottom" => ToolWindowLocation.Bottom, _ => ToolWindowLocation.Right },
-                window.Kind == "markdown" ? ToolWindowKind.Markdown : ToolWindowKind.Tree,
+                window.Kind switch { "markdown" => ToolWindowKind.Markdown, "view" => ToolWindowKind.View, _ => ToolWindowKind.Tree },
                 source)
             {
                 Icon = window.Icon,
@@ -619,6 +629,88 @@ public sealed class PluginManager : IAsyncDisposable
     }
 
     public string? GetMarkdown(string viewId) => _markdown.GetValueOrDefault(viewId);
+
+    // ------------------------------------------------------------------ declarative views and custom editors (API 1.0)
+
+    private readonly ConcurrentDictionary<string, (string PluginId, ViewNodeDto Root)> _views = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _customEditorOwners = new(StringComparer.Ordinal);
+
+    /// <summary>A declarative view changed (its id).</summary>
+    public event EventHandler<string>? ViewChanged;
+
+    /// <summary>A custom editor's plugin gave its file new text.</summary>
+    public event EventHandler<(string ViewId, string Text)>? CustomEditorTextChanged;
+
+    /// <summary>A declarative view's content, or null before its plugin set it.</summary>
+    public ViewNodeDto? GetView(string viewId) => _views.TryGetValue(viewId, out var view) ? view.Root : null;
+
+    /// <summary>Sends what the user did to the plugin that set the view. False when it isn't running.</summary>
+    public async Task<bool> SendViewEventAsync(ViewEventParams viewEvent, CancellationToken cancellationToken)
+    {
+        if (!_views.TryGetValue(viewEvent.ViewId, out var view) || Find(view.PluginId) is not { } plugin || GetHost(plugin.HostGroup) is not { IsRunning: true } host)
+        {
+            return false;
+        }
+
+        try
+        {
+            await host.Connection.InvokeAsync(PluginMethods.ViewEvent, viewEvent, PluginJsonContext.Default.ViewEventParams, PluginJsonContext.Default.EmptyResult, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
+        {
+            PluginLog.AppendLine($"[{plugin.Id}] view event {viewEvent.ElementId}/{viewEvent.Kind} failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>Custom editors of the plugins that load (API 1.0, M22a).</summary>
+    public IReadOnlyList<ContributedCustomEditor> CustomEditors =>
+        [.. Plugins.Where(p => p.IsUsable)
+            .SelectMany(p => (p.Manifest?.Contributes?.CustomEditors ?? [])
+                .Where(e => !string.IsNullOrWhiteSpace(e.ViewType) && e.FilenamePatterns is { Length: > 0 })
+                .Select(e => new ContributedCustomEditor(e.ViewType, string.IsNullOrWhiteSpace(e.DisplayName) ? e.ViewType : e.DisplayName, e.FilenamePatterns, p.Id)))];
+
+    /// <summary>The custom editor for a file, by its name; null when none claims it.</summary>
+    public ContributedCustomEditor? CustomEditorFor(string path) => CustomEditors.FirstOrDefault(e => e.Matches(path));
+
+    /// <summary>
+    /// Opens <paramref name="path"/> in <paramref name="editor"/>: its plugin activates, gets the file, and fills the view
+    /// whose id this returns. Throws when the plugin can't.
+    /// </summary>
+    public async Task<string> OpenCustomEditorAsync(ContributedCustomEditor editor, string path, string text, CancellationToken cancellationToken)
+    {
+        if (Find(editor.PluginId) is not { } plugin || !await ActivateAsync(plugin, "onCustomEditor:" + editor.ViewType, cancellationToken).ConfigureAwait(false)
+            || GetHost(plugin.HostGroup) is not { IsRunning: true } host)
+        {
+            throw new InvalidOperationException($"The plugin of the custom editor '{editor.DisplayName}' didn't start.");
+        }
+
+        var viewId = "customEditor:" + Guid.NewGuid().ToString("N");
+        _customEditorOwners[viewId] = plugin.Id;
+        try
+        {
+            await host.Connection.InvokeAsync(PluginMethods.CustomEditorOpen, new CustomEditorOpenParams(editor.ViewType, viewId, path, text),
+                PluginJsonContext.Default.CustomEditorOpenParams, PluginJsonContext.Default.EmptyResult, cancellationToken).ConfigureAwait(false);
+        }
+        catch (JsonRpcRemoteException ex)
+        {
+            _customEditorOwners.TryRemove(viewId, out _);
+            throw new InvalidOperationException($"The custom editor '{editor.DisplayName}' couldn't open {Path.GetFileName(path)}: {ex.Message}", ex);
+        }
+
+        return viewId;
+    }
+
+    /// <summary>A custom editor's document closed: its plugin hears of it, and its view goes.</summary>
+    public void CloseCustomEditor(string viewId)
+    {
+        _views.TryRemove(viewId, out _);
+        if (_customEditorOwners.TryRemove(viewId, out var pluginId) && Find(pluginId) is { } plugin && GetHost(plugin.HostGroup) is { IsRunning: true } host)
+        {
+            _ = host.NotifySafeAsync(PluginMethods.CustomEditorClose, new ViewIdParams(viewId), PluginJsonContext.Default.ViewIdParams);
+        }
+    }
 
     // ------------------------------------------------------------------ settings and command events
 
@@ -1004,6 +1096,13 @@ public sealed class PluginManager : IAsyncDisposable
                 _manager._markdown[p.ViewId] = p.Markdown;
                 _manager.MarkdownChanged?.Invoke(_manager, p.ViewId);
             });
+            connection.OnNotification(PluginMethods.ViewSet, json.ViewSetParams, p =>
+            {
+                _manager._views[p.ViewId] = (p.PluginId, p.Root);
+                _manager.ViewChanged?.Invoke(_manager, p.ViewId);
+            });
+            connection.OnNotification(PluginMethods.CustomEditorSetText, json.CustomEditorTextParams, p =>
+                _manager.CustomEditorTextChanged?.Invoke(_manager, (p.ViewId, p.Text)));
             connection.OnNotification(PluginMethods.Log, json.LogParams, p =>
                 _manager.PluginLog.AppendLine($"[{p.PluginId ?? _group}] {p.Level}: {p.Message}"));
             ConfigureProposed(connection);

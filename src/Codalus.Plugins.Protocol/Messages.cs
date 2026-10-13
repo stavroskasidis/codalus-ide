@@ -62,6 +62,33 @@ public sealed record ProgressReportParams(string PluginId, string Id, string? Me
 
 public sealed record ProgressIdParams(string PluginId, string Id);
 
+/// <summary>A declarative view's element on the wire (the API's <c>ViewNode</c>).</summary>
+public sealed record ViewNodeDto(string Kind)
+{
+    public string? Id { get; init; }
+    public string? Text { get; init; }
+    public string? Style { get; init; }
+    public string? Value { get; init; }
+    public string? Placeholder { get; init; }
+    public bool? Checked { get; init; }
+    public bool Disabled { get; init; }
+    public string[]? Options { get; init; }
+    public string[]? Columns { get; init; }
+    public string[][]? Rows { get; init; }
+    public ViewNodeDto[]? Children { get; init; }
+    public string? Orientation { get; init; }
+}
+
+public sealed record ViewSetParams(string PluginId, string ViewId, ViewNodeDto Root);
+
+public sealed record ViewEventParams(string ViewId, string ElementId, string Kind, string? Value, int? Row);
+
+public sealed record CustomEditorOpenParams(string ViewType, string ViewId, string Path, string Text);
+
+public sealed record ViewIdParams(string ViewId);
+
+public sealed record CustomEditorTextParams(string PluginId, string ViewId, string Text);
+
 public sealed record OutputParams(string PluginId, string Channel, string? Text);
 
 public sealed record StatusBarUpdateParams(string PluginId, string ItemId, string Text, string? Tooltip, string? Command, string Alignment, int Priority, bool Visible);

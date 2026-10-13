@@ -1,0 +1,17 @@
+{
+  "id": "codalus-samples.todoboard",
+  "version": "1.0.0",
+  "displayName": "Todo Board",
+  "publisher": "codalus-samples",
+  "description": "A sample plugin with declarative views (API 1.0): a custom editor for *.todos.json files and a summary tool window.",
+  "engines": { "codalus": "^1.0.0" },
+  "entry": { "runtime": "dotnet", "assembly": "TodoBoard.dll", "type": "TodoBoard.TodoBoardPlugin" },
+  "contributes": {
+    "customEditors": [
+      { "viewType": "todoboard.board", "displayName": "Todo Board", "filenamePatterns": [ "*.todos.json" ] }
+    ],
+    "toolWindows": [
+      { "id": "todoboard.summary", "title": "Todo Summary", "kind": "view", "location": "right" }
+    ]
+  }
+}

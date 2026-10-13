@@ -81,6 +81,9 @@ public sealed record ManifestContributions
     /// <summary>Debug adapters (DAP) for launch configurations of their <c>type</c> (API 1.0, M22a); no plugin code needed.</summary>
     public ManifestDebugger[]? Debuggers { get; init; }
 
+    /// <summary>Custom editors for files by name pattern (API 1.0, M22a); activation event <c>onCustomEditor:&lt;viewType&gt;</c>.</summary>
+    public ManifestCustomEditor[]? CustomEditors { get; init; }
+
     /// <summary>Rows for the Properties window, from a command (API 0.2.8, M26, ADR 0033).</summary>
     public ManifestPropertyProvider[]? PropertyProviders { get; init; }
 
@@ -145,6 +148,12 @@ public sealed record ManifestSnippets(string Language, string Path);
 /// <c>colors</c>, <c>tokenColors</c> and <c>semanticTokenColors</c>) in the plugin's folder.
 /// </summary>
 public sealed record ManifestTheme(string Id, string Label, string UiTheme, string Path);
+
+/// <summary>
+/// A custom editor: files whose names match one of <see cref="FilenamePatterns"/> (<c>*.todo.json</c>) open in it, unless
+/// the user chooses the text editor (Open With).
+/// </summary>
+public sealed record ManifestCustomEditor(string ViewType, string DisplayName, string[] FilenamePatterns);
 
 /// <summary>
 /// A debug adapter speaking DAP over stdio: launch configurations whose <c>type</c> is <see cref="Type"/> start
@@ -284,6 +293,11 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(ProgressStartParams))]
 [JsonSerializable(typeof(ProgressReportParams))]
 [JsonSerializable(typeof(ProgressIdParams))]
+[JsonSerializable(typeof(ViewSetParams))]
+[JsonSerializable(typeof(ViewEventParams))]
+[JsonSerializable(typeof(CustomEditorOpenParams))]
+[JsonSerializable(typeof(ViewIdParams))]
+[JsonSerializable(typeof(CustomEditorTextParams))]
 [JsonSerializable(typeof(ShowInputBoxResult))]
 [JsonSerializable(typeof(OutputParams))]
 [JsonSerializable(typeof(StatusBarUpdateParams))]

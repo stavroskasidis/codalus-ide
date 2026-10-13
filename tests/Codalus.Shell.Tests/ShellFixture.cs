@@ -72,7 +72,7 @@ internal sealed class ShellFixture : IAsyncDisposable
     /// <summary>A built-in plugin's build output (a folder with its manifest).</summary>
     public static string PluginBin(string project) => Path.Combine(RepoRoot, "src", "Plugins", project, "bin", Configuration, "net10.0");
 
-    private static string Configuration => Metadata("CodalusConfiguration");
+    internal static string Configuration => Metadata("CodalusConfiguration");
 
     /// <summary>Copies samples/ProjectSystem into the user-data folder (so tests can change it) and returns the .slnx path.</summary>
     public string CopyFixture()

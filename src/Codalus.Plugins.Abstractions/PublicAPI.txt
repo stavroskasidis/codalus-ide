@@ -37,6 +37,16 @@ class Codalus.Plugins.CoverageReport
   GetHashCode() -> System.Int32
   Methods { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.MethodCoverage>
   ToString() -> System.String
+class Codalus.Plugins.CustomEditorDocument
+  .ctor(System.String ViewId, System.String Path, System.String Text)
+  Deconstruct(ref System.String ViewId, ref System.String Path, ref System.String Text) -> System.Void
+  Equals(Codalus.Plugins.CustomEditorDocument other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Path { get; init; } : System.String
+  Text { get; init; } : System.String
+  ToString() -> System.String
+  ViewId { get; init; } : System.String
 class Codalus.Plugins.DebugLaunchOptions
   .ctor(System.String Program, System.Collections.Generic.IReadOnlyList<System.String> Arguments, System.String WorkingDirectory)
   Arguments { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
@@ -174,6 +184,9 @@ interface Codalus.Plugins.ICommands
   ExecuteAsync(System.String commandId, System.Threading.CancellationToken cancellationToken, params System.Object[] args) -> System.Threading.Tasks.Task<System.Nullable<System.Text.Json.JsonElement>>
   Register(System.String commandId, System.Action handler) -> System.IDisposable
   Register(System.String commandId, System.Func<Codalus.Plugins.CommandInvocation, System.Threading.CancellationToken, System.Threading.Tasks.Task<System.Object>> handler) -> System.IDisposable
+interface Codalus.Plugins.ICustomEditorProvider
+  CloseAsync(System.String viewId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+  OpenAsync(Codalus.Plugins.CustomEditorDocument document, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
 interface Codalus.Plugins.IDebug
   AttachAsync(System.Int32 processId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.IDebugSession>
   LaunchAsync(Codalus.Plugins.DebugLaunchOptions options, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.IDebugSession>
@@ -268,8 +281,12 @@ interface Codalus.Plugins.ITreeDataProvider<T>
 interface Codalus.Plugins.IWindow
   CreateOutputChannel(System.String name) -> Codalus.Plugins.IOutputChannel
   CreateStatusBarItem(System.String id, Codalus.Plugins.StatusBarAlignment alignment = Left, System.Int32 priority = 0) -> Codalus.Plugins.IStatusBarItem
+  OnViewEvent(System.String viewId, System.Func<Codalus.Plugins.ViewEvent, System.Threading.CancellationToken, System.Threading.Tasks.Task> handler) -> System.IDisposable
+  RegisterCustomEditor(System.String viewType, Codalus.Plugins.ICustomEditorProvider provider) -> System.IDisposable
   RegisterTreeDataProvider<T>(System.String viewId, Codalus.Plugins.ITreeDataProvider<T> provider) -> System.IDisposable
+  SetCustomEditorText(System.String viewId, System.String text) -> System.Void
   SetMarkdown(System.String viewId, System.String markdown) -> System.Void
+  SetView(System.String viewId, Codalus.Plugins.ViewNode root) -> System.Void
   ShowInputBoxAsync(Codalus.Plugins.InputBoxOptions options, System.Threading.CancellationToken cancellationToken = null) -> System.Threading.Tasks.Task<System.String>
   ShowNotificationAsync(Codalus.Plugins.NotificationSeverity severity, System.String message, System.Collections.Generic.IReadOnlyList<System.String> actions = null, System.Threading.CancellationToken cancellationToken = null) -> System.Threading.Tasks.Task<System.String>
   ShowQuickPickAsync(System.Collections.Generic.IReadOnlyList<Codalus.Plugins.QuickPickItem> items, System.String placeholder = null, System.Threading.CancellationToken cancellationToken = null) -> System.Threading.Tasks.Task<Codalus.Plugins.QuickPickItem>
@@ -696,6 +713,48 @@ class Codalus.Plugins.TypeOutline
   NestedName { get; init; } : System.String
   SelectedMethod { get; init; } : System.String
   ToString() -> System.String
+class Codalus.Plugins.ViewEvent
+  .ctor(System.String ElementId, System.String Kind, System.String Value = null, System.Nullable<System.Int32> Row = null)
+  Deconstruct(ref System.String ElementId, ref System.String Kind, ref System.String Value, ref System.Nullable<System.Int32> Row) -> System.Void
+  ElementId { get; init; } : System.String
+  Equals(Codalus.Plugins.ViewEvent other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Kind { get; init; } : System.String
+  Row { get; init; } : System.Nullable<System.Int32>
+  ToString() -> System.String
+  Value { get; init; } : System.String
+class Codalus.Plugins.ViewNode
+  .ctor(System.String Kind)
+  Button(System.String id, System.String text, System.Boolean primary = False) -> Codalus.Plugins.ViewNode
+  CheckBox(System.String id, System.String text, System.Boolean isChecked) -> Codalus.Plugins.ViewNode
+  Checked { get; init; } : System.Nullable<System.Boolean>
+  Children { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ViewNode>
+  Columns { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  Deconstruct(ref System.String Kind) -> System.Void
+  Disabled { get; init; } : System.Boolean
+  Dropdown(System.String id, System.Collections.Generic.IReadOnlyList<System.String> options, System.String selected = null) -> Codalus.Plugins.ViewNode
+  Equals(Codalus.Plugins.ViewNode other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Heading(System.String text) -> Codalus.Plugins.ViewNode
+  Id { get; init; } : System.String
+  Kind { get; init; } : System.String
+  Label(System.String text, System.String style = null) -> Codalus.Plugins.ViewNode
+  Options { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  Orientation { get; init; } : System.String
+  Placeholder { get; init; } : System.String
+  Row(params Codalus.Plugins.ViewNode[] children) -> Codalus.Plugins.ViewNode
+  Rows { get; init; } : System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<System.String>>
+  Separator() -> Codalus.Plugins.ViewNode
+  Stack(params Codalus.Plugins.ViewNode[] children) -> Codalus.Plugins.ViewNode
+  Style { get; init; } : System.String
+  Table(System.String id, System.Collections.Generic.IReadOnlyList<System.String> columns, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<System.String>> rows) -> Codalus.Plugins.ViewNode
+  Text { get; init; } : System.String
+  TextBox(System.String id, System.String value = null, System.String placeholder = null) -> Codalus.Plugins.ViewNode
+  ToString() -> System.String
+  Toolbar(params Codalus.Plugins.ViewNode[] buttons) -> Codalus.Plugins.ViewNode
+  Value { get; init; } : System.String
 class Codalus.Plugins.VisualizerView
   .ctor()
   Columns { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
