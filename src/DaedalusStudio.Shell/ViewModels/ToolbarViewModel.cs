@@ -55,6 +55,21 @@ public sealed class ToolbarViewModel : ObservableObject
     /// <summary>A command's shortcut on this OS, for the buttons' tooltips (M34a); null when it has none.</summary>
     public Func<string, string?>? KeyLabel { get; set; }
 
+    /// <summary>Built-in buttons (by command) the user removed (M23b).</summary>
+    public IReadOnlySet<string> Removed { get; private set; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Commands the user added to the standard toolbar (a null toolbar name), then their own toolbars.</summary>
+    public IReadOnlyList<(string? Toolbar, IReadOnlyList<ToolbarCommandItem> Items)> Extra { get; private set; } = [];
+
+    public event EventHandler? CustomizationChanged;
+
+    public void ApplyCustomization(IReadOnlySet<string> removed, IReadOnlyList<(string? Toolbar, IReadOnlyList<ToolbarCommandItem> Items)> extra)
+    {
+        Removed = removed;
+        Extra = extra;
+        CustomizationChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public ICommand BackCommand => _command("workbench.navigateBack");
 
     public ICommand ForwardCommand => _command("workbench.navigateForward");
@@ -262,3 +277,6 @@ public sealed class ToolbarViewModel : ObservableObject
         }
     }
 }
+
+/// <summary>A command the user put on a toolbar (M23b).</summary>
+public sealed record ToolbarCommandItem(string Command, string Title, System.Windows.Input.ICommand Run);

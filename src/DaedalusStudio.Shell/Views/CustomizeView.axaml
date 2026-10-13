@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.CustomizeView"
+             x:DataType="vm:CustomizeViewModel">
+  <DockPanel Margin="12,8">
+    <StackPanel DockPanel.Dock="Top" Spacing="6">
+      <TextBlock Classes="heading" Text="Customize" />
+      <TextBlock Classes="muted" TextWrapping="Wrap"
+                 Text="Add any command to a menu, a context menu or a toolbar, remove items, change their order, or make toolbars of your own. Changes apply at once; Reset returns a menu to how it was. They're the setting Menu and Toolbar Customizations, so they belong to the profile and sync with it." />
+      <controls:ToolbarPanel>
+        <ComboBox x:Name="TargetBox" ItemsSource="{Binding Targets}" SelectedItem="{Binding Target}" MinWidth="260" AutomationProperties.Name="Menu or toolbar" />
+        <Button Content="New Toolbar…" Command="{Binding NewToolbarCommand}" />
+        <Button Content="Delete Toolbar" Command="{Binding DeleteToolbarCommand}" />
+      </controls:ToolbarPanel>
+    </StackPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+      <Button Content="Add Command…" Command="{Binding AddCommand}" />
+      <Button Content="{Binding RemoveTitle}" Command="{Binding RemoveCommand}" AutomationProperties.Name="{Binding RemoveTitle}" />
+      <Button Content="Move Up" Command="{Binding MoveUpCommand}" />
+      <Button Content="Move Down" Command="{Binding MoveDownCommand}" />
+      <Button Content="Reset" Command="{Binding ResetCommand}" ToolTip.Tip="Back to the items as contributed" />
+    </controls:ToolbarPanel>
+    <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" Margin="0,6,0,0" AutomationProperties.Name="Items">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:CustomizeItem">
+          <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:CustomizeItem">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{Binding Title}" VerticalAlignment="Center" ToolTip.Tip="{Binding Key}" />
+            <TextBlock Classes="muted" Text="{Binding Note}" IsVisible="{Binding HasNote}" VerticalAlignment="Center" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

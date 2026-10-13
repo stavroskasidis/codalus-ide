@@ -71,8 +71,31 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
     private readonly Lock _gate = new();
     private readonly List<MenuItemRule> _items = [];
     private readonly List<MenuBarMenu> _menuBar = [];
+    private MenuCustomizations _customizations = MenuCustomizations.None;
 
     public event EventHandler? Changed;
+
+    /// <summary>The user's additions, removals and order (M23b), applied by <see cref="GetItems(string, IContextKeyReader)"/>.</summary>
+    public MenuCustomizations Customizations
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _customizations;
+            }
+        }
+
+        set
+        {
+            lock (_gate)
+            {
+                _customizations = value;
+            }
+
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     public IReadOnlyList<MenuBarMenu> MenuBar
     {
@@ -144,28 +167,50 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
     /// <summary>The visible items of a location, ordered by group then order; <see cref="MenuItem.Group"/> marks separators.</summary>
     public IReadOnlyList<MenuItem> GetItems(string location) => GetItems(location, context);
 
-    public IReadOnlyList<MenuItem> GetItems(string location, IContextKeyReader scope)
+    public IReadOnlyList<MenuItem> GetItems(string location, IContextKeyReader scope) => GetItems(location, scope, everything: false);
+
+    /// <summary>
+    /// Every item of a location whatever the when-clauses, empty submenus too, with the user's customizations: what
+    /// Tools → Customize lists.
+    /// </summary>
+    public IReadOnlyList<MenuItem> GetAllItems(string location) => GetItems(location, context, everything: true);
+
+    /// <summary>The location's items as contributed, without the user's customizations (Customize's Reset compares with them).</summary>
+    public IReadOnlyList<string> GetContributedKeys(string location)
+    {
+        lock (_gate)
+        {
+            return [.. _items.Where(i => i.Location == location)
+                .OrderBy(r => GroupRank(r.Group)).ThenBy(r => r.Group, StringComparer.Ordinal).ThenBy(r => r.Order)
+                .Select(r => r.Submenu ?? r.Command)];
+        }
+    }
+
+    private List<MenuItem> GetItems(string location, IContextKeyReader scope, bool everything)
     {
         List<MenuItemRule> rules;
+        MenuCustomizations customizations;
         lock (_gate)
         {
             rules = _items.Where(i => i.Location == location).ToList();
+            customizations = _customizations;
         }
 
+        var customization = customizations.For(location);
         var result = new List<MenuItem>();
         foreach (var rule in rules
                      .OrderBy(r => GroupRank(r.Group))
                      .ThenBy(r => r.Group, StringComparer.Ordinal)
                      .ThenBy(r => r.Order))
         {
-            if (!rule.When.Evaluate(scope))
+            if ((!everything && !rule.When.Evaluate(scope)) || customization.Remove.Contains(rule.Submenu ?? rule.Command))
             {
                 continue;
             }
 
             if (rule.Submenu is { } submenu)
             {
-                if (submenu != location && GetItems(submenu, scope).Count > 0)
+                if (submenu != location && (everything || GetItems(submenu, scope, everything: false).Count > 0))
                 {
                     result.Add(new MenuItem(string.Empty, rule.Title ?? submenu, null, true, rule.Group) { Submenu = submenu });
                 }
@@ -189,6 +234,37 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
                 Description = descriptor.DisplayTitle,
                 Keys = keys,
             });
+        }
+
+        // The user's own commands: added to this location, or a toolbar of theirs.
+        var added = customization.Add.AsEnumerable();
+        if (location.StartsWith(MenuCustomizations.ToolbarPrefix, StringComparison.Ordinal))
+        {
+            var name = location[MenuCustomizations.ToolbarPrefix.Length..];
+            added = customizations.Toolbars.Where(t => t.Name == name).SelectMany(t => t.Commands).Concat(added);
+        }
+
+        foreach (var command in added)
+        {
+            if (customization.Remove.Contains(command) || result.Any(i => i.Command == command) || commands.Find(command) is not { } descriptor)
+            {
+                continue;
+            }
+
+            var keys = keybindings.GetBinding(command);
+            result.Add(new MenuItem(command, descriptor.Title, keys?.ToLabel(keybindings.Platform), descriptor.Enablement.Evaluate(scope), "~custom")
+            {
+                Description = descriptor.DisplayTitle,
+                Keys = keys,
+            });
+        }
+
+        if (customization.Order is { } order)
+        {
+            // In the user's order, as one group: their order crosses the contributed groups' separators.
+            var ranks = order.Select((key, i) => (key, i)).DistinctBy(p => p.key).ToDictionary(p => p.key, p => p.i, StringComparer.Ordinal);
+            int Rank(MenuItem item) => ranks.TryGetValue(item.Submenu ?? item.Command, out var i) ? i : int.MaxValue;
+            result = [.. result.Select((item, index) => (item, index)).OrderBy(p => Rank(p.item)).ThenBy(p => p.index).Select(p => p.item with { Group = "custom" })];
         }
 
         return result;

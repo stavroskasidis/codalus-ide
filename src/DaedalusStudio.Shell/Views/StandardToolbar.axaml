@@ -5,7 +5,7 @@
              x:Class="DaedalusStudio.Shell.Views.StandardToolbar"
              x:DataType="vm:ToolbarViewModel">
   <Border Classes="standardToolbar">
-    <WrapPanel Orientation="Horizontal" Margin="4,2" AutomationProperties.Name="Standard toolbar">
+    <WrapPanel x:Name="Panel" Orientation="Horizontal" Margin="4,2" AutomationProperties.Name="Standard toolbar">
       <Button Classes="toolbar" Command="{Binding BackCommand}" Tag="workbench.navigateBack" ToolTip.Tip="Navigate Backward" AutomationProperties.Name="Navigate Backward">
         <controls:Icon Kind="arrow-left" Classes="accent-navigate" />
       </Button>

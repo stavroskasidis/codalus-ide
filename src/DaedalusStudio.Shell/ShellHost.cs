@@ -96,6 +96,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Dialogs = new DialogViewModel();
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
         InitializeToolbar();
+        InitializeCustomizations();
         InitializeSolutions();
         InitializeBuild();
         InitializePackages();

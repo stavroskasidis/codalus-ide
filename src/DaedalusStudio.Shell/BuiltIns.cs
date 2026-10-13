@@ -74,6 +74,14 @@ internal static partial class BuiltIns
                 Description = "The ids of plugins that don't load (the Plugins window turns them off and on). Changes apply when Daedalus Studio starts again.",
                 Scope = SettingScope.User,
             },
+            SettingDescriptor.Create(Workbench.Menus.MenuCustomizations.SettingKey, "{}", SettingType.Object, shell) with
+            {
+                Title = "Menu and Toolbar Customizations",
+                Category = "Appearance",
+                Description = "Commands added to and removed from menus, context menus and the standard toolbar, their order, and your own toolbars: { \"locations\": { \"menuBar/tools\": { \"add\": [], \"remove\": [], \"order\": [] } }, \"toolbars\": { \"Name\": [] } }. Tools → Customize edits it.",
+                Scope = SettingScope.User,
+                Order = 6,
+            },
             SettingDescriptor.Create(ShellHost.SyncTargetSetting, "\"\"", SettingType.String, shell) with
             {
                 Title = "Sync Target",
@@ -213,6 +221,7 @@ internal static partial class BuiltIns
         Add("workbench.openSettingsJson", "Open User Settings (JSON)", "Preferences", Ui(shell.OpenSettingsJsonAsync));
         Add("workbench.openKeyboardShortcuts", "Open Keyboard Shortcuts", "Preferences", Ui(shell.OpenKeyboardShortcuts));
         Add("workbench.openFontsAndColors", "Fonts and Colors", "Preferences", Ui(shell.OpenFontsAndColors));
+        Add("workbench.customize", "Customize…", "Preferences", Ui(shell.OpenCustomize));
         Add("workbench.exportSettings", "Export Settings…", "Preferences", Ui(() => shell.ExportSettingsAsync()));
         Add("workbench.importSettings", "Import Settings…", "Preferences", Ui(() => shell.ImportSettingsAsync()));
         Add("workbench.importVsCodeSettings", "Import Settings from VS Code…", "Preferences", Ui(() => shell.ImportVsCodeSettingsAsync()));
