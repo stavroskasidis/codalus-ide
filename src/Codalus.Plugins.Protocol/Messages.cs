@@ -93,6 +93,22 @@ public sealed record FsSchemeParams(string PluginId, string Scheme);
 
 public sealed record AuthProviderParams(string PluginId, string ProviderId, string Label);
 
+public sealed record ScmProviderParams(string PluginId, string ProviderId, string Label, string Root);
+
+public sealed record ScmResourceDto(string Path, string Status, string? Tooltip);
+
+public sealed record ScmGroupDto(string Id, string Label, ScmResourceDto[] Resources);
+
+public sealed record ScmUpdateParams(string ProviderId, ScmGroupDto[] Groups, string? InputPlaceholder, string? AcceptLabel, string? Status);
+
+public sealed record ScmRequestParams(string ProviderId)
+{
+    public string? Message { get; init; }
+    public string? Path { get; init; }
+}
+
+public sealed record ScmOriginalResult(string? Text);
+
 public sealed record AuthGetSessionParams(string PluginId, string ProviderId, string[] Scopes, bool CreateIfNone);
 
 /// <summary>A provider operation: <see cref="Scopes"/> for listing and creating, <see cref="SessionId"/> for removing.</summary>

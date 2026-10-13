@@ -62,6 +62,15 @@ public static class PluginMethods
     /// <summary>Host → shell: files of a scheme changed.</summary>
     public const string FsChanged = "fs/changed";
 
+    /// <summary>Host → shell: a source control provider (API 1.0) comes, shows its state, or goes.</summary>
+    public const string ScmRegister = "scm/register";
+    public const string ScmUpdate = "scm/update";
+    public const string ScmUnregister = "scm/unregister";
+
+    /// <summary>Shell → host (requests): commit with the message; a file's original.</summary>
+    public const string ScmAccept = "scm/accept";
+    public const string ScmOriginal = "scm/original";
+
     /// <summary>Host → shell: an authentication provider is offered (API 1.0), withdrawn, or its sessions changed.</summary>
     public const string AuthRegister = "auth/register";
     public const string AuthUnregister = "auth/unregister";

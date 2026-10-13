@@ -275,6 +275,7 @@ interface Codalus.Plugins.IPluginContext
   Plugin { get; } : Codalus.Plugins.PluginInfo
   Secrets { get; } : Codalus.Plugins.ISecrets
   Settings { get; } : Codalus.Plugins.ISettings
+  SourceControl { get; } : Codalus.Plugins.ISourceControl
   Subscriptions { get; } : System.Collections.Generic.IList<System.IDisposable>
   Terminals { get; } : Codalus.Plugins.ITerminals
   Tests { get; } : Codalus.Plugins.ITests
@@ -289,6 +290,12 @@ interface Codalus.Plugins.ISecrets
 interface Codalus.Plugins.ISettings
   Changed event System.EventHandler<Codalus.Plugins.SettingsChangedEventArgs>
   GetValue<T>(System.String key, T fallback) -> T
+interface Codalus.Plugins.ISourceControl
+  RegisterProvider(System.String id, System.String label, System.String root, Codalus.Plugins.ISourceControlProvider provider) -> System.IDisposable
+  Update(System.String id, Codalus.Plugins.SourceControlState state) -> System.Void
+interface Codalus.Plugins.ISourceControlProvider
+  AcceptAsync(System.String message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+  GetOriginalAsync(System.String path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.String>
 interface Codalus.Plugins.IStatusBarItem
   Command { get; set; } : System.String
   Hide() -> System.Void
@@ -596,6 +603,37 @@ class Codalus.Plugins.SettingsChangedEventArgs
   .ctor(System.Collections.Generic.IReadOnlyCollection<System.String> keys)
   Affects(System.String keyOrSection) -> System.Boolean
   Keys { get; } : System.Collections.Generic.IReadOnlyCollection<System.String>
+class Codalus.Plugins.SourceControlGroup
+  .ctor(System.String Id, System.String Label, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.SourceControlResource> Resources)
+  Deconstruct(ref System.String Id, ref System.String Label, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.SourceControlResource> Resources) -> System.Void
+  Equals(Codalus.Plugins.SourceControlGroup other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  Label { get; init; } : System.String
+  Resources { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.SourceControlResource>
+  ToString() -> System.String
+class Codalus.Plugins.SourceControlResource
+  .ctor(System.String Path, System.String Status, System.String Tooltip = null)
+  Deconstruct(ref System.String Path, ref System.String Status, ref System.String Tooltip) -> System.Void
+  Equals(Codalus.Plugins.SourceControlResource other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Path { get; init; } : System.String
+  Status { get; init; } : System.String
+  ToString() -> System.String
+  Tooltip { get; init; } : System.String
+class Codalus.Plugins.SourceControlState
+  .ctor(System.Collections.Generic.IReadOnlyList<Codalus.Plugins.SourceControlGroup> Groups)
+  AcceptLabel { get; init; } : System.String
+  Deconstruct(ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.SourceControlGroup> Groups) -> System.Void
+  Equals(Codalus.Plugins.SourceControlState other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Groups { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.SourceControlGroup>
+  InputPlaceholder { get; init; } : System.String
+  Status { get; init; } : System.String
+  ToString() -> System.String
 enum Codalus.Plugins.StatusBarAlignment
   Left = 0
   Right = 1

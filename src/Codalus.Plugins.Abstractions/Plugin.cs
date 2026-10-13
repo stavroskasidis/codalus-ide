@@ -85,6 +85,9 @@ public interface IPluginContext
 
     /// <summary>Authentication providers: offering one, and asking any for a session (since 1.0).</summary>
     IAuthentication Authentication => throw new NotSupportedException("This context has no authentication.");
+
+    /// <summary>Source control providers (since 1.0).</summary>
+    ISourceControl SourceControl => throw new NotSupportedException("This context has no source control.");
 }
 
 /// <summary>The arguments a command was invoked with (JSON values, so commands work across processes).</summary>

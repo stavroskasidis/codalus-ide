@@ -18,7 +18,8 @@
       { "id": "hello.count", "title": "Count to Ten Slowly", "category": "Hello" },
       { "id": "hello.mountFiles", "title": "Serve the hello: File System", "category": "Hello" },
       { "id": "hello.readFile", "title": "Read a hello: File (test)", "category": "Hello" },
-      { "id": "hello.signIn", "title": "Sign In to Hello Accounts", "category": "Hello" }
+      { "id": "hello.signIn", "title": "Sign In to Hello Accounts", "category": "Hello" },
+      { "id": "hello.startScm", "title": "Track a Folder with Hello Source Control", "category": "Hello" }
     ],
     "menus": {
       "commandPalette": [

@@ -81,6 +81,15 @@ public sealed class HelloPlugin : ICodalusPlugin
         context.Subscriptions.Add(context.Commands.Register("hello.signIn", async (_, ct) =>
             (await context.Authentication.GetSessionAsync("hello-accounts", ["read"], createIfNone: true, ct))?.Account));
 
+        // A source control provider (API 1.0): every file of the folder is "modified" until committed.
+        context.Subscriptions.Add(context.Commands.Register("hello.startScm", (invocation, _) =>
+        {
+            var scm = new FolderScm(invocation.Arg<string>(0)!, context.SourceControl);
+            context.Subscriptions.Add(context.SourceControl.RegisterProvider("hello-scm", "Hello Source Control", scm.Root, scm));
+            scm.Publish();
+            return Task.FromResult<object?>(null);
+        }));
+
         // Simulates a fatal plugin bug, so the shell's host supervision can be exercised.
         context.Subscriptions.Add(context.Commands.Register("hello.crashHost", () => Environment.Exit(42)));
 
@@ -247,4 +256,32 @@ internal sealed class MemoryAccounts : IAuthenticationProvider
 
         return Task.CompletedTask;
     }
+}
+
+/// <summary>A pretend source control: the folder's files are changes until a commit, which records its message.</summary>
+internal sealed class FolderScm(string root, ISourceControl sourceControl) : ISourceControlProvider
+{
+    private readonly List<string> _commits = [];
+
+    public string Root { get; } = root;
+
+    public void Publish() => sourceControl.Update("hello-scm", new SourceControlState(
+    [
+        new SourceControlGroup("changes", "Changes", [.. Directory.EnumerateFiles(Root).Order(StringComparer.Ordinal).Select(f => new SourceControlResource(f, "M"))]),
+    ])
+    {
+        InputPlaceholder = "Message",
+        AcceptLabel = "Commit",
+        Status = _commits.Count == 0 ? "no commits" : $"{_commits.Count} commit(s), last: {_commits[^1]}",
+    });
+
+    public Task AcceptAsync(string message, CancellationToken cancellationToken)
+    {
+        _commits.Add(message);
+        Publish();
+        return Task.CompletedTask;
+    }
+
+    public Task<string?> GetOriginalAsync(string path, CancellationToken cancellationToken) =>
+        Task.FromResult<string?>("the original of " + Path.GetFileName(path) + "\n");
 }

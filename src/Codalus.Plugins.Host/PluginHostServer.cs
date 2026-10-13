@@ -74,6 +74,13 @@ internal sealed class PluginHostServer : IAsyncDisposable
             return new GetTreeChildrenResult([.. await tree.GetChildrenAsync(p.Handle, ct).ConfigureAwait(false)]);
         });
         _connection.OnNotification(PluginMethods.SettingsDidChange, json.SettingsDidChangeParams, p => Settings.Apply(p.Changes));
+        _connection.OnRequest(PluginMethods.ScmAccept, json.ScmRequestParams, json.EmptyResult, async (p, ct) =>
+        {
+            await SourceControl(p).AcceptAsync(p.Message ?? string.Empty, ct).ConfigureAwait(false);
+            return new EmptyResult();
+        });
+        _connection.OnRequest(PluginMethods.ScmOriginal, json.ScmRequestParams, json.ScmOriginalResult, async (p, ct) =>
+            new ScmOriginalResult(await SourceControl(p).GetOriginalAsync(p.Path ?? string.Empty, ct).ConfigureAwait(false)));
         _connection.OnRequest(PluginMethods.AuthGetSessions, json.AuthRequestParams, json.AuthSessionsResult, async (p, ct) =>
             new AuthSessionsResult([.. (await Authentication(p).GetSessionsAsync(p.Scopes, ct).ConfigureAwait(false)).Select(ToDto)]));
         _connection.OnRequest(PluginMethods.AuthCreateSession, json.AuthRequestParams, json.AuthSessionResult, async (p, ct) =>
@@ -336,6 +343,28 @@ internal sealed class PluginHostServer : IAsyncDisposable
             }
         });
     }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ISourceControlProvider> _sourceControls = new(StringComparer.Ordinal);
+
+    internal IDisposable RegisterSourceControl(string pluginId, string id, string label, string root, ISourceControlProvider provider)
+    {
+        if (!_sourceControls.TryAdd(id, provider))
+        {
+            throw new InvalidOperationException($"The source control provider '{id}' is already registered.");
+        }
+
+        Post(PluginMethods.ScmRegister, new ScmProviderParams(pluginId, id, label, root), PluginJsonContext.Default.ScmProviderParams);
+        return new Disposable(() =>
+        {
+            if (_sourceControls.TryRemove(new KeyValuePair<string, ISourceControlProvider>(id, provider)))
+            {
+                Post(PluginMethods.ScmUnregister, new ScmProviderParams(pluginId, id, label, root), PluginJsonContext.Default.ScmProviderParams);
+            }
+        });
+    }
+
+    private ISourceControlProvider SourceControl(ScmRequestParams p) =>
+        _sourceControls.TryGetValue(p.ProviderId, out var provider) ? provider : throw new JsonRpcHandlerException(PluginErrorCodes.PluginNotActivated, $"No source control provider '{p.ProviderId}'.");
 
     private IAuthenticationProvider Authentication(AuthRequestParams p) =>
         _authentication.TryGetValue(p.ProviderId, out var provider) ? provider : throw new JsonRpcHandlerException(PluginErrorCodes.PluginNotActivated, $"No authentication provider '{p.ProviderId}'.");

@@ -41,6 +41,22 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
 
     public IAuthentication Authentication => _authentication ??= new PluginAuthentication(_server, Id, Own);
 
+    public ISourceControl SourceControl => _sourceControl ??= new PluginSourceControl(_server, Id, Own);
+
+    private PluginSourceControl? _sourceControl;
+
+    /// <summary>The plugin's source control providers and their state.</summary>
+    private sealed class PluginSourceControl(PluginHostServer server, string pluginId, Func<IDisposable, IDisposable> own) : ISourceControl
+    {
+        public IDisposable RegisterProvider(string id, string label, string root, ISourceControlProvider provider) =>
+            own(server.RegisterSourceControl(pluginId, id, label, root, provider));
+
+        public void Update(string id, SourceControlState state) =>
+            server.Post(PluginMethods.ScmUpdate, new ScmUpdateParams(id,
+                [.. state.Groups.Select(g => new ScmGroupDto(g.Id, g.Label, [.. g.Resources.Select(r => new ScmResourceDto(r.Path, r.Status, r.Tooltip))]))],
+                state.InputPlaceholder, state.AcceptLabel, state.Status), PluginJsonContext.Default.ScmUpdateParams);
+    }
+
     private PluginAuthentication? _authentication;
 
     /// <summary>The plugin's authentication providers, and its requests for sessions (which the shell answers).</summary>

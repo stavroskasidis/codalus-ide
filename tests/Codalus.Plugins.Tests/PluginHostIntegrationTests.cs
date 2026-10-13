@@ -101,6 +101,25 @@ public sealed class PluginHostIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_source_control_provider_shows_its_state_commits_and_gives_originals()
+    {
+        // ISourceControl (API 1.0): the provider's state reaches the IDE; commit and originals go back to it.
+        var folder = Path.Combine(_userData, "scm");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "a.txt"), "a");
+        File.WriteAllText(Path.Combine(folder, "b.txt"), "b");
+        await _workbench.Commands.ExecuteAsync("hello.startScm", [Json(System.Text.Json.JsonSerializer.Serialize(folder))], Timeout());
+        await WaitUntilAsync(() => _manager.SourceControls.Any(s => s is { Id: "hello-scm", Groups.Count: 1 }));
+        var scm = _manager.SourceControls.Single();
+        Assert.Equal(("Hello Source Control", folder, "no commits", "Commit"), (scm.Label, scm.Root, scm.Status, scm.AcceptLabel));
+        Assert.Equal(["a.txt", "b.txt"], scm.Groups[0].Resources.Select(r => Path.GetFileName(r.Path)));
+
+        await _manager.AcceptSourceControlAsync("hello-scm", "first", Timeout());
+        await WaitUntilAsync(() => _manager.SourceControls.Single().Status == "1 commit(s), last: first");
+        Assert.Equal("the original of a.txt\n", await _manager.GetSourceControlOriginalAsync("hello-scm", Path.Combine(folder, "a.txt"), Timeout()));
+    }
+
+    [Fact]
     public async Task An_authentication_provider_signs_in_lists_sessions_asks_consent_and_signs_out()
     {
         // IAuthentication (API 1.0). Asking the provider for its sessions activates its plugin (onAuthenticationRequest).

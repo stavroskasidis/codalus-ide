@@ -133,6 +133,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeProgress();
         InitializePluginFiles();
         HookAuthentication();
+        InitializeSourceControlProviders();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -474,6 +475,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             BenchmarksViewModel.ToolWindowId => BenchmarksWindow,
             XamlPreviewViewModel.ToolWindowId => XamlPreview,
             RemotePortsViewModel.ToolWindowId => PortsWindow,
+            SourceControlProvidersWindow => SourceControlProviders(),
             _ => null,
         },
     };

@@ -91,6 +91,7 @@ public sealed class ViewLocator : IDataTemplate
         TreeToolViewModel vm => new TreeToolView { DataContext = vm },
         MarkdownToolViewModel vm => new MarkdownToolView { DataContext = vm },
         DeclarativeToolViewModel vm => new DeclarativeViewHost(vm.ViewId, vm.Plugins, activate: true),
+        ShellHost.SourceControlProvidersContent scm => new ShellHost.SourceControlProvidersView(scm.Shell),
         SolutionExplorerViewModel vm => new SolutionExplorerView { DataContext = vm },
         PropertiesWindowViewModel vm => new PropertiesWindowView { DataContext = vm },
         TestExplorerViewModel vm => new TestExplorerView { DataContext = vm },

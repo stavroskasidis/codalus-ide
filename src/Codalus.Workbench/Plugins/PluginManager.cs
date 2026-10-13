@@ -39,6 +39,18 @@ public interface IPluginPrompts
 /// </summary>
 public sealed record WorkspacePlacement(Func<ProcessLaunchInfo, ProcessLaunchInfo?> Place, Func<string, string> PluginPath);
 
+/// <summary>A plugin's source control provider and what it shows.</summary>
+public sealed record SourceControlInfo(string Id, string Label, string Root, string PluginId)
+{
+    public IReadOnlyList<ScmGroupDto> Groups { get; init; } = [];
+
+    public string? InputPlaceholder { get; init; }
+
+    public string? AcceptLabel { get; init; }
+
+    public string? Status { get; init; }
+}
+
 /// <summary>A plugin's custom editor: the files it opens, by name pattern (<c>*.todo.json</c>, <c>TODO</c>).</summary>
 public sealed record ContributedCustomEditor(string ViewType, string DisplayName, IReadOnlyList<string> FilenamePatterns, string PluginId)
 {
@@ -671,6 +683,33 @@ public sealed class PluginManager : IAsyncDisposable
         FileSystemsChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    // ------------------------------------------------------------------ source control providers (API 1.0)
+
+    private readonly ConcurrentDictionary<string, SourceControlInfo> _sourceControls = new(StringComparer.Ordinal);
+
+    /// <summary>The source control providers plugins register, with their latest state.</summary>
+    public IReadOnlyList<SourceControlInfo> SourceControls => [.. _sourceControls.Values.OrderBy(s => s.Label, StringComparer.CurrentCultureIgnoreCase)];
+
+    /// <summary>A provider came, went or changed its state.</summary>
+    public event EventHandler? SourceControlsChanged;
+
+    private JsonRpcConnection? SourceControlConnection(string providerId) =>
+        _sourceControls.TryGetValue(providerId, out var info) && Find(info.PluginId) is { } plugin && GetHost(plugin.HostGroup) is { IsRunning: true } host ? host.Connection : null;
+
+    /// <summary>Commits with <paramref name="message"/> through the provider.</summary>
+    public async Task AcceptSourceControlAsync(string providerId, string message, CancellationToken cancellationToken)
+    {
+        var connection = SourceControlConnection(providerId) ?? throw new InvalidOperationException($"The source control provider '{providerId}' isn't running.");
+        await connection.InvokeAsync(PluginMethods.ScmAccept, new ScmRequestParams(providerId) { Message = message }, PluginJsonContext.Default.ScmRequestParams, PluginJsonContext.Default.EmptyResult, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>A file as the provider's repository has it; null for a new one.</summary>
+    public async Task<string?> GetSourceControlOriginalAsync(string providerId, string path, CancellationToken cancellationToken)
+    {
+        var connection = SourceControlConnection(providerId) ?? throw new InvalidOperationException($"The source control provider '{providerId}' isn't running.");
+        return (await connection.InvokeAsync(PluginMethods.ScmOriginal, new ScmRequestParams(providerId) { Path = path }, PluginJsonContext.Default.ScmRequestParams, PluginJsonContext.Default.ScmOriginalResult, cancellationToken).ConfigureAwait(false)).Text;
+    }
+
     // ------------------------------------------------------------------ authentication providers (API 1.0)
 
     private readonly ConcurrentDictionary<string, (string PluginId, string Label)> _authProviders = new(StringComparer.Ordinal);
@@ -1107,6 +1146,12 @@ public sealed class PluginManager : IAsyncDisposable
         {
             var members = Members.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
             _manager.UnregisterFileSystems((_, plugin) => members.Contains(plugin));
+            foreach (var id in _manager._sourceControls.Where(s => members.Contains(s.Value.PluginId)).Select(s => s.Key).ToList())
+            {
+                _manager._sourceControls.TryRemove(id, out _);
+                _manager.SourceControlsChanged?.Invoke(_manager, EventArgs.Empty);
+            }
+
             foreach (var (id, _) in _manager._authProviders.Where(p => members.Contains(p.Value.PluginId)).ToList())
             {
                 _manager._authProviders.TryRemove(id, out _);
@@ -1233,6 +1278,26 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 _manager._markdown[p.ViewId] = p.Markdown;
                 _manager.MarkdownChanged?.Invoke(_manager, p.ViewId);
+            });
+            connection.OnNotification(PluginMethods.ScmRegister, json.ScmProviderParams, p =>
+            {
+                _manager._sourceControls[p.ProviderId] = new SourceControlInfo(p.ProviderId, p.Label, p.Root, p.PluginId);
+                _manager.SourceControlsChanged?.Invoke(_manager, EventArgs.Empty);
+            });
+            connection.OnNotification(PluginMethods.ScmUpdate, json.ScmUpdateParams, p =>
+            {
+                if (_manager._sourceControls.TryGetValue(p.ProviderId, out var info))
+                {
+                    _manager._sourceControls[p.ProviderId] = info with { Groups = p.Groups, InputPlaceholder = p.InputPlaceholder, AcceptLabel = p.AcceptLabel, Status = p.Status };
+                    _manager.SourceControlsChanged?.Invoke(_manager, EventArgs.Empty);
+                }
+            });
+            connection.OnNotification(PluginMethods.ScmUnregister, json.ScmProviderParams, p =>
+            {
+                if (_manager._sourceControls.TryRemove(p.ProviderId, out _))
+                {
+                    _manager.SourceControlsChanged?.Invoke(_manager, EventArgs.Empty);
+                }
             });
             connection.OnNotification(PluginMethods.AuthRegister, json.AuthProviderParams, p =>
             {
