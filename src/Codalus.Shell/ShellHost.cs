@@ -144,6 +144,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializePluginPerformance();
         InitializeComponentsPage();
         InitializeAiChat();
+        InitializeAiAgent();
         InitializeAiActions();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -349,7 +350,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         // Later 'codalus diff' invocations open here (in the local window: a remote one leaves them to it).
         if (Options.Remote is null)
         {
-            _instance = Infrastructure.SingleInstance.Listen(Infrastructure.SingleInstance.PipeName(Paths.State), OnInstanceRequestAsync);
+            _instance = Infrastructure.SingleInstance.Listen(Infrastructure.SingleInstance.PipeName(Paths.State), OnInstanceRequestAsync, OnInstanceQueryAsync);
         }
 
         // Started as git's merge tool or editor: do that, then exit with its outcome.
@@ -887,6 +888,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         _updateHttp.Dispose();
         await DisposeCompanionAsync().ConfigureAwait(false);
         _instance?.Dispose();
+        await DisposeAiAgentAsync().ConfigureAwait(false);
         Askpass?.Dispose();
         Terminals?.Dispose();
         if (Interactive is not null)

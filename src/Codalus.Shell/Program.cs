@@ -15,6 +15,12 @@ internal static partial class Program
             return Codalus.Workbench.Git.AskpassClient.Run(args[0], Console.Out, error: Console.Error);
         }
 
+        // codalus mcp: an MCP server on stdio for external agents, answered by the running IDE (M28d, ADR 0063).
+        if (args is ["mcp", .. var mcpArgs])
+        {
+            return RunMcpServer(mcpArgs);
+        }
+
         BenchEvents.Emit(BenchEventNames.MainEntered);
         Infrastructure.Installation.Run();
         var options = ShellOptions.Parse(args);
@@ -71,6 +77,19 @@ internal static partial class Program
             Console.Error.WriteLine(OperatingSystem.IsLinux() ? "Set DISPLAY or WAYLAND_DISPLAY, or run it under xvfb-run." : "Run it in a desktop session with an active display.");
             return 3;
         }
+    }
+
+    private static int RunMcpServer(string[] args)
+    {
+        var options = ShellOptions.Parse(args);
+        var paths = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
+        var pipe = Infrastructure.SingleInstance.PipeName(paths.State);
+        var tools = Codalus.Workbench.Ai.McpServer.IdeTools((tool, arguments, ct) =>
+            Infrastructure.SingleInstance.AskAsync(pipe, new Infrastructure.InstanceRequest(Codalus.Workbench.Ai.McpServer.RequestPrefix + tool, [arguments]), ct));
+        using var input = new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false));
+        using var output = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false));
+        Codalus.Workbench.Ai.McpServer.RunAsync(input, output, tools, ShellInfo.Version, CancellationToken.None).GetAwaiter().GetResult();
+        return 0;
     }
 
     // Also used by the Avalonia previewer and headless tests.

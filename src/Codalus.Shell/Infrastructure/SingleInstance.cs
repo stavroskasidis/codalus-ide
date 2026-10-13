@@ -8,9 +8,10 @@ namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
 /// A request from a second <c>codalus</c> process to the running one, for example <c>diff left right</c>. With
-/// <see cref="Wait"/> the answer comes when the work is done (<c>merge</c>, <c>--wait</c>: git waits for the tool).
+/// <see cref="Wait"/> the answer comes when the work is done (<c>merge</c>, <c>--wait</c>: git waits for the tool);
+/// with <see cref="Query"/> the answer is text (<c>codalus mcp</c>'s tools, M28d).
 /// </summary>
-public sealed record InstanceRequest(string Command, string[] Arguments, bool Wait = false);
+public sealed record InstanceRequest(string Command, string[] Arguments, bool Wait = false, bool Query = false);
 
 /// <summary>
 /// Hands command lines to an already running shell of the same user and user-data folder, over a named pipe (a Unix
@@ -23,11 +24,13 @@ public sealed class SingleInstance : IDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly string _pipeName;
     private readonly Func<InstanceRequest, Task<bool>> _handler;
+    private readonly Func<InstanceRequest, Task<string>>? _query;
 
-    private SingleInstance(string pipeName, Func<InstanceRequest, Task<bool>> handler)
+    private SingleInstance(string pipeName, Func<InstanceRequest, Task<bool>> handler, Func<InstanceRequest, Task<string>>? query)
     {
         _pipeName = pipeName;
         _handler = handler;
+        _query = query;
         _ = Task.Run(ListenAsync);
     }
 
@@ -42,7 +45,34 @@ public sealed class SingleInstance : IDisposable
     /// Starts answering requests; <paramref name="handler"/> runs on a background thread and says whether the work
     /// succeeded (only waiting requests hear it).
     /// </summary>
-    public static SingleInstance Listen(string pipeName, Func<InstanceRequest, Task<bool>> handler) => new(pipeName, handler);
+    public static SingleInstance Listen(string pipeName, Func<InstanceRequest, Task<bool>> handler, Func<InstanceRequest, Task<string>>? query = null) => new(pipeName, handler, query);
+
+    /// <summary>Asks the running shell a <see cref="InstanceRequest.Query"/>; null when none answers.</summary>
+    public static async Task<string?> AskAsync(string pipeName, InstanceRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly | PipeOptions.Asynchronous);
+            await using (pipe.ConfigureAwait(false))
+            {
+                await pipe.ConnectAsync(s_connectTimeout, cancellationToken).ConfigureAwait(false);
+                var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+                await using (writer.ConfigureAwait(false))
+                {
+                    using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(request with { Query = true, Wait = true }, InstanceJsonContext.Default.InstanceRequest).AsMemory(), cancellationToken).ConfigureAwait(false);
+                    var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                    return line is not null && line.StartsWith("result ", StringComparison.Ordinal)
+                        ? JsonSerializer.Deserialize(line[7..], InstanceJsonContext.Default.String)
+                        : null;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Sends a request to the running shell. False when none answers (start a new one then).</summary>
     public static bool TrySend(string pipeName, InstanceRequest request) => Send(pipeName, request) is not null;
@@ -122,6 +152,13 @@ public sealed class SingleInstance : IDisposable
                         return;
                     }
 
+                    if (request.Query)
+                    {
+                        var answer = _query is null ? "This instance doesn't answer queries." : await _query(request).ConfigureAwait(false);
+                        await writer.WriteLineAsync("result " + JsonSerializer.Serialize(answer, InstanceJsonContext.Default.String)).ConfigureAwait(false);
+                        return;
+                    }
+
                     if (!request.Wait)
                     {
                         await writer.WriteLineAsync("ok").ConfigureAwait(false);
@@ -149,4 +186,5 @@ public sealed class SingleInstance : IDisposable
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(InstanceRequest))]
+[JsonSerializable(typeof(string))]
 internal sealed partial class InstanceJsonContext : JsonSerializerContext;

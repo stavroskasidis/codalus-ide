@@ -50,3 +50,43 @@ The answers to the first four come in the AI Chat, where you can ask more.
 Type a question and press Enter. The answer streams in, and **Stop** ends it. **New Chat** starts over; the conversation so far goes with each message, so a new chat sends less.
 
 Code in an answer has **Apply…**. It replaces the selection you asked about, or the whole file when you sent the file, and shows the change first, as a refactoring does. Nothing changes until you choose Apply in that preview.
+
+## Agent mode
+
+Check **Agent mode** in the AI Chat to have the AI do multi-step work: it reads and searches the workspace's files, looks at problems, changes files, runs commands and builds, until it can answer. Each step shows in the conversation as it happens (▸ the tool, ↳ its result), and **Stop** ends it. It takes at most 25 steps per question.
+
+You stay in charge:
+- **Every change is shown first**, in the same preview as a refactoring, and made only when you choose Apply. If you cancel, the AI is told the change was rejected.
+- **Every command asks first**, showing the command; **Don't Run** is the default.
+- Changing files, commands and builds are offered only in a **trusted** workspace. Elsewhere the agent can only read, search and look at problems.
+- The same data boundary applies: the agent can't read secrets or files your `.gitignore` or `.codalusignore` exclude, and never leaves the workspace's folder.
+
+Approving a command runs it with your rights. The approvals are prompts, not a sandbox.
+
+## MCP servers
+
+The agent can also use the tools of your [MCP](https://modelcontextprotocol.io) servers. List them in the setting `ai.mcpServers`, in the same shape as other MCP clients:
+
+```json
+"ai.mcpServers": {
+  "files": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/notes"] }
+}
+```
+
+A server starts when agent mode first needs it, and stops when the window closes. Its tools join the agent's as `server__tool`. **Each call asks first**: Allow Once, Allow for This Session (for that server), or Don't Allow. Servers that run over stdio are supported; HTTP servers aren't yet.
+
+## Codalus IDE as an MCP server
+
+`codalus mcp` is an MCP server for other agents (Claude Code, other editors' assistants). It answers from the Codalus IDE you have running, with the same user-data folder:
+- `get_solution`: the open solution, its projects and their target frameworks;
+- `get_problems`: the errors and warnings of a file, or of every file;
+- `get_test_results`: the Test Explorer's last results, with the failures' messages;
+- `build`: builds the solution (a trusted one) and returns its errors.
+
+It only reads what the IDE has, apart from building; it changes nothing. For example, with Claude Code:
+
+```bash
+claude mcp add codalus -- codalus mcp
+```
+
+Add `--user-data-dir <folder>` after `mcp` when the IDE runs with one.

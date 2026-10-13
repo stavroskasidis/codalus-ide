@@ -49,6 +49,29 @@ public sealed class AiProviderTests : IAsyncLifetime
         "event: message_stop\ndata: {\"type\":\"message_stop\"}",
     ];
 
+    // Answers with a tool call (M28d), its arguments in pieces as the APIs stream them.
+    private static readonly string[] s_openAiToolEvents =
+    [
+        """data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_9","type":"function","function":{"name":"read_file","arguments":""}}]}}]}""",
+        """data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\":"}}]}}]}""",
+        """data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"a.cs\"}"}}]}}]}""",
+        """data: {"choices":[{"finish_reason":"tool_calls","delta":{}}]}""",
+        "data: [DONE]",
+    ];
+
+    private static readonly string[] s_anthropicToolEvents =
+    [
+        "data: {\"type\":\"message_start\"}",
+        "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Reading.\"}}",
+        "data: {\"type\":\"content_block_stop\",\"index\":0}",
+        "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"read_file\",\"input\":{}}}",
+        "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\"}}",
+        "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"a.cs\\\"}\"}}",
+        "data: {\"type\":\"content_block_stop\",\"index\":1}",
+        "data: {\"type\":\"message_stop\"}",
+    ];
+
     private MockHttpResponse Handle(MockHttpRequest request)
     {
         lock (_requests)
@@ -56,8 +79,11 @@ public sealed class AiProviderTests : IAsyncLifetime
             _requests.Add((request.Path, request.Body, request.Header("x-api-key"), request.Header("Authorization")));
         }
 
+        var tools = request.Body.Contains("\"tools\"", StringComparison.Ordinal);
         return request.Path switch
         {
+            "/v1/chat/completions" when tools => MockHttpResponse.Text(string.Join("\n\n", s_openAiToolEvents) + "\n\n", contentType: "text/event-stream"),
+            "/anthropic/v1/messages" when tools => MockHttpResponse.Text(string.Join("\n\n", s_anthropicToolEvents) + "\n\n", contentType: "text/event-stream"),
             "/v1/models" => MockHttpResponse.Json("""{ "data": [ { "id": "local-coder" }, { "id": "local-chat" } ] }"""),
             "/v1/chat/completions" => MockHttpResponse.Text(string.Join("\n\n", s_openAiEvents) + "\n\n", contentType: "text/event-stream"),
             "/anthropic/v1/models" => MockHttpResponse.Json("""{ "data": [ { "id": "claude-opus-5-5", "display_name": "Claude Opus 5.5" } ] }"""),
@@ -128,6 +154,59 @@ public sealed class AiProviderTests : IAsyncLifetime
         Assert.Equal("Be brief.", body.RootElement.GetProperty("system").GetString()); // the system prompt on its own
         Assert.Equal(1, body.RootElement.GetProperty("messages").GetArrayLength());
         Assert.True(body.RootElement.GetProperty("max_tokens").GetInt32() > 0);
+    }
+
+    /// <summary>A conversation in agent mode: a tool was called, and its result follows.</summary>
+    private static readonly AiMessageDto[] s_agentMessages =
+    [
+        new("system", "Use tools."),
+        new("user", "What's in a.cs?"),
+        new("assistant", "Let me look.") { ToolCalls = [new AiToolCallDto("call_1", "list_files", "{}")] },
+        new("tool", "a.cs") { ToolCallId = "call_1" },
+    ];
+
+    private static readonly AiToolDto[] s_tools = [new("read_file", "Reads a file.", """{"type":"object","properties":{"path":{"type":"string"}}}""")];
+
+    [Fact]
+    public async Task An_openai_compatible_endpoint_gets_tools_and_streams_tool_calls()
+    {
+        var events = new List<AiEventParams>();
+        await _manager.ChatEventsAsync("openai", "local-coder", s_agentMessages, s_tools, events.Add, Timeout());
+
+        var call = Assert.Single(events).ToolCall!;
+        Assert.Equal(("call_9", "read_file", """{"path":"a.cs"}"""), (call.Id, call.Name, call.Arguments));
+        using var body = JsonDocument.Parse(_requests.Single(r => r.Path == "/v1/chat/completions").Body);
+        var tool = body.RootElement.GetProperty("tools")[0];
+        Assert.Equal("function", tool.GetProperty("type").GetString());
+        Assert.Equal("read_file", tool.GetProperty("function").GetProperty("name").GetString());
+        Assert.Equal("object", tool.GetProperty("function").GetProperty("parameters").GetProperty("type").GetString());
+        var messages = body.RootElement.GetProperty("messages");
+        Assert.Equal("call_1", messages[2].GetProperty("tool_calls")[0].GetProperty("id").GetString());
+        Assert.Equal("list_files", messages[2].GetProperty("tool_calls")[0].GetProperty("function").GetProperty("name").GetString());
+        Assert.Equal("tool", messages[3].GetProperty("role").GetString());
+        Assert.Equal("call_1", messages[3].GetProperty("tool_call_id").GetString());
+    }
+
+    [Fact]
+    public async Task Anthropic_gets_tools_and_streams_text_and_tool_use()
+    {
+        Assert.True(await _manager.ConfigureAiAsync("anthropic", Timeout()));
+        var events = new List<AiEventParams>();
+        await _manager.ChatEventsAsync("anthropic", "claude-opus-5-5", s_agentMessages, s_tools, events.Add, Timeout());
+
+        Assert.Equal("Reading.", events[0].Text);
+        var call = events[1].ToolCall!;
+        Assert.Equal(("toolu_1", "read_file", """{"path":"a.cs"}"""), (call.Id, call.Name, call.Arguments));
+        using var body = JsonDocument.Parse(_requests.Single(r => r.Path == "/anthropic/v1/messages").Body);
+        Assert.Equal("read_file", body.RootElement.GetProperty("tools")[0].GetProperty("name").GetString());
+        Assert.Equal("object", body.RootElement.GetProperty("tools")[0].GetProperty("input_schema").GetProperty("type").GetString());
+        var messages = body.RootElement.GetProperty("messages");
+        Assert.Equal(3, messages.GetArrayLength()); // user, assistant with tool_use, user with tool_result
+        var use = messages[1].GetProperty("content")[1];
+        Assert.Equal(("tool_use", "call_1", "list_files"), (use.GetProperty("type").GetString(), use.GetProperty("id").GetString(), use.GetProperty("name").GetString()));
+        var result = messages[2].GetProperty("content")[0];
+        Assert.Equal("user", messages[2].GetProperty("role").GetString());
+        Assert.Equal(("tool_result", "call_1", "a.cs"), (result.GetProperty("type").GetString(), result.GetProperty("tool_use_id").GetString(), result.GetProperty("content").GetString()));
     }
 
     public async ValueTask DisposeAsync()

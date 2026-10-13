@@ -94,16 +94,61 @@ internal sealed class OpenAiCompatibleProvider(IPluginContext context, HttpClien
 
     public async IAsyncEnumerable<string> ChatAsync(AiChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        await foreach (var item in ChatEventsAsync(request with { Tools = null }, cancellationToken).ConfigureAwait(false))
+        {
+            if (item.Text is { } text)
+            {
+                yield return text;
+            }
+        }
+    }
+
+    /// <summary>A message in the Chat Completions shape: an assistant's <c>tool_calls</c>, a tool result's <c>tool_call_id</c>.</summary>
+    internal static JsonObject Message(AiMessage m)
+    {
+        var node = new JsonObject { ["role"] = m.Role, ["content"] = m.Content };
+        if (m.ToolCalls is { Count: > 0 } calls)
+        {
+            node["tool_calls"] = new JsonArray([.. calls.Select(c => (JsonNode)new JsonObject
+            {
+                ["id"] = c.Id,
+                ["type"] = "function",
+                ["function"] = new JsonObject { ["name"] = c.Name, ["arguments"] = c.Arguments },
+            })]);
+        }
+
+        if (m.ToolCallId is { } id)
+        {
+            node["tool_call_id"] = id;
+        }
+
+        return node;
+    }
+
+    public async IAsyncEnumerable<AiEvent> ChatEventsAsync(AiChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var body = new JsonObject
         {
             ["model"] = request.Model,
             ["stream"] = true,
-            ["messages"] = new JsonArray([.. request.Messages.Select(m => (JsonNode)new JsonObject { ["role"] = m.Role, ["content"] = m.Content })]),
+            ["messages"] = new JsonArray([.. request.Messages.Select(m => (JsonNode)Message(m))]),
         };
         if (request.MaxTokens is { } max)
         {
             body["max_tokens"] = max;
         }
+
+        if (request.Tools is { Count: > 0 } tools)
+        {
+            body["tools"] = new JsonArray([.. tools.Select(t => (JsonNode)new JsonObject
+            {
+                ["type"] = "function",
+                ["function"] = new JsonObject { ["name"] = t.Name, ["description"] = t.Description, ["parameters"] = JsonNode.Parse(t.InputSchema) },
+            })]);
+        }
+
+        // A tool call streams in pieces under its index: the id and name first, then the arguments' text.
+        var calls = new SortedDictionary<int, (string Id, string Name, StringBuilder Arguments)>();
 
         using var message = await RequestAsync(HttpMethod.Post, "/chat/completions", cancellationToken).ConfigureAwait(false);
         message.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
@@ -113,13 +158,37 @@ internal sealed class OpenAiCompatibleProvider(IPluginContext context, HttpClien
         {
             if (data == "[DONE]")
             {
-                yield break;
+                break;
             }
 
-            if (JsonNode.Parse(data)?["choices"]?[0]?["delta"]?["content"]?.GetValue<string>() is { Length: > 0 } text)
+            var delta = JsonNode.Parse(data)?["choices"]?[0]?["delta"];
+            if (delta?["content"]?.GetValue<string>() is { Length: > 0 } text)
             {
-                yield return text;
+                yield return new AiEvent(text, null);
             }
+
+            foreach (var call in delta?["tool_calls"]?.AsArray() ?? [])
+            {
+                var index = call?["index"]?.GetValue<int>() ?? 0;
+                var current = calls.TryGetValue(index, out var c) ? c : (Id: string.Empty, Name: string.Empty, Arguments: new StringBuilder());
+                if (call?["id"]?.GetValue<string>() is { Length: > 0 } id)
+                {
+                    current.Id = id;
+                }
+
+                if (call?["function"]?["name"]?.GetValue<string>() is { Length: > 0 } name)
+                {
+                    current.Name = name;
+                }
+
+                current.Arguments.Append(call?["function"]?["arguments"]?.GetValue<string>());
+                calls[index] = current;
+            }
+        }
+
+        foreach (var (index, call) in calls)
+        {
+            yield return new AiEvent(null, new AiToolCall(call.Id.Length > 0 ? call.Id : "call_" + index, call.Name, call.Arguments.Length > 0 ? call.Arguments.ToString() : "{}"));
         }
     }
 
@@ -186,6 +255,76 @@ internal sealed class AnthropicProvider(IPluginContext context, HttpClient http)
 
     public async IAsyncEnumerable<string> ChatAsync(AiChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        await foreach (var item in ChatEventsAsync(request with { Tools = null }, cancellationToken).ConfigureAwait(false))
+        {
+            if (item.Text is { } text)
+            {
+                yield return text;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The conversation in the Messages API's shape: an assistant's tool calls are <c>tool_use</c> blocks, and tool
+    /// results are <c>tool_result</c> blocks of one user turn.
+    /// </summary>
+    internal static JsonArray Messages(IEnumerable<AiMessage> messages)
+    {
+        var result = new JsonArray();
+        JsonArray? results = null;
+        foreach (var m in messages.Where(m => m.Role != "system"))
+        {
+            if (m.Role == "tool")
+            {
+                if (results is null)
+                {
+                    results = [];
+                    result.Add(new JsonObject { ["role"] = "user", ["content"] = results });
+                }
+
+                results.Add(new JsonObject { ["type"] = "tool_result", ["tool_use_id"] = m.ToolCallId, ["content"] = m.Content });
+                continue;
+            }
+
+            results = null;
+            if (m.ToolCalls is { Count: > 0 } calls)
+            {
+                var blocks = new JsonArray();
+                if (m.Content.Length > 0)
+                {
+                    blocks.Add(new JsonObject { ["type"] = "text", ["text"] = m.Content });
+                }
+
+                foreach (var call in calls)
+                {
+                    blocks.Add(new JsonObject { ["type"] = "tool_use", ["id"] = call.Id, ["name"] = call.Name, ["input"] = ParseObject(call.Arguments) });
+                }
+
+                result.Add(new JsonObject { ["role"] = m.Role, ["content"] = blocks });
+            }
+            else
+            {
+                result.Add(new JsonObject { ["role"] = m.Role, ["content"] = m.Content });
+            }
+        }
+
+        return result;
+    }
+
+    private static JsonNode ParseObject(string json)
+    {
+        try
+        {
+            return JsonNode.Parse(json) as JsonObject ?? new JsonObject();
+        }
+        catch (JsonException)
+        {
+            return new JsonObject();
+        }
+    }
+
+    public async IAsyncEnumerable<AiEvent> ChatEventsAsync(AiChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         // The Messages API takes the system prompt on its own, and alternating user and assistant turns.
         var system = string.Join("\n\n", request.Messages.Where(m => m.Role == "system").Select(m => m.Content));
         var body = new JsonObject
@@ -193,12 +332,24 @@ internal sealed class AnthropicProvider(IPluginContext context, HttpClient http)
             ["model"] = request.Model,
             ["max_tokens"] = request.MaxTokens ?? DefaultMaxTokens,
             ["stream"] = true,
-            ["messages"] = new JsonArray([.. request.Messages.Where(m => m.Role != "system").Select(m => (JsonNode)new JsonObject { ["role"] = m.Role, ["content"] = m.Content })]),
+            ["messages"] = Messages(request.Messages),
         };
         if (system.Length > 0)
         {
             body["system"] = system;
         }
+
+        if (request.Tools is { Count: > 0 } tools)
+        {
+            body["tools"] = new JsonArray([.. tools.Select(t => (JsonNode)new JsonObject
+            {
+                ["name"] = t.Name,
+                ["description"] = t.Description,
+                ["input_schema"] = JsonNode.Parse(t.InputSchema),
+            })]);
+        }
+
+        (string Id, string Name, StringBuilder Input)? toolUse = null;
 
         using var message = await RequestAsync(HttpMethod.Post, "/v1/messages", cancellationToken).ConfigureAwait(false);
         message.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
@@ -208,13 +359,26 @@ internal sealed class AnthropicProvider(IPluginContext context, HttpClient http)
         {
             var node = JsonNode.Parse(data);
             var type = node?["type"]?.GetValue<string>();
-            if (type == "content_block_delta")
+            if (type == "content_block_start" && node!["content_block"] is { } block && block["type"]?.GetValue<string>() == "tool_use")
             {
-                var text = node!["delta"]?["text"]?.GetValue<string>();
-                if (!string.IsNullOrEmpty(text))
+                toolUse = (block["id"]?.GetValue<string>() ?? string.Empty, block["name"]?.GetValue<string>() ?? string.Empty, new StringBuilder());
+            }
+            else if (type == "content_block_delta")
+            {
+                var delta = node!["delta"];
+                if (delta?["partial_json"]?.GetValue<string>() is { } partial)
                 {
-                    yield return text;
+                    toolUse?.Input.Append(partial);
                 }
+                else if (delta?["text"]?.GetValue<string>() is { Length: > 0 } text)
+                {
+                    yield return new AiEvent(text, null);
+                }
+            }
+            else if (type == "content_block_stop" && toolUse is { } use)
+            {
+                toolUse = null;
+                yield return new AiEvent(null, new AiToolCall(use.Id, use.Name, use.Input.Length > 0 ? use.Input.ToString() : "{}"));
             }
             else if (type == "error")
             {

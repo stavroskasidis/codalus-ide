@@ -1967,6 +1967,8 @@
   "setting.ai.enabled.title": "Use AI",
   "setting.ai.inlineSuggestions.description": "While AI is on, suggest code at the caret after a pause in typing, as ghost text: Tab accepts it. Each suggestion sends the file around the caret to the AI provider.",
   "setting.ai.inlineSuggestions.title": "AI Inline Suggestions",
+  "setting.ai.mcpServers.description": "MCP servers whose tools the AI agent may use, as { \"name\": { \"command\": …, \"args\": […], \"env\": {…} } }. Each starts when agent mode first needs it, and every call of its tools asks you first.",
+  "setting.ai.mcpServers.title": "MCP Servers",
   "setting.ai.model.description": "The provider's model. The AI Chat window lists them.",
   "setting.ai.model.title": "AI Model",
   "setting.ai.provider.description": "The plugin that answers: an OpenAI-compatible endpoint (OpenAI, or a local server), Anthropic, or a plugin's.",

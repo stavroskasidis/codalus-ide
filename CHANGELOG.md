@@ -2,6 +2,16 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.3.0
+
+**AI assistance** (M28, [ADR 0062](docs/adr/0062-ai-providers-and-data-boundaries.md), [ADR 0063](docs/adr/0063-ai-agent-mode-and-mcp.md)), off until you turn it on ([guide](docs/user-guide/ai.md)):
+- any OpenAI-compatible endpoint (OpenAI, or a local server such as Ollama or LM Studio) or Anthropic, or a plugin's provider;
+- only what you attach is sent, never secrets or files your `.gitignore` or `.codalusignore` exclude;
+- the AI Chat, with code applied through the refactoring preview, and inline suggestions as ghost text (Tab accepts);
+- AI actions on problems, selections, exceptions, failed tests and commit messages;
+- agent mode, which reads, edits (each change shown first) and runs commands (each approved) in a trusted workspace, with your MCP servers' tools;
+- `codalus mcp`, an MCP server that lets other agents ask the running IDE for the solution, problems, test results and builds.
+
 ## 0.2.0
 
 **Daedalus Studio is now Codalus IDE** ([ADR 0056](docs/adr/0056-rename-to-codalus.md)): the CLI is `codalus`, the packages are `codalus` (and `codalus-bin` on the AUR), and the repository is `stavroskasidis/codalus-ide`. It's a clean break, made while there are no users to move:

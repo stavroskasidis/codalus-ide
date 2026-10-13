@@ -784,23 +784,23 @@ public sealed class PluginManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, AiStream> _aiStreams = new(StringComparer.Ordinal);
 
     /// <summary>A chat answer being received: the pieces are handed on in order, and counted.</summary>
-    private sealed class AiStream(Action<string> onText)
+    private sealed class AiStream(Action<AiEventParams> onEvent)
     {
         private readonly Lock _gate = new();
-        private readonly SortedDictionary<int, string> _early = [];
+        private readonly SortedDictionary<int, AiEventParams> _early = [];
         private int _next;
 
         public int Received { get; private set; }
 
         /// <summary>A piece, by its order: notifications may be handled out of order, so later ones wait for earlier ones.</summary>
-        public void Add(int index, string text)
+        public void Add(AiEventParams piece)
         {
             lock (_gate)
             {
-                _early[index] = text;
+                _early[piece.Index] = piece;
                 while (_early.Remove(_next, out var next))
                 {
-                    onText(next);
+                    onEvent(next);
                     _next++;
                     Received++;
                 }
@@ -848,15 +848,28 @@ public sealed class PluginManager : IAsyncDisposable
     }
 
     /// <summary>Streams a chat answer from a provider: <paramref name="onText"/> gets each piece, in order, before this completes.</summary>
-    public async Task ChatAsync(string providerId, string model, IReadOnlyList<AiMessageDto> messages, Action<string> onText, CancellationToken cancellationToken, int? maxTokens = null)
+    public Task ChatAsync(string providerId, string model, IReadOnlyList<AiMessageDto> messages, Action<string> onText, CancellationToken cancellationToken, int? maxTokens = null) =>
+        ChatEventsAsync(providerId, model, messages, null, e =>
+        {
+            if (e.Text is { } text)
+            {
+                onText(text);
+            }
+        }, cancellationToken, maxTokens);
+
+    /// <summary>
+    /// Streams an answer with tools (M28d): <paramref name="onEvent"/> gets each text piece and tool call, in order,
+    /// before this completes. Without <paramref name="tools"/> it is a plain chat.
+    /// </summary>
+    public async Task ChatEventsAsync(string providerId, string model, IReadOnlyList<AiMessageDto> messages, IReadOnlyList<AiToolDto>? tools, Action<AiEventParams> onEvent, CancellationToken cancellationToken, int? maxTokens = null)
     {
         var host = await AiHostAsync(providerId, cancellationToken).ConfigureAwait(false);
         var id = Guid.NewGuid().ToString("N");
-        var stream = new AiStream(onText);
+        var stream = new AiStream(onEvent);
         _aiStreams[id] = stream;
         try
         {
-            var result = await host.Connection.InvokeAsync(AiMethods.Chat, new AiChatParams(providerId, id, model, [.. messages]) { MaxTokens = maxTokens },
+            var result = await host.Connection.InvokeAsync(AiMethods.Chat, new AiChatParams(providerId, id, model, [.. messages]) { MaxTokens = maxTokens, Events = tools is not null, Tools = tools is null ? null : [.. tools] },
                 PluginJsonContext.Default.AiChatParams, PluginJsonContext.Default.AiChatResult, cancellationToken).ConfigureAwait(false);
 
             // The answer can arrive while the last pieces are still being handled.
@@ -1507,7 +1520,14 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 if (_manager._aiStreams.TryGetValue(p.StreamId, out var stream))
                 {
-                    stream.Add(p.Index, p.Text);
+                    stream.Add(new AiEventParams(p.StreamId, p.Index, p.Text, null));
+                }
+            });
+            connection.OnNotification(AiMethods.Event, json.AiEventParams, p =>
+            {
+                if (_manager._aiStreams.TryGetValue(p.StreamId, out var stream))
+                {
+                    stream.Add(p);
                 }
             });
             connection.OnNotification(PluginMethods.AuthRegister, json.AuthProviderParams, p =>

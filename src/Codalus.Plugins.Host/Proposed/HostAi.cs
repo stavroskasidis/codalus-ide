@@ -37,8 +37,33 @@ internal sealed class HostAiRegistry(PluginHostServer server)
             new AiConfigureResult(await Provider(p.ProviderId).ConfigureAsync(ct).ConfigureAwait(false)));
         connection.OnRequest(AiMethods.Chat, json.AiChatParams, json.AiChatResult, async (p, ct) =>
         {
-            var request = new AiChatRequest(p.Model, [.. p.Messages.Select(m => new AiMessage(m.Role, m.Content))]) { MaxTokens = p.MaxTokens };
+            var request = new AiChatRequest(p.Model, [.. p.Messages.Select(m => new AiMessage(m.Role, m.Content)
+            {
+                ToolCalls = m.ToolCalls is null ? null : [.. m.ToolCalls.Select(c => new AiToolCall(c.Id, c.Name, c.Arguments))],
+                ToolCallId = m.ToolCallId,
+            })])
+            {
+                MaxTokens = p.MaxTokens,
+                Tools = p.Tools is null ? null : [.. p.Tools.Select(t => new AiTool(t.Name, t.Description, t.InputSchema))],
+            };
             var chunks = 0;
+            if (p.Events)
+            {
+                await foreach (var item in Provider(p.ProviderId).ChatEventsAsync(request, ct).WithCancellation(ct).ConfigureAwait(false))
+                {
+                    if (item.Text is { Length: 0 } && item.ToolCall is null)
+                    {
+                        continue;
+                    }
+
+                    var call = item.ToolCall is { } c ? new AiToolCallDto(c.Id, c.Name, c.Arguments) : null;
+                    await connection.NotifyAsync(AiMethods.Event, new AiEventParams(p.StreamId, chunks, item.Text, call), json.AiEventParams, ct).ConfigureAwait(false);
+                    chunks++;
+                }
+
+                return new AiChatResult(chunks);
+            }
+
             await foreach (var text in Provider(p.ProviderId).ChatAsync(request, ct).WithCancellation(ct).ConfigureAwait(false))
             {
                 if (text.Length > 0)

@@ -303,6 +303,7 @@ Proposed APIs are not covered by the versioning policy: they may change in any r
 - Declare the provider (`contributes.aiProviders`: `{ id, label }`), then `context.Proposed().Ai.RegisterModelProvider(id, label, provider)` when the plugin activates. It activates when the user picks the provider (`onAiProvider:<id>`, implicit).
 - An `IAiModelProvider` lists its models (`GetModelsAsync`) and streams an answer to an `AiChatRequest` (the model and the messages, the IDE's system message first) as an `IAsyncEnumerable<string>`. `ConfigureAsync` asks for what it needs: a key with `InputBoxOptions.Password`, kept in `Secrets`.
 - The IDE decides what a request carries: the user's attachments, without secrets or ignored files. The provider only carries it to its endpoint. The built-in `Codalus.Plugins.Ai` (OpenAI-compatible endpoints and Anthropic) is a complete example.
+- Tool calls (since M28d, [ADR 0063](adr/0063-ai-agent-mode-and-mcp.md)): agent mode sends `AiChatRequest.Tools` and reads `ChatEventsAsync`, which streams `AiEvent`s, text or an `AiToolCall` (id, name, JSON arguments). The conversation then carries the assistant's `ToolCalls` and `tool` messages with their `ToolCallId`. The default `ChatEventsAsync` wraps `ChatAsync`, so a provider without tools still answers, without calling any.
 
 ## Testing plugins
 
@@ -352,6 +353,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### M28d (no API version change)
+
+The proposed `Ai` API gains tool calls: `AiChatRequest.Tools`, `IAiModelProvider.ChatEventsAsync` (with a default), `AiEvent`, `AiTool`, `AiToolCall`, and `AiMessage.ToolCalls`/`ToolCallId`. Proposed APIs aren't versioned, and the stable API didn't change.
 
 ### 1.1.0 (M28a)
 

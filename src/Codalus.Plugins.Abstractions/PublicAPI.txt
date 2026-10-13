@@ -510,6 +510,18 @@ class Codalus.Plugins.Proposed.AiChatRequest
   Messages { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.AiMessage>
   Model { get; init; } : System.String
   ToString() -> System.String
+  Tools { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.AiTool>
+class Codalus.Plugins.Proposed.AiEvent
+  .ctor(System.String Text, Codalus.Plugins.Proposed.AiToolCall ToolCall)
+  Deconstruct(ref System.String Text, ref Codalus.Plugins.Proposed.AiToolCall ToolCall) -> System.Void
+  Equals(Codalus.Plugins.Proposed.AiEvent other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Text { get; init; } : System.String
+  ToString() -> System.String
+  ToolCall { get; init; } : Codalus.Plugins.Proposed.AiToolCall
+static class Codalus.Plugins.Proposed.AiEvents
+  FromText(System.Collections.Generic.IAsyncEnumerable<System.String> text, System.Threading.CancellationToken cancellationToken = null) -> System.Collections.Generic.IAsyncEnumerable<Codalus.Plugins.Proposed.AiEvent>
 class Codalus.Plugins.Proposed.AiMessage
   .ctor(System.String Role, System.String Content)
   Content { get; init; } : System.String
@@ -519,6 +531,8 @@ class Codalus.Plugins.Proposed.AiMessage
   GetHashCode() -> System.Int32
   Role { get; init; } : System.String
   ToString() -> System.String
+  ToolCallId { get; init; } : System.String
+  ToolCalls { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.AiToolCall>
 class Codalus.Plugins.Proposed.AiModel
   .ctor(System.String Id, System.String Label)
   Deconstruct(ref System.String Id, ref System.String Label) -> System.Void
@@ -528,10 +542,31 @@ class Codalus.Plugins.Proposed.AiModel
   Id { get; init; } : System.String
   Label { get; init; } : System.String
   ToString() -> System.String
+class Codalus.Plugins.Proposed.AiTool
+  .ctor(System.String Name, System.String Description, System.String InputSchema)
+  Deconstruct(ref System.String Name, ref System.String Description, ref System.String InputSchema) -> System.Void
+  Description { get; init; } : System.String
+  Equals(Codalus.Plugins.Proposed.AiTool other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  InputSchema { get; init; } : System.String
+  Name { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.Proposed.AiToolCall
+  .ctor(System.String Id, System.String Name, System.String Arguments)
+  Arguments { get; init; } : System.String
+  Deconstruct(ref System.String Id, ref System.String Name, ref System.String Arguments) -> System.Void
+  Equals(Codalus.Plugins.Proposed.AiToolCall other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  Name { get; init; } : System.String
+  ToString() -> System.String
 interface Codalus.Plugins.Proposed.IAi
   RegisterModelProvider(System.String id, System.String label, Codalus.Plugins.Proposed.IAiModelProvider provider) -> System.IDisposable
 interface Codalus.Plugins.Proposed.IAiModelProvider
   ChatAsync(Codalus.Plugins.Proposed.AiChatRequest request, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<System.String>
+  ChatEventsAsync(Codalus.Plugins.Proposed.AiChatRequest request, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<Codalus.Plugins.Proposed.AiEvent>
   ConfigureAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Boolean>
   GetModelsAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.AiModel>>
 interface Codalus.Plugins.Proposed.IProposedApi

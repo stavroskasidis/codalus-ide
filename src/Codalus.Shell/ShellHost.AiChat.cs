@@ -52,6 +52,7 @@ public sealed partial class ShellHost
         public bool IncludeOpenFiles;
         public bool IncludeDiagnostics = true;
         public bool IncludeBuild;
+        public bool Agent;
         public Action? Changed;
     }
 
@@ -313,6 +314,17 @@ public sealed partial class ShellHost
         }
 
         children.Add(new ViewNodeDto("separator"));
+        children.Add(new ViewNodeDto("checkbox") { Id = "agent", Text = "Agent mode", Checked = _ai.Agent });
+        if (_ai.Agent)
+        {
+            children.Add(new ViewNodeDto("text")
+            {
+                Text = Solutions.Solution?.Trusted == true
+                    ? "The AI reads, searches and changes files, runs commands and builds to do what you ask: you review every change and approve every command."
+                    : "The AI reads and searches the workspace's files to answer. In a trusted workspace it can also change files and run commands, with your approval.",
+                Style = "muted",
+            });
+        }
         children.Add(new ViewNodeDto("text") { Text = "Send with the message:", Style = "muted" });
         children.Add(new ViewNodeDto("stack")
         {
@@ -433,6 +445,9 @@ public sealed partial class ShellHost
                 break;
             case ("ctx:build", "change"):
                 _ai.IncludeBuild = value == "true";
+                break;
+            case ("agent", "change"):
+                _ai.Agent = value == "true";
                 break;
             default:
                 if (id.StartsWith("apply:", StringComparison.Ordinal) && kind == "click")
@@ -560,6 +575,12 @@ public sealed partial class ShellHost
     {
         if (_ai.Cancel is not null || !AiEnabled || AiProvider.Length == 0 || AiModel.Length == 0)
         {
+            return;
+        }
+
+        if (_ai.Agent)
+        {
+            await RunAgentInChatAsync(question, attachments, refused, target).ConfigureAwait(true);
             return;
         }
 

@@ -114,8 +114,12 @@ The plugin API, version 1.1.0: every public type and member of `Codalus.Plugins.
 ## Codalus.Plugins.Proposed
 
 - [`AiChatRequest`](#aichatrequest)
+- [`AiEvent`](#aievent)
+- [`AiEvents`](#aievents)
 - [`AiMessage`](#aimessage)
 - [`AiModel`](#aimodel)
+- [`AiTool`](#aitool)
+- [`AiToolCall`](#aitoolcall)
 - [`IAi`](#iai)
 - [`IAiModelProvider`](#iaimodelprovider)
 - [`IProposedApi`](#iproposedapi)
@@ -1627,6 +1631,29 @@ A chat request: the model and the conversation so far, the newest message last.
 | `int? MaxTokens { get; init; }` | The most tokens the answer may use, when the user set a limit. |
 | `IReadOnlyList<AiMessage> Messages { get; init; }` | The conversation, with the IDE's system message first. |
 | `string Model { get; init; }` | One of the provider's `AiModel.Id`s. |
+| `IReadOnlyList<AiTool>? Tools { get; init; }` | The tools the model may call (M28d); none outside agent mode. |
+
+### `AiEvent`
+
+`record Codalus.Plugins.Proposed.AiEvent`
+
+A piece of an answer: text, or a tool call (M28d).
+
+| Member | Description |
+|---|---|
+| `AiEvent(string? Text, AiToolCall? ToolCall)` | A piece of an answer: text, or a tool call (M28d). |
+| `string? Text { get; init; }` | Text, when it is text. |
+| `AiToolCall? ToolCall { get; init; }` | A tool call, when it is one. |
+
+### `AiEvents`
+
+`static class Codalus.Plugins.Proposed.AiEvents`
+
+Helpers for `AiEvent` streams.
+
+| Member | Description |
+|---|---|
+| `static IAsyncEnumerable<AiEvent> FromText(IAsyncEnumerable<string> text, CancellationToken cancellationToken = default)` | A text stream as events. |
 
 ### `AiMessage`
 
@@ -1638,7 +1665,9 @@ A message of a conversation.
 |---|---|
 | `AiMessage(string Role, string Content)` | A message of a conversation. |
 | `string Content { get; init; }` | Its text. |
-| `string Role { get; init; }` | `system`, `user` or `assistant`. |
+| `string Role { get; init; }` | `system`, `user`, `assistant` or `tool` (a tool's result). |
+| `string? ToolCallId { get; init; }` | The call a `tool` message answers. |
+| `IReadOnlyList<AiToolCall>? ToolCalls { get; init; }` | The tools an assistant message called (M28d). |
 
 ### `AiModel`
 
@@ -1651,6 +1680,32 @@ A model a provider offers.
 | `AiModel(string Id, string Label)` | A model a provider offers. |
 | `string Id { get; init; }` | The id the provider's API takes. |
 | `string Label { get; init; }` | The name the user sees. |
+
+### `AiTool`
+
+`record Codalus.Plugins.Proposed.AiTool`
+
+A tool the model may call (M28d, agent mode).
+
+| Member | Description |
+|---|---|
+| `AiTool(string Name, string Description, string InputSchema)` | A tool the model may call (M28d, agent mode). |
+| `string Description { get; init; }` | What it does, for the model. |
+| `string InputSchema { get; init; }` | The JSON schema of its input, as text. |
+| `string Name { get; init; }` | Its name. |
+
+### `AiToolCall`
+
+`record Codalus.Plugins.Proposed.AiToolCall`
+
+A call of a tool by the model.
+
+| Member | Description |
+|---|---|
+| `AiToolCall(string Id, string Name, string Arguments)` | A call of a tool by the model. |
+| `string Arguments { get; init; }` | Its input, as JSON text. |
+| `string Id { get; init; }` | The call's id, which its result names. |
+| `string Name { get; init; }` | The tool. |
 
 ### `IAi`
 
@@ -1671,6 +1726,7 @@ A source of AI models (proposed, M28a, ADR 0062): a vendor's API or a local serv
 | Member | Description |
 |---|---|
 | `IAsyncEnumerable<string> ChatAsync(AiChatRequest request, CancellationToken cancellationToken)` | Streams the answer to `request`, a piece of text at a time. |
+| `IAsyncEnumerable<AiEvent> ChatEventsAsync(AiChatRequest request, CancellationToken cancellationToken)` | Streams the answer with tool calls (M28d, agent mode): text pieces and the calls of `AiChatRequest.Tools`. The default carries `IAiModelProvider.ChatAsync`'s text, for providers without tools. |
 | `Task<bool> ConfigureAsync(CancellationToken cancellationToken)` | Asks the user for what it needs (a key, a server's address); returns whether it is configured now. |
 | `Task<IReadOnlyList<AiModel>> GetModelsAsync(CancellationToken cancellationToken)` | The models it offers now (an empty list when it isn't configured). |
 

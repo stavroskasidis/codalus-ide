@@ -371,7 +371,7 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ workspace edits
 
-    private async Task PreviewAndApplyAsync(string title, WorkspaceEdit edit)
+    private async Task<bool> PreviewAndApplyAsync(string title, WorkspaceEdit edit)
     {
         var details = await PreviewAsync(edit).ConfigureAwait(true);
         var files = edit.DocumentChanges.Length;
@@ -379,10 +379,7 @@ public sealed partial class ShellHost
         {
             Details = details,
         }).ConfigureAwait(true);
-        if (choice.Button == "Apply")
-        {
-            await ApplyWorkspaceEditAsync(edit).ConfigureAwait(true);
-        }
+        return choice.Button == "Apply" && await ApplyWorkspaceEditAsync(edit).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -418,6 +415,7 @@ public sealed partial class ShellHost
                 }
                 else
                 {
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                     await TextFiles.WriteAsync(path, ApplyToText(string.Empty, change.Edits), TextFileFormat.Default, CancellationToken.None).ConfigureAwait(true);
                 }
             }

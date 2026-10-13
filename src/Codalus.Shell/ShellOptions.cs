@@ -11,6 +11,7 @@ public sealed record ShellOptions
                codalus merge <local> <remote> <base> <merged> [options]
                                                         Resolve a merge (git mergetool); exits when it is accepted.
                codalus --wait <file> [options]         Edit a file and exit when its tab closes (git's core.editor).
+               codalus mcp [--user-data-dir <dir>]     An MCP server on stdio for other agents, answered by the running IDE.
 
           --user-data-dir <dir>   Keep settings, state and plugins under <dir> instead of the OS defaults.
           --locale <name>         The display language for this run (qps-ploc: pseudo-language).

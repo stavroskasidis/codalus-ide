@@ -424,4 +424,5 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(AiChatParams))]
 [JsonSerializable(typeof(AiChunkParams))]
 [JsonSerializable(typeof(AiChatResult))]
+[JsonSerializable(typeof(AiEventParams))]
 public sealed partial class PluginJsonContext : JsonSerializerContext;
