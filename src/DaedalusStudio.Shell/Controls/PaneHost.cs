@@ -44,10 +44,16 @@ public sealed class PaneHost : Decorator
             }
         }
 
-        var first = this.GetVisualDescendants()
+        // Content (a list, a tree, a text box) before buttons, never the toolbar's overflow button: focusing a toolbar or
+        // empty-state button drew its keyboard focus border (seen in the gallery on the Mac), so a button takes the
+        // focus without it.
+        var candidates = this.GetVisualDescendants()
             .OfType<InputElement>()
-            .FirstOrDefault(c => c != this && c.Focusable && c.IsEffectivelyEnabled && c.IsEffectivelyVisible);
-        if (first?.Focus(NavigationMethod.Tab) != true || !IsKeyboardFocusWithin)
+            .Where(c => c != this && c.Focusable && c.IsEffectivelyEnabled && c.IsEffectivelyVisible && !c.Classes.Contains("overflow"))
+            .ToList();
+        var first = candidates.FirstOrDefault(c => c is not Button) ?? candidates.FirstOrDefault();
+        var method = first is Button ? NavigationMethod.Pointer : NavigationMethod.Tab;
+        if (first?.Focus(method) != true || !IsKeyboardFocusWithin)
         {
             Focus(NavigationMethod.Tab);
         }

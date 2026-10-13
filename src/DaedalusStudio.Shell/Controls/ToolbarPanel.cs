@@ -43,6 +43,9 @@ public sealed class ToolbarPanel : Panel
         ToolTip.SetTip(_overflow, "More");
         AutomationProperties.SetName(_overflow, "More toolbar commands");
         _overflow.Click += (_, _) => ShowOverflow();
+        // It is the panel's first child but sits at the right end: last in the tab order too, so focusing a tool window
+        // doesn't land on it (its focus border showed in the gallery on the Mac).
+        Avalonia.Input.KeyboardNavigation.SetTabIndex(_overflow, int.MaxValue);
         Children.Add(_overflow); // XAML adds the items after it; it is always arranged at the right end
         ClipToBounds = true;
         VerticalAlignment = VerticalAlignment.Top;
