@@ -129,6 +129,7 @@ public sealed partial class ShellHost
     /// <summary>The indicator: while AI is on, the provider and model, and whether a request is in flight.</summary>
     private void UpdateAiStatus()
     {
+        Workbench.Context.Set("aiReady", AiEnabled && AiProvider.Length > 0 && AiModel.Length > 0);
         if (!AiEnabled)
         {
             Workbench.StatusBar.Remove(AiStatusItem);
@@ -514,7 +515,7 @@ public sealed partial class ShellHost
                 target = new AiTarget(path, editor.Model.Uri, 0, 0, lines - 1, editor.Model.Text.Lines[lines - 1].Length, WholeFile: true);
             }
 
-            if (_ai.IncludeDiagnostics && Languages.Diagnostics.For(editor.Model.Uri) is { Count: > 0 } diagnostics)
+            if (_ai.IncludeDiagnostics && Languages.Diagnostics.For(editor.Model.Path) is { Count: > 0 } diagnostics)
             {
                 var text = string.Join('\n', diagnostics.Take(50).Select(d => $"line {d.Range.Start.Line + 1}: {d.Message}"));
                 await Attach("diagnostics", path, text, $"Problems in {name}").ConfigureAwait(true);
@@ -547,10 +548,24 @@ public sealed partial class ShellHost
             }
         }
 
+        _ai.Question = string.Empty;
+        await SendInChatAsync(question, attachments, refused, target).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Sends a question with attachments already through the data boundary (<paramref name="refused"/>: what was left
+    /// out and why), and streams the answer into the conversation. The chat's own question and the AI actions (M28c) share it.
+    /// </summary>
+    private async Task SendInChatAsync(string question, List<AiAttachment> attachments, List<string> refused, AiTarget? target)
+    {
+        if (_ai.Cancel is not null || !AiEnabled || AiProvider.Length == 0 || AiModel.Length == 0)
+        {
+            return;
+        }
+
         var history = _ai.Turns.Select(t => new AiMessageDto(t.Role, t.Text)).ToList();
         var messages = AiContext.Messages(history, attachments, question);
         _ai.Turns.Add(new AiTurn("user", question, [.. attachments.Select(a => a.Label)], target));
-        _ai.Question = string.Empty;
         _ai.Status = refused.Count > 0 ? "Not sent: " + string.Join(" ", refused) : null;
         var streaming = _ai.Streaming = new StringBuilder();
         using var cancel = _ai.Cancel = new CancellationTokenSource();

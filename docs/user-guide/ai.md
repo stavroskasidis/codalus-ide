@@ -34,6 +34,17 @@ With **AI Inline Suggestions** on (`ai.inlineSuggestions`, off by default, and o
 
 Each suggestion sends the file around the caret (about 4,000 characters before it and 1,500 after) to your provider, under the same rules as the chat: files that are secrets or ignored are never sent, so they get no suggestions. A workspace can turn suggestions off for itself, as it can AI.
 
+## AI actions
+
+Where you are already working, a command asks for you, with the context that place has. Each runs only when you choose it, with the same rules about what is sent:
+- **Ask AI About This Problem** (the editor's context menu): the error or warning at the caret, with the 15 lines around it.
+- **Write Tests with AI** (the editor's context menu, with code selected): tests for the selection, in the solution's test framework when it has test projects.
+- **Explain the Exception with AI** (Debug menu, stopped on an exception): its type, message, stack and inner exceptions, and the code where the program stopped.
+- **Explain the Test Failure with AI** (Test menu): the failed test selected in the Test Explorer, with its message, expected and actual values, stack and source.
+- **Draft Commit Message with AI** (Git menu): a message for the staged changes, written into Git Changes' message box for you to edit. The diffs of secret or ignored files aren't sent; their names are.
+
+The answers to the first four come in the AI Chat, where you can ask more.
+
 ## The chat
 
 Type a question and press Enter. The answer streams in, and **Stop** ends it. **New Chat** starts over; the conversation so far goes with each message, so a new chat sends less.
