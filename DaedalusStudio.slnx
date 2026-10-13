@@ -61,6 +61,10 @@
     <Project Path="tests/DaedalusStudio.Rpc.Tests/DaedalusStudio.Rpc.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Shell.Tests/DaedalusStudio.Shell.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.TargetFrameworks.Tests/DaedalusStudio.TargetFrameworks.Tests.csproj" />
+    <Project Path="tests/DaedalusStudio.Website.Tests/DaedalusStudio.Website.Tests.csproj" />
     <Project Path="tests/DaedalusStudio.Workbench.Tests/DaedalusStudio.Workbench.Tests.csproj" />
+  </Folder>
+  <Folder Name="/website/">
+    <Project Path="website/DaedalusStudio.Website.csproj" />
   </Folder>
 </Solution>

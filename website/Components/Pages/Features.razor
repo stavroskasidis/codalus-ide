@@ -1,0 +1,171 @@
+@page "/features"
+@inject SiteOptions Site
+
+<PageMeta Title="Features" Description="Everything in Daedalus Studio: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, profiling and more." />
+
+<div class="container">
+    <section class="page-intro">
+        <p class="eyebrow">Features</p>
+        <h1 class="display display-l">Everything you need to build for .NET. Nothing to bolt on.</h1>
+        <p class="lead">Write, run, debug, test and ship from one fast, native IDE on Windows, macOS and Linux. The tools you'd otherwise collect one extension at a time are already here, and they work together from the first launch.</p>
+        <div class="hero-actions" style="justify-content: flex-start">
+            <a class="button" href="download/" data-download-os>
+                <Icon Name="download" Size="18" />
+                <span data-label>Download</span>
+            </a>
+            <a class="button button-quiet" href="docs/getting-started/">Get started</a>
+        </div>
+    </section>
+
+    <section class="tour" style="padding-top: 48px" aria-label="Screenshot tour" data-tabs>
+        <div class="tabs" role="tablist" aria-label="Screenshots" hidden>
+            @foreach (var shot in s_shots)
+            {
+                <button class="tab" type="button" role="tab" id="tab-@shot.Key" aria-controls="shot-@shot.Key" data-key="@shot.Key">@shot.Label</button>
+            }
+        </div>
+        @foreach (var (shot, i) in s_shots.Select((s, i) => (s, i)))
+        {
+            <figure class="shot" role="tabpanel" id="shot-@shot.Key" aria-labelledby="tab-@shot.Key">
+                <img src="assets/screenshots/@shot.File" width="1280" height="800" loading="@(i == 0 ? "eager" : "lazy")" alt="@shot.Alt" />
+                <figcaption><strong>@shot.Label</strong><span>@shot.Caption</span></figcaption>
+            </figure>
+        }
+    </section>
+
+    <section class="section themes" aria-labelledby="themes">
+        <div class="head-row">
+            <h2 class="heading" id="themes">Blue, Light and Dark.</h2>
+            <p class="muted small">Plus High Contrast. A classic layout: the menu and search in the title bar, the Solution Explorer on the right, and a status bar colored by state.</p>
+        </div>
+        <div class="grid grid-wide">
+            @foreach (var theme in new[] { "Blue", "Light", "Dark" })
+            {
+                <figure>
+                    <img src="assets/screenshots/editor-@(theme.ToLowerInvariant()).png" width="1280" height="800" loading="lazy" alt="Daedalus Studio in the @theme theme" />
+                    <figcaption>@theme</figcaption>
+                </figure>
+            }
+        </div>
+    </section>
+
+    <section class="section" aria-labelledby="all">
+        <h2 class="heading" id="all" style="margin-bottom: 36px">Everything in the box</h2>
+        <div class="feature-lists">
+            <div>
+                <h3>Editor</h3>
+                <ul>
+                    <li>Tabs with preview and split views, multiple carets, folding and a minimap</li>
+                    <li>Semantic highlighting, completion, signature help and Quick Info</li>
+                    <li>Live diagnostics and an Error List</li>
+                    <li>Rename, code fixes and refactorings, all with previews</li>
+                    <li>Snippets, Code Cleanup, format on save and local history</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Navigation</h3>
+                <ul>
+                    <li>Go to Definition and Implementation, into decompiled code</li>
+                    <li>Find All References with read/write classification</li>
+                    <li>Peek Definition, Call and Type Hierarchy, Go To All</li>
+                    <li>Inlay hints, CodeLens, an inheritance margin and sticky scroll</li>
+                    <li>Library code from Source Link before decompiling</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Solutions and NuGet</h3>
+                <ul>
+                    <li>.sln and .slnx, SDK-style projects and solution filters</li>
+                    <li>Property pages that show where each value comes from</li>
+                    <li>Launch profiles, Configuration Manager and Reference Manager</li>
+                    <li>Browse, update and consolidate packages; Central Package Management</li>
+                    <li>Folder mode for a folder without a solution</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Build, run and test</h3>
+                <ul>
+                    <li>Build, Rebuild and Clean on MSBuild, cancellable</li>
+                    <li>A fast up-to-date check, binary logs and build timings</li>
+                    <li>Run with Ctrl+F5, and multiple startup projects</li>
+                    <li>A Test Explorer for xUnit, NUnit, MSTest and TUnit</li>
+                    <li>Code coverage with Coverlet</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Debugging</h3>
+                <ul>
+                    <li>Launch (F5) and attach, stepping and threads</li>
+                    <li>Conditions, hit counts, logpoints and dependent breakpoints</li>
+                    <li>Text, JSON, XML and HTML visualizers, and [DebuggerDisplay]</li>
+                    <li>Pinned data tips, PerfTips and Run to Click</li>
+                    <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Git and hosting</h3>
+                <ul>
+                    <li>Per-file, per-hunk and per-line staging, and blame</li>
+                    <li>A history graph, a 3-way merge editor and interactive rebase</li>
+                    <li>Stash, tags, remotes, worktrees and Git LFS</li>
+                    <li>Pull requests, with review comments in the editor</li>
+                    <li>GitHub, Azure DevOps and GitLab</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Web</h3>
+                <ul>
+                    <li>Razor and Blazor, with C# features inside the markup</li>
+                    <li>.http files, the HTTP Response window and an Endpoints Explorer</li>
+                    <li>HTML, CSS, JavaScript and TypeScript language servers</li>
+                    <li>ESLint, Prettier, npm scripts and the Task Runner Explorer</li>
+                    <li>Hot Reload through dotnet watch</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Data, containers and cloud</h3>
+                <ul>
+                    <li>EF Core migrations, model views and reverse engineering</li>
+                    <li>A Database Explorer for SQL Server, PostgreSQL, MySQL and SQLite</li>
+                    <li>Run and debug in containers with docker or podman</li>
+                    <li>Aspire AppHosts and their resources</li>
+                    <li>Publish profiles, including container images</li>
+                </ul>
+            </div>
+            <div>
+                <h3>And more</h3>
+                <ul>
+                    <li>Profiling: counters, CPU traces and flame graphs</li>
+                    <li>Avalonia XAML editing and a live previewer</li>
+                    <li>An integrated terminal and C# Interactive</li>
+                    <li>About forty languages highlighted; JSON and YAML schemas</li>
+                    <li>Any LSP language server through a plugin</li>
+                </ul>
+            </div>
+        </div>
+        <div class="notice" style="margin-top: 56px">
+            <p><strong>Not there yet:</strong> remote development (SSH, WSL, containers), Hot Reload while debugging, .NET MAUI, Visual Basic and F#.</p>
+            <a class="link-arrow" href="@Site.Blob("docs/roadmap.md")">See the roadmap</a>
+        </div>
+    </section>
+</div>
+
+@code {
+    private sealed record Shot(string Key, string Label, string File, string Alt, string Caption);
+
+    private static readonly Shot[] s_shots =
+    [
+        new("editor", "Editor", "editor-dark.png",
+            "The editor with inlay hints, Find Results for references to Greet, and the Solution Explorer",
+            "Roslyn-powered C# with inlay hints, the minimap, Find All References and the Solution Explorer."),
+        new("debugging", "Debugging", "debugging.png",
+            "Paused at a breakpoint with a PerfTip, and the Exception Settings window",
+            "Paused on a line with a PerfTip, and the Exception Settings window, with every debug tool window a tab away."),
+        new("blazor", "Blazor", "blazor.png",
+            "Debugging a Razor component, paused inside Counter.razor, with the Test Explorer and the Debug Console",
+            "A hosted Blazor app: the server and its WebAssembly page debugged as one session, paused inside a .razor file."),
+        new("web", "Web APIs", "web-http.png",
+            "A .http file with run buttons, the HTTP Response window and the Endpoints Explorer",
+            "Send requests from a .http file, read the response, and browse every route in the Endpoints Explorer."),
+    ];
+}

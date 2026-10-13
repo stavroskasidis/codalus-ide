@@ -1,0 +1,26 @@
+@inject SiteOptions Site
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    @* Every link on the site is relative to this: "/" when the app serves it, the Pages path in an export. *@
+    <base href="@Site.BasePath" />
+    <meta name="theme-color" content="#0e0b17" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Daedalus Studio" />
+    <meta property="og:image" content="@(Site.BaseUrl)assets/screenshots/editor-dark.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+    <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/icon-256.png" />
+    <link rel="preload" href="assets/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="assets/site.css" />
+    <script src="assets/site.js" defer></script>
+    <HeadOutlet />
+</head>
+<body>
+    <Routes />
+</body>
+</html>

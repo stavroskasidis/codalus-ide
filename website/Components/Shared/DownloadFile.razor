@@ -1,0 +1,37 @@
+@inject Releases Releases
+
+@* One package of the offered release: its name, what it is, and its download link. *@
+<div class="file">
+    <div class="file-text">
+        <span class="file-title">
+            @Kind
+            @if (Recommended)
+            {
+                <span class="badge">Recommended</span>
+            }
+        </span>
+        <span class="file-name">@Releases.FileName(Suffix)</span>
+        <span class="file-note">
+            @ChildContent
+            @if (Arm64Suffix is not null)
+            {
+                @(" ")<a href="@Releases.AssetUrl(Arm64Suffix)">arm64</a>@(".")
+            }
+        </span>
+    </div>
+    <a class="button button-small @(Recommended ? "" : "button-quiet")" href="@Releases.AssetUrl(Suffix)">Download</a>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Kind { get; set; } = "";
+
+    /// <summary>The file name after <c>daedalus-studio-&lt;version&gt;-</c>: <c>win-x64-setup.exe</c>.</summary>
+    [Parameter, EditorRequired] public string Suffix { get; set; } = "";
+
+    /// <summary>The same package for arm64, linked after the note.</summary>
+    [Parameter] public string? Arm64Suffix { get; set; }
+
+    [Parameter] public bool Recommended { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

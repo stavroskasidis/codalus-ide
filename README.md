@@ -50,6 +50,7 @@ Daedalus Studio is an open-source (MIT), cross-platform IDE for .NET that runs n
 
 ## Documentation
 
+- [Website](https://stavroskasidis.com/daedalus-studio/): downloads, features and the user guide.
 - [User guide](docs/user-guide/README.md): installing, solutions, NuGet, editing, build and run, debugging, web development, testing, Git, terminal and C# Interactive, settings, troubleshooting.
 - [Roadmap](docs/roadmap.md): the post-MVP milestones and the decisions behind them.
 - [Writing plugins](docs/plugins.md).
