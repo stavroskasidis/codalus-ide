@@ -38,7 +38,9 @@ catch (Exception ex) when (ex is not OutOfMemoryException)
     catch (InvalidOperationException)
     {
         // No dotnet at all where the locator looks (DOTNET_ROOT, DOTNET_HOST_PATH, PATH): say so instead of crashing.
-        await Console.Error.WriteLineAsync("No .NET SDK was found: dotnet isn't in DOTNET_ROOT or on the PATH. Install the .NET SDK (Help → Check Environment) to open solutions.").ConfigureAwait(false);
+        await Console.Error.WriteLineAsync(unresolved is not null && globalJson is not null
+            ? $"{unresolved} Install the SDK that {globalJson.Path} asks for, or change it (Help → Check Environment)."
+            : "No .NET SDK was found: dotnet isn't in DOTNET_ROOT or on the PATH. Install the .NET SDK (Help → Check Environment) to open solutions.").ConfigureAwait(false);
         return 3;
     }
 }
@@ -49,7 +51,9 @@ var instance = instances.FirstOrDefault(i => SdkSelection.CanLoad(i.Version, Env
 if (instance is null)
 {
     await Console.Error.WriteLineAsync(instances.Count == 0
-        ? "No .NET SDK was found. Install the .NET SDK to open solutions."
+        ? unresolved is not null && globalJson is not null
+            ? $"{unresolved} Install the SDK that {globalJson.Path} asks for, or change it (Help → Check Environment)."
+            : "No .NET SDK was found. Install the .NET SDK to open solutions."
         : !SdkSelection.AboveFloor(instances[0].Version) ? SdkSelection.BelowFloor(SdkName(instances[0]), GlobalJsonSdk.Find(Directory.GetCurrentDirectory())?.Path, null)
         : SdkSelection.Unloadable(instances[0].Version, null, Environment.Version)).ConfigureAwait(false);
     return 3;

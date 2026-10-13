@@ -30,6 +30,9 @@ public sealed record SupervisionPolicy
 
     public TimeSpan MaxBackoff { get; init; } = TimeSpan.FromSeconds(4);
 
+    /// <summary>Exit codes that mean starting again won't help (the build host's 3: no usable SDK): no restart.</summary>
+    public IReadOnlyCollection<int> FinalExitCodes { get; init; } = [];
+
     /// <summary>Graceful shutdown: request, then notification. Null skips the step.</summary>
     public string? ShutdownRequest { get; init; } = "shutdown";
 
@@ -161,7 +164,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
                 _restarts.Dequeue();
             }
 
-            restart = _restarts.Count < _policy.MaxRestarts;
+            restart = _restarts.Count < _policy.MaxRestarts && !(exitCode is { } code && _policy.FinalExitCodes.Contains(code));
             if (restart)
             {
                 _restarts.Enqueue(now);

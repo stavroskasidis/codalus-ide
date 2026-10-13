@@ -61,10 +61,27 @@ public sealed partial class ShellHost
         };
         Solutions.RestoreStateChanged += (_, e) => Ui.Post(() => OnRestoreState(e));
         Solutions.HostCrashed += (_, e) => CrashReporter.Write("host", $"The build host exited unexpectedly (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}); restart: {e.WillRestart}.");
-        Solutions.HostCrashed += (_, e) => Workbench.Notifications.Show(
-            e.WillRestart ? NotificationSeverity.Warning : NotificationSeverity.Error,
-            e.WillRestart ? $"The build host stopped unexpectedly (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}). Reopening the solution…"
-                          : "The build host crashed repeatedly and was stopped. Reopen the solution to try again.");
+        Solutions.HostCrashed += (_, e) =>
+        {
+            if (e.ExitCode == SolutionService.NoSdkExitCode)
+            {
+                // Not a crash: the build host found no SDK it can use, and says why. Starting it again won't help.
+                Ui.Post(async () =>
+                {
+                    var why = Solutions.LastHostMessage is { Length: > 0 } message ? message : "No .NET SDK was found.";
+                    if (await Workbench.Notifications.Error("The solution can't be loaded: " + why, "Check Environment").Result.ConfigureAwait(true) == "Check Environment")
+                    {
+                        OpenCheckEnvironment();
+                    }
+                });
+                return;
+            }
+
+            Workbench.Notifications.Show(
+                e.WillRestart ? NotificationSeverity.Warning : NotificationSeverity.Error,
+                e.WillRestart ? $"The build host stopped unexpectedly (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}). Reopening the solution…"
+                              : "The build host crashed repeatedly and was stopped. Reopen the solution to try again.");
+        };
         Solutions.HostRestarted += (_, _) => Workbench.Notifications.Info(Localizer.Get("msg.solutions.theBuildHostRestartedAndThe", "The build host restarted and the solution was reopened."));
         UpdateSolutionStatus();
     }

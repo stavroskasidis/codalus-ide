@@ -44,6 +44,12 @@ public sealed class SolutionService : IAsyncDisposable
     private readonly Func<string?> _resolveHost;
     private readonly Func<string, CancellationToken, Task<IReadOnlyDictionary<string, string>?>> _hostEnvironment;
     private readonly SupervisionPolicy? _policy;
+
+    /// <summary>The build host's exit code when it finds no usable SDK (none, or not the one global.json asks for).</summary>
+    public const int NoSdkExitCode = 3;
+
+    /// <summary>The build host's last line of output: why it stopped, when it did.</summary>
+    public string? LastHostMessage { get; private set; }
     private readonly ConcurrentDictionary<string, ProjectInfo> _projects = new(PathComparer);
     private readonly ConcurrentDictionary<string, CompilerInputsInfo> _compilerInputs = new(PathComparer);
     private readonly ConcurrentDictionary<string, string> _activeFrameworks = new(PathComparer);
@@ -160,14 +166,18 @@ public sealed class SolutionService : IAsyncDisposable
                 launch = place(launch) ?? throw new InvalidOperationException("The build host can't run on the remote machine.");
             }
 
-            var host = new SupervisedProcess("build host", launch, _policy)
+            var host = new SupervisedProcess("build host", launch, (_policy ?? SupervisionPolicy.Default) with { FinalExitCodes = [NoSdkExitCode] })
             {
                 ConfigureConnection = Configure,
                 Initialize = InitializeAsync,
             };
             host.Crashed += (_, e) => HostCrashed?.Invoke(this, e);
             host.Restarted += (_, _) => HostRestarted?.Invoke(this, EventArgs.Empty);
-            host.Log += (_, line) => Log?.Invoke(this, line);
+            host.Log += (_, line) =>
+            {
+                LastHostMessage = line;
+                Log?.Invoke(this, line);
+            };
             _host = host;
             await host.StartAsync(cancellationToken).ConfigureAwait(false);
             return _solution!;

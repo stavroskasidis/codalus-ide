@@ -39,6 +39,35 @@ public sealed class LoginShellPathTests
         Assert.Contains("/bin", path.Split(':'), StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// The Mac's case: the login PATH puts Homebrew's dotnet first, a link to a wrapper script whose folder has no SDKs,
+    /// so the build host's MSBuildLocator can't use it. The root with the newest SDK is chosen instead.
+    /// </summary>
+    [Fact]
+    public void A_dotnet_without_sdks_on_the_path_is_passed_over_for_the_root_with_the_newest_sdk()
+    {
+        static string N(string path) => path.Replace('\\', '/');
+        var files = new HashSet<string> { "/opt/homebrew/bin/dotnet", "/usr/local/share/dotnet/dotnet", "/Users/ada/.dotnet/dotnet" };
+        var sdks = new Dictionary<string, string[]>
+        {
+            ["/opt/homebrew/Cellar/dotnet/10.0.300/bin"] = [],
+            ["/usr/local/share/dotnet"] = ["10.0.301", "9.0.305", "8.0.414"],
+            ["/Users/ada/.dotnet"] = ["10.0.401"],
+        };
+        var check = new EnvironmentCheck(PlatformKind.MacOS, name => name switch { "PATH" => "/Users/ada/.local/bin:/opt/homebrew/bin:/usr/bin:/bin", "HOME" => "/Users/ada", _ => null },
+            exists: path => files.Contains(N(path)))
+        {
+            RealPath = path => N(path) == "/opt/homebrew/bin/dotnet" ? "/opt/homebrew/Cellar/dotnet/10.0.300/bin/dotnet" : path,
+            SdkVersions = folder => sdks.GetValueOrDefault(N(folder).TrimEnd('/')) ?? [],
+        };
+
+        Assert.Equal("/Users/ada/.dotnet", N(check.FindSdkRoot()!));
+
+        // A real dotnet with SDKs on the PATH is used as it is.
+        sdks["/opt/homebrew/Cellar/dotnet/10.0.300/bin"] = ["10.0.300"];
+        Assert.Equal("/opt/homebrew/Cellar/dotnet/10.0.300/bin", N(check.FindSdkRoot()!));
+    }
+
     [Theory]
     [InlineData(PlatformKind.MacOS, "/usr/local/share/dotnet/dotnet")]
     [InlineData(PlatformKind.Linux, "/usr/lib64/dotnet/dotnet")]

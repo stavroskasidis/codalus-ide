@@ -33,18 +33,22 @@ public sealed partial class ShellHost
     /// </summary>
     private void UseUserDotnet()
     {
-        if (Environment.GetEnvironmentVariable("DOTNET_ROOT") is { Length: > 0 } || EnvironmentCheck.FindOnPath("dotnet") is not null)
+        // A root that is already in use as it is: DOTNET_ROOT, or a real dotnet with SDKs first on the PATH.
+        var current = Environment.GetEnvironmentVariable("DOTNET_ROOT") is { Length: > 0 } set ? set
+            : EnvironmentCheck.FindOnPath("dotnet") is { } onPath ? Path.GetDirectoryName(onPath) : null;
+        if (EnvironmentCheck.FindSdkRoot() is not { } root)
         {
+            Workbench.Log.AppendLine("[setup] No .NET SDK found (DOTNET_ROOT, PATH, or where the installers put it); Help → Check Environment offers to install one.");
             return;
         }
 
-        if (EnvironmentCheck.FindDotnet() is { } dotnet && Path.GetDirectoryName(dotnet) is { } folder)
+        // A dotnet on the PATH without SDKs (Homebrew's wrapper script, after the Finder launch took the login PATH)
+        // is passed over: the root with SDKs goes first.
+        if (current is null || !string.Equals(Path.TrimEndingDirectorySeparator(current), Path.TrimEndingDirectorySeparator(root), StringComparison.Ordinal)
+            && EnvironmentCheck.RealPath(Path.Combine(current, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet")) is var real
+            && !string.Equals(Path.GetDirectoryName(real), Path.TrimEndingDirectorySeparator(root), StringComparison.Ordinal))
         {
-            AddDotnetToEnvironment(folder);
-        }
-        else
-        {
-            Workbench.Log.AppendLine("[setup] No .NET SDK found (DOTNET_ROOT, PATH, or where the installers put it); Help → Check Environment offers to install one.");
+            AddDotnetToEnvironment(root);
         }
     }
 

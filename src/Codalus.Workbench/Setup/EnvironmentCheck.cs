@@ -149,6 +149,63 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         return candidates.Select(c => System.IO.Path.Combine(c, exe)).FirstOrDefault(_exists);
     }
 
+    /// <summary>
+    /// The .NET root the IDE's processes should use (M37, and the Finder launch on macOS): <c>DOTNET_ROOT</c>, or the
+    /// <c>dotnet</c> on <c>PATH</c>, when their folder has SDKs; otherwise the installers' folder with the newest SDK.
+    /// A <c>dotnet</c> whose real folder has no <c>sdk/</c>, such as Homebrew's wrapper script, doesn't count: the build
+    /// host's MSBuildLocator can't use it. Null when no folder has an SDK.
+    /// </summary>
+    public string? FindSdkRoot()
+    {
+        var exe = platform == PlatformKind.Windows ? "dotnet.exe" : "dotnet";
+        if (environment("DOTNET_ROOT") is { Length: > 0 } root && HasSdks(root))
+        {
+            return root;
+        }
+
+        if (FindOnPath("dotnet") is { } onPath && System.IO.Path.GetDirectoryName(RealPath(onPath)) is { } folder && HasSdks(folder))
+        {
+            return folder;
+        }
+
+        var home = environment("HOME") ?? environment("USERPROFILE") ?? string.Empty;
+        string[] candidates = platform switch
+        {
+            PlatformKind.Windows => [System.IO.Path.Combine(environment("ProgramFiles") ?? @"C:\Program Files", "dotnet"), System.IO.Path.Combine(environment("LOCALAPPDATA") ?? string.Empty, "Microsoft", "dotnet")],
+            PlatformKind.MacOS => ["/usr/local/share/dotnet", System.IO.Path.Combine(home, ".dotnet")],
+            _ => [System.IO.Path.Combine(home, ".dotnet"), "/usr/share/dotnet", "/usr/lib/dotnet", "/usr/lib64/dotnet", "/usr/local/share/dotnet", "/snap/dotnet-sdk/current"],
+        };
+
+        // The folder whose newest SDK is the newest: a global.json is likelier to find what it asks for there.
+        return candidates.Where(c => _exists(System.IO.Path.Combine(c, exe)) && HasSdks(c))
+            .OrderByDescending(c => NewestSdk(c)).FirstOrDefault();
+    }
+
+    /// <summary>Whether a .NET root has at least one SDK (<c>sdk/&lt;version&gt;</c>).</summary>
+    public Func<string, IReadOnlyList<string>> SdkVersions { get; init; } = folder =>
+    {
+        var sdk = System.IO.Path.Combine(folder, "sdk");
+        return Directory.Exists(sdk) ? [.. Directory.EnumerateDirectories(sdk).Select(System.IO.Path.GetFileName).OfType<string>().Where(n => n.Length > 0 && char.IsDigit(n[0]))] : [];
+    };
+
+    private bool HasSdks(string folder) => SdkVersions(folder).Count > 0;
+
+    private Version NewestSdk(string folder) =>
+        SdkVersions(folder).Select(v => Version.TryParse(v.Split('-')[0], out var parsed) ? parsed : new Version(0, 0)).DefaultIfEmpty(new Version(0, 0)).Max()!;
+
+    /// <summary>A path with its links resolved (Homebrew links <c>/opt/homebrew/bin/dotnet</c> into its Cellar).</summary>
+    public Func<string, string> RealPath { get; init; } = path =>
+    {
+        try
+        {
+            return File.ResolveLinkTarget(path, returnFinalTarget: true)?.FullName ?? path;
+        }
+        catch (IOException)
+        {
+            return path;
+        }
+    };
+
     /// <summary>A program on <c>PATH</c> (with Windows' extensions), or null.</summary>
     public string? FindOnPath(string name)
     {
