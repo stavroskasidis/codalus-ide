@@ -24,6 +24,16 @@ sudo apt update &amp;&amp; sudo apt install daedalus-studio</code></pre>
 <pre><code>sudo curl -fsSL -o /etc/yum.repos.d/daedalus-studio.repo {{BASE_URL}}/rpm/daedalus-studio-stable.repo
 sudo dnf install daedalus-studio</code></pre>
 
+<h2>openSUSE (zypper)</h2>
+<pre><code>sudo rpm --import {{BASE_URL}}/daedalus-studio-packages.asc
+sudo zypper addrepo {{BASE_URL}}/rpm/daedalus-studio-stable.repo
+sudo zypper install daedalus-studio</code></pre>
+
+<h2>Arch Linux (AUR)</h2>
+<p>The <code>daedalus-studio-bin</code> package, with an AUR helper (<code>yay -S daedalus-studio-bin</code>) or by hand:</p>
+<pre><code>git clone https://aur.archlinux.org/daedalus-studio-bin.git
+cd daedalus-studio-bin &amp;&amp; makepkg -si</code></pre>
+
 <p>Other downloads (Windows, macOS, the AppImage) are on the <a href="https://github.com/stavroskasidis/daedalus-studio/releases">releases page</a>.</p>
 </body>
 </html>

@@ -1,0 +1,36 @@
+# Maintainer: Stavros Kasidis (https://github.com/stavroskasidis)
+# The AUR package of a stable release (filled in by eng/aur.sh): the published .tar.gz as it is, with the desktop
+# entry, icon and license from the release's tag. Nothing is built or stripped (the shell is a Native AOT binary, the
+# hosts are .NET assemblies).
+pkgname=daedalus-studio-bin
+pkgver={{VERSION}}
+pkgrel=1
+pkgdesc='Cross-platform, open-source IDE for .NET'
+arch=('x86_64' 'aarch64')
+url='https://github.com/stavroskasidis/daedalus-studio'
+license=('MIT')
+depends=('git' 'icu' 'fontconfig')
+optdepends=('dotnet-sdk: open, build and run solutions (required for any solution)')
+provides=('daedalus-studio')
+conflicts=('daedalus-studio')
+options=('!strip' '!debug')
+_raw="https://raw.githubusercontent.com/stavroskasidis/daedalus-studio/v${pkgver}"
+source=("daedalus-studio.desktop::${_raw}/eng/packaging/linux/daedalus-studio.desktop"
+        "daedalus-studio.png::${_raw}/assets/logo/png/daedalus-256.png"
+        "LICENSE::${_raw}/LICENSE")
+source_x86_64=("${url}/releases/download/v${pkgver}/daedalus-studio-${pkgver}-linux-x64.tar.gz")
+source_aarch64=("${url}/releases/download/v${pkgver}/daedalus-studio-${pkgver}-linux-arm64.tar.gz")
+sha256sums=('{{SHA256_DESKTOP}}'
+            '{{SHA256_ICON}}'
+            '{{SHA256_LICENSE}}')
+sha256sums_x86_64=('{{SHA256_X64}}')
+sha256sums_aarch64=('{{SHA256_ARM64}}')
+
+package() {
+  install -d "$pkgdir/opt" "$pkgdir/usr/bin"
+  cp -a daedalus-studio "$pkgdir/opt/daedalus-studio"
+  ln -s /opt/daedalus-studio/daedalus "$pkgdir/usr/bin/daedalus"
+  install -Dm644 daedalus-studio.desktop "$pkgdir/usr/share/applications/daedalus-studio.desktop"
+  install -Dm644 daedalus-studio.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/daedalus-studio.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
