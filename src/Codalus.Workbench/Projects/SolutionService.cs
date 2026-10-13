@@ -50,6 +50,9 @@ public sealed class SolutionService : IAsyncDisposable
 
     /// <summary>The build host's last line of output: why it stopped, when it did.</summary>
     public string? LastHostMessage { get; private set; }
+
+    /// <summary>Whether the build host stopped because it found no usable SDK (<see cref="NoSdkExitCode"/>), which it has said why.</summary>
+    public bool StoppedForSdk { get; private set; }
     private readonly ConcurrentDictionary<string, ProjectInfo> _projects = new(PathComparer);
     private readonly ConcurrentDictionary<string, CompilerInputsInfo> _compilerInputs = new(PathComparer);
     private readonly ConcurrentDictionary<string, string> _activeFrameworks = new(PathComparer);
@@ -171,7 +174,12 @@ public sealed class SolutionService : IAsyncDisposable
                 ConfigureConnection = Configure,
                 Initialize = InitializeAsync,
             };
-            host.Crashed += (_, e) => HostCrashed?.Invoke(this, e);
+            StoppedForSdk = false;
+            host.Crashed += (_, e) =>
+            {
+                StoppedForSdk = e.ExitCode == NoSdkExitCode;
+                HostCrashed?.Invoke(this, e);
+            };
             host.Restarted += (_, _) => HostRestarted?.Invoke(this, EventArgs.Empty);
             host.Log += (_, line) =>
             {

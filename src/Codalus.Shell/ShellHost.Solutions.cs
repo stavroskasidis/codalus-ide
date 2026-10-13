@@ -169,6 +169,20 @@ public sealed partial class ShellHost
         {
             StatusBar.ClearMessage();
             BuildHostLog.AppendLine($"[open] {path}: {ex}");
+            if (ex is JsonRpcConnectionLostException)
+            {
+                // The lost connection may be reported before the host's exit: give it a moment to say why it stopped.
+                for (var i = 0; i < 30 && !Solutions.StoppedForSdk; i++)
+                {
+                    await Task.Delay(100).ConfigureAwait(true);
+                }
+
+                if (Solutions.StoppedForSdk)
+                {
+                    return; // the build host's own reason is shown instead
+                }
+            }
+
             ReportError($"Could not open {Path.GetFileName(path)}: {ex.Message}");
         }
     }
