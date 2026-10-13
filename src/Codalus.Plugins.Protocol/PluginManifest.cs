@@ -78,6 +78,9 @@ public sealed record ManifestContributions
     /// <summary>Color themes in VS Code's format (API 1.0, M22a): no plugin code, so a declarative plugin can be one.</summary>
     public ManifestTheme[]? Themes { get; init; }
 
+    /// <summary>Debug adapters (DAP) for launch configurations of their <c>type</c> (API 1.0, M22a); no plugin code needed.</summary>
+    public ManifestDebugger[]? Debuggers { get; init; }
+
     /// <summary>Rows for the Properties window, from a command (API 0.2.8, M26, ADR 0033).</summary>
     public ManifestPropertyProvider[]? PropertyProviders { get; init; }
 
@@ -142,6 +145,19 @@ public sealed record ManifestSnippets(string Language, string Path);
 /// <c>colors</c>, <c>tokenColors</c> and <c>semanticTokenColors</c>) in the plugin's folder.
 /// </summary>
 public sealed record ManifestTheme(string Id, string Label, string UiTheme, string Path);
+
+/// <summary>
+/// A debug adapter speaking DAP over stdio: launch configurations whose <c>type</c> is <see cref="Type"/> start
+/// <see cref="Command"/> (a path in the plugin's folder, or a program on the PATH) with <see cref="Args"/>
+/// (<c>${pluginDir}</c> is the plugin's folder), and send the configuration as the <c>launch</c> request.
+/// </summary>
+public sealed record ManifestDebugger(string Type, string Label, string Command)
+{
+    public string[]? Args { get; init; }
+
+    /// <summary>Languages whose files the debugger is for (shown when there's no configuration yet).</summary>
+    public string[]? Languages { get; init; }
+}
 
 /// <summary>A language, as in VS Code's <c>contributes.languages</c>. Paths are relative to the plugin's folder.</summary>
 public sealed record ManifestLanguage(string Id)

@@ -316,6 +316,12 @@ public sealed partial class ShellHost
             return true;
         }
 
+        if (!configuration.IsBuiltIn)
+        {
+            await StartContributedDebuggerAsync(configuration, debug, variables).ConfigureAwait(true);
+            return true;
+        }
+
         LaunchPlan plan;
         string key;
         try
@@ -377,6 +383,41 @@ public sealed partial class ShellHost
         return true;
     }
 
+    /// <summary>
+    /// A launch configuration of a plugin's debugger (API 1.0, M22a): its adapter starts, and the configuration (its
+    /// variables expanded; <c>noDebug</c> for Start Without Debugging, as DAP has it) is its <c>launch</c> request.
+    /// </summary>
+    private async Task StartContributedDebuggerAsync(LaunchConfiguration configuration, bool debug, FolderVariables variables)
+    {
+        if (Plugins.Debuggers.FirstOrDefault(d => d.Type == configuration.Type) is not { } debugger)
+        {
+            Workbench.Notifications.Error($"No debugger handles '{configuration.Type}' (the launch configuration '{configuration.Name}'). A plugin that contributes one is needed.");
+            return;
+        }
+
+        var launch = FolderConfiguration.ExpandJson(configuration.Raw!.Value, variables);
+        if (!debug)
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(launch.GetRawText())!.AsObject();
+            node["noDebug"] = true;
+            using var document = System.Text.Json.JsonDocument.Parse(node.ToJsonString());
+            launch = document.RootElement.Clone();
+        }
+
+        var (program, arguments) = debugger.Start();
+        DebugLog.Clear();
+        DebugLog.AppendLine($"> {debugger.Label}: {configuration.Name}   ({program} {string.Join(' ', arguments)})".TrimEnd());
+        Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
+        try
+        {
+            await Debugger.LaunchAdapterAsync(configuration.Name, new Codalus.Debugging.DebugAdapterStartInfo(program, arguments, variables.WorkspaceFolder), launch, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or Codalus.Debugging.DapException or Codalus.Debugging.DapConnectionLostException)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.folder.couldNotStart", "Could not start '{0}': {1}", configuration.Name, ex.Message));
+        }
+    }
+
     public async Task SelectLaunchConfigurationAsync()
     {
         var configurations = LaunchConfigurations();
@@ -392,7 +433,11 @@ public sealed partial class ShellHost
         }
 
         var current = CurrentLaunchConfiguration?.Name;
-        var items = configurations.Select(c => new QuickPickItem(c.Name) { Detail = c.Type == "project" ? c.Project : c.Program, Tag = c.Name }).ToList();
+        var items = configurations.Select(c => new QuickPickItem(c.Name)
+        {
+            Detail = c.Type == "project" ? c.Project : c.IsBuiltIn ? c.Program : Plugins.Debuggers.FirstOrDefault(d => d.Type == c.Type)?.Label ?? c.Type + " (no debugger installed)",
+            Tag = c.Name,
+        }).ToList();
         var active = Math.Max(0, items.FindIndex(i => (string)i.Tag! == current));
         if (await Palette.ShowAsync(items, "Select the launch configuration", active).ConfigureAwait(true) is { Tag: string picked })
         {

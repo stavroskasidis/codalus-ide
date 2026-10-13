@@ -39,6 +39,14 @@ public interface IPluginPrompts
 /// </summary>
 public sealed record WorkspacePlacement(Func<ProcessLaunchInfo, ProcessLaunchInfo?> Place, Func<string, string> PluginPath);
 
+/// <summary>A plugin's debug adapter: the launch configuration type it serves, and how to start it (<c>dotnet</c> for a <c>.dll</c>).</summary>
+public sealed record ContributedDebugger(string Type, string Label, string Command, IReadOnlyList<string> Args, IReadOnlyList<string> Languages, string PluginId)
+{
+    /// <summary>The adapter's process: a <c>.dll</c> runs with <c>dotnet</c>.</summary>
+    public (string Program, IReadOnlyList<string> Arguments) Start() =>
+        Command.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? ("dotnet", [Command, .. Args]) : (Command, Args);
+}
+
 /// <summary>A plugin's color theme: its id (the setting's value), label, base theme (<c>light</c>, <c>dark</c> or <c>highContrast</c>) and file.</summary>
 public sealed record ContributedTheme(string Id, string Label, string Base, string File, string PluginId)
 {
@@ -331,6 +339,19 @@ public sealed class PluginManager : IAsyncDisposable
                 .Where(t => !string.IsNullOrWhiteSpace(t.Id) && !string.IsNullOrWhiteSpace(t.Path) && ContributedTheme.BaseOf(t.UiTheme) is not null)
                 .Select(t => new ContributedTheme(t.Id, string.IsNullOrWhiteSpace(t.Label) ? t.Id : t.Label, ContributedTheme.BaseOf(t.UiTheme)!, Path.Combine(p.InstallPath, t.Path), p.Id))
                 .Where(t => File.Exists(t.File)))];
+
+    /// <summary>Debug adapters of the plugins that load (API 1.0, M22a), by the launch configuration type they serve.</summary>
+    public IReadOnlyList<ContributedDebugger> Debuggers =>
+        [.. Plugins.Where(p => p.State is PluginState.Ready or PluginState.Active)
+            .SelectMany(p => (p.Manifest?.Contributes?.Debuggers ?? [])
+                .Where(d => !string.IsNullOrWhiteSpace(d.Type) && !string.IsNullOrWhiteSpace(d.Command))
+                .Select(d =>
+                {
+                    string Resolve(string text) => text.Replace("${pluginDir}", p.InstallPath, StringComparison.Ordinal);
+                    var command = Resolve(d.Command);
+                    var local = Path.Combine(p.InstallPath, command);
+                    return new ContributedDebugger(d.Type, string.IsNullOrWhiteSpace(d.Label) ? d.Type : d.Label, File.Exists(local) ? local : command, [.. (d.Args ?? []).Select(Resolve)], d.Languages ?? [], p.Id);
+                }))];
 
     /// <summary>Custom tools of the plugins that load (API 0.2.8, ADR 0035).</summary>
     public IReadOnlyList<(string PluginId, ManifestCustomTool Tool)> CustomTools =>

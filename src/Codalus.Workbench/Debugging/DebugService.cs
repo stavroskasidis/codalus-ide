@@ -205,6 +205,19 @@ public sealed class DebugService : IAsyncDisposable
 
     // ------------------------------------------------------------------ start and stop
 
+    /// <summary>
+    /// Starts a plugin's debug adapter (API 1.0, M22a) and sends <paramref name="launch"/> (the launch configuration, its
+    /// variables expanded) as its <c>launch</c> request. The session is as any other: breakpoints, stepping, the Debug
+    /// Console. Throws when the adapter doesn't start or refuses the launch.
+    /// </summary>
+    public Task LaunchAdapterAsync(string name, DebugAdapterStartInfo adapter, System.Text.Json.JsonElement launch, CancellationToken cancellationToken) =>
+        StartAsync(
+            async ct => await DebugAdapter.StartAsync(adapter, ct, Terminal).ConfigureAwait(false),
+            started => started.LaunchAsync(launch, DapJsonContext.Default.JsonElement, cancellationToken),
+            attached: false,
+            [new DebugProcess(name, null, DebugProcess.Launched, null)],
+            cancellationToken);
+
     /// <summary>Starts <paramref name="plan"/> under the debugger. Throws when no adapter is installed or the launch fails.</summary>
     public Task LaunchAsync(LaunchPlan plan, CancellationToken cancellationToken) =>
         LaunchAsync([new DebugLaunch(ProgramName(plan), plan)], cancellationToken);

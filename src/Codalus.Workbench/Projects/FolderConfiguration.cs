@@ -15,7 +15,17 @@ public sealed record FolderTask(string Label, string Type, string Command, IRead
 /// project, with its launch profile) and <c>program</c> an executable or a <c>.dll</c> (run with <c>dotnet</c>).
 /// <see cref="PreLaunchTask"/> names a task to run first.
 /// </summary>
-public sealed record LaunchConfiguration(string Name, string Type, string? Project, string? Program, IReadOnlyList<string> Args, string? Cwd, IReadOnlyDictionary<string, string> Env, string? PreLaunchTask);
+public sealed record LaunchConfiguration(string Name, string Type, string? Project, string? Program, IReadOnlyList<string> Args, string? Cwd, IReadOnlyDictionary<string, string> Env, string? PreLaunchTask)
+{
+    /// <summary>
+    /// A configuration of another type (a plugin's debugger, API 1.0): the whole object, sent to its adapter as the
+    /// <c>launch</c> request with its variables expanded.
+    /// </summary>
+    public System.Text.Json.JsonElement? Raw { get; init; }
+
+    /// <summary>A project or a program, which the IDE starts itself; anything else is a plugin's debugger's.</summary>
+    public bool IsBuiltIn => Type is "project" or "program";
+}
 
 /// <summary>What <c>${…}</c> variables expand to: the workspace folder, the active file, and its line and selection.</summary>
 public sealed record FolderVariables(string WorkspaceFolder, string? File = null, int? Line = null, string? SelectedText = null);
@@ -102,12 +112,16 @@ public static partial class FolderConfiguration
                 {
                     var name = String(item, "name");
                     var type = String(item, "type") ?? (String(item, "project") is not null ? "project" : "program");
-                    if (name is null || (type == "project" ? String(item, "project") : String(item, "program")) is null)
+                    var builtIn = type is "project" or "program";
+                    if (name is null || (builtIn && (type == "project" ? String(item, "project") : String(item, "program")) is null))
                     {
                         continue;
                     }
 
-                    configurations.Add(new LaunchConfiguration(name, type, String(item, "project"), String(item, "program"), Strings(item, "args"), String(item, "cwd"), Environment(item), String(item, "preLaunchTask")));
+                    configurations.Add(new LaunchConfiguration(name, type, String(item, "project"), String(item, "program"), Strings(item, "args"), String(item, "cwd"), Environment(item), String(item, "preLaunchTask"))
+                    {
+                        Raw = builtIn ? null : item.Clone(),
+                    });
                 }
             }
 
@@ -117,6 +131,22 @@ public static partial class FolderConfiguration
         {
             return ([], $"{path}: {ex.Message}");
         }
+    }
+
+    /// <summary>Every string in <paramref name="value"/> (a plugin debugger's configuration) with its variables expanded.</summary>
+    public static JsonElement ExpandJson(JsonElement value, FolderVariables variables)
+    {
+        static System.Text.Json.Nodes.JsonNode? Walk(System.Text.Json.Nodes.JsonNode? node, Func<string, string> expand) => node switch
+        {
+            System.Text.Json.Nodes.JsonObject o => new System.Text.Json.Nodes.JsonObject(o.Select(p => KeyValuePair.Create(p.Key, Walk(p.Value, expand)))),
+            System.Text.Json.Nodes.JsonArray a => new System.Text.Json.Nodes.JsonArray([.. a.Select(i => Walk(i, expand))]),
+            System.Text.Json.Nodes.JsonValue v when v.GetValueKind() == JsonValueKind.String => System.Text.Json.Nodes.JsonValue.Create(expand(v.GetValue<string>())),
+            _ => node?.DeepClone(),
+        };
+
+        var expanded = Walk(System.Text.Json.Nodes.JsonNode.Parse(value.GetRawText()), text => Expand(text, variables));
+        using var document = JsonDocument.Parse(expanded?.ToJsonString() ?? "null");
+        return document.RootElement.Clone();
     }
 
     /// <summary>

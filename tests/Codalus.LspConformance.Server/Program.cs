@@ -5,7 +5,14 @@ using Codalus.Rpc;
 // A scripted LSP server for the bridge tests (ADR 0016). Its results use the shapes VS Code's client accepts and the
 // shell's narrowed types don't: options objects, location links, marked strings, numeric diagnostic codes,
 // insert/replace edits, snippets, offset parameter labels, `changes` maps and bare commands among code actions.
-// Documents are "key = value" lines; a line without '=' is an error with code 42.
+// Documents are "key = value" lines; a line without '=' is an error with code 42. With --dap it is a scripted debug
+// adapter instead (ScriptedDap).
+if (args.Contains("--dap"))
+{
+    await Codalus.LspConformance.Server.ScriptedDap.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput());
+    return;
+}
+
 var connection = new JsonRpcConnection(Console.OpenStandardInput(), Console.OpenStandardOutput());
 var documents = new Dictionary<string, string>(StringComparer.Ordinal);
 var exit = new TaskCompletionSource();
