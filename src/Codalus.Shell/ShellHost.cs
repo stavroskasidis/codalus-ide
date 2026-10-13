@@ -410,6 +410,9 @@ public sealed partial class ShellHost : IAsyncDisposable
             .Append((builtIn, true));
         Plugins.AddPlugins(PluginDiscovery.Scan(roots, Workbench.Platform, Options.EnableProposedApi));
 
+        // Plugins' file icon themes (API 1.0): the setting, applied.
+        RegisterIconThemes();
+
         // Plugins' color themes (API 1.0): offered by the setting, and applied when it names one.
         if (Plugins.Themes.Count > 0)
         {

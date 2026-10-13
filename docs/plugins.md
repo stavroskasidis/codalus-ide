@@ -2,7 +2,7 @@
 
 Plugins extend Codalus IDE with commands, menus, key bindings, settings, tool windows, notifications, output channels and status bar items. This guide walks through the sample in [`samples/plugins/HelloWorld`](../samples/plugins/HelloWorld). The design and its reasons are in [ADR 0003](adr/0003-plugin-api.md), and the wire protocol is in [plugin-protocol.md](plugin-protocol.md).
 
-**API version 0.2.0.** The API is pre-1.0: a minor release (0.3) may break plugins, while patch releases (0.2.x) only add. Ask for `^0.2.0`. See the [changelog](#changelog).
+**API version 1.0.0** ([ADR 0058](adr/0058-plugin-api-1-0.md)). The API is frozen: minor releases (1.x) only add, and a member goes away only in a major release, after it has been marked obsolete (warning `CODALUS0001`) for at least two minor releases. Ask for `^1.0.0`. See the [changelog](#changelog).
 
 ## How plugins run
 
@@ -23,7 +23,7 @@ Plugins extend Codalus IDE with commands, menus, key bindings, settings, tool wi
   </PropertyGroup>
   <ItemGroup>
     <!-- The host provides the API at runtime, so it is not copied next to the plugin. -->
-    <PackageReference Include="Codalus.Plugins.Abstractions" Version="0.1.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Codalus.Plugins.Abstractions" Version="1.0.0" ExcludeAssets="runtime" />
   </ItemGroup>
   <ItemGroup>
     <None Update="codalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
@@ -31,7 +31,7 @@ Plugins extend Codalus IDE with commands, menus, key bindings, settings, tool wi
 </Project>
 ```
 
-The `Codalus.Plugins.Abstractions` package is not published yet (the repository is private until M7). Until then, reference the project directly, as the sample does.
+The `Codalus.Plugins.Abstractions` package isn't on nuget.org yet (it comes with the marketplace, M22c). Until then, reference the project directly, as the samples do.
 
 ## The manifest
 
@@ -41,7 +41,7 @@ The `Codalus.Plugins.Abstractions` package is not published yet (the repository 
   "version": "1.0.0",
   "displayName": "Hello World",
   "publisher": "codalus-samples",
-  "engines": { "codalus": "^0.1.0" },
+  "engines": { "codalus": "^1.0.0" },
   "entry": { "runtime": "dotnet", "assembly": "HelloWorld.dll" },
   "activationEvents": [ "onSettingChanged:hello.announce" ],
   "contributes": {
@@ -69,7 +69,7 @@ The `Codalus.Plugins.Abstractions` package is not published yet (the repository 
 | `version` | SemVer. |
 | `engines.codalus` | An npm-style range over the **plugin API version** (`^0.1.0`, `~0.1.2`, `>=0.1.0 <0.3.0`, `0.1.x`, `a \|\| b`). Plugins whose range doesn't include the running API are not loaded; the user is told why. |
 | `entry` | `runtime` is `dotnet`; `assembly` is the plugin DLL next to the manifest. If it contains more than one public `ICodalusPlugin`, name one with `type`. |
-| `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, `onTestProjects` (the open solution has a test project; since 0.2.1), `onHostingProvider:<id>` (the shell needs a hosting provider the plugin declares; since 0.2.7, implicit), and `onDebug` (a debug session starts; since 0.2.7). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
+| `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, `onTestProjects` (the open solution has a test project; since 0.2.1), `onHostingProvider:<id>` (the shell needs a hosting provider the plugin declares; since 0.2.7, implicit), `onDebug` (a debug session starts; since 0.2.7), and since 1.0 `onAuthenticationRequest:<id>` (a session is asked of an authentication provider the plugin declares; implicit) and `onCustomEditor:<viewType>` (a file opens in its custom editor; implicit). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
 | `isolation` | `shared` (default) or `dedicated` (a host process of its own). |
 | `runsOn` | Where the plugin runs in a remote window: `ui` (default), with the window on this machine, or `workspace`, on the machine the workspace is on (the server), next to its files and tools ([ADR 0057](adr/0057-plugin-placement.md)). |
 | `enableProposedApi` | Use [proposed APIs](#proposed-apis). Honored for built-in plugins, and for others when Codalus runs with `--enable-proposed-api`. |
@@ -83,12 +83,17 @@ A manifest string that is a whole `%key%` (VS Code's convention) is replaced whe
 - **commands:** `id`, `title`, `category` (shown as "Category: Title"), `enablement` (a when-clause; disabled commands are hidden from the palette and greyed in menus).
 - **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|edit|view|git|project|build|debug|test|analyze|tools|window|help` and, since M34a, their submenus (`menuBar/edit/goTo`, `menuBar/edit/find`, `menuBar/edit/advanced`, `menuBar/edit/intelliSense`, `menuBar/edit/refactor`, `menuBar/file/new`, `menuBar/git/branches`, `menuBar/debug/windows` and the rest named in `BuiltIns.Menus.cs`), `toolWindow/title` (buttons above a tool window), `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key; submenus `solutionExplorer/context/add`, `/git` and `/entityFramework` since M34a) `documentTab/context` (a document tab's context menu, since M34e) and `editor/context` (submenus `editor/context/git`, `/snippets`, `/outlining` and `/breakpoint` since M34a) (the code editor's context menu; its commands get the document URI and the zero-based caret line and column as arguments; since 0.2.1). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
 - **keybindings:** `key` plus optional `mac`, `linux` and `win` overrides, `command`, `when` and `args`. Chords are space-separated (`ctrl+k ctrl+h`). `primary` means ⌘ on macOS and Ctrl elsewhere. Users override bindings in the Keyboard Shortcuts editor; user bindings win over plugin bindings, which win over defaults.
-- **toolWindows:** `id`, `title`, `location` (`left`, `right`, `bottom`), `kind` (`tree` or `markdown`) and `icon`.
+- **toolWindows:** `id`, `title`, `location` (`left`, `right`, `bottom`), `kind` (`tree`, `markdown`, or since 1.0 `view`, a [declarative view](#declarative-views-and-custom-editors)) and `icon`.
 - **settings:** `title` (the Settings UI category) and `properties`, each with `type` (`string`, `boolean`, `integer`, `number`, `string[]`), `default`, `description`, `enum` and `enumDescriptions`, `minimum`/`maximum`, `scope` (`user`, or `workspace` to allow per-workspace overrides) and `order`. Invalid values in settings.json fall back to the default and are reported in the Settings UI.
 - **hostingProviders** (since 0.2.6, proposed API): Git hosting providers, `id`, `label`, `hosts` (the remotes' hosts by default; `*.example.com` matches subdomains), `serverSetting` (a setting with an enterprise server's URL, whose host counts too) and `icon`. The shell knows them before the plugin loads, and activates the plugin only when it needs the provider: to sign in, or for a repository on a host where the user is signed in. See [Proposed APIs](#proposed-apis).
 
 - **propertyProviders** (since 0.2.8): rows for the Properties window, `{ command, when }`. The command gets `{ kind, path, project }` of the Solution Explorer's selection (`kind` as in `explorerItemKind`) and returns `[{ category, name, value, description }]`; the rows are read only and show under their category (default: the plugin's name). `when` limits the selections it is asked for.
 - **externalToolMacros** (since 0.2.8): macros for External Tools' command, arguments and initial directory, `{ name, command, description }`. A tool that uses `$(name)` runs the command first; its string result replaces the macro.
+- **themes** (since 1.0): color themes in VS Code's format, `{ id, label, uiTheme, path }`. `uiTheme` is the base (`vs`, `vs-dark`, `hc-black` or `hc-light`), and the file's `colors`, `tokenColors` and `semanticTokenColors` go over it: UI colors onto the shell's tokens (`sideBar.background`, `statusBar.background`, `editor.background` and the other keys in `Theming/ThemeFiles.cs`), TextMate scopes onto the editor's token types. `id` is a value of `workbench.colorTheme`; the user's color customizations apply over it (`"[Label]"`). `samples/plugins/MidnightTheme` is one.
+- **iconThemes** (since 1.0): file icon themes in VS Code's format, `{ id, label, path }`: `iconDefinitions` (`iconPath` relative to the file), `file`, `folder`, `folderExpanded`, `fileExtensions`, `fileNames`, `folderNames` and `folderNamesExpanded`. The Solution Explorer, tabs and pickers use it when `workbench.iconTheme` is its `id`. Icons are drawn as raster images (PNG, ICO, BMP, JPEG, WebP); an SVG icon falls back to the built-in one and is named in Output → Codalus. `samples/plugins/BlockIcons` is one.
+- **debuggers** (since 1.0): debug adapters speaking DAP over stdio, `{ type, label, command, args, languages }`. `launch.json` configurations whose `type` is `type` start `command` (a file in the plugin's folder, a `.dll` running with `dotnet`, or a program on `PATH`; `${pluginDir}` is the plugin's folder), and the configuration, with `${workspaceFolder}` and the other variables expanded, is sent as the `launch` request. The session uses the debugger's windows like netcoredbg's: breakpoints, call stack, variables, the Debug Console.
+- **customEditors** (since 1.0): `{ viewType, displayName, filenamePatterns }`. Files whose names match open in the plugin's editor, a [declarative view](#declarative-views-and-custom-editors), unless the user picks Open With → Text Editor.
+- **authentication** (since 1.0): `{ id, label }` of the [authentication providers](#authentication) the plugin offers. The Accounts page lists them before the plugin loads.
 - **customTools** (since 0.2.8): custom tools (single-file generators, ADR 0035), `{ name, command, extension, description }`. A project item whose `Generator` metadata is `name` runs the command on Run Custom Tool and when it is saved: the command gets `{ path, content, namespace, project }` and returns the generated text, or `{ content, extension }`. The output is written next to the input with the extension (default `.cs`) and nested under it, as for the built-in `ResXFileCodeGenerator` and `TextTemplatingFileGenerator`.
 
 ### When-clauses
@@ -116,7 +121,7 @@ public sealed class HelloPlugin : ICodalusPlugin
 }
 ```
 
-- `IPluginContext` gives you `Commands`, `Window`, `Settings`, `Log` and `Subscriptions`. Add every registration to `Subscriptions`; they are disposed on deactivation.
+- `IPluginContext` gives you `Commands`, `Window`, `Settings`, `Log` and `Subscriptions`, and the [workbench APIs](#workbench-apis): `Tests`, `Workspace`, `Build`, `Debug`, `Terminals`, `Hosting`, `Secrets`, `FileSystems`, `Authentication` and `SourceControl`. Add every registration to `Subscriptions`; they are disposed on deactivation.
 - **Commands** take and return JSON-serializable values (`CommandInvocation.Arg<T>(i)` reads arguments). `Commands.ExecuteAsync` runs any command, including the shell's built-ins below.
 - **Window:** notifications with actions (the task completes with the chosen action, or null), `ShowQuickPickAsync` (pick from a list in the command palette) and `ShowInputBoxAsync` (ask for a line of text) since 0.1.1, output channels, status bar items, tree data providers and `SetMarkdown` for Markdown views.
 - **Settings:** `GetValue<T>(key, fallback)` and a `Changed` event (`e.Affects("section")`).
@@ -129,6 +134,28 @@ Implement `ITreeDataProvider<T>`: `GetChildrenAsync(element)` (null means the ro
 ### Markdown views
 
 `Window.SetMarkdown(viewId, markdown)` supports headings, paragraphs, bulleted and numbered lists, block quotes, fenced code, horizontal rules, `**bold**`, `*italic*`, `` `code` `` and links. Link targets are `https://…` (opened in the browser) or `command:<id>` (runs a command).
+
+### Progress
+
+`Window.WithProgressAsync(title, (progress, ct) => …, cancellable: true)` runs work as a task in the status bar, the way the IDE shows loading projects and builds: the title and the latest `ProgressReport` (a message, and a percentage when the work knows it) take the place of "Ready", with a progress bar. With `cancellable`, the bar's ✕ cancels the token passed to the work. Several tasks can run; the newest shows, and the … button lists them all.
+
+### Declarative views and custom editors
+
+A tool window of kind `view` is a declarative view (D2): the plugin describes it as a tree of `ViewNode`s and the IDE draws it with its own controls, in the theme, keyboard-accessible, with no UI code in the plugin.
+
+```csharp
+context.Window.SetView("todoboard.summary", ViewNode.Stack(
+    ViewNode.Heading("Todos"),
+    ViewNode.Row(ViewNode.TextBox("title", placeholder: "New todo"), ViewNode.Button("add", "Add", primary: true)),
+    ViewNode.Table("items", ["Done", "Title"], rows)));
+context.Subscriptions.Add(context.Window.OnViewEvent("todoboard.summary", async (e, ct) => { /* e.ElementId, e.Kind, e.Value, e.Row */ }));
+```
+
+- Elements: `Stack`, `Row`, `Heading`, `Label` (plain, `muted`, `code`), `Button`, `TextBox`, `CheckBox`, `Dropdown`, `Table`, `Toolbar` and `Separator`.
+- Events: `click`; `change` with the value (a text box when the user presses Enter or leaves it); `select` and `activate` (double-click or Enter) with a table's row.
+- Call `SetView` again to update the view. Elements keep the user's input across updates by their `Id`.
+
+A **custom editor** opens files in such a view. Declare it (`contributes.customEditors`), then `Window.RegisterCustomEditor(viewType, provider)`. The provider's `OpenAsync` gets a `CustomEditorDocument` (a view id, the path and the text) and fills the view; `SetCustomEditorText(viewId, text)` gives the file's new text, which marks the document modified, and the user saves it with Ctrl+S. `samples/plugins/TodoBoard` is a board for `*.todos.json` files and a summary tool window.
 
 ### Icons and status bar text
 
@@ -186,7 +213,7 @@ Since 0.2.4 a plugin can add a language without any code ([ADR 0016](adr/0016-la
 ```
 
 **Declarative plugins**
-- A plugin whose contributions are only languages, grammars, language servers and settings may leave out `entry`.
+- A plugin whose contributions are only languages, grammars, language servers, snippets, themes, icon themes, debuggers and settings may leave out `entry`.
 - It never loads in a plugin host, and its contributions apply as soon as it is discovered.
 
 **`languages`**
@@ -218,11 +245,11 @@ Since 0.2.5 a plugin can contribute code snippets ([ADR 0018](adr/0018-editing-r
 
 The file maps names to `{ "prefix", "body", "description" }`; `prefix` and `body` may be strings or arrays (a body array is joined with line breaks). Bodies use TextMate snippet syntax: `$1`, `${1:default}`, `${1|a,b|}`, `$0`, `$TM_SELECTED_TEXT`, `$TM_FILENAME_BASE` and the other variables VS Code defines. Snippets show in completion by prefix, in Insert Snippet, and (when the body uses the selection) in Surround With. The user's snippets with the same name win. A plugin whose only contributions are declarative (snippets, languages, grammars, language servers, settings) needs no `entry`.
 
-## Proposed APIs
+## Workbench APIs
 
-Proposed APIs are not covered by the versioning policy (ADR 0003): they may change in any release, and are meant to be proved by built-in plugins before plugin API 1.0. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. Since 0.2.1:
+These were proposed APIs in 0.2.x, proved by the built-in plugins, and are stable members of `IPluginContext` since 1.0:
 
-- **`Tests`: test controllers** (ADR 0010), modelled on VS Code's testing API. `CreateController(id, label)` returns a controller whose `Items` (a tree of `TestItem`: id, label, URI, range, traits, children) appear in the Test Explorer, with editor glyphs on the items' ranges. `CreateRunProfile(label, Run|Debug|Coverage, handler)` adds a way to run tests: the handler gets a `TestRunRequest` (included and excluded items; `Include` null means all) and a token that the user's Cancel cancels. `CreateRun(request)` reports progress: `Enqueued`, `Started`, `Passed`, `Failed`/`Errored` with `TestMessage`s (message, expected, actual, stack trace, location), `Skipped`, `AppendOutput`, `AddAttachment`, `AddCoverage` (ADR 0011), then `Complete`. Item ids are unique within a controller; changes are sent to the shell in batches.
+- **`Tests`: test controllers** (ADR 0010, since 0.2.1), modelled on VS Code's testing API. `CreateController(id, label)` returns a controller whose `Items` (a tree of `TestItem`: id, label, URI, range, traits, children) appear in the Test Explorer, with editor glyphs on the items' ranges. `CreateRunProfile(label, Run|Debug|Coverage, handler)` adds a way to run tests: the handler gets a `TestRunRequest` (included and excluded items; `Include` null means all) and a token that the user's Cancel cancels. `CreateRun(request)` reports progress: `Enqueued`, `Started`, `Passed`, `Failed`/`Errored` with `TestMessage`s (message, expected, actual, stack trace, location), `Skipped`, `AppendOutput`, `AddAttachment`, `AddCoverage` (ADR 0011), then `Complete`. Item ids are unique within a controller; changes are sent to the shell in batches.
 - **`Workspace`:** the open solution (`GetSolutionAsync`: projects with target frameworks, test project and test platform, compile files and project references), `GetProjectOutputAsync` (the build output per target framework), `FindTestCandidatesAsync` (test classes and methods found in source by the language service, before any build), `GetTypeOutlineAsync` (the type at a position and its methods), and the events `SolutionChanged` and `DocumentsChanged`.
 - **`Build`:** `BuildAsync(projects)` builds through the shell (after a build in progress; output in the Build channel and the Error List), and the `Finished` event.
 - **`Debug`:** `LaunchAsync` and `AttachAsync` start a debug session (netcoredbg, ADR 0007) and return its process id and an `Ended` task.
@@ -241,6 +268,24 @@ Since 0.2.6 ([ADR 0031](adr/0031-git-hosting-and-repository-features.md)):
 
 The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/Codalus.Plugins.GitHub`, `.AzureDevOps`, `.GitLab`, on the shared `Codalus.Plugins.Hosting`) are complete examples.
 
+New in 1.0. `samples/plugins/HelloWorld` has one of each (`MemoryFiles`, `MemoryAccounts`, `FolderScm`).
+
+### File systems
+
+`FileSystems.RegisterProvider(scheme, provider)` serves files under a scheme of the plugin's: an archive's contents, a cloud store, a database's scripts. The IDE shows them under `FileSystems.RootOf(scheme)`, a path of this machine's form (`\\codalus-plugin.invalid\<scheme>` on Windows, `/codalus-plugin/<scheme>` elsewhere), and the editor reads and saves through the provider: **Browse a Plugin's Files…** in the command palette picks one to open, and so does any path under the root. An `IFileSystemProvider` implements `StatAsync`, `ReadDirectoryAsync` and `ReadFileAsync`; the write members (`WriteFileAsync`, `CreateDirectoryAsync`, `DeleteAsync`, `RenameAsync`) default to read-only. Paths are the provider's own, `/`-separated from `/`. Throw `FileNotFoundException`, `DirectoryNotFoundException`, `UnauthorizedAccessException` or `IOException`; the IDE sees a missing file, a denied access or a failure. `NotifyChanged(scheme, paths)` reloads open editors.
+
+### Authentication
+
+A plugin can sign users in to a service for itself and for other plugins (`contributes.authentication`, then `Authentication.RegisterProvider(id, label, provider)`). An `IAuthenticationProvider` lists sessions (`GetSessionsAsync`), signs in (`CreateSessionAsync`: a browser, a device code, an input box) and signs out (`RemoveSessionAsync`); keep tokens in `Secrets`. Any plugin asks with `Authentication.GetSessionAsync(providerId, scopes, createIfNone)`: the provider's plugin activates if needed, and when another plugin asks, the user is asked to allow it (once per plugin and provider in a session). The Accounts page (Git Hosting Accounts… in the command palette) shows each provider's sessions under Other sign-ins, with Sign Out; call `NotifySessionsChanged` after a sign-in or sign-out the IDE didn't start.
+
+### Source control
+
+`SourceControl.RegisterProvider(id, label, root, provider)` adds a source control system for a folder (Mercurial, Perforce, Subversion); Git is built in. `Update(id, state)` shows its `SourceControlState`: groups of files (`Changes`, `Staged`…) with statuses, a commit box's placeholder and button label, and a short status. The Source Control Providers window (View → Other Windows) shows each provider; the commit button calls `AcceptAsync(message)`, and opening a file compares it with `GetOriginalAsync(path)`.
+
+## Proposed APIs
+
+Proposed APIs are not covered by the versioning policy: they may change in any release, and are proved by built-in plugins before they become stable. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. 1.0 has none: they all became members of `IPluginContext`. Webviews are expected to start here.
+
 ## Running and debugging
 
 1. Build the plugin.
@@ -251,6 +296,22 @@ The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/Codalus.Plugi
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 1.0.0 (M22a)
+
+The API is frozen ([ADR 0058](adr/0058-plugin-api-1-0.md)): from here, minor releases only add, and removals wait for a major release after a deprecation (`CODALUS0001`) of at least two minor releases. The public surface is recorded in `src/Codalus.Plugins.Abstractions/PublicAPI.txt`.
+
+Breaking for 0.3.0 plugins: ask for `"codalus": "^1.0.0"`, and use `context.Tests`, `context.Workspace`, `context.Build`, `context.Debug`, `context.Terminals`, `context.Hosting` and `context.Secrets` where you called `context.Proposed()`. `enableProposedApi` isn't needed for them any more.
+
+Added:
+- `IWindow.WithProgressAsync` and `ProgressReport`: [tasks in the status bar](#progress).
+- Declarative views: `ViewNode`, `ViewEvent`, `IWindow.SetView` and `OnViewEvent`, tool windows of kind `view`.
+- Custom editors: `contributes.customEditors`, `ICustomEditorProvider`, `CustomEditorDocument`, `IWindow.RegisterCustomEditor` and `SetCustomEditorText`; activation event `onCustomEditor:<viewType>`.
+- `contributes.themes` (color themes) and `contributes.iconThemes` (file icon themes, raster icons), in VS Code's formats.
+- `contributes.debuggers`: DAP adapters for launch configuration types.
+- `IPluginContext.FileSystems`: [file system providers](#file-systems).
+- `IPluginContext.Authentication` and `contributes.authentication`: [authentication providers](#authentication); activation event `onAuthenticationRequest:<id>`.
+- `IPluginContext.SourceControl`: [source control providers](#source-control).
 
 ### 0.3.0 (M39)
 

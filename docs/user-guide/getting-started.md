@@ -60,7 +60,9 @@ The Start page opens with **Get Started**: choose a color theme and a keyboard s
 2. **Trust the folder.** Opening a solution runs code from it: MSBuild evaluates its project files and imports, and restore runs NuGet targets. The first time you open a folder, Codalus IDE asks whether you trust its authors.
    - **Trust and Open** loads the projects, restores packages and starts the language service.
    - **Open Without Trusting** shows the solution's structure only, in restricted mode. You can trust it later: click "Restricted mode" in the status bar.
-3. The Solution Explorer fills in as projects are evaluated. The status bar shows the progress, the configuration (`Debug | Any CPU`), the startup project and, in a git repository, the branch.
+3. The Solution Explorer fills in as projects are evaluated. The status bar shows the progress (*Loading project 29 of 96: …* with a progress bar), the configuration (`Debug | Any CPU`), the startup project and, in a git repository, the branch.
+
+**Running tasks** (loading projects, restoring packages, builds, and plugins' work) show at the left of the status bar where "Ready" is: the newest task's text and a progress bar. **✕** cancels it, and **…** lists every running task (also the command Show Running Tasks).
 
 ## Command line
 

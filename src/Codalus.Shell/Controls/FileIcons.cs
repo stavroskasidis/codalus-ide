@@ -93,9 +93,17 @@ public static class FileIcons
     /// <summary>The solution's icon (a classic IDE's purple solution glyph).</summary>
     public const string Solution = "solution@Build";
 
+    /// <summary>A plugin's file icon theme in use (API 1.0, M22a); null for the built-in icons.</summary>
+    public static Theming.IconTheme? Theme { get; set; }
+
     /// <summary>A file's icon by its name (special names first, then the extension).</summary>
     public static string ForFile(string name)
     {
+        if (Theme?.ForFile(name) is { } themed)
+        {
+            return themed;
+        }
+
         var lower = name.ToLowerInvariant();
         string? icon = lower switch
         {
@@ -123,7 +131,8 @@ public static class FileIcons
     }
 
     /// <summary>A folder's icon by its name, open or closed.</summary>
-    public static string ForFolder(string name, bool open) => Mi + s_byFolder.GetValueOrDefault(name, "folder") + (open ? "-open" : string.Empty);
+    public static string ForFolder(string name, bool open) =>
+        Theme?.ForFolder(name, open) ?? Mi + s_byFolder.GetValueOrDefault(name, "folder") + (open ? "-open" : string.Empty);
 
     /// <summary>A project's icon from what the build host knows about it (test, web, Aspire, library, app).</summary>
     public static string ForProject(string path, ProjectInfo? info)

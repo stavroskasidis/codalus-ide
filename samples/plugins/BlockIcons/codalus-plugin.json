@@ -1,0 +1,19 @@
+{
+  "id": "codalus-samples.blockicons",
+  "version": "1.0.0",
+  "displayName": "Block Icons",
+  "publisher": "codalus-samples",
+  "description": "A sample declarative plugin: a file icon theme of plain colored blocks (PNG icons).",
+  "engines": {
+    "codalus": "^1.0.0"
+  },
+  "contributes": {
+    "iconThemes": [
+      {
+        "id": "blocks",
+        "label": "Blocks",
+        "path": "blocks-icon-theme.json"
+      }
+    ]
+  }
+}

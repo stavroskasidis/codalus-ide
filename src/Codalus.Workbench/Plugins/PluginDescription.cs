@@ -127,7 +127,7 @@ public sealed partial class PluginDescription
         {
             // Declarative: only contributions that need no plugin code (API 0.2.4, ADR 0016; snippets since 0.2.5).
             var contributes = m.Contributes;
-            if (contributes is null || (contributes.Languages is null && contributes.Grammars is null && contributes.LanguageServers is null && contributes.Settings is null && contributes.Snippets is null && contributes.Themes is null && contributes.Debuggers is null))
+            if (contributes is null || (contributes.Languages is null && contributes.Grammars is null && contributes.LanguageServers is null && contributes.Settings is null && contributes.Snippets is null && contributes.Themes is null && contributes.IconThemes is null && contributes.Debuggers is null))
             {
                 Fail("A plugin without an entry must contribute languages, grammars, language servers, snippets, themes, debuggers or settings.");
                 return;

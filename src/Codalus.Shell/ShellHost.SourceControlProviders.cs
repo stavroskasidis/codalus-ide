@@ -5,6 +5,7 @@ using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Commands;
+using Codalus.Workbench.Menus;
 using Codalus.Workbench.ToolWindows;
 
 namespace Codalus.Shell;
@@ -30,8 +31,20 @@ public sealed partial class ShellHost
 
     private SourceControlProvidersContent? _scmContent;
 
-    private void InitializeSourceControlProviders() =>
+    public const string ShowSourceControlProvidersCommand = "scm.showProviders";
+
+    private void InitializeSourceControlProviders()
+    {
         Workbench.ToolWindows.Register(new ToolWindowDescriptor(SourceControlProvidersWindow, "Source Control Providers", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "git" });
+        Workbench.Commands.Register(
+            new CommandDescriptor(ShowSourceControlProvidersCommand, "Source Control Providers", ContributionSource.Shell) { Category = "View" },
+            (_, _) =>
+            {
+                Ui.Post(() => Layout.ShowToolWindow(SourceControlProvidersWindow, focus: true));
+                return Task.FromResult<object?>(null);
+            });
+        Workbench.Menus.Add([new MenuItemRule(BuiltIns.OtherWindowsMenu, ShowSourceControlProvidersCommand, ContributionSource.Shell) { Group = "windows", Order = BuiltIns.AlphabeticalOrder("Source Control Providers") }]);
+    }
 
     private SourceControlProvidersContent SourceControlProviders() => _scmContent ??= new SourceControlProvidersContent(this);
 

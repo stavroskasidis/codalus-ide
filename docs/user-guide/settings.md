@@ -33,7 +33,9 @@ Settings you may want first:
 
 ## Themes
 
-Tools → Color Theme (`Ctrl+K Ctrl+T`): Blue, Light, Dark, High Contrast, or Follow System (Light or Dark, as the operating system is set).
+Tools → Color Theme (`Ctrl+K Ctrl+T`): Blue, Light, Dark, High Contrast, or Follow System (Light or Dark, as the operating system is set). Plugins can add color themes, which are listed with these.
+
+**File icon themes**: Options → Environment → Appearance → File Icon Theme (`workbench.iconTheme`) chooses the icons of files and folders in the Solution Explorer, tabs and pickers: the built-in ones, or a plugin's. Icon themes use VS Code's format; for now only their PNG (and other raster) icons are drawn, and SVG icons show the built-in icon instead.
 
 **Fonts and Colors** (Tools → Fonts and Colors): change any color over the theme's:
 - **Syntax**: comments, strings, keywords, numbers, types, functions and variables, or one semantic token type.

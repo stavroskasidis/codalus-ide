@@ -112,7 +112,9 @@ public sealed class PluginManager : IAsyncDisposable
 {
     // A guard against a hung plugin, generous enough for a first activation on a busy machine (a build, a CI runner).
     private static readonly TimeSpan s_activationTimeout = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan s_treeTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>How long a tree view waits for its plugin's answer; tests on loaded machines wait longer.</summary>
+    internal TimeSpan TreeTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
     /// <summary>The setting listing the ids of plugins the user turned off (M23b); it applies when the IDE starts.</summary>
     public const string DisabledSetting = "plugins.disabled";
@@ -361,6 +363,13 @@ public sealed class PluginManager : IAsyncDisposable
                 .Where(t => !string.IsNullOrWhiteSpace(t.Id) && !string.IsNullOrWhiteSpace(t.Path) && ContributedTheme.BaseOf(t.UiTheme) is not null)
                 .Select(t => new ContributedTheme(t.Id, string.IsNullOrWhiteSpace(t.Label) ? t.Id : t.Label, ContributedTheme.BaseOf(t.UiTheme)!, Path.Combine(p.InstallPath, t.Path), p.Id))
                 .Where(t => File.Exists(t.File)))];
+
+    /// <summary>File icon themes of the plugins that load (API 1.0, M22a): id, label and file.</summary>
+    public IReadOnlyList<(string Id, string Label, string File, string PluginId)> IconThemes =>
+        [.. Plugins.Where(p => p.State is PluginState.Ready or PluginState.Active)
+            .SelectMany(p => (p.Manifest?.Contributes?.IconThemes ?? [])
+                .Where(t => !string.IsNullOrWhiteSpace(t.Id) && !string.IsNullOrWhiteSpace(t.Path) && File.Exists(Path.Combine(p.InstallPath, t.Path)))
+                .Select(t => (t.Id, string.IsNullOrWhiteSpace(t.Label) ? t.Id : t.Label, Path.Combine(p.InstallPath, t.Path), p.Id)))];
 
     /// <summary>Debug adapters of the plugins that load (API 1.0, M22a), by the launch configuration type they serve.</summary>
     public IReadOnlyList<ContributedDebugger> Debuggers =>
@@ -625,7 +634,7 @@ public sealed class PluginManager : IAsyncDisposable
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(s_treeTimeout);
+        timeout.CancelAfter(TreeTimeout);
         try
         {
             var result = await host.Connection.InvokeAsync(

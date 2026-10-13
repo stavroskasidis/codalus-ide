@@ -1,0 +1,39 @@
+{
+  "iconDefinitions": {
+    "_file": {
+      "iconPath": "./icons/file.png"
+    },
+    "_csharp": {
+      "iconPath": "./icons/csharp.png"
+    },
+    "_json": {
+      "iconPath": "./icons/json.png"
+    },
+    "_folder": {
+      "iconPath": "./icons/folder.png"
+    },
+    "_folder_open": {
+      "iconPath": "./icons/folder-open.png"
+    },
+    "_folder_src": {
+      "iconPath": "./icons/folder-src.png"
+    },
+    "_markdown": {
+      "iconPath": "./icons/markdown.svg"
+    }
+  },
+  "file": "_file",
+  "folder": "_folder",
+  "folderExpanded": "_folder_open",
+  "fileExtensions": {
+    "cs": "_csharp",
+    "json": "_json",
+    "md": "_markdown"
+  },
+  "fileNames": {
+    "global.json": "_json"
+  },
+  "folderNames": {
+    "src": "_folder_src"
+  }
+}

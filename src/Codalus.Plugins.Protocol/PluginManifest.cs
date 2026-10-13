@@ -78,6 +78,9 @@ public sealed record ManifestContributions
     /// <summary>Color themes in VS Code's format (API 1.0, M22a): no plugin code, so a declarative plugin can be one.</summary>
     public ManifestTheme[]? Themes { get; init; }
 
+    /// <summary>File icon themes in VS Code's format (API 1.0, M22a; raster icons).</summary>
+    public ManifestIconTheme[]? IconThemes { get; init; }
+
     /// <summary>Debug adapters (DAP) for launch configurations of their <c>type</c> (API 1.0, M22a); no plugin code needed.</summary>
     public ManifestDebugger[]? Debuggers { get; init; }
 
@@ -151,6 +154,9 @@ public sealed record ManifestSnippets(string Language, string Path);
 /// <c>colors</c>, <c>tokenColors</c> and <c>semanticTokenColors</c>) in the plugin's folder.
 /// </summary>
 public sealed record ManifestTheme(string Id, string Label, string UiTheme, string Path);
+
+/// <summary>A file icon theme: <see cref="Id"/> is the <c>workbench.iconTheme</c> value, <see cref="Path"/> its file.</summary>
+public sealed record ManifestIconTheme(string Id, string Label, string Path);
 
 /// <summary>
 /// A custom editor: files whose names match one of <see cref="FilenamePatterns"/> (<c>*.todo.json</c>) open in it, unless

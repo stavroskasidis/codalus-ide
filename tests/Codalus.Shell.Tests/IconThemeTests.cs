@@ -1,0 +1,54 @@
+using Avalonia.Headless.XUnit;
+using Codalus.Shell.Controls;
+using Codalus.Shell.Theming;
+using Codalus.Workbench.Settings;
+
+namespace Codalus.Shell.Tests;
+
+/// <summary>File icon themes from plugins (plugin API 1.0, M22a).</summary>
+public sealed class IconThemeTests
+{
+    private static string BlockIconsDir => Path.Combine(ShellFixture.RepoRoot, "samples", "plugins", "BlockIcons");
+
+    [Fact]
+    public void A_vs_code_icon_theme_maps_names_extensions_and_folders_to_raster_icons()
+    {
+        var theme = IconTheme.Read(Path.Combine(BlockIconsDir, "blocks-icon-theme.json"));
+        string Icon(string file) => Path.GetFileName(file["img:".Length..]);
+
+        Assert.Equal("csharp.png", Icon(theme.ForFile("Program.cs")!));
+        Assert.Equal("json.png", Icon(theme.ForFile("global.json")!)); // by name
+        Assert.Equal("json.png", Icon(theme.ForFile("appsettings.Development.json")!)); // the longest extension that has one
+        Assert.Equal("file.png", Icon(theme.ForFile("README.txt")!)); // the default
+        Assert.Equal("file.png", Icon(theme.ForFile("NOTES.md")!)); // its SVG icon is skipped
+        Assert.Contains(theme.Skipped, s => s.StartsWith("_markdown", StringComparison.Ordinal));
+
+        Assert.Equal("folder-src.png", Icon(theme.ForFolder("src", open: false)!));
+        Assert.Equal("folder-src.png", Icon(theme.ForFolder("src", open: true)!));
+        Assert.Equal("folder.png", Icon(theme.ForFolder("docs", open: false)!));
+        Assert.Equal("folder-open.png", Icon(theme.ForFolder("docs", open: true)!));
+    }
+
+    [AvaloniaFact]
+    public async Task The_setting_offers_a_plugins_icon_theme_and_switches_the_file_icons()
+    {
+        await using var f = ShellFixture.Create(builtInPlugins: BlockIconsDir);
+        try
+        {
+            Assert.Contains("blocks", f.Shell.Workbench.Settings.Descriptors.Single(d => d.Key == ShellHost.IconThemeSetting).Enum!);
+            Assert.StartsWith("mi:", FileIcons.ForFile("Program.cs"), StringComparison.Ordinal);
+
+            await f.Shell.Workbench.Settings.SetAsync(ShellHost.IconThemeSetting, "blocks", SettingScope.User, CancellationToken.None);
+            await ShellFixture.PumpUntil(() => FileIcons.ForFile("Program.cs").StartsWith("img:", StringComparison.Ordinal));
+            Assert.EndsWith("csharp.png", FileIcons.ForFile("Program.cs"), StringComparison.Ordinal);
+            Assert.EndsWith("folder-src.png", FileIcons.ForFolder("src", open: false), StringComparison.Ordinal);
+
+            await f.Shell.Workbench.Settings.SetAsync(ShellHost.IconThemeSetting, "default", SettingScope.User, CancellationToken.None);
+            await ShellFixture.PumpUntil(() => FileIcons.ForFile("Program.cs").StartsWith("mi:", StringComparison.Ordinal));
+        }
+        finally
+        {
+            FileIcons.Theme = null; // static: leave the built-in icons for the other tests
+        }
+    }
+}

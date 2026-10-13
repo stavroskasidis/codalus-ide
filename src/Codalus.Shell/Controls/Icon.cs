@@ -44,8 +44,44 @@ public sealed class Icon : Control
         ActualThemeVariantChanged += (_, _) => InvalidateVisual();
     }
 
+    private static readonly Dictionary<string, Avalonia.Media.Imaging.Bitmap?> s_images = new(StringComparer.Ordinal);
+
+    /// <summary>A plugin icon theme's raster icon (<c>img:&lt;path&gt;</c>), loaded once.</summary>
+    private static Avalonia.Media.Imaging.Bitmap? Image(string path)
+    {
+        lock (s_images)
+        {
+            if (!s_images.TryGetValue(path, out var bitmap))
+            {
+                try
+                {
+                    bitmap = new Avalonia.Media.Imaging.Bitmap(path);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+                {
+                    bitmap = null;
+                }
+
+                s_images[path] = bitmap;
+            }
+
+            return bitmap;
+        }
+    }
+
     public override void Render(DrawingContext context)
     {
+        if (Kind is { } image && image.StartsWith("img:", StringComparison.Ordinal))
+        {
+            if (Image(image[4..]) is { } bitmap)
+            {
+                var side = Math.Min(Bounds.Width, Bounds.Height);
+                context.DrawImage(bitmap, new Rect((Bounds.Width - side) / 2, (Bounds.Height - side) / 2, side, side));
+            }
+
+            return;
+        }
+
         if (Foreground is not { } brush)
         {
             return;

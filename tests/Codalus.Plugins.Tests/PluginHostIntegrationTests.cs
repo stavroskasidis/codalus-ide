@@ -41,7 +41,10 @@ public sealed class PluginHostIntegrationTests : IAsyncLifetime
         paths.EnsureCreated();
         _workbench = new WorkbenchServices(paths, PlatformInfo.Current, watchFiles: false);
         _manager = new PluginManager(_workbench, _ => ProcessLaunchInfo.FromPath(HostAssembly), "test",
-            new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50), MaxRestarts = 2 });
+            new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50), MaxRestarts = 2 })
+        {
+            TreeTimeout = s_timeout, // a host just started on a busy CI runner can take longer than the shell's guard
+        };
         _manager.AddPlugins(PluginDiscovery.Scan([(HelloWorldDir, false)], PlatformInfo.Current));
         return ValueTask.CompletedTask;
     }

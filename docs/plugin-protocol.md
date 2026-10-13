@@ -1,4 +1,4 @@
-# Shell ↔ plugin host protocol (v0.2)
+# Shell ↔ plugin host protocol (v0.2, plugin API 1.0)
 
 This is the transport between the shell and `codalus-pluginhost`: **JSON-RPC 2.0** over stdio, framed with LSP `Content-Length` headers, the same framing as `docs/protocol.md`. Requests flow in both directions. Parameters are a single camelCase object. Cancellation uses `$/cancelRequest`. The design decisions are in [ADR 0003](adr/0003-plugin-api.md). The C# contracts live in `src/Codalus.Plugins.Protocol`.
 
@@ -119,6 +119,61 @@ Since API 0.2.6 (protocol 0.2), [ADR 0031](adr/0031-git-hosting-and-repository-f
 
 A `pullRequest` is `{number, title, author, sourceBranch, targetBranch, webUrl, reference, isDraft, state, createdAt?, updatedAt?, sourceCommit?, sourceRepository?, sourceCloneUrl?, reviewers}`; `sourceRepository` is set for a fork's pull request. Thread paths are relative to the repository, with forward slashes; lines are one-based in the pull request's version of the file.
 
+## API 1.0 (M22a)
+
+Progress, declarative views and custom editors ([plugins.md](plugins.md#progress)):
+
+| Method | Direction | Kind | Params → Result |
+|---|---|---|---|
+| `window/progressStart` | host → shell | notification | `{pluginId, id, title, cancellable}`: a task in the status bar |
+| `window/progressReport` | host → shell | notification | `{pluginId, id, message?, percent?}` |
+| `window/progressEnd` | host → shell | notification | `{pluginId, id}` |
+| `window/progressCancel` | shell → host | notification | `{pluginId, id}`: the user cancelled the task |
+| `view/set` | host → shell | notification | `{pluginId, viewId, root}`: a declarative view's content; `root` is a view node |
+| `view/event` | shell → host | request | `{viewId, elementId, kind: click\|change\|select\|activate, value?, row?}` → `{}` |
+| `customEditor/open` | shell → host | request | `{viewType, viewId, path, text}` → `{}`: the plugin fills `viewId` with `view/set` |
+| `customEditor/close` | shell → host | notification | `{viewId}` |
+| `customEditor/setText` | host → shell | notification | `{pluginId, viewId, text}`: the document's new text (it shows as modified) |
+
+A view node is `{kind, id?, text?, style?, value?, placeholder?, checked?, disabled, options?, columns?, rows?: string[][], children?, orientation?}`, `kind` one of `stack`, `text`, `button`, `textbox`, `checkbox`, `dropdown`, `table`, `toolbar` and `separator`.
+
+File system providers:
+
+| Method | Direction | Kind | Params → Result |
+|---|---|---|---|
+| `fs/register`, `fs/unregister` | host → shell | notification | `{pluginId, scheme}` |
+| `fs/changed` | host → shell | notification | `{scheme, paths, kind: created\|changed\|deleted}` |
+| `fs/stat` | shell → host | request | `{scheme, path}` → `{exists, isDirectory, size, modified}` |
+| `fs/readDirectory` | shell → host | request | `{scheme, path}` → `{entries: [{name, isDirectory, size, modified}]}` |
+| `fs/readFile` | shell → host | request | `{scheme, path}` → `{content}` (base64) |
+| `fs/writeFile` | shell → host | request | `{scheme, path, content}` → `{}` |
+| `fs/createDirectory` | shell → host | request | `{scheme, path}` → `{}` |
+| `fs/delete` | shell → host | request | `{scheme, path, recursive}` → `{}` |
+| `fs/rename` | shell → host | request | `{scheme, path, target, overwrite}` → `{}` |
+
+Authentication providers:
+
+| Method | Direction | Kind | Params → Result |
+|---|---|---|---|
+| `auth/register` | host → shell | notification | `{pluginId, providerId, label}` |
+| `auth/unregister`, `auth/sessionsChanged` | host → shell | notification | `{pluginId, providerId, label}` |
+| `auth/getSession` | host → shell | request | `{pluginId, providerId, scopes, createIfNone}` → `{session?}`: the shell asks the user's consent when the provider is another plugin's, activates the provider's plugin and asks it |
+| `auth/getSessions` | shell → host | request | `{providerId, scopes?}` → `{sessions: [session]}` |
+| `auth/createSession` | shell → host | request | `{providerId, scopes}` → `{session}` |
+| `auth/removeSession` | shell → host | request | `{providerId, sessionId}` → `{}` |
+
+A `session` is `{id, accessToken, account, scopes}`.
+
+Source control providers:
+
+| Method | Direction | Kind | Params → Result |
+|---|---|---|---|
+| `scm/register` | host → shell | notification | `{pluginId, providerId, label, root}` |
+| `scm/update` | host → shell | notification | `{providerId, groups: [{id, label, resources: [{path, status, tooltip?}]}], inputPlaceholder?, acceptLabel?, status?}` |
+| `scm/unregister` | host → shell | notification | `{pluginId, providerId, label, root}` |
+| `scm/accept` | shell → host | request | `{providerId, message}` → `{}` |
+| `scm/original` | shell → host | request | `{providerId, path}` → `{text?}` |
+
 ## Errors
 
 These are JSON-RPC error codes. `-32601` means the method was not found. Codalus-specific codes:
@@ -132,3 +187,6 @@ These are JSON-RPC error codes. `-32601` means the method was not found. Codalus
 - `-33011`: the hosting provider doesn't support the request
 - `-33012`: the host refused or failed (the message says why)
 - `-33013`: no hosting provider with that id is registered
+- `-33100`: no such file or directory (file system providers, API 1.0)
+- `-33101`: access denied, or a read-only file system
+- `-33102`: the provider failed (the message says why)
