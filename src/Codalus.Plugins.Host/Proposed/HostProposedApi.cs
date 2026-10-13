@@ -20,9 +20,12 @@ internal sealed class ProposedHost : IDisposable
         _server = server;
         Tests = new HostTestRegistry(server);
         Hosting = new HostHostingRegistry(server);
+        Ai = new HostAiRegistry(server);
     }
 
     public HostTestRegistry Tests { get; }
+
+    public HostAiRegistry Ai { get; }
 
     public HostHostingRegistry Hosting { get; }
 
@@ -39,6 +42,7 @@ internal sealed class ProposedHost : IDisposable
         var json = PluginJsonContext.Default;
         var connection = _server.Connection;
         Hosting.RegisterHandlers(connection);
+        Ai.RegisterHandlers(connection);
         connection.OnRequest(ProposedMethods.TestsRun, json.TestRunParams, json.TestRunResultDto, async (p, ct) =>
             new TestRunResultDto([.. await Tests.RunAsync(p, ct).ConfigureAwait(false)]));
         connection.OnRequest(ProposedMethods.TestsRefresh, json.TestControllerIdParams, json.EmptyResult, async (p, ct) =>
@@ -270,6 +274,9 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
     }
 
     public ITests Tests => this;
+
+    /// <summary>AI model providers (M28a).</summary>
+    public IAi Ai => new PluginAi(_host.Ai, _pluginId);
 
     public IWorkspace Workspace => this;
 

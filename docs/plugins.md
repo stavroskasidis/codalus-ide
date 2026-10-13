@@ -105,6 +105,7 @@ A manifest string that is a whole `%key%` (VS Code's convention) is replaced whe
 - **iconThemes** (since 1.0): file icon themes in VS Code's format, `{ id, label, path }`: `iconDefinitions` (`iconPath` relative to the file), `file`, `folder`, `folderExpanded`, `fileExtensions`, `fileNames`, `folderNames` and `folderNamesExpanded`. The Solution Explorer, tabs and pickers use it when `workbench.iconTheme` is its `id`. Raster icons (PNG, ICO, BMP, JPEG, WebP) are drawn as they are. SVG icons (since M22b) are converted once, outside the IDE's process, into vector drawings like the IDE's own icons; an SVG using more than paths and groups with fills falls back to the built-in icon and is named in Output → Codalus. `samples/plugins/BlockIcons` is one.
 - **debuggers** (since 1.0): debug adapters speaking DAP over stdio, `{ type, label, command, args, languages }`. `launch.json` configurations whose `type` is `type` start `command` (a file in the plugin's folder, a `.dll` running with `dotnet`, or a program on `PATH`; `${pluginDir}` is the plugin's folder), and the configuration, with `${workspaceFolder}` and the other variables expanded, is sent as the `launch` request. The session uses the debugger's windows like netcoredbg's: breakpoints, call stack, variables, the Debug Console.
 - **customEditors** (since 1.0): `{ viewType, displayName, filenamePatterns }`. Files whose names match open in the plugin's editor, a [declarative view](#declarative-views-and-custom-editors), unless the user picks Open With → Text Editor.
+- **aiProviders** (since M28a, proposed): `{ id, label }` of the [AI model providers](#proposed-apis) the plugin offers. The `ai.provider` setting lists them before the plugin loads.
 - **authentication** (since 1.0): `{ id, label }` of the [authentication providers](#authentication) the plugin offers. The Accounts page lists them before the plugin loads.
 - **customTools** (since 0.2.8): custom tools (single-file generators, ADR 0035), `{ name, command, extension, description }`. A project item whose `Generator` metadata is `name` runs the command on Run Custom Tool and when it is saved: the command gets `{ path, content, namespace, project }` and returns the generated text, or `{ content, extension }`. The output is written next to the input with the extension (default `.cs`) and nested under it, as for the built-in `ResXFileCodeGenerator` and `TextTemplatingFileGenerator`.
 
@@ -296,7 +297,12 @@ A plugin can sign users in to a service for itself and for other plugins (`contr
 
 ## Proposed APIs
 
-Proposed APIs are not covered by the versioning policy: they may change in any release, and are proved by built-in plugins before they become stable. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. 1.0 has none: they all became members of `IPluginContext`. Webviews are expected to start here.
+Proposed APIs are not covered by the versioning policy: they may change in any release, and are proved by built-in plugins before they become stable. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. The APIs of 0.2.x all became members of `IPluginContext` in 1.0. Webviews are expected to start here.
+
+**`Ai`: AI model providers** (since M28a, [ADR 0062](adr/0062-ai-providers-and-data-boundaries.md)).
+- Declare the provider (`contributes.aiProviders`: `{ id, label }`), then `context.Proposed().Ai.RegisterModelProvider(id, label, provider)` when the plugin activates. It activates when the user picks the provider (`onAiProvider:<id>`, implicit).
+- An `IAiModelProvider` lists its models (`GetModelsAsync`) and streams an answer to an `AiChatRequest` (the model and the messages, the IDE's system message first) as an `IAsyncEnumerable<string>`. `ConfigureAsync` asks for what it needs: a key with `InputBoxOptions.Password`, kept in `Secrets`.
+- The IDE decides what a request carries: the user's attachments, without secrets or ignored files. The provider only carries it to its endpoint. The built-in `Codalus.Plugins.Ai` (OpenAI-compatible endpoints and Anthropic) is a complete example.
 
 ## Testing plugins
 
@@ -346,6 +352,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### 1.1.0 (M28a)
+
+Additive: `InputBoxOptions.Password` hides what is typed (a key, a password). The proposed `IProposedApi.Ai` (AI model providers) and the manifest's `contributes.aiProviders` are new.
 
 ### M22c (no API version change)
 

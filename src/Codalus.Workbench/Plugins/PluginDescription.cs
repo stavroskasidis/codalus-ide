@@ -286,6 +286,15 @@ public sealed partial class PluginDescription
             }
         }
 
+        // Using a contributed AI provider activates its plugin (M28a).
+        foreach (var provider in c?.AiProviders ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(provider.Id))
+            {
+                events.Add("onAiProvider:" + provider.Id);
+            }
+        }
+
         // A session asked of a contributed authentication provider activates its plugin (API 1.0).
         foreach (var provider in c?.Authentication ?? [])
         {

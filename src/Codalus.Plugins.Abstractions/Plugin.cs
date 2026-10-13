@@ -10,7 +10,7 @@ public static class PluginApi
     /// only add to the API and a member goes away only after a major version, deprecated first with the
     /// <see cref="DeprecationDiagnostic"/> warning (ADR 0003, docs/plugins.md#changelog).
     /// </summary>
-    public const string Version = "1.0.0";
+    public const string Version = "1.1.0";
 
     /// <summary>The diagnostic id of deprecated API members (<c>[Obsolete(..., DiagnosticId = "CODALUS0001")]</c>).</summary>
     public const string DeprecationDiagnostic = "CODALUS0001";
@@ -376,6 +376,9 @@ public sealed record InputBoxOptions(string Title)
 
     /// <summary>The initial text.</summary>
     public string? Value { get; init; }
+
+    /// <summary>Hides what is typed: a key or a password (since 1.1).</summary>
+    public bool Password { get; init; }
 }
 
 /// <summary>What a task reports: a message, and how far it is (0 to 100). A null keeps the previous value.</summary>

@@ -174,6 +174,18 @@ Source control providers:
 | `scm/accept` | shell → host | request | `{providerId, message}` → `{}` |
 | `scm/original` | shell → host | request | `{providerId, path}` → `{text?}` |
 
+## AI providers (proposed, M28a)
+
+| Method | Direction | Kind | Params → Result |
+|---|---|---|---|
+| `ai/register`, `ai/unregister` | host → shell | notification | `{pluginId, providerId, label}` |
+| `ai/models` | shell → host | request | `{providerId}` → `{models: [{id, label}]}` |
+| `ai/configure` | shell → host | request | `{providerId}` → `{configured}` |
+| `ai/chat` | shell → host | request | `{providerId, streamId, model, messages: [{role, content}], maxTokens?}` → `{chunks}` |
+| `ai/chunk` | host → shell | notification | `{streamId, index, text}`: a piece of the answer, numbered from 0 |
+
+The host sends every chunk before answering `ai/chat`. The shell handles notifications concurrently, so it orders chunks by `index` and waits until it has handled `chunks` of them.
+
 ## Errors
 
 These are JSON-RPC error codes. `-32601` means the method was not found. Codalus-specific codes:

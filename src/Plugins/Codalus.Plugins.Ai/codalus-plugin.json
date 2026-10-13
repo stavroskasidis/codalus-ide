@@ -1,0 +1,34 @@
+{
+  "id": "codalus.ai",
+  "version": "0.1.0",
+  "displayName": "AI Providers",
+  "publisher": "codalus",
+  "description": "OpenAI-compatible endpoints (OpenAI, or a local server such as Ollama, LM Studio or vLLM) and Anthropic, for the IDE's AI features. Nothing is sent until you turn AI on and choose a provider.",
+  "engines": { "codalus": "^1.1.0" },
+  "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.Ai.dll" },
+  "enableProposedApi": true,
+  "permissions": ["network", "secrets"],
+  "contributes": {
+    "aiProviders": [
+      { "id": "openai", "label": "OpenAI-compatible" },
+      { "id": "anthropic", "label": "Anthropic" }
+    ],
+    "settings": {
+      "title": "AI Providers",
+      "properties": {
+        "ai.openai.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "The OpenAI-compatible endpoint: https://api.openai.com/v1, or a local server's, such as http://localhost:11434/v1 (Ollama) or http://localhost:1234/v1 (LM Studio).",
+          "scope": "user"
+        },
+        "ai.anthropic.baseUrl": {
+          "type": "string",
+          "default": "https://api.anthropic.com",
+          "description": "Anthropic's API.",
+          "scope": "user"
+        }
+      }
+    }
+  }
+}

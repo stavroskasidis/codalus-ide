@@ -50,6 +50,7 @@
     <Project Path="src/Plugins/Codalus.Plugins.AzureDevOps/Codalus.Plugins.AzureDevOps.csproj" />
     <Project Path="src/Plugins/Codalus.Plugins.DotNetTest/Codalus.Plugins.DotNetTest.csproj" />
     <Project Path="src/Plugins/Codalus.Plugins.GitHub/Codalus.Plugins.GitHub.csproj" />
+    <Project Path="src/Plugins/Codalus.Plugins.Ai/Codalus.Plugins.Ai.csproj" />
     <Project Path="src/Plugins/Codalus.Plugins.GitLab/Codalus.Plugins.GitLab.csproj" />
     <Project Path="src/Plugins/Codalus.Plugins.Hosting/Codalus.Plugins.Hosting.csproj" />
     <Project Path="src/Plugins/Codalus.Plugins.Templates/Codalus.Plugins.Templates.csproj" />

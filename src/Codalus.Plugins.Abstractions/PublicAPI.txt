@@ -369,6 +369,7 @@ class Codalus.Plugins.InputBoxOptions
   Equals(Codalus.Plugins.InputBoxOptions other) -> System.Boolean
   Equals(System.Object obj) -> System.Boolean
   GetHashCode() -> System.Int32
+  Password { get; init; } : System.Boolean
   Prompt { get; init; } : System.String
   Title { get; init; } : System.String
   ToString() -> System.String
@@ -452,7 +453,7 @@ class Codalus.Plugins.ParameterOutline
   Type { get; init; } : System.String
 static class Codalus.Plugins.PluginApi
   DeprecationDiagnostic : System.String = CODALUS0001
-  Version : System.String = 1.0.0
+  Version : System.String = 1.1.0
 class Codalus.Plugins.PluginInfo
   .ctor(System.String Id, System.String Version, System.String InstallPath)
   Deconstruct(ref System.String Id, ref System.String Version, ref System.String InstallPath) -> System.Void
@@ -499,7 +500,42 @@ class Codalus.Plugins.ProjectOutput
   TargetFramework { get; init; } : System.String
   TargetPath { get; init; } : System.String
   ToString() -> System.String
+class Codalus.Plugins.Proposed.AiChatRequest
+  .ctor(System.String Model, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.AiMessage> Messages)
+  Deconstruct(ref System.String Model, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.AiMessage> Messages) -> System.Void
+  Equals(Codalus.Plugins.Proposed.AiChatRequest other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  MaxTokens { get; init; } : System.Nullable<System.Int32>
+  Messages { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.AiMessage>
+  Model { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.Proposed.AiMessage
+  .ctor(System.String Role, System.String Content)
+  Content { get; init; } : System.String
+  Deconstruct(ref System.String Role, ref System.String Content) -> System.Void
+  Equals(Codalus.Plugins.Proposed.AiMessage other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Role { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.Proposed.AiModel
+  .ctor(System.String Id, System.String Label)
+  Deconstruct(ref System.String Id, ref System.String Label) -> System.Void
+  Equals(Codalus.Plugins.Proposed.AiModel other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  Label { get; init; } : System.String
+  ToString() -> System.String
+interface Codalus.Plugins.Proposed.IAi
+  RegisterModelProvider(System.String id, System.String label, Codalus.Plugins.Proposed.IAiModelProvider provider) -> System.IDisposable
+interface Codalus.Plugins.Proposed.IAiModelProvider
+  ChatAsync(Codalus.Plugins.Proposed.AiChatRequest request, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<System.String>
+  ConfigureAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Boolean>
+  GetModelsAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.AiModel>>
 interface Codalus.Plugins.Proposed.IProposedApi
+  Ai { get; } : Codalus.Plugins.Proposed.IAi
 interface Codalus.Plugins.Proposed.IProposedApiProvider
   Proposed { get; } : Codalus.Plugins.Proposed.IProposedApi
 static class Codalus.Plugins.Proposed.ProposedApiExtensions

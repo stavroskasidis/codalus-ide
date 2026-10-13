@@ -11,6 +11,8 @@ namespace Codalus.Plugins.Proposed;
 /// </summary>
 public interface IProposedApi
 {
+    /// <summary>AI model providers (M28a, ADR 0062).</summary>
+    IAi Ai => throw new NotSupportedException("This context has no AI providers.");
 }
 
 /// <summary>Implemented by plugin contexts that can offer proposed APIs.</summary>

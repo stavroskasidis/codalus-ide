@@ -21,7 +21,8 @@ Codalus IDE is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linu
 17. [Keyboard shortcuts on each operating system: completion keys, and the shortcuts Windows, Linux and macOS keep](keyboard.md)
 18. [Avalonia: XAML editing, the XAML Previewer, the Live Visual Tree and Live Property Explorer, new Avalonia projects](avalonia.md)
 19. [Remote development: SSH, WSL, containers and Dev Containers](remote.md)
-20. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
+20. [AI assistance: providers, what is sent, the chat](ai.md)
+21. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md), with the [API reference](plugin-api.md).
 

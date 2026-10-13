@@ -96,6 +96,9 @@ public sealed record ManifestContributions
     /// <summary>Authentication providers (API 1.0, M22a): the plugin activates when a session is asked of one (<c>onAuthenticationRequest:&lt;id&gt;</c>).</summary>
     public ManifestAuthentication[]? Authentication { get; init; }
 
+    /// <summary>AI model providers (proposed, M28a): the plugin activates when one is used (<c>onAiProvider:&lt;id&gt;</c>).</summary>
+    public ManifestAiProvider[]? AiProviders { get; init; }
+
     /// <summary>Rows for the Properties window, from a command (API 0.2.8, M26, ADR 0033).</summary>
     public ManifestPropertyProvider[]? PropertyProviders { get; init; }
 
@@ -172,6 +175,9 @@ public sealed record ManifestCustomEditor(string ViewType, string DisplayName, s
 
 /// <summary>An authentication provider the plugin offers: its id and the name users see.</summary>
 public sealed record ManifestAuthentication(string Id, string Label);
+
+/// <summary>An AI model provider the plugin offers (M28a): its id (the setting <c>ai.provider</c>) and the name users see.</summary>
+public sealed record ManifestAiProvider(string Id, string Label);
 
 /// <summary>
 /// A debug adapter speaking DAP over stdio: launch configurations whose <c>type</c> is <see cref="Type"/> start
@@ -411,4 +417,11 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(HostingPublishParams))]
 [JsonSerializable(typeof(PublishedRepositoryDto))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
+[JsonSerializable(typeof(AiProviderParams))]
+[JsonSerializable(typeof(AiProviderIdParams))]
+[JsonSerializable(typeof(AiModelsResult))]
+[JsonSerializable(typeof(AiConfigureResult))]
+[JsonSerializable(typeof(AiChatParams))]
+[JsonSerializable(typeof(AiChunkParams))]
+[JsonSerializable(typeof(AiChatResult))]
 public sealed partial class PluginJsonContext : JsonSerializerContext;

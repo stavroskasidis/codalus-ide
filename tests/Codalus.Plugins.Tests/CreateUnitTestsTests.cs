@@ -96,6 +96,6 @@ public sealed class CreateUnitTestsTests(DotNetTestFixture fixture)
         public Task<int?> PickAsync(IReadOnlyList<QuickPickItemDto> items, string? placeholder, string source, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(items.Select((item, index) => (item, index)).First(x => x.item.Label == label).index);
 
-        public Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+        public Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken, bool password = false) => Task.FromResult<string?>(null);
     }
 }

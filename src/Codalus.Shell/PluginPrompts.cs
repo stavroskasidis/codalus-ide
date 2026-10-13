@@ -22,10 +22,16 @@ internal sealed class PluginPrompts(ShellHost shell) : IPluginPrompts
             return picked?.Tag as int?;
         }).Unwrap();
 
-    public Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken) =>
+    public Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken, bool password = false) =>
         Ui.RunAsync(async () =>
         {
             using var registration = cancellationToken.Register(() => Ui.Post(shell.Dialogs.Cancel));
-            return await shell.Dialogs.InputAsync(title, prompt ?? source, value ?? string.Empty).ConfigureAwait(true);
+            if (!password)
+            {
+                return await shell.Dialogs.InputAsync(title, prompt ?? source, value ?? string.Empty).ConfigureAwait(true);
+            }
+
+            var result = await shell.Dialogs.ShowAsync(new DialogRequest(title, prompt ?? source, ["OK", "Cancel"]) { Input = value ?? string.Empty, IsPassword = true }).ConfigureAwait(true);
+            return result.Button == "OK" ? result.Input : null;
         }).Unwrap();
 }

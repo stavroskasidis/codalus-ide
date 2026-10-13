@@ -1,6 +1,6 @@
 # Plugin API reference
 
-The plugin API, version 1.0.0: every public type and member of `Codalus.Plugins.Abstractions`, from its documentation comments. How to write a plugin is in the [plugin guide](../plugins.md); this page is generated from the API and checked by its tests, so it matches the version it names.
+The plugin API, version 1.1.0: every public type and member of `Codalus.Plugins.Abstractions`, from its documentation comments. How to write a plugin is in the [plugin guide](../plugins.md); this page is generated from the API and checked by its tests, so it matches the version it names.
 
 ## Codalus.Plugins
 
@@ -113,6 +113,11 @@ The plugin API, version 1.0.0: every public type and member of `Codalus.Plugins.
 
 ## Codalus.Plugins.Proposed
 
+- [`AiChatRequest`](#aichatrequest)
+- [`AiMessage`](#aimessage)
+- [`AiModel`](#aimodel)
+- [`IAi`](#iai)
+- [`IAiModelProvider`](#iaimodelprovider)
 - [`IProposedApi`](#iproposedapi)
 - [`IProposedApiProvider`](#iproposedapiprovider)
 - [`ProposedApiExtensions`](#proposedapiextensions)
@@ -822,6 +827,7 @@ What `IWindow.ShowInputBoxAsync` asks. Since API 0.1.1.
 | Member | Description |
 |---|---|
 | `InputBoxOptions(string Title)` | What `IWindow.ShowInputBoxAsync` asks. Since API 0.1.1. |
+| `bool Password { get; init; }` | Hides what is typed: a key or a password (since 1.1). |
 | `string? Prompt { get; init; }` | Explanatory text under the title. |
 | `string Title { get; init; }` | The question, for example "Project name". |
 | `string? Value { get; init; }` | The initial text. |
@@ -938,7 +944,7 @@ Constants of this version of the plugin API.
 | Member | Description |
 |---|---|
 | `const string DeprecationDiagnostic = "CODALUS0001"` | The diagnostic id of deprecated API members (`[Obsolete(..., DiagnosticId = "CODALUS0001")]`). |
-| `const string Version = "1.0.0"` | The API version that a plugin's `engines.codalus` range is checked against. Since 1.0 (M22a), minor versions only add to the API and a member goes away only after a major version, deprecated first with the `PluginApi.DeprecationDiagnostic` warning (ADR 0003, docs/plugins.md#changelog). |
+| `const string Version = "1.1.0"` | The API version that a plugin's `engines.codalus` range is checked against. Since 1.0 (M22a), minor versions only add to the API and a member goes away only after a major version, deprecated first with the `PluginApi.DeprecationDiagnostic` warning (ADR 0003, docs/plugins.md#changelog). |
 
 ### `PluginInfo`
 
@@ -1609,11 +1615,74 @@ The open solution. `WorkspaceSolution.SdkPath` is the .NET SDK folder MSBuild us
 | `string? SdkPath { get; init; }` | The .NET SDK folder MSBuild uses. |
 | `bool Trusted { get; init; }` | Whether the user trusts its folder (only then are projects evaluated). |
 
+### `AiChatRequest`
+
+`record Codalus.Plugins.Proposed.AiChatRequest`
+
+A chat request: the model and the conversation so far, the newest message last.
+
+| Member | Description |
+|---|---|
+| `AiChatRequest(string Model, IReadOnlyList<AiMessage> Messages)` | A chat request: the model and the conversation so far, the newest message last. |
+| `int? MaxTokens { get; init; }` | The most tokens the answer may use, when the user set a limit. |
+| `IReadOnlyList<AiMessage> Messages { get; init; }` | The conversation, with the IDE's system message first. |
+| `string Model { get; init; }` | One of the provider's `AiModel.Id`s. |
+
+### `AiMessage`
+
+`record Codalus.Plugins.Proposed.AiMessage`
+
+A message of a conversation.
+
+| Member | Description |
+|---|---|
+| `AiMessage(string Role, string Content)` | A message of a conversation. |
+| `string Content { get; init; }` | Its text. |
+| `string Role { get; init; }` | `system`, `user` or `assistant`. |
+
+### `AiModel`
+
+`record Codalus.Plugins.Proposed.AiModel`
+
+A model a provider offers.
+
+| Member | Description |
+|---|---|
+| `AiModel(string Id, string Label)` | A model a provider offers. |
+| `string Id { get; init; }` | The id the provider's API takes. |
+| `string Label { get; init; }` | The name the user sees. |
+
+### `IAi`
+
+`interface Codalus.Plugins.Proposed.IAi`
+
+AI model providers (proposed, M28a).
+
+| Member | Description |
+|---|---|
+| `IDisposable RegisterModelProvider(string id, string label, IAiModelProvider provider)` | Offers `provider` as `id` (the setting `ai.provider`) until disposed. |
+
+### `IAiModelProvider`
+
+`interface Codalus.Plugins.Proposed.IAiModelProvider`
+
+A source of AI models (proposed, M28a, ADR 0062): a vendor's API or a local server. The IDE decides what is sent; the provider only carries it. Keep keys in `IPluginContext.Secrets`.
+
+| Member | Description |
+|---|---|
+| `IAsyncEnumerable<string> ChatAsync(AiChatRequest request, CancellationToken cancellationToken)` | Streams the answer to `request`, a piece of text at a time. |
+| `Task<bool> ConfigureAsync(CancellationToken cancellationToken)` | Asks the user for what it needs (a key, a server's address); returns whether it is configured now. |
+| `Task<IReadOnlyList<AiModel>> GetModelsAsync(CancellationToken cancellationToken)` | The models it offers now (an empty list when it isn't configured). |
+
 ### `IProposedApi`
 
 `interface Codalus.Plugins.Proposed.IProposedApi`
 
 Proposed APIs (ADR 0003): not yet covered by the versioning policy and free to change in any release. A plugin must set `"enableProposedApi": true`; third-party plugins also need a development build (`--enable-proposed-api`). Built-in plugins may use them in every build (ADR 0010). API 1.0 promoted every proposal that built-in plugins had proved (tests, workspace, build, debug, terminals, hosting, secrets and visualizers) to `IPluginContext`. New proposals start here.
+
+| Member | Description |
+|---|---|
+| `IAi Ai { get; }` | AI model providers (M28a, ADR 0062). |
 
 ### `IProposedApiProvider`
 

@@ -201,7 +201,7 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
     {
         var result = await _server.RequestAsync(
             PluginMethods.ShowInputBox,
-            new ShowInputBoxParams(Id, options.Title, options.Prompt, options.Value),
+            new ShowInputBoxParams(Id, options.Title, options.Prompt, options.Value) { Password = options.Password },
             PluginJsonContext.Default.ShowInputBoxParams,
             PluginJsonContext.Default.ShowInputBoxResult,
             cancellationToken).ConfigureAwait(false);

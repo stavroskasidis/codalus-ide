@@ -28,8 +28,8 @@ public interface IPluginPrompts
     /// <summary>Returns the index of the chosen item, or null when cancelled.</summary>
     Task<int?> PickAsync(IReadOnlyList<QuickPickItemDto> items, string? placeholder, string source, CancellationToken cancellationToken);
 
-    /// <summary>Returns the entered text, or null when cancelled.</summary>
-    Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken);
+    /// <summary>Returns the entered text, or null when cancelled. <paramref name="password"/> hides what is typed.</summary>
+    Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken, bool password = false);
 }
 
 /// <summary>
@@ -780,6 +780,97 @@ public sealed class PluginManager : IAsyncDisposable
 
     // ------------------------------------------------------------------ authentication providers (API 1.0)
 
+    private readonly ConcurrentDictionary<string, (string PluginId, string Label)> _aiProviders = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, AiStream> _aiStreams = new(StringComparer.Ordinal);
+
+    /// <summary>A chat answer being received: the pieces are handed on in order, and counted.</summary>
+    private sealed class AiStream(Action<string> onText)
+    {
+        private readonly Lock _gate = new();
+        private readonly SortedDictionary<int, string> _early = [];
+        private int _next;
+
+        public int Received { get; private set; }
+
+        /// <summary>A piece, by its order: notifications may be handled out of order, so later ones wait for earlier ones.</summary>
+        public void Add(int index, string text)
+        {
+            lock (_gate)
+            {
+                _early[index] = text;
+                while (_early.Remove(_next, out var next))
+                {
+                    onText(next);
+                    _next++;
+                    Received++;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The AI model providers the loaded plugins declare (M28a, ADR 0062), whether or not their plugin runs yet: the
+    /// <c>ai.provider</c> setting offers them.
+    /// </summary>
+    public IReadOnlyList<(string Id, string Label, string PluginId)> AiProviders =>
+        [.. Plugins.Where(p => p.IsUsable && p.State != PluginState.Disabled)
+            .SelectMany(p => (p.Manifest?.Contributes?.AiProviders ?? []).Where(a => !string.IsNullOrWhiteSpace(a.Id)).Select(a => (a.Id, string.IsNullOrWhiteSpace(a.Label) ? a.Id : a.Label, p.Id)))
+            .OrderBy(p => p.Item2, StringComparer.CurrentCultureIgnoreCase)];
+
+    private async Task<HostConnection> AiHostAsync(string providerId, CancellationToken cancellationToken)
+    {
+        if (!_aiProviders.ContainsKey(providerId))
+        {
+            await ActivateByEventAsync("onAiProvider:" + providerId, cancellationToken).ConfigureAwait(false);
+            for (var waited = 0; waited < 50 && !_aiProviders.ContainsKey(providerId); waited++)
+            {
+                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return _aiProviders.TryGetValue(providerId, out var provider) && Find(provider.PluginId) is { } plugin && GetHost(plugin.HostGroup) is { IsRunning: true } host
+            ? host
+            : throw new InvalidOperationException($"The AI provider '{providerId}' isn't available: its plugin didn't load.");
+    }
+
+    /// <summary>The models a provider offers now.</summary>
+    public async Task<IReadOnlyList<AiModelDto>> GetAiModelsAsync(string providerId, CancellationToken cancellationToken)
+    {
+        var host = await AiHostAsync(providerId, cancellationToken).ConfigureAwait(false);
+        return (await host.Connection.InvokeAsync(AiMethods.Models, new AiProviderIdParams(providerId), PluginJsonContext.Default.AiProviderIdParams, PluginJsonContext.Default.AiModelsResult, cancellationToken).ConfigureAwait(false)).Models;
+    }
+
+    /// <summary>Lets the provider ask for what it needs (a key, an address); returns whether it is configured.</summary>
+    public async Task<bool> ConfigureAiAsync(string providerId, CancellationToken cancellationToken)
+    {
+        var host = await AiHostAsync(providerId, cancellationToken).ConfigureAwait(false);
+        return (await host.Connection.InvokeAsync(AiMethods.Configure, new AiProviderIdParams(providerId), PluginJsonContext.Default.AiProviderIdParams, PluginJsonContext.Default.AiConfigureResult, cancellationToken).ConfigureAwait(false)).Configured;
+    }
+
+    /// <summary>Streams a chat answer from a provider: <paramref name="onText"/> gets each piece, in order, before this completes.</summary>
+    public async Task ChatAsync(string providerId, string model, IReadOnlyList<AiMessageDto> messages, Action<string> onText, CancellationToken cancellationToken, int? maxTokens = null)
+    {
+        var host = await AiHostAsync(providerId, cancellationToken).ConfigureAwait(false);
+        var id = Guid.NewGuid().ToString("N");
+        var stream = new AiStream(onText);
+        _aiStreams[id] = stream;
+        try
+        {
+            var result = await host.Connection.InvokeAsync(AiMethods.Chat, new AiChatParams(providerId, id, model, [.. messages]) { MaxTokens = maxTokens },
+                PluginJsonContext.Default.AiChatParams, PluginJsonContext.Default.AiChatResult, cancellationToken).ConfigureAwait(false);
+
+            // The answer can arrive while the last pieces are still being handled.
+            for (var waited = 0; stream.Received < result.Chunks && waited < 200; waited++)
+            {
+                await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _aiStreams.TryRemove(id, out _);
+        }
+    }
+
     private readonly ConcurrentDictionary<string, (string PluginId, string Label)> _authProviders = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _authConsents = new(StringComparer.Ordinal);
 
@@ -1258,6 +1349,11 @@ public sealed class PluginManager : IAsyncDisposable
                 _manager.SourceControlsChanged?.Invoke(_manager, EventArgs.Empty);
             }
 
+            foreach (var (id, _) in _manager._aiProviders.Where(p => members.Contains(p.Value.PluginId)).ToList())
+            {
+                _manager._aiProviders.TryRemove(id, out _);
+            }
+
             foreach (var (id, _) in _manager._authProviders.Where(p => members.Contains(p.Value.PluginId)).ToList())
             {
                 _manager._authProviders.TryRemove(id, out _);
@@ -1342,7 +1438,7 @@ public sealed class PluginManager : IAsyncDisposable
                     : null));
             connection.OnRequest(PluginMethods.ShowInputBox, json.ShowInputBoxParams, json.ShowInputBoxResult, async (p, ct) =>
                 new ShowInputBoxResult(_manager.Prompts is { } prompts
-                    ? await prompts.InputAsync(p.Title, p.Prompt, p.Value, _manager.Find(p.PluginId)?.DisplayName ?? p.PluginId, ct).ConfigureAwait(false)
+                    ? await prompts.InputAsync(p.Title, p.Prompt, p.Value, _manager.Find(p.PluginId)?.DisplayName ?? p.PluginId, ct, p.Password).ConfigureAwait(false)
                     : null));
             connection.OnNotification(PluginMethods.ProgressStart, json.ProgressStartParams, p =>
             {
@@ -1403,6 +1499,15 @@ public sealed class PluginManager : IAsyncDisposable
                 if (_manager._sourceControls.TryRemove(p.ProviderId, out _))
                 {
                     _manager.SourceControlsChanged?.Invoke(_manager, EventArgs.Empty);
+                }
+            });
+            connection.OnNotification(AiMethods.Register, json.AiProviderParams, p => _manager._aiProviders[p.ProviderId] = (p.PluginId, p.Label));
+            connection.OnNotification(AiMethods.Unregister, json.AiProviderParams, p => _manager._aiProviders.TryRemove(p.ProviderId, out _));
+            connection.OnNotification(AiMethods.Chunk, json.AiChunkParams, p =>
+            {
+                if (_manager._aiStreams.TryGetValue(p.StreamId, out var stream))
+                {
+                    stream.Add(p.Index, p.Text);
                 }
             });
             connection.OnNotification(PluginMethods.AuthRegister, json.AuthProviderParams, p =>

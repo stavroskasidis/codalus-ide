@@ -50,7 +50,11 @@ public sealed record ShowQuickPickParams(string PluginId, QuickPickItemDto[] Ite
 /// <summary>The index of the chosen item, or null when cancelled.</summary>
 public sealed record ShowQuickPickResult(int? Index);
 
-public sealed record ShowInputBoxParams(string PluginId, string Title, string? Prompt, string? Value);
+public sealed record ShowInputBoxParams(string PluginId, string Title, string? Prompt, string? Value)
+{
+    /// <summary>Hides what is typed (API 1.1).</summary>
+    public bool Password { get; init; }
+}
 
 /// <summary>The entered text, or null when cancelled.</summary>
 public sealed record ShowInputBoxResult(string? Value);

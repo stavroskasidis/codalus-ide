@@ -133,7 +133,7 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
             return Task.FromResult<int?>(items.ToList().FindIndex(i => i.Description == wanted));
         }
 
-        public Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken)
+        public Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken, bool password = false)
         {
             Asked.Add(title);
             return Task.FromResult<string?>(answers.Dequeue());
