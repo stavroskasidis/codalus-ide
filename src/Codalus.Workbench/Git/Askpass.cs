@@ -196,7 +196,7 @@ public static class AskpassClient
 
         try
         {
-            using var pipe = Connect(pipeName, TimeSpan.FromSeconds(5));
+            using var pipe = Connect(pipeName, TimeSpan.FromSeconds(15));
             using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
             using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
             writer.WriteLine(token);
