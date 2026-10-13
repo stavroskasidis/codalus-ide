@@ -132,7 +132,7 @@ public sealed class SettingsService : IDisposable
             Title = descriptor.Title is { } title ? Localization.Localizer.Get($"setting.{key}.title", title) : null,
             Description = descriptor.Description is { } description ? Localization.Localizer.Get($"setting.{key}.description", description) : null,
             Category = descriptor.Category is { } category ? Localization.Localizer.Get($"settingCategory.{category}", category) : null,
-            EnumDescriptions = descriptor.EnumDescriptions is { } names && descriptor.Enum is { } values && names.Count == values.Count
+            EnumDescriptions = descriptor.TranslateEnumDescriptions && descriptor.EnumDescriptions is { } names && descriptor.Enum is { } values && names.Count == values.Count
                 ? [.. names.Select((name, i) => Localization.Localizer.Get($"setting.{key}.enum.{values[i]}", name))]
                 : descriptor.EnumDescriptions,
         };

@@ -5,6 +5,7 @@ using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Context;
 using DaedalusStudio.Workbench.Menus;
 using DaedalusStudio.Workbench.Settings;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -75,7 +76,7 @@ internal static partial class BuiltIns
         Add("explorer.copy", "Copy", "Explorer", Ui(explorer.Copy), Selection, palette: false);
         Add("explorer.paste", "Paste", "Explorer", Ui(explorer.PasteAsync), Selection, palette: false);
         Add("explorer.copyPath", "Copy Path", "Explorer", Ui(explorer.CopyPathAsync), Open, palette: false);
-        Add("explorer.reveal", OperatingSystem.IsMacOS() ? "Reveal in Finder" : OperatingSystem.IsWindows() ? "Reveal in File Explorer" : "Reveal in File Manager", "Explorer", Ui(explorer.RevealInFileManager), Open, palette: false);
+        Add("explorer.reveal", OperatingSystem.IsMacOS() ? Localizer.Get("command.explorer.reveal.mac", "Reveal in Finder") : OperatingSystem.IsWindows() ? Localizer.Get("command.explorer.reveal.windows", "Reveal in File Explorer") : Localizer.Get("command.explorer.reveal.linux", "Reveal in File Manager"), "Explorer", Ui(explorer.RevealInFileManager), Open, palette: false);
         Add("explorer.collapseAll", "Collapse All", "Explorer", Ui(explorer.CollapseAll), Open);
         Add("explorer.syncWithActiveDocument", "Sync with Active Document", "Explorer", Ui(() =>
         {

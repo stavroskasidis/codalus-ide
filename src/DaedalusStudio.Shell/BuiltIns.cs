@@ -9,6 +9,7 @@ using DaedalusStudio.Workbench.Keybindings;
 using DaedalusStudio.Workbench.Menus;
 using DaedalusStudio.Workbench.Settings;
 using DaedalusStudio.Workbench.ToolWindows;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -242,7 +243,7 @@ internal static partial class BuiltIns
         Add("workbench.openPluginsFolder", "Open User Plugins Folder", "Plugins", Ui(shell.OpenPluginsFolder));
         Add("file.save", "Save", "File", Ui(shell.SaveActiveDocumentAsync), enablement: "activeDocumentKind == textFile");
         Add("workbench.closeActiveDocument", "Close Document", "File", Ui(shell.CloseActiveDocument), enablement: "activeDocumentKind");
-        Add("workbench.quit", PlatformInfo.Current == PlatformKind.Windows ? "Exit" : "Quit", "File", Ui(() => shell.Window?.RequestClose()));
+        Add("workbench.quit", PlatformInfo.Current == PlatformKind.Windows ? Localizer.Get("command.workbench.quit.windows", "Exit") : Localizer.Get("command.workbench.quit.other", "Quit"), "File", Ui(() => shell.Window?.RequestClose()));
         Add("help.about", "About Daedalus Studio", "Help", Ui(shell.ShowAbout));
         Add("help.openCrashReports", "Open Crash Reports Folder", "Help", Ui(shell.OpenCrashReports));
         Add("update.check", "Check for Updates", "Help", Ui(() => _ = shell.CheckForUpdatesAsync()));

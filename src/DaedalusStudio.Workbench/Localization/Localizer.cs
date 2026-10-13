@@ -130,9 +130,9 @@ public static class Localizer
     /// </summary>
     public static string Pseudo(string text)
     {
-        if (text.Length == 0)
+        if (text.Length == 0 || (text.StartsWith('[') && text.EndsWith("·]", StringComparison.Ordinal)))
         {
-            return text;
+            return text; // already pseudo (a title translated where it's declared, then again as it registers)
         }
 
         var builder = new StringBuilder(text.Length * 2);

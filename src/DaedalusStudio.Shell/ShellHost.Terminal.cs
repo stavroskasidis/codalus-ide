@@ -200,7 +200,8 @@ public sealed partial class ShellHost
                 Category = "Terminal",
                 Description = "The shell new terminals start. Empty: the first one found.",
                 Enum = ["", .. profiles.Select(p => p.Id)],
-                EnumDescriptions = ["Automatic", .. profiles.Select(p => p.Name)],
+                EnumDescriptions = [Localizer.Get("setting.terminal.defaultProfile.automatic", "Automatic"), .. profiles.Select(p => p.Name)],
+                TranslateEnumDescriptions = false, // the shells found on this machine
                 Order = 1,
             },
             SettingDescriptor.Create(TerminalFontFamilySetting, "\"\"", SettingType.String, shell) with

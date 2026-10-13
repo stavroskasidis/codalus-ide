@@ -66,7 +66,7 @@ public sealed partial class LocalizationCatalogTests
                 expected[$"settingCategory.{category}"] = category;
             }
 
-            if (setting is { Enum: { } values, EnumDescriptions: { } names } && values.Count == names.Count)
+            if (setting is { Enum: { } values, EnumDescriptions: { } names, TranslateEnumDescriptions: true } && values.Count == names.Count)
             {
                 for (var i = 0; i < values.Count; i++)
                 {
@@ -108,6 +108,12 @@ public sealed partial class LocalizationCatalogTests
         }
 
         Assert.True(conflicts.Count == 0, $"Keys used with different English: {string.Join(", ", conflicts)}");
+
+        // A title with a key per OS (translated where it's declared) has no key of its own: every OS's catalogue is the same.
+        foreach (var key in expected.Keys.Where(k => expected.Keys.Any(v => v.StartsWith(k + ".", StringComparison.Ordinal) && k.StartsWith("command.", StringComparison.Ordinal))).ToList())
+        {
+            expected.Remove(key);
+        }
 
         // The views' strings live only in the catalogue.
         var catalog = JsonNode.Parse(await File.ReadAllTextAsync(CatalogPath, TestContext.Current.CancellationToken))!.AsObject();

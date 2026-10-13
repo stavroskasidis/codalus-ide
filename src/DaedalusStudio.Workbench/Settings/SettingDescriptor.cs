@@ -56,6 +56,12 @@ public sealed record SettingDescriptor(string Key, SettingType Type, JsonElement
 
     public IReadOnlyList<string>? EnumDescriptions { get; init; }
 
+    /// <summary>
+    /// False when the enum's names are found at run time and aren't text to translate (the terminal's shells, M23c):
+    /// they stay as given, and the catalogue leaves them out.
+    /// </summary>
+    public bool TranslateEnumDescriptions { get; init; } = true;
+
     public double? Minimum { get; init; }
 
     public double? Maximum { get; init; }
