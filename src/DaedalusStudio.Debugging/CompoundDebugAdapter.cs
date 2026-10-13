@@ -38,6 +38,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private string? _shownReason;
     private int _nextId;
     private int _ending;
+    private int _reserved;
 
     public CompoundDebugAdapter(IDebugAdapter primary, string name, bool independent = false)
     {
@@ -48,6 +49,28 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         _ = independent
             ? primary.Closed.ContinueWith(_ => EndAsync(part), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap()
             : primary.Closed.ContinueWith(_ => _closed.TrySetResult(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Holds an independent session open for <paramref name="count"/> programs still being added: without it, the first
+    /// program ending before the next one joined ended the session and cancelled the next one's start (seen on a loaded
+    /// Windows runner). Each reservation is released once its program joined or failed to.
+    /// </summary>
+    public void Reserve(int count) => Interlocked.Add(ref _reserved, count);
+
+    /// <summary>Releases one <see cref="Reserve"/>d place; the session ends here when every program has already ended.</summary>
+    public async Task ReleaseAsync()
+    {
+        bool last;
+        lock (_gate)
+        {
+            last = Interlocked.Decrement(ref _reserved) <= 0 && _parts.All(p => p.Ended);
+        }
+
+        if (last && Independent)
+        {
+            await EndSessionAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>Each adapter debugs a program of its own, and the session lasts until the last one ends (multiple startup projects).</summary>
@@ -388,6 +411,16 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         }
     }
 
+    private async Task EndSessionAsync()
+    {
+        if (Interlocked.Exchange(ref _ending, 1) == 0)
+        {
+            await RaiseAsync(DapEvents.Terminated, default).ConfigureAwait(false);
+        }
+
+        _closed.TrySetResult();
+    }
+
     /// <summary>
     /// One adapter ended: the others are disconnected (terminating their debuggees), then the session ends once. In an
     /// independent session the others go on, and the session ends with the last one.
@@ -412,7 +445,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
                     _shown = null;
                 }
 
-                last = _parts.All(p => p.Ended);
+                last = _parts.All(p => p.Ended) && Volatile.Read(ref _reserved) <= 0;
             }
 
             PartChanged?.Invoke(this, new CompoundPartEvent(part.Name, part.Index, null, Ended: true, part.ExitCode));
@@ -422,12 +455,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
                 return;
             }
 
-            if (Interlocked.Exchange(ref _ending, 1) == 0)
-            {
-                await RaiseAsync(DapEvents.Terminated, default).ConfigureAwait(false);
-            }
-
-            _closed.TrySetResult();
+            await EndSessionAsync().ConfigureAwait(false);
             return;
         }
 
