@@ -89,7 +89,8 @@ public sealed class PluginInstaller(string pluginsDirectory, PlatformKind platfo
             var root = Path.GetFullPath(staging) + Path.DirectorySeparatorChar;
             foreach (var entry in files)
             {
-                var target = Path.GetFullPath(Path.Combine(staging, entry.FullName[prefix.Length..]));
+                // Packs made on Linux may write "plugin//file": the relative path is what follows the folder's slashes.
+                var target = Path.GetFullPath(Path.Combine(staging, entry.FullName[prefix.Length..].TrimStart('/')));
                 if (!target.StartsWith(root, StringComparison.Ordinal))
                 {
                     throw new InvalidDataException($"{id} has a file outside its plugin folder: {entry.FullName}");

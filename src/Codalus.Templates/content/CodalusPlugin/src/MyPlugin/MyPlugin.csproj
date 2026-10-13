@@ -31,7 +31,7 @@
 
   <Target Name="PackPluginFolder">
     <ItemGroup>
-      <TfmSpecificPackageFile Include="$(OutputPath)**\*" Exclude="$(OutputPath)**\*.pdb" PackagePath="plugin\%(RecursiveDir)" />
+      <TfmSpecificPackageFile Include="$(OutputPath)**\*" Exclude="$(OutputPath)**\*.pdb" PackagePath="plugin/%(RecursiveDir)" />
     </ItemGroup>
   </Target>
 </Project>
