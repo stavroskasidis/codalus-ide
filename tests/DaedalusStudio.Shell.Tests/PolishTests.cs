@@ -282,6 +282,14 @@ public partial class PolishTests
         Assert.Equal("Group by", choices.Header);
         ((MenuItem)choices.Items[1]!).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
         Assert.Equal(1, combo.SelectedIndex);
+
+        // Hidden items aren't reached with Tab (the overflow menu has them); they are again once they show.
+        Assert.All(panel.Overflowed, c => Assert.False(Avalonia.Input.KeyboardNavigation.GetIsTabStop(c)));
+        var wasHidden = hiddenButton;
+        window.Width = 600;
+        ShellFixture.Pump();
+        Assert.Empty(panel.Overflowed);
+        Assert.True(Avalonia.Input.KeyboardNavigation.GetIsTabStop(wasHidden));
         window.Close();
     }
 

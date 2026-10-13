@@ -26,6 +26,9 @@ public sealed class ToolbarPanel : Panel
     private readonly Button _overflow;
     private readonly HashSet<Control> _hidden = [];
 
+    /// <summary>Hidden items this panel took out of the keyboard's tab order (and gives back when they show).</summary>
+    private readonly HashSet<Control> _untabbed = [];
+
     static ToolbarPanel()
     {
         AffectsMeasure<ToolbarPanel>(SpacingProperty, MinStretchWidth);
@@ -131,7 +134,18 @@ public sealed class ToolbarPanel : Panel
             {
                 // Outside the panel, which clips: not drawn, not hit, and its minimum size can't overlap the others.
                 child.Arrange(new Rect(finalSize.Width + 10000, 0, child.DesiredSize.Width, child.DesiredSize.Height));
+                // Nor reached with Tab (M34e): the overflow menu has it.
+                if (_untabbed.Add(child))
+                {
+                    Avalonia.Input.KeyboardNavigation.SetIsTabStop(child, false);
+                }
+
                 continue;
+            }
+
+            if (_untabbed.Remove(child))
+            {
+                child.ClearValue(Avalonia.Input.KeyboardNavigation.IsTabStopProperty);
             }
 
             var w = child == stretch ? Math.Max(0, finalSize.Width - reserved - used) : child.DesiredSize.Width;

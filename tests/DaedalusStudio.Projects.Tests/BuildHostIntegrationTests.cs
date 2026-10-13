@@ -432,7 +432,10 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         }
 
         var cold = await OpenAsync(restores: true);
-        Assert.DoesNotContain("from the cache", cold, StringComparison.Ordinal);
+        // The first design-time builds find no cache. (After the restore, projects whose assets it didn't change come
+        // from the cache this session just wrote: on the macOS runner that was 2 of 3.)
+        var firstCache = cold.Split('\n').FirstOrDefault(l => l.Contains("build cache:", StringComparison.Ordinal)) ?? string.Empty;
+        Assert.True(firstCache.Contains(" 0 hit(s)", StringComparison.Ordinal), $"Cold:{Environment.NewLine}{cold}");
         var coldApp = _service.CompilerInputs[AppProject];
 
         // Unchanged: nothing builds, the inputs are the same, and the packages restored a moment ago aren't restored again.
