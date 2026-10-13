@@ -396,6 +396,8 @@ internal static partial class BuiltIns
             Item(Tools, "workbench.selectTheme", "z-preferences"),
             Item(Tools, "workbench.openKeyboardShortcuts", "z-preferences"),
             Item(Tools, "workbench.openFontsAndColors", "z-preferences"),
+            Item(Tools, "workbench.importSettings", "z-preferences"),
+            Item(Tools, "workbench.exportSettings", "z-preferences"),
             Item(Tools, "workbench.importVsCodeSettings", "z-preferences"),
             Item(Tools, "workbench.openOptions", "z-preferences"),
 

@@ -62,7 +62,7 @@ public sealed partial class ShellHost
                 array.Add(JsonNode.Parse(entry.GetRawText()));
             }
 
-            await Workbench.SaveUserKeybindingsAsync(array.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), CancellationToken.None).ConfigureAwait(true);
+            await Workbench.SaveUserKeybindingsAsync(array.ToJsonString(s_readableJson), CancellationToken.None).ConfigureAwait(true);
             Workbench.LoadUserKeybindings();
         }
 
