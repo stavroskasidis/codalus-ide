@@ -1,19 +1,19 @@
 {
   "id": "daedalus.welcome",
   "version": "0.1.0",
-  "displayName": "Welcome",
+  "displayName": "%displayName%",
   "publisher": "daedalus",
-  "description": "The Start page: getting started, common actions, recent solutions, tips and links to the documentation.",
+  "description": "%description%",
   "engines": { "daedalus": "^0.2.0" },
   "entry": { "runtime": "dotnet", "assembly": "DaedalusStudio.Plugins.Welcome.dll" },
   "activationEvents": [ "onStartup" ],
   "contributes": {
     "commands": [
-      { "id": "welcome.show", "title": "Show Start Page", "category": "Welcome" },
-      { "id": "welcome.showOnboarding", "title": "Get Started", "category": "Welcome" },
-      { "id": "welcome.chooseKeyboardScheme", "title": "Choose a Keyboard Scheme", "category": "Preferences" },
-      { "id": "welcome.toggleShowOnStartup", "title": "Toggle Start Page on Startup", "category": "Welcome" },
-      { "id": "welcome.refresh", "title": "Refresh", "category": "Welcome" }
+      { "id": "welcome.show", "title": "%command.show%", "category": "Welcome" },
+      { "id": "welcome.showOnboarding", "title": "%command.showOnboarding%", "category": "Welcome" },
+      { "id": "welcome.chooseKeyboardScheme", "title": "%command.chooseKeyboardScheme%", "category": "Preferences" },
+      { "id": "welcome.toggleShowOnStartup", "title": "%command.toggleShowOnStartup%", "category": "Welcome" },
+      { "id": "welcome.refresh", "title": "%command.refresh%", "category": "Welcome" }
     ],
     "menus": {
       "menuBar/help": [
@@ -26,7 +26,7 @@
       ]
     },
     "toolWindows": [
-      { "id": "welcome.view", "title": "Start", "location": "left", "kind": "tree", "icon": "home" }
+      { "id": "welcome.view", "title": "%view.start%", "location": "left", "kind": "tree", "icon": "home" }
     ],
     "settings": {
       "title": "Welcome",
@@ -35,13 +35,13 @@
           "type": "boolean",
           "default": true,
           "scope": "user",
-          "description": "Show the Start page when Daedalus Studio starts."
+          "description": "%setting.showOnStartup%"
         },
         "welcome.onboarded": {
           "type": "boolean",
           "default": false,
           "scope": "user",
-          "description": "Get Started is done: the Start page no longer offers the theme, keyboard scheme and imports first (Help → Get Started shows them again)."
+          "description": "%setting.onboarded%"
         }
       }
     }

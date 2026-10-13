@@ -77,6 +77,7 @@
     <AvaloniaResource Include="..\..\assets\logo\daedalus.ico" Link="Assets\daedalus.ico" />
     <!-- Built-in snippets, one file per language (M12b). -->
     <EmbeddedResource Include="Editor\Snippets\*.json" LogicalName="DaedalusStudio.Shell.Snippets.%(Filename).json" />
+    <EmbeddedResource Include="Localization\*.json" LogicalName="DaedalusStudio.Shell.Localization.%(Filename).json" />
   </ItemGroup>
 
   <!-- Terminal shell integration scripts (ADR 0014), next to the shell in terminal/. Dotfiles are listed explicitly. -->
@@ -129,7 +130,7 @@
 
   <Target Name="DaedalusCopyBuiltInPlugins">
     <ItemGroup>
-      <_DaedalusPluginFiles Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.dll;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.pdb;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\daedalus-plugin.json">
+      <_DaedalusPluginFiles Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.dll;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.pdb;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\daedalus-plugin.json;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\daedalus-plugin.nls*.json">
         <PluginId>%(BuiltInPlugin.PluginId)</PluginId>
       </_DaedalusPluginFiles>
     </ItemGroup>

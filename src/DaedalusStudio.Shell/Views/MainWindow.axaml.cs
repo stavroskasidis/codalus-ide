@@ -33,6 +33,11 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         _shell = shell;
         shell.Window = this;
+        if (DaedalusStudio.Workbench.Localization.Localizer.IsRightToLeft)
+        {
+            FlowDirection = Avalonia.Media.FlowDirection.RightToLeft; // M23b: right-to-left languages (and the qps-plocm pseudo-language)
+        }
+
         DataContext = shell;
         ApplyPlacement(shell.InitialPlacement);
         MenuBuilder.Attach(this, MenuBar, shell);

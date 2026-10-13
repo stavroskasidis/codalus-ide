@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -6,20 +7,20 @@
              x:DataType="vm:FontsAndColorsViewModel">
   <DockPanel Margin="12,8">
     <StackPanel DockPanel.Dock="Top" Spacing="6">
-      <TextBlock Classes="heading" Text="Fonts and Colors" />
+      <TextBlock Classes="heading" Text="{l:T fontsAndColors.fontsAndColors}" />
       <TextBlock Classes="muted" TextWrapping="Wrap"
-                 Text="Colors over the theme's, for kinds of code, the editor and the window. Type a color (#RRGGBB, or #RRGGBBAA with transparency); Reset returns to the theme's. They're the settings Syntax Colors and Editor and Window Colors, in VS Code's form." />
+                 Text="{l:T fontsAndColors.colorsOverTheThemeSFor}" />
       <controls:ToolbarPanel>
-        <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="Search colors" MinWidth="120" AutomationProperties.Name="Search colors" />
-        <CheckBox IsChecked="{Binding ForAllThemes}" Content="For every theme" AutomationProperties.Name="For every theme"
-                  ToolTip.Tip="Off: colors set here apply to the active theme only" />
-        <Button Content="Fonts…" Command="{Binding OpenFontSettingsCommand}" ToolTip.Tip="The editor's font family and size (Settings)" />
+        <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="{l:T fontsAndColors.searchColors}" MinWidth="120" AutomationProperties.Name="{l:T fontsAndColors.searchColors}" />
+        <CheckBox IsChecked="{Binding ForAllThemes}" Content="{l:T fontsAndColors.forEveryTheme}" AutomationProperties.Name="{l:T fontsAndColors.forEveryTheme}"
+                  ToolTip.Tip="{l:T fontsAndColors.offColorsSetHereApplyTo}" />
+        <Button Content="{l:T fontsAndColors.fonts}" Command="{Binding OpenFontSettingsCommand}" ToolTip.Tip="{l:T fontsAndColors.theEditorSFontFamilyAnd}" />
       </controls:ToolbarPanel>
       <TextBlock Classes="muted">
-        <Run Text="Theme:" /> <Run Text="{Binding ThemeTitle}" />
+        <Run Text="{l:T fontsAndColors.theme}" /> <Run Text="{Binding ThemeTitle}" />
       </TextBlock>
     </StackPanel>
-    <ListBox x:Name="List" ItemsSource="{Binding Items}" Background="Transparent" Margin="0,6,0,0" AutomationProperties.Name="Colors">
+    <ListBox x:Name="List" ItemsSource="{Binding Items}" Background="Transparent" Margin="0,6,0,0" AutomationProperties.Name="{l:T fontsAndColors.colors}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ColorItemViewModel">
           <Setter Property="Padding" Value="2" />
@@ -34,7 +35,7 @@
             <Border Grid.Column="2" Width="18" Height="14" Background="{Binding Swatch}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" VerticalAlignment="Center" />
             <TextBox Grid.Column="3" Classes="cell" Text="{Binding Hex, UpdateSourceTrigger=LostFocus}" VerticalAlignment="Center"
                      AutomationProperties.Name="{Binding Title}" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
-            <Button Grid.Column="4" Classes="link" Content="Reset" Command="{Binding ResetCommand}" IsVisible="{Binding IsCustom}" Margin="6,0,0,0" />
+            <Button Grid.Column="4" Classes="link" Content="{l:T fontsAndColors.reset}" Command="{Binding ResetCommand}" IsVisible="{Binding IsCustom}" Margin="6,0,0,0" />
             <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" />
           </Grid>
         </DataTemplate>

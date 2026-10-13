@@ -13,6 +13,7 @@ public sealed record ShellOptions
                daedalus --wait <file> [options]         Edit a file and exit when its tab closes (git's core.editor).
 
           --user-data-dir <dir>   Keep settings, state and plugins under <dir> instead of the OS defaults.
+          --locale <name>         The display language for this run (qps-ploc: pseudo-language).
           --plugin-dir <dir>      Load plugins from <dir> (a plugin folder or a folder of plugins). Repeatable.
           --enable-proposed-api   Allow plugins to use proposed APIs (development builds only).
           --dev                   Development mode: shows developer commands.
@@ -25,6 +26,9 @@ public sealed record ShellOptions
     public string? Path { get; init; }
 
     public string? UserDataDir { get; init; }
+
+    /// <summary>The display language for this run (M23b), over the setting.</summary>
+    public string? Locale { get; init; }
 
     public IReadOnlyList<string> PluginDirs { get; init; } = [];
 
@@ -133,6 +137,9 @@ public sealed record ShellOptions
             {
                 case "--user-data-dir":
                     options = options with { UserDataDir = Value() };
+                    break;
+                case "--locale":
+                    options = options with { Locale = Value() };
                     break;
                 case "--plugin-dir":
                     if (Value() is { } dir)

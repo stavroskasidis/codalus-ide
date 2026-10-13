@@ -71,9 +71,19 @@ public sealed class CommandRegistry(ContextKeyService context)
 
     public CommandDescriptor? Find(string id) => _descriptors.GetValueOrDefault(id);
 
+    /// <summary>The shell's commands in the display language (M23b; plugins translate theirs in their manifests).</summary>
+    private static CommandDescriptor Localized(CommandDescriptor descriptor) =>
+        descriptor.Source != ContributionSource.Shell
+            ? descriptor
+            : descriptor with
+            {
+                Title = Localization.Localizer.Get($"command.{descriptor.Id}", descriptor.Title),
+                Category = descriptor.Category is { Length: > 0 } category ? Localization.Localizer.Get($"category.{category}", category) : descriptor.Category,
+            };
+
     public void Declare(CommandDescriptor descriptor)
     {
-        _descriptors[descriptor.Id] = descriptor;
+        _descriptors[descriptor.Id] = Localized(descriptor);
         DescriptorsChanged?.Invoke(this, EventArgs.Empty);
     }
 

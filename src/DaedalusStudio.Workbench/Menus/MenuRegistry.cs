@@ -125,7 +125,7 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
         lock (_gate)
         {
             _menuBar.RemoveAll(m => m.Id == menu.Id);
-            _menuBar.Add(menu);
+            _menuBar.Add(menu with { Title = Localization.Localizer.Get($"menu.{menu.Id}", menu.Title) });
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -135,7 +135,10 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
     {
         lock (_gate)
         {
-            _items.AddRange(items);
+            // The shell's submenu titles in the display language (M23b).
+            _items.AddRange(items.Select(i => i is { Submenu: { } submenu, Title: { } title } && i.Source == ContributionSource.Shell
+                ? i with { Title = Localization.Localizer.Get($"menu.{submenu}", title) }
+                : i));
         }
 
         Changed?.Invoke(this, EventArgs.Empty);

@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -6,9 +7,9 @@
              x:DataType="vm:PluginsViewModel">
   <DockPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState"
-               Text="No plugins are installed. Put plugins in the user plugins folder or pass --plugin-dir."
+               Text="{l:T plugins.noPluginsAreInstalledPutPlugins}"
                IsVisible="{Binding IsEmpty}" />
-    <ListBox x:Name="List" ItemsSource="{Binding Plugins}" Background="Transparent" AutomationProperties.Name="Installed plugins">
+    <ListBox x:Name="List" ItemsSource="{Binding Plugins}" Background="Transparent" AutomationProperties.Name="{l:T plugins.installedPlugins}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:PluginRowViewModel">
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />

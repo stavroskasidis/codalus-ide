@@ -78,7 +78,7 @@ public sealed partial class PluginDescription
         PluginManifest? manifest;
         try
         {
-            manifest = JsonSerializer.Deserialize(File.ReadAllText(path), PluginJsonContext.Default.PluginManifest);
+            manifest = JsonSerializer.Deserialize(ManifestLocalization.Apply(File.ReadAllText(path), directory, Localization.Localizer.Current), PluginJsonContext.Default.PluginManifest);
         }
         catch (Exception ex) when (ex is JsonException or IOException or NotSupportedException)
         {
