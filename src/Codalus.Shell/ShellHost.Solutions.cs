@@ -410,14 +410,7 @@ public sealed partial class ShellHost
             progress = "$(warning) Restricted mode";
             command = "solution.trust";
         }
-        else if (Solutions.Progress is { Completed: false } p)
-        {
-            progress = $"$(refresh) Loading projects {p.Evaluated}/{p.Total}";
-        }
-        else if (Solutions.RestoreState == "running")
-        {
-            progress = "$(refresh) Restoring packages…";
-        }
+        // Loading and restoring show as tasks with a progress bar (ShellHost.Progress.cs).
         else if (Solutions.RestoreState == "failed")
         {
             progress = "$(error) Restore failed";

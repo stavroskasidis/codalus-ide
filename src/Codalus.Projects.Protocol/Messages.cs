@@ -127,7 +127,11 @@ public sealed record SetConfigurationParams(string Configuration, string Platfor
 /// <summary>The user trusted the open solution's folder: evaluate it (and restore when <see cref="Restore"/>).</summary>
 public sealed record TrustParams(bool Restore);
 
-public sealed record EvaluationProgressParams(int Evaluated, int Total, bool Completed);
+public sealed record EvaluationProgressParams(int Evaluated, int Total, bool Completed)
+{
+    /// <summary>The project just evaluated (the status bar's "Loading project 29 of 96: …").</summary>
+    public string? Current { get; init; }
+}
 
 // ------------------------------------------------------------------ projects
 

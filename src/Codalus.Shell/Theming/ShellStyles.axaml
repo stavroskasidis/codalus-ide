@@ -461,4 +461,23 @@
     <Setter Property="CornerRadius" Value="4" />
     <Setter Property="Padding" Value="8,6" />
   </Style>
+
+  <!-- A running task in the status bar (M22a): a green bar on a light track, as the classic IDE shows it, and flat buttons. -->
+  <Style Selector="ProgressBar#StatusProgress">
+    <Setter Property="Foreground" Value="#16C60C" />
+    <Setter Property="Background" Value="#E6FFFFFF" />
+    <Setter Property="CornerRadius" Value="0" />
+  </Style>
+  <Style Selector="Button.statusCancel">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Foreground}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.statusCancel:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.StatusBar.Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Foreground}" />
+  </Style>
 </Styles>

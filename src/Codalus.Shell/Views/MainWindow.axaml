@@ -61,7 +61,7 @@
             MinHeight="24"
             IsVisible="{Binding StatusBar.IsVisible}"
             AutomationProperties.Name="{l:T main.statusBar}">
-      <Grid ColumnDefinitions="Auto,*,Auto">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto">
         <ItemsControl ItemsSource="{Binding StatusBar.Left}" ItemTemplate="{StaticResource StatusItemTemplate}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
@@ -76,8 +76,19 @@
                    Margin="12,0"
                    VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis"
+                   ToolTip.Tip="{Binding StatusBar.ProgressTooltip}"
                    AutomationProperties.LiveSetting="Polite" />
-        <ItemsControl Grid.Column="2" ItemsSource="{Binding StatusBar.Right}" ItemTemplate="{StaticResource StatusItemTemplate}">
+        <!-- A running task (loading projects, a build, a plugin's): its progress and, when it allows it, cancel. -->
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="0,0,8,0" VerticalAlignment="Center" IsVisible="{Binding StatusBar.HasProgress}">
+          <ProgressBar x:Name="StatusProgress" Width="100" Height="10" MinHeight="10" Minimum="0" Maximum="100"
+                       Value="{Binding StatusBar.ProgressValue}" IsIndeterminate="{Binding StatusBar.IsProgressIndeterminate}"
+                       ToolTip.Tip="{Binding StatusBar.ProgressTooltip}" AutomationProperties.Name="{l:T main.taskProgress}" />
+          <Button Classes="statusCancel" Content="✕" Padding="4,0" Command="{Binding StatusBar.CancelProgressCommand}" IsVisible="{Binding StatusBar.CanCancelProgress}"
+                  ToolTip.Tip="{l:T main.cancelTask}" AutomationProperties.Name="{l:T main.cancelTask}" />
+          <Button Classes="statusCancel" Content="…" Padding="4,0" Command="{Binding StatusBar.ShowTasksCommand}"
+                  ToolTip.Tip="{l:T main.showRunningTasks}" AutomationProperties.Name="{l:T main.showRunningTasks}" />
+        </StackPanel>
+        <ItemsControl Grid.Column="3" ItemsSource="{Binding StatusBar.Right}" ItemTemplate="{StaticResource StatusItemTemplate}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <StackPanel Orientation="Horizontal" />

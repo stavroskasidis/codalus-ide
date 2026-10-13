@@ -332,7 +332,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 lock (progressGate)
                 {
                     done++;
-                    _ = _events.ProgressAsync(new EvaluationProgressParams(done, projects.Count, done == projects.Count));
+                    _ = _events.ProgressAsync(new EvaluationProgressParams(done, projects.Count, done == projects.Count) { Current = project });
                 }
             }).ConfigureAwait(false);
         _watcher?.SetImports(_evaluated.Values.SelectMany(e => e.Imports));

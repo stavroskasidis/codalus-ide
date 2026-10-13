@@ -107,8 +107,51 @@ public sealed class StatusBarViewModel : ObservableObject
 
     public bool HasMessage => !string.IsNullOrEmpty(_message);
 
-    /// <summary>The message, or "Ready" when there is none (as the status bar of a classic IDE shows).</summary>
-    public string DisplayMessage => string.IsNullOrEmpty(_message) ? "Ready" : _message;
+    /// <summary>
+    /// What the bar says: a running task's text ("Loading project 29 of 96: …"), else the message, else "Ready" (as
+    /// the status bar of a classic IDE shows).
+    /// </summary>
+    public string DisplayMessage => _progressText ?? (string.IsNullOrEmpty(_message) ? "Ready" : _message);
+
+    private string? _progressText;
+    private double _progressValue;
+    private bool _progressIndeterminate;
+    private bool _canCancelProgress;
+    private string? _progressTooltip;
+
+    /// <summary>A task is running: the bar shows its text, a progress bar and, when it can be cancelled, a cancel button.</summary>
+    public bool HasProgress => _progressText is not null;
+
+    /// <summary>0 to 100.</summary>
+    public double ProgressValue => _progressValue;
+
+    public bool IsProgressIndeterminate => _progressIndeterminate;
+
+    public bool CanCancelProgress => _canCancelProgress;
+
+    public string? ProgressTooltip => _progressTooltip;
+
+    /// <summary>Cancels the task shown (set by the shell).</summary>
+    public System.Windows.Input.ICommand? CancelProgressCommand { get; set; }
+
+    /// <summary>Lists the running tasks (set by the shell).</summary>
+    public System.Windows.Input.ICommand? ShowTasksCommand { get; set; }
+
+    /// <summary>Shows a running task; null text clears it.</summary>
+    public void SetProgress(string? text, double? percent, bool canCancel, string? tooltip)
+    {
+        _progressText = text;
+        _progressValue = percent ?? 0;
+        _progressIndeterminate = text is not null && percent is null;
+        _canCancelProgress = text is not null && canCancel;
+        _progressTooltip = tooltip;
+        OnPropertyChanged(nameof(HasProgress));
+        OnPropertyChanged(nameof(DisplayMessage));
+        OnPropertyChanged(nameof(ProgressValue));
+        OnPropertyChanged(nameof(IsProgressIndeterminate));
+        OnPropertyChanged(nameof(CanCancelProgress));
+        OnPropertyChanged(nameof(ProgressTooltip));
+    }
 
     /// <summary>A solution is open: the bar is the accent color; without one it is purple (M29).</summary>
     public bool HasSolution
