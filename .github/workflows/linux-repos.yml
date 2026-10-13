@@ -3,14 +3,15 @@ name: Website and Linux repositories
 # Everything GitHub Pages serves, rebuilt as one site: the apt and dnf repositories from the newest stable release and
 # the newest nightly (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret), checked by installing from
 # them with apt, dnf and zypper, signatures verified (eng/test-linux-repos.sh) (M31, D18); then the website, the Blazor
-# app in website/ exported to static files with those releases' download links. Called after each nightly, started on
-# develop after each release (release.yml runs on master, and the github-pages environment deploys develop), and run
-# when the website or the user guide changes on develop.
+# app in website/ exported to static files with those releases' download links. Only master deploys (the maintainer's
+# rule, 2026-10-13): release.yml calls this after each release, and a push to master that changes the website or the
+# user guide runs it; nightlies don't deploy, so the nightly channel and the site's nightly links move on with master.
+# Started on another branch (workflow_dispatch), it builds and checks the site without deploying it.
 on:
   workflow_call:
   workflow_dispatch:
   push:
-    branches: [develop]
+    branches: [master]
     paths:
       - "website/**"
       - "docs/user-guide/**"
@@ -81,10 +82,17 @@ jobs:
 
   deploy:
     needs: build
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.address.outputs.url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+      # Pages reports http:// for a project site under its owner's custom domain, though the site is served over HTTPS.
+      - id: address
+        shell: bash
+        run: |
+          url="${{ steps.deployment.outputs.page_url }}"
+          echo "url=https://${url#*://}" >> "$GITHUB_OUTPUT"
