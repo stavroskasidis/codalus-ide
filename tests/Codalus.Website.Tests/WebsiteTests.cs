@@ -65,6 +65,22 @@ public sealed class WebsiteTests : IDisposable
     }
 
     [Fact]
+    public async Task The_home_pages_download_buttons_carry_each_platforms_file()
+    {
+        var html = await Get(Options(stable: "v0.2.0"), "");
+
+        // site.js points the buttons at the visitor's file; without script they lead to the Download page.
+        Assert.Contains("data-windows=\"https://github.com/stavroskasidis/codalus-ide/releases/download/v0.2.0/codalus-0.2.0-win-x64-setup.exe\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-macos=\"https://github.com/stavroskasidis/codalus-ide/releases/download/v0.2.0/codalus-0.2.0-osx-arm64.pkg\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-linux=\"https://github.com/stavroskasidis/codalus-ide/releases/download/v0.2.0/codalus-0.2.0-linux-x64.AppImage\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-linux-arm64=\"https://github.com/stavroskasidis/codalus-ide/releases/download/v0.2.0/codalus-0.2.0-linux-arm64.AppImage\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"download/\" data-download-os", html, StringComparison.Ordinal);
+
+        var none = await Get(Options(), "");
+        Assert.DoesNotContain("data-windows=", none, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Without_a_stable_release_the_download_page_offers_the_nightly()
     {
         var html = await Get(Options(nightly: "v0.1.0-nightly.20261013.8"), "download/");

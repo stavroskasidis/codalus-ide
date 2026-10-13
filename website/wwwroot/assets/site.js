@@ -48,12 +48,15 @@
     select(initial, false);
   }
 
-  // "Download for <OS>" on the home page.
+  // "Download for <OS>" on the home page: the visitor's recommended file from the release (data-<os>, set when the
+  // site knows a release), else the Download page at that OS's tab.
   const os = detectOs();
   const osNames = { windows: "Windows", macos: "macOS", linux: "Linux" };
+  const arm64 = /aarch64|arm64/i.test(navigator.userAgent || "");
   for (const link of document.querySelectorAll("[data-download-os]")) {
     if (!os) continue;
-    link.href = link.href.split("#")[0] + "#" + os;
+    const file = (os === "linux" && arm64 && link.dataset.linuxArm64) || link.dataset[os];
+    link.href = file || link.href.split("#")[0] + "#" + os;
     const label = link.querySelector("[data-label]");
     if (label) label.textContent = "Download for " + osNames[os];
   }
