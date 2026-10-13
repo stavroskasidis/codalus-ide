@@ -116,16 +116,7 @@ internal static partial class BuiltIns
                 Scope = SettingScope.User,
                 Order = 2,
             },
-            SettingDescriptor.Create(ThemeService.SettingKey, "\"followSystem\"", SettingType.String, shell) with
-            {
-                Title = "Color Theme",
-                Category = "Appearance",
-                Description = "The color theme. Follow System uses the operating system's light, dark or high-contrast setting.",
-                Enum = [.. ThemeService.Choices.Select(c => c.Id)],
-                EnumDescriptions = [.. ThemeService.Choices.Select(c => c.Title)],
-                Scope = SettingScope.User,
-                Order = 1,
-            },
+            ColorThemeSetting(ThemeService.Choices),
             SettingDescriptor.Create("workbench.statusBar.visible", "true", SettingType.Boolean, shell) with
             {
                 Title = "Status Bar Visible",
@@ -392,4 +383,17 @@ internal static partial class BuiltIns
         await Infrastructure.Ui.RunAsync(action).ConfigureAwait(false);
         return null;
     };
+
+    /// <summary><c>workbench.colorTheme</c>, offering <paramref name="choices"/> (the built-in themes, and plugins' once they're known).</summary>
+    public static SettingDescriptor ColorThemeSetting(IReadOnlyList<ThemeChoice> choices) =>
+        SettingDescriptor.Create(ThemeService.SettingKey, "\"followSystem\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Color Theme",
+            Category = "Appearance",
+            Description = "The color theme. Follow System uses the operating system's light, dark or high-contrast setting. Plugins can add themes.",
+            Enum = [.. choices.Select(c => c.Id)],
+            EnumDescriptions = [.. choices.Select(c => c.Title)],
+            Scope = SettingScope.User,
+            Order = 1,
+        };
 }

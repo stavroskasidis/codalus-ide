@@ -1,0 +1,13 @@
+{
+  "id": "codalus-samples.midnight",
+  "version": "1.0.0",
+  "displayName": "Midnight Theme",
+  "publisher": "codalus-samples",
+  "description": "A sample declarative plugin: a dark color theme in VS Code's theme format.",
+  "engines": { "codalus": "^1.0.0" },
+  "contributes": {
+    "themes": [
+      { "id": "midnight", "label": "Midnight", "uiTheme": "vs-dark", "path": "themes/midnight.json" }
+    ]
+  }
+}

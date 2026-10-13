@@ -39,6 +39,19 @@ public interface IPluginPrompts
 /// </summary>
 public sealed record WorkspacePlacement(Func<ProcessLaunchInfo, ProcessLaunchInfo?> Place, Func<string, string> PluginPath);
 
+/// <summary>A plugin's color theme: its id (the setting's value), label, base theme (<c>light</c>, <c>dark</c> or <c>highContrast</c>) and file.</summary>
+public sealed record ContributedTheme(string Id, string Label, string Base, string File, string PluginId)
+{
+    /// <summary>VS Code's <c>uiTheme</c> as our base theme; null for an unknown one.</summary>
+    public static string? BaseOf(string? uiTheme) => uiTheme switch
+    {
+        "vs" or "hc-light" => "light",
+        "vs-dark" => "dark",
+        "hc-black" => "highContrast",
+        _ => null,
+    };
+}
+
 /// <summary>Locates <c>codalus-pluginhost</c>: <c>CODALUS_PLUGINHOST</c>, then <c>pluginhost/</c> next to the shell.</summary>
 public static class PluginHostLocator
 {
@@ -307,6 +320,17 @@ public sealed class PluginManager : IAsyncDisposable
     public IReadOnlyList<(string PluginId, ManifestToolMacro Macro)> ToolMacros =>
         [.. Plugins.Where(p => p.State is PluginState.Ready or PluginState.Active)
             .SelectMany(p => (p.Manifest?.Contributes?.ExternalToolMacros ?? []).Where(x => !string.IsNullOrWhiteSpace(x.Name) && !string.IsNullOrWhiteSpace(x.Command)).Select(x => (p.Id, x)))];
+
+    /// <summary>
+    /// Color themes of the plugins that load (API 1.0, M22a): those with an id, a known base and a file that exists.
+    /// The shell offers them with its own.
+    /// </summary>
+    public IReadOnlyList<ContributedTheme> Themes =>
+        [.. Plugins.Where(p => p.State is PluginState.Ready or PluginState.Active)
+            .SelectMany(p => (p.Manifest?.Contributes?.Themes ?? [])
+                .Where(t => !string.IsNullOrWhiteSpace(t.Id) && !string.IsNullOrWhiteSpace(t.Path) && ContributedTheme.BaseOf(t.UiTheme) is not null)
+                .Select(t => new ContributedTheme(t.Id, string.IsNullOrWhiteSpace(t.Label) ? t.Id : t.Label, ContributedTheme.BaseOf(t.UiTheme)!, Path.Combine(p.InstallPath, t.Path), p.Id))
+                .Where(t => File.Exists(t.File)))];
 
     /// <summary>Custom tools of the plugins that load (API 0.2.8, ADR 0035).</summary>
     public IReadOnlyList<(string PluginId, ManifestCustomTool Tool)> CustomTools =>

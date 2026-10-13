@@ -38,12 +38,14 @@ public sealed class ThemeService
 
     private readonly Application _app;
     private readonly WorkbenchServices _workbench;
+    private readonly Func<IReadOnlyList<Workbench.Plugins.ContributedTheme>> _contributed;
     private string? _preview;
 
-    public ThemeService(Application app, WorkbenchServices workbench)
+    public ThemeService(Application app, WorkbenchServices workbench, Func<IReadOnlyList<Workbench.Plugins.ContributedTheme>>? contributed = null)
     {
         _app = app;
         _workbench = workbench;
+        _contributed = contributed ?? (() => []);
         workbench.Settings.Changed += (_, e) =>
         {
             if (e.Affects(SettingKey))
@@ -59,8 +61,15 @@ public sealed class ThemeService
         Apply();
     }
 
-    /// <summary>The resolved theme: <c>blue</c>, <c>light</c>, <c>dark</c> or <c>highContrast</c>.</summary>
+    /// <summary>The resolved theme: <c>blue</c>, <c>light</c>, <c>dark</c> or <c>highContrast</c> (a plugin's theme's base).</summary>
     public string ActiveTheme { get; private set; } = string.Empty;
+
+    /// <summary>The plugin's theme in use over <see cref="ActiveTheme"/>, or null (API 1.0, M22a).</summary>
+    public Workbench.Plugins.ContributedTheme? ActiveContributed { get; private set; }
+
+    /// <summary>The built-in themes, then the plugins' (by label).</summary>
+    public IReadOnlyList<ThemeChoice> AllChoices =>
+        [.. Choices, .. _contributed().OrderBy(t => t.Label, StringComparer.CurrentCultureIgnoreCase).Select(t => new ThemeChoice(t.Id, t.Label))];
 
     /// <summary>The configured choice (may be <see cref="FollowSystem"/>).</summary>
     public string Setting => _workbench.Settings.GetString(SettingKey, FollowSystem);
@@ -76,7 +85,9 @@ public sealed class ThemeService
 
     public void Apply()
     {
-        var resolved = Resolve(_preview ?? Setting, _app.PlatformSettings?.GetColorValues());
+        var setting = _preview ?? Setting;
+        var contributed = _contributed().FirstOrDefault(t => t.Id == setting);
+        var resolved = contributed?.Base ?? Resolve(setting, _app.PlatformSettings?.GetColorValues());
         _app.RequestedThemeVariant = resolved switch
         {
             "light" => ThemeVariant.Light,
@@ -85,9 +96,10 @@ public sealed class ThemeService
             _ => ThemeVariant.Dark,
         };
 
-        if (resolved != ActiveTheme)
+        if (resolved != ActiveTheme || contributed != ActiveContributed)
         {
             ActiveTheme = resolved;
+            ActiveContributed = contributed;
             _workbench.Context.Set("theme", resolved);
             Changed?.Invoke(this, EventArgs.Empty);
         }

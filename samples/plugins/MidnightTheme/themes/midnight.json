@@ -1,0 +1,33 @@
+{
+  // Midnight: a sample theme for the theme contribution point (plugin API 1.0). Colors chosen for this sample.
+  "name": "Midnight",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#0B1020",
+    "editor.foreground": "#D7DCEA",
+    "editorLineNumber.foreground": "#4A5577",
+    "editor.selectionBackground": "#2A3B6680",
+    "editor.lineHighlightBackground": "#141B33",
+    "sideBar.background": "#0E1428",
+    "editorGroupHeader.tabsBackground": "#0A0F1E",
+    "statusBar.background": "#1B2A55",
+    "statusBar.foreground": "#E6EAF5",
+    "titleBar.activeBackground": "#0A0F1E",
+    "focusBorder": "#5C7CFA",
+    "button.background": "#3D5AFE",
+    "button.foreground": "#FFFFFF"
+  },
+  "tokenColors": [
+    { "scope": ["comment"], "settings": { "foreground": "#5C6A8F", "fontStyle": "italic" } },
+    { "scope": "string", "settings": { "foreground": "#9EE6A0" } },
+    { "scope": "constant.numeric", "settings": { "foreground": "#F7B267" } },
+    { "scope": "keyword, storage.type", "settings": { "foreground": "#8EA8FF" } },
+    { "scope": "keyword.control", "settings": { "foreground": "#C792EA" } },
+    { "scope": "entity.name.type, entity.name.class", "settings": { "foreground": "#5FD7E6" } },
+    { "scope": "entity.name.function", "settings": { "foreground": "#FFD580" } },
+    { "scope": "variable.parameter", "settings": { "foreground": "#F2A1C2" } }
+  ],
+  "semanticTokenColors": {
+    "property": "#B9C4FF"
+  }
+}

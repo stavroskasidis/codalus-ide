@@ -2161,7 +2161,7 @@
   "setting.web.prettier.title": "Prettier",
   "setting.workbench.colorCustomizations.description": "Colors over the theme's for the editor (VS Code's ids, such as \"editor.selectionBackground\") and the window (resource keys such as \"Shell.Background\"); under \"[Dark]\" for one theme only. Tools → Fonts and Colors edits them.",
   "setting.workbench.colorCustomizations.title": "Editor and Window Colors",
-  "setting.workbench.colorTheme.description": "The color theme. Follow System uses the operating system's light, dark or high-contrast setting.",
+  "setting.workbench.colorTheme.description": "The color theme. Follow System uses the operating system's light, dark or high-contrast setting. Plugins can add themes.",
   "setting.workbench.colorTheme.enum.blue": "Blue",
   "setting.workbench.colorTheme.enum.dark": "Dark",
   "setting.workbench.colorTheme.enum.followSystem": "Follow System",

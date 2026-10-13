@@ -77,7 +77,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         UseUserDotnet();
         Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings()]);
         InitializeTerminalProfiles();
-        Theme = new ThemeService(app, Workbench);
+        Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
         {
             var log = Workbench.Log.GetText();
@@ -405,6 +405,13 @@ public sealed partial class ShellHost : IAsyncDisposable
             .Append((Paths.PluginsDirectory, false))
             .Append((builtIn, true));
         Plugins.AddPlugins(PluginDiscovery.Scan(roots, Workbench.Platform, Options.EnableProposedApi));
+
+        // Plugins' color themes (API 1.0): offered by the setting, and applied when it names one.
+        if (Plugins.Themes.Count > 0)
+        {
+            Workbench.Settings.Register([BuiltIns.ColorThemeSetting(Theme.AllChoices)]);
+            Theme.Apply();
+        }
     }
 
     private object? CreateToolContent(ToolWindowDescriptor window) => window.Kind switch
@@ -587,7 +594,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     public async Task SelectThemeAsync()
     {
         var current = Theme.Setting;
-        var choices = ThemeService.Choices;
+        var choices = Theme.AllChoices;
         var items = choices.Select(c => new QuickPickItem(c.Title) { Tag = c.Id, Detail = c.Id == current ? "current" : null }).ToList();
         var active = Math.Max(0, choices.ToList().FindIndex(c => c.Id == current));
         Workbench.Context.Set("inCommandPalette", true);

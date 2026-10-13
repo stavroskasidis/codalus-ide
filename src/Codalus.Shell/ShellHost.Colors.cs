@@ -33,6 +33,31 @@ public sealed partial class ShellHost
         }
     }
 
+    private (string File, DateTime Written, ColorOverrides Colors)? _themeLayer;
+
+    /// <summary>A plugin theme's colors, read once per file version.</summary>
+    private ColorOverrides ThemeLayer(Workbench.Plugins.ContributedTheme theme)
+    {
+        try
+        {
+            var written = File.GetLastWriteTimeUtc(theme.File);
+            if (_themeLayer is { } cached && cached.File == theme.File && cached.Written == written)
+            {
+                return cached.Colors;
+            }
+
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(theme.File), new System.Text.Json.JsonDocumentOptions { CommentHandling = System.Text.Json.JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            var colors = ThemeFiles.Read(document.RootElement);
+            _themeLayer = (theme.File, written, colors);
+            return colors;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            Workbench.Log.AppendLine($"The theme '{theme.Label}' ({theme.File}) couldn't be read: {ex.Message}");
+            return ColorOverrides.None;
+        }
+    }
+
     private void InitializeColors()
     {
         Workbench.Settings.Changed += (_, e) =>
@@ -52,9 +77,14 @@ public sealed partial class ShellHost
 
     private void ApplyColorCustomizations()
     {
-        var title = ThemeService.Choices.FirstOrDefault(c => c.Id == Theme.ActiveTheme)?.Title ?? Theme.ActiveTheme;
-        ColorOverrides = ColorCustomizations.For(Theme.ActiveTheme, title,
+        // A plugin's theme (API 1.0) is its colors over its base; the user's customizations go over both, by the
+        // plugin theme's id or label as well as the base's.
+        var contributed = Theme.ActiveContributed;
+        var themeId = contributed?.Id ?? Theme.ActiveTheme;
+        var title = contributed?.Label ?? ThemeService.Choices.FirstOrDefault(c => c.Id == Theme.ActiveTheme)?.Title ?? Theme.ActiveTheme;
+        var user = ColorCustomizations.For(themeId, title,
             Workbench.Settings.GetValue(ColorCustomizations.WorkbenchKey), Workbench.Settings.GetValue(ColorCustomizations.TokensKey));
+        ColorOverrides = contributed is null ? user : ThemeFiles.Merge(ThemeLayer(contributed), user);
         _editorTheme = null;
         if (Avalonia.Application.Current is not { } app)
         {

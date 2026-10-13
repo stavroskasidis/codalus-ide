@@ -75,6 +75,9 @@ public sealed record ManifestContributions
     /// <summary>Snippet files in VS Code's format, for a language (API 0.2.5, M12b).</summary>
     public ManifestSnippets[]? Snippets { get; init; }
 
+    /// <summary>Color themes in VS Code's format (API 1.0, M22a): no plugin code, so a declarative plugin can be one.</summary>
+    public ManifestTheme[]? Themes { get; init; }
+
     /// <summary>Rows for the Properties window, from a command (API 0.2.8, M26, ADR 0033).</summary>
     public ManifestPropertyProvider[]? PropertyProviders { get; init; }
 
@@ -132,6 +135,13 @@ public sealed record ManifestCustomTool(string Name, string Command)
 
 /// <summary>A snippet file, as in VS Code's <c>contributes.snippets</c>: <c>{ language, path }</c>, the path relative to the plugin's folder.</summary>
 public sealed record ManifestSnippets(string Language, string Path);
+
+/// <summary>
+/// A color theme: <see cref="Id"/> is the <c>workbench.colorTheme</c> value, <see cref="UiTheme"/> its base
+/// (<c>vs</c>, <c>vs-dark</c>, <c>hc-black</c> or <c>hc-light</c>), <see cref="Path"/> its file (VS Code's
+/// <c>colors</c>, <c>tokenColors</c> and <c>semanticTokenColors</c>) in the plugin's folder.
+/// </summary>
+public sealed record ManifestTheme(string Id, string Label, string UiTheme, string Path);
 
 /// <summary>A language, as in VS Code's <c>contributes.languages</c>. Paths are relative to the plugin's folder.</summary>
 public sealed record ManifestLanguage(string Id)
