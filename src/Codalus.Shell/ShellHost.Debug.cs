@@ -222,6 +222,12 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (Remote is null && IsMobileApp(project))
+        {
+            await StartMobileAsync(project, debug: true).ConfigureAwait(true);
+            return;
+        }
+
         if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })

@@ -94,6 +94,7 @@ internal sealed class SolutionBuilder : IDisposable
             BuildTargets.Pack => "Pack",
             BuildTargets.Publish => "Publish",
             BuildTargets.PublishContainer => "Publish;PublishContainer", // the image is made from the published output
+            BuildTargets.Install => "Install",
             _ => "Build",
         };
         await events.BuildOutputAsync($"{msbuildTarget} started: {Path.GetFileName(path)} ({Describe(globalProperties)})").ConfigureAwait(false);

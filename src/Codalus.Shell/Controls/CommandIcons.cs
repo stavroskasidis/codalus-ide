@@ -40,6 +40,7 @@ public static class CommandIcons
     {
         ["account"] = Blue,
         ["window"] = Blue,
+        ["phone"] = Blue,
         ["broom"] = Blue,
         ["save"] = Blue,
         ["save-all"] = Blue,

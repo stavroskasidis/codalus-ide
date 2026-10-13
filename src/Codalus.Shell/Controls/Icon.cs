@@ -309,6 +309,7 @@ public static class IconSet
         ["fork"] = "branch_fork_16_regular",
         ["merge"] = "merge_16_regular",
         ["stash"] = "archive_16_regular",
+        ["phone"] = "phone_16_regular",
         ["tag"] = "tag_16_regular",
         ["link-add"] = "link_add_16_regular",
         ["container"] = "cube_16_regular",

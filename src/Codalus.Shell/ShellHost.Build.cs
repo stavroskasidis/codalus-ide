@@ -197,6 +197,13 @@ public sealed partial class ShellHost
             return;
         }
 
+        // A mobile app runs on the toolbar's device, built for that device's framework (M20a, ADR 0064).
+        if (Remote is null && IsMobileApp(project))
+        {
+            await StartMobileAsync(project, debug: false).ConfigureAwait(true);
+            return;
+        }
+
         // Hot Reload needs .NET 6 (M33): asked for, it says why not; on by the setting, the program runs without it.
         string? withoutHotReload = null;
         if ((hotReload || hotReloadSetting) && HotReloadUnsupportedReason(project) is { } reason)

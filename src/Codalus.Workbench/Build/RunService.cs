@@ -79,9 +79,13 @@ public sealed class RunningProgram : IDisposable
         _listening.TrySetCanceled();
     }
 
+    /// <summary>What else Stop does: an app on a device is stopped there (M20a), its log reader here.</summary>
+    public Action? Stopping { get; set; }
+
     /// <summary>Ends the program and every process it started; a child the OS won't let us end (access denied, already exiting) is left.</summary>
     public void Stop()
     {
+        Stopping?.Invoke();
         try
         {
             if (!_process.HasExited)

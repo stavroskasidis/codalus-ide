@@ -284,7 +284,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         return null;
     }
 
-    private static async Task<(int ExitCode, string Output)> RunAsync(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken cancellationToken)
+    internal static async Task<(int ExitCode, string Output)> RunAsync(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo(program)
         {

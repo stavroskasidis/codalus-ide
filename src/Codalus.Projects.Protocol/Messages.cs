@@ -318,6 +318,12 @@ public static class BuildTargets
 
     /// <summary>The SDK's <c>PublishContainer</c> target: publishes, then builds a container image (M17c).</summary>
     public const string PublishContainer = "publishContainer";
+
+    /// <summary>
+    /// The mobile workloads' <c>Install</c> target (M20a, ADR 0064): builds, signs and installs the app on the device
+    /// that the options' properties name (<c>TargetFramework</c>, and <c>AdbTarget</c> for Android).
+    /// </summary>
+    public const string Install = "install";
 }
 
 /// <summary>

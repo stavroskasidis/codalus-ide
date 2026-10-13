@@ -145,6 +145,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeComponentsPage();
         InitializeAiChat();
         InitializeAiAgent();
+        InitializeMobile();
         InitializeAiActions();
 
         // A file given on the command line: start its language service now, alongside the window.
@@ -499,6 +500,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             PluginGalleryWindow => PluginGallery(),
             ComponentsWindow => ComponentsPage(),
             AiChatWindow => AiChat(),
+            DevicesWindow => DevicesPage(),
             _ => null,
         },
     };

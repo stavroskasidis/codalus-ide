@@ -94,6 +94,7 @@ public sealed partial class ShellHost
             [.. solution.Projects.Where(p => Runs.IsExecutable(p.Path) || Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(p.Path, startup)).Select(p => new StartupProjectChoice(p.Name, p.Path))],
             startup,
             startup is null ? null : Runs.ChosenProfile(startup));
+        UpdateToolbarDevices();
     }
 
     // ------------------------------------------------------------------ search (Ctrl+Q)

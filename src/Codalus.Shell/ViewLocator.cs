@@ -95,6 +95,7 @@ public sealed class ViewLocator : IDataTemplate
         ShellHost.PluginGalleryContent gallery => new ShellHost.PluginGalleryView(gallery.Shell),
         ShellHost.ComponentsContent components => new ShellHost.ComponentsView(components.Shell),
         ShellHost.AiChatContent ai => new ShellHost.AiChatView(ai.Shell),
+        ShellHost.DevicesContent devices => new ShellHost.DevicesView(devices.Shell),
         SolutionExplorerViewModel vm => new SolutionExplorerView { DataContext = vm },
         PropertiesWindowViewModel vm => new PropertiesWindowView { DataContext = vm },
         TestExplorerViewModel vm => new TestExplorerView { DataContext = vm },

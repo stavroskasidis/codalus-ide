@@ -10,6 +10,12 @@ public sealed record StartupProjectChoice(string Name, string Path)
     public override string ToString() => Name;
 }
 
+/// <summary>A device or emulator in the toolbar's device list (M20, a mobile startup project).</summary>
+public sealed record DeviceChoice(string Label, string Id)
+{
+    public override string ToString() => Label;
+}
+
 /// <summary>
 /// The standard toolbar under the menu (M29): navigation, open and save, undo and redo, the solution configuration and
 /// platform, the startup project and Start; while debugging, the debug commands. The shell keeps it up to date
@@ -143,6 +149,49 @@ public sealed class ToolbarViewModel : ObservableObject
             {
                 Select(_configuration, value);
             }
+        }
+    }
+
+    private DeviceChoice? _device;
+    private bool _hasDevices;
+
+    /// <summary>Where a mobile startup project runs (M20): its devices and emulators; empty for other projects.</summary>
+    public ObservableCollection<DeviceChoice> Devices { get; } = [];
+
+    /// <summary>Called with a device's id when the user picks one.</summary>
+    public Action<string>? SelectDevice { get; set; }
+
+    public bool HasDevices
+    {
+        get => _hasDevices;
+        private set => SetField(ref _hasDevices, value);
+    }
+
+    public DeviceChoice? Device
+    {
+        get => _device;
+        set
+        {
+            if (SetField(ref _device, value) && !_updating && value is not null)
+            {
+                SelectDevice?.Invoke(value.Id);
+            }
+        }
+    }
+
+    /// <summary>Shows the startup project's devices (none hides the list) with <paramref name="selected"/> chosen.</summary>
+    public void SetDevices(IReadOnlyList<DeviceChoice> devices, string? selected)
+    {
+        _updating = true;
+        try
+        {
+            Replace(Devices, devices);
+            Device = Devices.FirstOrDefault(d => d.Id == selected) ?? Devices.FirstOrDefault();
+            HasDevices = Devices.Count > 0;
+        }
+        finally
+        {
+            _updating = false;
         }
     }
 

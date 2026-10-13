@@ -38,6 +38,8 @@
       <Border Classes="toolbarSeparator" IsVisible="{Binding HasSolution}" />
       <ComboBox Classes="toolbar" ItemsSource="{Binding StartupProjects}" SelectedItem="{Binding StartupProject}" MinWidth="120"
                 IsVisible="{Binding HasSolution}" ToolTip.Tip="{l:T standardToolbar.startupProject}" AutomationProperties.Name="{l:T standardToolbar.startupProject}" PlaceholderText="{l:T standardToolbar.startupProject2}" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding Devices}" SelectedItem="{Binding Device}" MinWidth="120"
+                IsVisible="{Binding HasDevices}" ToolTip.Tip="{l:T standardToolbar.device}" AutomationProperties.Name="{l:T standardToolbar.device}" />
       <Button x:Name="StartButton" Classes="toolbar start" Command="{Binding StartCommand}" IsVisible="{Binding CanStart}"
               Tag="debug.start" ToolTip.Tip="{l:T standardToolbar.startDebugging}" AutomationProperties.Name="{l:T standardToolbar.startDebugging}">
         <StackPanel Orientation="Horizontal" Spacing="4">
