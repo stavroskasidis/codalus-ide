@@ -1,0 +1,172 @@
+@page "/download"
+@inject Releases Releases
+@inject SiteOptions Site
+
+<PageMeta Title="Download" Description="Download Daedalus Studio for Windows, macOS and Linux: installers that update themselves, a portable zip, an AppImage, and apt and dnf repositories." />
+
+<div class="container">
+    <section class="page-intro">
+        <p class="eyebrow">Download@(Releases.Offered is { } offered ? $" · {offered}" : "")</p>
+        <h1 class="display display-l">Install Daedalus Studio</h1>
+        <p class="lead">Free and open source. The installers update themselves from signed feeds, and the debugger is included.</p>
+    </section>
+
+    @if (Releases.OnlyNightly)
+    {
+        <div class="notice notice-amber" style="margin-top: 32px">
+            <p><strong>No stable release yet.</strong> These are the newest nightly build, @Releases.Nightly, built from develop. Expect rough edges, and please <a href="@(Site.GitHub)/issues">report what you find</a>.</p>
+        </div>
+    }
+    else if (Releases.Offered is null)
+    {
+        <div class="notice notice-amber" style="margin-top: 32px">
+            <p><strong>The first release isn't out yet.</strong> The links below lead to the releases page; until then, build from source.</p>
+        </div>
+    }
+
+    <section style="padding-top: 32px" aria-labelledby="prereq">
+        <div class="notice">
+            <p><strong id="prereq">Before you install:</strong> the <a href="https://dotnet.microsoft.com/download">.NET SDK 10.0</a> or newer, and <a href="https://git-scm.com/downloads">git</a> 2.30 or newer on the PATH.</p>
+            <a class="link-arrow" href="docs/getting-started/#prerequisites">Details</a>
+        </div>
+    </section>
+
+    <section style="padding-top: 40px" aria-label="Downloads" data-tabs data-tabs-hash data-tabs-detect>
+        <div class="tabs" role="tablist" aria-label="Operating system" hidden>
+            <button class="tab" type="button" role="tab" id="tab-windows" aria-controls="windows-panel" data-key="windows">Windows</button>
+            <button class="tab" type="button" role="tab" id="tab-macos" aria-controls="macos-panel" data-key="macos">macOS</button>
+            <button class="tab" type="button" role="tab" id="tab-linux" aria-controls="linux-panel" data-key="linux">Linux</button>
+        </div>
+
+        <div class="os-panel" role="tabpanel" id="windows-panel" aria-labelledby="tab-windows">
+            <div class="os-head"><h2 id="windows">Windows</h2><span>Windows 11, x64</span></div>
+            <DownloadFile Kind="Installer" Suffix="win-x64-setup.exe" Recommended="true">
+                Installs for you alone, without administrator rights. Adds a Start menu entry and <code>daedalus</code> to your PATH, and updates itself.
+            </DownloadFile>
+            <DownloadFile Kind="Portable zip" Suffix="win-x64.zip">Unzip anywhere and run daedalus.exe. It doesn't update itself.</DownloadFile>
+            <div class="os-foot">
+                <strong>First start: “Windows protected your PC”</strong>
+                <span>The installers aren't code-signed yet. Choose More info, then Run anyway. Windows asks only once.</span>
+            </div>
+        </div>
+
+        <div class="os-panel" role="tabpanel" id="macos-panel" aria-labelledby="tab-macos">
+            <div class="os-head"><h2 id="macos">macOS</h2><span>macOS 15 or newer, Apple silicon</span></div>
+            <DownloadFile Kind="Installer package" Suffix="osx-arm64.pkg" Recommended="true">
+                Install for you (~/Applications) or for every user (/Applications). The app updates itself.
+            </DownloadFile>
+            <DownloadFile Kind="App bundle" Suffix="osx-arm64.app.zip">The app on its own: unzip it and move it where you like.</DownloadFile>
+            <div class="os-foot">
+                <strong>First start: “Apple could not verify…”</strong>
+                <span>The installers aren't code-signed yet. Close the message, open System Settings → Privacy &amp; Security, choose Open Anyway next to Daedalus Studio, then open it again.</span>
+            </div>
+        </div>
+
+        <div class="os-panel" role="tabpanel" id="linux-panel" aria-labelledby="tab-linux">
+            <div class="os-head"><h2 id="linux">Linux</h2><span>x64 or arm64, X11 or Wayland through XWayland</span></div>
+            <DownloadFile Kind="AppImage" Suffix="linux-x64.AppImage" Arm64Suffix="linux-arm64.AppImage" Recommended="true">
+                <code>chmod +x</code> the file and run it. It updates itself.
+            </DownloadFile>
+            <DownloadFile Kind="Debian and Ubuntu package" Suffix="linux-x64.deb" Arm64Suffix="linux-arm64.deb">
+                <code>sudo apt install ./</code> the file, or use the apt repository below to get updates with the system.
+            </DownloadFile>
+            <DownloadFile Kind="Fedora and RHEL package" Suffix="linux-x64.rpm" Arm64Suffix="linux-arm64.rpm">
+                <code>sudo dnf install ./</code> the file, or use the dnf repository below.
+            </DownloadFile>
+            <DownloadFile Kind="Tarball" Suffix="linux-x64.tar.gz" Arm64Suffix="linux-arm64.tar.gz">
+                Extract it and run <code>daedalus-studio/daedalus</code>.
+            </DownloadFile>
+            <div class="os-foot">
+                <strong>Package repositories</strong>
+                <span>Installs from the apt and dnf repositories update with the system. The packages and the repositories are signed with the project's key.</span>
+            </div>
+            <div class="repo-grid" style="margin: 0; padding: 20px 24px 24px">
+                <div class="card card-outline">
+                    <h3 id="apt">Debian and Ubuntu (apt)</h3>
+                    <Commands Text="@Apt" />
+                </div>
+                <div class="card card-outline">
+                    <h3 id="dnf">Fedora and RHEL (dnf)</h3>
+                    <Commands Text="@Dnf" />
+                    <p>Use <code>nightly</code> in place of <code>stable</code> for nightly builds.</p>
+                </div>
+                <div class="card card-outline">
+                    <h3 id="zypper">openSUSE (zypper)</h3>
+                    <Commands Text="@Zypper" />
+                    <p>The same rpm repository, so it updates with the system.</p>
+                </div>
+                <div class="card card-outline">
+                    <h3 id="aur">Arch Linux (AUR)</h3>
+                    <Commands Text="@Aur" />
+                    <p>Or with an AUR helper: <code>yay -S daedalus-studio-bin</code>.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" aria-label="Channels and verification">
+        <div class="grid grid-wide">
+            <div class="card card-outline">
+                <h2>Stable and nightly</h2>
+                <p>
+                    Stable releases come from master. Nightly builds come from develop every night it changed, and are marked as prereleases.
+                    @if (Releases.Stable is not null && Releases.Nightly is { } nightly)
+                    {
+                        @("The newest is ")<a href="@Releases.ReleaseUrl(nightly)">@nightly</a>@(".")
+                    }
+                </p>
+                <a class="link-arrow" href="@Releases.ReleasesUrl">All releases</a>
+            </div>
+            <div class="card card-outline">
+                <h2>Check the download</h2>
+                <p>Every release lists the SHA-256 of each file in SHA256SUMS.txt. The .deb and .rpm packages and the repositories are signed with the project's key.</p>
+                <a class="link-arrow" href="@Site.Blob("eng/packaging/linux/daedalus-studio-packages.asc")">The signing key</a>
+            </div>
+            <div class="card card-outline">
+                <h2>Build from source</h2>
+                <Commands Text="@Source" />
+            </div>
+        </div>
+    </section>
+
+    <section class="section" aria-labelledby="next">
+        <div class="cta cta-row">
+            <div>
+                <h2 id="next">Installed? Open a solution.</h2>
+                <p>File → Open Solution or Project (Ctrl+Shift+O), or <code>daedalus path/to/App.slnx</code>. Trust the folder, and the projects load, restore and light up.</p>
+            </div>
+            <a class="button" href="docs/getting-started/#first-start">Getting started</a>
+        </div>
+    </section>
+</div>
+
+@code {
+    // The repositories are served next to the site (eng/linux-repos.sh, .github/workflows/linux-repos.yml).
+    private string Apt => $"""
+        curl -fsSL {Site.BaseUrl}daedalus-studio-packages.asc | sudo gpg --dearmor -o /usr/share/keyrings/daedalus-studio.gpg
+        echo "deb [signed-by=/usr/share/keyrings/daedalus-studio.gpg] {Site.BaseUrl}apt stable main" | sudo tee /etc/apt/sources.list.d/daedalus-studio.list
+        sudo apt update && sudo apt install daedalus-studio
+        """;
+
+    private string Dnf => $"""
+        sudo curl -fsSL -o /etc/yum.repos.d/daedalus-studio.repo {Site.BaseUrl}rpm/daedalus-studio-stable.repo
+        sudo dnf install daedalus-studio
+        """;
+
+    private string Zypper => $"""
+        sudo rpm --import {Site.BaseUrl}daedalus-studio-packages.asc
+        sudo zypper addrepo {Site.BaseUrl}rpm/daedalus-studio-stable.repo
+        sudo zypper install daedalus-studio
+        """;
+
+    private const string Aur = """
+        git clone https://aur.archlinux.org/daedalus-studio-bin.git
+        cd daedalus-studio-bin && makepkg -si
+        """;
+
+    private string Source => $"""
+        git clone {Site.GitHub}
+        cd daedalus-studio
+        dotnet run --project src/DaedalusStudio.Shell
+        """;
+}

@@ -1,12 +1,20 @@
-name: Linux repositories
+name: Website and Linux repositories
 
-# Rebuilds the apt and dnf repositories on GitHub Pages from the newest stable release and the newest nightly
-# (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret), checks that apt and dnf install from them with
-# their signatures verified (eng/test-linux-repos.sh), then deploys them (M31, D18). Called after each nightly, and
-# started on develop after each release: release.yml runs on master, and the github-pages environment deploys develop.
+# Everything GitHub Pages serves, rebuilt as one site: the apt and dnf repositories from the newest stable release and
+# the newest nightly (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret), checked by installing from
+# them with apt, dnf and zypper, signatures verified (eng/test-linux-repos.sh) (M31, D18); then the website, the Blazor
+# app in website/ exported to static files with those releases' download links. Called after each nightly, started on
+# develop after each release (release.yml runs on master, and the github-pages environment deploys develop), and run
+# when the website or the user guide changes on develop.
 on:
   workflow_call:
   workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - "website/**"
+      - "docs/user-guide/**"
+      - ".github/workflows/linux-repos.yml"
 
 permissions:
   contents: read
@@ -25,15 +33,18 @@ jobs:
       - name: Tools
         run: sudo apt-get update && sudo apt-get install -y apt-utils createrepo-c rpm
       - name: The newest stable and nightly packages
+        id: releases
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           stable="$(gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -rV | head -n 1 || true)"
           nightly="$(gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- '-nightly\.' | sort -rV | head -n 1 || true)"
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+          echo "nightly=$nightly" >> "$GITHUB_OUTPUT"
           [ -n "$stable" ] && gh release download "$stable" -D packages/stable -p '*.deb' -p '*.rpm'
           [ -n "$nightly" ] && gh release download "$nightly" -D packages/nightly -p '*.deb' -p '*.rpm'
-          ls -R packages
+          mkdir -p packages && ls -R packages
       # The site's address as Pages serves it (a custom domain of the owner's, or <owner>.github.io), over HTTPS: apt
       # refuses a redirect from HTTPS to HTTP, which github.io gives when the owner has a custom domain.
       - id: pages
@@ -53,6 +64,17 @@ jobs:
         run: |
           [ -d site/rpm/stable ] && bash eng/test-linux-repos.sh site stable
           [ -d site/rpm/nightly ] && bash eng/test-linux-repos.sh site nightly
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      # The app renders every page into the same folder (it leaves the repositories alone) and fails on a broken link
+      # or anchor. A relative --export path is taken from the repository root.
+      - name: Export the website
+        shell: bash
+        run: |
+          base="${{ steps.pages.outputs.base_url }}"
+          dotnet run --project website -c Release --no-launch-profile -- --export site --base-url "https://${base#*://}/" \
+            --ref "${{ github.ref_name }}" --stable "${{ steps.releases.outputs.stable }}" --nightly "${{ steps.releases.outputs.nightly }}"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

@@ -1,0 +1,89 @@
+@page "/docs"
+@page "/docs/{Slug}"
+@inject UserGuide Guide
+@inject SiteOptions Site
+@inject NavigationManager Nav
+
+@if (_page is { } current)
+{
+    <PageMeta Title="@(current.Slug.Length == 0 ? "Documentation" : $"{current.Title} · Docs")" Description="@current.Description" />
+
+    <div class="container-wide docs">
+        <details class="docs-nav" open>
+            <summary>Guide contents</summary>
+            <div class="docs-nav-body">
+                <div class="search" data-search="docs/search-index.json" hidden>
+                    <label for="docsearch">Search the guide</label>
+                    <input id="docsearch" type="search" placeholder="Breakpoints, NuGet, themes…" autocomplete="off" aria-controls="search-results" />
+                    <ul class="search-results" id="search-results" aria-live="polite" hidden></ul>
+                </div>
+                <nav class="docs-group" aria-label="User guide">
+                    <span class="docs-group-title">User guide</span>
+                    @foreach (var item in Guide.Pages)
+                    {
+                        <a href="@item.Url" aria-current="@(item == current ? "page" : null)">@(item.Slug.Length == 0 ? "Overview" : item.Title)</a>
+                    }
+                </nav>
+                <nav class="docs-group" aria-label="More">
+                    <span class="docs-group-title">More</span>
+                    <a href="@Site.Blob("docs/plugins.md")">Writing plugins</a>
+                    <a href="@Site.Blob("docs/protocol.md")">Language service protocol</a>
+                    <a href="@Site.Blob("docs/roadmap.md")">Roadmap</a>
+                    <a href="@Site.Tree("docs/adr")">Architecture decisions</a>
+                    <a href="@Site.Blob("docs/accessibility.md")">Accessibility</a>
+                    <a href="@Site.Blob("CONTRIBUTING.md")">Contributing</a>
+                </nav>
+            </div>
+        </details>
+        <article class="docs-main">
+            <p class="breadcrumb">
+                @if (current.Slug.Length == 0)
+                {
+                    @("Documentation")
+                }
+                else
+                {
+                    <a href="docs/">User guide</a>@(" › " + current.Title)
+                }
+            </p>
+            <div class="prose">
+                @((MarkupString)current.Html)
+            </div>
+            <div class="docs-pager">
+                <a class="edit" href="@($"{Site.GitHub}/edit/{Site.Ref}/{current.Source}")">Edit this page on GitHub</a>
+                <div class="pager-links">
+                    @if (Neighbour(-1) is { } previous)
+                    {
+                        <a href="@previous.Url" rel="prev"><small>Previous</small><span>@previous.Title</span></a>
+                    }
+                    @if (Neighbour(1) is { } next)
+                    {
+                        <a href="@next.Url" rel="next"><small>Next</small><span>@next.Title</span></a>
+                    }
+                </div>
+            </div>
+        </article>
+    </div>
+}
+
+@code {
+    private GuidePage? _page;
+
+    [Parameter] public string? Slug { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _page = Guide.Find(Slug);
+        if (_page is null)
+        {
+            Nav.NotFound();
+        }
+    }
+
+    private GuidePage? Neighbour(int step)
+    {
+        var pages = Guide.Pages;
+        var index = pages.ToList().IndexOf(_page!) + step;
+        return index >= 0 && index < pages.Count ? pages[index] : null;
+    }
+}

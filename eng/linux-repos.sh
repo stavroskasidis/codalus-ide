@@ -4,13 +4,14 @@
 #
 # Usage: eng/linux-repos.sh --out <site> --base-url <url> [--stable <dir>] [--nightly <dir>]
 #   <dir>      a folder with that channel's .deb and .rpm packages (x64 and arm64)
-#   <site>     the folder to write (what Pages publishes): apt/, rpm/, the .repo files, the public key and index.html
+#   <site>     the folder to write (what Pages publishes): apt/, rpm/, the .repo files and the public key. The website
+#              (website/, exported with --export) goes into the same folder afterwards; its download page has the
+#              instructions.
 # Environment:
 #   PACKAGES_GPG_PRIVATE_KEY  the armored private key (a repository secret); without it, a throwaway key signs (tests)
 # Needs: gpg, apt-ftparchive (apt-utils), createrepo_c, rpmsign (rpm).
 set -euo pipefail
 
-repo="$(cd "$(dirname "$0")/.." && pwd)"
 out="" base_url="" stable="" nightly=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -89,7 +90,6 @@ gpgkey=$base_url/daedalus-studio-packages.asc
 EOF
 done
 
-sed -e "s|{{BASE_URL}}|$base_url|g" "$repo/eng/packaging/linux/repos-index.html" > "$out/index.html"
 touch "$out/.nojekyll" # Pages serves the files as they are
 echo "== Site in $out (signed by $fingerprint)"
 find "$out" -maxdepth 3 -type d | sort

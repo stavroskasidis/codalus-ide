@@ -1,0 +1,24 @@
+@inject SiteOptions Site
+@inject NavigationManager Nav
+
+<PageTitle>@FullTitle</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Description" />
+    <meta property="og:title" content="@FullTitle" />
+    <meta property="og:description" content="@Description" />
+    <meta property="og:url" content="@Canonical" />
+    <link rel="canonical" href="@Canonical" />
+</HeadContent>
+
+@code {
+    /// <summary>The page's name; " · Daedalus Studio" follows it unless <see cref="Exact"/>.</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Description { get; set; } = "";
+
+    [Parameter] public bool Exact { get; set; }
+
+    private string FullTitle => Exact ? Title : $"{Title} · Daedalus Studio";
+
+    private string Canonical => Site.BaseUrl + Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0];
+}

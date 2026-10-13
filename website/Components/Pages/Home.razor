@@ -1,0 +1,135 @@
+@page "/"
+@inject Releases Releases
+@inject SiteOptions Site
+
+<PageMeta Exact="true" Title="Daedalus Studio: the open-source .NET IDE for Windows, macOS and Linux"
+          Description="Daedalus Studio is a free, open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git, native on Windows, macOS and Linux." />
+
+<div class="container">
+    <section class="hero">
+        @if (Releases.Stable is { } stable)
+        {
+            <a class="pill" href="@Releases.ReleaseUrl(stable)"><span class="pill-tag">NEW</span>Version @stable is out: see what's in it <Icon Name="arrow" Size="14" /></a>
+        }
+        else if (Releases.OnlyNightly)
+        {
+            <a class="pill" href="@Releases.ReleaseUrl(Releases.Nightly)"><span class="pill-tag">PREVIEW</span>Nightly builds are available while 0.x takes shape <Icon Name="arrow" Size="14" /></a>
+        }
+        <h1 class="display display-xl">A real .NET IDE, native on Windows, macOS and Linux.</h1>
+        <p class="lead">Daedalus Studio is an open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git. Free, MIT-licensed, and without telemetry.</p>
+        <div class="hero-actions">
+            <a class="button" href="download/" data-download-os>
+                <Icon Name="download" Size="18" />
+                <span data-label>Download</span>
+            </a>
+            <a class="button button-quiet" href="docs/">Read the user guide</a>
+        </div>
+        <p class="fineprint">Windows 11 x64 · macOS 15+ on Apple silicon · Linux x64 and arm64 · needs the .NET SDK 10.0+</p>
+        <figure class="shot shot-hero">
+            <img src="assets/screenshots/editor-dark.png" width="1280" height="800" alt="Daedalus Studio with a C# solution open: the Start page, the editor with inlay hints, Find Results and the Solution Explorer" />
+        </figure>
+    </section>
+
+    <section class="section" aria-labelledby="everything">
+        <div class="section-head">
+            <p class="eyebrow">The whole inner loop</p>
+            <h2 class="heading" id="everything">From opening a solution to shipping it, in one window.</h2>
+        </div>
+        <div class="grid">
+            <FeatureCard Icon="code" Title="C# on Roslyn">Semantic highlighting, completion, live diagnostics, refactorings with previews, your analyzers and source generators.</FeatureCard>
+            <FeatureCard Icon="projects" Title="A real project system">.sln and .slnx, SDK-style projects on MSBuild, property pages, configurations, multi-targeting and NuGet.</FeatureCard>
+            <FeatureCard Icon="bug" Title="Debugging">Conditional breakpoints and logpoints, data tips, Watch, visualizers, PerfTips, and Blazor in the browser.</FeatureCard>
+            <FeatureCard Icon="flask" Title="Testing">A Test Explorer for xUnit, NUnit, MSTest and TUnit, test margins in the editor, and coverage with Coverlet.</FeatureCard>
+            <FeatureCard Icon="branch" Title="Git and pull requests">Hunk staging, a history graph, a 3-way merge editor, interactive rebase, and GitHub, Azure DevOps and GitLab.</FeatureCard>
+            <FeatureCard Icon="terminal" Title="Terminal and C# Interactive">Your own shells with clickable file:line links, and a C# REPL that loads NuGet packages and your project.</FeatureCard>
+            <FeatureCard Icon="globe" Title="Web, Razor and Blazor">C# inside .razor and .cshtml, .http files, an Endpoints Explorer, and HTML, CSS and TypeScript servers.</FeatureCard>
+            <FeatureCard Icon="pulse" Title="Profiling">Live .NET counters, CPU traces with flame graphs and hot lines in the editor, through EventPipe.</FeatureCard>
+            <FeatureCard Icon="database" Title="Data and EF Core">Migrations and model views on your own dotnet-ef, and a Database Explorer for SQL Server, PostgreSQL, MySQL and SQLite.</FeatureCard>
+            <FeatureCard Icon="box" Title="Containers and Aspire">Run and debug in a container with docker or podman, and debug an Aspire AppHost with all its projects.</FeatureCard>
+            <FeatureCard Icon="layout" Title="Avalonia XAML">Completion and binding paths in .axaml files, XAML diagnostics, and a live previewer beside the code.</FeatureCard>
+            <FeatureCard Icon="puzzle" Title="Plugins">A versioned, out-of-process plugin API, and any LSP language server added without writing code.</FeatureCard>
+        </div>
+        <p><a class="link-arrow" href="features/">See every feature, with screenshots <Icon Name="arrow" Size="16" /></a></p>
+    </section>
+
+    <section class="section split" aria-labelledby="debug">
+        <div class="split-text">
+            <p class="eyebrow">F5 just works</p>
+            <h2 class="heading" id="debug">Debug the way you're used to.</h2>
+            <p>Launch or attach, step through threads, and read values where they are. The debugger is netcoredbg over DAP, included in every package.</p>
+            <ul class="ticks">
+                <li>Breakpoints with conditions, hit counts and logpoints</li>
+                <li>Call Stack, Locals, Autos, Watch and QuickWatch</li>
+                <li>PerfTips, Run to Click and exception settings</li>
+                <li>A server and its Blazor page as one session</li>
+            </ul>
+        </div>
+        <figure class="shot split-media">
+            <img src="assets/screenshots/debugging.png" width="1280" height="800" loading="lazy" alt="Paused at a breakpoint: the current line highlighted with a PerfTip, and the Exception Settings window open" />
+        </figure>
+    </section>
+
+    <section class="section" aria-labelledby="arch">
+        <div class="panel arch">
+            <div class="split-text">
+                <p class="eyebrow">Built to stay responsive</p>
+                <h2 class="heading" id="arch">A light native shell. Heavy work out of process.</h2>
+                <p>The window is a Native AOT app. Roslyn, MSBuild, the debugger and plugins each run in their own supervised process. If one crashes, it restarts, and the editor never goes down with it.</p>
+            </div>
+            <div class="arch-diagram">
+                <div class="arch-shell"><strong>daedalus</strong><span>UI shell · Native AOT</span></div>
+                <div class="arch-wire" aria-hidden="true">JSON-RPC · LSP · DAP</div>
+                <ul class="arch-hosts" aria-label="Processes the shell supervises">
+                    @foreach (var (name, role) in s_hosts)
+                    {
+                        <li><span>@name</span><span>@role</span></li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" aria-label="Principles">
+        <div class="principles">
+            <div>
+                <h3>Open source</h3>
+                <p>MIT-licensed and developed in the open on GitHub. Every third-party component is listed with its license.</p>
+            </div>
+            <div>
+                <h3>Private</h3>
+                <p>No telemetry. Crash reports stay on your machine and are opt-in. Tokens live in the OS credential store.</p>
+            </div>
+            <div>
+                <h3>Safe by default</h3>
+                <p>Untrusted folders open in restricted mode: no MSBuild, no restore, no code runs until you trust them.</p>
+            </div>
+            <div>
+                <h3>Familiar</h3>
+                <p>A classic IDE layout and keyboard scheme, Blue, Light and Dark themes, and VS Code key bindings as an option.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" aria-labelledby="cta">
+        <div class="cta">
+            <h2 class="heading" id="cta">Open your solution in Daedalus Studio.</h2>
+            <p>Installers for Windows, macOS and Linux that update themselves, plus apt and dnf repositories. You need the .NET SDK 10.0 or newer and git 2.30 or newer.</p>
+            <div class="hero-actions">
+                <a class="button" href="download/">Download for your platform</a>
+                <a class="button button-quiet" href="@Site.GitHub">Star on GitHub</a>
+            </div>
+        </div>
+    </section>
+</div>
+
+@code {
+    private static readonly (string Name, string Role)[] s_hosts =
+    [
+        ("lshost", "Roslyn"),
+        ("buildhost", "MSBuild"),
+        ("netcoredbg", "debugger"),
+        ("markuphost", "JSON · XML · YAML"),
+        ("replhost", "C# Interactive"),
+        ("pluginhost", "your plugins"),
+    ];
+}

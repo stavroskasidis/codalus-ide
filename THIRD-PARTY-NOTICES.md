@@ -203,6 +203,16 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+## Website (served by GitHub Pages; not part of the app)
+
+The website (`website/`, an ASP.NET Core Blazor app on the shared framework, exported to static files) loads nothing from third-party hosts: its fonts are served from the site itself.
+
+| Component | Version | License | Used for |
+|---|---|---|---|
+| Markdig (Alexandre Mutel) | 1.4.0 | BSD-2-Clause (per its nuspec) | Renders the user guide into the website's docs pages when the site is exported; nothing of it is published. |
+| Schibsted Grotesk (The Schibsted Grotesk Project Authors; the latin variable font from `@fontsource-variable/schibsted-grotesk`) | 5.3.0 | OFL-1.1 | **Redistributed** by the website, `website/wwwroot/assets/fonts/schibsted-grotesk.woff2`, with its licence in `OFL-schibsted-grotesk.txt` beside it (linked from every page's footer). |
+| JetBrains Mono (The JetBrains Mono Project Authors; the latin variable font from `@fontsource-variable/jetbrains-mono`) | 5.3.0 | OFL-1.1 | **Redistributed** by the website, `website/wwwroot/assets/fonts/jetbrains-mono.woff2`, with its licence in `OFL-jetbrains-mono.txt` beside it (linked from every page's footer). |
+
 ## Schemas (bundled)
 
 | Component | Version | License | Used for |

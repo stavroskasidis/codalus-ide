@@ -31,7 +31,7 @@ echo "== dnf ($channel) in Fedora 42"
   dnf remove -y -q daedalus-studio > /tmp/dnf.log 2>&1 || { cat /tmp/dnf.log; exit 1; }
   $removed"
 echo "== zypper ($channel) in openSUSE Tumbleweed"
-# The dnf repository and its .repo file serve zypper as they are; the key is trusted first, as the packages page says.
+# The dnf repository and its .repo file serve zypper as they are; the key is trusted first, as the website's download page says.
 "$runtime" run --rm -v "$site:/site:ro" registry.opensuse.org/opensuse/tumbleweed:latest bash -euc "
   rpm --import /site/daedalus-studio-packages.asc
   sed -e 's|^baseurl=.*|baseurl=file:///site/rpm/$channel|' -e 's|^gpgkey=.*|gpgkey=file:///site/daedalus-studio-packages.asc|' \

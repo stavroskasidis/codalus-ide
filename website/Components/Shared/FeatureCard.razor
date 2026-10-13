@@ -1,0 +1,13 @@
+<div class="card">
+    <Icon Name="@Icon" Size="26" Class="icon" />
+    <h3>@Title</h3>
+    <p>@ChildContent</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

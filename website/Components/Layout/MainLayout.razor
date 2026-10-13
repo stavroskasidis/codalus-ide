@@ -1,0 +1,73 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+@inject SiteOptions Site
+
+<a class="skip-link" href="@(CurrentPage)#main">Skip to content</a>
+<header class="site-header">
+    <nav class="site-nav @Container" aria-label="Main">
+        <a class="brand" href="./">
+            <img src="assets/logo.svg" width="30" height="30" alt="" />
+            <span>Daedalus <span class="brand-sub">Studio</span></span>
+            @if (Section == "docs")
+            {
+                <span class="brand-section">Docs</span>
+            }
+        </a>
+        <div class="nav-links">
+            <a href="features/" aria-current="@Current("features")">Features</a>
+            <a href="download/" aria-current="@Current("download")">Download</a>
+            <a href="docs/" aria-current="@Current("docs")">Docs</a>
+            <a href="@Site.GitHub">
+                <Icon Name="github" Size="18" />
+                GitHub
+            </a>
+            <a class="button" href="download/">Download</a>
+        </div>
+    </nav>
+</header>
+<main id="main">
+    @Body
+</main>
+<footer class="site-footer">
+    <div class="footer-inner @Container">
+        <div class="footer-brand">
+            <div><img src="assets/logo.svg" width="24" height="24" alt="" />Daedalus Studio</div>
+            <p>An open-source, cross-platform IDE for .NET. MIT License.</p>
+            <p class="footer-fonts">Set in <a href="assets/fonts/OFL-schibsted-grotesk.txt">Schibsted Grotesk</a> and <a href="assets/fonts/OFL-jetbrains-mono.txt">JetBrains Mono</a> (SIL Open Font License).</p>
+        </div>
+        <div class="footer-cols">
+            <div>
+                <span>Product</span>
+                <a href="features/">Features</a>
+                <a href="download/">Download</a>
+                <a href="@Site.Blob("CHANGELOG.md")">Changelog</a>
+                <a href="@Site.Blob("docs/roadmap.md")">Roadmap</a>
+            </div>
+            <div>
+                <span>Learn</span>
+                <a href="docs/">User guide</a>
+                <a href="@Site.Blob("docs/plugins.md")">Writing plugins</a>
+                <a href="@Site.Tree("docs/adr")">Architecture decisions</a>
+            </div>
+            <div>
+                <span>Project</span>
+                <a href="@Site.GitHub">GitHub</a>
+                <a href="@(Site.GitHub)/issues">Report an issue</a>
+                <a href="@Site.Blob("CONTRIBUTING.md")">Contributing</a>
+                <a href="@Site.Blob("SECURITY.md")">Security</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+@code {
+    /// <summary>This page's address relative to the base, for links within it (<c>download/#main</c>).</summary>
+    private string CurrentPage => Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0] is { Length: > 0 } path ? path : "./";
+
+    /// <summary>The first segment of the address: <c>features</c>, <c>download</c>, <c>docs</c>, or empty at home.</summary>
+    private string Section => Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#', '/')[0];
+
+    private string Container => Section == "docs" ? "container-wide" : "container";
+
+    private string? Current(string section) => Section == section ? "page" : null;
+}
