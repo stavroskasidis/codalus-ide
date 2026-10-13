@@ -38,7 +38,7 @@
               <TextBlock Text="{Binding Reference}" Classes="muted" VerticalAlignment="Center" />
               <TextBlock Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </StackPanel>
-            <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="11" Margin="22,0,0,0" />
+            <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="22,0,0,0" />
           </StackPanel>
         </DataTemplate>
       </ListBox.ItemTemplate>

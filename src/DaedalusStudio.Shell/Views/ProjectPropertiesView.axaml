@@ -44,7 +44,7 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:PropertySectionViewModel">
                 <StackPanel Spacing="4" Margin="0,8,0,4">
-                  <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding Title}" />
+                  <TextBlock Classes="subheading" Text="{Binding Title}" />
                   <ItemsControl ItemsSource="{Binding Items}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:PropertyItemViewModel">
@@ -52,7 +52,7 @@
                           <StackPanel Spacing="3">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                               <TextBlock FontWeight="SemiBold" Text="{Binding Label}" />
-                              <TextBlock Classes="muted" FontSize="11" VerticalAlignment="Center" Text="{Binding Name}" />
+                              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Text="{Binding Name}" />
                             </StackPanel>
                             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
                             <TextBox Width="460" HorizontalAlignment="Left" IsVisible="{Binding IsText}" IsEnabled="{Binding CanEdit}"
@@ -66,13 +66,13 @@
                                 </DataTemplate>
                               </ComboBox.ItemTemplate>
                             </ComboBox>
-                            <TextBlock Classes="muted" FontSize="11" Text="{Binding EvaluatedNote}" IsVisible="{Binding HasEvaluatedNote}" TextWrapping="Wrap" />
+                            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding EvaluatedNote}" IsVisible="{Binding HasEvaluatedNote}" TextWrapping="Wrap" />
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                              <Button Classes="link" FontSize="11" Content="{Binding Origin}" Command="{Binding OpenDefinitionCommand}" ToolTip.Tip="Open the file that sets it" />
-                              <Button Classes="link" FontSize="11" Content="Reset" Command="{Binding ResetCommand}" IsVisible="{Binding IsSetInProject}"
+                              <Button Classes="link" FontSize="{DynamicResource Shell.FontSize.Small}" Content="{Binding Origin}" Command="{Binding OpenDefinitionCommand}" ToolTip.Tip="Open the file that sets it" />
+                              <Button Classes="link" FontSize="{DynamicResource Shell.FontSize.Small}" Content="Reset" Command="{Binding ResetCommand}" IsVisible="{Binding IsSetInProject}"
                                       ToolTip.Tip="Remove it from the project file (back to the inherited or default value)" AutomationProperties.Name="{Binding Label, StringFormat='Reset {0}'}" />
                             </StackPanel>
-                            <TextBlock Classes="muted" FontSize="11" FontStyle="Italic" Text="{Binding ScopeNote}" IsVisible="{Binding !CanEdit}" />
+                            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="{Binding ScopeNote}" IsVisible="{Binding !CanEdit}" />
                           </StackPanel>
                         </Border>
                       </DataTemplate>
@@ -89,7 +89,7 @@
       <Panel Grid.Column="1" IsVisible="{Binding IsBuildEventsPage}">
         <ScrollViewer DataContext="{Binding BuildEvents}" x:DataType="vm:BuildEventsViewModel">
           <StackPanel Margin="16,8,16,16" Spacing="6">
-            <TextBlock FontSize="15" FontWeight="SemiBold" Text="Build events" />
+            <TextBlock Classes="subheading" Text="Build events" />
             <TextBlock Classes="muted" TextWrapping="Wrap" Text="Commands that run before and after the project builds, in the platform's shell (cmd on Windows, sh elsewhere). MSBuild expands the macros below." />
             <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
             <TextBlock FontWeight="SemiBold" Text="Pre-build event command line" Margin="0,6,0,0" />
@@ -106,7 +106,7 @@
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
-            <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{x:Static vm:BuildEventsViewModel.Macros}" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{x:Static vm:BuildEventsViewModel.Macros}" />
             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
               <Button Content="Save" Command="{Binding SaveCommand}" AutomationProperties.Name="Save build events" />
               <Button Content="Revert" Command="{Binding RevertCommand}" />
@@ -120,10 +120,10 @@
       <Panel Grid.Column="1" IsVisible="{Binding IsLaunchProfilesPage}">
       <DockPanel Margin="16,8" DataContext="{Binding LaunchProfiles}" x:DataType="vm:LaunchProfilesViewModel">
         <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,8">
-          <TextBlock FontSize="15" FontWeight="SemiBold" Text="Launch profiles" />
+          <TextBlock Classes="subheading" Text="Launch profiles" />
           <TextBlock Classes="muted" TextWrapping="Wrap" Text="How F5 and Ctrl+F5 start the project (the same file dotnet run uses)." />
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="muted" FontSize="11" VerticalAlignment="Center" Text="{Binding Location}" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Text="{Binding Location}" />
             <Button Grid.Column="1" Classes="link" Content="Open launchSettings.json" Command="{Binding OpenFileCommand}" />
           </Grid>
           <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />

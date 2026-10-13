@@ -6,7 +6,7 @@
              x:Class="DaedalusStudio.Shell.Views.EntityFrameworkView"
              x:DataType="vm:EntityFrameworkViewModel">
   <DockPanel>
-    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,3">
+    <controls:ToolbarPanel DockPanel.Dock="Top">
       <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Build and refresh the contexts and migrations" AutomationProperties.Name="Refresh Entity Framework">
         <controls:Icon Kind="refresh" />
       </Button>
@@ -17,7 +17,7 @@
       <Button Classes="toolbar" Content="Bundle…" Command="{Binding BundleCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="Create a migrations bundle (an executable that applies the migrations)" />
       <Button Classes="toolbar" Content="Compiled Model…" Command="{Binding OptimizeCommand}" IsEnabled="{Binding HasContext}" ToolTip.Tip="Generate a compiled model (dbcontext optimize)" />
       <Button Classes="toolbar" Content="Reverse Engineer…" Command="{Binding ScaffoldCommand}" ToolTip.Tip="Generate entities and a context from a database (dbcontext scaffold)" />
-    </WrapPanel>
+    </controls:ToolbarPanel>
     <StackPanel DockPanel.Dock="Top" Margin="8,2,8,4" Spacing="4">
       <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
         <TextBlock Text="Context" Classes="muted" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -37,11 +37,11 @@
           </ComboBox.ItemTemplate>
         </ComboBox>
       </Grid>
-      <TextBlock Text="{Binding Database}" IsVisible="{Binding HasDatabase}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
-      <TextBlock Text="{Binding Status}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
+      <TextBlock Text="{Binding Database}" IsVisible="{Binding HasDatabase}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextTrimming="CharacterEllipsis" />
+      <TextBlock Text="{Binding Status}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextTrimming="CharacterEllipsis" />
       <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsBusy}">
         <ProgressBar IsIndeterminate="True" Width="60" Height="4" VerticalAlignment="Center" />
-        <TextBlock Text="{Binding Busy}" Classes="muted" FontSize="11" />
+        <TextBlock Text="{Binding Busy}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" />
       </StackPanel>
       <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Warning}" />
       <Button Content="Install dotnet-ef" Command="{Binding InstallCommand}" IsVisible="{Binding CanInstall}" HorizontalAlignment="Left" ToolTip.Tip="Install dotnet-ef as a local tool at the project's EF Core version, or restore the .NET tools" />
@@ -65,8 +65,8 @@
             <controls:Icon Grid.RowSpan="2" Kind="{Binding Icon}" VerticalAlignment="Top" Margin="0,1,6,0" />
             <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
             <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
-              <TextBlock Text="{Binding State}" Classes="muted" FontSize="11" />
-              <TextBlock Text="{Binding Created}" Classes="muted" FontSize="11" />
+              <TextBlock Text="{Binding State}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" />
+              <TextBlock Text="{Binding Created}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" />
             </StackPanel>
           </Grid>
         </DataTemplate>

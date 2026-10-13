@@ -15,7 +15,7 @@
     </WrapPanel>
 
     <Grid Grid.Row="1">
-      <TextBlock Classes="muted" Margin="12" Text="No commits." IsVisible="{Binding IsEmpty}" />
+      <TextBlock Classes="emptyState" Text="No commits." IsVisible="{Binding IsEmpty}" />
       <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Commits">
         <ListBox.Styles>
           <Style Selector="ListBoxItem" x:DataType="vm:GitCommitRow">
@@ -46,7 +46,7 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
                       <Border Classes="ref">
-                        <TextBlock Text="{Binding}" FontSize="11" />
+                        <TextBlock Text="{Binding}" FontSize="{DynamicResource Shell.FontSize.Small}" />
                       </Border>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>

@@ -4,7 +4,7 @@
              x:Class="DaedalusStudio.Shell.Views.BookmarksView"
              x:DataType="vm:BookmarksViewModel">
   <DockPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" TextWrapping="Wrap" IsVisible="{Binding IsEmpty}"
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" IsVisible="{Binding IsEmpty}"
                Text="No bookmarks. Ctrl+K Ctrl+K adds one on the caret's line." />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Bookmarks">
       <ListBox.Styles>
@@ -18,7 +18,7 @@
           <StackPanel Orientation="Horizontal" Spacing="8">
             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" IsVisible="{Binding HasName}" />
             <TextBlock Text="{Binding Location}" />
-            <TextBlock Classes="muted" FontSize="11" Text="{Binding Folder}" VerticalAlignment="Center" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Folder}" VerticalAlignment="Center" />
           </StackPanel>
         </DataTemplate>
       </ListBox.ItemTemplate>

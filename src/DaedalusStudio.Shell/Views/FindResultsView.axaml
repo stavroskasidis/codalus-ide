@@ -1,28 +1,25 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.FindResultsView"
              x:DataType="vm:FindResultsViewModel">
   <DockPanel>
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto,180,Auto" Margin="6,4">
+    <controls:ToolbarPanel DockPanel.Dock="Top">
       <TextBox x:Name="QueryBox" Text="{Binding Query}" PlaceholderText="Find in files" AutomationProperties.Name="Find in files" />
-      <ToggleButton Grid.Column="1" Classes="toolbar" Content="Aa" IsChecked="{Binding MatchCase}" ToolTip.Tip="Match case" AutomationProperties.Name="Match case" Margin="4,0,0,0" />
-      <ToggleButton Grid.Column="2" Classes="toolbar" Content="ab" IsChecked="{Binding WholeWord}" ToolTip.Tip="Match whole word" AutomationProperties.Name="Match whole word" />
-      <ToggleButton Grid.Column="3" Classes="toolbar" Content=".*" IsChecked="{Binding UseRegex}" ToolTip.Tip="Use regular expressions" AutomationProperties.Name="Use regular expressions" />
-      <TextBox Grid.Column="4" Text="{Binding Include}" PlaceholderText="Files (e.g. *.cs)" AutomationProperties.Name="File types" Margin="4,0" />
-      <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4">
-        <Button Content="Find All" Command="{Binding SearchCommand}" AutomationProperties.Name="Find all" />
-        <Button Content="Stop" Command="{Binding CancelCommand}" IsVisible="{Binding IsSearching}" AutomationProperties.Name="Stop searching" />
-      </StackPanel>
-    </Grid>
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,0,6,2" IsVisible="{Binding IsReferences}">
-      <ComboBox MinWidth="220" ItemsSource="{Binding ReferenceSets}" SelectedItem="{Binding CurrentSet}" AutomationProperties.Name="Earlier results" ToolTip.Tip="Earlier results" />
-      <TextBlock Text="Group by" VerticalAlignment="Center" Classes="muted" />
-      <ComboBox MinWidth="90" ItemsSource="{x:Static vm:FindResultsViewModel.GroupByOptions}" SelectedItem="{Binding GroupBy}" AutomationProperties.Name="Group by" />
-      <TextBlock Text="Show" VerticalAlignment="Center" Classes="muted" />
-      <ComboBox MinWidth="110" ItemsSource="{x:Static vm:FindResultsViewModel.KindFilterOptions}" SelectedItem="{Binding KindFilter}" AutomationProperties.Name="Reference kind" />
-    </StackPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="10,2" Text="{Binding Summary}" AutomationProperties.LiveSetting="Polite" />
+      <ToggleButton Classes="toolbar" Content="Aa" IsChecked="{Binding MatchCase}" ToolTip.Tip="Match case" AutomationProperties.Name="Match case" />
+      <ToggleButton Classes="toolbar" Content="ab" IsChecked="{Binding WholeWord}" ToolTip.Tip="Match whole word" AutomationProperties.Name="Match whole word" />
+      <ToggleButton Classes="toolbar" Content=".*" IsChecked="{Binding UseRegex}" ToolTip.Tip="Use regular expressions" AutomationProperties.Name="Use regular expressions" />
+      <Button Content="Find All" Command="{Binding SearchCommand}" AutomationProperties.Name="Find all" />
+      <Button Content="Stop" Command="{Binding CancelCommand}" IsVisible="{Binding IsSearching}" AutomationProperties.Name="Stop searching" />
+    </controls:ToolbarPanel>
+    <TextBox DockPanel.Dock="Top" Text="{Binding Include}" PlaceholderText="Files (e.g. *.cs)" AutomationProperties.Name="File types" Margin="4,0,4,4" />
+    <controls:ToolbarPanel DockPanel.Dock="Top" IsVisible="{Binding IsReferences}">
+      <ComboBox MinWidth="200" ItemsSource="{Binding ReferenceSets}" SelectedItem="{Binding CurrentSet}" AutomationProperties.Name="Earlier results" ToolTip.Tip="Earlier results" />
+      <ComboBox MinWidth="90" ItemsSource="{x:Static vm:FindResultsViewModel.GroupByOptions}" SelectedItem="{Binding GroupBy}" AutomationProperties.Name="Group by" ToolTip.Tip="Group by" />
+      <ComboBox MinWidth="110" ItemsSource="{x:Static vm:FindResultsViewModel.KindFilterOptions}" SelectedItem="{Binding KindFilter}" AutomationProperties.Name="Reference kind" ToolTip.Tip="Show" />
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="10,2" TextWrapping="Wrap" Text="{Binding Summary}" AutomationProperties.LiveSetting="Polite" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Find results">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:FindResultRow">

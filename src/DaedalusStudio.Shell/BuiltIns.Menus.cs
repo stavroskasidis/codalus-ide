@@ -402,10 +402,12 @@ internal static partial class BuiltIns
             Item(Window, "workbench.splitEditorRight", "1-split"),
             Item(Window, "workbench.splitEditorDown", "1-split"),
             Item(Window, "workbench.keepEditor", "2-documents"),
+            Item(Window, "workbench.pinEditor", "2-documents"),
             Item(Window, "workbench.nextDocument", "2-documents"),
             Item(Window, "workbench.previousDocument", "2-documents"),
             Item(Window, "workbench.closeOtherDocuments", "3-close"),
             Item(Window, "workbench.closeAllDocuments", "3-close"),
+            Item(Window, "workbench.closeUnpinnedDocuments", "3-close"),
             Item(Window, "workbench.closeDocumentsToTheRight", "3-close"),
             Item(Window, "workbench.resetLayout", "4-layout"),
 

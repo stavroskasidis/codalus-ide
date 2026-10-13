@@ -1,19 +1,20 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.BreakpointsView"
              x:DataType="vm:BreakpointsViewModel">
   <DockPanel>
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*" Margin="6,4">
+    <controls:ToolbarPanel DockPanel.Dock="Top" Spacing="4">
       <Button x:Name="NewFunction" Content="New Function…" ToolTip.Tip="New Function Breakpoint" AutomationProperties.Name="New function breakpoint" />
-      <Button x:Name="EnableAll" Grid.Column="1" Margin="6,0,0,0" Content="Enable All" ToolTip.Tip="Enable the breakpoints shown" AutomationProperties.Name="Enable all breakpoints" />
-      <Button x:Name="DisableAll" Grid.Column="2" Margin="6,0,0,0" Content="Disable All" ToolTip.Tip="Disable the breakpoints shown" AutomationProperties.Name="Disable all breakpoints" />
-      <Button x:Name="Export" Grid.Column="3" Margin="6,0,0,0" Content="Export…" AutomationProperties.Name="Export breakpoints" />
-      <Button x:Name="Import" Grid.Column="4" Margin="6,0,0,0" Content="Import…" AutomationProperties.Name="Import breakpoints" />
-      <Button x:Name="DeleteAll" Grid.Column="5" Margin="6,0,0,0" Content="Delete All" AutomationProperties.Name="Delete all breakpoints" />
-      <TextBox x:Name="Search" Grid.Column="6" Margin="6,0,0,0" Text="{Binding Filter}" PlaceholderText="Search (location, condition, label)" AutomationProperties.Name="Search breakpoints" />
-    </Grid>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="No breakpoints. Press F9 in an editor to add one." IsVisible="{Binding IsEmpty}" />
+      <Button x:Name="EnableAll" Content="Enable All" ToolTip.Tip="Enable the breakpoints shown" AutomationProperties.Name="Enable all breakpoints" />
+      <Button x:Name="DisableAll" Content="Disable All" ToolTip.Tip="Disable the breakpoints shown" AutomationProperties.Name="Disable all breakpoints" />
+      <Button x:Name="Export" Content="Export…" AutomationProperties.Name="Export breakpoints" />
+      <Button x:Name="Import" Content="Import…" AutomationProperties.Name="Import breakpoints" />
+      <Button x:Name="DeleteAll" Content="Delete All" AutomationProperties.Name="Delete all breakpoints" />
+      <TextBox x:Name="Search" Text="{Binding Filter}" PlaceholderText="Search (location, condition, label)" AutomationProperties.Name="Search breakpoints" />
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="No breakpoints. Press F9 in an editor to add one." IsVisible="{Binding IsEmpty}" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Breakpoints">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:BreakpointRow">
@@ -27,7 +28,7 @@
             <CheckBox IsChecked="{Binding Enabled}" AutomationProperties.Name="Enabled" />
             <TextBlock Text="{Binding Location}" VerticalAlignment="Center" Classes.muted="{Binding !IsVerified}" />
             <Border Classes="badge" IsVisible="{Binding HasLabels}" VerticalAlignment="Center" Padding="4,0" CornerRadius="3" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}">
-              <TextBlock Text="{Binding Labels}" FontSize="11" />
+              <TextBlock Text="{Binding Labels}" FontSize="{DynamicResource Shell.FontSize.Small}" />
             </Border>
             <TextBlock Text="{Binding Details}" Classes="muted" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
           </StackPanel>

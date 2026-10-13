@@ -6,7 +6,7 @@
              x:DataType="vm:DocumentOutlineViewModel">
   <DockPanel>
     <TextBox x:Name="FilterBox" DockPanel.Dock="Top" Margin="6,4" Text="{Binding Filter}" PlaceholderText="Filter symbols" AutomationProperties.Name="Filter symbols" />
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
     <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="Document Outline">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:SymbolNodeViewModel">
@@ -20,7 +20,7 @@
           <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
             <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
             <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
-            <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
           </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>

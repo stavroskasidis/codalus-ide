@@ -85,7 +85,7 @@
         <Button DockPanel.Dock="Bottom" Classes="link" HorizontalAlignment="Center" Margin="4" Content="Load more" Command="{Binding LoadMoreCommand}" IsVisible="{Binding HasMore}" />
         <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
         <Grid>
-          <TextBlock Classes="muted" Margin="12" TextWrapping="Wrap" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
+          <TextBlock Classes="emptyState" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
           <ListBox x:Name="List"
                    ItemsSource="{Binding Rows}"
                    SelectedItem="{Binding Selected}"
@@ -119,9 +119,9 @@
                         <TextBlock Text="{Binding VersionLine}" />
                       </StackPanel>
                       <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                        <Border Classes="badge muted" IsVisible="{Binding HasNote}"><TextBlock FontSize="11" Text="{Binding Note}" /></Border>
-                        <Border Classes="badge warning" IsVisible="{Binding IsDeprecated}"><TextBlock FontSize="11" Text="deprecated" /></Border>
-                        <Border Classes="badge error" IsVisible="{Binding IsVulnerable}"><TextBlock FontSize="11" Text="vulnerable" /></Border>
+                        <Border Classes="badge muted" IsVisible="{Binding HasNote}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Note}" /></Border>
+                        <Border Classes="badge warning" IsVisible="{Binding IsDeprecated}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="deprecated" /></Border>
+                        <Border Classes="badge error" IsVisible="{Binding IsVulnerable}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="vulnerable" /></Border>
                       </StackPanel>
                     </StackPanel>
                   </Grid>
@@ -141,7 +141,7 @@
         <ScrollViewer x:Name="DetailsScroller" DataContext="{Binding Details}">
           <StackPanel Margin="16,12" Spacing="10" x:DataType="vm:PackageDetailsViewModel">
             <StackPanel Spacing="2">
-              <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding Id}" TextWrapping="Wrap" />
+              <TextBlock Classes="heading" Text="{Binding Id}" TextWrapping="Wrap" />
               <TextBlock Classes="muted" Text="{Binding Title}" IsVisible="{Binding Title, Converter={x:Static ObjectConverters.IsNotNull}}" />
               <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
               <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />

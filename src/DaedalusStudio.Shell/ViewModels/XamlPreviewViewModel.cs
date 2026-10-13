@@ -26,7 +26,7 @@ public sealed class XamlPreviewViewModel : ObservableObject
     private WriteableBitmap? _previous;
     private PreviewFrame? _frame;
     private double _zoom = 1;
-    private string _scale = "100%";
+    private string _scale = "1×";
     private string _theme = "Default";
     private PreviewRect? _selection;
     private int _frames;
@@ -88,7 +88,8 @@ public sealed class XamlPreviewViewModel : ObservableObject
         SetZoom(Math.Max(0.1, zoom), fit: true);
     }
 
-    public IReadOnlyList<string> Scales { get; } = ["100%", "125%", "150%", "200%"];
+    /// <summary>The render scales (DPI) as multipliers, so the zoom button is the toolbar's only percentage (M34d).</summary>
+    public IReadOnlyList<string> Scales { get; } = ["1×", "1.25×", "1.5×", "2×"];
 
     public IReadOnlyList<string> Themes { get; } = ["Default", "Light", "Dark"];
 
@@ -162,9 +163,9 @@ public sealed class XamlPreviewViewModel : ObservableObject
         get => _scale;
         set
         {
-            if (SetField(ref _scale, value) && double.TryParse(value.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out var percent))
+            if (SetField(ref _scale, value) && double.TryParse(value.TrimEnd('×'), NumberStyles.Float, CultureInfo.InvariantCulture, out var factor))
             {
-                _ = Invoke(ScaleChanged, percent / 100);
+                _ = Invoke(ScaleChanged, factor);
             }
         }
     }

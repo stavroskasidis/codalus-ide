@@ -12,7 +12,7 @@
       <TextBlock Grid.Column="3" Text="Optimized" Classes="muted" />
       <TextBlock Grid.Column="4" Text="Path" Classes="muted" />
     </Grid>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="Modules appear here while debugging." IsVisible="{Binding IsEmpty}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="Modules appear here while debugging." IsVisible="{Binding IsEmpty}" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Modules">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ModuleRow">

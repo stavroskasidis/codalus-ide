@@ -44,10 +44,10 @@
     </Border>
 
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,190,220,170" Margin="22,6,22,2">
-      <TextBlock Classes="muted" FontSize="11" Text="Command" />
-      <TextBlock Grid.Column="1" Classes="muted" FontSize="11" Text="Key Binding" />
-      <TextBlock Grid.Column="2" Classes="muted" FontSize="11" Text="When" />
-      <TextBlock Grid.Column="3" Classes="muted" FontSize="11" Text="Source" />
+      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="Command" />
+      <TextBlock Grid.Column="1" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="Key Binding" />
+      <TextBlock Grid.Column="2" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="When" />
+      <TextBlock Grid.Column="3" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="Source" />
     </Grid>
 
     <ListBox x:Name="List"

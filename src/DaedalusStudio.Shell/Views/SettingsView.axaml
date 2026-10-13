@@ -29,7 +29,7 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
-        <TextBlock Classes="muted" FontSize="12" Text="{Binding SelectedDescription}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding SelectedDescription}" />
       </StackPanel>
     </DataTemplate>
     <DataTemplate DataType="vm:TextSettingViewModel">
@@ -62,7 +62,7 @@
           <ToggleButton Content="User" IsChecked="{Binding IsUserScope}" AutomationProperties.Name="User settings" />
           <ToggleButton Content="Workspace" IsChecked="{Binding IsWorkspaceScope}" AutomationProperties.Name="Workspace settings" />
         </StackPanel>
-        <TextBlock Classes="muted" FontSize="11" Text="{Binding FileLabel}" />
+        <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding FileLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FileLabel}" />
         <TextBlock Foreground="{DynamicResource Shell.Warning}" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
       </StackPanel>
     </Border>
@@ -96,9 +96,9 @@
                   <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                       <TextBlock FontWeight="SemiBold" Text="{Binding Heading}" />
-                      <TextBlock Classes="muted" FontSize="11" Text="Modified" IsVisible="{Binding IsModified}" VerticalAlignment="Center" />
+                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="Modified" IsVisible="{Binding IsModified}" VerticalAlignment="Center" />
                       <Button Classes="link"
-                              FontSize="11"
+                              FontSize="{DynamicResource Shell.FontSize.Small}"
                               Content="Reset"
                               Command="{Binding ResetCommand}"
                               IsVisible="{Binding IsModified}"
@@ -106,10 +106,10 @@
                               AutomationProperties.Name="{Binding Title, StringFormat='Reset {0}'}" />
                     </StackPanel>
                     <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
-                    <TextBlock Classes="muted" FontSize="11" FontStyle="Italic" Text="This setting can only be changed in user settings." IsVisible="{Binding IsUserOnlyHere}" />
+                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="This setting can only be changed in user settings." IsVisible="{Binding IsUserOnlyHere}" />
                     <ContentControl Content="{Binding}" Margin="0,4,0,0" />
                     <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
-                    <TextBlock Classes="muted" FontSize="10" Text="{Binding Key}" />
+                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Key}" />
                   </StackPanel>
                 </Border>
               </DataTemplate>

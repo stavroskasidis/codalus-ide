@@ -74,6 +74,11 @@ test_app() {
   fi
 
   cp "$userdata"/logs/smoke-test* "$results/" 2> /dev/null || true
+  # The UI gallery (M34d): every surface in every theme, with data, empty and in an error state.
+  if [ -d "$userdata/logs/gallery" ]; then
+    rm -rf "$results/gallery"
+    cp -r "$userdata/logs/gallery" "$results/gallery"
+  fi
   if [ -f "$results/smoke-test.md" ]; then
     [ -n "${GITHUB_STEP_SUMMARY:-}" ] && cat "$results/smoke-test.md" >> "$GITHUB_STEP_SUMMARY"
   else

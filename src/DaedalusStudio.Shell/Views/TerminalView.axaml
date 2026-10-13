@@ -57,7 +57,7 @@
           <terminal:TerminalControl x:Name="Secondary" />
         </DockPanel>
       </Grid>
-      <TextBlock Classes="muted" Margin="12" Text="No terminal is open. Click + to open one." IsVisible="{Binding !HasTerminal}" />
+      <TextBlock Classes="emptyState" Text="No terminal is open. Click + to open one." IsVisible="{Binding !HasTerminal}" />
       <ListBox Grid.Column="1" x:Name="TabList" Width="160" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Terminals"
                IsVisible="{Binding Tabs.Count, Converter={x:Static vm:TerminalViewConverters.MoreThanOne}}">
         <ListBox.ItemTemplate>

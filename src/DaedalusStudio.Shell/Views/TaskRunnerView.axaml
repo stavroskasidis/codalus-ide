@@ -9,7 +9,7 @@
       <Button x:Name="Restore" Content="Restore Packages" AutomationProperties.Name="Restore the selected package.json's npm packages" />
       <Button x:Name="Refresh" Content="Refresh" AutomationProperties.Name="Refresh the npm scripts" />
     </StackPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Status}" IsVisible="{Binding HasStatus}" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="npm scripts">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:TaskRunnerRow">

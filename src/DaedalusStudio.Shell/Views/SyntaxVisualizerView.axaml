@@ -4,7 +4,7 @@
              x:Class="DaedalusStudio.Shell.Views.SyntaxVisualizerView"
              x:DataType="vm:SyntaxVisualizerViewModel">
   <Grid RowDefinitions="*,4,Auto">
-    <TextBlock Classes="muted" Margin="12,8" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+    <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
     <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Syntax Tree">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:SyntaxItemViewModel">
@@ -22,7 +22,7 @@
                        Foreground="{DynamicResource Shell.Diff.Added}" IsVisible="{Binding IsToken}" />
             <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12"
                        Foreground="{DynamicResource Shell.Warning}" IsVisible="{Binding IsTrivia}" />
-            <TextBlock Classes="muted" FontSize="11" Text="{Binding Span}" VerticalAlignment="Center" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Span}" VerticalAlignment="Center" />
           </StackPanel>
         </TreeDataTemplate>
       </TreeView.ItemTemplate>
@@ -54,7 +54,7 @@
             <TreeDataTemplate x:DataType="vm:OperationItemViewModel" ItemsSource="{Binding Children}">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Syntax}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Syntax}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" />
               </StackPanel>
             </TreeDataTemplate>
           </TreeView.ItemTemplate>

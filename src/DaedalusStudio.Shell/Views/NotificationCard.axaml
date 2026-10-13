@@ -26,8 +26,8 @@
         <controls:Icon Kind="close" Width="12" Height="12" />
       </Button>
       <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-        <TextBlock Classes="muted" FontSize="11" Text="{Binding Source}" />
-        <TextBlock Classes="muted" FontSize="11" Text="{Binding Time}" />
+        <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Source}" />
+        <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Time}" />
       </StackPanel>
       <ItemsControl Grid.Row="2"
                     Grid.Column="1"

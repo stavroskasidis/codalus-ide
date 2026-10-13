@@ -18,7 +18,7 @@
         </ComboBox.ItemTemplate>
       </ComboBox>
     </StackPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="The call stack appears here while the program is stopped." IsVisible="{Binding IsEmpty}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="The call stack appears here while the program is stopped." IsVisible="{Binding IsEmpty}" />
     <ListBox x:Name="List" ItemsSource="{Binding Frames}" Background="Transparent" AutomationProperties.Name="Call stack">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:FrameRow">

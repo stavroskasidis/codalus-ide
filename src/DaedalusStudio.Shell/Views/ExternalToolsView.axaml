@@ -42,7 +42,7 @@
           <TextBox Text="{Binding InitialDirectory}" PlaceholderText="$(ItemDir)" AutomationProperties.Name="Initial directory" />
           <CheckBox Content="Use the Output window" IsChecked="{Binding UseOutputWindow}" />
           <CheckBox Content="Prompt for arguments" IsChecked="{Binding PromptForArguments}" />
-          <TextBlock Classes="muted" FontSize="11" Text="{Binding CommandId, StringFormat='Command: {0}'}" />
+          <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding CommandId, StringFormat='Command: {0}'}" />
           <Button HorizontalAlignment="Left" Content="Run" Command="{Binding $parent[UserControl].((vm:ExternalToolsViewModel)DataContext).RunCommand}" />
         </StackPanel>
       </ScrollViewer>
@@ -53,7 +53,7 @@
             <DataTemplate x:DataType="tools:ToolMacro">
               <StackPanel>
                 <SelectableTextBlock FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" Text="{Binding Name, StringFormat='$({0})'}" />
-                <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding Description}" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{Binding Description}" />
               </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>

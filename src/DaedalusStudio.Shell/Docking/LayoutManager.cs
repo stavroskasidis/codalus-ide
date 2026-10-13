@@ -247,11 +247,18 @@ public sealed class LayoutManager : ObservableObject
         var existing = Documents.FirstOrDefault(d => d.Id == document.Id);
         if (existing is null)
         {
+            // The preview tab sits at the right end of its group (M34d): a new preview takes its place there, and other
+            // documents open to its left.
             var dock = ActiveDocumentDock();
-            if (preview && dock.VisibleDockables?.OfType<ShellDocument>().FirstOrDefault(d => d.IsPreview && !d.IsModified) is { } previous)
+            var current = dock.VisibleDockables?.OfType<ShellDocument>().FirstOrDefault(d => d.IsPreview && !d.IsModified);
+            if (preview && current is not null)
             {
-                Factory.InsertDockable(dock, document, dock.VisibleDockables.IndexOf(previous));
-                Factory.CloseDockable(previous);
+                Factory.AddDockable(dock, document);
+                Factory.CloseDockable(current);
+            }
+            else if (!preview && current is not null && dock.VisibleDockables is { } tabs)
+            {
+                Factory.InsertDockable(dock, document, tabs.IndexOf(current));
             }
             else
             {
@@ -278,6 +285,28 @@ public sealed class LayoutManager : ObservableObject
         }
 
         UpdateActiveDocument();
+    }
+
+    /// <summary>
+    /// Pins or unpins <paramref name="document"/> (M34d). Pinned tabs stay at the left of their group in the order they
+    /// were pinned; an unpinned tab moves to the first place after them. Pinning keeps a preview tab open.
+    /// </summary>
+    public void SetPinned(ShellDocument document, bool pinned)
+    {
+        document.IsPinned = pinned;
+        if (pinned)
+        {
+            document.IsPreview = false;
+        }
+
+        if (document.Owner is IDock { VisibleDockables: { } tabs } dock)
+        {
+            var target = tabs.OfType<ShellDocument>().Count(d => d.IsPinned && d != document);
+            if (target < tabs.Count && tabs[target] != document)
+            {
+                Factory.MoveDockable(dock, document, tabs[target]);
+            }
+        }
     }
 
     /// <summary>Adds <paramref name="view"/> next to the active document in a new group, to the right or below.</summary>

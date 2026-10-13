@@ -1,84 +1,90 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.BenchmarksView"
              x:DataType="vm:BenchmarksViewModel">
   <DockPanel Margin="8,6">
     <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,6">
-      <StackPanel Orientation="Horizontal" Spacing="8">
+      <controls:ToolbarPanel Spacing="8" Margin="0">
         <Button x:Name="RunAllButton" Content="Run All" Command="{Binding RunAllCommand}" />
         <Button Content="Run Selected" Command="{Binding RunSelectedCommand}" />
         <Button Content="Stop" Command="{Binding StopCommand}" />
         <TextBlock VerticalAlignment="Center" Text="Job" Margin="8,0,0,0" />
-        <ComboBox ItemsSource="{Binding Jobs}" SelectedItem="{Binding Job}" MinWidth="100" AutomationProperties.Name="BenchmarkDotNet job" />
+        <ComboBox ItemsSource="{Binding Jobs}" SelectedItem="{Binding Job}" MinWidth="100" AutomationProperties.Name="BenchmarkDotNet job" ToolTip.Tip="BenchmarkDotNet job" />
         <CheckBox Content="In process" IsChecked="{Binding InProcess}" ToolTip.Tip="Run in the benchmark project's own process: faster, no generated project to build" />
-      </StackPanel>
+      </controls:ToolbarPanel>
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
     </StackPanel>
     <!-- The results' fixed columns need room: narrower, they spilled over the History header (seen on the Mac). -->
-    <Grid>
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" />
-        <ColumnDefinition Width="4" />
-        <ColumnDefinition Width="2*" MinWidth="480" />
-        <ColumnDefinition Width="4" />
-        <ColumnDefinition Width="*" />
-      </Grid.ColumnDefinitions>
-      <DockPanel>
-        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Benchmarks" Margin="0,0,0,4" />
-        <ListBox x:Name="BenchmarkList" ItemsSource="{Binding Benchmarks}" SelectedItem="{Binding SelectedBenchmark}" AutomationProperties.Name="Benchmarks in the solution; double-click opens one">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:BenchmarkRowViewModel">
-              <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
-                <TextBlock Text="{Binding Title}" />
-                <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="11" />
-              </StackPanel>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
-      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
-      <DockPanel Grid.Column="2" Margin="6,0" ClipToBounds="True">
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,90,80,90,80,60" Margin="4,0,4,4">
-          <TextBlock FontWeight="SemiBold" Text="Method" />
-          <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="Mean" TextAlignment="Right" />
-          <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="Error" TextAlignment="Right" />
-          <TextBlock Grid.Column="3" FontWeight="SemiBold" Text="StdDev" TextAlignment="Right" />
-          <TextBlock Grid.Column="4" FontWeight="SemiBold" Text="Allocated" TextAlignment="Right" />
-          <TextBlock Grid.Column="5" FontWeight="SemiBold" Text="Ratio" TextAlignment="Right" />
+    <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+      <DockPanel MinWidth="900" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="4" />
+            <ColumnDefinition Width="2*" MinWidth="480" />
+            <ColumnDefinition Width="4" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Benchmarks" Margin="0,0,0,4" />
+            <ListBox x:Name="BenchmarkList" ItemsSource="{Binding Benchmarks}" SelectedItem="{Binding SelectedBenchmark}" AutomationProperties.Name="Benchmarks in the solution; double-click opens one">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:BenchmarkRowViewModel">
+                  <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
+                    <TextBlock Text="{Binding Title}" />
+                    <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+          <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+          <DockPanel Grid.Column="2" Margin="6,0" ClipToBounds="True">
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,90,80,90,80,60" Margin="4,0,4,4">
+              <TextBlock FontWeight="SemiBold" Text="Method" />
+              <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="Mean" TextAlignment="Right" />
+              <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="Error" TextAlignment="Right" />
+              <TextBlock Grid.Column="3" FontWeight="SemiBold" Text="StdDev" TextAlignment="Right" />
+              <TextBlock Grid.Column="4" FontWeight="SemiBold" Text="Allocated" TextAlignment="Right" />
+              <TextBlock Grid.Column="5" FontWeight="SemiBold" Text="Ratio" TextAlignment="Right" />
+            </Grid>
+            <ListBox ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" AutomationProperties.Name="The last run's results">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:BenchmarkResultRowViewModel">
+                  <Grid ColumnDefinitions="*,90,80,90,80,60" AutomationProperties.Name="{Binding AccessibleName}">
+                    <TextBlock Text="{Binding Method}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding Mean}" TextAlignment="Right" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="2" Text="{Binding Error}" TextAlignment="Right" Classes="muted" />
+                    <TextBlock Grid.Column="3" Text="{Binding StandardDeviation}" TextAlignment="Right" Classes="muted" />
+                    <TextBlock Grid.Column="4" Text="{Binding Allocated}" TextAlignment="Right" />
+                    <TextBlock Grid.Column="5" Text="{Binding Ratio}" TextAlignment="Right" Classes="muted" />
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+          <GridSplitter Grid.Column="3" ResizeDirection="Columns" />
+          <DockPanel Grid.Column="4">
+            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="History" Margin="0,0,0,4" />
+            <ListBox ItemsSource="{Binding History}" AutomationProperties.Name="The selected benchmark's earlier runs, the newest first">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:BenchmarkHistoryRowViewModel">
+                  <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Mean}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Change}" Classes="muted" />
+                    </StackPanel>
+                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Time}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
         </Grid>
-        <ListBox ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" AutomationProperties.Name="The last run's results">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:BenchmarkResultRowViewModel">
-              <Grid ColumnDefinitions="*,90,80,90,80,60" AutomationProperties.Name="{Binding AccessibleName}">
-                <TextBlock Text="{Binding Method}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="1" Text="{Binding Mean}" TextAlignment="Right" FontWeight="SemiBold" />
-                <TextBlock Grid.Column="2" Text="{Binding Error}" TextAlignment="Right" Classes="muted" />
-                <TextBlock Grid.Column="3" Text="{Binding StandardDeviation}" TextAlignment="Right" Classes="muted" />
-                <TextBlock Grid.Column="4" Text="{Binding Allocated}" TextAlignment="Right" />
-                <TextBlock Grid.Column="5" Text="{Binding Ratio}" TextAlignment="Right" Classes="muted" />
-              </Grid>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
       </DockPanel>
-      <GridSplitter Grid.Column="3" ResizeDirection="Columns" />
-      <DockPanel Grid.Column="4">
-        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="History" Margin="0,0,0,4" />
-        <ListBox ItemsSource="{Binding History}" AutomationProperties.Name="The selected benchmark's earlier runs, the newest first">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:BenchmarkHistoryRowViewModel">
-              <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="{Binding Mean}" FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding Change}" Classes="muted" />
-                </StackPanel>
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Time}" />
-              </StackPanel>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
-    </Grid>
+    </ScrollViewer>
   </DockPanel>
 </UserControl>
