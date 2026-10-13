@@ -35,7 +35,9 @@ Each rule has a test of what it must and mustn't touch. It reads Latin-1 for the
 
 **History stays as written.** ADRs, checkpoints, the changelog's 0.1.0 entry, the name research and the roadmap's M39 section keep the old name. The maintainer's clones keep their folder names (`Projects/daedalus-studio`) until renamed by hand.
 
-**The mark** is new too, chosen by the maintainer from proposals (wings, now two feathers each, from the old mark). The old labyrinth-wings files are replaced when the mark is chosen.
+**The mark** is new too. The maintainer chose it on 2026-10-13 from seven rounds of proposals: the old mark's wings, now two feathers each, with the left wing violet (`#A47BFF` to `#5B2EC7`) and the right wing ember (`#FFC24A` to `#F0662A`), each shaded from tip to base, and the inner feathers at 82%. It's code and Daedalus, two colors for two halves of the name.
+- `eng/logo.py` writes every logo file from that one geometry: the SVG mark, the single-colour variant and the wordmarks ("Codalus" and "IDE"), the PNGs from 16 to 1024 px (drawn with Pillow, 4x supersampled), the Windows `.ico` and the site's icons.
+- The old alternatives and the unused tile are gone.
 
 ## Consequences
 

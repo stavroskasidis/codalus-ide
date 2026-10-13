@@ -1,11 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Codalus IDE">
-  <!-- Single-colour variant (follows currentColor); the feathers step down in opacity. -->
+  <!-- Single-colour variant (follows currentColor); the right wing and the inner feathers are lighter. -->
   <g fill="currentColor">
-    <polygon points="24,212 124,38.8 124,82.8 54,204"/>
-    <polygon opacity="0.82" points="65.6,200 124,98.8 124,142.8 95.6,192"/>
-    <polygon opacity="0.64" points="107.1,188 124,158.8 124,178"/>
-    <polygon opacity="0.72" points="232,212 132,38.8 132,82.8 202,204"/>
-    <polygon opacity="0.56" points="190.4,200 132,98.8 132,142.8 160.4,192"/>
-    <polygon opacity="0.42" points="148.9,188 132,158.8 132,178"/>
+    <polygon points="20,218 124,38 124,92 58,208"/>
+    <polygon opacity="0.82" points="74,204 124,117.4 124,161.4 104,196"/>
+    <polygon opacity="0.60" points="236,218 132,38 132,92 198,208"/>
+    <polygon opacity="0.49" points="182,204 132,117.4 132,161.4 152,196"/>
   </g>
 </svg>

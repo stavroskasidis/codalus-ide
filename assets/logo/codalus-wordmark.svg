@@ -1,19 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 256" role="img" aria-label="Codalus IDE">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 256" role="img" aria-label="Codalus IDE">
   <style>
     .name { fill: #1E1636; }
     .sub { fill: #6A3DD8; }
-    @media (prefers-color-scheme: dark) {
-      .name { fill: #F2EEFF; }
-      .sub { fill: #B9A0FF; }
-    }
+    @media (prefers-color-scheme: dark) { .name { fill: #F2EEFF; } .sub { fill: #B9A0FF; } }
   </style>
-  <polygon fill="#9A6CFF" points="24,212 124,38.8 124,82.8 54,204"/>
-  <polygon fill="#8152F2" points="65.6,200 124,98.8 124,142.8 95.6,192"/>
-  <polygon fill="#6B3DDB" points="107.1,188 124,158.8 124,178"/>
-  <polygon fill="#5B2EC7" points="232,212 132,38.8 132,82.8 202,204"/>
-  <polygon fill="#4A24AD" points="190.4,200 132,98.8 132,142.8 160.4,192"/>
-  <polygon fill="#3D1D94" points="148.9,188 132,158.8 132,178"/>
+  <defs>
+    <linearGradient id="violet" gradientUnits="userSpaceOnUse" x1="0" y1="38" x2="0" y2="218">
+      <stop offset="0" stop-color="#A47BFF"/><stop offset="1" stop-color="#5B2EC7"/>
+    </linearGradient>
+    <linearGradient id="ember" gradientUnits="userSpaceOnUse" x1="0" y1="38" x2="0" y2="218">
+      <stop offset="0" stop-color="#FFC24A"/><stop offset="1" stop-color="#F0662A"/>
+    </linearGradient>
+  </defs>
+  <polygon fill="url(#violet)" points="20,218 124,38 124,92 58,208"/>
+  <polygon fill="url(#violet)" fill-opacity="0.82" points="74,204 124,117.4 124,161.4 104,196"/>
+  <polygon fill="url(#ember)" points="236,218 132,38 132,92 198,208"/>
+  <polygon fill="url(#ember)" fill-opacity="0.82" points="182,204 132,117.4 132,161.4 152,196"/>
   <text x="272" y="166" font-family="'Segoe UI Variable Display', 'Segoe UI', Inter, 'Helvetica Neue', Arial, sans-serif" font-size="104" letter-spacing="-2">
-    <tspan class="name" font-weight="700">Codalus</tspan><tspan class="sub" font-weight="400" dx="24">Studio</tspan>
+    <tspan class="name" font-weight="700">Codalus</tspan><tspan class="sub" font-weight="400" dx="24">IDE</tspan>
   </text>
 </svg>
