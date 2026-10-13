@@ -151,6 +151,7 @@ public sealed partial class ShellHost : IEditorServices
         Solutions.ProjectChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
         Solutions.CompilerInputsChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
         InitializeProfiles();
+        InitializeSync();
         InitializeColors(); // before ThemeChanged's subscribers: they read the customized theme
         Theme.Changed += (_, _) => ThemeChanged?.Invoke(this, EventArgs.Empty);
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);

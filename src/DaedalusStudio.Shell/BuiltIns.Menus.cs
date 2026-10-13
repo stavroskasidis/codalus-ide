@@ -407,6 +407,7 @@ internal static partial class BuiltIns
             Item(Tools, "workbench.importSettings", "z-preferences"),
             Item(Tools, "workbench.exportSettings", "z-preferences"),
             Item(Tools, "workbench.importVsCodeSettings", "z-preferences"),
+            Item(Tools, "settingsSync.syncNow", "z-preferences"),
             Item(Tools, "workbench.importVsSettings", "z-preferences"),
             Item(Tools, "workbench.openOptions", "z-preferences"),
 

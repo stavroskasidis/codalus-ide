@@ -289,6 +289,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         _ = OfferRecoveryAsync();
         StartUpdates();
+        _ = SyncSettingsAsync(quiet: true);
         foreach (var error in Options.Errors)
         {
             Workbench.Notifications.Warning(error);

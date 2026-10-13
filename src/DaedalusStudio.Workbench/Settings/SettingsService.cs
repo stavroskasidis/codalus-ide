@@ -386,4 +386,6 @@ public sealed class SettingsService : IDisposable
 [System.Text.Json.Serialization.JsonSerializable(typeof(bool))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(double))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(string[]))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(JsonElement))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, string>))]
 internal sealed partial class SettingsJsonContext : System.Text.Json.Serialization.JsonSerializerContext;

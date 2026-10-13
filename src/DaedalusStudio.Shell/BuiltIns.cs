@@ -74,6 +74,20 @@ internal static partial class BuiltIns
                 Description = "The ids of plugins that don't load (the Plugins window turns them off and on). Changes apply when Daedalus Studio starts again.",
                 Scope = SettingScope.User,
             },
+            SettingDescriptor.Create(ShellHost.SyncTargetSetting, "\"\"", SettingType.String, shell) with
+            {
+                Title = "Sync Target",
+                Category = "Settings Sync",
+                Description = "Where your settings, keyboard shortcuts, snippets and saved layouts sync: a folder (one a cloud drive syncs) or a Git repository's URL (a gist's clone URL works). Empty: sync is off. Each profile has its own.",
+                Scope = SettingScope.User,
+            },
+            SettingDescriptor.Create(ShellHost.SyncIgnoredSetting, "[]", SettingType.StringArray, shell) with
+            {
+                Title = "Settings Not Synced",
+                Category = "Settings Sync",
+                Description = "Settings that stay on this machine (the sync settings always do), such as paths that differ between machines.",
+                Scope = SettingScope.User,
+            },
             SettingDescriptor.Create(KeyboardSchemeSetting, "\"default\"", SettingType.String, shell) with
             {
                 Title = "Keyboard Scheme",
@@ -226,6 +240,9 @@ internal static partial class BuiltIns
         Add("update.whatsNew", "What's New", "Help", Ui(() => shell.ShowWhatsNew()));
         Add("update.restart", "Restart to Update", "Help", Ui(shell.RestartToUpdate));
         Add("workbench.restart", "Restart", "File", Ui(shell.Restart));
+        Add("settingsSync.turnOn", "Settings Sync: Turn On…", "Preferences", Ui(() => shell.TurnOnSettingsSyncAsync()));
+        Add("settingsSync.syncNow", "Settings Sync: Sync Now", "Preferences", Ui(() => shell.SyncSettingsAsync()));
+        Add("settingsSync.turnOff", "Settings Sync: Turn Off", "Preferences", Ui(shell.TurnOffSettingsSyncAsync));
         Add("workbench.profiles.switch", "Switch Profile…", "Profiles", Ui(() => shell.SwitchProfileAsync()));
         Add("workbench.profiles.new", "New Profile…", "Profiles", Ui(() => shell.NewProfileAsync()));
         Add("workbench.profiles.delete", "Delete Profile…", "Profiles", Ui(() => shell.DeleteProfileAsync()));
