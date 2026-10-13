@@ -46,10 +46,12 @@ public sealed class ProfileStore(AppPaths paths)
             .Where(n => !string.Equals(n, DefaultName, StringComparison.OrdinalIgnoreCase))
             .Order(StringComparer.CurrentCultureIgnoreCase)];
 
-    public string Folder(string name) => Path.Combine(Root, name);
+    /// <summary>A profile's folder; names are case-insensitive on every OS (Linux's file system isn't), so "copy" is "Copy"'s.</summary>
+    public string Folder(string name) =>
+        Path.Combine(Root, Names.FirstOrDefault(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) ?? name);
 
     public bool Exists(string name) =>
-        string.Equals(name, DefaultName, StringComparison.OrdinalIgnoreCase) || Directory.Exists(Folder(name));
+        Names.Contains(name, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Why <paramref name="name"/> can't be a new profile's name, or null.</summary>
     public string? Validate(string name)

@@ -53,6 +53,8 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M32 | Self-update | at checkpoint ([m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
 | M34 | UI polish | M34a at checkpoint ([m34a](checkpoints/m34a.md)), pulled forward by the maintainer on 2026-10-12: Fluent UI System Icons compiled at build time (D24) with command-family colors, every menu a tree like a classic IDE's, output windows that follow new output, the minimap docked at the editor's edge, completion keys per OS (the editor's key bindings now match a focused editor), then Material Icon Theme's file, folder and project icons, a flat navigation bar and themed outlining markers; M34b at checkpoint ([m34b](checkpoints/m34b.md)), pulled forward the same day: batched project loading in the language host, no false errors while loading, a parallel background pass, parallel design-time builds and their persisted cache, restore on open only when needed; M34d at checkpoint ([m34d](checkpoints/m34d.md)), 2026-10-13: spacing, size and type tokens, document tabs and captions in every state (selected without the focus, pinned, preview on the right, colored by project), toolbars that overflow instead of wrapping, High Contrast's black menus, the gallery in the smoke test, clipped-text and WCAG AA contrast tests, the UI guide; M34c at checkpoint ([m34c](checkpoints/m34c.md)), 2026-10-13: the language host keeps diagnostics and reference assemblies between sessions, open documents compile against unchanged projects' assemblies, and CS4014 the build wouldn't report is left out (ADR 0049); the rest of M34 stays the last milestone before Visual Basic and F# |
+| M37 | Environment setup | planned (2026-10-13): detect a missing or mismatched .NET SDK, git and the optional tools, Help → Check Environment, and install them with the user's consent (winget, the official installers, `dotnet-install`, the distribution's package manager); later MAUI's workloads |
+| M38 | Start window | planned (2026-10-13): "What would you like to do?" at startup, with recent solutions (search, pinned, grouped by date) and Create, Open, Open Folder and Clone |
 | M35 | Visual Basic | planned, always second to last |
 | M36 | F# | planned, always last |
 
@@ -132,7 +134,7 @@ All seven are settled:
 | 8. Remote | M21 | SSH, WSL, Dev Containers. |
 | 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
 | 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
-| 11. Polish | M34 | Every panel, window and feature brought to one finished standard. |
+| 11. Polish | M34, M37, M38 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38). |
 | 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
 Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. After M30a, the maintainer moved M16c ahead of the rest of phase 4 (M31–M33).
@@ -1715,6 +1717,51 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 - Benchmarks and budgets with numbers before and after.
 
 **Status.** At checkpoint: [m34c](checkpoints/m34c.md).
+
+### M37 — Environment setup
+
+**Why.** Daedalus Studio needs tools it doesn't ship: the .NET SDK (the one `global.json` pins, or any), git, and for some features Node.js, a container engine or WSL. Today a missing tool shows as a failed load or a log line. The maintainer asked (2026-10-13) for the IDE to notice what's missing and offer to install it, and to do the same later for MAUI's workloads.
+
+**Scope.**
+- **Detection**: when the IDE starts, when a solution opens, and when a feature first needs a tool.
+  - **.NET SDK**: none at all; none matching a solution's `global.json`; or a solution's target framework newer than any installed SDK. Partly there already in `SdkSelection` and `GlobalJsonSdk`.
+  - **git**, and Git LFS when a repository uses it.
+  - **Optional tools**, only when a feature needs them: Node.js (already downloaded on demand, ADR 0024), Docker or Podman, WSL, a Chromium browser for browser debugging.
+- **Help → Check Environment**: a page listing each tool with its version and path (the SDKs, git, the debugger, the language servers' runtimes), what's missing and what needs it, each with a fix.
+- **Offering to install**: a notification or a first-run step names the tool, why it's needed, and exactly what will run. Nothing installs without the user's yes.
+  - **Windows**: `winget` (`Microsoft.DotNet.SDK.<n>`, `Git.Git`). Without winget, the official installer is downloaded and its checksum checked.
+  - **macOS**: the .NET SDK's `.pkg`, or `dotnet-install.sh` into the user's folder. git comes from the Xcode Command Line Tools (`xcode-select --install`), or Homebrew when it's there.
+  - **Linux**: `dotnet-install.sh` into `~/.dotnet` needs no root. For system packages (git, an SDK from the distribution), the distribution's command (`apt`, `dnf`, `zypper`, `pacman`) is shown and runs in the integrated terminal, where `sudo` asks for its own password.
+  - **A pinned SDK** (`global.json`, including older ones per ADR 0030) installs side by side with `dotnet-install` at that exact version.
+- **After installing**: the tools are found again without a restart where possible (the build host, the language host and the terminal environment pick up the new `PATH`), and the solution reloads.
+- **First run**: the onboarding's Get Started (M23a) gains a step when something essential is missing.
+- **Later, the same framework for workloads**: MAUI's (`dotnet workload install maui`, the Android SDK and a JDK, Xcode on macOS) when M20 starts, and WebAssembly's tools for Blazor's AOT. Each milestone that needs a toolchain adds its own detector and installer.
+
+**Tests.** Stand-in tool folders and a fake installer: detection without an SDK, with the wrong SDK, and without git; the offer and the exact command it would run on each OS; a refusal leaves everything as it was. Tests never install anything for real. A manual run on a clean virtual machine of each OS is part of the checkpoint.
+
+**Status.** Planned (added by the maintainer on 2026-10-13).
+
+### M38 — Start window
+
+**Why.** Opening Daedalus Studio should start with a window that asks what you want to do: your recent solutions, and the ways to start, as the classic IDE's start window does. The maintainer asked for it on 2026-10-13. Today the Start page is a tool window of the Welcome plugin.
+
+**Scope.**
+- **When it shows**: a start window ("What would you like to do?") when the IDE starts without a solution, and from File → Start Window. It closes when a choice opens something. **Continue without code** opens the empty IDE. A setting turns it off (then the IDE opens empty, or reopens the last solution, as chosen).
+- **Recent list**: solutions, projects and folders.
+  - **Search**: a search box (`Alt+S`) filters by name and path.
+  - **Groups**: Pinned, Today, Yesterday, This week, This month, Older.
+  - **Each entry**: its icon, name, folder and when it was last opened.
+  - **Actions**: pin and unpin (the pin shows on hover, always on pinned entries), remove from the list, copy the path, and open in a new window. Entries whose files are gone are marked, and opening one offers to remove it.
+  - **Keyboard**: the list works from the keyboard: arrows, `Enter` opens, `Delete` removes.
+- **Actions on the right**: Create a new project (the New Project dialog of the Templates plugin), Open a project or solution, Open a folder, and Clone a repository (the clone dialog, with the hosting accounts of ADR 0031). Each has its icon and a one-line description.
+- **Below**: the release's What's New (M32) and, until the user is done with it, the Get Started steps from M23a.
+- **Shell**: its own window, dark or light with the theme, resizable, and remembered between sessions.
+- **The Welcome plugin**: its Start page tool window stays available for those who want it docked. Its recent list and actions come from the same service.
+- **Recent entries**: the recent list moves from the shell state to a store with pins and last-opened times, and is shared with File → Recent and the taskbar's or dock's jump list where the OS has one.
+
+**Tests.** The window's model: grouping by date (with a fixed clock), search, pin, remove and missing entries. A headless shell test opens the IDE without a solution, sees the window, and opens a recent solution from it. Screenshots in light and dark for the static site.
+
+**Status.** Planned (added by the maintainer on 2026-10-13).
 
 ---
 
