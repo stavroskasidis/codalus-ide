@@ -1739,8 +1739,8 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 | Container label, launch agents, bundle id | `dev.daedalus.*` | `dev.codalus.*` |
 | Credential store service, single-instance pipe | Daedalus Studio | Codalus |
 | Installers | Velopack `DaedalusStudio`, `daedalus-studio` packages, AUR `daedalus-studio-bin`, winget | Velopack `Codalus`, `codalus` deb/rpm/AppImage/tar.gz, AUR `codalus-bin`, winget `Codalus.Codalus` |
-| Repository and site | `stavroskasidis/daedalus-studio`, `stavroskasidis.com/daedalus-studio/` | `stavroskasidis/codalus`, `stavroskasidis.com/codalus/` |
-| Logo | the labyrinth mark, "Daedalus Studio" wordmark | the same mark; a new wordmark and the `.ico`/PNG sizes regenerated |
+| Repository and site | `stavroskasidis/daedalus-studio`, `stavroskasidis.com/daedalus-studio/` | `stavroskasidis/codalus-ide`, `stavroskasidis.com/codalus-ide/` |
+| Logo | the labyrinth mark, "Daedalus Studio" wordmark | a new mark and wordmark, chosen by the maintainer from proposals; the `.ico`/PNG sizes regenerated |
 
 **Steps.**
 1. **Freeze**: land or park the open branches, so that the rename is one change on `develop` with nothing in flight.
@@ -1754,14 +1754,14 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 6. **Validation**: the full suite on Windows, Linux (WSL) and macOS, the smoke test on each, the packages built and installed (`eng/smoke-test.sh --packages`), the apt and dnf repositories tested (`eng/test-linux-repos.sh`), and the AUR package (`eng/test-aur.sh`).
 7. **Outside the repository**, in order, after the rename is merged (the maintainer's, or with the maintainer's go-ahead):
    - rename the GitHub repository (GitHub redirects the old URLs, but not Pages);
-   - the Pages site moves to `/codalus/` (`linux-repos.yml` reads its address from `configure-pages`);
+   - the Pages site moves to `/codalus-ide/` (`linux-repos.yml` reads its address from `configure-pages`);
    - re-point the local clones and the Mac's (`git remote set-url`);
    - reserve the `Codalus` prefix on nuget.org;
    - register `codalus-bin` on the AUR when `AUR_SSH_PRIVATE_KEY` exists;
    - the 0.2.0 release publishes everything under the new names. The 0.1.0 release and the old apt/dnf address stay as they are (no users to move).
 8. **Local environment**: the worktrees, the WSL mirror folder (`~/codalus`), the memory notes and the scripts that name the old folders.
 
-**Decisions for the maintainer**: the repository's name (`codalus`, recommended, or `codalus-ide`); whether the CLI is `codalus` (recommended) or something shorter; a new wordmark only, or a new mark too.
+**Decided** (2026-10-13): the repository is `codalus-ide`, the CLI is `codalus`, and the logo gets a new mark too. Mark proposals (SVG, light and dark, at 16 to 256 px) come first, and the maintainer picks one before step 2.
 
 **Status.** Planned (the maintainer's request, 2026-10-13).
 
