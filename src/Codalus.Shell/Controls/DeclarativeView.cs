@@ -261,9 +261,10 @@ public sealed class DeclarativeView : UserControl
         return panel;
     }
 
-    private StackPanel Toolbar(ViewNodeDto node)
+    /// <summary>A row of buttons that wraps onto a new line in a narrow pane, rather than cutting a button off.</summary>
+    private WrapPanel Toolbar(ViewNodeDto node)
     {
-        var bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        var bar = new WrapPanel { Orientation = Orientation.Horizontal };
         foreach (var child in node.Children ?? [])
         {
             var built = Build(child);
@@ -272,6 +273,7 @@ public sealed class DeclarativeView : UserControl
                 button.Classes.Add("toolbar");
             }
 
+            built.Margin = new Thickness(0, 0, 4, 4);
             bar.Children.Add(built);
         }
 
