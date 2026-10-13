@@ -295,9 +295,15 @@ public partial class PolishTests
         f.Shell.Trust.Trust(Path.GetDirectoryName(Path.GetDirectoryName(solution))!);
         await f.Shell.OpenSolutionAsync(solution);
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count > 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
-        var folder = Path.GetDirectoryName(solution)!;
-        var files = Directory.EnumerateFiles(folder, "*.cs", SearchOption.AllDirectories).Where(p => !p.Contains($"{System.IO.Path.DirectorySeparatorChar}obj{System.IO.Path.DirectorySeparatorChar}", StringComparison.Ordinal)).Take(3).ToList();
-        Assert.True(files.Count == 3, "three source files in the fixture");
+        // Three source files of the loaded projects (the fixture also has files no project of the solution owns).
+        var files = f.Shell.Solutions.Projects.Values
+            .SelectMany(p => p.Items.Where(i => i.Link is null).Select(i => i.Path))
+            .Where(p => p.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) && File.Exists(p))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .Take(3)
+            .ToList();
+        Assert.True(files.Count == 3, "three source files in the fixture's projects");
 
         await f.Shell.OpenFileAsync(files[0], preview: false);
         await f.Shell.OpenFileAsync(files[1], preview: true);
