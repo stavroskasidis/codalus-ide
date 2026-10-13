@@ -23,12 +23,25 @@
       </DataTemplate>
     </Setter>
   </Style>
+  <!-- Tool window tabs fit their pane: the widest shrink first and end in an ellipsis, the tooltip has the name. -->
   <Style Selector="ToolControl">
     <Setter Property="HeaderTemplate">
       <DataTemplate DataType="core:IDockable">
-        <TextBlock Text="{Binding Title}" Padding="2" />
+        <TextBlock Classes="tabTitle" Text="{Binding Title}" Padding="2" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}"
+                   MaxWidth="{Binding $parent[ToolTabStripItem].(controls:FittingTabPanel.TitleMaxWidth)}" />
       </DataTemplate>
     </Setter>
+  </Style>
+  <Style Selector="ToolTabStrip">
+    <Setter Property="ItemsPanel">
+      <ItemsPanelTemplate>
+        <controls:FittingTabPanel />
+      </ItemsPanelTemplate>
+    </Setter>
+  </Style>
+  <!-- Dock scrolls the tabs sideways (hidden scroll bar), which gives them unlimited width: the panel needs the pane's. -->
+  <Style Selector="ToolTabStrip /template/ ScrollViewer#PART_ScrollViewer">
+    <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
   </Style>
 
   <!--

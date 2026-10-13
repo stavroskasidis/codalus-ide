@@ -285,6 +285,59 @@ public partial class PolishTests
         window.Close();
     }
 
+    // ------------------------------------------------------------------ tool window tabs
+
+    [Fact]
+    public void Tabs_that_dont_fit_share_the_width_and_narrow_ones_keep_theirs()
+    {
+        Assert.True(double.IsPositiveInfinity(FittingTabPanel.Cap([80, 90, 100], 300)));
+        Assert.True(double.IsPositiveInfinity(FittingTabPanel.Cap([80, 90], double.PositiveInfinity)));
+        Assert.Equal(110, FittingTabPanel.Cap([80, 200, 150], 300), 3); // 80 keeps its width, the others share 220
+        Assert.Equal(75, FittingTabPanel.Cap([100, 100, 100, 100], 300), 3);
+    }
+
+    [AvaloniaFact]
+    public async Task Tool_window_tabs_fit_their_pane_with_ellipses_and_whole_names_in_tooltips()
+    {
+        // The maintainer's report: with many tool windows in one group, the tabs ran off the pane ("Database E").
+        await using var f = ShellFixture.Create();
+        foreach (var descriptor in f.Shell.Workbench.ToolWindows.All.ToList())
+        {
+            f.Shell.Layout.ShowToolWindow(descriptor.Id, focus: false);
+        }
+
+        f.Window.Width = 1000;
+        ShellFixture.Pump();
+        var strips = f.Window.GetVisualDescendants().OfType<Dock.Avalonia.Controls.ToolTabStrip>().Where(s => s.IsEffectivelyVisible).ToList();
+        Assert.NotEmpty(strips);
+        var crowded = 0;
+        foreach (var strip in strips)
+        {
+            var panel = strip.GetVisualDescendants().OfType<FittingTabPanel>().FirstOrDefault();
+            Assert.NotNull(panel);
+            var tabs = panel.Children.Where(c => c.IsVisible).ToList();
+            var used = tabs.Sum(t => t.Bounds.Width);
+            // They fit, unless even the narrowest tabs can't (33 tool windows in one group): then each is at the floor.
+            Assert.True(used <= strip.Bounds.Width + 1 || tabs.All(t => t.Bounds.Width <= FittingTabPanel.MinTabWidth + 1),
+                $"{tabs.Count} tabs take {used:0} px of {strip.Bounds.Width:0}");
+            var titles = tabs.SelectMany(t => t.GetVisualDescendants().OfType<TextBlock>().Where(b => b.Classes.Contains("tabTitle"))).ToList();
+            Assert.All(titles, b => Assert.Equal(b.Text, ToolTip.GetTip(b)));
+            if (titles.Any(b => !double.IsPositiveInfinity(b.MaxWidth)))
+            {
+                crowded++;
+                Assert.All(titles, b => Assert.Equal(TextTrimming.CharacterEllipsis, b.TextTrimming));
+            }
+        }
+
+        Assert.True(crowded > 0, "with every tool window open, some group has shrunk tabs");
+        if (Environment.GetEnvironmentVariable("DAEDALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
+        {
+            Directory.CreateDirectory(snapshots);
+            using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(f.Window);
+            frame!.Save(Path.Combine(snapshots, "tool-window-tabs.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+    }
+
     // ------------------------------------------------------------------ document tabs
 
     [AvaloniaFact]
