@@ -1,4 +1,5 @@
-<local:LoadingView xmlns="https://github.com/avaloniaui"
+<local:LoadingView xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                    xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
                    xmlns:local="using:DaedalusStudio.Shell.Views"
@@ -7,7 +8,7 @@
                    x:DataType="vm:SdkViewModel">
   <DockPanel Margin="16,12">
     <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,8">
-      <TextBlock Classes="heading" Text=".NET SDKs" />
+      <TextBlock Classes="heading" Text="{l:T sdk.netSdks}" />
       <TextBlock TextWrapping="Wrap" Text="{Binding ResolvedText}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding GlobalJsonText}" />
       <TextBlock Foreground="{DynamicResource Shell.Warning}" TextWrapping="Wrap" Text="{Binding Warning}" IsVisible="{Binding HasWarning}" />
@@ -15,16 +16,16 @@
     </StackPanel>
     <Grid ColumnDefinitions="*,16,*">
       <DockPanel>
-        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="Installed SDKs" />
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="{l:T sdk.installedSdks}" />
         <!-- Wraps rather than clipping when the column is narrow (M34's checklist). -->
         <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" Margin="0,8,0,0">
-          <Button Content="Use This SDK" Command="{Binding PinCommand}" ToolTip.Tip="Writes global.json next to the solution and reloads it" />
-          <TextBlock VerticalAlignment="Center" Text="Roll forward:" />
-          <ComboBox MinWidth="130" ItemsSource="{x:Static vm:SdkViewModel.RollForwardOptions}" SelectedItem="{Binding RollForward}" AutomationProperties.Name="Roll forward" />
-          <Button Content="Remove Pin" Command="{Binding UnpinCommand}" />
-          <Button Classes="link" Content="Refresh" Command="{Binding RefreshCommand}" />
+          <Button Content="{l:T sdk.useThisSdk}" Command="{Binding PinCommand}" ToolTip.Tip="{l:T sdk.writesGlobalJsonNextToThe}" />
+          <TextBlock VerticalAlignment="Center" Text="{l:T sdk.rollForward}" />
+          <ComboBox MinWidth="130" ItemsSource="{x:Static vm:SdkViewModel.RollForwardOptions}" SelectedItem="{Binding RollForward}" AutomationProperties.Name="{l:T sdk.rollForward2}" />
+          <Button Content="{l:T sdk.removePin}" Command="{Binding UnpinCommand}" />
+          <Button Classes="link" Content="{l:T sdk.refresh}" Command="{Binding RefreshCommand}" />
         </WrapPanel>
-        <ListBox ItemsSource="{Binding Sdks}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Installed SDKs">
+        <ListBox ItemsSource="{Binding Sdks}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T sdk.installedSdks}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:SdkRow">
               <StackPanel>
@@ -38,9 +39,9 @@
         </ListBox>
       </DockPanel>
       <DockPanel Grid.Column="2">
-        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="Workloads" />
-        <TextBlock DockPanel.Dock="Top" Classes="muted" Text="No workloads are installed." IsVisible="{Binding !HasWorkloads}" />
-        <ListBox ItemsSource="{Binding Workloads}" AutomationProperties.Name="Workloads">
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4" Text="{l:T sdk.workloads}" />
+        <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{l:T sdk.noWorkloadsAreInstalled}" IsVisible="{Binding !HasWorkloads}" />
+        <ListBox ItemsSource="{Binding Workloads}" AutomationProperties.Name="{l:T sdk.workloads}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="protocol:DotnetWorkload">
               <StackPanel Orientation="Horizontal" Spacing="8">

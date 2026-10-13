@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -8,15 +9,15 @@
     <!-- Filters (not for line history). -->
     <WrapPanel Margin="6,4" IsVisible="{Binding CanFilter}">
       <ComboBox ItemsSource="{Binding Branches}" SelectedItem="{Binding Branch}" MinWidth="160" Margin="0,0,6,0"
-                ToolTip.Tip="Branch" AutomationProperties.Name="Branch" />
-      <TextBox x:Name="AuthorBox" Text="{Binding Author}" Width="160" Margin="0,0,6,0" PlaceholderText="Author" AutomationProperties.Name="Filter by author" />
-      <TextBox x:Name="MessageBox" Text="{Binding MessageFilter}" Width="220" Margin="0,0,6,0" PlaceholderText="Message" AutomationProperties.Name="Filter by message" />
-      <Button Content="Filter" Click="OnFilter" />
+                ToolTip.Tip="{l:T gitHistory.branch}" AutomationProperties.Name="{l:T gitHistory.branch}" />
+      <TextBox x:Name="AuthorBox" Text="{Binding Author}" Width="160" Margin="0,0,6,0" PlaceholderText="{l:T gitHistory.author}" AutomationProperties.Name="{l:T gitHistory.filterByAuthor}" />
+      <TextBox x:Name="MessageBox" Text="{Binding MessageFilter}" Width="220" Margin="0,0,6,0" PlaceholderText="{l:T gitHistory.message}" AutomationProperties.Name="{l:T gitHistory.filterByMessage}" />
+      <Button Content="{l:T gitHistory.filter}" Click="OnFilter" />
     </WrapPanel>
 
     <Grid Grid.Row="1">
-      <TextBlock Classes="emptyState" Text="No commits." IsVisible="{Binding IsEmpty}" />
-      <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Commits">
+      <TextBlock Classes="emptyState" Text="{l:T gitHistory.noCommits}" IsVisible="{Binding IsEmpty}" />
+      <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T gitHistory.commits}">
         <ListBox.Styles>
           <Style Selector="ListBoxItem" x:DataType="vm:GitCommitRow">
             <Setter Property="Padding" Value="4,0" />
@@ -61,20 +62,20 @@
         </ListBox.ItemTemplate>
         <ListBox.ContextMenu>
           <ContextMenu>
-            <MenuItem Header="Checkout (Detached)" Tag="checkout" Click="OnCommitAction" />
-            <MenuItem Header="New Branch Here…" Tag="branch" Click="OnCommitAction" />
-            <MenuItem Header="Create Tag…" Tag="tag" Click="OnCommitAction" />
+            <MenuItem Header="{l:T gitHistory.checkoutDetached}" Tag="checkout" Click="OnCommitAction" />
+            <MenuItem Header="{l:T gitHistory.newBranchHere}" Tag="branch" Click="OnCommitAction" />
+            <MenuItem Header="{l:T gitHistory.createTag}" Tag="tag" Click="OnCommitAction" />
             <Separator />
-            <MenuItem Header="Cherry-Pick" Tag="cherryPick" Click="OnCommitAction" />
-            <MenuItem Header="Revert" Tag="revert" Click="OnCommitAction" />
-            <MenuItem Header="Reset">
-              <MenuItem Header="Keep Changes Staged (Soft)" Tag="reset-soft" Click="OnCommitAction" />
-              <MenuItem Header="Keep Changes (Mixed)" Tag="reset-mixed" Click="OnCommitAction" />
-              <MenuItem Header="Discard Changes (Hard)…" Tag="reset-hard" Click="OnCommitAction" />
+            <MenuItem Header="{l:T gitHistory.cherryPick}" Tag="cherryPick" Click="OnCommitAction" />
+            <MenuItem Header="{l:T gitHistory.revert}" Tag="revert" Click="OnCommitAction" />
+            <MenuItem Header="{l:T gitHistory.reset}">
+              <MenuItem Header="{l:T gitHistory.keepChangesStagedSoft}" Tag="reset-soft" Click="OnCommitAction" />
+              <MenuItem Header="{l:T gitHistory.keepChangesMixed}" Tag="reset-mixed" Click="OnCommitAction" />
+              <MenuItem Header="{l:T gitHistory.discardChangesHard}" Tag="reset-hard" Click="OnCommitAction" />
             </MenuItem>
-            <MenuItem Header="Interactive Rebase from Here…" Tag="rebaseInteractive" Click="OnCommitAction" />
+            <MenuItem Header="{l:T gitHistory.interactiveRebaseFromHere}" Tag="rebaseInteractive" Click="OnCommitAction" />
             <Separator />
-            <MenuItem Header="Copy Commit Hash" Tag="copyHash" Click="OnCommitAction" />
+            <MenuItem Header="{l:T gitHistory.copyCommitHash}" Tag="copyHash" Click="OnCommitAction" />
           </ContextMenu>
         </ListBox.ContextMenu>
       </ListBox>
@@ -83,9 +84,9 @@
     <GridSplitter Grid.Row="2" ResizeDirection="Rows" Background="{DynamicResource Shell.Border}" />
 
     <Grid Grid.Row="3" ColumnDefinitions="*,4,*" IsVisible="{Binding HasDetails}">
-      <SelectableTextBlock Margin="8,6" Text="{Binding DetailsText}" TextWrapping="Wrap" AutomationProperties.Name="Commit details" />
+      <SelectableTextBlock Margin="8,6" Text="{Binding DetailsText}" TextWrapping="Wrap" AutomationProperties.Name="{l:T gitHistory.commitDetails}" />
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource Shell.Border}" />
-      <ListBox x:Name="FileList" Grid.Column="2" ItemsSource="{Binding Files}" Background="Transparent" AutomationProperties.Name="Changed files">
+      <ListBox x:Name="FileList" Grid.Column="2" ItemsSource="{Binding Files}" Background="Transparent" AutomationProperties.Name="{l:T gitHistory.changedFiles}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:GitCommitFileRow">
             <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding RelativePath}">

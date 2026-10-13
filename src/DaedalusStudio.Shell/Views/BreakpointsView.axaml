@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
@@ -6,16 +7,16 @@
              x:DataType="vm:BreakpointsViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top" Spacing="4">
-      <Button x:Name="NewFunction" Content="New Function…" ToolTip.Tip="New Function Breakpoint" AutomationProperties.Name="New function breakpoint" />
-      <Button x:Name="EnableAll" Content="Enable All" ToolTip.Tip="Enable the breakpoints shown" AutomationProperties.Name="Enable all breakpoints" />
-      <Button x:Name="DisableAll" Content="Disable All" ToolTip.Tip="Disable the breakpoints shown" AutomationProperties.Name="Disable all breakpoints" />
-      <Button x:Name="Export" Content="Export…" AutomationProperties.Name="Export breakpoints" />
-      <Button x:Name="Import" Content="Import…" AutomationProperties.Name="Import breakpoints" />
-      <Button x:Name="DeleteAll" Content="Delete All" AutomationProperties.Name="Delete all breakpoints" />
-      <TextBox x:Name="Search" Text="{Binding Filter}" PlaceholderText="Search (location, condition, label)" AutomationProperties.Name="Search breakpoints" />
+      <Button x:Name="NewFunction" Content="{l:T breakpoints.newFunction}" ToolTip.Tip="{l:T breakpoints.newFunctionBreakpoint}" AutomationProperties.Name="{l:T breakpoints.newFunctionBreakpoint2}" />
+      <Button x:Name="EnableAll" Content="{l:T breakpoints.enableAll}" ToolTip.Tip="{l:T breakpoints.enableTheBreakpointsShown}" AutomationProperties.Name="{l:T breakpoints.enableAllBreakpoints}" />
+      <Button x:Name="DisableAll" Content="{l:T breakpoints.disableAll}" ToolTip.Tip="{l:T breakpoints.disableTheBreakpointsShown}" AutomationProperties.Name="{l:T breakpoints.disableAllBreakpoints}" />
+      <Button x:Name="Export" Content="{l:T breakpoints.export}" AutomationProperties.Name="{l:T breakpoints.exportBreakpoints}" />
+      <Button x:Name="Import" Content="{l:T breakpoints.import}" AutomationProperties.Name="{l:T breakpoints.importBreakpoints}" />
+      <Button x:Name="DeleteAll" Content="{l:T breakpoints.deleteAll}" AutomationProperties.Name="{l:T breakpoints.deleteAllBreakpoints}" />
+      <TextBox x:Name="Search" Text="{Binding Filter}" PlaceholderText="{l:T breakpoints.searchLocationConditionLabel}" AutomationProperties.Name="{l:T breakpoints.searchBreakpoints}" />
     </controls:ToolbarPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="No breakpoints. Press F9 in an editor to add one." IsVisible="{Binding IsEmpty}" />
-    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Breakpoints">
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T breakpoints.noBreakpointsPressF9InAn}" IsVisible="{Binding IsEmpty}" />
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T breakpoints.breakpoints}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:BreakpointRow">
           <Setter Property="Padding" Value="2" />
@@ -25,7 +26,7 @@
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:BreakpointRow">
           <StackPanel Orientation="Horizontal" Spacing="8">
-            <CheckBox IsChecked="{Binding Enabled}" AutomationProperties.Name="Enabled" />
+            <CheckBox IsChecked="{Binding Enabled}" AutomationProperties.Name="{l:T breakpoints.enabled}" />
             <TextBlock Text="{Binding Location}" VerticalAlignment="Center" Classes.muted="{Binding !IsVerified}" />
             <Border Classes="badge" IsVisible="{Binding HasLabels}" VerticalAlignment="Center" Padding="4,0" CornerRadius="3" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}">
               <TextBlock Text="{Binding Labels}" FontSize="{DynamicResource Shell.FontSize.Small}" />

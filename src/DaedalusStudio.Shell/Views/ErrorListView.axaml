@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -6,14 +7,14 @@
              x:DataType="vm:ErrorListViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <ComboBox SelectedIndex="0" x:Name="Scope" MinWidth="130" AutomationProperties.Name="Scope" ToolTip.Tip="Scope">
-        <ComboBoxItem Content="Entire Solution" />
-        <ComboBoxItem Content="Current Document" />
+      <ComboBox SelectedIndex="0" x:Name="Scope" MinWidth="130" AutomationProperties.Name="{l:T errorList.scope}" ToolTip.Tip="{l:T errorList.scope}">
+        <ComboBoxItem Content="{l:T errorList.entireSolution}" />
+        <ComboBoxItem Content="{l:T errorList.currentDocument}" />
       </ComboBox>
-      <ComboBox SelectedIndex="{Binding SourceFilter}" MinWidth="130" AutomationProperties.Name="Source" ToolTip.Tip="Source">
-        <ComboBoxItem Content="Build + IntelliSense" />
-        <ComboBoxItem Content="Build Only" />
-        <ComboBoxItem Content="IntelliSense Only" />
+      <ComboBox SelectedIndex="{Binding SourceFilter}" MinWidth="130" AutomationProperties.Name="{l:T errorList.source}" ToolTip.Tip="{l:T errorList.source}">
+        <ComboBoxItem Content="{l:T errorList.buildIntellisense}" />
+        <ComboBoxItem Content="{l:T errorList.buildOnly}" />
+        <ComboBoxItem Content="{l:T errorList.intellisenseOnly}" />
       </ComboBox>
       <ToggleButton Classes="toolbar" IsChecked="{Binding ShowErrors}" AutomationProperties.Name="{Binding ErrorsLabel}" ToolTip.Tip="{Binding ErrorsLabel}">
         <StackPanel Orientation="Horizontal" Spacing="4">
@@ -33,20 +34,20 @@
           <TextBlock Text="{Binding MessagesLabel}" />
         </StackPanel>
       </ToggleButton>
-      <TextBox Text="{Binding Filter}" PlaceholderText="Search Error List" MinWidth="120" AutomationProperties.Name="Search Error List" />
+      <TextBox Text="{Binding Filter}" PlaceholderText="{l:T errorList.searchErrorList}" MinWidth="120" AutomationProperties.Name="{l:T errorList.searchErrorList}" />
     </controls:ToolbarPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="No problems." IsVisible="{Binding IsEmpty}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T errorList.noProblems}" IsVisible="{Binding IsEmpty}" />
     <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->
     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
       <DockPanel MinWidth="620" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
         <Grid DockPanel.Dock="Top" ColumnDefinitions="28,90,*,140,200,130" Margin="8,2" >
-          <TextBlock Grid.Column="1" Classes="muted" Text="Code" />
-          <TextBlock Grid.Column="2" Classes="muted" Text="Description" />
-          <TextBlock Grid.Column="3" Classes="muted" Text="Project" />
-          <TextBlock Grid.Column="4" Classes="muted" Text="File" />
-          <TextBlock Grid.Column="5" Classes="muted" Text="Source" />
+          <TextBlock Grid.Column="1" Classes="muted" Text="{l:T errorList.code}" />
+          <TextBlock Grid.Column="2" Classes="muted" Text="{l:T errorList.description}" />
+          <TextBlock Grid.Column="3" Classes="muted" Text="{l:T errorList.project}" />
+          <TextBlock Grid.Column="4" Classes="muted" Text="{l:T errorList.file}" />
+          <TextBlock Grid.Column="5" Classes="muted" Text="{l:T errorList.source}" />
         </Grid>
-        <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Error List">
+        <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T errorList.errorList}">
           <ListBox.Styles>
             <Style Selector="ListBoxItem" x:DataType="vm:ErrorListRow">
               <Setter Property="Padding" Value="2" />

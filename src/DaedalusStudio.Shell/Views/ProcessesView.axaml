@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
@@ -6,23 +7,23 @@
              x:DataType="vm:ProcessesViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button Content="Attach to Process…" Click="OnAttach" AutomationProperties.Name="Attach to Process" />
-      <Button Content="Detach All" Click="OnDetach" IsEnabled="{Binding CanDetach}" AutomationProperties.Name="Detach All"
-              ToolTip.Tip="Detach from an attached program and leave it running" />
-      <Button Content="Terminate All" Click="OnTerminate" IsEnabled="{Binding !IsEmpty}" AutomationProperties.Name="Terminate All" />
+      <Button Content="{l:T processes.attachToProcess}" Click="OnAttach" AutomationProperties.Name="{l:T processes.attachToProcess2}" />
+      <Button Content="{l:T processes.detachAll}" Click="OnDetach" IsEnabled="{Binding CanDetach}" AutomationProperties.Name="{l:T processes.detachAll}"
+              ToolTip.Tip="{l:T processes.detachFromAnAttachedProgramAnd}" />
+      <Button Content="{l:T processes.terminateAll}" Click="OnTerminate" IsEnabled="{Binding !IsEmpty}" AutomationProperties.Name="{l:T processes.terminateAll}" />
     </controls:ToolbarPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="No process is being debugged." IsVisible="{Binding IsEmpty}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T processes.noProcessIsBeingDebugged}" IsVisible="{Binding IsEmpty}" />
     <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->
     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
       <DockPanel MinWidth="560" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
         <Grid DockPanel.Dock="Top" ColumnDefinitions="160,70,80,80,*" Margin="8,2">
-          <TextBlock Text="Name" Classes="muted" />
-          <TextBlock Grid.Column="1" Text="ID" Classes="muted" />
-          <TextBlock Grid.Column="2" Text="State" Classes="muted" />
-          <TextBlock Grid.Column="3" Text="Debugging" Classes="muted" />
-          <TextBlock Grid.Column="4" Text="Path" Classes="muted" />
+          <TextBlock Text="{l:T processes.name}" Classes="muted" />
+          <TextBlock Grid.Column="1" Text="{l:T processes.id}" Classes="muted" />
+          <TextBlock Grid.Column="2" Text="{l:T processes.state}" Classes="muted" />
+          <TextBlock Grid.Column="3" Text="{l:T processes.debugging}" Classes="muted" />
+          <TextBlock Grid.Column="4" Text="{l:T processes.path}" Classes="muted" />
         </Grid>
-        <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Processes">
+        <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T processes.processes}">
           <ListBox.Styles>
             <Style Selector="ListBoxItem" x:DataType="vm:ProcessRow">
               <Setter Property="Padding" Value="2" />

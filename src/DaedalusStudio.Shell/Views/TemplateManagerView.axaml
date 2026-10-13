@@ -1,4 +1,5 @@
-<local:LoadingView xmlns="https://github.com/avaloniaui"
+<local:LoadingView xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                    xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
                    xmlns:local="using:DaedalusStudio.Shell.Views"
@@ -6,25 +7,25 @@
                    x:DataType="vm:TemplateManagerViewModel">
   <DockPanel Margin="16,12">
     <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
-      <TextBlock Classes="heading" Text="Templates" />
-      <TextBlock Classes="muted" TextWrapping="Wrap" Text="The dotnet new template packages installed for you. New Project and Add New Item offer their templates." />
+      <TextBlock Classes="heading" Text="{l:T templateManager.templates}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T templateManager.theDotnetNewTemplatePackagesInstalled}" />
       <Grid ColumnDefinitions="*,Auto">
-        <TextBox x:Name="PackageBox" Text="{Binding Package}" PlaceholderText="A package id (Id or Id@version), a .nupkg or a template folder" AutomationProperties.Name="Template package to install" />
-        <Button Grid.Column="1" Margin="6,0,0,0" Content="Install" Command="{Binding InstallCommand}" AutomationProperties.Name="Install template package" />
+        <TextBox x:Name="PackageBox" Text="{Binding Package}" PlaceholderText="{l:T templateManager.aPackageIdIdOrId}" AutomationProperties.Name="{l:T templateManager.templatePackageToInstall}" />
+        <Button Grid.Column="1" Margin="6,0,0,0" Content="{l:T templateManager.install}" Command="{Binding InstallCommand}" AutomationProperties.Name="{l:T templateManager.installTemplatePackage}" />
       </Grid>
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <Button Content="Uninstall" Command="{Binding UninstallCommand}" />
-        <Button Content="Check for Updates" Command="{Binding CheckUpdatesCommand}" />
-        <Button Content="Update All" Command="{Binding UpdateAllCommand}" />
-        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+        <Button Content="{l:T templateManager.uninstall}" Command="{Binding UninstallCommand}" />
+        <Button Content="{l:T templateManager.checkForUpdates}" Command="{Binding CheckUpdatesCommand}" />
+        <Button Content="{l:T templateManager.updateAll}" Command="{Binding UpdateAllCommand}" />
+        <Button Content="{l:T templateManager.refresh}" Command="{Binding RefreshCommand}" />
         <ProgressBar IsIndeterminate="True" Width="80" Height="2" MinHeight="2" VerticalAlignment="Center" IsVisible="{Binding IsBusy}" />
         <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Status}" />
       </StackPanel>
     </StackPanel>
     <TextBox DockPanel.Dock="Bottom" Height="110" Margin="0,8,0,0" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" Text="{Binding Output}"
-             FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="dotnet new output" />
+             FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T templateManager.dotnetNewOutput}" />
     <Grid ColumnDefinitions="*,*">
-      <ListBox ItemsSource="{Binding Packages}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Installed template packages">
+      <ListBox ItemsSource="{Binding Packages}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T templateManager.installedTemplatePackages}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:TemplatePackageRowViewModel">
             <StackPanel Margin="0,2" AutomationProperties.Name="{Binding AccessibleName}">
@@ -41,7 +42,7 @@
       <Border Grid.Column="1" Margin="8,0,0,0" Padding="10" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}">
         <StackPanel Spacing="4">
           <TextBlock FontWeight="SemiBold" Text="{Binding Selected.Id}" />
-          <TextBlock Classes="muted" Text="Templates:" />
+          <TextBlock Classes="muted" Text="{l:T templateManager.templates2}" />
           <TextBlock TextWrapping="Wrap" Text="{Binding Selected.TemplatesText}" />
         </StackPanel>
       </Border>

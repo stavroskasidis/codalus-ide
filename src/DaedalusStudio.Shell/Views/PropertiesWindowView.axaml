@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -25,7 +26,7 @@
     <Border DockPanel.Dock="Top" Padding="8,4" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.Border}">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-        <Button Grid.Column="1" Classes="toolbar" Command="{Binding AddMetadataCommand}" ToolTip.Tip="Add Metadata…" AutomationProperties.Name="Add Metadata">
+        <Button Grid.Column="1" Classes="toolbar" Command="{Binding AddMetadataCommand}" ToolTip.Tip="{l:T properties.addMetadata}" AutomationProperties.Name="{l:T properties.addMetadata2}">
           <controls:Icon Kind="file-add" />
         </Button>
       </Grid>
@@ -50,7 +51,7 @@
     <Grid>
       <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
       <ScrollViewer IsVisible="{Binding !HasMessage}">
-        <ItemsControl x:Name="Grid" ItemsSource="{Binding Categories}" AutomationProperties.Name="Properties">
+        <ItemsControl x:Name="Grid" ItemsSource="{Binding Categories}" AutomationProperties.Name="{l:T properties.properties}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:PropertyCategoryViewModel">
               <StackPanel>

@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
@@ -6,15 +7,15 @@
              x:DataType="vm:AspireViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button x:Name="Dashboard" Content="Open Dashboard" IsEnabled="{Binding HasDashboard}" AutomationProperties.Name="Open the Aspire dashboard in the browser" />
-      <Button x:Name="Start" Content="Start" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Start the selected resource" />
-      <Button x:Name="Stop" Content="Stop" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Stop the selected resource" />
-      <Button x:Name="Restart" Content="Restart" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Restart the selected resource" />
-      <Button x:Name="Browse" Content="Open Endpoint" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Open the selected resource's endpoint in the browser" />
+      <Button x:Name="Dashboard" Content="{l:T aspire.openDashboard}" IsEnabled="{Binding HasDashboard}" AutomationProperties.Name="{l:T aspire.openTheAspireDashboardInThe}" />
+      <Button x:Name="Start" Content="{l:T aspire.start}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.startTheSelectedResource}" />
+      <Button x:Name="Stop" Content="{l:T aspire.stop}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.stopTheSelectedResource}" />
+      <Button x:Name="Restart" Content="{l:T aspire.restart}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.restartTheSelectedResource}" />
+      <Button x:Name="Browse" Content="{l:T aspire.openEndpoint}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.openTheSelectedResourceSEndpoint}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
     <Grid ColumnDefinitions="2*,4,3*">
-      <ListBox x:Name="ResourceList" ItemsSource="{Binding Resources}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Aspire resources">
+      <ListBox x:Name="ResourceList" ItemsSource="{Binding Resources}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T aspire.aspireResources}">
         <ListBox.Styles>
           <Style Selector="ListBoxItem" x:DataType="vm:AspireResourceRow">
             <Setter Property="Padding" Value="4,2" />
@@ -35,11 +36,11 @@
       </ListBox>
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
       <TabControl Grid.Column="2" Padding="0">
-        <TabItem Header="Console">
-          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="The resource's console output" />
+        <TabItem Header="{l:T aspire.console}">
+          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="{l:T aspire.theResourceSConsoleOutput}" />
         </TabItem>
-        <TabItem Header="Environment">
-          <ListBox ItemsSource="{Binding Environment}" Background="Transparent" AutomationProperties.Name="Environment variables">
+        <TabItem Header="{l:T aspire.environment}">
+          <ListBox ItemsSource="{Binding Environment}" Background="Transparent" AutomationProperties.Name="{l:T aspire.environmentVariables}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ContainerPropertyRow">
                 <Grid ColumnDefinitions="260,*">
@@ -50,8 +51,8 @@
             </ListBox.ItemTemplate>
           </ListBox>
         </TabItem>
-        <TabItem Header="Details">
-          <ListBox ItemsSource="{Binding Properties}" Background="Transparent" AutomationProperties.Name="Endpoints and properties">
+        <TabItem Header="{l:T aspire.details}">
+          <ListBox ItemsSource="{Binding Properties}" Background="Transparent" AutomationProperties.Name="{l:T aspire.endpointsAndProperties}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ContainerPropertyRow">
                 <Grid ColumnDefinitions="220,*">

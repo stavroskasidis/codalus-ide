@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -7,24 +8,24 @@
   <DockPanel>
     <DockPanel DockPanel.Dock="Top" Margin="4,3">
       <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
-        <Button Classes="toolbar" Command="{Binding MentionCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="Mention in the commit message" AutomationProperties.Name="Mention in Commit Message">
+        <Button Classes="toolbar" Command="{Binding MentionCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T workItems.mentionInTheCommitMessage}" AutomationProperties.Name="{l:T workItems.mentionInCommitMessage}">
           <controls:Icon Kind="edit" />
         </Button>
-        <Button Classes="toolbar" Command="{Binding OpenCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="Open in Browser" AutomationProperties.Name="Open in Browser">
+        <Button Classes="toolbar" Command="{Binding OpenCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T workItems.openInBrowser}" AutomationProperties.Name="{l:T workItems.openInBrowser}">
           <controls:Icon Kind="link-external" />
         </Button>
-        <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" AutomationProperties.Name="Refresh Work Items">
+        <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T workItems.refresh}" AutomationProperties.Name="{l:T workItems.refreshWorkItems}">
           <controls:Icon Kind="refresh" />
         </Button>
       </StackPanel>
-      <TextBox Text="{Binding Search}" PlaceholderText="Search by number or words (empty: assigned to me)" AutomationProperties.Name="Search work items" />
+      <TextBox Text="{Binding Search}" PlaceholderText="{l:T workItems.searchByNumberOrWordsEmpty}" AutomationProperties.Name="{l:T workItems.searchWorkItems}" />
     </DockPanel>
     <TextBlock DockPanel.Dock="Top" Text="{Binding Heading}" FontWeight="SemiBold" Margin="8,4,8,2" />
     <StackPanel DockPanel.Dock="Top" Margin="12,6" Spacing="8" IsVisible="{Binding HasMessage}">
       <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Classes="muted" />
       <Button Classes="accent" Content="{Binding SignInLabel}" Command="{Binding SignInCommand}" IsVisible="{Binding CanSignIn}" HorizontalAlignment="Left" />
     </StackPanel>
-    <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Work items">
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T workItems.workItems}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:WorkItemRow">
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />

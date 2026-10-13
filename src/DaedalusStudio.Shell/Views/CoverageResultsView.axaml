@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -6,26 +7,26 @@
              x:DataType="vm:CoverageResultsViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <ToggleButton Classes="toolbar" IsChecked="{Binding ShowColoring}" ToolTip.Tip="Show Coverage Coloring in the Editor" AutomationProperties.Name="Show Coverage Coloring">
+      <ToggleButton Classes="toolbar" IsChecked="{Binding ShowColoring}" ToolTip.Tip="{l:T coverageResults.showCoverageColoringInTheEditor}" AutomationProperties.Name="{l:T coverageResults.showCoverageColoring}">
         <controls:Icon Kind="coverage" />
       </ToggleButton>
-      <Button Classes="toolbar" Command="{Binding ExportCommand}" IsEnabled="{Binding HasCoverage}" ToolTip.Tip="Export Coverage (Cobertura)…" AutomationProperties.Name="Export Coverage">
+      <Button Classes="toolbar" Command="{Binding ExportCommand}" IsEnabled="{Binding HasCoverage}" ToolTip.Tip="{l:T coverageResults.exportCoverageCobertura}" AutomationProperties.Name="{l:T coverageResults.exportCoverage}">
         <controls:Icon Kind="arrow-down" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding ClearCommand}" IsEnabled="{Binding HasCoverage}" ToolTip.Tip="Clear Coverage" AutomationProperties.Name="Clear Coverage">
+      <Button Classes="toolbar" Command="{Binding ClearCommand}" IsEnabled="{Binding HasCoverage}" ToolTip.Tip="{l:T coverageResults.clearCoverage}" AutomationProperties.Name="{l:T coverageResults.clearCoverage}">
         <controls:Icon Kind="clear-all" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="Collapse All" AutomationProperties.Name="Collapse All">
+      <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="{l:T coverageResults.collapseAll}" AutomationProperties.Name="{l:T coverageResults.collapseAll}">
         <controls:Icon Kind="collapse-all" />
       </Button>
-      <TextBox x:Name="Filter" Text="{Binding FilterText}" MinWidth="180" Margin="4,0" PlaceholderText="Search Coverage Results" AutomationProperties.Name="Search Coverage Results" />
+      <TextBox x:Name="Filter" Text="{Binding FilterText}" MinWidth="180" Margin="4,0" PlaceholderText="{l:T coverageResults.searchCoverageResults}" AutomationProperties.Name="{l:T coverageResults.searchCoverageResults}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="8,0,8,3" Text="{Binding Summary}" />
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,120,80,80" Margin="8,2" IsVisible="{Binding HasCoverage}">
-      <TextBlock Classes="muted" Text="Name" />
-      <TextBlock Grid.Column="1" Classes="muted" Text="Lines" />
-      <TextBlock Grid.Column="2" Classes="muted" Text="Covered" HorizontalAlignment="Right" />
-      <TextBlock Grid.Column="3" Classes="muted" Text="Branches" HorizontalAlignment="Right" />
+      <TextBlock Classes="muted" Text="{l:T coverageResults.name}" />
+      <TextBlock Grid.Column="1" Classes="muted" Text="{l:T coverageResults.lines}" />
+      <TextBlock Grid.Column="2" Classes="muted" Text="{l:T coverageResults.covered}" HorizontalAlignment="Right" />
+      <TextBlock Grid.Column="3" Classes="muted" Text="{l:T coverageResults.branches}" HorizontalAlignment="Right" />
     </Grid>
     <Grid>
       <TextBlock Classes="emptyState" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
@@ -34,7 +35,7 @@
                SelectedItem="{Binding Selected}"
                IsVisible="{Binding HasCoverage}"
                Background="Transparent"
-               AutomationProperties.Name="Coverage Results">
+               AutomationProperties.Name="{l:T coverageResults.coverageResults}">
         <ListBox.Styles>
           <Style Selector="ListBoxItem" x:DataType="vm:CoverageRowViewModel">
             <Setter Property="Padding" Value="0,1" />

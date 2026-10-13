@@ -1,4 +1,5 @@
-<local:LoadingView xmlns="https://github.com/avaloniaui"
+<local:LoadingView xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                    xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
                    xmlns:local="using:DaedalusStudio.Shell.Views"
@@ -7,30 +8,30 @@
                    x:DataType="vm:StartupProjectsViewModel">
   <DockPanel Margin="16,12">
     <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
-      <TextBlock Classes="heading" Text="Startup Projects" />
-      <TextBlock Classes="muted" TextWrapping="Wrap" Text="What Start Debugging (F5) and Start Without Debugging (Ctrl+F5) launch. Several projects start in the order below; those that start under the debugger share one debug session." />
-      <RadioButton GroupName="startup" Content="Single startup project" IsChecked="{Binding IsSingle}" AutomationProperties.Name="Single startup project" />
-      <ComboBox Margin="24,0,0,0" MinWidth="260" HorizontalAlignment="Left" ItemsSource="{Binding Projects}" SelectedItem="{Binding SingleProject}" IsEnabled="{Binding IsSingle}" AutomationProperties.Name="Startup project">
+      <TextBlock Classes="heading" Text="{l:T startupProjects.startupProjects}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T startupProjects.whatStartDebuggingF5AndStart}" />
+      <RadioButton GroupName="startup" Content="{l:T startupProjects.singleStartupProject}" IsChecked="{Binding IsSingle}" AutomationProperties.Name="{l:T startupProjects.singleStartupProject}" />
+      <ComboBox Margin="24,0,0,0" MinWidth="260" HorizontalAlignment="Left" ItemsSource="{Binding Projects}" SelectedItem="{Binding SingleProject}" IsEnabled="{Binding IsSingle}" AutomationProperties.Name="{l:T startupProjects.startupProject}">
         <ComboBox.ItemTemplate>
           <DataTemplate x:DataType="protocol:SolutionProjectInfo">
             <TextBlock Text="{Binding Name}" />
           </DataTemplate>
         </ComboBox.ItemTemplate>
       </ComboBox>
-      <RadioButton GroupName="startup" Content="Multiple startup projects" IsChecked="{Binding IsMultiple}" AutomationProperties.Name="Multiple startup projects" />
+      <RadioButton GroupName="startup" Content="{l:T startupProjects.multipleStartupProjects}" IsChecked="{Binding IsMultiple}" AutomationProperties.Name="{l:T startupProjects.multipleStartupProjects}" />
     </StackPanel>
     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
-      <Button Content="Apply" Classes="accent" Command="{Binding ApplyCommand}" AutomationProperties.Name="Apply startup projects" />
+      <Button Content="{l:T startupProjects.apply}" Classes="accent" Command="{Binding ApplyCommand}" AutomationProperties.Name="{l:T startupProjects.applyStartupProjects}" />
       <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" />
     </StackPanel>
     <Grid ColumnDefinitions="*,Auto" IsEnabled="{Binding IsMultiple}">
       <Grid RowDefinitions="Auto,*">
         <Grid ColumnDefinitions="*,190,200" Margin="8,2">
-          <TextBlock Classes="muted" Text="Project" />
-          <TextBlock Grid.Column="1" Classes="muted" Text="Action" />
-          <TextBlock Grid.Column="2" Classes="muted" Text="Launch profile" />
+          <TextBlock Classes="muted" Text="{l:T startupProjects.project}" />
+          <TextBlock Grid.Column="1" Classes="muted" Text="{l:T startupProjects.action}" />
+          <TextBlock Grid.Column="2" Classes="muted" Text="{l:T startupProjects.launchProfile}" />
         </Grid>
-        <ListBox Grid.Row="1" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" AutomationProperties.Name="Startup project actions">
+        <ListBox Grid.Row="1" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T startupProjects.startupProjectActions}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:StartupProjectRowViewModel">
               <Grid ColumnDefinitions="*,190,200">
@@ -45,8 +46,8 @@
         </ListBox>
       </Grid>
       <StackPanel Grid.Column="1" Spacing="4" Margin="8,24,0,0">
-        <Button Content="Move Up" Command="{Binding MoveUpCommand}" MinWidth="84" AutomationProperties.Name="Move up" />
-        <Button Content="Move Down" Command="{Binding MoveDownCommand}" MinWidth="84" AutomationProperties.Name="Move down" />
+        <Button Content="{l:T startupProjects.moveUp}" Command="{Binding MoveUpCommand}" MinWidth="84" AutomationProperties.Name="{l:T startupProjects.moveUp2}" />
+        <Button Content="{l:T startupProjects.moveDown}" Command="{Binding MoveDownCommand}" MinWidth="84" AutomationProperties.Name="{l:T startupProjects.moveDown2}" />
       </StackPanel>
     </Grid>
   </DockPanel>

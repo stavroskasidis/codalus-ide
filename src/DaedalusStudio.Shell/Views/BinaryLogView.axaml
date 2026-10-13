@@ -1,4 +1,5 @@
-<local:LoadingView xmlns="https://github.com/avaloniaui"
+<local:LoadingView xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                    xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
                    xmlns:local="using:DaedalusStudio.Shell.Views"
@@ -12,17 +13,17 @@
           <TextBlock Classes="heading" Text="{Binding Title}" />
           <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Path}" />
         </StackPanel>
-        <Button Grid.Column="1" Content="Open File" Command="{Binding OpenCommand}" VerticalAlignment="Top" ToolTip.Tip="Open the selected node's file" />
+        <Button Grid.Column="1" Content="{l:T binaryLog.openFile}" Command="{Binding OpenCommand}" VerticalAlignment="Top" ToolTip.Tip="{l:T binaryLog.openTheSelectedNodeSFile}" />
       </Grid>
       <Grid ColumnDefinitions="*,Auto">
-        <TextBox x:Name="SearchBox" Text="{Binding Query}" PlaceholderText="Search the log (projects, targets, tasks, messages, properties, files)" AutomationProperties.Name="Search the binary log" />
-        <Button Grid.Column="1" Margin="6,0,0,0" Content="Search" Command="{Binding SearchCommand}" IsDefault="True" />
+        <TextBox x:Name="SearchBox" Text="{Binding Query}" PlaceholderText="{l:T binaryLog.searchTheLogProjectsTargetsTasks}" AutomationProperties.Name="{l:T binaryLog.searchTheBinaryLog}" />
+        <Button Grid.Column="1" Margin="6,0,0,0" Content="{l:T binaryLog.search}" Command="{Binding SearchCommand}" IsDefault="True" />
       </Grid>
       <TextBlock Classes="muted" Text="{Binding Summary}" />
       <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <Grid ColumnDefinitions="*,Auto,*">
-      <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Binary log tree">
+      <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T binaryLog.binaryLogTree}">
         <TreeView.Styles>
           <Style Selector="TreeViewItem" x:DataType="vm:BinaryLogNodeViewModel">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -42,7 +43,7 @@
         </TreeView.ItemTemplate>
       </TreeView>
       <GridSplitter Grid.Column="1" Width="4" IsVisible="{Binding HasResults}" />
-      <ListBox Grid.Column="2" ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" IsVisible="{Binding HasResults}" AutomationProperties.Name="Search results">
+      <ListBox Grid.Column="2" ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" IsVisible="{Binding HasResults}" AutomationProperties.Name="{l:T binaryLog.searchResults}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:BinaryLogSearchRowViewModel">
             <StackPanel AutomationProperties.Name="{Binding AccessibleName}">

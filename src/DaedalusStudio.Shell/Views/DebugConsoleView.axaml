@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:ae="using:AvaloniaEdit"
@@ -10,8 +11,8 @@
              Margin="6,4"
              Text="{Binding Input}"
              FontFamily="{Binding Font.Family}"
-             PlaceholderText="Evaluate an expression in the selected frame (Enter)"
-             AutomationProperties.Name="Debug console input" />
+             PlaceholderText="{l:T debugConsole.evaluateAnExpressionInTheSelected}"
+             AutomationProperties.Name="{l:T debugConsole.debugConsoleInput}" />
     <ae:TextEditor x:Name="Editor"
                    IsReadOnly="True"
                    ShowLineNumbers="False"
@@ -21,6 +22,6 @@
                    Background="{DynamicResource Shell.Editor.Background}"
                    Foreground="{DynamicResource Shell.Editor.Foreground}"
                    Padding="6,2"
-                   AutomationProperties.Name="Debug console output" />
+                   AutomationProperties.Name="{l:T debugConsole.debugConsoleOutput}" />
   </DockPanel>
 </UserControl>

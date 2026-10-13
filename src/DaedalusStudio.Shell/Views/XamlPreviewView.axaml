@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
@@ -7,22 +8,22 @@
   <DockPanel>
     <!-- One toolbar row (M34d): icons with tooltips, and what doesn't fit a narrow pane goes to the overflow menu. -->
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh: build if needed and render again" AutomationProperties.Name="Refresh">
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T xamlPreview.refreshBuildIfNeededAndRender}" AutomationProperties.Name="{l:T xamlPreview.refresh}">
         <controls:Icon Kind="refresh" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding ZoomOutCommand}" ToolTip.Tip="Zoom out" AutomationProperties.Name="Zoom out">
+      <Button Classes="toolbar" Command="{Binding ZoomOutCommand}" ToolTip.Tip="{l:T xamlPreview.zoomOut}" AutomationProperties.Name="{l:T xamlPreview.zoomOut}">
         <controls:Icon Kind="zoom-out" />
       </Button>
-      <Button Classes="toolbar" Content="{Binding ZoomText}" Command="{Binding ZoomResetCommand}" MinWidth="44" ToolTip.Tip="The zoom: click for actual size" AutomationProperties.Name="Zoom; actual size" />
-      <Button Classes="toolbar" Command="{Binding ZoomInCommand}" ToolTip.Tip="Zoom in" AutomationProperties.Name="Zoom in">
+      <Button Classes="toolbar" Content="{Binding ZoomText}" Command="{Binding ZoomResetCommand}" MinWidth="44" ToolTip.Tip="{l:T xamlPreview.theZoomClickForActualSize}" AutomationProperties.Name="{l:T xamlPreview.zoomActualSize}" />
+      <Button Classes="toolbar" Command="{Binding ZoomInCommand}" ToolTip.Tip="{l:T xamlPreview.zoomIn}" AutomationProperties.Name="{l:T xamlPreview.zoomIn}">
         <controls:Icon Kind="zoom-in" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding FitCommand}" ToolTip.Tip="Fit the preview to the pane" AutomationProperties.Name="Fit to the pane">
+      <Button Classes="toolbar" Command="{Binding FitCommand}" ToolTip.Tip="{l:T xamlPreview.fitThePreviewToThePane}" AutomationProperties.Name="{l:T xamlPreview.fitToThePane}">
         <controls:Icon Kind="fit" />
       </Button>
       <Border Classes="toolbarSeparator" />
-      <ComboBox Classes="toolbar" ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" ToolTip.Tip="Render scale (DPI)" AutomationProperties.Name="Render scale" />
-      <ComboBox Classes="toolbar" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}" ToolTip.Tip="Theme variant" AutomationProperties.Name="Theme variant" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding Scales}" SelectedItem="{Binding SelectedScale}" ToolTip.Tip="{l:T xamlPreview.renderScaleDpi}" AutomationProperties.Name="{l:T xamlPreview.renderScale}" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}" ToolTip.Tip="{l:T xamlPreview.themeVariant}" AutomationProperties.Name="{l:T xamlPreview.themeVariant}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Margin="8,0,8,4" Classes="muted" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
     <Border DockPanel.Dock="Top" IsVisible="{Binding HasError}" Margin="8,0,8,6" Padding="8,6" BorderThickness="1" BorderBrush="{DynamicResource Shell.Error}" CornerRadius="2">
@@ -31,7 +32,7 @@
     <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" AllowAutoHide="False">
       <Canvas x:Name="Surface" Margin="12" HorizontalAlignment="Left" VerticalAlignment="Top" Background="Transparent" Cursor="Hand"
               Width="{Binding ImageWidth}" Height="{Binding ImageHeight}"
-              AutomationProperties.Name="The preview: click an element to select it in the XAML">
+              AutomationProperties.Name="{l:T xamlPreview.thePreviewClickAnElementTo}">
         <Image Source="{Binding Image}" Width="{Binding ImageWidth}" Height="{Binding ImageHeight}" Stretch="Fill" />
         <Rectangle IsVisible="{Binding HasSelection}" IsHitTestVisible="False" StrokeThickness="2" Stroke="{DynamicResource Shell.Accent}"
                    Canvas.Left="{Binding SelectionLeft}" Canvas.Top="{Binding SelectionTop}" Width="{Binding SelectionWidth}" Height="{Binding SelectionHeight}" />

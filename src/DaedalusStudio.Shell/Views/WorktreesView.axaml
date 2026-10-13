@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -6,18 +7,18 @@
              x:DataType="vm:WorktreesViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button Classes="toolbar" Content="Add…" Command="{Binding AddCommand}" ToolTip.Tip="Add a worktree for a new or existing branch" />
-      <Button Classes="toolbar" Content="Open" Command="{Binding OpenCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="Open the worktree's solution in this window" />
-      <Button Classes="toolbar" Content="Open in New Window" Command="{Binding OpenNewWindowCommand}" IsEnabled="{Binding HasSelection}" />
+      <Button Classes="toolbar" Content="{l:T worktrees.add}" Command="{Binding AddCommand}" ToolTip.Tip="{l:T worktrees.addAWorktreeForANew}" />
+      <Button Classes="toolbar" Content="{l:T worktrees.open}" Command="{Binding OpenCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T worktrees.openTheWorktreeSSolutionIn}" />
+      <Button Classes="toolbar" Content="{l:T worktrees.openInNewWindow}" Command="{Binding OpenNewWindowCommand}" IsEnabled="{Binding HasSelection}" />
       <Button Classes="toolbar" Content="{Binding LockText}" Command="{Binding LockCommand}" IsEnabled="{Binding HasSelection}" />
-      <Button Classes="toolbar" Content="Remove" Command="{Binding RemoveCommand}" IsEnabled="{Binding HasSelection}" />
-      <Button Classes="toolbar" Content="Prune" Command="{Binding PruneCommand}" ToolTip.Tip="Forget worktrees whose folders are gone" />
-      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" AutomationProperties.Name="Refresh Worktrees">
+      <Button Classes="toolbar" Content="{l:T worktrees.remove}" Command="{Binding RemoveCommand}" IsEnabled="{Binding HasSelection}" />
+      <Button Classes="toolbar" Content="{l:T worktrees.prune}" Command="{Binding PruneCommand}" ToolTip.Tip="{l:T worktrees.forgetWorktreesWhoseFoldersAreGone}" />
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T worktrees.refresh}" AutomationProperties.Name="{l:T worktrees.refreshWorktrees}">
         <controls:Icon Kind="refresh" />
       </Button>
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Text="{Binding Message}" IsVisible="{Binding HasMessage}" Classes="muted" TextWrapping="Wrap" Margin="12,6" />
-    <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Worktrees">
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T worktrees.worktrees}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:WorktreeRow">
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />

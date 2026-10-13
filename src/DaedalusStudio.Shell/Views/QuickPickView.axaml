@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -13,7 +14,7 @@
                AutomationProperties.Name="{Binding Placeholder}" />
       <TextBlock DockPanel.Dock="Top"
                  Classes="muted"
-                 Text="No matching results"
+                 Text="{l:T quickPick.noMatchingResults}"
                  Margin="8"
                  IsVisible="{Binding IsEmpty}" />
       <ListBox x:Name="List"
@@ -21,7 +22,7 @@
                Background="Transparent"
                ItemsSource="{Binding Rows}"
                SelectedIndex="{Binding SelectedIndex}"
-               AutomationProperties.Name="Results">
+               AutomationProperties.Name="{l:T quickPick.results}">
         <ListBox.Styles>
           <Style Selector="ListBoxItem" x:DataType="vm:QuickPickRow">
             <Setter Property="Padding" Value="8,4" />

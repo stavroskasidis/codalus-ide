@@ -1,4 +1,5 @@
-<local:LoadingView xmlns="https://github.com/avaloniaui"
+<local:LoadingView xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                    xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
                    xmlns:local="using:DaedalusStudio.Shell.Views"
@@ -10,11 +11,11 @@
       <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <TabControl>
-      <TabItem Header="Projects">
+      <TabItem Header="{l:T referenceManager.projects}">
         <DockPanel Margin="0,8,0,0">
-          <TextBox DockPanel.Dock="Top" Text="{Binding Filter}" PlaceholderText="Filter projects" Margin="0,0,0,6" AutomationProperties.Name="Filter projects" />
-          <Button DockPanel.Dock="Bottom" HorizontalAlignment="Left" Margin="0,8,0,0" Content="Apply" Command="{Binding ApplyCommand}" AutomationProperties.Name="Apply project references" />
-          <ListBox ItemsSource="{Binding VisibleProjects}" AutomationProperties.Name="Projects">
+          <TextBox DockPanel.Dock="Top" Text="{Binding Filter}" PlaceholderText="{l:T referenceManager.filterProjects}" Margin="0,0,0,6" AutomationProperties.Name="{l:T referenceManager.filterProjects}" />
+          <Button DockPanel.Dock="Bottom" HorizontalAlignment="Left" Margin="0,8,0,0" Content="{l:T referenceManager.apply}" Command="{Binding ApplyCommand}" AutomationProperties.Name="{l:T referenceManager.applyProjectReferences}" />
+          <ListBox ItemsSource="{Binding VisibleProjects}" AutomationProperties.Name="{l:T referenceManager.projects}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ReferenceChoiceViewModel">
                 <CheckBox Content="{Binding Name}" IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Name}" />
@@ -23,14 +24,14 @@
           </ListBox>
         </DockPanel>
       </TabItem>
-      <TabItem Header="Assemblies and analyzers">
+      <TabItem Header="{l:T referenceManager.assembliesAndAnalyzers}">
         <DockPanel Margin="0,8,0,0">
           <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
-            <Button Content="Add Assembly…" Command="{Binding AddAssemblyCommand}" />
-            <Button Content="Add Analyzer…" Command="{Binding AddAnalyzerCommand}" />
-            <Button Content="Remove" Command="{Binding RemoveFileCommand}" />
+            <Button Content="{l:T referenceManager.addAssembly}" Command="{Binding AddAssemblyCommand}" />
+            <Button Content="{l:T referenceManager.addAnalyzer}" Command="{Binding AddAnalyzerCommand}" />
+            <Button Content="{l:T referenceManager.remove}" Command="{Binding RemoveFileCommand}" />
           </StackPanel>
-          <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile}" AutomationProperties.Name="Assembly and analyzer references">
+          <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile}" AutomationProperties.Name="{l:T referenceManager.assemblyAndAnalyzerReferences}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:FileReferenceRow">
                 <StackPanel Orientation="Horizontal" Spacing="8">

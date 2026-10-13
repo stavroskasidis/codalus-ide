@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.SettingsView"
@@ -49,18 +50,18 @@
         <Grid ColumnDefinitions="*,Auto">
           <TextBox x:Name="SearchBox"
                    Text="{Binding Search}"
-                   PlaceholderText="Search settings (@modified shows changed ones)"
-                   AutomationProperties.Name="Search settings" />
+                   PlaceholderText="{l:T settings.searchSettingsModifiedShowsChangedOnes}"
+                   AutomationProperties.Name="{l:T settings.searchSettings}" />
           <Button Grid.Column="1"
                   Classes="link"
                   Margin="16,0,0,0"
                   VerticalAlignment="Center"
-                  Content="Edit in settings.json"
+                  Content="{l:T settings.editInSettingsJson}"
                   Command="{Binding OpenJsonCommand}" />
         </Grid>
         <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasWorkspace}">
-          <ToggleButton Content="User" IsChecked="{Binding IsUserScope}" AutomationProperties.Name="User settings" />
-          <ToggleButton Content="Workspace" IsChecked="{Binding IsWorkspaceScope}" AutomationProperties.Name="Workspace settings" />
+          <ToggleButton Content="{l:T settings.user}" IsChecked="{Binding IsUserScope}" AutomationProperties.Name="{l:T settings.userSettings}" />
+          <ToggleButton Content="{l:T settings.workspace}" IsChecked="{Binding IsWorkspaceScope}" AutomationProperties.Name="{l:T settings.workspaceSettings}" />
         </StackPanel>
         <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding FileLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FileLabel}" />
         <TextBlock Foreground="{DynamicResource Shell.Warning}" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
@@ -72,7 +73,7 @@
                 SelectedItem="{Binding SelectedCategory}"
                 Background="Transparent"
                 Margin="0,8,0,0"
-                AutomationProperties.Name="Setting categories">
+                AutomationProperties.Name="{l:T settings.settingCategories}">
         <TreeView.Styles>
           <Style Selector="TreeViewItem" x:DataType="vm:SettingCategoryViewModel">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=OneTime}" />
@@ -88,7 +89,7 @@
       </TreeView>
       <ScrollViewer Grid.Column="1">
         <StackPanel Margin="16,8,16,16">
-          <TextBlock Classes="muted" Text="No settings found." IsVisible="{Binding IsEmpty}" Margin="0,8" />
+          <TextBlock Classes="muted" Text="{l:T settings.noSettingsFound}" IsVisible="{Binding IsEmpty}" Margin="0,8" />
           <ItemsControl x:Name="Items" ItemsSource="{Binding Items}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:SettingItemViewModel">
@@ -96,17 +97,17 @@
                   <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                       <TextBlock FontWeight="SemiBold" Text="{Binding Heading}" />
-                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="Modified" IsVisible="{Binding IsModified}" VerticalAlignment="Center" />
+                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T settings.modified}" IsVisible="{Binding IsModified}" VerticalAlignment="Center" />
                       <Button Classes="link"
                               FontSize="{DynamicResource Shell.FontSize.Small}"
-                              Content="Reset"
+                              Content="{l:T settings.reset}"
                               Command="{Binding ResetCommand}"
                               IsVisible="{Binding IsModified}"
                               VerticalAlignment="Center"
                               AutomationProperties.Name="{Binding Title, StringFormat='Reset {0}'}" />
                     </StackPanel>
                     <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" />
-                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="This setting can only be changed in user settings." IsVisible="{Binding IsUserOnlyHere}" />
+                    <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="{l:T settings.thisSettingCanOnlyBeChanged}" IsVisible="{Binding IsUserOnlyHere}" />
                     <ContentControl Content="{Binding}" Margin="0,4,0,0" />
                     <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
                     <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Key}" />

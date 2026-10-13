@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
@@ -6,19 +7,19 @@
              x:DataType="vm:ExceptionSettingsViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top" Spacing="4">
-      <TextBox x:Name="Search" Text="{Binding Filter}" PlaceholderText="Search exception types" AutomationProperties.Name="Search exception types" />
-      <Button x:Name="CheckAll" Content="Break on All" ToolTip.Tip="Break when any exception is thrown" AutomationProperties.Name="Break on all exceptions" />
-      <Button x:Name="UncheckAll" Content="Break on None" ToolTip.Tip="Break only on user-unhandled exceptions" AutomationProperties.Name="Break on no thrown exceptions" />
-      <Button x:Name="Reset" Content="Restore Defaults" AutomationProperties.Name="Restore the default exception settings" />
+      <TextBox x:Name="Search" Text="{Binding Filter}" PlaceholderText="{l:T exceptionSettings.searchExceptionTypes}" AutomationProperties.Name="{l:T exceptionSettings.searchExceptionTypes}" />
+      <Button x:Name="CheckAll" Content="{l:T exceptionSettings.breakOnAll}" ToolTip.Tip="{l:T exceptionSettings.breakWhenAnyExceptionIsThrown}" AutomationProperties.Name="{l:T exceptionSettings.breakOnAllExceptions}" />
+      <Button x:Name="UncheckAll" Content="{l:T exceptionSettings.breakOnNone}" ToolTip.Tip="{l:T exceptionSettings.breakOnlyOnUserUnhandledExceptions}" AutomationProperties.Name="{l:T exceptionSettings.breakOnNoThrownExceptions}" />
+      <Button x:Name="Reset" Content="{l:T exceptionSettings.restoreDefaults}" AutomationProperties.Name="{l:T exceptionSettings.restoreTheDefaultExceptionSettings}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="10,2,10,4" TextWrapping="Wrap"
-               Text="Checked types break when they are thrown, even if they are caught. User-unhandled exceptions always break. Types match exactly: a base type doesn't cover derived ones." />
-    <CheckBox DockPanel.Dock="Top" Margin="10,2" IsChecked="{Binding BreakOnOthers}" Content="All other exception types (not in this list)" AutomationProperties.Name="Break on all other exception types" />
+               Text="{l:T exceptionSettings.checkedTypesBreakWhenTheyAre}" />
+    <CheckBox DockPanel.Dock="Top" Margin="10,2" IsChecked="{Binding BreakOnOthers}" Content="{l:T exceptionSettings.allOtherExceptionTypesNotIn}" AutomationProperties.Name="{l:T exceptionSettings.breakOnAllOtherExceptionTypes}" />
     <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="6,4">
-      <TextBox x:Name="NewType" Text="{Binding NewType}" PlaceholderText="Add a type by its full name, e.g. MyApp.ValidationException (Enter)" AutomationProperties.Name="New exception type" />
-      <Button x:Name="Add" Grid.Column="1" Margin="6,0,0,0" Content="Add" AutomationProperties.Name="Add exception type" />
+      <TextBox x:Name="NewType" Text="{Binding NewType}" PlaceholderText="{l:T exceptionSettings.addATypeByItsFull}" AutomationProperties.Name="{l:T exceptionSettings.newExceptionType}" />
+      <Button x:Name="Add" Grid.Column="1" Margin="6,0,0,0" Content="{l:T exceptionSettings.add}" AutomationProperties.Name="{l:T exceptionSettings.addExceptionType}" />
     </Grid>
-    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Exception types">
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T exceptionSettings.exceptionTypes}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ExceptionTypeRow">
           <Setter Property="Padding" Value="2" />
@@ -29,8 +30,8 @@
         <DataTemplate x:DataType="vm:ExceptionTypeRow">
           <Grid ColumnDefinitions="*,220">
             <CheckBox IsChecked="{Binding BreakWhenThrown}" Content="{Binding Type}" AutomationProperties.Name="{Binding Type}" />
-            <TextBox Grid.Column="1" Text="{Binding Condition, UpdateSourceTrigger=LostFocus}" PlaceholderText="All modules" MinHeight="22" Padding="4,1"
-                     ToolTip.Tip="Break only when thrown in these modules: names with * and ?, comma-separated; ! excludes (e.g. MyApp.dll or !System.*)"
+            <TextBox Grid.Column="1" Text="{Binding Condition, UpdateSourceTrigger=LostFocus}" PlaceholderText="{l:T exceptionSettings.allModules}" MinHeight="22" Padding="4,1"
+                     ToolTip.Tip="{l:T exceptionSettings.breakOnlyWhenThrownInThese}"
                      AutomationProperties.Name="{Binding Type, StringFormat=Module condition for {0}}" />
           </Grid>
         </DataTemplate>

@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.DialogView"
@@ -27,7 +28,7 @@
                AutomationProperties.Name="{Binding Title}" />
       <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasChoices}">
         <Border BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="320">
-          <ListBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" Background="Transparent" AutomationProperties.Name="Choices">
+          <ListBox ItemsSource="{Binding Choices}" SelectedItem="{Binding SelectedChoice}" Background="Transparent" AutomationProperties.Name="{l:T dialog.choices}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:DialogChoiceViewModel">
                 <StackPanel Orientation="Horizontal" Spacing="6">
@@ -40,12 +41,12 @@
           </ListBox>
         </Border>
         <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,0,0" IsVisible="{Binding Reorderable}">
-          <Button Content="Up" Command="{Binding MoveUpCommand}" MinWidth="64" AutomationProperties.Name="Move up" />
-          <Button Content="Down" Command="{Binding MoveDownCommand}" MinWidth="64" AutomationProperties.Name="Move down" />
+          <Button Content="{l:T dialog.up}" Command="{Binding MoveUpCommand}" MinWidth="64" AutomationProperties.Name="{l:T dialog.moveUp}" />
+          <Button Content="{l:T dialog.down}" Command="{Binding MoveDownCommand}" MinWidth="64" AutomationProperties.Name="{l:T dialog.moveDown}" />
         </StackPanel>
       </Grid>
       <Border IsVisible="{Binding HasDetails}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" MaxHeight="420">
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Preview">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="{l:T dialog.preview}">
           <ItemsControl ItemsSource="{Binding Details}" Margin="6,4">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:DetailLine">

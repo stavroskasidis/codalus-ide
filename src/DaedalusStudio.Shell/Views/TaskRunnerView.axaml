@@ -1,16 +1,17 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.TaskRunnerView"
              x:DataType="vm:TaskRunnerViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
-      <Button x:Name="Run" Content="Run" AutomationProperties.Name="Run the selected script" />
-      <Button x:Name="Restore" Content="Restore Packages" AutomationProperties.Name="Restore the selected package.json's npm packages" />
-      <Button x:Name="Refresh" Content="Refresh" AutomationProperties.Name="Refresh the npm scripts" />
+      <Button x:Name="Run" Content="{l:T taskRunner.run}" AutomationProperties.Name="{l:T taskRunner.runTheSelectedScript}" />
+      <Button x:Name="Restore" Content="{l:T taskRunner.restorePackages}" AutomationProperties.Name="{l:T taskRunner.restoreTheSelectedPackageJsonS}" />
+      <Button x:Name="Refresh" Content="{l:T taskRunner.refresh}" AutomationProperties.Name="{l:T taskRunner.refreshTheNpmScripts}" />
     </StackPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Status}" IsVisible="{Binding HasStatus}" />
-    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="npm scripts">
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T taskRunner.npmScripts}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:TaskRunnerRow">
           <Setter Property="Padding" Value="2" />

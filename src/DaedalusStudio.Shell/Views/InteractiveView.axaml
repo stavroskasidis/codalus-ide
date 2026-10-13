@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:ae="using:AvaloniaEdit"
@@ -8,8 +9,8 @@
     <Border DockPanel.Dock="Top" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Shell.Border}" Padding="4,2">
       <DockPanel>
         <StackPanel Orientation="Horizontal" Spacing="4">
-          <Button Content="Reset" Command="{Binding ResetCommand}" ToolTip.Tip="Discard the state and start over (also stops a running submission)" AutomationProperties.Name="Reset" />
-          <Button Content="Clear" Command="{Binding ClearCommand}" ToolTip.Tip="Clear the window" AutomationProperties.Name="Clear" />
+          <Button Content="{l:T interactive.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T interactive.discardTheStateAndStartOver}" AutomationProperties.Name="{l:T interactive.reset}" />
+          <Button Content="{l:T interactive.clear}" Command="{Binding ClearCommand}" ToolTip.Tip="{l:T interactive.clearTheWindow}" AutomationProperties.Name="{l:T interactive.clear}" />
         </StackPanel>
         <TextBlock Text="{Binding Status}" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.75" Margin="8,0" />
       </DockPanel>
@@ -30,7 +31,7 @@
                        Background="{DynamicResource Shell.Editor.Background}"
                        Foreground="{DynamicResource Shell.Editor.Foreground}"
                        Padding="4,2"
-                       AutomationProperties.Name="C# Interactive input" />
+                       AutomationProperties.Name="{l:T interactive.cInteractiveInput}" />
       </DockPanel>
     </Border>
     <ae:TextEditor x:Name="TranscriptEditor"
@@ -42,6 +43,6 @@
                    Background="{DynamicResource Shell.Editor.Background}"
                    Foreground="{DynamicResource Shell.Editor.Foreground}"
                    Padding="6,2"
-                   AutomationProperties.Name="C# Interactive output" />
+                   AutomationProperties.Name="{l:T interactive.cInteractiveOutput}" />
   </DockPanel>
 </UserControl>

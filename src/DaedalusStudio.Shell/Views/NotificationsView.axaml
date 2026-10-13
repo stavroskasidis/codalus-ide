@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:views="using:DaedalusStudio.Shell.Views"
@@ -9,13 +10,13 @@
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="6,4">
       <Button Classes="toolbar"
               Command="{Binding ClearAllCommand}"
-              ToolTip.Tip="Clear All Notifications"
-              AutomationProperties.Name="Clear all notifications">
+              ToolTip.Tip="{l:T notifications.clearAllNotifications}"
+              AutomationProperties.Name="{l:T notifications.clearAllNotifications2}">
         <controls:Icon Kind="clear-all" />
       </Button>
     </StackPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="No new notifications." IsVisible="{Binding IsEmpty}" />
-    <ListBox x:Name="List" ItemsSource="{Binding Items}" Background="Transparent" AutomationProperties.Name="Notifications">
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T notifications.noNewNotifications}" IsVisible="{Binding IsEmpty}" />
+    <ListBox x:Name="List" ItemsSource="{Binding Items}" Background="Transparent" AutomationProperties.Name="{l:T notifications.notifications}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:NotificationViewModel">
           <Setter Property="Padding" Value="0" />

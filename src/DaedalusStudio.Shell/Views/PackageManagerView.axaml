@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -48,27 +49,27 @@
       <StackPanel Spacing="6">
         <Grid ColumnDefinitions="Auto,*,Auto">
           <StackPanel Orientation="Horizontal" Spacing="2">
-            <ToggleButton x:Name="BrowseTab" Classes="tab" Content="Browse" IsChecked="{Binding IsBrowseTab}" AutomationProperties.Name="Browse" />
-            <ToggleButton x:Name="InstalledTab" Classes="tab" Content="Installed" IsChecked="{Binding IsInstalledTab}" AutomationProperties.Name="Installed" />
+            <ToggleButton x:Name="BrowseTab" Classes="tab" Content="{l:T packageManager.browse}" IsChecked="{Binding IsBrowseTab}" AutomationProperties.Name="{l:T packageManager.browse}" />
+            <ToggleButton x:Name="InstalledTab" Classes="tab" Content="{l:T packageManager.installed}" IsChecked="{Binding IsInstalledTab}" AutomationProperties.Name="{l:T packageManager.installed}" />
             <ToggleButton x:Name="UpdatesTab" Classes="tab" Content="{Binding UpdatesLabel}" IsChecked="{Binding IsUpdatesTab}" AutomationProperties.Name="{Binding UpdatesLabel}" />
             <ToggleButton x:Name="ConsolidateTab" Classes="tab" Content="{Binding ConsolidateLabel}" IsChecked="{Binding IsConsolidateTab}" IsVisible="{Binding IsSolution}" AutomationProperties.Name="{Binding ConsolidateLabel}" />
           </StackPanel>
           <TextBlock Grid.Column="2" Classes="heading" VerticalAlignment="Center" Text="{Binding Title}" />
         </Grid>
         <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
-          <TextBox x:Name="SearchBox" Text="{Binding Search}" PlaceholderText="{Binding SearchPlaceholder}" AutomationProperties.Name="Search packages" />
-          <CheckBox Grid.Column="1" Margin="10,0,0,0" Content="Include prerelease" IsChecked="{Binding IncludePrerelease}" VerticalAlignment="Center" />
-          <ComboBox Grid.Column="2" Margin="10,0,0,0" MinWidth="150" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}" VerticalAlignment="Center" AutomationProperties.Name="Package source" />
-          <Button Grid.Column="3" Classes="toolbar" Margin="4,0,0,0" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" AutomationProperties.Name="Refresh">
+          <TextBox x:Name="SearchBox" Text="{Binding Search}" PlaceholderText="{Binding SearchPlaceholder}" AutomationProperties.Name="{l:T packageManager.searchPackages}" />
+          <CheckBox Grid.Column="1" Margin="10,0,0,0" Content="{l:T packageManager.includePrerelease}" IsChecked="{Binding IncludePrerelease}" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="2" Margin="10,0,0,0" MinWidth="150" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}" VerticalAlignment="Center" AutomationProperties.Name="{l:T packageManager.packageSource}" />
+          <Button Grid.Column="3" Classes="toolbar" Margin="4,0,0,0" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T packageManager.refresh}" AutomationProperties.Name="{l:T packageManager.refresh}">
             <controls:Icon Kind="refresh" />
           </Button>
-          <Button Grid.Column="4" Classes="toolbar" Command="{Binding OpenSourcesCommand}" ToolTip.Tip="Package Sources…" AutomationProperties.Name="Package sources">
+          <Button Grid.Column="4" Classes="toolbar" Command="{Binding OpenSourcesCommand}" ToolTip.Tip="{l:T packageManager.packageSources}" AutomationProperties.Name="{l:T packageManager.packageSources2}">
             <controls:Icon Kind="gear" />
           </Button>
         </Grid>
         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasRestoreStatus}">
           <TextBlock Classes="muted" Text="{Binding RestoreStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
-          <Button Grid.Column="1" Classes="link" Content="Show Output" Command="{Binding ShowRestoreOutputCommand}" />
+          <Button Grid.Column="1" Classes="link" Content="{l:T packageManager.showOutput}" Command="{Binding ShowRestoreOutputCommand}" />
         </Grid>
         <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
         <TextBlock Foreground="{DynamicResource Shell.Warning}" FontSize="12" Text="{Binding SourceErrors}" TextWrapping="Wrap" IsVisible="{Binding HasSourceErrors}" />
@@ -79,10 +80,10 @@
       <!-- The package list. -->
       <DockPanel>
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="8,4" IsVisible="{Binding IsUpdatesTab}">
-          <CheckBox Content="Select all packages" IsChecked="{Binding SelectAllUpdates}" />
-          <Button Grid.Column="1" Content="Update" Command="{Binding UpdateSelectedCommand}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="Update selected packages" />
+          <CheckBox Content="{l:T packageManager.selectAllPackages}" IsChecked="{Binding SelectAllUpdates}" />
+          <Button Grid.Column="1" Content="{l:T packageManager.update}" Command="{Binding UpdateSelectedCommand}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T packageManager.updateSelectedPackages}" />
         </Grid>
-        <Button DockPanel.Dock="Bottom" Classes="link" HorizontalAlignment="Center" Margin="4" Content="Load more" Command="{Binding LoadMoreCommand}" IsVisible="{Binding HasMore}" />
+        <Button DockPanel.Dock="Bottom" Classes="link" HorizontalAlignment="Center" Margin="4" Content="{l:T packageManager.loadMore}" Command="{Binding LoadMoreCommand}" IsVisible="{Binding HasMore}" />
         <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
         <Grid>
           <TextBlock Classes="emptyState" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
@@ -90,7 +91,7 @@
                    ItemsSource="{Binding Rows}"
                    SelectedItem="{Binding Selected}"
                    Background="Transparent"
-                   AutomationProperties.Name="Packages">
+                   AutomationProperties.Name="{l:T packageManager.packages}">
             <ListBox.Styles>
               <Style Selector="ListBoxItem" x:DataType="vm:PackageRowViewModel">
                 <Setter Property="Padding" Value="6,4" />
@@ -115,13 +116,13 @@
                     </StackPanel>
                     <StackPanel Grid.Column="3" Spacing="2" Margin="8,0,0,0" HorizontalAlignment="Right">
                       <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                        <controls:Icon Kind="check" Classes="passed" IsVisible="{Binding IsInstalled}" ToolTip.Tip="Installed" />
+                        <controls:Icon Kind="check" Classes="passed" IsVisible="{Binding IsInstalled}" ToolTip.Tip="{l:T packageManager.installed}" />
                         <TextBlock Text="{Binding VersionLine}" />
                       </StackPanel>
                       <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
                         <Border Classes="badge muted" IsVisible="{Binding HasNote}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Note}" /></Border>
-                        <Border Classes="badge warning" IsVisible="{Binding IsDeprecated}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="deprecated" /></Border>
-                        <Border Classes="badge error" IsVisible="{Binding IsVulnerable}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="vulnerable" /></Border>
+                        <Border Classes="badge warning" IsVisible="{Binding IsDeprecated}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T packageManager.deprecated}" /></Border>
+                        <Border Classes="badge error" IsVisible="{Binding IsVulnerable}"><TextBlock FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T packageManager.vulnerable}" /></Border>
                       </StackPanel>
                     </StackPanel>
                   </Grid>
@@ -136,7 +137,7 @@
 
       <!-- Details of the selected package. -->
       <Panel Grid.Column="2">
-        <TextBlock Classes="muted" Margin="16" Text="Select a package to see its details." IsVisible="{Binding !HasDetails}" />
+        <TextBlock Classes="muted" Margin="16" Text="{l:T packageManager.selectAPackageToSeeIts}" IsVisible="{Binding !HasDetails}" />
         <Panel IsVisible="{Binding HasDetails}">
         <ScrollViewer x:Name="DetailsScroller" DataContext="{Binding Details}">
           <StackPanel Margin="16,12" Spacing="10" x:DataType="vm:PackageDetailsViewModel">
@@ -160,8 +161,8 @@
             </ItemsControl>
 
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto">
-              <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" Text="Version:" />
-              <ComboBox x:Name="VersionPicker" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedVersion}" AutomationProperties.Name="Version">
+              <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" Text="{l:T packageManager.version}" />
+              <ComboBox x:Name="VersionPicker" Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedVersion}" AutomationProperties.Name="{l:T packageManager.version2}">
                 <ComboBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:PackageVersionChoice">
                     <TextBlock Text="{Binding Label}" />
@@ -169,12 +170,12 @@
                 </ComboBox.ItemTemplate>
               </ComboBox>
               <Button x:Name="InstallButton" Grid.Column="2" Margin="8,0,0,0" Content="{Binding InstallLabel}" Command="{Binding InstallCommand}" AutomationProperties.Name="{Binding InstallLabel}" />
-              <Button x:Name="UninstallButton" Grid.Column="3" Margin="4,0,0,0" Content="Uninstall" Command="{Binding UninstallCommand}" AutomationProperties.Name="Uninstall" />
+              <Button x:Name="UninstallButton" Grid.Column="3" Margin="4,0,0,0" Content="{l:T packageManager.uninstall}" Command="{Binding UninstallCommand}" AutomationProperties.Name="{l:T packageManager.uninstall}" />
               <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Classes="muted" Margin="0,4,0,0" Text="{Binding InstalledText}" />
             </Grid>
-            <CheckBox Content="Override the central version in this project (VersionOverride)" IsChecked="{Binding UseVersionOverride}" IsVisible="{Binding IsCentral}" />
+            <CheckBox Content="{l:T packageManager.overrideTheCentralVersionInThis}" IsChecked="{Binding UseVersionOverride}" IsVisible="{Binding IsCentral}" />
             <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding CentralNote}" IsVisible="{Binding HasCentralNote}" />
-            <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="This package comes from a GlobalPackageReference in Directory.Packages.props: edit it there." IsVisible="{Binding IsGlobal}" />
+            <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{l:T packageManager.thisPackageComesFromAGlobalpackagereference}" IsVisible="{Binding IsGlobal}" />
 
             <Border BorderThickness="3,0,0,0" BorderBrush="{DynamicResource Shell.Warning}" Padding="8,4" IsVisible="{Binding IsDeprecated}">
               <TextBlock TextWrapping="Wrap" Text="{Binding DeprecationText}" />
@@ -193,37 +194,37 @@
             </Border>
 
             <StackPanel Spacing="2" IsVisible="{Binding HasWhy}">
-              <TextBlock FontWeight="SemiBold" Text="Why is this package here?" />
+              <TextBlock FontWeight="SemiBold" Text="{l:T packageManager.whyIsThisPackageHere}" />
               <TextBlock FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" TextWrapping="Wrap" Text="{Binding Why}" />
             </StackPanel>
 
-            <TextBlock FontWeight="SemiBold" Text="Description" />
+            <TextBlock FontWeight="SemiBold" Text="{l:T packageManager.description}" />
             <TextBlock TextWrapping="Wrap" Text="{Binding Description}" />
 
             <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
-              <TextBlock Classes="muted" Margin="0,0,12,2" Text="Version:" />
+              <TextBlock Classes="muted" Margin="0,0,12,2" Text="{l:T packageManager.version}" />
               <TextBlock Grid.Column="1" Text="{Binding SelectedVersion.Version}" />
-              <TextBlock Grid.Row="1" Classes="muted" Margin="0,0,12,2" Text="Authors:" />
+              <TextBlock Grid.Row="1" Classes="muted" Margin="0,0,12,2" Text="{l:T packageManager.authors}" />
               <TextBlock Grid.Row="1" Grid.Column="1" TextWrapping="Wrap" Text="{Binding Authors}" />
-              <TextBlock Grid.Row="2" Classes="muted" Margin="0,0,12,2" Text="License:" />
+              <TextBlock Grid.Row="2" Classes="muted" Margin="0,0,12,2" Text="{l:T packageManager.license}" />
               <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="6">
                 <TextBlock Text="{Binding LicenseText}" />
-                <Button Classes="link" Content="View License" Command="{Binding OpenLinkCommand}" CommandParameter="{Binding LicenseUrl}" IsVisible="{Binding HasLicenseUrl}" />
+                <Button Classes="link" Content="{l:T packageManager.viewLicense}" Command="{Binding OpenLinkCommand}" CommandParameter="{Binding LicenseUrl}" IsVisible="{Binding HasLicenseUrl}" />
               </StackPanel>
-              <TextBlock Grid.Row="3" Classes="muted" Margin="0,0,12,2" Text="Published:" />
+              <TextBlock Grid.Row="3" Classes="muted" Margin="0,0,12,2" Text="{l:T packageManager.published}" />
               <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Published}" />
-              <TextBlock Grid.Row="4" Classes="muted" Margin="0,0,12,2" Text="Downloads:" />
+              <TextBlock Grid.Row="4" Classes="muted" Margin="0,0,12,2" Text="{l:T packageManager.downloads}" />
               <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding DownloadsText}" />
-              <TextBlock Grid.Row="5" Classes="muted" Margin="0,0,12,2" Text="Project URL:" />
+              <TextBlock Grid.Row="5" Classes="muted" Margin="0,0,12,2" Text="{l:T packageManager.projectUrl}" />
               <Button Grid.Row="5" Grid.Column="1" Classes="link" HorizontalAlignment="Left" Content="{Binding ProjectUrl}" Command="{Binding OpenLinkCommand}" CommandParameter="{Binding ProjectUrl}" IsVisible="{Binding HasProjectUrl}" />
-              <TextBlock Grid.Row="6" Classes="muted" Margin="0,0,12,2" Text="Source:" />
+              <TextBlock Grid.Row="6" Classes="muted" Margin="0,0,12,2" Text="{l:T packageManager.source}" />
               <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding Source}" />
             </Grid>
 
-            <TextBlock FontWeight="SemiBold" Text="Dependencies" />
+            <TextBlock FontWeight="SemiBold" Text="{l:T packageManager.dependencies}" />
             <TextBlock FontSize="12" TextWrapping="Wrap" Text="{Binding Dependencies}" />
 
-            <TextBlock FontWeight="SemiBold" Text="README" IsVisible="{Binding HasReadme}" />
+            <TextBlock FontWeight="SemiBold" Text="{l:T packageManager.readme}" IsVisible="{Binding HasReadme}" />
             <ContentControl x:Name="ReadmeHost" IsVisible="{Binding HasReadme}" />
           </StackPanel>
         </ScrollViewer>

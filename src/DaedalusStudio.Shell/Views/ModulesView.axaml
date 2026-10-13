@@ -1,19 +1,20 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.ModulesView"
              x:DataType="vm:ModulesViewModel">
   <DockPanel>
-    <TextBox x:Name="Search" DockPanel.Dock="Top" Margin="6,4" Text="{Binding Filter}" PlaceholderText="Search modules" AutomationProperties.Name="Search modules" />
+    <TextBox x:Name="Search" DockPanel.Dock="Top" Margin="6,4" Text="{Binding Filter}" PlaceholderText="{l:T modules.searchModules}" AutomationProperties.Name="{l:T modules.searchModules}" />
     <Grid DockPanel.Dock="Top" ColumnDefinitions="40,240,200,70,*" Margin="8,2" IsVisible="{Binding !IsEmpty}">
       <TextBlock Text="#" Classes="muted" />
-      <TextBlock Grid.Column="1" Text="Name" Classes="muted" />
-      <TextBlock Grid.Column="2" Text="Symbol Status" Classes="muted" />
-      <TextBlock Grid.Column="3" Text="Optimized" Classes="muted" />
-      <TextBlock Grid.Column="4" Text="Path" Classes="muted" />
+      <TextBlock Grid.Column="1" Text="{l:T modules.name}" Classes="muted" />
+      <TextBlock Grid.Column="2" Text="{l:T modules.symbolStatus}" Classes="muted" />
+      <TextBlock Grid.Column="3" Text="{l:T modules.optimized}" Classes="muted" />
+      <TextBlock Grid.Column="4" Text="{l:T modules.path}" Classes="muted" />
     </Grid>
-    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="Modules appear here while debugging." IsVisible="{Binding IsEmpty}" />
-    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Modules">
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T modules.modulesAppearHereWhileDebugging}" IsVisible="{Binding IsEmpty}" />
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T modules.modules}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ModuleRow">
           <Setter Property="Padding" Value="2" />

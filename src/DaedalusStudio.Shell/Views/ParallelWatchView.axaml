@@ -1,20 +1,21 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.ParallelWatchView"
              x:DataType="vm:ParallelWatchViewModel">
   <DockPanel>
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="6,4">
-      <TextBox x:Name="ExpressionBox" Text="{Binding Expression}" PlaceholderText="An expression to evaluate on every thread" KeyDown="OnKeyDown"
-               AutomationProperties.Name="Expression" />
-      <Button Grid.Column="1" Content="Evaluate" Margin="6,0,0,0" Click="OnEvaluate" />
+      <TextBox x:Name="ExpressionBox" Text="{Binding Expression}" PlaceholderText="{l:T parallelWatch.anExpressionToEvaluateOnEvery}" KeyDown="OnKeyDown"
+               AutomationProperties.Name="{l:T parallelWatch.expression}" />
+      <Button Grid.Column="1" Content="{l:T parallelWatch.evaluate}" Margin="6,0,0,0" Click="OnEvaluate" />
     </Grid>
     <Grid DockPanel.Dock="Top" ColumnDefinitions="160,240,*" Margin="8,2">
-      <TextBlock Text="Thread" Classes="muted" />
-      <TextBlock Grid.Column="1" Text="Frame" Classes="muted" />
-      <TextBlock Grid.Column="2" Text="Value" Classes="muted" />
+      <TextBlock Text="{l:T parallelWatch.thread}" Classes="muted" />
+      <TextBlock Grid.Column="1" Text="{l:T parallelWatch.frame}" Classes="muted" />
+      <TextBlock Grid.Column="2" Text="{l:T parallelWatch.value}" Classes="muted" />
     </Grid>
-    <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Values by thread">
+    <ListBox ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T parallelWatch.valuesByThread}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ParallelWatchRow">
           <Setter Property="Padding" Value="2" />

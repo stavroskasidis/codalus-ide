@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -7,43 +8,43 @@
   <DockPanel>
     <!-- Toolbar: run, debug, repeat, cancel; grouping and playlist. One row: what doesn't fit goes to the overflow menu (M34d). -->
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button Classes="toolbar" Command="{Binding RunAllCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="Run All Tests (Ctrl+R, A)" AutomationProperties.Name="Run All Tests">
+      <Button Classes="toolbar" Command="{Binding RunAllCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="{l:T testExplorer.runAllTestsCtrlRA}" AutomationProperties.Name="{l:T testExplorer.runAllTests}">
         <controls:Icon Kind="run-all" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding RunSelectedCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="Run Selected Tests" AutomationProperties.Name="Run Selected Tests">
+      <Button Classes="toolbar" Command="{Binding RunSelectedCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="{l:T testExplorer.runSelectedTests}" AutomationProperties.Name="{l:T testExplorer.runSelectedTests}">
         <controls:Icon Kind="play" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding DebugSelectedCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="Debug Selected Tests" AutomationProperties.Name="Debug Selected Tests">
+      <Button Classes="toolbar" Command="{Binding DebugSelectedCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="{l:T testExplorer.debugSelectedTests}" AutomationProperties.Name="{l:T testExplorer.debugSelectedTests}">
         <controls:Icon Kind="debug" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding CoverSelectedCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="Run Selected Tests with Coverage" AutomationProperties.Name="Run Selected Tests with Coverage">
+      <Button Classes="toolbar" Command="{Binding CoverSelectedCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="{l:T testExplorer.runSelectedTestsWithCoverage}" AutomationProperties.Name="{l:T testExplorer.runSelectedTestsWithCoverage}">
         <controls:Icon Kind="coverage" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding RunFailedCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="Run Failed Tests" AutomationProperties.Name="Run Failed Tests">
+      <Button Classes="toolbar" Command="{Binding RunFailedCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="{l:T testExplorer.runFailedTests}" AutomationProperties.Name="{l:T testExplorer.runFailedTests}">
         <controls:Icon Kind="test-failed" Classes="failed" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding RunNotRunCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="Run Tests That Have Not Run" AutomationProperties.Name="Run Tests That Have Not Run">
+      <Button Classes="toolbar" Command="{Binding RunNotRunCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="{l:T testExplorer.runTestsThatHaveNotRun}" AutomationProperties.Name="{l:T testExplorer.runTestsThatHaveNotRun}">
         <controls:Icon Kind="test-none" Classes="none" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding RepeatLastCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="Repeat Last Run (Ctrl+R, L)" AutomationProperties.Name="Repeat Last Run">
+      <Button Classes="toolbar" Command="{Binding RepeatLastCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="{l:T testExplorer.repeatLastRunCtrlRL}" AutomationProperties.Name="{l:T testExplorer.repeatLastRun}">
         <controls:Icon Kind="history" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding CancelCommand}" IsEnabled="{Binding IsRunning}" ToolTip.Tip="Cancel" AutomationProperties.Name="Cancel Test Run">
+      <Button Classes="toolbar" Command="{Binding CancelCommand}" IsEnabled="{Binding IsRunning}" ToolTip.Tip="{l:T testExplorer.cancel}" AutomationProperties.Name="{l:T testExplorer.cancelTestRun}">
         <controls:Icon Kind="stop" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="Refresh (build and discover tests)" AutomationProperties.Name="Refresh Tests">
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" IsEnabled="{Binding IsIdle}" ToolTip.Tip="{l:T testExplorer.refreshBuildAndDiscoverTests}" AutomationProperties.Name="{l:T testExplorer.refreshTests}">
         <controls:Icon Kind="refresh" />
       </Button>
-      <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="Collapse All" AutomationProperties.Name="Collapse All">
+      <Button Classes="toolbar" Command="{Binding CollapseAllCommand}" ToolTip.Tip="{l:T testExplorer.collapseAll}" AutomationProperties.Name="{l:T testExplorer.collapseAll}">
         <controls:Icon Kind="collapse-all" />
       </Button>
       <Border Classes="toolbarSeparator" />
-      <ComboBox Classes="toolbar" ItemsSource="{Binding Groupings}" SelectedIndex="{Binding GroupingIndex}" Width="176" ToolTip.Tip="Group by" AutomationProperties.Name="Group by" />
-      <ComboBox Classes="toolbar" ItemsSource="{Binding PlaylistNames}" SelectedIndex="{Binding PlaylistIndex}" Width="110" ToolTip.Tip="Playlist" AutomationProperties.Name="Playlist" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding Groupings}" SelectedIndex="{Binding GroupingIndex}" Width="176" ToolTip.Tip="{l:T testExplorer.groupBy}" AutomationProperties.Name="{l:T testExplorer.groupBy}" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding PlaylistNames}" SelectedIndex="{Binding PlaylistIndex}" Width="110" ToolTip.Tip="{l:T testExplorer.playlist}" AutomationProperties.Name="{l:T testExplorer.playlist}" />
     </controls:ToolbarPanel>
     <!-- The search box has its own row, the pane's width. -->
-    <TextBox x:Name="Filter" DockPanel.Dock="Top" Margin="4,0,4,4" Text="{Binding FilterText}" PlaceholderText="Search Test Explorer"
-             ToolTip.Tip="Search: outcome:failed trait:Category=Math project:Name" AutomationProperties.Name="Search Test Explorer" />
+    <TextBox x:Name="Filter" DockPanel.Dock="Top" Margin="4,0,4,4" Text="{Binding FilterText}" PlaceholderText="{l:T testExplorer.searchTestExplorer}"
+             ToolTip.Tip="{l:T testExplorer.searchOutcomeFailedTraitCategoryMath}" AutomationProperties.Name="{l:T testExplorer.searchTestExplorer}" />
     <TextBlock DockPanel.Dock="Top" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="8,0,8,3" TextWrapping="Wrap" Text="{Binding Summary}" />
 
     <Grid RowDefinitions="*,Auto,Auto">
@@ -54,7 +55,7 @@
                  SelectedItem="{Binding Selected}"
                  IsVisible="{Binding HasTests}"
                  Background="Transparent"
-                 AutomationProperties.Name="Test Explorer">
+                 AutomationProperties.Name="{l:T testExplorer.testExplorer}">
           <ListBox.Styles>
             <Style Selector="ListBoxItem" x:DataType="vm:TestRowViewModel">
               <Setter Property="Padding" Value="0,1" />
@@ -86,7 +87,7 @@
       <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" Background="{DynamicResource Shell.Border}" IsVisible="{Binding HasDetails}" />
 
       <!-- Details of the selected test. -->
-      <ScrollViewer Grid.Row="2" MaxHeight="320" IsVisible="{Binding HasDetails}" AutomationProperties.Name="Test details">
+      <ScrollViewer Grid.Row="2" MaxHeight="320" IsVisible="{Binding HasDetails}" AutomationProperties.Name="{l:T testExplorer.testDetails}">
         <StackPanel Margin="10,6" Spacing="6">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <controls:Icon Kind="{Binding DetailsIcon}"
@@ -95,19 +96,19 @@
             <SelectableTextBlock Text="{Binding DetailsTitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
           </StackPanel>
           <TextBlock Classes="muted" Text="{Binding DetailsOutcome}" />
-          <Button Classes="link" Content="{Binding DetailsSource}" IsVisible="{Binding HasSource}" Click="OnOpenSource" AutomationProperties.Name="Open the test's source" />
+          <Button Classes="link" Content="{Binding DetailsSource}" IsVisible="{Binding HasSource}" Click="OnOpenSource" AutomationProperties.Name="{l:T testExplorer.openTheTestSSource}" />
           <StackPanel IsVisible="{Binding HasMessage}" Spacing="2">
-            <TextBlock Classes="muted" Text="Message" />
+            <TextBlock Classes="muted" Text="{l:T testExplorer.message}" />
             <SelectableTextBlock Text="{Binding DetailsMessage}" TextWrapping="Wrap" />
           </StackPanel>
           <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" IsVisible="{Binding HasExpected}">
-            <TextBlock Classes="muted" Text="Expected  " />
+            <TextBlock Classes="muted" Text="{l:T testExplorer.expected}" />
             <SelectableTextBlock Grid.Column="1" Text="{Binding DetailsExpected}" TextWrapping="Wrap" />
-            <TextBlock Grid.Row="1" Classes="muted" Text="Actual  " />
+            <TextBlock Grid.Row="1" Classes="muted" Text="{l:T testExplorer.actual}" />
             <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DetailsActual}" TextWrapping="Wrap" />
           </Grid>
           <StackPanel IsVisible="{Binding HasFrames}" Spacing="1">
-            <TextBlock Classes="muted" Text="Stack trace" />
+            <TextBlock Classes="muted" Text="{l:T testExplorer.stackTrace}" />
             <ItemsControl ItemsSource="{Binding DetailsFrames}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:StackFrameRow">
@@ -122,11 +123,11 @@
             </ItemsControl>
           </StackPanel>
           <StackPanel IsVisible="{Binding HasOutput}" Spacing="2">
-            <TextBlock Classes="muted" Text="Output" />
+            <TextBlock Classes="muted" Text="{l:T testExplorer.output}" />
             <SelectableTextBlock Text="{Binding DetailsOutput}" TextWrapping="Wrap" FontSize="12" />
           </StackPanel>
           <StackPanel IsVisible="{Binding HasHistory}" Spacing="1">
-            <TextBlock Classes="muted" Text="History" />
+            <TextBlock Classes="muted" Text="{l:T testExplorer.history}" />
             <ItemsControl ItemsSource="{Binding DetailsHistory}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:HistoryRow">

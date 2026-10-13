@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.HttpResponseView"
@@ -7,15 +8,15 @@
     <DockPanel>
       <SelectableTextBlock DockPanel.Dock="Top" Margin="8,6" Text="{Binding Summary}" FontWeight="SemiBold" Classes.error="{Binding IsError}" TextWrapping="Wrap" />
       <TabControl x:Name="Tabs" Padding="0">
-        <TabItem Header="Body">
+        <TabItem Header="{l:T httpResponse.body}">
           <Border x:Name="BodyHost" />
         </TabItem>
-        <TabItem Header="Headers">
+        <TabItem Header="{l:T httpResponse.headers}">
           <ScrollViewer>
             <SelectableTextBlock Text="{Binding Headers}" FontFamily="{Binding Font.Family}" Margin="8" />
           </ScrollViewer>
         </TabItem>
-        <TabItem Header="Request">
+        <TabItem Header="{l:T httpResponse.request}">
           <ScrollViewer>
             <SelectableTextBlock Text="{Binding RequestText}" FontFamily="{Binding Font.Family}" Margin="8" />
           </ScrollViewer>
@@ -25,10 +26,10 @@
     <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
     <DockPanel Grid.Column="2">
       <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="6,4">
-        <TextBlock Text="History" VerticalAlignment="Center" FontWeight="SemiBold" />
-        <Button x:Name="Clear" Grid.Column="1" Content="Clear" AutomationProperties.Name="Clear the request history" />
+        <TextBlock Text="{l:T httpResponse.history}" VerticalAlignment="Center" FontWeight="SemiBold" />
+        <Button x:Name="Clear" Grid.Column="1" Content="{l:T httpResponse.clear}" AutomationProperties.Name="{l:T httpResponse.clearTheRequestHistory}" />
       </Grid>
-      <ListBox ItemsSource="{Binding History}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Request history">
+      <ListBox ItemsSource="{Binding History}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T httpResponse.requestHistory}">
         <ListBox.Styles>
           <Style Selector="ListBoxItem" x:DataType="vm:HttpHistoryRow">
             <Setter Property="Padding" Value="2" />

@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:dap="using:DaedalusStudio.Debugging"
@@ -6,8 +7,8 @@
              x:DataType="vm:CallStackViewModel">
   <DockPanel>
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
-      <TextBlock Text="Thread:" VerticalAlignment="Center" />
-      <ComboBox ItemsSource="{Binding Threads}" SelectedItem="{Binding SelectedThread}" MinWidth="220" AutomationProperties.Name="Thread">
+      <TextBlock Text="{l:T callStack.thread}" VerticalAlignment="Center" />
+      <ComboBox ItemsSource="{Binding Threads}" SelectedItem="{Binding SelectedThread}" MinWidth="220" AutomationProperties.Name="{l:T callStack.thread2}">
         <ComboBox.ItemTemplate>
           <DataTemplate x:DataType="dap:DapThread">
             <TextBlock>
@@ -18,8 +19,8 @@
         </ComboBox.ItemTemplate>
       </ComboBox>
     </StackPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="The call stack appears here while the program is stopped." IsVisible="{Binding IsEmpty}" />
-    <ListBox x:Name="List" ItemsSource="{Binding Frames}" Background="Transparent" AutomationProperties.Name="Call stack">
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T callStack.theCallStackAppearsHereWhile}" IsVisible="{Binding IsEmpty}" />
+    <ListBox x:Name="List" ItemsSource="{Binding Frames}" Background="Transparent" AutomationProperties.Name="{l:T callStack.callStack}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:FrameRow">
           <Setter Property="Padding" Value="2" />

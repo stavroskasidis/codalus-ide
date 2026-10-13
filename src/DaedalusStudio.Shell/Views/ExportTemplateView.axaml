@@ -1,17 +1,18 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.ExportTemplateView"
              x:DataType="vm:ExportTemplateViewModel">
   <ScrollViewer>
     <StackPanel Margin="16,12" Spacing="6" MaxWidth="720" HorizontalAlignment="Left">
-      <TextBlock Classes="heading" Text="Export Template" />
-      <TextBlock Classes="muted" TextWrapping="Wrap" Text="Makes a project or an item into a dotnet new template and installs it for you." />
-      <TextBlock Margin="0,8,0,0" Text="Template type" />
-      <ComboBox x:Name="KindPicker" MinWidth="200" ItemsSource="{Binding Kinds}" SelectedItem="{Binding Kind}" AutomationProperties.Name="Template type" />
+      <TextBlock Classes="heading" Text="{l:T exportTemplate.exportTemplate}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T exportTemplate.makesAProjectOrAnItem}" />
+      <TextBlock Margin="0,8,0,0" Text="{l:T exportTemplate.templateType}" />
+      <ComboBox x:Name="KindPicker" MinWidth="200" ItemsSource="{Binding Kinds}" SelectedItem="{Binding Kind}" AutomationProperties.Name="{l:T exportTemplate.templateType}" />
       <StackPanel Spacing="6" IsVisible="{Binding IsProject}">
-        <TextBlock Text="Project" />
-        <ComboBox MinWidth="320" ItemsSource="{Binding Projects}" SelectedItem="{Binding Project}" AutomationProperties.Name="Project to export">
+        <TextBlock Text="{l:T exportTemplate.project}" />
+        <ComboBox MinWidth="320" ItemsSource="{Binding Projects}" SelectedItem="{Binding Project}" AutomationProperties.Name="{l:T exportTemplate.projectToExport}">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="vm:SolutionProjectChoice">
               <TextBlock Text="{Binding Name}" />
@@ -20,23 +21,23 @@
         </ComboBox>
       </StackPanel>
       <StackPanel Spacing="6" IsVisible="{Binding IsItem}">
-        <TextBlock Text="Item" />
+        <TextBlock Text="{l:T exportTemplate.item}" />
         <TextBlock Classes="muted" Text="{Binding ItemDisplay}" />
       </StackPanel>
-      <TextBlock Text="Name" />
-      <TextBox Text="{Binding Name}" AutomationProperties.Name="Template name" />
-      <TextBlock Text="Short name (dotnet new &lt;short name&gt;)" />
-      <TextBox Text="{Binding ShortName}" AutomationProperties.Name="Short name" />
-      <TextBlock Text="Description" />
-      <TextBox Text="{Binding Description}" AutomationProperties.Name="Description" />
-      <TextBlock Text="Author" />
-      <TextBox Text="{Binding Author}" AutomationProperties.Name="Author" />
+      <TextBlock Text="{l:T exportTemplate.name}" />
+      <TextBox Text="{Binding Name}" AutomationProperties.Name="{l:T exportTemplate.templateName}" />
+      <TextBlock Text="{l:T exportTemplate.shortNameDotnetNewShortName}" />
+      <TextBox Text="{Binding ShortName}" AutomationProperties.Name="{l:T exportTemplate.shortName}" />
+      <TextBlock Text="{l:T exportTemplate.description}" />
+      <TextBox Text="{Binding Description}" AutomationProperties.Name="{l:T exportTemplate.description}" />
+      <TextBlock Text="{l:T exportTemplate.author}" />
+      <TextBox Text="{Binding Author}" AutomationProperties.Name="{l:T exportTemplate.author}" />
       <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Destination, StringFormat='Written to {0}'}" TextWrapping="Wrap" />
       <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
-      <Button Classes="accent" HorizontalAlignment="Left" Margin="0,6,0,0" Content="Export and Install" Command="{Binding ExportCommand}" />
+      <Button Classes="accent" HorizontalAlignment="Left" Margin="0,6,0,0" Content="{l:T exportTemplate.exportAndInstall}" Command="{Binding ExportCommand}" />
       <TextBlock TextWrapping="Wrap" Text="{Binding Status}" />
       <TextBox Height="100" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" Text="{Binding Output}"
-               FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="dotnet new output" />
+               FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" FontSize="12" AutomationProperties.Name="{l:T exportTemplate.dotnetNewOutput}" />
     </StackPanel>
   </ScrollViewer>
 </UserControl>

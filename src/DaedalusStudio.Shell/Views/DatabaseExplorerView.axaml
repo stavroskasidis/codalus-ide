@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -6,20 +7,20 @@
              x:DataType="vm:DatabaseExplorerViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button Classes="toolbar" Command="{Binding AddCommand}" ToolTip.Tip="Add a connection" AutomationProperties.Name="Add Connection">
+      <Button Classes="toolbar" Command="{Binding AddCommand}" ToolTip.Tip="{l:T databaseExplorer.addAConnection}" AutomationProperties.Name="{l:T databaseExplorer.addConnection}">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <controls:Icon Kind="database" />
-          <TextBlock Text="Add Connection…" VerticalAlignment="Center" />
+          <TextBlock Text="{l:T databaseExplorer.addConnection2}" VerticalAlignment="Center" />
         </StackPanel>
       </Button>
-      <Button Classes="toolbar" Content="New Query" Command="{Binding NewQueryCommand}" ToolTip.Tip="A new SQL editor on the selected connection" />
-      <Button Classes="toolbar" Content="View Data" Command="{Binding ViewDataCommand}" ToolTip.Tip="Show and edit the selected table's rows" />
-      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh the selected connection" AutomationProperties.Name="Refresh">
+      <Button Classes="toolbar" Content="{l:T databaseExplorer.newQuery}" Command="{Binding NewQueryCommand}" ToolTip.Tip="{l:T databaseExplorer.aNewSqlEditorOnThe}" />
+      <Button Classes="toolbar" Content="{l:T databaseExplorer.viewData}" Command="{Binding ViewDataCommand}" ToolTip.Tip="{l:T databaseExplorer.showAndEditTheSelectedTable}" />
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T databaseExplorer.refreshTheSelectedConnection}" AutomationProperties.Name="{l:T databaseExplorer.refresh}">
         <controls:Icon Kind="refresh" />
       </Button>
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
-    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Database Explorer">
+    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T databaseExplorer.databaseExplorer}">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:DbNodeViewModel">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />

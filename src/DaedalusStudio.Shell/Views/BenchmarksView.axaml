@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
@@ -7,12 +8,12 @@
   <DockPanel Margin="8,6">
     <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,6">
       <controls:ToolbarPanel Spacing="8" Margin="0">
-        <Button x:Name="RunAllButton" Content="Run All" Command="{Binding RunAllCommand}" />
-        <Button Content="Run Selected" Command="{Binding RunSelectedCommand}" />
-        <Button Content="Stop" Command="{Binding StopCommand}" />
-        <TextBlock VerticalAlignment="Center" Text="Job" Margin="8,0,0,0" />
-        <ComboBox ItemsSource="{Binding Jobs}" SelectedItem="{Binding Job}" MinWidth="100" AutomationProperties.Name="BenchmarkDotNet job" ToolTip.Tip="BenchmarkDotNet job" />
-        <CheckBox Content="In process" IsChecked="{Binding InProcess}" ToolTip.Tip="Run in the benchmark project's own process: faster, no generated project to build" />
+        <Button x:Name="RunAllButton" Content="{l:T benchmarks.runAll}" Command="{Binding RunAllCommand}" />
+        <Button Content="{l:T benchmarks.runSelected}" Command="{Binding RunSelectedCommand}" />
+        <Button Content="{l:T benchmarks.stop}" Command="{Binding StopCommand}" />
+        <TextBlock VerticalAlignment="Center" Text="{l:T benchmarks.job}" Margin="8,0,0,0" />
+        <ComboBox ItemsSource="{Binding Jobs}" SelectedItem="{Binding Job}" MinWidth="100" AutomationProperties.Name="{l:T benchmarks.benchmarkdotnetJob}" ToolTip.Tip="{l:T benchmarks.benchmarkdotnetJob}" />
+        <CheckBox Content="{l:T benchmarks.inProcess}" IsChecked="{Binding InProcess}" ToolTip.Tip="{l:T benchmarks.runInTheBenchmarkProjectS}" />
       </controls:ToolbarPanel>
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
     </StackPanel>
@@ -29,8 +30,8 @@
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
           <DockPanel>
-            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Benchmarks" Margin="0,0,0,4" />
-            <ListBox x:Name="BenchmarkList" ItemsSource="{Binding Benchmarks}" SelectedItem="{Binding SelectedBenchmark}" AutomationProperties.Name="Benchmarks in the solution; double-click opens one">
+            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{l:T benchmarks.benchmarks}" Margin="0,0,0,4" />
+            <ListBox x:Name="BenchmarkList" ItemsSource="{Binding Benchmarks}" SelectedItem="{Binding SelectedBenchmark}" AutomationProperties.Name="{l:T benchmarks.benchmarksInTheSolutionDoubleClick}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:BenchmarkRowViewModel">
                   <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
@@ -44,14 +45,14 @@
           <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
           <DockPanel Grid.Column="2" Margin="6,0" ClipToBounds="True">
             <Grid DockPanel.Dock="Top" ColumnDefinitions="*,90,80,90,80,60" Margin="4,0,4,4">
-              <TextBlock FontWeight="SemiBold" Text="Method" />
-              <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="Mean" TextAlignment="Right" />
-              <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="Error" TextAlignment="Right" />
-              <TextBlock Grid.Column="3" FontWeight="SemiBold" Text="StdDev" TextAlignment="Right" />
-              <TextBlock Grid.Column="4" FontWeight="SemiBold" Text="Allocated" TextAlignment="Right" />
-              <TextBlock Grid.Column="5" FontWeight="SemiBold" Text="Ratio" TextAlignment="Right" />
+              <TextBlock FontWeight="SemiBold" Text="{l:T benchmarks.method}" />
+              <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="{l:T benchmarks.mean}" TextAlignment="Right" />
+              <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="{l:T benchmarks.error}" TextAlignment="Right" />
+              <TextBlock Grid.Column="3" FontWeight="SemiBold" Text="{l:T benchmarks.stddev}" TextAlignment="Right" />
+              <TextBlock Grid.Column="4" FontWeight="SemiBold" Text="{l:T benchmarks.allocated}" TextAlignment="Right" />
+              <TextBlock Grid.Column="5" FontWeight="SemiBold" Text="{l:T benchmarks.ratio}" TextAlignment="Right" />
             </Grid>
-            <ListBox ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" AutomationProperties.Name="The last run's results">
+            <ListBox ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" AutomationProperties.Name="{l:T benchmarks.theLastRunSResults}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:BenchmarkResultRowViewModel">
                   <Grid ColumnDefinitions="*,90,80,90,80,60" AutomationProperties.Name="{Binding AccessibleName}">
@@ -68,8 +69,8 @@
           </DockPanel>
           <GridSplitter Grid.Column="3" ResizeDirection="Columns" />
           <DockPanel Grid.Column="4">
-            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="History" Margin="0,0,0,4" />
-            <ListBox ItemsSource="{Binding History}" AutomationProperties.Name="The selected benchmark's earlier runs, the newest first">
+            <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{l:T benchmarks.history}" Margin="0,0,0,4" />
+            <ListBox ItemsSource="{Binding History}" AutomationProperties.Name="{l:T benchmarks.theSelectedBenchmarkSEarlierRuns}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:BenchmarkHistoryRowViewModel">
                   <StackPanel AutomationProperties.Name="{Binding AccessibleName}">

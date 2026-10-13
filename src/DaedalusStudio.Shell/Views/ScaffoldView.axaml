@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -7,12 +8,12 @@
   <DockPanel Margin="16,12">
     <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,8">
       <TextBlock Classes="heading" Text="{Binding Title}" />
-      <TextBlock Classes="muted" TextWrapping="Wrap" Text="Empty items come from the SDK's item templates; the Entity Framework and Identity scaffolders run your dotnet-aspnet-codegenerator in the project's folder." />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T scaffold.emptyItemsComeFromTheSdk}" />
     </StackPanel>
 
     <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,10,0,0">
       <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button x:Name="AddButton" Classes="accent" Content="Add" Command="{Binding AddCommand}" IsEnabled="{Binding !IsBusy}" IsDefault="True" AutomationProperties.Name="Add scaffolded item" />
+        <Button x:Name="AddButton" Classes="accent" Content="{l:T scaffold.add}" Command="{Binding AddCommand}" IsEnabled="{Binding !IsBusy}" IsDefault="True" AutomationProperties.Name="{l:T scaffold.addScaffoldedItem}" />
         <ProgressBar IsIndeterminate="True" Width="120" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
       </StackPanel>
       <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
@@ -20,8 +21,8 @@
     </StackPanel>
 
     <Grid ColumnDefinitions="150,300,*">
-      <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" AutomationProperties.Name="Scaffolder categories" />
-      <ListBox Grid.Column="1" Margin="8,0" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutomationProperties.Name="Scaffolders">
+      <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" AutomationProperties.Name="{l:T scaffold.scaffolderCategories}" />
+      <ListBox Grid.Column="1" Margin="8,0" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutomationProperties.Name="{l:T scaffold.scaffolders}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ScaffolderRow">
             <Grid ColumnDefinitions="Auto,*" Margin="0,2" AutomationProperties.Name="{Binding Name}">
@@ -41,7 +42,7 @@
             <TextBlock Classes="muted" Text="{Binding SelectedRow.Description}" TextWrapping="Wrap" />
             <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ToolMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
               <TextBlock Classes="muted" FontSize="12" Text="{Binding ToolMessage}" TextWrapping="Wrap" VerticalAlignment="Center" />
-              <Button Grid.Column="1" Margin="8,0,0,0" Content="Install" Command="{Binding InstallCommand}" IsVisible="{Binding NeedsTool}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="Install the code generator" />
+              <Button Grid.Column="1" Margin="8,0,0,0" Content="{l:T scaffold.install}" Command="{Binding InstallCommand}" IsVisible="{Binding NeedsTool}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T scaffold.installTheCodeGenerator}" />
             </Grid>
             <ItemsControl ItemsSource="{Binding Fields}">
               <ItemsControl.DataTemplates>
@@ -50,7 +51,7 @@
                     <TextBlock Text="{Binding Label}" />
                     <Grid ColumnDefinitions="*,Auto">
                       <TextBox Text="{Binding Text}" PlaceholderText="{Binding Placeholder}" AutomationProperties.Name="{Binding Parameter.Label}" />
-                      <ComboBox Grid.Column="1" Margin="6,0,0,0" MinWidth="150" ItemsSource="{Binding Suggestions}" SelectedItem="{Binding Suggestion}" PlaceholderText="From the project" IsVisible="{Binding HasSuggestions}" />
+                      <ComboBox Grid.Column="1" Margin="6,0,0,0" MinWidth="150" ItemsSource="{Binding Suggestions}" SelectedItem="{Binding Suggestion}" PlaceholderText="{l:T scaffold.fromTheProject}" IsVisible="{Binding HasSuggestions}" />
                     </Grid>
                     <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Description}" IsVisible="{Binding HasDescription}" TextWrapping="Wrap" />
                   </StackPanel>

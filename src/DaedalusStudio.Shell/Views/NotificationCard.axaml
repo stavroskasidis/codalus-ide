@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -21,8 +22,8 @@
               Margin="8,-3,-6,0"
               VerticalAlignment="Top"
               Command="{Binding DismissCommand}"
-              ToolTip.Tip="Dismiss"
-              AutomationProperties.Name="Dismiss notification">
+              ToolTip.Tip="{l:T notificationCard.dismiss}"
+              AutomationProperties.Name="{l:T notificationCard.dismissNotification}">
         <controls:Icon Kind="close" Width="12" Height="12" />
       </Button>
       <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">

@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
@@ -6,21 +7,21 @@
              x:DataType="vm:ContainersViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button x:Name="Refresh" Content="Refresh" AutomationProperties.Name="Refresh the containers and images" />
-      <Button x:Name="Start" Content="Start" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Start the selected container" />
-      <Button x:Name="Stop" Content="Stop" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Stop the selected container" />
-      <Button x:Name="Restart" Content="Restart" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Restart the selected container" />
-      <Button x:Name="Remove" Content="Remove" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Remove the selected container" />
-      <Button x:Name="Browse" Content="Open in Browser" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Open the selected container's first published port in the browser" />
-      <Button x:Name="Terminal" Content="Open Terminal" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Open a terminal in the selected container" />
-      <Button x:Name="Attach" Content="Attach Debugger" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="Attach the debugger to a process in the selected container" />
-      <TextBlock Classes="muted" VerticalAlignment="Center" Text="Working…" IsVisible="{Binding IsBusy}" />
+      <Button x:Name="Refresh" Content="{l:T containers.refresh}" AutomationProperties.Name="{l:T containers.refreshTheContainersAndImages}" />
+      <Button x:Name="Start" Content="{l:T containers.start}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.startTheSelectedContainer}" />
+      <Button x:Name="Stop" Content="{l:T containers.stop}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.stopTheSelectedContainer}" />
+      <Button x:Name="Restart" Content="{l:T containers.restart}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.restartTheSelectedContainer}" />
+      <Button x:Name="Remove" Content="{l:T containers.remove}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.removeTheSelectedContainer}" />
+      <Button x:Name="Browse" Content="{l:T containers.openInBrowser}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.openTheSelectedContainerSFirst}" />
+      <Button x:Name="Terminal" Content="{l:T containers.openTerminal}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.openATerminalInTheSelected}" />
+      <Button x:Name="Attach" Content="{l:T containers.attachDebugger}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.attachTheDebuggerToAProcess}" />
+      <TextBlock Classes="muted" VerticalAlignment="Center" Text="{l:T containers.working}" IsVisible="{Binding IsBusy}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
     <Grid ColumnDefinitions="2*,4,3*">
       <TabControl Grid.Column="0" Padding="0">
-        <TabItem Header="Containers">
-          <ListBox x:Name="ContainerList" ItemsSource="{Binding Containers}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Containers">
+        <TabItem Header="{l:T containers.containers}">
+          <ListBox x:Name="ContainerList" ItemsSource="{Binding Containers}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T containers.containers}">
             <ListBox.Styles>
               <Style Selector="ListBoxItem" x:DataType="vm:ContainerRow">
                 <Setter Property="Padding" Value="4,2" />
@@ -40,12 +41,12 @@
             </ListBox.ItemTemplate>
           </ListBox>
         </TabItem>
-        <TabItem Header="Images">
+        <TabItem Header="{l:T containers.images}">
           <DockPanel>
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4">
-              <Button x:Name="RemoveImage" Content="Remove Image" AutomationProperties.Name="Remove the selected image" />
+              <Button x:Name="RemoveImage" Content="{l:T containers.removeImage}" AutomationProperties.Name="{l:T containers.removeTheSelectedImage}" />
             </StackPanel>
-            <ListBox ItemsSource="{Binding Images}" SelectedItem="{Binding SelectedImage}" Background="Transparent" AutomationProperties.Name="Images">
+            <ListBox ItemsSource="{Binding Images}" SelectedItem="{Binding SelectedImage}" Background="Transparent" AutomationProperties.Name="{l:T containers.images}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:ImageRow">
                   <StackPanel>
@@ -60,11 +61,11 @@
       </TabControl>
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
       <TabControl Grid.Column="2" Padding="0" SelectedIndex="{Binding Tab}">
-        <TabItem Header="Logs">
-          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="Container logs" />
+        <TabItem Header="{l:T containers.logs}">
+          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="{l:T containers.containerLogs}" />
         </TabItem>
-        <TabItem Header="Environment">
-          <ListBox ItemsSource="{Binding Environment}" Background="Transparent" AutomationProperties.Name="Environment variables">
+        <TabItem Header="{l:T containers.environment}">
+          <ListBox ItemsSource="{Binding Environment}" Background="Transparent" AutomationProperties.Name="{l:T containers.environmentVariables}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ContainerPropertyRow">
                 <Grid ColumnDefinitions="220,*">
@@ -75,8 +76,8 @@
             </ListBox.ItemTemplate>
           </ListBox>
         </TabItem>
-        <TabItem Header="Ports">
-          <ListBox ItemsSource="{Binding Ports}" Background="Transparent" AutomationProperties.Name="Ports and mounts">
+        <TabItem Header="{l:T containers.ports}">
+          <ListBox ItemsSource="{Binding Ports}" Background="Transparent" AutomationProperties.Name="{l:T containers.portsAndMounts}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ContainerPropertyRow">
                 <Grid ColumnDefinitions="220,*">
@@ -87,8 +88,8 @@
             </ListBox.ItemTemplate>
           </ListBox>
         </TabItem>
-        <TabItem Header="Labels">
-          <ListBox ItemsSource="{Binding Labels}" Background="Transparent" AutomationProperties.Name="Labels">
+        <TabItem Header="{l:T containers.labels}">
+          <ListBox ItemsSource="{Binding Labels}" Background="Transparent" AutomationProperties.Name="{l:T containers.labels}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:ContainerPropertyRow">
                 <Grid ColumnDefinitions="260,*">
@@ -99,10 +100,10 @@
             </ListBox.ItemTemplate>
           </ListBox>
         </TabItem>
-        <TabItem Header="Files">
+        <TabItem Header="{l:T containers.files}">
           <DockPanel>
-            <TextBox x:Name="PathBox" DockPanel.Dock="Top" Margin="4" Text="{Binding FilesPath}" AutomationProperties.Name="Folder in the container (Enter lists it)" />
-            <ListBox x:Name="FileList" ItemsSource="{Binding Files}" Background="Transparent" AutomationProperties.Name="Files in the container">
+            <TextBox x:Name="PathBox" DockPanel.Dock="Top" Margin="4" Text="{Binding FilesPath}" AutomationProperties.Name="{l:T containers.folderInTheContainerEnterLists}" />
+            <ListBox x:Name="FileList" ItemsSource="{Binding Files}" Background="Transparent" AutomationProperties.Name="{l:T containers.filesInTheContainer}">
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:ContainerFileRow">
                   <TextBlock Text="{Binding Label}" />

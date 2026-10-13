@@ -129,7 +129,7 @@ public sealed partial class LocalizationCatalogTests
     {
         // Each view's literal UI strings may only go down (eng/localize-xaml.py moves them into the catalogue).
         var counts = Views()
-            .Select(v => (File: Relative(v), Count: Literal().Matches(File.ReadAllText(v)).Count(m => m.Groups[1].Value.Any(char.IsLetter))))
+            .Select(v => (File: Relative(v), Count: Literal().Matches(File.ReadAllText(v)).Count(m => System.Net.WebUtility.HtmlDecode(m.Groups[1].Value).Any(char.IsLetter))))
             .Where(c => c.Count > 0)
             .ToList();
         if (Update)

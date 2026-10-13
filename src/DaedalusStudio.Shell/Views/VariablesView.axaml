@@ -1,11 +1,12 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              x:Class="DaedalusStudio.Shell.Views.VariablesView"
              x:DataType="vm:VariablesViewModel">
   <DockPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="Variables appear here while the program is stopped." IsVisible="{Binding IsEmpty}" />
-    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="Variables">
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T variables.variablesAppearHereWhileTheProgram}" IsVisible="{Binding IsEmpty}" />
+    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="{l:T variables.variables}">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:VariableNode">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />

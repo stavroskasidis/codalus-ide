@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -6,13 +7,13 @@
              x:DataType="vm:CodeMetricsViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
-      <Button Classes="toolbar" Command="{Binding SolutionCommand}" ToolTip.Tip="Calculate Code Metrics for Solution" AutomationProperties.Name="Calculate Code Metrics for Solution">
-        <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="solution" /><TextBlock Text="Solution" /></StackPanel>
+      <Button Classes="toolbar" Command="{Binding SolutionCommand}" ToolTip.Tip="{l:T codeMetrics.calculateCodeMetricsForSolution}" AutomationProperties.Name="{l:T codeMetrics.calculateCodeMetricsForSolution}">
+        <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="solution" /><TextBlock Text="{l:T codeMetrics.solution}" /></StackPanel>
       </Button>
-      <Button Classes="toolbar" Command="{Binding ProjectCommand}" ToolTip.Tip="Calculate Code Metrics for the Active Project" AutomationProperties.Name="Calculate Code Metrics for Project">
-        <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="project" /><TextBlock Text="Project" /></StackPanel>
+      <Button Classes="toolbar" Command="{Binding ProjectCommand}" ToolTip.Tip="{l:T codeMetrics.calculateCodeMetricsForTheActive}" AutomationProperties.Name="{l:T codeMetrics.calculateCodeMetricsForProject}">
+        <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="project" /><TextBlock Text="{l:T codeMetrics.project}" /></StackPanel>
       </Button>
-      <Button Classes="toolbar" Command="{Binding CopyCommand}" ToolTip.Tip="Copy the results as tab-separated text" AutomationProperties.Name="Copy Results">
+      <Button Classes="toolbar" Command="{Binding CopyCommand}" ToolTip.Tip="{l:T codeMetrics.copyTheResultsAsTabSeparated}" AutomationProperties.Name="{l:T codeMetrics.copyResults}">
         <controls:Icon Kind="file-data" />
       </Button>
     </controls:ToolbarPanel>
@@ -20,17 +21,17 @@
     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
       <DockPanel MinWidth="640" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
         <Grid DockPanel.Dock="Top" ColumnDefinitions="*,90,90,80,80,80,90" Margin="8,2,24,2">
-          <TextBlock Classes="muted" Text="Hierarchy" />
-          <TextBlock Grid.Column="1" Classes="muted" Text="Maintainability" HorizontalAlignment="Right" ToolTip.Tip="Maintainability Index: 20–100 good, 10–19 moderate, 0–9 low" />
-          <TextBlock Grid.Column="2" Classes="muted" Text="Complexity" HorizontalAlignment="Right" ToolTip.Tip="Cyclomatic Complexity" />
-          <TextBlock Grid.Column="3" Classes="muted" Text="Inheritance" HorizontalAlignment="Right" ToolTip.Tip="Depth of Inheritance" />
-          <TextBlock Grid.Column="4" Classes="muted" Text="Coupling" HorizontalAlignment="Right" ToolTip.Tip="Class Coupling" />
-          <TextBlock Grid.Column="5" Classes="muted" Text="Source" HorizontalAlignment="Right" ToolTip.Tip="Lines of Source Code" />
-          <TextBlock Grid.Column="6" Classes="muted" Text="Executable" HorizontalAlignment="Right" ToolTip.Tip="Lines of Executable Code" />
+          <TextBlock Classes="muted" Text="{l:T codeMetrics.hierarchy}" />
+          <TextBlock Grid.Column="1" Classes="muted" Text="{l:T codeMetrics.maintainability}" HorizontalAlignment="Right" ToolTip.Tip="{l:T codeMetrics.maintainabilityIndex20100Good10}" />
+          <TextBlock Grid.Column="2" Classes="muted" Text="{l:T codeMetrics.complexity}" HorizontalAlignment="Right" ToolTip.Tip="{l:T codeMetrics.cyclomaticComplexity}" />
+          <TextBlock Grid.Column="3" Classes="muted" Text="{l:T codeMetrics.inheritance}" HorizontalAlignment="Right" ToolTip.Tip="{l:T codeMetrics.depthOfInheritance}" />
+          <TextBlock Grid.Column="4" Classes="muted" Text="{l:T codeMetrics.coupling}" HorizontalAlignment="Right" ToolTip.Tip="{l:T codeMetrics.classCoupling}" />
+          <TextBlock Grid.Column="5" Classes="muted" Text="{l:T codeMetrics.source}" HorizontalAlignment="Right" ToolTip.Tip="{l:T codeMetrics.linesOfSourceCode}" />
+          <TextBlock Grid.Column="6" Classes="muted" Text="{l:T codeMetrics.executable}" HorizontalAlignment="Right" ToolTip.Tip="{l:T codeMetrics.linesOfExecutableCode}" />
         </Grid>
         <Grid>
           <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
-          <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="Code Metrics Results">
+          <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="{l:T codeMetrics.codeMetricsResults}">
             <TreeView.Styles>
               <Style Selector="TreeViewItem" x:DataType="vm:MetricsNodeViewModel">
                 <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />

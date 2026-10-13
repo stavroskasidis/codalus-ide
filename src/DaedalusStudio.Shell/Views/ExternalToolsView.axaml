@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:tools="using:DaedalusStudio.Workbench.ExternalTools"
@@ -6,23 +7,23 @@
              x:DataType="vm:ExternalToolsViewModel">
   <DockPanel Margin="16,12">
     <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,10">
-      <TextBlock Classes="heading" Text="External Tools" />
-      <TextBlock Classes="muted" TextWrapping="Wrap" Text="Your own commands in the Tools menu and the command palette. Each can have a key binding (Keyboard Shortcuts: search 'External Tools')." />
+      <TextBlock Classes="heading" Text="{l:T externalTools.externalTools}" />
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T externalTools.yourOwnCommandsInTheTools}" />
       <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,10,0,0">
-      <Button Classes="accent" Content="Save" Command="{Binding SaveCommand}" AutomationProperties.Name="Save external tools" />
-      <Button Content="Revert" Command="{Binding RevertCommand}" />
+      <Button Classes="accent" Content="{l:T externalTools.save}" Command="{Binding SaveCommand}" AutomationProperties.Name="{l:T externalTools.saveExternalTools}" />
+      <Button Content="{l:T externalTools.revert}" Command="{Binding RevertCommand}" />
     </StackPanel>
     <Grid ColumnDefinitions="240,*,300">
       <DockPanel>
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
-          <Button x:Name="AddButton" Content="Add" Command="{Binding AddCommand}" />
-          <Button Content="Delete" Command="{Binding RemoveCommand}" />
-          <Button Content="Up" Command="{Binding MoveUpCommand}" AutomationProperties.Name="Move up" />
-          <Button Content="Down" Command="{Binding MoveDownCommand}" AutomationProperties.Name="Move down" />
+          <Button x:Name="AddButton" Content="{l:T externalTools.add}" Command="{Binding AddCommand}" />
+          <Button Content="{l:T externalTools.delete}" Command="{Binding RemoveCommand}" />
+          <Button Content="{l:T externalTools.up}" Command="{Binding MoveUpCommand}" AutomationProperties.Name="{l:T externalTools.moveUp}" />
+          <Button Content="{l:T externalTools.down}" Command="{Binding MoveDownCommand}" AutomationProperties.Name="{l:T externalTools.moveDown}" />
         </StackPanel>
-        <ListBox ItemsSource="{Binding Tools}" SelectedItem="{Binding Selected}" AutomationProperties.Name="External tools">
+        <ListBox ItemsSource="{Binding Tools}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T externalTools.externalTools2}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ExternalToolRowViewModel">
               <TextBlock Text="{Binding Title}" />
@@ -32,23 +33,23 @@
       </DockPanel>
       <ScrollViewer Grid.Column="1" Margin="12,0" IsVisible="{Binding HasSelection}">
         <StackPanel Spacing="6" DataContext="{Binding Selected}" x:DataType="vm:ExternalToolRowViewModel">
-          <TextBlock Text="Title" />
-          <TextBox Text="{Binding Title}" AutomationProperties.Name="Title" />
-          <TextBlock Text="Command" />
-          <TextBox Text="{Binding Command}" PlaceholderText="A program on PATH, or its full path" AutomationProperties.Name="Command" />
-          <TextBlock Text="Arguments" />
-          <TextBox Text="{Binding Arguments}" PlaceholderText="$(ItemPath)" AutomationProperties.Name="Arguments" />
-          <TextBlock Text="Initial directory" />
-          <TextBox Text="{Binding InitialDirectory}" PlaceholderText="$(ItemDir)" AutomationProperties.Name="Initial directory" />
-          <CheckBox Content="Use the Output window" IsChecked="{Binding UseOutputWindow}" />
-          <CheckBox Content="Prompt for arguments" IsChecked="{Binding PromptForArguments}" />
+          <TextBlock Text="{l:T externalTools.title}" />
+          <TextBox Text="{Binding Title}" AutomationProperties.Name="{l:T externalTools.title}" />
+          <TextBlock Text="{l:T externalTools.command}" />
+          <TextBox Text="{Binding Command}" PlaceholderText="{l:T externalTools.aProgramOnPathOrIts}" AutomationProperties.Name="{l:T externalTools.command}" />
+          <TextBlock Text="{l:T externalTools.arguments}" />
+          <TextBox Text="{Binding Arguments}" PlaceholderText="{l:T externalTools.itempath}" AutomationProperties.Name="{l:T externalTools.arguments}" />
+          <TextBlock Text="{l:T externalTools.initialDirectory}" />
+          <TextBox Text="{Binding InitialDirectory}" PlaceholderText="{l:T externalTools.itemdir}" AutomationProperties.Name="{l:T externalTools.initialDirectory}" />
+          <CheckBox Content="{l:T externalTools.useTheOutputWindow}" IsChecked="{Binding UseOutputWindow}" />
+          <CheckBox Content="{l:T externalTools.promptForArguments}" IsChecked="{Binding PromptForArguments}" />
           <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding CommandId, StringFormat='Command: {0}'}" />
-          <Button HorizontalAlignment="Left" Content="Run" Command="{Binding $parent[UserControl].((vm:ExternalToolsViewModel)DataContext).RunCommand}" />
+          <Button HorizontalAlignment="Left" Content="{l:T externalTools.run}" Command="{Binding $parent[UserControl].((vm:ExternalToolsViewModel)DataContext).RunCommand}" />
         </StackPanel>
       </ScrollViewer>
       <DockPanel Grid.Column="2">
-        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Macros" Margin="0,0,0,4" />
-        <ListBox ItemsSource="{Binding Macros}" AutomationProperties.Name="Macros">
+        <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="{l:T externalTools.macros}" Margin="0,0,0,4" />
+        <ListBox ItemsSource="{Binding Macros}" AutomationProperties.Name="{l:T externalTools.macros}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="tools:ToolMacro">
               <StackPanel>

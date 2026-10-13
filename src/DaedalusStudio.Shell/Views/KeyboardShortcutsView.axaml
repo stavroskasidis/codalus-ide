@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
              xmlns:controls="using:DaedalusStudio.Shell.Controls"
@@ -10,19 +11,19 @@
         <Grid ColumnDefinitions="*,Auto">
           <TextBox x:Name="SearchBox"
                    Text="{Binding Search}"
-                   PlaceholderText="Search by command, id or keys"
-                   AutomationProperties.Name="Search keyboard shortcuts" />
+                   PlaceholderText="{l:T keyboardShortcuts.searchByCommandIdOrKeys}"
+                   AutomationProperties.Name="{l:T keyboardShortcuts.searchKeyboardShortcuts}" />
           <Button Grid.Column="1"
                   Classes="link"
                   Margin="16,0,0,0"
                   VerticalAlignment="Center"
-                  Content="Edit in keybindings.json"
+                  Content="{l:T keyboardShortcuts.editInKeybindingsJson}"
                   Command="{Binding OpenJsonCommand}" />
         </Grid>
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <Button Content="Change Key Binding…" Command="{Binding ChangeCommand}" ToolTip.Tip="Enter or double-click" />
-          <Button Content="Remove" Command="{Binding RemoveCommand}" ToolTip.Tip="Delete" />
-          <Button Content="Reset" Command="{Binding ResetCommand}" ToolTip.Tip="Restore the default key binding" />
+          <Button Content="{l:T keyboardShortcuts.changeKeyBinding}" Command="{Binding ChangeCommand}" ToolTip.Tip="{l:T keyboardShortcuts.enterOrDoubleClick}" />
+          <Button Content="{l:T keyboardShortcuts.remove}" Command="{Binding RemoveCommand}" ToolTip.Tip="{l:T keyboardShortcuts.delete}" />
+          <Button Content="{l:T keyboardShortcuts.reset}" Command="{Binding ResetCommand}" ToolTip.Tip="{l:T keyboardShortcuts.restoreTheDefaultKeyBinding}" />
           <TextBlock Classes="muted" Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
         </StackPanel>
       </StackPanel>
@@ -44,10 +45,10 @@
     </Border>
 
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,190,220,170" Margin="22,6,22,2">
-      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="Command" />
-      <TextBlock Grid.Column="1" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="Key Binding" />
-      <TextBlock Grid.Column="2" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="When" />
-      <TextBlock Grid.Column="3" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="Source" />
+      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.command}" />
+      <TextBlock Grid.Column="1" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.keyBinding}" />
+      <TextBlock Grid.Column="2" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.when}" />
+      <TextBlock Grid.Column="3" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.source}" />
     </Grid>
 
     <ListBox x:Name="List"
@@ -55,7 +56,7 @@
              Background="Transparent"
              ItemsSource="{Binding Rows}"
              SelectedItem="{Binding Selected}"
-             AutomationProperties.Name="Keyboard shortcuts">
+             AutomationProperties.Name="{l:T keyboardShortcuts.keyboardShortcuts}">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:KeybindingRowViewModel">
           <Setter Property="Padding" Value="14,4" />
@@ -68,7 +69,7 @@
           <Grid ColumnDefinitions="*,190,220,170">
             <StackPanel Orientation="Horizontal" Spacing="6">
               <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CommandId}" />
-              <controls:Icon Kind="warning" Classes="warning" IsVisible="{Binding HasConflict}" ToolTip.Tip="This key binding conflicts with another command." />
+              <controls:Icon Kind="warning" Classes="warning" IsVisible="{Binding HasConflict}" ToolTip.Tip="{l:T keyboardShortcuts.thisKeyBindingConflictsWithAnother}" />
             </StackPanel>
             <TextBlock Grid.Column="1" Text="{Binding KeyLabel}" FontWeight="SemiBold" />
             <TextBlock Grid.Column="2" Classes="muted" Text="{Binding When}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding When}" />
