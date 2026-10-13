@@ -39,6 +39,9 @@
     <HelperProcess Include="..\DaedalusStudio.TextTemplating.Host\DaedalusStudio.TextTemplating.Host.csproj" Folder="t4host" />
     <HelperProcess Include="..\DaedalusStudio.Diagnostics.Host\DaedalusStudio.Diagnostics.Host.csproj" Folder="diaghost" />
     <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
+    <!-- The remote development server (M21, ADR 0050): remote/server/ (framework-dependent, any OS) and remote/<rid>/ (self-contained). -->
+    <RemoteServer Include="..\DaedalusStudio.Remote.Server\DaedalusStudio.Remote.Server.csproj" />
+    <ProjectReference Include="@(RemoteServer)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Welcome\DaedalusStudio.Plugins.Welcome.csproj" PluginId="daedalus.welcome" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.Templates\DaedalusStudio.Plugins.Templates.csproj" PluginId="daedalus.templates" />
     <BuiltInPlugin Include="..\Plugins\DaedalusStudio.Plugins.DotNetTest\DaedalusStudio.Plugins.DotNetTest.csproj" PluginId="daedalus.dotnettest" />
@@ -107,7 +110,42 @@
       diaghost/                   daedalus-diaghost, EventPipe sessions and trace processing for the profiler (likewise)
       plugins/<plugin id>/        built-in plugins
       terminal/                   shell integration scripts for the integrated terminal
+      remote/server/              daedalus-server, the remote development server, framework-dependent for any OS (M21)
+      remote/<rid>/               daedalus-server self-contained for a remote platform ($(DaedalusServerRids), publish only)
   -->
+  <PropertyGroup>
+    <!-- The remote platforms that get a self-contained server in a published install (empty: none; remote machines then need .NET). -->
+    <DaedalusServerRids Condition="'$(DaedalusServerRids)' == ''">linux-x64;linux-arm64</DaedalusServerRids>
+  </PropertyGroup>
+
+  <Target Name="DaedalusRemoteServerForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_DaedalusServerFiles Include="%(RemoteServer.RootDir)%(RemoteServer.Directory)bin\$(Configuration)\net10.0\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_DaedalusServerFiles)" DestinationFiles="@(_DaedalusServerFiles->'$(OutDir)remote\server\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="DaedalusRemoteServerForPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_DaedalusRemoteDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)', 'remote'))</_DaedalusRemoteDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_DaedalusServerRid Include="$(DaedalusServerRids)" />
+    </ItemGroup>
+    <!--
+      Each server is its own `dotnet publish`, with its own restore phase: in one MSBuild call (or one build's
+      project instances) Publish reads the assets file as it was before that call's restore, and a restore for one
+      platform replaces another's (NETSDK1047, found on the Mac).
+    -->
+    <PropertyGroup>
+      <_DaedalusDotnet>$(DOTNET_HOST_PATH)</_DaedalusDotnet>
+      <_DaedalusDotnet Condition="'$(_DaedalusDotnet)' == ''">dotnet</_DaedalusDotnet>
+      <_DaedalusServerProject>@(RemoteServer->'%(FullPath)')</_DaedalusServerProject>
+    </PropertyGroup>
+    <Exec Command="&quot;$(_DaedalusDotnet)&quot; publish &quot;$(_DaedalusServerProject)&quot; -c $(Configuration) --no-self-contained -p:UseAppHost=false -o &quot;$(_DaedalusRemoteDir)server&quot; -nologo" />
+    <Exec Condition="'@(_DaedalusServerRid)' != ''"
+          Command="&quot;$(_DaedalusDotnet)&quot; publish &quot;$(_DaedalusServerProject)&quot; -c $(Configuration) -r %(_DaedalusServerRid.Identity) --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o &quot;$(_DaedalusRemoteDir)%(_DaedalusServerRid.Identity)&quot; -nologo" />
+  </Target>
   <Target Name="DaedalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
       <_DaedalusHostFiles Include="%(HelperProcess.RootDir)%(HelperProcess.Directory)bin\$(Configuration)\net10.0\**\*">

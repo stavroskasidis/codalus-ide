@@ -18,6 +18,7 @@ public sealed record ShellOptions
           --enable-proposed-api   Allow plugins to use proposed APIs (development builds only).
           --dev                   Development mode: shows developer commands.
           --open <file>           Open a file in the editor.
+          --remote <target>       Open [path] on another machine: ssh:user@host[:port] or wsl:<distribution>.
           --version               Print the version and exit.
           --help                  Print this help and exit.
         """;
@@ -61,6 +62,12 @@ public sealed record ShellOptions
     /// 2 failed, 4 not an install that updates itself.
     /// </summary>
     public bool UpdateNow { get; init; }
+
+    /// <summary>
+    /// <c>--remote ssh:host</c> or <c>wsl:Ubuntu</c> (M21): this window connects there and opens <see cref="Path"/>, a
+    /// path on that machine.
+    /// </summary>
+    public string? Remote { get; init; }
 
     /// <summary>A file to open in the editor (<c>--open</c>).</summary>
     public string? OpenFile { get; init; }
@@ -168,6 +175,9 @@ public sealed record ShellOptions
                     break;
                 case "--open":
                     options = options with { OpenFile = Value() is { } file ? System.IO.Path.GetFullPath(file) : null };
+                    break;
+                case "--remote":
+                    options = options with { Remote = Value() };
                     break;
                 case "--bench":
                     options = options with { Bench = Value() };

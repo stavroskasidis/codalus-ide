@@ -1,11 +1,14 @@
-using System.Diagnostics;
-
 namespace DaedalusStudio.Rpc;
 
 /// <summary>How to start a service process. A <c>.dll</c> is launched with <c>dotnet</c>.</summary>
 public sealed record ProcessLaunchInfo(string FileName, IReadOnlyList<string> Arguments)
 {
     public IReadOnlyDictionary<string, string>? Environment { get; init; }
+
+    public string? WorkingDirectory { get; init; }
+
+    /// <summary>Where the process starts: null for this machine, or a remote server's launcher (M21, ADR 0050).</summary>
+    public IProcessLauncher? Launcher { get; init; }
 
     public static ProcessLaunchInfo FromPath(string path, params string[] arguments) =>
         path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
@@ -55,7 +58,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
     private readonly SemaphoreSlim _startLock = new(1, 1);
     private readonly Lock _gate = new();
     private readonly Queue<DateTime> _restarts = new();
-    private Process? _process;
+    private IHostProcess? _process;
     private JsonRpcConnection? _connection;
     private bool _disposed;
     private bool _gaveUp;
@@ -80,20 +83,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
     /// <summary>True once the crash-loop limit was hit; the process is not restarted again until <see cref="StartAsync"/>.</summary>
     public bool GaveUp => _gaveUp;
 
-    public int? ProcessId
-    {
-        get
-        {
-            try
-            {
-                return _process?.Id;
-            }
-            catch (InvalidOperationException)
-            {
-                return null;
-            }
-        }
-    }
+    public int? ProcessId => _process?.Id;
 
     public JsonRpcConnection Connection =>
         _connection ?? throw new JsonRpcConnectionLostException($"{Name} is not running.", null);
@@ -127,36 +117,11 @@ public sealed class SupervisedProcess : IAsyncDisposable
     private async Task StartCoreAsync(bool isRestart, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var psi = new ProcessStartInfo(_launch.FileName)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        foreach (var argument in _launch.Arguments)
-        {
-            psi.ArgumentList.Add(argument);
-        }
+        var process = await (_launch.Launcher ?? LocalProcessLauncher.Instance).StartAsync(_launch, cancellationToken).ConfigureAwait(false);
+        process.ErrorLine += line => Log?.Invoke(this, line);
+        process.BeginErrorRead();
 
-        foreach (var (key, value) in _launch.Environment ?? new Dictionary<string, string>())
-        {
-            psi.Environment[key] = value;
-        }
-
-        var process = Process.Start(psi) ?? throw new InvalidOperationException($"Failed to start {_launch.FileName}.");
-        process.EnableRaisingEvents = true;
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-            {
-                Log?.Invoke(this, e.Data);
-            }
-        };
-        process.BeginErrorReadLine();
-
-        var connection = new JsonRpcConnection(process.StandardOutput.BaseStream, process.StandardInput.BaseStream);
+        var connection = new JsonRpcConnection(process.Output, process.Input);
         ConfigureConnection?.Invoke(connection);
         connection.Disconnected += OnDisconnected;
         connection.HandlerFailed += (_, ex) => Log?.Invoke(this, $"[{Name}] handler failed: {ex.Message}");
@@ -184,9 +149,9 @@ public sealed class SupervisedProcess : IAsyncDisposable
                 return;
             }
 
-            if (_process is { } process && process.WaitForExit(2000))
+            if (_process is { } process && process.Exited.Wait(2000))
             {
-                exitCode = process.ExitCode;
+                exitCode = process.Exited.Result;
             }
 
             _connection = null;
@@ -251,7 +216,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         JsonRpcConnection? connection;
-        Process? process;
+        IHostProcess? process;
         lock (_gate)
         {
             if (_disposed)
@@ -289,18 +254,12 @@ public sealed class SupervisedProcess : IAsyncDisposable
 
         if (process is not null)
         {
-            try
+            if (await Task.WhenAny(process.Exited, Task.Delay(2000)).ConfigureAwait(false) != process.Exited)
             {
-                if (!process.WaitForExit(2000))
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-            }
-            catch (InvalidOperationException)
-            {
+                process.Kill();
             }
 
-            process.Dispose();
+            await process.DisposeAsync().ConfigureAwait(false);
         }
 
         _startLock.Dispose();

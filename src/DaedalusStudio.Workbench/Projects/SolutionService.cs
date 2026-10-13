@@ -63,6 +63,9 @@ public sealed class SolutionService : IAsyncDisposable
     public static StringComparer PathComparer { get; } =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
+    /// <summary>Where the build host runs: null here, or a remote window's server (M21, ADR 0050).</summary>
+    public Func<ProcessLaunchInfo, ProcessLaunchInfo?>? Placement { get; set; }
+
     /// <summary>The open solution's structure, or null.</summary>
     public SolutionInfo? Solution => _solution;
 
@@ -142,14 +145,21 @@ public sealed class SolutionService : IAsyncDisposable
             var full = Path.GetFullPath(path);
             var hostPath = _resolveHost() ?? throw new InvalidOperationException("The build host (daedalus-buildhost) was not found.");
             _openParams = new OpenSolutionParams(full, trusted, configuration, platform, restore);
-            var directory = Directory.Exists(full) ? Path.TrimEndingDirectorySeparator(full) : Path.GetDirectoryName(full)!;
-            var environment = await _hostEnvironment(directory, cancellationToken).ConfigureAwait(false);
+            var directory = await FileSystem.FileSystems.DirectoryExistsAsync(full, cancellationToken).ConfigureAwait(false) ? Path.TrimEndingDirectorySeparator(full) : Path.GetDirectoryName(full)!;
+
+            // A remote window's build host runs on the server (M21): its SDK is the remote machine's.
+            var environment = Placement is null ? await _hostEnvironment(directory, cancellationToken).ConfigureAwait(false) : null;
             if (environment is not null)
             {
                 Log?.Invoke(this, "[info] The solution's SDK is newer than .NET " + BuildHostRuntime.HostMajor + ": the build host rolls forward (" + string.Join(", ", environment.Select(e => e.Key + "=" + e.Value)) + ").");
             }
 
             var launch = ProcessLaunchInfo.FromPath(hostPath, "--solution-dir", directory) with { Environment = environment };
+            if (Placement is { } place)
+            {
+                launch = place(launch) ?? throw new InvalidOperationException("The build host can't run on the remote machine.");
+            }
+
             var host = new SupervisedProcess("build host", launch, _policy)
             {
                 ConfigureConnection = Configure,

@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\src\DaedalusStudio.Interactive.Host\DaedalusStudio.Interactive.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\DaedalusStudio.LspConformance.Server\DaedalusStudio.LspConformance.Server.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\DaedalusStudio.Markup.Host\DaedalusStudio.Markup.Host.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\DaedalusStudio.Remote.Server\DaedalusStudio.Remote.Server.csproj" ReferenceOutputAssembly="false" />
     <!-- Launched by the tests, and referenced for its plan parsers (internals visible to these tests). -->
     <ProjectReference Include="..\..\src\DaedalusStudio.Data.Host\DaedalusStudio.Data.Host.csproj" />
     <!-- Launched by the tests, and referenced for its profile views (internals visible to these tests). -->

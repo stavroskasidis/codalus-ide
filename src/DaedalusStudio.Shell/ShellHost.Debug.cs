@@ -11,6 +11,7 @@ using DaedalusStudio.Shell.Views;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Debugging;
+using DaedalusStudio.Workbench.FileSystem;
 using DaedalusStudio.Workbench.Output;
 using DaedalusStudio.Workbench.StatusBar;
 
@@ -235,6 +236,14 @@ public sealed partial class ShellHost
         {
             var (info, profiles, error) = await Runs.GetProfilesAsync(project, CancellationToken.None).ConfigureAwait(true);
             var profile = Runs.ResolveProfile(project, profiles);
+            if (Remote is { } remote)
+            {
+                // A remote window (M21): netcoredbg runs there, through the server.
+                DebugLog.Clear();
+                await StartRemoteAsync(remote, project, info, profile, debug: true).ConfigureAwait(true);
+                return;
+            }
+
             if (IsAspireHost(project))
             {
                 // An Aspire AppHost debugs its projects in its session (ADR 0043).
@@ -511,6 +520,18 @@ public sealed partial class ShellHost
         });
     }
 
+    private static async Task<bool> SourceExistsAsync(string path)
+    {
+        try
+        {
+            return await FileSystems.FileExistsAsync(path, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
     private async Task OnDebugStoppedAsync(StopInfo stop)
     {
         if (!_debugWindowsShown)
@@ -529,7 +550,8 @@ public sealed partial class ShellHost
             StatusBar.ShowMessage($"Exception thrown: {type}: {message}", TimeSpan.FromSeconds(10));
         }
 
-        if (Debugger.SelectedFrame is { Source.Path: { } path } frame && File.Exists(path))
+        // Through the file system that holds it: a remote window's sources are the server's (M21).
+        if (Debugger.SelectedFrame is { Source.Path: { } path } frame && await SourceExistsAsync(path).ConfigureAwait(true))
         {
             await OpenFileAsync(path, preview: false, new Position(Math.Max(0, frame.Line - 1), Math.Max(0, frame.Column - 1))).ConfigureAwait(true);
         }

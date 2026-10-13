@@ -23,6 +23,7 @@ internal sealed class ShellFixture : IAsyncDisposable
     private ShellFixture(string userData, string? builtInPlugins)
     {
         UserData = userData;
+        Environment.SetEnvironmentVariable("HISTFILE", "/dev/null"); // the tests' terminals keep no history in the real home
         Environment.SetEnvironmentVariable("DAEDALUS_PLUGINHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.Plugins.Host", "bin", Configuration, "net10.0", "daedalus-pluginhost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_BUILDHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.Projects.Host", "bin", Configuration, "net10.0", "daedalus-buildhost.dll"));
         Environment.SetEnvironmentVariable("DAEDALUS_LSHOST", Path.Combine(RepoRoot, "src", "DaedalusStudio.LanguageServices.Host", "bin", Configuration, "net10.0", "daedalus-lshost.dll"));

@@ -112,6 +112,7 @@ public sealed class ViewLocator : IDataTemplate
         CountersViewModel vm => new CountersView { DataContext = vm },
         BenchmarksViewModel vm => new BenchmarksView { DataContext = vm },
         XamlPreviewViewModel vm => new XamlPreviewView { DataContext = vm },
+        RemotePortsViewModel vm => new RemotePortsView { DataContext = vm },
         HttpResponseViewModel vm => new HttpResponseView { DataContext = vm },
         ThreadsViewModel vm => new ThreadsView { DataContext = vm },
         ModulesViewModel vm => new ModulesView { DataContext = vm },

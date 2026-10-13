@@ -35,9 +35,17 @@ public sealed record SshTarget(string Host, string? User = null, int? Port = nul
 
     private string Destination => User is null ? Host : User + "@" + Host;
 
+    /// <summary>More <c>-o</c> options (a remote window's <c>BatchMode=yes</c>: keys and agents only, never a prompt, M21).</summary>
+    public IReadOnlyList<string> Options { get; init; } = [];
+
     public override (string Program, IReadOnlyList<string> Arguments) Shell(string script)
     {
         List<string> arguments = ["-T", "-o", "ServerAliveInterval=15"];
+        foreach (var option in Options)
+        {
+            arguments.AddRange(["-o", option]);
+        }
+
         if (Port is { } port)
         {
             arguments.AddRange(["-p", port.ToString(CultureInfo.InvariantCulture)]);

@@ -73,7 +73,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
-        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings()]);
+        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
@@ -82,7 +82,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.RemoteToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -127,6 +127,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeProfiling();
         InitializeXaml();
         InitializeUpdates();
+        InitializeRemote();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -147,6 +148,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterContainerCommands(this);
         BuiltIns.RegisterProfilingCommands(this);
         BuiltIns.RegisterXamlCommands(this);
+        BuiltIns.RegisterRemoteCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterPackageCommands(this);
@@ -163,6 +165,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterContainerMenus(Workbench.Menus);
         BuiltIns.RegisterProfilingMenus(Workbench.Menus);
         BuiltIns.RegisterXamlMenus(Workbench.Menus);
+        BuiltIns.RegisterRemoteMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
         BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
         BuiltIns.RegisterProjectSystemMenus(Workbench.Menus);
@@ -298,7 +301,19 @@ public sealed partial class ShellHost : IAsyncDisposable
             Workbench.Notifications.Warning(error);
         }
 
-        if (Options.Path is { } path)
+        if (Options.Remote is { } remoteTarget)
+        {
+            // A remote window (M21): the path is the remote machine's.
+            if (DaedalusStudio.Workbench.Remote.RemoteTargetSpec.Parse(remoteTarget) is { } spec)
+            {
+                _ = ConnectRemoteAsync(spec, Options.Path);
+            }
+            else
+            {
+                Workbench.Notifications.Error($"'{remoteTarget}' isn't a remote target: use ssh:user@host[:port]{(OperatingSystem.IsWindows() ? " or wsl:<distribution>" : string.Empty)}.");
+            }
+        }
+        else if (Options.Path is { } path)
         {
             // A folder opens its solution, or itself in folder mode (ADR 0033).
             _ = Directory.Exists(path) ? OpenFolderAsync(path) : OpenSolutionAsync(path);
@@ -309,8 +324,11 @@ public sealed partial class ShellHost : IAsyncDisposable
             _ = OpenFileDiffAsync(diff.Left, diff.Right);
         }
 
-        // Later 'daedalus diff' invocations open here.
-        _instance = Infrastructure.SingleInstance.Listen(Infrastructure.SingleInstance.PipeName(Paths.State), OnInstanceRequestAsync);
+        // Later 'daedalus diff' invocations open here (in the local window: a remote one leaves them to it).
+        if (Options.Remote is null)
+        {
+            _instance = Infrastructure.SingleInstance.Listen(Infrastructure.SingleInstance.PipeName(Paths.State), OnInstanceRequestAsync);
+        }
 
         // Started as git's merge tool or editor: do that, then exit with its outcome.
         if (Options.Merge is { } merge)
@@ -436,6 +454,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             CountersViewModel.ToolWindowId => CountersWindow,
             BenchmarksViewModel.ToolWindowId => BenchmarksWindow,
             XamlPreviewViewModel.ToolWindowId => XamlPreview,
+            RemotePortsViewModel.ToolWindowId => PortsWindow,
             _ => null,
         },
     };
@@ -839,6 +858,12 @@ public sealed partial class ShellHost : IAsyncDisposable
         await DisposeXamlAsync().ConfigureAwait(false);
         await Languages.DisposeAsync().ConfigureAwait(false);
         await Solutions.DisposeAsync().ConfigureAwait(false);
+        if (Remote is { } remote)
+        {
+            Remote = null;
+            await remote.DisposeAsync().ConfigureAwait(false);
+        }
+
         await Plugins.DisposeAsync().ConfigureAwait(false);
         Workbench.Dispose();
         RestartIfRequested(openSolution);
