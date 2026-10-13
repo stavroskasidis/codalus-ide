@@ -98,8 +98,10 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
     public async Task Cancelling_a_request_cancels_the_remote_handler()
     {
         var handlerCancelled = new TaskCompletionSource();
+        var handlerStarted = new TaskCompletionSource();
         _b.OnRequest("slow", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, async (_, ct) =>
         {
+            handlerStarted.TrySetResult();
             try
             {
                 await Task.Delay(s_timeout, ct);
@@ -115,8 +117,12 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
         _a.Start();
         _b.Start();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _a.InvokeAsync("slow", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, cts.Token));
+        // Cancelled once the handler runs: a fixed delay could fire before the request is sent on a loaded machine.
+        using var cts = new CancellationTokenSource();
+        var call = _a.InvokeAsync("slow", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, cts.Token);
+        await handlerStarted.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call);
         await handlerCancelled.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
     }
 

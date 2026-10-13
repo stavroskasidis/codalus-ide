@@ -351,7 +351,8 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
             {
                 line = await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
             }
-            while (line is not null && !line.StartsWith("CpuBound ", StringComparison.Ordinal) && (line.Length == 0 || line.Contains("Diagnostics IPC", StringComparison.Ordinal) || line.StartsWith("The runtime has been configured", StringComparison.Ordinal)));
+            while (line is not null && !line.StartsWith("CpuBound ", StringComparison.Ordinal)
+                && (line.Length == 0 || line.Contains("Diagnostics IPC", StringComparison.Ordinal) || line.StartsWith("The runtime has been configured", StringComparison.Ordinal) || line.StartsWith("DOTNET_DiagnosticPorts=", StringComparison.Ordinal)));
 
             Assert.StartsWith("CpuBound ", line, StringComparison.Ordinal);
             await process.WaitForExitAsync(Timeout());
