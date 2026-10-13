@@ -74,6 +74,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
+        UseUserDotnet();
         Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench);
@@ -296,6 +297,10 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         _ = OfferRecoveryAsync();
         StartUpdates();
+        if (Options.SmokeTest is null && Options.Bench is null)
+        {
+            _ = CheckEnvironmentAsync(offer: true);
+        }
         _ = SyncSettingsAsync(quiet: true);
         foreach (var error in Options.Errors)
         {

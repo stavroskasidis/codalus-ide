@@ -435,6 +435,7 @@ internal static partial class BuiltIns
 
             // Help. The Start page comes from the welcome plugin ("navigation").
             Item(Help, "workbench.showLogs", "help"),
+            Item(Help, "help.checkEnvironment", "help"),
             Item(Help, "help.openCrashReports", "help"),
             Item(Help, "help.about", "help"),
             Item(Help, "update.check", "updates"),

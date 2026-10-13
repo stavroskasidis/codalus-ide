@@ -259,6 +259,7 @@ internal static partial class BuiltIns
         Add("update.whatsNew", "What's New", "Help", Ui(() => shell.ShowWhatsNew()));
         Add("update.restart", "Restart to Update", "Help", Ui(shell.RestartToUpdate));
         Add("workbench.restart", "Restart", "File", Ui(shell.Restart));
+        Add("help.checkEnvironment", "Check Environment", "Help", Ui(shell.OpenCheckEnvironment));
         Add("workbench.showStartWindow", "Start Window", "File", Ui(shell.ShowStartWindow));
         Add("settingsSync.turnOn", "Settings Sync: Turn On…", "Preferences", Ui(() => shell.TurnOnSettingsSyncAsync()));
         Add("settingsSync.syncNow", "Settings Sync: Sync Now", "Preferences", Ui(() => shell.SyncSettingsAsync()));

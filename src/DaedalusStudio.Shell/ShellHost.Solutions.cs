@@ -141,6 +141,7 @@ public sealed partial class ShellHost
             else
             {
                 Recent.Add(path);
+                _ = CheckSolutionSdkAsync(path);
                 Workbench.Settings.SetWorkspaceFile(Path.Combine(folder, ".daedalus", "settings.json"));
                 await RestoreEditorSessionAsync(path).ConfigureAwait(true);
                 await OpenRepositoryAsync(folder).ConfigureAwait(true);
