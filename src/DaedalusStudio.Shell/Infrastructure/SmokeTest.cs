@@ -1096,14 +1096,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
 
         const string wasmTitle = "F5 debugs a Blazor WebAssembly app in the browser: a breakpoint in a .razor file stops";
-        if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null && Environment.GetEnvironmentVariable("CI") != "true")
+        const string compoundTitle = "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each";
+        if (Browsers.Find(shell.Workbench.Settings.GetString(Browsers.SettingKey, "auto")) is null)
         {
-            Report("blazor.wasmDebug", "M16", wasmTitle, "skipped", 0, "No Chrome, Edge or Chromium is installed.");
+            // Skipped here, a failure in CI (which must prove it), at once rather than after the steps' timeouts.
+            var (outcome, reason) = Environment.GetEnvironmentVariable("CI") == "true"
+                ? ("failed", "No Chrome, Edge or Chromium is installed, and CI must run browser debugging.")
+                : ("skipped", "No Chrome, Edge or Chromium is installed.");
+            Report("blazor.wasmDebug", "M16", wasmTitle, outcome, 0, reason);
+            Report("blazor.compoundDebug", "M16", compoundTitle, outcome, 0, reason);
         }
         else
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
-            await StepAsync("blazor.compoundDebug", "M16", "F5 on a Blazor Web App debugs the server and the page together: a .razor breakpoint stops in each", CompoundDebugStepAsync).ConfigureAwait(true);
+            await StepAsync("blazor.compoundDebug", "M16", compoundTitle, CompoundDebugStepAsync).ConfigureAwait(true);
         }
 
         // M21: a remote window on the local stand-in server (the shipped remote/server); it disconnects at its end.
@@ -2193,12 +2199,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Run("debug.start");
         try
         {
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, "the server stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, () => "the server stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
             Check(shell.Debugger.IsCompound && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's: " + Thread());
             var first = shell.Debugger.CurrentStop;
             await shell.Debugger.ContinueAsync().ConfigureAwait(true);
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.CurrentStop != first && shell.Debugger.Frames.Count > 0,
-                "the page stops at the breakpoint in WebAssembly (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 300).ConfigureAwait(true);
+                () => "the page stops at the breakpoint in WebAssembly (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 300).ConfigureAwait(true);
             Check(Thread().StartsWith("Browser:", StringComparison.Ordinal), "the second stop is the browser's: " + Thread());
             Screenshot("smoke-test-blazor-compound-debug.png");
         }
@@ -2241,7 +2247,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             // The first session downloads vscode-js-debug (and Node.js, if M16b's step didn't). A failed build ends the wait.
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), "the browser session stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), () => "the browser session stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
             Check(!BuildFailed(), "the build before debugging succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the call stack", 60).ConfigureAwait(true);
             Check(shell.CallStack.Frames[0].Name.Contains("Counter.OnInitialized", StringComparison.Ordinal), "the top frame is Counter.OnInitialized, in the browser: " + shell.CallStack.Frames[0].Name);
@@ -2450,6 +2456,15 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return;
         }
 
+        // A known gap of one platform, skipped with its reason in the report (never passed): DAEDALUS_SMOKE_SKIP is
+        // "<id>[,<id>…]=<reason>", set by the packages workflow.
+        if (Environment.GetEnvironmentVariable("DAEDALUS_SMOKE_SKIP") is { Length: > 0 } skip && skip.Split('=', 2) is [var ids, var because]
+            && ids.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(id, StringComparer.Ordinal))
+        {
+            Report(id, milestone, title, "skipped", 0, because.Trim());
+            return;
+        }
+
         // Diagnosing one step: DAEDALUS_SMOKE_ONLY=<id>[,<id>…] runs those (steps that need an earlier one's state
         // need it listed too).
         if (Environment.GetEnvironmentVariable("DAEDALUS_SMOKE_ONLY") is { Length: > 0 } only
@@ -2569,14 +2584,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
     }
 
-    private static async Task WaitAsync(Func<bool> condition, string what, int seconds = 30)
+    private static Task WaitAsync(Func<bool> condition, string what, int seconds = 30) => WaitAsync(condition, () => what, seconds);
+
+    /// <summary>As above, with <paramref name="what"/> read when the wait times out (a log's tail at that moment).</summary>
+    private static async Task WaitAsync(Func<bool> condition, Func<string> what, int seconds = 30)
     {
         var deadline = Stopwatch.GetTimestamp() + (seconds * Stopwatch.Frequency);
         while (!condition())
         {
             if (Stopwatch.GetTimestamp() > deadline)
             {
-                throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what}.");
+                throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what()}.");
             }
 
             await Task.Delay(50).ConfigureAwait(true);

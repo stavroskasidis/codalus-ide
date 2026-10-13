@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Tests a site from eng/linux-repos.sh the way users use it, with signatures checked: in an Ubuntu container apt trusts
-# the site's key, updates (InRelease) and installs daedalus-studio; in a Fedora container dnf does the same with
-# gpgcheck and repo_gpgcheck on. The site is read through file: URLs, so no web server is needed. Then each removes it.
+# the site's key, updates (InRelease) and installs daedalus-studio; in Fedora and openSUSE containers dnf and zypper do
+# the same with gpgcheck and repo_gpgcheck on. The site is read through file: URLs, so no web server is needed. Then
+# each removes it.
 # Usage: eng/test-linux-repos.sh <site> [stable|nightly]
 set -euo pipefail
 
@@ -28,5 +29,15 @@ echo "== dnf ($channel) in Fedora 42"
   dnf install -y -q daedalus-studio > /tmp/dnf.log 2>&1 || { cat /tmp/dnf.log; exit 1; }
   daedalus --version
   dnf remove -y -q daedalus-studio > /tmp/dnf.log 2>&1 || { cat /tmp/dnf.log; exit 1; }
+  $removed"
+echo "== zypper ($channel) in openSUSE Tumbleweed"
+# The dnf repository and its .repo file serve zypper as they are; the key is trusted first, as the packages page says.
+"$runtime" run --rm -v "$site:/site:ro" registry.opensuse.org/opensuse/tumbleweed:latest bash -euc "
+  rpm --import /site/daedalus-studio-packages.asc
+  sed -e 's|^baseurl=.*|baseurl=file:///site/rpm/$channel|' -e 's|^gpgkey=.*|gpgkey=file:///site/daedalus-studio-packages.asc|' \
+    /site/rpm/daedalus-studio-$channel.repo > /etc/zypp/repos.d/daedalus-studio.repo
+  zypper --non-interactive --quiet install daedalus-studio > /tmp/zypper.log 2>&1 || { cat /tmp/zypper.log; exit 1; }
+  daedalus --version
+  zypper --non-interactive --quiet remove daedalus-studio > /tmp/zypper.log 2>&1 || { cat /tmp/zypper.log; exit 1; }
   $removed"
 echo "== The $channel repositories install and remove daedalus-studio"

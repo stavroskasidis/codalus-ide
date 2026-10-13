@@ -299,6 +299,7 @@ public sealed class HostingShellTests
         var greetings = Path.Combine(folder, "src", "Greetings");
         Git(greetings, "init", "-q", "-b", "trunk");
         Configure(greetings);
+        File.WriteAllText(Path.Combine(greetings, ".gitignore"), "bin/\nobj/\n"); // the build host writes there meanwhile
         Git(greetings, "add", ".");
         Git(greetings, "commit", "-q", "-m", "greetings");
         await f.Shell.DiscoverRepositoriesAsync();

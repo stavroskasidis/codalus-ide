@@ -59,6 +59,14 @@ jobs:
           echo "previous=$previous" >> "$GITHUB_OUTPUT"
           echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "Nightly $version from $ref (previous: ${previous:-none}; build: $build)" >> "$GITHUB_STEP_SUMMARY"
+      # The tag comes first, while the commit is still the branch's head: the workflow token may create a tag only on
+      # a commit whose workflow files match the default branch's (otherwise it needs the workflows permission, which
+      # it can't have), and the branch may move on with workflow changes during the build. A failed run removes it.
+      - name: Tag the commit
+        if: steps.plan.outputs.build == 'true' && !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v${{ steps.plan.outputs.version }}" -f sha="${{ steps.plan.outputs.ref }}" > /dev/null
 
   packages:
     needs: plan
@@ -102,6 +110,18 @@ jobs:
         run: |
           gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- '-nightly\.' | sort -rV | tail -n +15 \
             | while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done
+
+  untag:
+    needs: [plan, packages, publish]
+    if: failure() && needs.plan.outputs.build == 'true' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove the tag of a nightly that was not published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ needs.plan.outputs.version }}"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
 
   linux-repositories:
     needs: publish

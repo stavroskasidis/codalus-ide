@@ -272,7 +272,10 @@ public sealed class ProjectManagementIntegrationTests : IAsyncLifetime
         var build = await _service.BuildAsync(BuildTargets.Build, null, Timeout());
         Assert.True(build.Succeeded, "The build failed:\n" + string.Join("\n", output.TakeLast(60)));
         Assert.True(Directory.Exists(Path.Combine(Fixture, "src", "App", "bin")));
-        Assert.False(Directory.Exists(Path.Combine(Fixture, "tests", "Core.Tests", "bin")));
+        // Not built: no assembly. (bin/ itself may exist: a design-time build from before the unload creates the output
+        // folder in PrepareForBuild, which a loaded CI runner reaches before the unload.)
+        var testsBin = Path.Combine(Fixture, "tests", "Core.Tests", "bin");
+        Assert.False(Directory.Exists(testsBin) && Directory.EnumerateFiles(testsBin, "Core.Tests.dll", SearchOption.AllDirectories).Any());
 
         await _management.ReloadAsync(Tests, Timeout());
         await WaitUntilAsync(() => _service.Projects[Tests].State == ProjectStates.Loaded);

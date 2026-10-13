@@ -151,6 +151,19 @@ public sealed class BuildDepthTests
         var line = source.IndexOf("namespace Fixture.Items;", StringComparison.Ordinal);
         editor.Controller.Editor.Document.Insert(line, "// regenerated on save\n");
         f.Shell.Run("file.save");
-        await ShellFixture.PumpUntil(() => File.ReadAllText(Path.Combine(items, "Greeting.cs")).Contains("// regenerated on save", StringComparison.Ordinal), seconds: 120);
+        await ShellFixture.PumpUntil(() => ReadWhileWritten(Path.Combine(items, "Greeting.cs")).Contains("// regenerated on save", StringComparison.Ordinal), seconds: 120);
+    }
+
+    /// <summary>A file the generator may be writing right now: locked means not ready yet (the Windows runner).</summary>
+    private static string ReadWhileWritten(string path)
+    {
+        try
+        {
+            return File.ReadAllText(path);
+        }
+        catch (IOException)
+        {
+            return string.Empty;
+        }
     }
 }
