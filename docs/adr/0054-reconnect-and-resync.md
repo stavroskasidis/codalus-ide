@@ -24,7 +24,7 @@ The two ends of a link can't tell a dropped link from a slow one, and bytes in f
 
 **A server that outlives its link: a relay and a daemon.**
 - The client starts `daedalus-server --relay <session> --grace <seconds>`, with a session id it made up (a GUID).
-- The relay connects to the session's daemon over a Unix socket: `$XDG_RUNTIME_DIR/daedalus/<session>.sock`, else `daedalus-<user>/` in the temporary folder, created `0700`. If there's no daemon, the relay starts it (`--daemon <session>`): detached, its stdio not the relay's, its log `<session>.log` next to the socket, and SIGHUP ignored.
+- The relay connects to the session's daemon over a Unix socket: `$XDG_RUNTIME_DIR/daedalus/<session>.sock`, else `/tmp/daedalus-<user>/` (macOS's `$TMPDIR` would exceed the socket path limit), created `0700`. If there's no daemon, the relay starts it (`--daemon <session>`): detached, its stdio not the relay's, its log `<session>.log` next to the socket, and SIGHUP ignored.
 - The daemon's first line on each connection is its **instance**, a GUID of its own. The relay prints the preamble with it (`DAEDALUS-SERVER <version> <protocol> resumable <instance>`) and copies bytes both ways until either side ends.
 - The daemon runs the server exactly as `--stdio` does, on a `ResumableStream`, and attaches each connection as a new link.
 

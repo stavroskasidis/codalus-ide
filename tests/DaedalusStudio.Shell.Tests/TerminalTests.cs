@@ -87,10 +87,24 @@ public sealed class TerminalTests
         // A file:line reference printed by a program is a link to the file.
         var file = Path.Combine(f.UserData, "Linked.cs");
         await File.WriteAllTextAsync(file, "line 1\nline 2\nline 3\n", TestContext.Current.CancellationToken);
-        session.Terminal.Feed($"\r\n{file}(3,2): error XX0001: boom\r\n");
-        ShellFixture.Pump();
+        // The shell's own start-up output can repaint the screen over a line fed too early (ConPTY on a busy CI
+        // machine): wait for its prompt, and feed again if the line is gone.
+        int Row() => Enumerable.Range(0, session.Terminal.TotalRows).LastOrDefault(i => session.Terminal.GetRow(i).GetText().Contains("XX0001", StringComparison.Ordinal), -1);
+        await ShellFixture.PumpUntil(() => Enumerable.Range(0, session.Terminal.TotalRows).Any(i => session.Terminal.GetRow(i).GetText().Trim().Length > 0), seconds: 30);
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (Row() < 0 && DateTime.UtcNow < deadline)
+        {
+            session.Terminal.Feed($"\r\n{file}(3,2): error XX0001: boom\r\n");
+            for (var wait = DateTime.UtcNow.AddSeconds(2); Row() < 0 && DateTime.UtcNow < wait;)
+            {
+                ShellFixture.Pump();
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+            }
+        }
+
         // The logical line: a long temp path (macOS) wraps over several rows.
-        var row = Enumerable.Range(0, session.Terminal.TotalRows).Last(i => session.Terminal.GetRow(i).GetText().Contains("XX0001", StringComparison.Ordinal));
+        var row = Row();
+        Assert.True(row >= 0, "the fed line stays on the screen");
         Assert.Contains(DaedalusStudio.Terminal.TerminalLinks.Find(session.Terminal.LogicalLine(row).Text), l => l.Kind == DaedalusStudio.Terminal.TerminalLinkKind.File && l.Line == 3);
         f.Shell.TerminalWindow.OpenLink(new TerminalLinkActivation(DaedalusStudio.Terminal.TerminalLinkKind.File, file, 3, 2));
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == file);

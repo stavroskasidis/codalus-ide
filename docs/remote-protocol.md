@@ -30,7 +30,7 @@ Remote windows start the server with `--relay <session> --grace <seconds>` ([ADR
   - the hello: `'R'` + the offset received so far (`uint64`, big-endian), from each side; each side then resends what the other is missing;
   - data: `'D'` + length (`uint32`) + bytes;
   - acknowledgements: `'A'` + the offset received (`uint64`).
-- **The daemon** listens on `<session>.sock` and logs to `<session>.log`. Both are in `$XDG_RUNTIME_DIR/daedalus/`, else in `daedalus-<user>/` in the temporary folder (mode `0700`). It ends when the client says `exit`, or after the grace period (default 900 s) without a link.
+- **The daemon** listens on `<session>.sock` and logs to `<session>.log`. Both are in `$XDG_RUNTIME_DIR/daedalus/`, else in `/tmp/daedalus-<user>/` (mode `0700`; the temporary folder on Windows). It ends when the client says `exit`, or after the grace period (default 900 s) without a link.
 - **Reconnecting.** The client starts the same command again. If the instance differs, the session it ran in has ended.
 
 ## Channels

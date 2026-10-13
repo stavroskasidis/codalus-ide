@@ -24,9 +24,10 @@ public static class ServerDaemon
     /// <summary>The private folder of the sockets: <c>$XDG_RUNTIME_DIR/daedalus</c>, else <c>daedalus-&lt;user&gt;</c> in the temporary folder.</summary>
     public static string SocketFolder()
     {
+        // Socket paths are limited to about 104 bytes: macOS's $TMPDIR (/var/folders/…) is too long, /tmp isn't.
         var root = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") is { Length: > 0 } runtime && Directory.Exists(runtime)
             ? Path.Combine(runtime, "daedalus")
-            : Path.Combine(Path.GetTempPath(), "daedalus-" + Environment.UserName);
+            : Path.Combine(OperatingSystem.IsWindows() ? Path.GetTempPath() : "/tmp", "daedalus-" + Environment.UserName);
         if (OperatingSystem.IsWindows())
         {
             Directory.CreateDirectory(root);
