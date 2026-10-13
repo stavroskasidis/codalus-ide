@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\..\src\DaedalusStudio.Shell\DaedalusStudio.Shell.csproj" />
+    <!-- The live agent (M19b) is tested in-process against headless windows. -->
+    <ProjectReference Include="..\..\src\DaedalusStudio.Previewer.Agent\DaedalusStudio.Previewer.Agent.csproj" />
     <!-- Built so the tests can launch them; not referenced as assemblies. -->
     <ProjectReference Include="..\..\src\DaedalusStudio.Plugins.Host\DaedalusStudio.Plugins.Host.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Plugins\DaedalusStudio.Plugins.Welcome\DaedalusStudio.Plugins.Welcome.csproj" ReferenceOutputAssembly="false" />

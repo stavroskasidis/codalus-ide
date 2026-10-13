@@ -142,17 +142,17 @@ internal sealed class PreviewAgent
         return false;
     }
 
-    private static object? VisualParent(object visual)
+    internal static object? VisualParent(object visual)
     {
         var extensions = AvaloniaType("Avalonia.VisualTree.VisualExtensions");
         var method = extensions.GetMethods(Static).FirstOrDefault(m => m.Name == "GetVisualParent" && !m.IsGenericMethod && m.GetParameters().Length == 1);
         return method is not null ? method.Invoke(null, [visual]) : Property(visual, "VisualParent");
     }
 
-    private static object? LogicalParent(object element) =>
+    internal static object? LogicalParent(object element) =>
         Logical(element)?.GetProperty("LogicalParent")?.GetValue(element);
 
-    private static IEnumerable<object> LogicalChildren(object element) =>
+    internal static IEnumerable<object> LogicalChildren(object element) =>
         Logical(element)?.GetProperty("LogicalChildren")?.GetValue(element) is IEnumerable children ? children.Cast<object>() : [];
 
     private static IEnumerable<object> Descendants(object element)
@@ -167,11 +167,11 @@ internal sealed class PreviewAgent
         }
     }
 
-    private static Type? Logical(object element) =>
+    internal static Type? Logical(object element) =>
         element.GetType().GetInterfaces().FirstOrDefault(i => i.FullName == "Avalonia.LogicalTree.ILogical");
 
     /// <summary>The element's index among its logical siblings of the same type (0 for the root).</summary>
-    private static int Ordinal(object element)
+    internal static int Ordinal(object element)
     {
         if (LogicalParent(element) is not { } parent)
         {
@@ -196,7 +196,7 @@ internal sealed class PreviewAgent
         return 0;
     }
 
-    private static string TypeName(object element)
+    internal static string TypeName(object element)
     {
         var name = element.GetType().Name;
         var tick = name.IndexOf('`');
@@ -225,13 +225,13 @@ internal sealed class PreviewAgent
 
     // ------------------------------------------------------------------ reflection
 
-    private static object? Property(object target, string name) =>
+    internal static object? Property(object target, string name) =>
         target.GetType().GetProperty(name, Instance)?.GetValue(target);
 
     private static readonly Dictionary<string, Type> s_types = [];
     private static MethodInfo? s_translatePoint;
 
-    private static Type AvaloniaType(string fullName)
+    internal static Type AvaloniaType(string fullName)
     {
         lock (s_types)
         {
@@ -251,7 +251,7 @@ internal sealed class PreviewAgent
     }
 
     /// <summary>Runs <paramref name="work"/> on Avalonia's UI thread and waits for it (at most 10 s).</summary>
-    private static string OnUiThread(Func<string> work)
+    internal static string OnUiThread(Func<string> work)
     {
         var dispatcherType = AvaloniaType("Avalonia.Threading.Dispatcher");
         var dispatcher = dispatcherType.GetProperty("UIThread", Static)!.GetValue(null)!;
@@ -288,7 +288,7 @@ internal sealed class PreviewAgent
         return error is null ? result ?? string.Empty : throw new InvalidOperationException(error.Message, error);
     }
 
-    private static object? Normal(Type priorityType) =>
+    internal static object? Normal(Type priorityType) =>
         priorityType.GetField("Normal", Static)?.GetValue(null)
         ?? priorityType.GetProperty("Normal", Static)?.GetValue(null)
         ?? (priorityType.IsValueType ? Activator.CreateInstance(priorityType) : null);

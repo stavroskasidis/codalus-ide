@@ -14,29 +14,38 @@ using DaedalusStudio.Previewer.Agent;
 /// IDE at <c>127.0.0.1:$DAEDALUS_PREVIEW_AGENT_PORT</c>, says <c>hello $DAEDALUS_PREVIEW_AGENT_TOKEN</c>, and answers
 /// tab-separated request lines. Without the variables it does nothing. Avalonia is reached by reflection, so one agent
 /// serves every Avalonia version the user's app may use.
+/// With <c>DAEDALUS_LIVE_AGENT_PORT</c> and <c>_TOKEN</c> instead, the same agent serves a running app's Live Visual
+/// Tree and Live Property Explorer (M19b, ADR 0052): <see cref="LiveAgent"/>, which also sends lines of its own
+/// (<c>event …</c>).
 /// </summary>
 internal static class StartupHook
 {
     public const string PortVariable = "DAEDALUS_PREVIEW_AGENT_PORT";
     public const string TokenVariable = "DAEDALUS_PREVIEW_AGENT_TOKEN";
+    public const string LivePortVariable = "DAEDALUS_LIVE_AGENT_PORT";
+    public const string LiveTokenVariable = "DAEDALUS_LIVE_AGENT_TOKEN";
 
     public static void Initialize()
     {
-        var portText = Environment.GetEnvironmentVariable(PortVariable);
-        var token = Environment.GetEnvironmentVariable(TokenVariable) ?? string.Empty;
+        var live = int.TryParse(Environment.GetEnvironmentVariable(LivePortVariable), NumberStyles.Integer, CultureInfo.InvariantCulture, out var livePort) && livePort > 0;
+        var portText = Environment.GetEnvironmentVariable(live ? LivePortVariable : PortVariable);
+        var token = Environment.GetEnvironmentVariable(live ? LiveTokenVariable : TokenVariable) ?? string.Empty;
         if (!int.TryParse(portText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var port) || port <= 0)
         {
             return;
         }
 
         // The user's app's own child processes don't get an agent.
-        Environment.SetEnvironmentVariable(PortVariable, null);
-        Environment.SetEnvironmentVariable(TokenVariable, null);
-        var thread = new Thread(() => Run(port, token)) { IsBackground = true, Name = "Daedalus previewer agent" };
+        foreach (var variable in new[] { PortVariable, TokenVariable, LivePortVariable, LiveTokenVariable })
+        {
+            Environment.SetEnvironmentVariable(variable, null);
+        }
+
+        var thread = new Thread(() => Run(port, token, live)) { IsBackground = true, Name = live ? "Daedalus live agent" : "Daedalus previewer agent" };
         thread.Start();
     }
 
-    private static void Run(int port, string token)
+    private static void Run(int port, string token, bool live)
     {
         try
         {
@@ -46,8 +55,17 @@ internal static class StartupHook
             using var stream = client.GetStream();
             using var reader = new StreamReader(stream, new UTF8Encoding(false));
             using var writer = new StreamWriter(stream, new UTF8Encoding(false)) { NewLine = "\n", AutoFlush = true };
-            writer.WriteLine("hello\t" + token);
-            var agent = new PreviewAgent();
+            var gate = new object();
+            void Send(string text)
+            {
+                lock (gate)
+                {
+                    writer.WriteLine(text);
+                }
+            }
+
+            Send("hello\t" + token);
+            Func<string[], string> handle = live ? new LiveAgent(Send).Handle : new PreviewAgent().Handle;
             while (reader.ReadLine() is { } line)
             {
                 var parts = line.Split('\t');
@@ -59,14 +77,14 @@ internal static class StartupHook
                 string reply;
                 try
                 {
-                    reply = "ok\t" + agent.Handle(parts);
+                    reply = "ok\t" + handle(parts);
                 }
                 catch (Exception ex)
                 {
                     reply = "error\t" + (ex.InnerException ?? ex).Message.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
                 }
 
-                writer.WriteLine(parts[0] + "\t" + reply);
+                Send(parts[0] + "\t" + reply);
             }
         }
         catch (Exception ex)
