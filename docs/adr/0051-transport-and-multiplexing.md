@@ -1,4 +1,4 @@
-# 0050. Transport and multiplexing
+# 0051. Transport and multiplexing
 
 - **Status:** accepted (M21a, 2026-10-12; the maintainer's standing go-ahead for the milestones)
 - **Date:** 2026-10-12
@@ -6,7 +6,7 @@
 
 ## Context
 
-A remote window (ADR 0049) talks to `daedalus-server` through one byte stream: the stdin and stdout of `ssh host …` or `wsl.exe … --exec …`. Many conversations share it at once: the control requests (spawn, files, ports), the build host's and the C# host's JSON-RPC, netcoredbg's DAP, terminal bytes, and TCP tunnels for forwarded ports. They have different shapes. Hosts are `Content-Length`-framed JSON, terminals and tunnels are raw bytes. A terminal printing a build log, or a tunnel streaming a download, must not hold up completion. The roadmap requires multiplexed JSON-RPC channels over a single stdio stream, and a server that never listens on a network port.
+A remote window (ADR 0050) talks to `daedalus-server` through one byte stream: the stdin and stdout of `ssh host …` or `wsl.exe … --exec …`. Many conversations share it at once: the control requests (spawn, files, ports), the build host's and the C# host's JSON-RPC, netcoredbg's DAP, terminal bytes, and TCP tunnels for forwarded ports. They have different shapes. Hosts are `Content-Length`-framed JSON, terminals and tunnels are raw bytes. A terminal printing a build log, or a tunnel streaming a download, must not hold up completion. The roadmap requires multiplexed JSON-RPC channels over a single stdio stream, and a server that never listens on a network port.
 
 Options considered:
 - **One ssh connection per channel** (ssh's own multiplexing with `ControlMaster`). It needs the user's ssh configuration, isn't available for `wsl.exe` or Windows' OpenSSH, and costs a login per host.
@@ -53,11 +53,11 @@ Options considered:
 
 Messages are source-generated JSON (`RemoteJsonContext`), so the shell stays Native-AOT clean. File contents travel base64-encoded in `fs/readFile` and `fs/writeFile`. That is fine for source files. Large files over a channel are a later refinement (`TODO(issue)`).
 
-**Host channels are rewritten for paths** on the client (`MappedJsonStream`, ADR 0049). The server relays bytes and never parses host traffic.
+**Host channels are rewritten for paths** on the client (`MappedJsonStream`, ADR 0050). The server relays bytes and never parses host traffic.
 
 ## Threat model
 
-Security is ADR 0049's. For the transport:
+Security is ADR 0050's. For the transport:
 - The server never listens; the only way in is the stdio of a process the user started.
 - The framing caps every allocation (32 KB per frame, one window per channel). A peer that ignores credit can only grow the reader's queue of that channel.
 - An unknown frame type is ignored, and an unknown channel's data is dropped.
@@ -66,6 +66,6 @@ Security is ADR 0049's. For the transport:
 ## Consequences
 
 - One login per session, whatever runs in it. Terminals, hosts and tunnels can't starve each other.
-- Each frame costs 9 bytes, and each message on a host channel a parse and a rewrite on the client (ADR 0049). Measured on Windows: a control request's round trip through the local stand-in is 0.3 ms with no simulated latency, and the round trip plus about 12 ms at 50 ms.
+- Each frame costs 9 bytes, and each message on a host channel a parse and a rewrite on the client (ADR 0050). Measured on Windows: a control request's round trip through the local stand-in is 0.3 ms with no simulated latency, and the round trip plus about 12 ms at 50 ms.
 - The budget is completion within local + RTT + 20 ms. It holds at a simulated 50 and 150 ms: 90 ms through the server, 108 ms at 50 ms and 196 ms at 150 ms, on Windows (the M21a checkpoint).
 - Reconnecting after a network drop is M21b. It needs the server to outlive its stdio (a socket in the user's runtime folder, re-attached by a new ssh session) and the client to resync documents and sessions.

@@ -12,7 +12,7 @@ public sealed record FileSystemEntry(string Name, bool IsDirectory, long Size, D
 public sealed record FileChangeEvent(string Path, string Kind);
 
 /// <summary>
-/// Where files under a root live (F2, M21, ADR 0049): this machine, or a remote session's server. Paths are this
+/// Where files under a root live (F2, M21, ADR 0050): this machine, or a remote session's server. Paths are this
 /// machine's form; a remote provider maps them to the other machine's.
 /// </summary>
 public interface IFileSystemProvider
@@ -40,7 +40,7 @@ public interface IFileSystemProvider
 }
 
 /// <summary>
-/// The file systems by root (F2): a remote window mounts its server's under the folder its paths map to (ADR 0049),
+/// The file systems by root (F2): a remote window mounts its server's under the folder its paths map to (ADR 0050),
 /// everything else is this machine's. Process-wide, as a remote window is a process of its own.
 /// </summary>
 public static class FileSystems

@@ -1,6 +1,6 @@
 # The remote server protocol
 
-`daedalus-server` (`src/DaedalusStudio.Remote.Server`, M21) runs on the remote machine of a remote window. The architecture is [ADR 0049](adr/0049-remote-development-architecture.md); the transport and its framing are [ADR 0050](adr/0050-transport-and-multiplexing.md). The contracts are in `src/DaedalusStudio.Remote.Protocol` (`RemoteMethods`, `RemoteJsonContext`).
+`daedalus-server` (`src/DaedalusStudio.Remote.Server`, M21) runs on the remote machine of a remote window. The architecture is [ADR 0050](adr/0050-remote-development-architecture.md); the transport and its framing are [ADR 0051](adr/0051-transport-and-multiplexing.md). The contracts are in `src/DaedalusStudio.Remote.Protocol` (`RemoteMethods`, `RemoteJsonContext`).
 
 ## Starting
 
@@ -64,4 +64,4 @@ A missing path is error `-32010` (`RemoteMethods.FileNotFound`), which `RemoteFi
 
 ## Paths
 
-The server sees only its own machine's paths. The client maps them as ADR 0049 describes: in the arguments of `process/spawn` and `pty/open`, in file-system requests, and in the JSON of the host channels it reads and writes (`RemotePathMap`, `MappedJsonStream`).
+The server sees only its own machine's paths. The client maps them as ADR 0050 describes: in the arguments of `process/spawn` and `pty/open`, in file-system requests, and in the JSON of the host channels it reads and writes (`RemotePathMap`, `MappedJsonStream`).

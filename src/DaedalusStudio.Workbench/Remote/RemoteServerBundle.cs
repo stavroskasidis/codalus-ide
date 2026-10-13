@@ -17,7 +17,7 @@ public sealed record BundlePart(string Name, string Source);
 public sealed record InstalledServer(string Folder, string? Platform, bool SelfContained, string? WslDistribution, bool Copied);
 
 /// <summary>
-/// The version-locked server bundle (M21, ADR 0049): <c>server/</c> (self-contained for the remote platform when this
+/// The version-locked server bundle (M21, ADR 0050): <c>server/</c> (self-contained for the remote platform when this
 /// install carries one in <c>remote/&lt;rid&gt;/</c>, else the framework-dependent <c>remote/server/</c>), and the hosts
 /// it starts there — <c>buildhost/</c>, <c>lshost/</c>, <c>markuphost/</c> — the same builds the shell runs here. It is
 /// copied as a <c>.tar.gz</c> through the user's ssh or wsl.exe (the remote machine needs <c>tar</c>, <c>gzip</c> and

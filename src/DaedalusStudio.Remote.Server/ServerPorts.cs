@@ -9,7 +9,7 @@ using DaedalusStudio.Rpc;
 namespace DaedalusStudio.Remote.Server;
 
 /// <summary>
-/// Listening ports and tunnels (M21, ADR 0049): the client forwards a local port by opening a channel per connection,
+/// Listening ports and tunnels (M21, ADR 0050): the client forwards a local port by opening a channel per connection,
 /// and the server connects it to the port here. The server itself never listens.
 /// </summary>
 public sealed partial class RemoteServer

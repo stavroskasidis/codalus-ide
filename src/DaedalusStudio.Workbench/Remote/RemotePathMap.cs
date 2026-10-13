@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace DaedalusStudio.Workbench.Remote;
 
 /// <summary>
-/// Paths between this machine and a remote one (M21, ADR 0049). The shell names a remote file by a path of this
+/// Paths between this machine and a remote one (M21, ADR 0050). The shell names a remote file by a path of this
 /// machine's form under <see cref="LocalRoot"/>, so every <c>Path</c> API, comparer and tree of the shell works
 /// unchanged: on Windows, a WSL distribution's files are under <c>\\wsl.localhost\Ubuntu</c> (a real path), another
 /// machine's under <c>\\daedalus-remote.invalid\&lt;id&gt;</c>; on Linux and macOS under <c>/daedalus-remote/&lt;id&gt;</c>.

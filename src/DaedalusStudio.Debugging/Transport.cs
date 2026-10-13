@@ -13,7 +13,7 @@ public sealed record DebugAdapterStartInfo(
     IReadOnlyDictionary<string, string>? Environment = null,
     string? Transport = null)
 {
-    /// <summary>Starts the adapter through a remote server (M21, ADR 0049) instead of here; null: this machine.</summary>
+    /// <summary>Starts the adapter through a remote server (M21, ADR 0050) instead of here; null: this machine.</summary>
     public DaedalusStudio.Rpc.IProcessLauncher? Launcher { get; init; }
 
     /// <summary>A folder for netcoredbg's DAP logs (<c>--engineLogging</c>), to diagnose a session.</summary>

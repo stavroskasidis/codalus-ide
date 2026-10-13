@@ -16,7 +16,7 @@ using DaedalusStudio.Workbench.StatusBar;
 namespace DaedalusStudio.Shell.Tests;
 
 /// <summary>
-/// A remote window (M21, ADR 0049) on the local stand-in: <c>daedalus-server</c> started here, so nothing reaches
+/// A remote window (M21, ADR 0050) on the local stand-in: <c>daedalus-server</c> started here, so nothing reaches
 /// another machine. On Linux and macOS its paths go through the virtual root (<c>/daedalus-remote/local</c>) as a real
 /// remote machine's do; on Windows the stand-in is a Windows server, so paths stay as they are and the WSL tests of the
 /// workbench cover the mapping. Everything that reads the workspace or runs its code goes through the server: the build

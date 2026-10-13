@@ -4,7 +4,7 @@ using DaedalusStudio.Rpc;
 
 namespace DaedalusStudio.Remote.Server;
 
-/// <summary>The file-system provider (M21, ADR 0049): what the shell's editor and explorer read and write remotely.</summary>
+/// <summary>The file-system provider (M21, ADR 0050): what the shell's editor and explorer read and write remotely.</summary>
 public sealed partial class RemoteServer
 {
     private readonly ConcurrentDictionary<int, Watcher> _watchers = new();

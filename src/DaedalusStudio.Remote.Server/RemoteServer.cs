@@ -11,7 +11,7 @@ using DaedalusStudio.Rpc.Multiplexing;
 namespace DaedalusStudio.Remote.Server;
 
 /// <summary>
-/// The server side of a remote session (M21, ADR 0049): processes with their stdio on channels (the build and language
+/// The server side of a remote session (M21, ADR 0050): processes with their stdio on channels (the build and language
 /// hosts, netcoredbg), pseudo-terminals, the file system, listening ports and TCP tunnels to them. Everything it
 /// started ends with the session: when stdin ends, or on <c>shutdown</c>.
 /// </summary>

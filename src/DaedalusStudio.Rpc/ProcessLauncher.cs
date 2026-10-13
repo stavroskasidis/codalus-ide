@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace DaedalusStudio.Rpc;
 
 /// <summary>
-/// A started service process, here or on another machine (M21, ADR 0049): its stdio as streams and its lifetime.
+/// A started service process, here or on another machine (M21, ADR 0050): its stdio as streams and its lifetime.
 /// Standard error arrives as <see cref="ErrorLine"/> once <see cref="BeginErrorRead"/> was called, so a handler
 /// attached first sees every line.
 /// </summary>

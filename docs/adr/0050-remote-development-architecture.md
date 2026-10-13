@@ -1,4 +1,4 @@
-# 0049. Remote development architecture
+# 0050. Remote development architecture
 
 - **Status:** accepted (M21a, 2026-10-12; the maintainer's standing go-ahead for the milestones)
 - **Date:** 2026-10-12
@@ -6,7 +6,7 @@
 
 ## Context
 
-M21 is about working on code that lives on another machine: over SSH, in WSL, in a container. Editing has to feel local. The roadmap fixes the split. The shell keeps the UI and the editor buffers, so typing never crosses the network. A version-locked `daedalus-server` on the remote machine hosts what reads the workspace or runs its code: the language and build hosts, debug adapters, terminals and a file-system provider. One multiplexed stdio stream carries it all (ADR 0050). The roadmap also names Dev Containers, attaching to a running container, remote test environments, plugin placement (`runsOn`), and resilience (reconnect and resync). The milestone is split (roadmap rule 5): **M21a** (this ADR) is the architecture, SSH and WSL. **M21b** adds Dev Containers, attaching to a running container, `testenvironments.json`, `runsOn`, and reconnecting.
+M21 is about working on code that lives on another machine: over SSH, in WSL, in a container. Editing has to feel local. The roadmap fixes the split. The shell keeps the UI and the editor buffers, so typing never crosses the network. A version-locked `daedalus-server` on the remote machine hosts what reads the workspace or runs its code: the language and build hosts, debug adapters, terminals and a file-system provider. One multiplexed stdio stream carries it all (ADR 0051). The roadmap also names Dev Containers, attaching to a running container, remote test environments, plugin placement (`runsOn`), and resilience (reconnect and resync). The milestone is split (roadmap rule 5): **M21a** (this ADR) is the architecture, SSH and WSL. **M21b** adds Dev Containers, attaching to a running container, `testenvironments.json`, `runsOn`, and reconnecting.
 
 What the codebase already had:
 - Every host is a `SupervisedProcess` that speaks JSON-RPC on its stdio and restarts after a crash (ADR 0004, 0005).

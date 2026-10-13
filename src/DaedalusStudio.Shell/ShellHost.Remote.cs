@@ -22,7 +22,7 @@ using DaedalusStudio.Workbench.Terminal;
 namespace DaedalusStudio.Shell;
 
 /// <summary>
-/// Remote development (M21, ADR 0049): a remote window — this window connected to <c>daedalus-server</c> on an SSH
+/// Remote development (M21, ADR 0050): a remote window — this window connected to <c>daedalus-server</c> on an SSH
 /// machine or a WSL distribution — opens a folder or solution there. The build and language hosts, terminals and the
 /// debugger run on the server; the editor keeps its buffers here and reads and writes files through it. The status
 /// bar shows the connection and its round trip; the Ports window the forwarded ports.

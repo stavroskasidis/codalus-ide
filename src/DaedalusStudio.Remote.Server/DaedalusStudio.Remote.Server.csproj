@@ -5,7 +5,7 @@
     <RollForward>Major</RollForward>
     <AssemblyName>daedalus-server</AssemblyName>
     <RootNamespace>DaedalusStudio.Remote.Server</RootNamespace>
-    <Description>The remote development server (M21, ADR 0049): runs on the remote machine and hosts the build and language hosts, debug adapters, terminals, a file-system provider and port tunnels over multiplexed JSON-RPC channels on its stdio.</Description>
+    <Description>The remote development server (M21, ADR 0050): runs on the remote machine and hosts the build and language hosts, debug adapters, terminals, a file-system provider and port tunnels over multiplexed JSON-RPC channels on its stdio.</Description>
     <VersionPrefix>$(DaedalusVersion)</VersionPrefix>
     <VersionSuffix>dev</VersionSuffix>
     <InvariantGlobalization>true</InvariantGlobalization>

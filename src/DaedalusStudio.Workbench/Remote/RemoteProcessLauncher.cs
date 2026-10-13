@@ -7,7 +7,7 @@ using DaedalusStudio.Rpc;
 namespace DaedalusStudio.Workbench.Remote;
 
 /// <summary>
-/// Starts service processes through the server (M21, ADR 0049): a <see cref="SupervisedProcess"/> whose launch has
+/// Starts service processes through the server (M21, ADR 0050): a <see cref="SupervisedProcess"/> whose launch has
 /// this launcher runs on the remote machine, its JSON on a channel with paths rewritten both ways, and is restarted
 /// there like a local host. The file name, arguments and working folder are mapped to the remote machine's paths.
 /// </summary>

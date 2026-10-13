@@ -52,7 +52,7 @@ public sealed class LanguageService : IAsyncDisposable
     public event EventHandler<string>? Log;
 
     /// <summary>
-    /// Where language hosts run: null here, or a remote window's server (M21, ADR 0049), which returns null for a host
+    /// Where language hosts run: null here, or a remote window's server (M21, ADR 0050), which returns null for a host
     /// that can't run there.
     /// </summary>
     public Func<Rpc.ProcessLaunchInfo, Rpc.ProcessLaunchInfo?>? Placement { get; set; }

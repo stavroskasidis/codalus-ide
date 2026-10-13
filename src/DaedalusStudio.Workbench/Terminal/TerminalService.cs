@@ -215,7 +215,7 @@ public sealed class TerminalService : IDisposable
     public bool ShellIntegration { get; set; } = true;
 
     /// <summary>
-    /// Starts pseudo-terminals somewhere else: a remote window's server (M21, ADR 0049). The start info's environment
+    /// Starts pseudo-terminals somewhere else: a remote window's server (M21, ADR 0050). The start info's environment
     /// is this machine's plus the terminal's own variables; the factory sends only what differs.
     /// </summary>
     public Func<PtyStartInfo, PseudoTerminal>? PtyFactory { get; set; }

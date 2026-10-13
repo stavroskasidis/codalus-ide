@@ -24,7 +24,7 @@ public sealed class RemotePortRow(int remotePort, ForwardedPort? forwarded, stri
 }
 
 /// <summary>
-/// The Ports window of a remote window (M21, ADR 0049): forwarded ports and the remote machine's other listening
+/// The Ports window of a remote window (M21, ADR 0050): forwarded ports and the remote machine's other listening
 /// ports; forward one, stop forwarding, or open it in the browser.
 /// </summary>
 public sealed class RemotePortsViewModel(ShellHost shell) : ObservableObject

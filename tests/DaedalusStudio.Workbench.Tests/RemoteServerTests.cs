@@ -13,7 +13,7 @@ using DaedalusStudio.Workbench.Remote;
 namespace DaedalusStudio.Workbench.Tests;
 
 /// <summary>
-/// The remote development server (M21, ADR 0049 and 0050) through local stand-ins only: the server started here as a
+/// The remote development server (M21, ADR 0050 and 0051) through local stand-ins only: the server started here as a
 /// process (every OS), a WSL distribution (Windows, <c>DAEDALUS_TEST_WSL</c>, default <c>Ubuntu</c>, with .NET), and a
 /// fake <c>ssh</c> that runs the command here (Linux and macOS). Never another machine.
 /// </summary>

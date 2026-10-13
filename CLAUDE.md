@@ -72,7 +72,7 @@ Profiling (M18a, ADR 0044 and 0045) runs in a supervised, lazy `daedalus-diaghos
 
 ## Remote development
 
-A remote window (M21a, ADR 0049 and 0050, protocol in `docs/remote-protocol.md`) is this window connected to `daedalus-server` (`src/DaedalusStudio.Remote.Server`) on an SSH machine (the user's `ssh`, `BatchMode=yes`) or a WSL distribution: `daedalus --remote ssh:host|wsl:Ubuntu <path>`, or File → Open Remote Window (`ShellHost.Remote.cs`).
+A remote window (M21a, ADR 0050 and 0051, protocol in `docs/remote-protocol.md`) is this window connected to `daedalus-server` (`src/DaedalusStudio.Remote.Server`) on an SSH machine (the user's `ssh`, `BatchMode=yes`) or a WSL distribution: `daedalus --remote ssh:host|wsl:Ubuntu <path>`, or File → Open Remote Window (`ShellHost.Remote.cs`).
 - **Transport.** One stdio stream carries frames of many channels (`DaedalusStudio.Rpc/Multiplexing`, flow control per channel). The server never listens on a port.
 - **Hosts and paths.** The build, C# and markup hosts run there through `IProcessLauncher` (`ProcessLaunchInfo.Launcher`; placement in `SolutionService`/`LanguageService.Placement`), as does netcoredbg (`DebugAdapterStartInfo.Launcher`). Their JSON's paths are rewritten under a local root: `\\wsl.localhost\<distro>`, `\\daedalus-remote.invalid\<id>` or `/daedalus-remote/<id>` (`RemotePathMap`, `MappedJsonStream`).
 - **Files and terminals.** The editor's files go through `FileSystems` (workbench `FileSystem/`, the server's `RemoteFileSystem` mounted at the root), terminals through `TerminalService.PtyFactory`.

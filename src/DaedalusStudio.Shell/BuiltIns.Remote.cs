@@ -8,7 +8,7 @@ using DaedalusStudio.Workbench.ToolWindows;
 
 namespace DaedalusStudio.Shell;
 
-/// <summary>Remote development (M21, ADR 0049): Open Remote, the remote status menu, port forwarding and its settings.</summary>
+/// <summary>Remote development (M21, ADR 0050): Open Remote, the remote status menu, port forwarding and its settings.</summary>
 internal static partial class BuiltIns
 {
     public static IReadOnlyList<SettingDescriptor> RemoteSettings() =>

@@ -4,8 +4,8 @@ using DaedalusStudio.Remote.Server;
 using DaedalusStudio.Rpc;
 using DaedalusStudio.Rpc.Multiplexing;
 
-// Usage: daedalus-server [--stdio]. The remote development server (M21, ADR 0049, docs/remote-protocol.md): it prints
-// its preamble line, then speaks multiplexed frames (ADR 0050) on stdin and stdout until stdin ends. It never listens
+// Usage: daedalus-server [--stdio]. The remote development server (M21, ADR 0050, docs/remote-protocol.md): it prints
+// its preamble line, then speaks multiplexed frames (ADR 0051) on stdin and stdout until stdin ends. It never listens
 // on a network port. `daedalus-server --echo` copies stdin to stdout and exits with 3 (a test program for spawning).
 if (args is ["--echo", ..])
 {

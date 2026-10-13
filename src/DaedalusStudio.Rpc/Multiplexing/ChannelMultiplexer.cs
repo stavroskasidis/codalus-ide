@@ -5,7 +5,7 @@ using System.Diagnostics;
 
 namespace DaedalusStudio.Rpc.Multiplexing;
 
-/// <summary>The kinds of frame on a multiplexed stream (ADR 0050).</summary>
+/// <summary>The kinds of frame on a multiplexed stream (ADR 0051).</summary>
 public enum FrameType : byte
 {
     /// <summary>Bytes for a channel; counts against the receiver's window.</summary>
@@ -24,7 +24,7 @@ public enum FrameType : byte
 }
 
 /// <summary>
-/// Many byte channels over one duplex stream (M21, ADR 0050): the remote server's stdio carries the control channel
+/// Many byte channels over one duplex stream (M21, ADR 0051): the remote server's stdio carries the control channel
 /// (0) and a channel per host, terminal and tunnel. A frame is a 9-byte header — channel (<c>uint32</c>, big-endian),
 /// <see cref="FrameType"/>, payload length (<c>uint32</c>) — and at most <see cref="MaxPayload"/> bytes. Each channel
 /// has a <see cref="Window"/> of credit per direction, so a terminal flooding output or a reader that stopped reading

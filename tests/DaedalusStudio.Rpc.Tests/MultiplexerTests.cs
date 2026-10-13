@@ -7,7 +7,7 @@ using DaedalusStudio.Rpc.Multiplexing;
 namespace DaedalusStudio.Rpc.Tests;
 
 /// <summary>
-/// The multiplexer of the remote server's stdio (M21, ADR 0050): channels interleave, each has its own flow control,
+/// The multiplexer of the remote server's stdio (M21, ADR 0051): channels interleave, each has its own flow control,
 /// half-closes end reads, the end of the stream ends every channel, and JSON-RPC runs on a channel.
 /// </summary>
 public sealed class MultiplexerTests

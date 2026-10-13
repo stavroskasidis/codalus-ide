@@ -1097,7 +1097,7 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     }
 
     /// <summary>
-    /// Remote development (M21, ADR 0049) on the local stand-in: the window connects to the shipped server, opens a copy
+    /// Remote development (M21, ADR 0050) on the local stand-in: the window connects to the shipped server, opens a copy
     /// of BuildAndRun through it, completes and saves a file, builds, runs the program in the server's terminal and sees
     /// a new listening port forwarded; then it disconnects, local again. Every wait is bounded.
     /// </summary>

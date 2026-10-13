@@ -14,7 +14,7 @@ public sealed record RemoteTransport(string Program, IReadOnlyList<string> Argum
 }
 
 /// <summary>
-/// The connection to a running <c>daedalus-server</c> (M21, ADR 0049 and 0050): the transport process, the
+/// The connection to a running <c>daedalus-server</c> (M21, ADR 0050 and 0051): the transport process, the
 /// multiplexer on its stdio, and the control channel. Channels for hosts, terminals and tunnels are opened here.
 /// The server never listens on a port: its stdio, through the user's ssh or wsl.exe, is the only way in.
 /// </summary>

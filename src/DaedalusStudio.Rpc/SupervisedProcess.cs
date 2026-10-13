@@ -7,7 +7,7 @@ public sealed record ProcessLaunchInfo(string FileName, IReadOnlyList<string> Ar
 
     public string? WorkingDirectory { get; init; }
 
-    /// <summary>Where the process starts: null for this machine, or a remote server's launcher (M21, ADR 0049).</summary>
+    /// <summary>Where the process starts: null for this machine, or a remote server's launcher (M21, ADR 0050).</summary>
     public IProcessLauncher? Launcher { get; init; }
 
     public static ProcessLaunchInfo FromPath(string path, params string[] arguments) =>

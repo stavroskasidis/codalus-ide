@@ -63,7 +63,7 @@ public sealed class SolutionService : IAsyncDisposable
     public static StringComparer PathComparer { get; } =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
-    /// <summary>Where the build host runs: null here, or a remote window's server (M21, ADR 0049).</summary>
+    /// <summary>Where the build host runs: null here, or a remote window's server (M21, ADR 0050).</summary>
     public Func<ProcessLaunchInfo, ProcessLaunchInfo?>? Placement { get; set; }
 
     /// <summary>The open solution's structure, or null.</summary>

@@ -4,7 +4,7 @@ M21a (remote development over SSH and WSL) was paused for UX and performance wor
 
 ## Done
 
-- **Decisions:** [ADR 0049](../adr/0049-remote-development-architecture.md) (architecture and threat model) and [ADR 0050](../adr/0050-transport-and-multiplexing.md) (transport and multiplexing).
+- **Decisions:** [ADR 0050](../adr/0050-remote-development-architecture.md) (architecture and threat model) and [ADR 0051](../adr/0051-transport-and-multiplexing.md) (transport and multiplexing).
 - **Docs:** [docs/remote-protocol.md](../remote-protocol.md), the user guide's [remote.md](../user-guide/remote.md), CLAUDE.md, and the roadmap's M21 row. The row already says "M21a at checkpoint"; correct it if this stays unlanded.
 - **`daedalus-server`** (`src/DaedalusStudio.Remote.Server`, with the contracts in `src/DaedalusStudio.Remote.Protocol`): processes, PTYs, the file system with watches, listening ports, tunnels, and `server/hello` as the version lock.
 - **Transport** (`DaedalusStudio.Rpc/Multiplexing`): framed channels with flow control per channel, and a simulated-latency stream. `IProcessLauncher`/`IHostProcess` now start `SupervisedProcess` and `DebugAdapter`.
@@ -39,7 +39,7 @@ M21a (remote development over SSH and WSL) was paused for UX and performance wor
 2. Run the Native AOT publish. Check that the `DaedalusRemoteServerForPublish` target builds `remote/server` and the trimmed `remote/linux-*` servers in CI. Then run `eng/smoke-test.sh` (new step `remote.session`).
 3. Do the manual WSL session with the published app (`daedalus --remote wsl:Ubuntu <path> --screenshot …`; a remote window's screenshot waits for its C# service). Record it in m21a.md.
 4. Validate on Linux with `eng/wsl-test.sh --smoke` (`DAEDALUS_WSL_DIR=/home/akira/daedalus-m21`). On Linux the fake ssh covers the installer, and the local stand-in maps paths under `/daedalus-remote/local`. Push the Mac snapshot with `eng/push-snapshot.sh validate-m21`.
-5. Merge `origin/develop`. ADR numbers 0049 and 0050 may need renumbering if M19 or others took them. Fill in m21a.md's results, update the roadmap row, land, and read CI.
+5. Merge `origin/develop`. ADR numbers 0050 and 0051 may need renumbering if M19 or others took them. Fill in m21a.md's results, update the roadmap row, land, and read CI.
 
 ## Decisions taken (in the ADRs)
 

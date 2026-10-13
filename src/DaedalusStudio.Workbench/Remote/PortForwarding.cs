@@ -13,7 +13,7 @@ public sealed record ForwardedPort(int RemotePort, int LocalPort, string Origin,
 }
 
 /// <summary>
-/// Port forwarding for a remote session (M21, ADR 0049): a listener on this machine's loopback for each forwarded
+/// Port forwarding for a remote session (M21, ADR 0050): a listener on this machine's loopback for each forwarded
 /// port; every connection to it is a tunnel channel that the server connects to the port on its machine. With
 /// <see cref="AutoForward"/>, ports that start listening there after the session began are forwarded as they appear
 /// (a web app's, a debug session's), on the same number when it is free here.

@@ -77,7 +77,7 @@ public sealed record RemoteSessionOptions(RemoteTargetSpec Spec, string ClientVe
 }
 
 /// <summary>
-/// A remote window's session (M21, ADR 0049): the connection to <c>daedalus-server</c> on the target, the path map,
+/// A remote window's session (M21, ADR 0050): the connection to <c>daedalus-server</c> on the target, the path map,
 /// the mounted file system, where hosts run, terminals, and port forwarding. The shell keeps the UI and the editor
 /// buffers; everything that reads the workspace or runs its code runs on the target.
 /// </summary>

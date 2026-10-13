@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace DaedalusStudio.Remote.Protocol;
 
 /// <summary>
-/// The remote development server's control channel (M21, ADR 0049 and 0050; docs/remote-protocol.md): JSON-RPC on
+/// The remote development server's control channel (M21, ADR 0050 and 0051; docs/remote-protocol.md): JSON-RPC on
 /// channel 0 of the multiplexed stdio stream. The client opens every other channel by id before naming it in a
 /// request (<c>process/spawn</c>, <c>pty/open</c>, <c>tunnel/open</c>).
 /// </summary>
