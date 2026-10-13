@@ -23,6 +23,9 @@ public enum PluginState
 
     /// <summary>Loading or activation failed, or its host crashed repeatedly.</summary>
     Failed,
+
+    /// <summary>Turned off by the user (<c>plugins.disabled</c>, M23b): discovered, but nothing it contributes is applied.</summary>
+    Disabled,
 }
 
 /// <summary>A discovered plugin: its manifest, where it lives, and its state in this session.</summary>

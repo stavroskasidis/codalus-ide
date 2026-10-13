@@ -67,6 +67,13 @@ internal static partial class BuiltIns
                 Category = "Privacy",
                 Description = "When Daedalus Studio crashes, save a report (version, OS, the error and recent log lines) in the logs folder on this computer. Nothing is sent anywhere.",
             },
+            SettingDescriptor.Create(Workbench.Plugins.PluginManager.DisabledSetting, "[]", SettingType.StringArray, shell) with
+            {
+                Title = "Turned-Off Plugins",
+                Category = "Plugins",
+                Description = "The ids of plugins that don't load (the Plugins window turns them off and on). Changes apply when Daedalus Studio starts again.",
+                Scope = SettingScope.User,
+            },
             SettingDescriptor.Create(KeyboardSchemeSetting, "\"default\"", SettingType.String, shell) with
             {
                 Title = "Keyboard Scheme",
@@ -218,6 +225,7 @@ internal static partial class BuiltIns
         Add("update.check", "Check for Updates", "Help", Ui(() => _ = shell.CheckForUpdatesAsync()));
         Add("update.whatsNew", "What's New", "Help", Ui(() => shell.ShowWhatsNew()));
         Add("update.restart", "Restart to Update", "Help", Ui(shell.RestartToUpdate));
+        Add("workbench.restart", "Restart", "File", Ui(shell.Restart));
 
         // Helpers for plugins (not in the palette): plugins reach shell features through commands.
         Add("workbench.openExternal", "Open URL", "Developer", async (args, _) =>

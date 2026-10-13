@@ -63,6 +63,9 @@ public sealed class PluginManager : IAsyncDisposable
     private static readonly TimeSpan s_activationTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan s_treeTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>The setting listing the ids of plugins the user turned off (M23b); it applies when the IDE starts.</summary>
+    public const string DisabledSetting = "plugins.disabled";
+
     private readonly WorkbenchServices _workbench;
     private readonly Func<string, ProcessLaunchInfo?> _resolveHost;
     private readonly string _shellVersion;
@@ -158,6 +161,13 @@ public sealed class PluginManager : IAsyncDisposable
                 PluginLog.AppendLine($"[{plugin.Id}] warning: {warning}");
             }
 
+            if (plugin.IsUsable && IsTurnedOff(plugin.Id))
+            {
+                plugin.State = PluginState.Disabled;
+                PluginLog.AppendLine($"[{plugin.Id}] turned off ({DisabledSetting})");
+                continue;
+            }
+
             if (!plugin.IsUsable)
             {
                 PluginLog.AppendLine($"[{plugin.Id}] {plugin.State}: {plugin.Error}");
@@ -177,6 +187,11 @@ public sealed class PluginManager : IAsyncDisposable
 
         PluginsChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>Whether the user turned the plugin off (<see cref="DisabledSetting"/>).</summary>
+    public bool IsTurnedOff(string pluginId) =>
+        _workbench.Settings.GetValue(DisabledSetting) is { ValueKind: System.Text.Json.JsonValueKind.Array } ids
+        && ids.EnumerateArray().Any(id => id.ValueKind == System.Text.Json.JsonValueKind.String && string.Equals(id.GetString(), pluginId, StringComparison.OrdinalIgnoreCase));
 
     private async Task ShowAndHandleAsync(Notification notification)
     {

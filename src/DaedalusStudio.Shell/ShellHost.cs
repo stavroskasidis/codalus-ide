@@ -91,7 +91,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         EditorFont = new EditorFont(Workbench.Settings);
         Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
         Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));
-        PluginList = new PluginsViewModel(Plugins);
+        PluginList = new PluginsViewModel(Plugins, (id, off) => _ = SetPluginTurnedOffAsync(id, off));
         Palette = new QuickPickViewModel();
         Dialogs = new DialogViewModel();
         StatusBar = new StatusBarViewModel(Workbench.StatusBar, id => CommandFor(id)) { IsVisible = Workbench.Settings.GetBoolean("workbench.statusBar.visible", true) };
@@ -809,6 +809,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
         if (SelfUpdate is not null)
         {
@@ -834,5 +835,6 @@ public sealed partial class ShellHost : IAsyncDisposable
         await Solutions.DisposeAsync().ConfigureAwait(false);
         await Plugins.DisposeAsync().ConfigureAwait(false);
         Workbench.Dispose();
+        RestartIfRequested(openSolution);
     }
 }

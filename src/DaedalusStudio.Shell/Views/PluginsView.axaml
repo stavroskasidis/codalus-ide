@@ -21,6 +21,8 @@
               <controls:Icon Kind="extensions" VerticalAlignment="Center" />
               <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
               <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding State}" VerticalAlignment="Center" />
+              <Button Classes="link" Content="{Binding ToggleTitle}" Command="{Binding ToggleCommand}" IsVisible="{Binding CanToggle}"
+                      AutomationProperties.Name="{Binding ToggleTitle}" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Details}" TextWrapping="Wrap" />
             <TextBlock Foreground="{DynamicResource Shell.Error}" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" />
