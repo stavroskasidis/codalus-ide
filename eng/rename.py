@@ -27,6 +27,7 @@ PROTECTED = [
     "Projects/daedalus-studio",
     "Projects\\daedalus-studio",
     "Projects\\\\daedalus-studio",
+    "daedalus-mac",  # the Mac's Remote Control session, named outside the repository
 ]
 
 # Ordered: the specific before the general. Each rule's test of what it must not touch is in test_rules().
