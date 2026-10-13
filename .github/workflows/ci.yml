@@ -53,7 +53,7 @@ jobs:
         os: ${{ fromJSON(needs.matrix.outputs.os) }}
     runs-on: ${{ matrix.os }}
     # The manual matrix run also installs and runs the target framework matrix (M33).
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 100 || 60 }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 90 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -101,8 +101,10 @@ jobs:
           sudo security authorizationdb write system.privilege.taskport allow
       - name: Test (unit, integration, headless UI)
         # A test process still running after 25 minutes (Shell.Tests normally takes 13) is dumped, and the tests that
-        # were running are named, instead of the job timing out without a word.
-        run: dotnet test --solution DaedalusStudio.slnx -c Release --no-build --hangdump --hangdump-timeout 25m --hangdump-type Mini
+        # were running are named, instead of the job timing out without a word. The Windows runner has four cores: all
+        # the test projects at once (builds, debuggers, Aspire's orchestrator) timed out at random there, so it runs three
+        # at a time (and the job may take 90 minutes).
+        run: dotnet test --solution DaedalusStudio.slnx -c Release --no-build --hangdump --hangdump-timeout 25m --hangdump-type Mini ${{ runner.os == 'Windows' && '--max-parallel-test-modules 3' || '' }}
       - name: Processes the tests left running
         # The smoke test needs the machine to itself: what the tests left behind is listed (a leak to fix), then ended.
         if: always() && runner.os != 'Windows'
