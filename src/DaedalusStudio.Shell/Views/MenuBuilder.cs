@@ -26,6 +26,7 @@ internal static class MenuBuilder
         if (shell.Workbench.Platform == PlatformKind.MacOS)
         {
             menuBar.IsVisible = false;
+            AttachApplicationMenu(shell);
             var native = new NativeMenu();
             NativeMenu.SetMenu(window, native);
             void RebuildNative() => BuildNative(native, shell);
@@ -37,6 +38,24 @@ internal static class MenuBuilder
         void Rebuild() => Build(menuBar, shell);
         Rebuild();
         menus.Changed += (_, _) => Ui.Post(Rebuild);
+    }
+
+    /// <summary>
+    /// macOS's application menu: our About and Settings entries before the ones the system adds (Services, Hide, Quit).
+    /// Without a menu of its own, Avalonia's default shows "About Avalonia" (found on the Mac).
+    /// </summary>
+    private static void AttachApplicationMenu(ShellHost shell)
+    {
+        if (Avalonia.Application.Current is not { } app || NativeMenu.GetMenu(app) is not null)
+        {
+            return;
+        }
+
+        var menu = new NativeMenu();
+        menu.Add(new NativeMenuItem("About " + ShellInfo.ProductName) { Command = shell.CommandFor("help.about") });
+        menu.Add(new NativeMenuItemSeparator());
+        menu.Add(new NativeMenuItem("Settings…") { Command = shell.CommandFor("workbench.openOptions"), Gesture = new KeyGesture(Key.OemComma, Avalonia.Input.KeyModifiers.Meta) });
+        NativeMenu.SetMenu(app, menu);
     }
 
     /// <summary>
