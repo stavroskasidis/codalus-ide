@@ -19,6 +19,7 @@ Daedalus Studio is a free, open-source (MIT) IDE for .NET on Windows, macOS and 
 15. [Containers, Aspire and publishing](containers.md)
 16. [Profiling and diagnostics: the Performance Profiler, Diagnostic Tools and .NET Counters](profiling.md)
 17. [Keyboard shortcuts on each operating system: completion keys, and the shortcuts Windows, Linux and macOS keep](keyboard.md)
+18. [Avalonia: XAML editing, the XAML Previewer, the Live Visual Tree and Live Property Explorer, new Avalonia projects](avalonia.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md).
 

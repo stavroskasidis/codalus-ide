@@ -409,6 +409,8 @@ public sealed partial class ShellHost : IAsyncDisposable
             HttpResponseViewModel.ToolWindowId => HttpResponse,
             ThreadsViewModel.ToolWindowId => ThreadList,
             ModulesViewModel.ToolWindowId => ModuleList,
+            LiveTreeViewModel.ToolWindowId => LiveTree,
+            LivePropertiesViewModel.ToolWindowId => LiveProperties,
             ParallelStacksViewModel.ToolWindowId => ParallelStacksWindow,
             ParallelWatchViewModel.ToolWindowId => ParallelWatchWindow,
             ProcessesViewModel.ToolWindowId => ProcessesWindow,

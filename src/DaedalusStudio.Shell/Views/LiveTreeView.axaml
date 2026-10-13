@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.LiveTreeView"
+             x:DataType="vm:LiveTreeViewModel">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top" Margin="6,4">
+      <ToggleButton Classes="toolbar" IsChecked="{Binding IsPicking}" IsEnabled="{Binding IsConnected}"
+                    ToolTip.Tip="Select Element in the App: click an element in the running app to select it here"
+                    AutomationProperties.Name="Select Element in the App">
+        <controls:Icon Kind="select-expand" />
+      </ToggleButton>
+      <ToggleButton Classes="toolbar" IsChecked="{Binding ShowVisualTree}"
+                    ToolTip.Tip="Show the visual tree (templates' parts too); off: the elements the XAML declares"
+                    AutomationProperties.Name="Show Visual Tree">
+        <controls:Icon Kind="layers" />
+      </ToggleButton>
+      <Button Classes="toolbar" Command="{Binding GoToXamlCommand}" ToolTip.Tip="Go to the element's XAML" AutomationProperties.Name="Go to XAML">
+        <controls:Icon Kind="go-to" />
+      </Button>
+      <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" AutomationProperties.Name="Refresh">
+        <controls:Icon Kind="refresh" />
+      </Button>
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" />
+    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected, Mode=TwoWay}" Background="Transparent"
+              AutomationProperties.Name="Live Visual Tree">
+      <TreeView.Styles>
+        <Style Selector="TreeViewItem" x:DataType="vm:LiveNodeViewModel">
+          <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          <Setter Property="MinHeight" Value="22" />
+        </Style>
+      </TreeView.Styles>
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate x:DataType="vm:LiveNodeViewModel" ItemsSource="{Binding Children}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <controls:Icon Kind="window" IsVisible="{Binding IsWindow}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Label}" Classes.muted="{Binding IsTemplated}" VerticalAlignment="Center" />
+          </StackPanel>
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+    </TreeView>
+  </DockPanel>
+</UserControl>

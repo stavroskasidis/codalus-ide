@@ -358,10 +358,20 @@ public sealed class RunService : IDisposable
     {
         // The compiler a Roslyn component runs under is the SDK's; the project's own program needs its runtime picked
         // (the x64 one where the framework has no Arm64 runtime, M33).
-        return profile is { CommandName: LaunchProfile.RoslynComponent }
-            ? Adjust(await RoslynComponents.PlanAsync(_solutions, info, profile, cancellationToken).ConfigureAwait(false))
-            : Adjust(LaunchPlanner.Plan(info, profile), info);
+        if (profile is { CommandName: LaunchProfile.RoslynComponent })
+        {
+            return Adjust(await RoslynComponents.PlanAsync(_solutions, info, profile, cancellationToken).ConfigureAwait(false));
+        }
+
+        var plan = Adjust(LaunchPlanner.Plan(info, profile), info);
+        return ProgramPlan is { } hook ? hook(info, plan) : plan;
     }
+
+    /// <summary>
+    /// Changes a project's program plan for running and debugging alike (M19b: the live agent of an Avalonia app joins
+    /// its environment). Not for a Roslyn component's plan, which runs the compiler.
+    /// </summary>
+    public Func<RunInfo, LaunchPlan, LaunchPlan>? ProgramPlan { get; set; }
 
     /// <summary>The folder of the <c>dotnet</c> the solution builds with (null: the one on PATH), for Hot Reload.</summary>
     public string? DotnetRoot { get; set; }

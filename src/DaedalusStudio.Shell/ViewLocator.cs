@@ -113,6 +113,8 @@ public sealed class ViewLocator : IDataTemplate
         HttpResponseViewModel vm => new HttpResponseView { DataContext = vm },
         ThreadsViewModel vm => new ThreadsView { DataContext = vm },
         ModulesViewModel vm => new ModulesView { DataContext = vm },
+        LiveTreeViewModel vm => new LiveTreeView { DataContext = vm },
+        LivePropertiesViewModel vm => new LivePropertiesView { DataContext = vm },
         ParallelStacksViewModel vm => new ParallelStacksView { DataContext = vm },
         ParallelWatchViewModel vm => new ParallelWatchView { DataContext = vm },
         ProcessesViewModel vm => new ProcessesView { DataContext = vm },
