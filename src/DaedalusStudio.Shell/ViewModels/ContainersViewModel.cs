@@ -43,7 +43,8 @@ public sealed class ContainersViewModel(
     Func<ContainerSummary, Task> attach,
     Func<ContainerSummary, Task> terminal,
     Action<Uri> browse,
-    Func<string, string, Task> openFile) : ObservableObject
+    Func<string, string, Task> openFile,
+    Func<ContainerSummary, Task>? openRemoteWindow = null) : ObservableObject
 {
     public const string ToolWindowId = "containers";
 
@@ -387,4 +388,7 @@ public sealed class ContainersViewModel(
     public Task AttachAsync() => _selected is { } row ? attach(row.Container) : Task.CompletedTask;
 
     public Task OpenTerminalAsync() => _selected is { } row ? terminal(row.Container) : Task.CompletedTask;
+
+    /// <summary>A remote window in the selected container (M21b): its files, builds, terminals and debugging there.</summary>
+    public Task OpenRemoteWindowAsync() => _selected is { } row && openRemoteWindow is not null ? openRemoteWindow(row.Container) : Task.CompletedTask;
 }

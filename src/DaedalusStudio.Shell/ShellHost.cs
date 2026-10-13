@@ -310,7 +310,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         if (Options.Remote is { } remoteTarget)
         {
             // A remote window (M21): the path is the remote machine's.
-            if (DaedalusStudio.Workbench.Remote.RemoteTargetSpec.Parse(remoteTarget) is { } spec)
+            if (DaedalusStudio.Workbench.Remote.RemoteTargetSpec.Parse(remoteTarget, containerTool: ContainerEngine.Tool) is { } spec)
             {
                 _ = ConnectRemoteAsync(spec, Options.Path);
             }

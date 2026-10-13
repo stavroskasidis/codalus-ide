@@ -8,20 +8,23 @@ using DaedalusStudio.Workbench.FileSystem;
 namespace DaedalusStudio.Workbench.Remote;
 
 /// <summary>
-/// Where a remote window works (M21): <c>ssh:user@host:port</c> (or <c>ssh://…</c>), <c>wsl:Ubuntu</c> (Windows), or
-/// <c>local</c> — a server on this machine, the stand-in that tests and the smoke test use.
+/// Where a remote window works (M21): <c>ssh:user@host:port</c> (or <c>ssh://…</c>), <c>wsl:Ubuntu</c> (Windows),
+/// <c>container:name</c> (a running container, through <c>docker exec</c> or Podman's; M21b), or <c>local</c> — a server
+/// on this machine, the stand-in that tests and the smoke test use.
 /// </summary>
 public sealed record RemoteTargetSpec(string Kind, string Name, RemoteTarget? Target)
 {
     public const string Ssh = "ssh";
     public const string Wsl = "wsl";
     public const string Local = "local";
+    public const string Container = "container";
 
     /// <summary>For the status bar and titles: <c>SSH: pi@host</c>, <c>WSL: Ubuntu</c>, <c>Local server</c>.</summary>
     public string Display => Kind switch
     {
         Ssh => "SSH: " + Name,
         Wsl => "WSL: " + (Name.Length == 0 ? "default" : Name),
+        Container => "Container: " + Name,
         _ => "Local server",
     };
 
@@ -30,10 +33,21 @@ public sealed record RemoteTargetSpec(string Kind, string Name, RemoteTarget? Ta
 
     public override string ToString() => Kind == Local ? Local : Kind + ":" + Name;
 
-    /// <summary>Reads <c>ssh:host</c>, <c>ssh://user@host:port</c>, <c>wsl:Distribution</c>, <c>wsl</c> or <c>local</c>; null when it isn't one.</summary>
-    public static RemoteTargetSpec? Parse(string? text, string sshProgram = "ssh")
+    /// <summary>
+    /// Reads <c>ssh:host</c>, <c>ssh://user@host:port</c>, <c>wsl:Distribution</c>, <c>wsl</c>, <c>container:name</c>
+    /// (run through <paramref name="containerTool"/>, the container CLI's command line) or <c>local</c>; null when it isn't one.
+    /// </summary>
+    public static RemoteTargetSpec? Parse(string? text, string sshProgram = "ssh", IReadOnlyList<string>? containerTool = null)
     {
         var value = text?.Trim() ?? string.Empty;
+        if (value.StartsWith("container:", StringComparison.OrdinalIgnoreCase))
+        {
+            var name = value["container:".Length..].Trim();
+            return name.Length == 0 || name.Any(char.IsWhiteSpace) || name.StartsWith('-')
+                ? null
+                : new RemoteTargetSpec(Container, name, new ContainerTarget(name, containerTool is { Count: > 0 } ? containerTool : ["docker"]));
+        }
+
         if (value.Equals(Local, StringComparison.OrdinalIgnoreCase))
         {
             return new RemoteTargetSpec(Local, string.Empty, null);

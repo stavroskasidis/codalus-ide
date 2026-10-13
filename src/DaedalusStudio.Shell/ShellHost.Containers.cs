@@ -36,7 +36,8 @@ public sealed partial class ShellHost
             container => AttachToRemoteAsync(new ContainerTarget(container.Name, ContainerEngine.Tool), processName: null),
             container => OpenContainerTerminalAsync(container.Name),
             ShellIntegration.OpenUrl,
-            OpenContainerFileAsync);
+            OpenContainerFileAsync,
+            container => OpenRemoteWindowAsync("container:" + container.Name));
         Debugger.Ended += (_, _) =>
         {
             if (Interlocked.Exchange(ref _debugContainer, null) is { } container)

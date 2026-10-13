@@ -15,6 +15,7 @@
       <Button x:Name="Browse" Content="{l:T containers.openInBrowser}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.openTheSelectedContainerSFirst}" />
       <Button x:Name="Terminal" Content="{l:T containers.openTerminal}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.openATerminalInTheSelected}" />
       <Button x:Name="Attach" Content="{l:T containers.attachDebugger}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.attachTheDebuggerToAProcess}" />
+      <Button x:Name="RemoteWindow" Content="{l:T containers.openInRemoteWindow}" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T containers.openTheSelectedContainerInA}" />
       <TextBlock Classes="muted" VerticalAlignment="Center" Text="{l:T containers.working}" IsVisible="{Binding IsBusy}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />

@@ -434,6 +434,112 @@ public sealed class RemoteServerTests
         }
     }
 
+    /// <summary>
+    /// Podman with the local Ubuntu image (never pulled): here on Linux, in the WSL distribution on Windows; and the
+    /// .NET folder on the machine that runs the containers, to mount into one. Null when there is none.
+    /// </summary>
+    private static (IReadOnlyList<string> Tool, string DotnetRoot)? ContainerStandIn()
+    {
+        const string Image = "docker.io/library/ubuntu:24.04";
+        IReadOnlyList<string> tool;
+        IReadOnlyList<string> shell;
+        if (OperatingSystem.IsWindows())
+        {
+            var distribution = Environment.GetEnvironmentVariable("DAEDALUS_TEST_WSL") is { Length: > 0 } name ? name : "Ubuntu";
+            if (!RemoteTargets.WslDistributionsAsync(CancellationToken.None).GetAwaiter().GetResult().Contains(distribution, StringComparer.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            tool = ["wsl.exe", "-d", distribution, "--exec", "podman"];
+            shell = ["wsl.exe", "-d", distribution, "--exec", "sh", "-lc"];
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            tool = ["podman"];
+            shell = ["sh", "-lc"];
+        }
+        else
+        {
+            return null;
+        }
+
+        try
+        {
+            if (Run(tool, ["image", "exists", Image]).Code != 0)
+            {
+                return null;
+            }
+
+            var root = Run(shell, ["if [ -x \"$HOME/.dotnet/dotnet\" ]; then echo \"$HOME/.dotnet\"; else dirname \"$(readlink -f \"$(command -v dotnet)\")\"; fi"]).Output.Trim();
+            return root.StartsWith('/') ? (tool, root) : null;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
+
+        static (int Code, string Output) Run(IReadOnlyList<string> command, IReadOnlyList<string> arguments)
+        {
+            var start = new ProcessStartInfo(command[0], [.. command.Skip(1), .. arguments]) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            using var process = Process.Start(start)!;
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(60_000);
+            return (process.ExitCode, output);
+        }
+    }
+
+    [Fact]
+    public async Task A_running_container_is_a_remote_window_target_the_server_is_copied_into_and_runs_in()
+    {
+        if (ContainerStandIn() is not { } containers)
+        {
+            Assert.Skip("No container stand-in: Podman with docker.io/library/ubuntu:24.04 (here on Linux, in WSL on Windows).");
+            return;
+        }
+
+        var folder = TempFolder();
+        var name = "daedalus-remote-test-" + Guid.NewGuid().ToString("N")[..8];
+        var tool = containers.Tool;
+
+        // A bare Ubuntu with the .NET of the machine that runs it, read-only, and no ICU: the server and hosts run on it.
+        var run = new ProcessStartInfo(tool[0], [.. tool.Skip(1), "run", "-d", "--rm", "--name", name,
+            "-v", containers.DotnetRoot + ":/opt/dotnet:ro",
+            "-e", "PATH=/opt/dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "-e", "DOTNET_ROOT=/opt/dotnet", "-e", "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
+            "docker.io/library/ubuntu:24.04", "sleep", "900"])
+        { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        using (var process = Process.Start(run)!)
+        {
+            var error = await process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+            Assert.True(process.ExitCode == 0, "podman run: " + error);
+        }
+
+        Environment.SetEnvironmentVariable(RemoteServerBundle.ServerVariable, ServerDll);
+        try
+        {
+            var spec = RemoteTargetSpec.Parse("container:" + name, containerTool: tool)!;
+            Assert.Equal(("container", "Container: " + name), (spec.Kind, spec.Display));
+            var options = new RemoteSessionOptions(spec, ServerVersion, Path.Combine(folder, "cache")) { ServerHome = "/tmp/.daedalus-server" };
+            await using var session = await RemoteSession.ConnectAsync(options, "/tmp", null, Timeout(300));
+            Assert.Equal("linux", session.Connection.Server.Os);
+            Assert.StartsWith("/tmp/.daedalus-server/", session.Connection.Server.ServerFolder.Replace('\\', '/'), StringComparison.Ordinal);
+            Assert.False(session.Map.IsIdentity); // the container's paths are under a local root of their own
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(RemoteServerBundle.ServerVariable, null);
+            var remove = new ProcessStartInfo(tool[0], [.. tool.Skip(1), "rm", "-f", name]) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            using (var process = Process.Start(remove)!)
+            {
+                await process.WaitForExitAsync(CancellationToken.None);
+            }
+
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task A_damaged_bundle_is_refused_by_its_checksum()
     {

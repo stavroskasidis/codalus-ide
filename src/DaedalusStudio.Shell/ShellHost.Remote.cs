@@ -318,7 +318,7 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task OpenRemoteWindowAsync(string? argument = null)
     {
-        var spec = RemoteTargetSpec.Parse(argument);
+        var spec = RemoteTargetSpec.Parse(argument, containerTool: ContainerEngine.Tool);
         if (spec is null)
         {
             List<QuickPickItem> items = [new("SSH…") { Tag = "ssh", Detail = "A Linux or macOS machine, through your ssh: its config, keys and agent" }];
@@ -328,6 +328,20 @@ public sealed partial class ShellHost
                 {
                     items.Add(new QuickPickItem("WSL: " + distribution) { Tag = "wsl:" + distribution, Detail = "A distribution of the Windows Subsystem for Linux" });
                 }
+            }
+
+            // Running containers (M21b), through the engine of the settings; none listed when there's no engine.
+            try
+            {
+                using var listing = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                foreach (var container in (await ContainerEngine.ContainersAsync(listing.Token).ConfigureAwait(true)).Where(c => c.IsRunning))
+                {
+                    items.Add(new QuickPickItem("Container: " + container.Name) { Tag = "container:" + container.Name, Detail = container.Image });
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or OperationCanceledException or IOException)
+            {
+                Workbench.Log.AppendLine($"[remote] No containers listed: {ex.Message}");
             }
 
             if (await Palette.ShowAsync(items, "Open a remote window on…").ConfigureAwait(true) is not { Tag: string picked })
@@ -347,7 +361,7 @@ public sealed partial class ShellHost
                 picked = "ssh:" + host;
             }
 
-            spec = RemoteTargetSpec.Parse(picked);
+            spec = RemoteTargetSpec.Parse(picked, containerTool: ContainerEngine.Tool);
             if (spec is null)
             {
                 return;
