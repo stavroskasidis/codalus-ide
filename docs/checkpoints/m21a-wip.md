@@ -33,13 +33,24 @@ M21a (remote development over SSH and WSL) was paused for UX and performance wor
   - The failures outside M21 were M19a's `XamlLanguageTests` and `XamlPreviewerTests` (already failing on Windows on `develop`), `BuildDepthIntegrationTests`' file lock, and `BuildHostIntegrationTests.A_crashed_build_host…`, which timed out opening under load. It goes through the changed `SupervisedProcess`, so **re-run it alone first**.
   - Shell.Tests didn't run in the full suite.
 
+## Status (2026-10-13, paused again for the 0.1.0 release)
+
+Fixed since the first validation (Mac and Linux findings): launch profiles and debug stops read through the server's
+file system; a terminal that exits before the server listens; the server publish as separate `dotnet publish` runs
+(NETSDK1047); language hosts move to the server on connect (`LanguageService.ReplaceHostsAsync`); test homes under
+`/tmp`, HISTFILE, the macOS `/private` temp folder. Linux: the remote tests pass and the `remote.session` smoke step
+passes (`DAEDALUS_SMOKE_ONLY` runs it with its prerequisites).
+
 ## Next
 
-1. Re-run, alone: `BuildHostIntegrationTests`, the Debugging tests, all of Shell.Tests, and the edited port test. Then run the full suite.
-2. Run the Native AOT publish. Check that the `DaedalusRemoteServerForPublish` target builds `remote/server` and the trimmed `remote/linux-*` servers in CI. Then run `eng/smoke-test.sh` (new step `remote.session`).
-3. Do the manual WSL session with the published app (`daedalus --remote wsl:Ubuntu <path> --screenshot …`; a remote window's screenshot waits for its C# service). Record it in m21a.md.
-4. Validate on Linux with `eng/wsl-test.sh --smoke` (`DAEDALUS_WSL_DIR=/home/akira/daedalus-m21`). On Linux the fake ssh covers the installer, and the local stand-in maps paths under `/daedalus-remote/local`. Push the Mac snapshot with `eng/push-snapshot.sh validate-m21`.
-5. Merge `origin/develop`. ADR numbers 0050 and 0051 may need renumbering if M19 or others took them. Fill in m21a.md's results, update the roadmap row, land, and read CI.
+1. **Windows: `CompoundDebugTests.F5_debugs_the_server_and_the_page_in_one_session` hangs on this branch** (passes on
+   `develop` in 36 s). The Debug Console shows the program line and "Debugging in Chrome …", then nothing: no
+   netcoredbg (no `DAEDALUS_NETCOREDBG_LOG` file), no program, no node child. So the session stops between
+   `PrepareBrowserAsync` and `LaunchCompoundAsync`'s adapter start. The branch's browser and debug-service code is
+   identical to `develop`'s; the difference is `DebugAdapter.StartAsync` through `LocalProcessLauncher`. Linux passes the
+   same steps on this branch.
+2. Then: the full Windows suites, the Mac (`validate-m21` snapshot with all of the above), the full Linux run with
+   `--smoke`, the manual WSL session with the published app, m21a.md's results, merge `origin/develop`, land, read CI.
 
 ## Decisions taken (in the ADRs)
 
