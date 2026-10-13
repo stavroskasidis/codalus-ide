@@ -421,7 +421,9 @@ public sealed class RemoteServerTests
             var (program, arguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder));
             await using var connection = await RemoteConnection.StartAsync(new RemoteTransport(program, arguments, "stand-in"), ServerVersion, Timeout(120));
             Assert.Equal(target is WslTarget || OperatingSystem.IsLinux() ? "linux" : "macos", connection.Server.Os); // the fake ssh runs it here
-            Assert.Equal(installed.Folder + "/server/", connection.Server.ServerFolder.Replace('\\', '/'));
+            // The server names its folder canonically: macOS's /tmp is a link to /private/tmp.
+            static string Canonical(string path) => OperatingSystem.IsMacOS() && path.StartsWith("/tmp/", StringComparison.Ordinal) ? "/private" + path : path;
+            Assert.Equal(Canonical(installed.Folder + "/server/"), Canonical(connection.Server.ServerFolder.Replace('\\', '/')));
         }
         finally
         {
