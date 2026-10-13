@@ -12,9 +12,9 @@
       <Button Content="Terminate All" Click="OnTerminate" IsEnabled="{Binding !IsEmpty}" AutomationProperties.Name="Terminate All" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="No process is being debugged." IsVisible="{Binding IsEmpty}" />
-    <!-- The columns keep their widths in a narrow pane and scroll sideways together (M34d). -->
+    <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->
     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-      <DockPanel MinWidth="560">
+      <DockPanel MinWidth="560" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
         <Grid DockPanel.Dock="Top" ColumnDefinitions="160,70,80,80,*" Margin="8,2">
           <TextBlock Text="Name" Classes="muted" />
           <TextBlock Grid.Column="1" Text="ID" Classes="muted" />

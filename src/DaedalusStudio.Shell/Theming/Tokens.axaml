@@ -319,6 +319,20 @@
       <SolidColorBrush x:Key="ToolTipBackground" Color="#000000" />
       <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#6FC3DF" />
       <SolidColorBrush x:Key="ToolTipForeground" Color="#FFFFFF" />
+      <!-- Buttons and combo boxes: black with a white outline, not Fluent's dark gray (buttons) or accent fill (combo boxes). -->
+      <SolidColorBrush x:Key="ButtonBackground" Color="#000000" />
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#0E4A7B" />
+      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#F38518" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#0E4A7B" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#F38518" />
+      <SolidColorBrush x:Key="ComboBoxForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxForegroundFocused" Color="#FFFFFF" />
       <!-- Fluent focus rectangles. -->
       <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#F38518" />
       <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#000000" />

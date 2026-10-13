@@ -89,6 +89,7 @@ internal sealed partial class SmokeTest
                 continue;
             }
 
+            await Task.Delay(1500).ConfigureAwait(true); // documents load their data after they show
             await GalleryThemesAsync(async theme =>
             {
                 await SettleAsync().ConfigureAwait(true);
@@ -125,6 +126,10 @@ internal sealed partial class SmokeTest
             }
         }
 
+        // A failed test's details: grouped by outcome, the Failed group lists the tests.
+        var grouping = shell.TestExplorer.GroupingIndex;
+        shell.TestExplorer.GroupingIndex = 2;
+        shell.TestExplorer.Refresh();
         if (shell.TestExplorer.Rows.FirstOrDefault(r => r.Label == "Fails") is { } failed)
         {
             shell.TestExplorer.Selected = failed;
@@ -134,6 +139,8 @@ internal sealed partial class SmokeTest
                 return Task.CompletedTask;
             }, settle: true).ConfigureAwait(true);
         }
+
+        shell.TestExplorer.GroupingIndex = grouping;
 
         WriteGalleryIndex();
         Check(_gallery.Count > 20, $"the gallery has every surface ({_gallery.Count} surfaces)");

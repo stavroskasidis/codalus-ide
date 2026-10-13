@@ -17,9 +17,9 @@
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
     </StackPanel>
     <!-- The results' fixed columns need room: narrower, they spilled over the History header (seen on the Mac). -->
-    <!-- The columns keep their widths in a narrow pane and scroll sideways together (M34d). -->
+    <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->
     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-      <DockPanel MinWidth="900">
+      <DockPanel MinWidth="900" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />

@@ -28,6 +28,8 @@
   <Panel>
     <StackPanel Margin="12" Spacing="8" IsVisible="{Binding HasNoRepository}">
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="The open solution is not in a git repository (or git is not installed)." />
+      <!-- The empty state's next step (M34d). -->
+      <Button Content="Create Git Repository" Tag="git.init" Click="OnCommand" HorizontalAlignment="Left" AutomationProperties.Name="Create Git Repository" />
     </StackPanel>
     <DockPanel IsVisible="{Binding HasRepository}">
       <StackPanel DockPanel.Dock="Top" Margin="6,4" Spacing="4">

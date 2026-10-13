@@ -36,9 +36,9 @@
       <TextBox Text="{Binding Filter}" PlaceholderText="Search Error List" MinWidth="120" AutomationProperties.Name="Search Error List" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="No problems." IsVisible="{Binding IsEmpty}" />
-    <!-- The columns keep their widths in a narrow pane and scroll sideways together (M34d). -->
+    <!-- The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together (M34d). -->
     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-      <DockPanel MinWidth="620">
+      <DockPanel MinWidth="620" Width="{Binding $parent[ScrollViewer].Bounds.Width}">
         <Grid DockPanel.Dock="Top" ColumnDefinitions="28,90,*,140,200,130" Margin="8,2" >
           <TextBlock Grid.Column="1" Classes="muted" Text="Code" />
           <TextBlock Grid.Column="2" Classes="muted" Text="Description" />

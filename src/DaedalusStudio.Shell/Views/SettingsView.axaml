@@ -29,7 +29,7 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
-        <TextBlock Classes="muted" FontSize="12" Text="{Binding SelectedDescription}" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding SelectedDescription}" />
       </StackPanel>
     </DataTemplate>
     <DataTemplate DataType="vm:TextSettingViewModel">
@@ -62,7 +62,7 @@
           <ToggleButton Content="User" IsChecked="{Binding IsUserScope}" AutomationProperties.Name="User settings" />
           <ToggleButton Content="Workspace" IsChecked="{Binding IsWorkspaceScope}" AutomationProperties.Name="Workspace settings" />
         </StackPanel>
-        <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding FileLabel}" />
+        <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding FileLabel}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FileLabel}" />
         <TextBlock Foreground="{DynamicResource Shell.Warning}" TextWrapping="Wrap" Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" />
       </StackPanel>
     </Border>

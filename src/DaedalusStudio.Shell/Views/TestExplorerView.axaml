@@ -42,7 +42,7 @@
       <ComboBox Classes="toolbar" ItemsSource="{Binding PlaylistNames}" SelectedIndex="{Binding PlaylistIndex}" Width="110" ToolTip.Tip="Playlist" AutomationProperties.Name="Playlist" />
     </controls:ToolbarPanel>
     <!-- The search box has its own row, the pane's width. -->
-    <TextBox x:Name="Filter" DockPanel.Dock="Top" Margin="4,0,4,4" Text="{Binding FilterText}" PlaceholderText="Search (outcome:failed trait:Category=Math project:Name)"
+    <TextBox x:Name="Filter" DockPanel.Dock="Top" Margin="4,0,4,4" Text="{Binding FilterText}" PlaceholderText="Search Test Explorer"
              ToolTip.Tip="Search: outcome:failed trait:Category=Math project:Name" AutomationProperties.Name="Search Test Explorer" />
     <TextBlock DockPanel.Dock="Top" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="8,0,8,3" TextWrapping="Wrap" Text="{Binding Summary}" />
 

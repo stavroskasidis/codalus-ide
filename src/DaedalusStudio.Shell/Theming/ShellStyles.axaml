@@ -153,6 +153,15 @@
     <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
   </Style>
+  <!-- A disabled toolbar button is a dimmed icon, not a gray box. -->
+  <Style Selector="Button.toolbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="ToggleButton.toolbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
   <Style Selector="ToggleButton.toolbar">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Padding" Value="{DynamicResource Shell.Padding.ToolbarButton}" />
