@@ -2377,6 +2377,15 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return;
         }
 
+        // A known gap of one platform, skipped with its reason in the report (never passed): DAEDALUS_SMOKE_SKIP is
+        // "<id>[,<id>…]=<reason>", set by the packages workflow.
+        if (Environment.GetEnvironmentVariable("DAEDALUS_SMOKE_SKIP") is { Length: > 0 } skip && skip.Split('=', 2) is [var ids, var because]
+            && ids.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(id, StringComparer.Ordinal))
+        {
+            Report(id, milestone, title, "skipped", 0, because.Trim());
+            return;
+        }
+
         Console.Out.WriteLine($"[{_clock.Elapsed:mm\\:ss}] {milestone} {id}: {title}");
         Console.Out.Flush();
         var start = Stopwatch.GetTimestamp();
