@@ -91,10 +91,23 @@ All tokens are in `src/DaedalusStudio.Shell/Theming/Tokens.axaml`. Colors differ
 
 ## Icons
 
+**The rule (the maintainer's, 2026-10-13): every icon is colored, in the Visual Studio palette.** The palette is the
+`Shell.Icon.Blue`, `Green`, `Red`, `Orange`, `Purple`, `Yellow` and `Folder` tokens in `Theming/Tokens.axaml`: Visual
+Studio's image colors per theme (light `#00539C`, `#388A34`, `#A1260D`, `#B26B12`, `#652D90`, `#8A6400`, `#8A6320`;
+dark `#75BEFF`, `#89D185`, `#F48771`, `#E8AB53`, `#B180D7`, `#FFCC00`, `#DCB67A`), each at least 3:1 against menus,
+toolbars and panels. Command families are palette colors (run and tests green, stop red, save and navigation blue,
+open folder tan, build purple, Git orange). Every icon kind has its color in `CommandIcons` (`s_kindColors`: blue for
+windows, navigation and general actions, green for new, add and run, red for close, delete and errors, yellow for
+warnings, locks and databases, orange for Git and history, purple for build and extensions, tan for folders); an
+`Icon` that nothing else colors takes its kind's color, so a new kind must be added there (`IconColorTests` fails
+otherwise). File, folder and project icons take the palette color nearest each of their fills by hue, folders tan;
+gray fills (outlines, pages) stay gray, as Visual Studio's do. Only chrome glyphs (chevrons, carets) stay in the text
+color, and High Contrast draws every icon in the foreground.
+
 - **Commands and tool windows:** Fluent UI System Icons (Microsoft, MIT), 16 px regular. Add the file name to `src/DaedalusStudio.Shell/Icons/fluent-icons.txt`, run `eng/get-fluent-icons.sh`, commit the SVG, and map our name to it in `IconSet` (`Controls/Icon.cs`). A few small glyphs (chevrons, zoom, fit) are 16×16 stroke drawings in the same file.
-- **File types, folders and projects:** Material Icon Theme (MIT), `Icons/material-icons.txt` and `eng/get-material-icons.sh`, mapped in `Controls/FileIcons.cs`. They keep their colors, except in High Contrast.
+- **File types, folders and projects:** Material Icon Theme (MIT), `Icons/material-icons.txt` and `eng/get-material-icons.sh`, mapped in `Controls/FileIcons.cs`. Their colors become the palette's nearest (above), except in High Contrast.
 - **Compiled at build time:** `eng/icons/CompileIcons.cs` turns the SVGs into drawing operations; nothing parses SVG at runtime, and the shell stays Native AOT clean. Only `<path d>` is supported; anything else fails the build.
-- **Color by family:** a command's icon takes its family's token through an `accent-*` class (`Controls/CommandIcons.cs`): run green, stop red, save and navigation blue, open amber, build purple, Git orange, tests teal. Other icons use the foreground. States use `info`, `warning`, `error`, and the test outcome classes (`passed`, `failed`, `skipped`, `running`, `none`).
+- **Color by family:** a command's icon takes its family's token through an `accent-*` class (`Controls/CommandIcons.cs`): run green, stop red, save and navigation blue, open folder tan, build purple, Git orange, tests green. Other icons take their kind's palette color. States use `info`, `warning`, `error`, and the test outcome classes (`passed`, `failed`, `skipped`, `running`, `none`).
 - **High Contrast:** every icon is drawn in the foreground; shape carries the meaning.
 - **One size:** 16 px in toolbars, menus, lists and tabs (14 px in document tabs); 12 px only for chevrons and inline badges. Disabled commands dim their icons (40 %).
 - **Plugins** refer to icons by name (ADR 0003): any name in `IconSet` (`Controls/Icon.cs`), or `kind@Family` to color one with a family's token (`docs/plugins.md`).

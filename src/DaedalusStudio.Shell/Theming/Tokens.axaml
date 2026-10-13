@@ -37,15 +37,22 @@
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E5EBF1" />
-      <!-- Icon accents by command family (M34a, D24); at least 3:1 against menus, toolbars and panels. -->
-      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#1E7F34" />
-      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#C62828" />
-      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#1E66C5" />
-      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#9A6700" />
-      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#7B4FD0" />
-      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#C4380D" />
-      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#0B7A75" />
-      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#1E66C5" />
+      <!-- Icons in the Visual Studio palette (the maintainer's rule: every icon is colored), at least 3:1 against menus, toolbars and panels; command families are palette colors. -->
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#8A6400" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#5F6670" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F3F3F3" />
       <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#E0E0E0" />
@@ -131,13 +138,21 @@
       <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3E3E42" />
+      <!-- Icons in the Visual Studio palette (every icon is colored); command families are palette colors. -->
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFCC00" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#DCB67A" />
       <SolidColorBrush x:Key="Shell.Icon.Run" Color="#89D185" />
-      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Icon.Save" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Icon.Open" Color="#DCB67A" />
-      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#C5A0F0" />
-      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#F37650" />
-      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#4EC9B0" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#969696" />
       <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#2A2A2A" />
@@ -341,6 +356,13 @@
       <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#0E4A7B" />
       <!-- High Contrast keeps icons monochrome: shape carries the meaning, not color. -->
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Run" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Save" Color="#FFFFFF" />

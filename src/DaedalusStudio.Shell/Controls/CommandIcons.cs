@@ -24,6 +24,164 @@ public static class CommandIcons
     public const string Test = "test";
     public const string Navigate = "navigate";
 
+    // The Visual Studio palette's colors (Shell.Icon.Blue…): every icon is colored (the maintainer's rule), so each kind
+    // has one; command families above are colors of this palette too.
+    public const string Blue = "blue";
+    public const string Green = "green";
+    public const string Red = "red";
+    public const string Orange = "orange";
+    public const string Purple = "purple";
+    public const string Yellow = "yellow";
+    public const string Folder = "folder";
+
+    /// <summary>Each icon's color when its command has no family of its own: a classic IDE's (blue windows and navigation,
+    /// green new and add, red close and delete, yellow warnings, tan folders…).</summary>
+    private static readonly Dictionary<string, string> s_kindColors = new(StringComparer.Ordinal)
+    {
+        ["account"] = Blue,
+        ["broom"] = Blue,
+        ["save"] = Blue,
+        ["save-all"] = Blue,
+        ["collapse-all"] = Blue,
+        ["zoom-in"] = Blue,
+        ["zoom-out"] = Blue,
+        ["link-external"] = Blue,
+        ["fit"] = Blue,
+        ["edit"] = Blue,
+        ["cloud"] = Blue,
+        ["plan"] = Blue,
+        ["test-none"] = Blue,
+        ["arrow-down"] = Blue,
+        ["arrow-up"] = Blue,
+        ["attach"] = Blue,
+        ["braces"] = Blue,
+        ["call-hierarchy"] = Blue,
+        ["caret"] = Blue,
+        ["compare"] = Blue,
+        ["container"] = Blue,
+        ["copy"] = Blue,
+        ["cut"] = Blue,
+        ["definition"] = Blue,
+        ["document-text"] = Blue,
+        ["duplicate"] = Blue,
+        ["file"] = Blue,
+        ["file-code"] = Blue,
+        ["file-data"] = Blue,
+        ["files"] = Blue,
+        ["find-in-files"] = Blue,
+        ["format"] = Blue,
+        ["gauge"] = Blue,
+        ["gear"] = Blue,
+        ["globe"] = Blue,
+        ["go-to"] = Blue,
+        ["go-to-line"] = Blue,
+        ["home"] = Blue,
+        ["info"] = Blue,
+        ["keyboard"] = Blue,
+        ["layers"] = Blue,
+        ["layout"] = Blue,
+        ["link"] = Blue,
+        ["list"] = Blue,
+        ["metrics"] = Blue,
+        ["namespace"] = Blue,
+        ["output"] = Blue,
+        ["package"] = Blue,
+        ["paste"] = Blue,
+        ["pin"] = Blue,
+        ["properties"] = Blue,
+        ["redo"] = Blue,
+        ["references"] = Blue,
+        ["refresh"] = Blue,
+        ["rename"] = Blue,
+        ["replace"] = Blue,
+        ["search"] = Blue,
+        ["select-expand"] = Blue,
+        ["shield"] = Blue,
+        ["snippet"] = Blue,
+        ["split-down"] = Blue,
+        ["split-right"] = Blue,
+        ["tab"] = Blue,
+        ["table"] = Blue,
+        ["task-list"] = Blue,
+        ["templates"] = Blue,
+        ["terminal"] = Blue,
+        ["timer"] = Blue,
+        ["tools"] = Blue,
+        ["type-hierarchy"] = Blue,
+        ["undo"] = Blue,
+        ["update"] = Blue,
+        ["watch"] = Blue,
+        ["comment"] = Blue,
+        ["uncomment"] = Blue,
+        ["fold"] = Blue,
+        ["fold-all"] = Blue,
+        ["unfold-all"] = Blue,
+        ["download"] = Blue,
+        ["upload"] = Blue,
+        ["sync"] = Blue,
+        ["arrow-left"] = Blue,
+        ["arrow-right"] = Blue,
+        ["bookmark"] = Blue,
+        ["bookmarks"] = Blue,
+        ["step-into"] = Blue,
+        ["step-out"] = Blue,
+        ["step-over"] = Blue,
+        ["restart"] = Blue,
+        ["pause"] = Blue,
+        ["check"] = Green,
+        ["run-all"] = Green,
+        ["test-passed"] = Green,
+        ["check-circle"] = Green,
+        ["new"] = Green,
+        ["new-solution"] = Green,
+        ["file-add"] = Green,
+        ["link-add"] = Green,
+        ["play"] = Green,
+        ["play-outline"] = Green,
+        ["beaker"] = Green,
+        ["coverage"] = Green,
+        ["project"] = Green,
+        ["close"] = Red,
+        ["clear-all"] = Red,
+        ["discard"] = Red,
+        ["test-failed"] = Red,
+        ["close-all"] = Red,
+        ["cancel"] = Red,
+        ["error"] = Red,
+        ["trash"] = Red,
+        ["stop"] = Red,
+        ["breakpoint"] = Red,
+        ["breakpoint-outline"] = Red,
+        ["circle"] = Red,
+        ["flame"] = Orange,
+        ["tag"] = Orange,
+        ["history"] = Orange,
+        ["branch"] = Orange,
+        ["fork"] = Orange,
+        ["merge"] = Orange,
+        ["pull-request"] = Orange,
+        ["stash"] = Orange,
+        ["worktree"] = Orange,
+        ["publish"] = Orange,
+        ["issue"] = Orange,
+        ["debug"] = Orange,
+        ["build"] = Purple,
+        ["color"] = Purple,
+        ["extensions"] = Purple,
+        ["sparkle"] = Purple,
+        ["method"] = Purple,
+        ["solution"] = Purple,
+        ["warning"] = Yellow,
+        ["lightbulb"] = Yellow,
+        ["key"] = Yellow,
+        ["lock"] = Yellow,
+        ["star"] = Yellow,
+        ["bell"] = Yellow,
+        ["database"] = Yellow,
+        ["folder"] = Folder,
+        ["folder-open"] = Folder,
+    };
+
     private static readonly Dictionary<string, CommandIcon> s_icons = new(StringComparer.Ordinal)
     {
         // File.
@@ -237,17 +395,30 @@ public static class CommandIcons
     {
         if (s_icons.TryGetValue(command, out var icon))
         {
-            return icon;
+            return icon.Accent is null ? icon with { Accent = ColorOf(icon.Kind) } : icon;
         }
 
         if (toolWindowIcon is not null && command.StartsWith(BuiltIns.ViewCommandPrefix, StringComparison.Ordinal)
             && toolWindowIcon(command[BuiltIns.ViewCommandPrefix.Length..]) is { } kind && (IconSet.GetFilled(kind) is not null || IconSet.Get(kind) is not null))
         {
-            return new CommandIcon(kind);
+            return new CommandIcon(kind, ColorOf(kind));
         }
 
         return null;
     }
+
+    /// <summary>The palette color of an icon <paramref name="kind"/> (blue for a kind with none: plugins' icons are colored too).</summary>
+    public static string ColorOf(string kind) => s_kindColors.TryGetValue(kind, out var color) ? color : Blue;
+
+    /// <summary>
+    /// The color an <see cref="Icon"/> takes when nothing else colors it: its kind's, except the chrome glyphs (chevrons,
+    /// carets) that stay in the text color, as a classic IDE's do.
+    /// </summary>
+    public static string? DefaultColorOf(string kind) =>
+        kind.StartsWith("chevron", StringComparison.Ordinal) || kind is "caret" or "more" or "ellipsis" ? null : ColorOf(kind);
+
+    /// <summary>Whether <paramref name="kind"/> has a color of its own (tests: every built-in kind must).</summary>
+    public static bool HasColor(string kind) => s_kindColors.ContainsKey(kind);
 
     /// <summary>Every mapped command (tests).</summary>
     public static IReadOnlyDictionary<string, CommandIcon> All => s_icons;

@@ -62,19 +62,33 @@ public sealed class Icon : Control
 
             kind = kind[..at];
         }
+        else if (kind is not null && !kind.StartsWith("mi:", StringComparison.Ordinal) && !IsSet(ForegroundProperty) && ActualThemeVariant != Theming.ThemeService.HighContrast
+                 && CommandIcons.DefaultColorOf(kind) is { } color
+                 && this.TryFindResource("Shell.Icon." + char.ToUpperInvariant(color[0]) + color[1..], ActualThemeVariant, out var token) && token is IBrush colored)
+        {
+            // Every icon is colored (the maintainer's rule): one nothing colors takes its kind's palette color.
+            brush = colored;
+        }
 
         var size = Math.Min(Bounds.Width, Bounds.Height);
         var offset = new Point((Bounds.Width - size) / 2, (Bounds.Height - size) / 2);
         if (IconSet.GetFilled(kind) is { } filled)
         {
-            // Multicolor icons (file types) keep their colors, except in High Contrast, where shape carries the meaning.
+            // Multicolor icons (file types) take the Visual Studio palette's nearest color in the current theme (folders its
+            // tan), except in High Contrast, where shape carries the meaning.
             var monochrome = ActualThemeVariant == Theming.ThemeService.HighContrast;
+            var folder = kind!.StartsWith("mi:folder", StringComparison.Ordinal);
             var scale = size / filled.DesignSize;
             using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(offset.X, offset.Y)))
             {
                 foreach (var layer in filled.Layers)
                 {
-                    context.DrawGeometry(layer.Color == 0 || monochrome ? brush : filled.Brush(layer.Color), null, layer.Geometry);
+                    var fill = layer.Color == 0 || monochrome
+                        ? brush
+                        : (folder ? "Folder" : PaletteColor(layer.Color)) is { } family && this.TryFindResource("Shell.Icon." + family, ActualThemeVariant, out var token) && token is IBrush palette
+                            ? palette
+                            : filled.Brush(layer.Color);
+                    context.DrawGeometry(fill, null, layer.Geometry);
                 }
             }
 
@@ -91,6 +105,38 @@ public sealed class Icon : Control
         {
             context.DrawGeometry(null, new Pen(brush, 1.25, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), geometry);
         }
+    }
+
+    private static readonly Dictionary<uint, string?> s_paletteColors = [];
+
+    /// <summary>
+    /// The palette color (<c>Shell.Icon.Blue</c>…) nearest a compiled icon's fill by hue, or null for a gray, which keeps
+    /// its own color (a classic IDE's icons have gray outlines and pages).
+    /// </summary>
+    public static string? PaletteColor(uint argb)
+    {
+        lock (s_paletteColors)
+        {
+            if (s_paletteColors.TryGetValue(argb, out var known))
+            {
+                return known;
+            }
+        }
+
+        var hsl = Color.FromUInt32(argb).ToHsl();
+        string? family = hsl.S < 0.18 || hsl.L > 0.93 || hsl.L < 0.08 ? null
+            : hsl.H is < 15 or >= 340 ? "Red"
+            : hsl.H < 42 ? (hsl.L < 0.45 ? "Folder" : "Orange")
+            : hsl.H < 70 ? "Yellow"
+            : hsl.H < 165 ? "Green"
+            : hsl.H < 255 ? "Blue"
+            : "Purple";
+        lock (s_paletteColors)
+        {
+            s_paletteColors[argb] = family;
+        }
+
+        return family;
     }
 }
 

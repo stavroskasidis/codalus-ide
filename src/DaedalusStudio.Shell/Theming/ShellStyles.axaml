@@ -316,6 +316,28 @@
   <Style Selector="controls|Icon.accent-navigate">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Navigate}" />
   </Style>
+  <!-- The palette's colors as accents, for icons whose family is a color. -->
+  <Style Selector="controls|Icon.accent-blue">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Blue}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-green">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Green}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-red">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Red}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-orange">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Orange}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-purple">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Purple}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-yellow">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Yellow}" />
+  </Style>
+  <Style Selector="controls|Icon.accent-folder">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Icon.Folder}" />
+  </Style>
   <!-- Disabled commands dim their icons, colored or not. -->
   <Style Selector="MenuItem:disabled controls|Icon">
     <Setter Property="Opacity" Value="0.4" />
