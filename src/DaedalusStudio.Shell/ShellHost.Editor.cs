@@ -42,8 +42,6 @@ public sealed partial class ShellHost : IEditorServices
 
     public EditorOptions EditorOptions { get; private set; } = null!;
 
-    public EditorTheme EditorTheme => Editor.EditorTheme.For(Theme.ActiveTheme);
-
     /// <summary>The active editor tab, if the active document is one.</summary>
     public CodeEditorDocument? ActiveEditor => Layout.ActiveDocument as CodeEditorDocument;
 
@@ -152,6 +150,7 @@ public sealed partial class ShellHost : IEditorServices
         Languages.Diagnostics.Changed += (_, _) => Ui.Post(ScheduleDiagnosticsStatus);
         Solutions.ProjectChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
         Solutions.CompilerInputsChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
+        InitializeColors(); // before ThemeChanged's subscribers: they read the customized theme
         Theme.Changed += (_, _) => ThemeChanged?.Invoke(this, EventArgs.Empty);
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();

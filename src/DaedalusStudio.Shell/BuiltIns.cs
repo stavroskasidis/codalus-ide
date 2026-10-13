@@ -102,6 +102,22 @@ internal static partial class BuiltIns
                 Scope = SettingScope.User,
                 Order = 3,
             },
+            SettingDescriptor.Create(Theming.ColorCustomizations.TokensKey, "{}", SettingType.Object, shell) with
+            {
+                Title = "Syntax Colors",
+                Category = "Appearance",
+                Description = "Colors over the theme's for kinds of code, as VS Code writes them: \"comments\", \"strings\", \"keywords\", \"numbers\", \"types\", \"functions\", \"variables\", or \"semanticTokenColors\" by token type; under \"[Dark]\" (a theme's name) for one theme only. Tools → Fonts and Colors edits them.",
+                Scope = SettingScope.User,
+                Order = 4,
+            },
+            SettingDescriptor.Create(Theming.ColorCustomizations.WorkbenchKey, "{}", SettingType.Object, shell) with
+            {
+                Title = "Editor and Window Colors",
+                Category = "Appearance",
+                Description = "Colors over the theme's for the editor (VS Code's ids, such as \"editor.selectionBackground\") and the window (resource keys such as \"Shell.Background\"); under \"[Dark]\" for one theme only. Tools → Fonts and Colors edits them.",
+                Scope = SettingScope.User,
+                Order = 5,
+            },
             SettingDescriptor.Create("workbench.notifications.autoHideSeconds", "8", SettingType.Integer, shell) with
             {
                 Title = "Auto-Hide Informational Toasts",
