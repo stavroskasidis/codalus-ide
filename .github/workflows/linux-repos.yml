@@ -2,7 +2,8 @@ name: Linux repositories
 
 # Rebuilds the apt and dnf repositories on GitHub Pages from the newest stable release and the newest nightly
 # (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret), checks that apt and dnf install from them with
-# their signatures verified (eng/test-linux-repos.sh), then deploys them (M31, D18). Called after each release.
+# their signatures verified (eng/test-linux-repos.sh), then deploys them (M31, D18). Called after each nightly, and
+# started on develop after each release: release.yml runs on master, and the github-pages environment deploys develop.
 on:
   workflow_call:
   workflow_dispatch:
