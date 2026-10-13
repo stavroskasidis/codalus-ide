@@ -282,6 +282,14 @@ public partial class PolishTests
         Assert.Equal("Group by", choices.Header);
         ((MenuItem)choices.Items[1]!).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
         Assert.Equal(1, combo.SelectedIndex);
+
+        // Hidden items aren't reached with Tab (the overflow menu has them); they are again once they show.
+        Assert.All(panel.Overflowed, c => Assert.False(Avalonia.Input.KeyboardNavigation.GetIsTabStop(c)));
+        var wasHidden = hiddenButton;
+        window.Width = 600;
+        ShellFixture.Pump();
+        Assert.Empty(panel.Overflowed);
+        Assert.True(Avalonia.Input.KeyboardNavigation.GetIsTabStop(wasHidden));
         window.Close();
     }
 
@@ -392,5 +400,69 @@ public partial class PolishTests
         f.Shell.Run("workbench.closeUnpinnedDocuments");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.Count() == 1);
         Assert.Equal(third, f.Shell.Layout.Documents.Single());
+    }
+
+    [Fact]
+    public void Document_tabs_that_dont_fit_leave_from_the_right_but_pinned_and_selected_ones_stay()
+    {
+        Assert.All(DocumentTabPanel.Shown([(100, false), (100, false)], 300), Assert.True);
+        // 5 × 100 in 300: the pinned first and the selected fourth stay, the others leave from the right until it fits.
+        Assert.Equal([true, true, false, true, false], DocumentTabPanel.Shown([(100, true), (100, false), (100, false), (100, true), (100, false)], 300));
+        // Kept tabs stay even when they alone don't fit.
+        Assert.Equal([true, true, false], DocumentTabPanel.Shown([(200, true), (200, true), (100, false)], 300));
+    }
+
+    [AvaloniaFact]
+    public async Task Pinned_and_selected_document_tabs_stay_in_view_when_tabs_dont_fit()
+    {
+        // The Mac's review: with many documents open, the strip scrolled the pinned tab out of view.
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "many-documents");
+        Directory.CreateDirectory(folder);
+        var files = Enumerable.Range(1, 16).Select(i => Path.Combine(folder, $"A-rather-long-document-name-{i:00}.txt")).ToList();
+        foreach (var file in files)
+        {
+            await File.WriteAllTextAsync(file, "text", TestContext.Current.CancellationToken);
+            await f.Shell.OpenFileAsync(file, preview: false);
+        }
+
+        f.Shell.Layout.SetPinned(f.Shell.Layout.Documents.Single(d => d.FilePath == files[0]), true);
+        await f.Shell.OpenFileAsync(files[^1], preview: false); // the last one selected
+        f.Window.Width = 1000;
+        ShellFixture.Pump();
+
+        f.Window.UpdateLayout(); // the panel narrows its scroll viewer when attached: one more pass
+        ShellFixture.Pump();
+        var strip = f.Window.GetVisualDescendants().OfType<Dock.Avalonia.Controls.DocumentTabStrip>().Single(s => s.IsEffectivelyVisible);
+        var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().FirstOrDefault();
+        Assert.NotNull(panel);
+        var tabs = panel.Children.OfType<Avalonia.Controls.Primitives.TabStripItem>().ToList();
+        var shown = tabs.Where(t => t.Bounds.X < panel.Bounds.Width).ToList(); // the others are past the clipped edge
+        var scrollers = string.Join(", ", strip.GetVisualDescendants().OfType<ScrollViewer>().Select(s => $"{s.Name}:{s.HorizontalScrollBarVisibility}:{s.Viewport.Width:0}/{s.Extent.Width:0}"));
+        Assert.True(shown.Count < tabs.Count, $"16 long names don't all fit in 1000 px: the panel is {panel.Bounds.Width:0} px, the strip {strip.Bounds.Width:0}; scroll viewers {scrollers}");
+        Assert.Contains(shown, t => DocumentTab.GetIsPinned(t));
+        Assert.Contains(shown, t => t.IsSelected);
+        Assert.All(shown, t => Assert.True(t.Bounds.Right <= panel.Bounds.Width + 1, $"a tab ends at {t.Bounds.Right:0} of {panel.Bounds.Width:0}"));
+        var scroll = strip.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+        Assert.True(scroll is null || scroll.Offset.X == 0, "the strip doesn't scroll the pinned tab away");
+
+        // The tab's context menu is ours: right-clicking a tab makes its document the active one, and the menu has the
+        // document commands (Dock's had Float and Close only).
+        var commands = f.Shell.Workbench.Menus.GetItems(Workbench.Menus.MenuLocations.DocumentTabContext).Select(i => i.Command).ToList();
+        Assert.Contains("workbench.pinEditor", commands);
+        Assert.Contains("workbench.closeUnpinnedDocuments", commands);
+        Assert.Contains("workbench.copyDocumentPath", commands);
+        var pinnedTab = shown.First(t => DocumentTab.GetIsPinned(t));
+        var request = new Avalonia.Input.ContextRequestedEventArgs();
+        pinnedTab.RaiseEvent(request);
+        ShellFixture.Pump();
+        Assert.True(request.Handled, "our handler took the request");
+        Assert.Equal(files[0], f.Shell.Layout.ActiveDocument?.FilePath);
+        if (Environment.GetEnvironmentVariable("DAEDALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
+        {
+            Directory.CreateDirectory(snapshots);
+            using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(f.Window);
+            frame!.Save(Path.Combine(snapshots, "document-tabs.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
     }
 }

@@ -835,6 +835,53 @@ public sealed partial class ShellHost : IEditorServices
         Layout.OpenDocument(documents[index], focus: true);
     }
 
+    /// <summary>
+    /// Window → Open Documents… (a classic IDE's list of active files, M34e): every open document,
+    /// pinned ones marked, including those whose tabs don't fit their group; the one picked becomes active.
+    /// </summary>
+    public async Task ShowOpenDocumentsAsync()
+    {
+        var items = Layout.Documents
+            .Select(d => new QuickPickItem(d.Title)
+            {
+                Detail = (d.IsPinned ? "pinned · " : d.IsPreview ? "preview · " : string.Empty) + d.FilePath,
+                Icon = d.HasTabIcon ? d.TabIcon : null,
+                Tag = d,
+            })
+            .ToList();
+        if (items.Count > 0 && await Palette.ShowAsync(items, "Open documents").ConfigureAwait(true) is { Tag: Docking.ShellDocument document })
+        {
+            Layout.OpenDocument(document, focus: true);
+        }
+    }
+
+    /// <summary>A document tab's Copy Full Path (M34e).</summary>
+    public async Task CopyActiveDocumentPathAsync()
+    {
+        if (Layout.ActiveDocument?.FilePath is { Length: > 0 } path && Window?.Clipboard is { } clipboard)
+        {
+            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, path).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>A document tab's Open Containing Folder (Reveal in Finder on macOS, M34e).</summary>
+    public void RevealActiveDocument()
+    {
+        if (Layout.ActiveDocument?.FilePath is not { Length: > 0 } path || !File.Exists(path))
+        {
+            return; // an unsaved document, or a remote window's (not on this machine)
+        }
+
+        try
+        {
+            DaedalusStudio.Platform.ShellIntegration.RevealInFileManager(path);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Workbench.Notifications.Error($"Could not open the file manager: {ex.Message}");
+        }
+    }
+
     /// <summary>Window → Split: a second editor of the same document inside the tab.</summary>
     public void ToggleEditorSplit() => ActiveEditor?.View?.ToggleSplit();
 

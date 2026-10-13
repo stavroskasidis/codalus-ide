@@ -150,6 +150,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterEditCommands(this);
         BuiltIns.RegisterMenuBar(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterEditorContextMenu(Workbench.Menus, Workbench.Platform);
+        BuiltIns.RegisterDocumentTabContextMenu(Workbench.Menus);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
         BuiltIns.RegisterWebMenus(Workbench.Menus);

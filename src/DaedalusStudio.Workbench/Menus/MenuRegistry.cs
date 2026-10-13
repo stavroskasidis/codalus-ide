@@ -17,6 +17,9 @@ public static class MenuLocations
 
     public const string SolutionExplorerContext = "solutionExplorer/context";
 
+    /// <summary>A document tab's context menu (M34e). Its commands act on the active document, which the tab becomes.</summary>
+    public const string DocumentTabContext = "documentTab/context";
+
     public static string MenuBar(string menu) => MenuBarPrefix + menu;
 }
 

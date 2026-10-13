@@ -403,6 +403,7 @@ internal static partial class BuiltIns
             Item(Window, "workbench.splitEditorDown", "1-split"),
             Item(Window, "workbench.keepEditor", "2-documents"),
             Item(Window, "workbench.pinEditor", "2-documents"),
+            Item(Window, "workbench.showOpenDocuments", "2-documents"),
             Item(Window, "workbench.nextDocument", "2-documents"),
             Item(Window, "workbench.previousDocument", "2-documents"),
             Item(Window, "workbench.closeOtherDocuments", "3-close"),
@@ -417,6 +418,32 @@ internal static partial class BuiltIns
             Item(Help, "help.about", "help"),
             Item(Help, "update.check", "updates"),
             Item(Help, "update.whatsNew", "updates"),
+        ]);
+    }
+
+    /// <summary>
+    /// A document tab's context menu (M34e), instead of Dock's: closing, keeping and pinning, the file's path, splitting.
+    /// Right-clicking a tab makes it the active document first, so these act on it.
+    /// </summary>
+    public static void RegisterDocumentTabContextMenu(MenuRegistry menus)
+    {
+        var shell = ContributionSource.Shell;
+        var order = 0;
+        const string Tab = MenuLocations.DocumentTabContext;
+        MenuItemRule Item(string command, string group) => new(Tab, command, shell) { Group = group, Order = ++order };
+        menus.Add(
+        [
+            Item("workbench.closeActiveDocument", "1-close"),
+            Item("workbench.closeOtherDocuments", "1-close"),
+            Item("workbench.closeDocumentsToTheRight", "1-close"),
+            Item("workbench.closeUnpinnedDocuments", "1-close"),
+            Item("workbench.closeAllDocuments", "1-close"),
+            Item("workbench.pinEditor", "2-keep"),
+            Item("workbench.keepEditor", "2-keep"),
+            Item("workbench.copyDocumentPath", "3-path"),
+            Item("workbench.revealDocument", "3-path"),
+            Item("workbench.splitEditorRight", "4-split"),
+            Item("workbench.splitEditorDown", "4-split"),
         ]);
     }
 

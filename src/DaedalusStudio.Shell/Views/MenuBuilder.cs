@@ -3,6 +3,7 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.VisualTree;
 using DaedalusStudio.Platform;
 using DaedalusStudio.Shell.Controls;
 using DaedalusStudio.Shell.Infrastructure;
@@ -23,6 +24,9 @@ internal static class MenuBuilder
     public static void Attach(Window window, Menu menuBar, ShellHost shell)
     {
         var menus = shell.Workbench.Menus;
+        // A document tab's context menu is ours (M34e): the tab becomes the active document, then the menu opens,
+        // before Dock's own (tunneling, so it sees the request first).
+        window.AddHandler(Control.ContextRequestedEvent, (_, e) => OpenDocumentTabMenu(shell, e), Avalonia.Interactivity.RoutingStrategies.Tunnel);
         if (shell.Workbench.Platform == PlatformKind.MacOS)
         {
             menuBar.IsVisible = false;
@@ -39,6 +43,22 @@ internal static class MenuBuilder
         void Rebuild() => Build(menuBar, shell);
         Rebuild();
         menus.Changed += (_, _) => Ui.Post(Rebuild);
+    }
+
+    private static void OpenDocumentTabMenu(ShellHost shell, ContextRequestedEventArgs e)
+    {
+        if (e.Source is not Avalonia.Visual source
+            || source.FindAncestorOfType<Dock.Avalonia.Controls.DocumentTabStripItem>(includeSelf: true) is not { DataContext: Docking.ShellDocument document } tab)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        shell.Layout.OpenDocument(document, focus: true);
+        if (Context(shell, MenuLocations.DocumentTabContext) is { } menu)
+        {
+            menu.Open(tab);
+        }
     }
 
     /// <summary>

@@ -47,11 +47,11 @@
       <Button Content="Install dotnet-ef" Command="{Binding InstallCommand}" IsVisible="{Binding CanInstall}" HorizontalAlignment="Left" ToolTip.Tip="Install dotnet-ef as a local tool at the project's EF Core version, or restore the .NET tools" />
     </StackPanel>
     <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0" Padding="4,3">
-      <WrapPanel Orientation="Horizontal">
+      <controls:ToolbarPanel>
         <Button Classes="toolbar" Content="Update to This Migration" Command="{Binding UpdateToCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="Apply or revert migrations so the database is at the selected one" />
         <Button Classes="toolbar" Content="Remove Last Migration" Command="{Binding RemoveCommand}" IsEnabled="{Binding HasContext}" />
         <Button Classes="toolbar" Content="Go to Context" Command="{Binding OpenCommand}" IsEnabled="{Binding HasContext}" />
-      </WrapPanel>
+      </controls:ToolbarPanel>
     </Border>
     <ListBox x:Name="List" ItemsSource="{Binding Migrations}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Migrations">
       <ListBox.Styles>

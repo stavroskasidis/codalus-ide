@@ -76,7 +76,7 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 ### Contribution points
 
 - **commands:** `id`, `title`, `category` (shown as "Category: Title"), `enablement` (a when-clause; disabled commands are hidden from the palette and greyed in menus).
-- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|edit|view|git|project|build|debug|test|analyze|tools|window|help` and, since M34a, their submenus (`menuBar/edit/goTo`, `menuBar/edit/find`, `menuBar/edit/advanced`, `menuBar/edit/intelliSense`, `menuBar/edit/refactor`, `menuBar/file/new`, `menuBar/git/branches`, `menuBar/debug/windows` and the rest named in `BuiltIns.Menus.cs`), `toolWindow/title` (buttons above a tool window), `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key; submenus `solutionExplorer/context/add`, `/git` and `/entityFramework` since M34a) and `editor/context` (submenus `editor/context/git`, `/snippets`, `/outlining` and `/breakpoint` since M34a) (the code editor's context menu; its commands get the document URI and the zero-based caret line and column as arguments; since 0.2.1). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
+- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|edit|view|git|project|build|debug|test|analyze|tools|window|help` and, since M34a, their submenus (`menuBar/edit/goTo`, `menuBar/edit/find`, `menuBar/edit/advanced`, `menuBar/edit/intelliSense`, `menuBar/edit/refactor`, `menuBar/file/new`, `menuBar/git/branches`, `menuBar/debug/windows` and the rest named in `BuiltIns.Menus.cs`), `toolWindow/title` (buttons above a tool window), `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key; submenus `solutionExplorer/context/add`, `/git` and `/entityFramework` since M34a) `documentTab/context` (a document tab's context menu, since M34e) and `editor/context` (submenus `editor/context/git`, `/snippets`, `/outlining` and `/breakpoint` since M34a) (the code editor's context menu; its commands get the document URI and the zero-based caret line and column as arguments; since 0.2.1). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
 - **keybindings:** `key` plus optional `mac`, `linux` and `win` overrides, `command`, `when` and `args`. Chords are space-separated (`ctrl+k ctrl+h`). `primary` means ⌘ on macOS and Ctrl elsewhere. Users override bindings in the Keyboard Shortcuts editor; user bindings win over plugin bindings, which win over defaults.
 - **toolWindows:** `id`, `title`, `location` (`left`, `right`, `bottom`), `kind` (`tree` or `markdown`) and `icon`.
 - **settings:** `title` (the Settings UI category) and `properties`, each with `type` (`string`, `boolean`, `integer`, `number`, `string[]`), `default`, `description`, `enum` and `enumDescriptions`, `minimum`/`maximum`, `scope` (`user`, or `workspace` to allow per-workspace overrides) and `order`. Invalid values in settings.json fall back to the default and are reported in the Settings UI.
@@ -246,6 +246,10 @@ The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/DaedalusStudi
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### M34e (no version change)
+
+Additive: the menu location `documentTab/context`, a document tab's context menu (its commands act on the active document, which the right-clicked tab becomes).
 
 ### M34a (no version change)
 
