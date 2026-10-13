@@ -403,6 +403,7 @@ internal static partial class BuiltIns
             Item(Window, "workbench.splitEditorDown", "1-split"),
             Item(Window, "workbench.keepEditor", "2-documents"),
             Item(Window, "workbench.pinEditor", "2-documents"),
+            Item(Window, "workbench.showOpenDocuments", "2-documents"),
             Item(Window, "workbench.nextDocument", "2-documents"),
             Item(Window, "workbench.previousDocument", "2-documents"),
             Item(Window, "workbench.closeOtherDocuments", "3-close"),

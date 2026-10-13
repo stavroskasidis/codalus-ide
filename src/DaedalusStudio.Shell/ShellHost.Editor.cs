@@ -835,6 +835,26 @@ public sealed partial class ShellHost : IEditorServices
         Layout.OpenDocument(documents[index], focus: true);
     }
 
+    /// <summary>
+    /// Window → Open Documents… (a classic IDE's list of active files, M34e): every open document,
+    /// pinned ones marked, including those whose tabs don't fit their group; the one picked becomes active.
+    /// </summary>
+    public async Task ShowOpenDocumentsAsync()
+    {
+        var items = Layout.Documents
+            .Select(d => new QuickPickItem(d.Title)
+            {
+                Detail = (d.IsPinned ? "pinned · " : d.IsPreview ? "preview · " : string.Empty) + d.FilePath,
+                Icon = d.HasTabIcon ? d.TabIcon : null,
+                Tag = d,
+            })
+            .ToList();
+        if (items.Count > 0 && await Palette.ShowAsync(items, "Open documents").ConfigureAwait(true) is { Tag: Docking.ShellDocument document })
+        {
+            Layout.OpenDocument(document, focus: true);
+        }
+    }
+
     /// <summary>Window → Split: a second editor of the same document inside the tab.</summary>
     public void ToggleEditorSplit() => ActiveEditor?.View?.ToggleSplit();
 

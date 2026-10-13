@@ -246,6 +246,7 @@ internal static partial class BuiltIns
         Add("workbench.navigateForward", "Navigate Forward", "View", Ui(shell.NavigateForwardAsync));
         Add("workbench.nextDocument", "Next Document", "Window", Ui(() => shell.CycleDocument(+1)), "activeDocumentKind");
         Add("workbench.previousDocument", "Previous Document", "Window", Ui(() => shell.CycleDocument(-1)), "activeDocumentKind");
+        Add("workbench.showOpenDocuments", "Open Documents…", "Window", Ui(shell.ShowOpenDocumentsAsync), "activeDocumentKind");
         Add("workbench.keepEditor", "Keep Open (Promote Preview Tab)", "Window", Ui(() =>
         {
             if (shell.Layout.ActiveDocument is { } document)

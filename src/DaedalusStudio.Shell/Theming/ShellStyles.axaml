@@ -3,6 +3,12 @@
         xmlns:controls="using:DaedalusStudio.Shell.Controls"
         xmlns:core="using:Dock.Model.Core"
         xmlns:docking="using:DaedalusStudio.Shell.Docking">
+  <Styles.Resources>
+    <!-- Dock's document tab strip takes its panel from this resource (a style can't replace it): ours fits (M34e). -->
+    <ItemsPanelTemplate x:Key="DockDocumentTabStripHorizontalItemsPanel">
+      <controls:DocumentTabPanel />
+    </ItemsPanelTemplate>
+  </Styles.Resources>
 
   <Style Selector="Window">
     <Setter Property="Background" Value="{DynamicResource Shell.Background}" />
@@ -79,10 +85,15 @@
     <Setter Property="Background" Value="{DynamicResource Shell.Tab.Active}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Active.Foreground}" />
   </Style>
-  <Style Selector="DocumentTabStripItem:active:selected[(controls|DocumentTab.IsPreview)=True]">
+  <!-- The preview tab keeps its color whenever it's selected, focused or not (the Mac's review: it didn't stand out). -->
+  <Style Selector="DocumentTabStripItem:selected[(controls|DocumentTab.IsPreview)=True]">
     <Setter Property="Background" Value="{DynamicResource Shell.Tab.Preview}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Preview.Foreground}" />
   </Style>
+  <!--
+    Document tabs fit the group (M34e): tabs that don't fit leave from the right, never a pinned or the selected one,
+    instead of Dock's sideways scrolling that took pinned tabs out of view.
+  -->
 
   <!-- Tool window tabs: a hover that keeps its text readable, and the selected tab's title in the link color. -->
   <Style Selector="ToolTabStripItem:pointerover:not(:selected)">
