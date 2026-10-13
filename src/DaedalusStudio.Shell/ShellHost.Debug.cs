@@ -100,12 +100,41 @@ public sealed partial class ShellHost
         return null;
     }
 
+    /// <summary>The debugged program's stdout since its last line break: the debugger sends output in any chunks.</summary>
+    private readonly System.Text.StringBuilder _stdoutLine = new();
+
     private void OnDebugOutput(DebugOutput output)
     {
         DebugLog.Append(output.Text);
+        if (output.Category != "stdout")
+        {
+            return;
+        }
+
+        // Markers are looked for in whole lines: "Now listening on:" can arrive split across two output events.
+        List<string> lines = [];
+        lock (_stdoutLine)
+        {
+            _stdoutLine.Append(output.Text);
+            var text = _stdoutLine.ToString();
+            var end = text.LastIndexOf('\n');
+            if (end >= 0)
+            {
+                lines.AddRange(text[..end].Split('\n'));
+                _stdoutLine.Remove(0, end + 1);
+            }
+        }
+
+        foreach (var line in lines)
+        {
+            OnDebuggedLine(output with { Text = line });
+        }
+    }
+
+    private void OnDebuggedLine(DebugOutput output)
+    {
         OnServerOutput(output);
-        if (output.Category == "stdout"
-            && (output.Text.Contains("Now listening on:", StringComparison.Ordinal) || output.Text.Contains("Application started.", StringComparison.Ordinal)))
+        if (output.Text.Contains("Now listening on:", StringComparison.Ordinal) || output.Text.Contains("Application started.", StringComparison.Ordinal))
         {
             // One page per server that starts listening (several with multiple startup projects, M14c).
             var url = Interlocked.Exchange(ref _pendingBrowserUrl, null);
@@ -124,6 +153,27 @@ public sealed partial class ShellHost
                 ShellIntegration.OpenUrl(uri);
             }
         }
+    }
+
+    /// <summary>
+    /// A server whose output the Debug Console doesn't show (a console window of its own), or that never logs "Now
+    /// listening on", still gets its browser: once the launch profile's address accepts connections.
+    /// </summary>
+    private void OpenBrowserLater()
+    {
+        if (Volatile.Read(ref _pendingBrowserUrl) is not { } pending || !Uri.TryCreate(pending, UriKind.Absolute, out var address))
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            if (await ServerProbe.WaitUntilListeningAsync(address, TimeSpan.FromMinutes(2), () => Debugger.State != DebugState.Idle && Volatile.Read(ref _pendingBrowserUrl) is not null, CancellationToken.None).ConfigureAwait(false)
+                && Interlocked.Exchange(ref _pendingBrowserUrl, null) is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                Ui.Post(() => ShellIntegration.OpenUrl(uri));
+            }
+        });
     }
 
     // ------------------------------------------------------------------ start and stop
@@ -248,6 +298,7 @@ public sealed partial class ShellHost
 
             _pendingBrowserUrl = plan.BrowserUrl;
             await Debugger.LaunchAsync([launch], CancellationToken.None).ConfigureAwait(true);
+            OpenBrowserLater();
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException or IOException)
         {
@@ -445,6 +496,11 @@ public sealed partial class ShellHost
         {
             Workbench.StatusBar.Remove(DebugStatusItem);
             _pendingBrowserUrl = null;
+            lock (_stdoutLine)
+            {
+                _stdoutLine.Clear();
+            }
+
             _pendingBrowserUrls.Clear();
             return;
         }

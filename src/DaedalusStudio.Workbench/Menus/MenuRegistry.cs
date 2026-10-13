@@ -1,3 +1,4 @@
+using DaedalusStudio.Platform;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Context;
 using DaedalusStudio.Workbench.Keybindings;
@@ -40,6 +41,12 @@ public sealed record MenuItemRule(string Location, string Command, ContributionS
     /// </summary>
     public string? Submenu { get; init; }
 
+    /// <summary>
+    /// Keys the focused control handles itself (Undo's <c>primary+z</c>), shown in the menu when the command has no
+    /// key binding of its own. Keybinding syntax; never dispatched.
+    /// </summary>
+    public string? Keys { get; init; }
+
     /// <summary>A submenu entry: <paramref name="submenu"/> is the location of its items.</summary>
     public static MenuItemRule ForSubmenu(string location, string submenu, string title, ContributionSource source) =>
         new(location, string.Empty, source) { Submenu = submenu, Title = title };
@@ -49,6 +56,12 @@ public sealed record MenuItemRule(string Location, string Command, ContributionS
 public sealed record MenuItem(string Command, string Title, string? KeyLabel, bool Enabled, string Group)
 {
     public string? Submenu { get; init; }
+
+    /// <summary>The command's full name (<c>Category: Title</c>) for tooltips.</summary>
+    public string? Description { get; init; }
+
+    /// <summary>The keys shown (the command's binding, or the rule's <see cref="MenuItemRule.Keys"/>), for native menus.</summary>
+    public KeySequence? Keys { get; init; }
 }
 
 public sealed class MenuRegistry(CommandRegistry commands, KeybindingService keybindings, IContextKeyReader context)
@@ -68,6 +81,18 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
             lock (_gate)
             {
                 return [.. _menuBar.OrderBy(m => m.Order)];
+            }
+        }
+    }
+
+    /// <summary>Every contributed rule, whatever its when-clause (tests and the menu layout checks).</summary>
+    public IReadOnlyList<MenuItemRule> Rules
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _items];
             }
         }
     }
@@ -153,12 +178,17 @@ public sealed class MenuRegistry(CommandRegistry commands, KeybindingService key
                 continue;
             }
 
+            var keys = keybindings.GetBinding(rule.Command) ?? (rule.Keys is { } hint ? KeySequence.Parse(hint, keybindings.Platform) : null);
             result.Add(new MenuItem(
                 rule.Command,
                 rule.Title ?? (location == MenuLocations.CommandPalette ? descriptor.DisplayTitle : descriptor.Title),
-                keybindings.GetBinding(rule.Command)?.ToLabel(keybindings.Platform),
+                keys?.ToLabel(keybindings.Platform),
                 descriptor.Enablement.Evaluate(scope),
-                rule.Group));
+                rule.Group)
+            {
+                Description = descriptor.DisplayTitle,
+                Keys = keys,
+            });
         }
 
         return result;

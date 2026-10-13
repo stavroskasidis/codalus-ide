@@ -33,11 +33,21 @@ public sealed class SymbolNodeViewModel(DocumentSymbol symbol, string? container
 
     public override string ToString() => Name;
 
+    /// <summary>
+    /// A symbol kind's icon, colored as a classic IDE colors them (M34a: types amber, members purple, fields and
+    /// properties blue; <c>kind@Family</c> takes the theme's token, monochrome in High Contrast).
+    /// </summary>
     public static string IconFor(int kind) => kind switch
     {
         SymbolKind.Namespace or SymbolKind.Module or SymbolKind.Package => "namespace",
-        SymbolKind.Class or SymbolKind.Interface or SymbolKind.Struct or SymbolKind.Enum => "class",
-        SymbolKind.Method or SymbolKind.Constructor or SymbolKind.Function or SymbolKind.Operator => "method",
+        SymbolKind.Class or SymbolKind.Struct => "class@Open",
+        SymbolKind.Interface => "class@Navigate",
+        SymbolKind.Enum => "list@Open",
+        SymbolKind.EnumMember => "dot@Open",
+        SymbolKind.Method or SymbolKind.Constructor or SymbolKind.Function or SymbolKind.Operator => "method@Build",
+        SymbolKind.Property => "tools@Navigate",
+        SymbolKind.Field or SymbolKind.Constant or SymbolKind.Variable => "column@Save",
+        SymbolKind.Event => "flame@Open",
         SymbolKind.File => "file",
         _ => "dot",
     };

@@ -14,7 +14,7 @@ internal sealed record RunOptions(int? Runs, bool AllowInput, TextWriter Log, bo
 /// </summary>
 internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 {
-    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "self-driven", "test-explorer", "packages", "terminal", "markup-100k", "binary-size"];
+    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "completion-50", "self-driven", "test-explorer", "packages", "terminal", "markup-100k", "binary-size"];
 
     /// <summary>The tests in samples/Tests5k (FixtureGen <c>tests</c>) as found in source: 20 projects × 250 (a theory is one test until a runner lists its cases).</summary>
     private const int Tests5kLeaves = 20 * 10 * 25;
@@ -33,7 +33,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
     public static bool Applies(Target target, string scenario) => target.SupportedScenarios?.Contains(scenario) != false && scenario switch
     {
         "self-driven" => target.IsPrototype,
-        "test-explorer" or "packages" or "terminal" or "markup-100k" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
+        "test-explorer" or "packages" or "terminal" or "markup-100k" or "completion-50" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
         "open-solution-50" => target.Name != "vscode", // VS Code has no solution explorer without proprietary C# Dev Kit.
         "cold-start" or "editor-100k" => target.IsPrototype || OperatingSystem.IsWindows() || target.Name == "vscode",
         _ => true,
@@ -64,6 +64,9 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 break;
             case "open-solution-50":
                 await OpenSolutionAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
+                break;
+            case "completion-50":
+                await CompletionAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
                 break;
             case "self-driven":
                 await SelfDrivenAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
@@ -317,33 +320,112 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             var copy = CopyDirectory(source, Path.Combine(work, "Solution50"));
             var solution = Path.Combine(copy, "Solution50.sln");
             Machine.Run("dotnet", $"restore \"{solution}\" -v q");
-            await using var session = await LaunchAsync(target, new LaunchRequest(work, Solution: solution), cancellationToken).ConfigureAwait(false);
-
-            if (target.Name == "shell" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.SolutionStructure, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } structure)
+            await using (var cold = await LaunchAsync(target, new LaunchRequest(work, Solution: solution), cancellationToken, keepWork: target.Name == "shell").ConfigureAwait(false))
             {
-                result.Add("solution_structure_ms", (structure.WallMicros - session.LaunchWallMicros) / 1000.0);
+                await MeasureOpenAsync(target, cold, result, string.Empty, run, cancellationToken).ConfigureAwait(false);
             }
 
-            if (target.Instrumented && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.SolutionLoaded, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } loaded)
+            // Warm (M34b): the same copy opened again, as after a restart; the design-time build cache is filled.
+            if (target.Name == "shell")
             {
-                result.Add("solution_loaded_ms", (loaded.WallMicros - session.LaunchWallMicros) / 1000.0);
+                File.Delete(Path.Combine(work, "events.jsonl"));
+                await using var warm = await LaunchAsync(target, new LaunchRequest(work, Solution: solution), cancellationToken).ConfigureAwait(false);
+                await MeasureOpenAsync(target, warm, result, "warm_", run, cancellationToken).ConfigureAwait(false);
             }
+        }
+    }
 
-            if (BlackBox && await WindowProbe.WaitUntilReadyAsync(session.Process.Id, session.LaunchTimestamp, s_readyTimeout, target.IsMainWindow, cancellationToken).ConfigureAwait(false) is { } ready)
+    /// <summary>One open of the 50-project solution; <paramref name="prefix"/> names the warm open's metrics.</summary>
+    private async Task MeasureOpenAsync(Target target, Session session, ScenarioResult result, string prefix, int run, CancellationToken cancellationToken)
+    {
+        double Since(BenchEvent e) => (e.WallMicros - session.LaunchWallMicros) / 1000.0;
+        if (target.Name == "shell" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.SolutionStructure, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } structure)
+        {
+            result.Add(prefix + "solution_structure_ms", Since(structure));
+        }
+
+        if (target.Instrumented && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.SolutionLoaded, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } loaded)
+        {
+            result.Add(prefix + "solution_loaded_ms", Since(loaded));
+        }
+
+        if (prefix.Length == 0 && BlackBox && await WindowProbe.WaitUntilReadyAsync(session.Process.Id, session.LaunchTimestamp, s_readyTimeout, target.IsMainWindow, cancellationToken).ConfigureAwait(false) is { } ready)
+        {
+            result.Add("solution_ready_ms", ready.Ready.TotalMilliseconds);
+        }
+
+        // Every project's compiler inputs known: design-time builds done, or taken from their cache (M34b).
+        if (target.Name == "shell" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.DesignTimeDone, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } designTime)
+        {
+            result.Add(prefix + "designtime_done_ms", Since(designTime));
+
+            // The design-time build cache's hits and misses (M34c): a warm open of an unchanged copy should only hit.
+            result.Add(prefix + "designtime_cache_hits", designTime.Field("cache_hits"));
+            result.Add(prefix + "designtime_cache_misses", designTime.Field("cache_misses"));
+            if (prefix.Length > 0 && designTime.Text.TryGetValue("cache_miss_reasons", out var reasons))
             {
-                result.Add("solution_ready_ms", ready.Ready.TotalMilliseconds);
+                result.Notes.Add($"Run {run}, warm open: design-time build cache misses: {reasons}");
             }
+        }
 
-            // Language services ready: every project's design-time build loaded and compiled once (informational, ADR 0005).
-            if (target.Name == "shell" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.LanguageReady, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } language)
+        // Language services ready: every project's design-time build loaded and compiled once (ADR 0005).
+        if (target.Name == "shell" && await BenchEventLog.WaitForAsync(session.EventsFile, BenchEventNames.LanguageReady, s_readyTimeout, session.Process, cancellationToken).ConfigureAwait(false) is { } language)
+        {
+            result.Add(prefix + "language_ready_ms", Since(language));
+        }
+
+        await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
+        var memory = ProcessTree.Memory(session.Process.Id);
+        result.Add(prefix + "memory_solution_private_mb", memory.PrivateBytes / 1048576.0);
+        Log($"  {target.Name} open-solution-50 run {run}{(prefix.Length > 0 ? " (warm)" : string.Empty)}: loaded {Last(result, prefix + "solution_loaded_ms")} / design-time {Last(result, prefix + "designtime_done_ms")} / language {Last(result, prefix + "language_ready_ms")} ms");
+    }
+
+    // ------------------------------------------------------------------ completion and typing while a solution loads (M34c)
+
+    private async Task CompletionAsync(Target target, ScenarioResult result, int runs, CancellationToken cancellationToken)
+    {
+        var source = Path.Combine(repoRoot, "samples", "Solution50");
+        RequireFixture(source);
+        result.Notes.Add("Solution50 opened with a file of its last project (the top of the longest reference chain); from the file's opening, typing in it and "
+                         + "completion every 250 ms (--bench completion) until the C# service has been ready for 5 s. Cold: a fresh restored copy; warm: the same copy again.");
+        for (var run = 0; run < runs; run++)
+        {
+            var work = NewWorkDir();
+            var copy = CopyDirectory(source, Path.Combine(work, "Solution50"));
+            var solution = Path.Combine(copy, "Solution50.sln");
+            var file = Directory.EnumerateDirectories(copy).OrderBy(d => d, StringComparer.Ordinal).Last() is { } last ? Path.Combine(last, "Type00.cs") : throw new InvalidOperationException("No project.");
+            Machine.Run("dotnet", $"restore \"{solution}\" -v q");
+            foreach (var prefix in new[] { string.Empty, "warm_" })
             {
-                result.Add("language_ready_ms", (language.WallMicros - session.LaunchWallMicros) / 1000.0);
-            }
+                File.Delete(Path.Combine(work, "events.jsonl"));
+                await using var session = await LaunchAsync(target, new LaunchRequest(work, File: file, Solution: solution, Bench: "completion", ExitOn: "done"), cancellationToken, keepWork: prefix.Length == 0).ConfigureAwait(false);
+                try
+                {
+                    await session.Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromMinutes(4), cancellationToken).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    result.Notes.Add($"run {run}{prefix}: did not finish within 4 minutes");
+                }
 
-            await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
-            var memory = ProcessTree.Memory(session.Process.Id);
-            result.Add("memory_solution_private_mb", memory.PrivateBytes / 1048576.0);
-            Log($"  {target.Name} open-solution-50 run {run}: loaded {Last(result, "solution_loaded_ms")} / ready {Last(result, "solution_ready_ms")} / language {Last(result, "language_ready_ms")} ms");
+                var events = BenchEventLog.Read(session.EventsFile);
+                var completions = events.Where(e => e.Name == "completion").ToList();
+                if (completions.FirstOrDefault(e => e.Field("items") > 0) is { } first)
+                {
+                    result.Add(prefix + "completion_first_ms", (first.WallMicros - session.LaunchWallMicros) / 1000.0);
+                }
+
+                result.AddRange(prefix + "completion_loading_ms", completions.Where(e => e.Field("ready") == 0 && e.Field("items") > 0).Select(e => e.Field("latency_us") / 1000.0));
+                result.AddRange(prefix + "completion_ready_ms", completions.Where(e => e.Field("ready") == 1).Select(e => e.Field("latency_us") / 1000.0));
+                result.AddRange(prefix + "loading_typing_ms", events.Where(e => e.Name == BenchEventNames.KeyLatency && e.Field("synthetic") == 1).Select(e => e.Field("latency_us") / 1000.0));
+                if (events.FirstOrDefault(e => e.Name == BenchEventNames.LanguageReady) is { } language)
+                {
+                    result.Add(prefix + "language_ready_ms", (language.WallMicros - session.LaunchWallMicros) / 1000.0);
+                }
+
+                Log($"  {target.Name} completion-50 run {run}{(prefix.Length > 0 ? " (warm)" : string.Empty)}: first completion {Last(result, prefix + "completion_first_ms")} ms, "
+                    + $"while loading p99 {Pct(result, prefix + "completion_loading_ms", 0.99)} ms, typing p99 {Pct(result, prefix + "loading_typing_ms", 0.99)} ms");
+            }
         }
     }
 
@@ -694,7 +776,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
         }
     }
 
-    private async Task<Session> LaunchAsync(Target target, LaunchRequest request, CancellationToken cancellationToken)
+    private async Task<Session> LaunchAsync(Target target, LaunchRequest request, CancellationToken cancellationToken, bool keepWork = false)
     {
         var events = Path.Combine(request.WorkDir, "events.jsonl");
         var psi = target.CreateStartInfo(target, request with { EventsFile = events });
@@ -703,7 +785,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
         var wall = BenchEventLog.UnixMicrosNow();
         var timestamp = Stopwatch.GetTimestamp();
         var process = Process.Start(psi) ?? throw new InvalidOperationException($"Failed to start {target.Executable}.");
-        return new Session(process, timestamp, wall, request.WorkDir, events, options.KeepWork);
+        return new Session(process, timestamp, wall, request.WorkDir, events, options.KeepWork || keepWork);
     }
 
     private string NewWorkDir()

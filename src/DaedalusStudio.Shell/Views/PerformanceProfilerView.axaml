@@ -36,7 +36,7 @@
             <DataTemplate x:DataType="vm:ProcessRowViewModel">
               <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
                 <TextBlock Text="{Binding Text}" />
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNotNull}}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNotNull}}" TextTrimming="CharacterEllipsis" />
               </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
@@ -61,7 +61,7 @@
           <DataTemplate x:DataType="vm:ProfilerSessionRowViewModel">
             <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
               <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-              <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" />
+              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" />
             </StackPanel>
           </DataTemplate>
         </ListBox.ItemTemplate>

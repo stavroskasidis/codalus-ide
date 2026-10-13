@@ -30,7 +30,7 @@ namespace DaedalusStudio.Shell.Infrastructure;
 /// standard output; the process exits with 0 when no step failed. A step the machine can't run (no browser, outside CI)
 /// is skipped, not failed; a step whose prerequisite failed is skipped too, after that failure.
 /// </summary>
-internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
+internal sealed partial class SmokeTest(Window window, ShellHost shell, string samples)
 {
     private const string Branch = "main";
     private static readonly TimeSpan s_watchdog = TimeSpan.FromMinutes(25);
@@ -135,6 +135,11 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
     {
         Console.Out.WriteLine($"Smoke test: {ShellInfo.VersionText.Replace('\n', ' ')}");
 
+        // The steps read programs' output in the IDE: Windows' default console windows (a classic IDE's) would keep it
+        // from them and open on the desktop.
+        await shell.Workbench.Settings.SetAsync(ShellHost.RunConsoleSetting, "outputWindow", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugConsoleSetting, "internalConsole", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
         // M1: shell and plugin foundation.
         await StepAsync("shell.window", "M1", "Main window, status bar and default commands", () =>
         {
@@ -214,6 +219,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             var tree = (TreeToolViewModel)shell.Layout.OpenToolWindows.Single(t => t.Id == "welcome.view").Content!;
             await WaitAsync(() => tree.Roots.Count > 0, "the Start page has items").ConfigureAwait(true);
         }).ConfigureAwait(true);
+
+        // M34d: the UI gallery's empty states, before a solution opens.
+        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
 
         // M2: project system (build host, MSBuild evaluation, Solution Explorer).
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>
@@ -322,6 +330,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
 
             await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, before, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         }, "language.ready").ConfigureAwait(true);
+
+        // M34a: the menus as trees with icons, Ctrl+Space through the keyboard, output that follows.
+        await UxPassStepsAsync().ConfigureAwait(true);
 
         await StepAsync("editor.editing", "M12", "Snippets, Duplicate Line, Expand Selection, the Syntax Visualizer and Code Metrics", async () =>
         {
@@ -686,6 +697,9 @@ internal sealed class SmokeTest(Window window, ShellHost shell, string samples)
             await WaitAsync(() => editor.CoverageMargin.Lines.Count > 0, "the editor colors the lines").ConfigureAwait(true);
             await WaitAsync(() => shell.Layout.IsVisible(CoverageResultsViewModel.ToolWindowId) && shell.CoverageResults.Rows.Any(r => r.Label == "Arithmetic"), "Coverage Results lists the class").ConfigureAwait(true);
         }, "testing.run").ConfigureAwait(true);
+
+        // M34d: the UI gallery with data (the Testing solution after its runs), the documents, the chrome and the error states.
+        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, and the error states, in every theme", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
 
         // M9: NuGet packages, on a copy of samples/Packages and its local feed (ADR 0012).
         await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>

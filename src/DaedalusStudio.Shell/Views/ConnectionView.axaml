@@ -5,7 +5,7 @@
              x:DataType="vm:ConnectionFormViewModel">
   <ScrollViewer>
     <StackPanel Margin="24,18" Spacing="8" MaxWidth="720" HorizontalAlignment="Left">
-      <TextBlock Classes="heading" FontSize="18" Text="Database connection" />
+      <TextBlock Classes="heading" Text="Database connection" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="Connections are kept for your user account. The password is never written to a file: it goes to the operating system's credential store when you choose to save it, otherwise it is asked once per session." />
       <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,4">
         <TextBlock Text="Database" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />

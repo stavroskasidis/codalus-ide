@@ -29,7 +29,11 @@ public sealed class CodeEditorDocument : ShellDocument
     /// <summary>Kept as <c>textFile</c>: key bindings and plugins use it for any text document.</summary>
     public override string Kind => "textFile";
 
+    public override string? TabIcon => Controls.FileIcons.ForFile(Path.GetFileName(Model.Path));
+
     public CodeDocument Model { get; }
+
+    public override string? FilePath => Model.Path;
 
     public IEditorServices Services { get; }
 

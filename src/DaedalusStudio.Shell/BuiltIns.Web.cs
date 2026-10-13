@@ -15,7 +15,7 @@ internal static partial class BuiltIns
     public const string WebKeybindings = """
         [
           { "key": "ctrl+alt+r", "command": "http.sendRequest", "when": "editorTextFocus && editorLanguageId == http" },
-          { "key": "ctrl+alt+backspace", "command": "npm.taskRunner", "when": "keyboardScheme != vscode" }
+          { "win": "ctrl+alt+backspace", "mac": "ctrl+alt+backspace", "linux": "ctrl+shift+alt+r", "command": "npm.taskRunner", "when": "keyboardScheme != vscode" }
         ]
         """;
 
@@ -113,17 +113,10 @@ internal static partial class BuiltIns
         menus.Add(
         [
             Item(OtherWindowsMenu, "web.endpoints", "windows", AlphabeticalOrder("Endpoints Explorer")),
-            Item(MenuLocations.MenuBar("project"), "web.manageUserSecrets", "web", 1),
-            Item(MenuLocations.MenuBar("project"), "web.addScaffoldedItem", "add", 0),
-            Item(MenuLocations.MenuBar("project"), "web.serviceReferences", "web", 0),
-            Item(SolutionExplorerView.ContextMenuLocation, "web.addScaffoldedItem", "1-new", 1, "(explorerItemKind == project || explorerItemKind == folder) && !explorerFolderView", "New Scaffolded Item…"),
-            Item(SolutionExplorerView.ContextMenuLocation, "web.serviceReferences", "3-web", 0, "explorerItemKind == project", "Service References…"),
-            Item(MenuLocations.MenuBar("debug"), "web.selectEnvironment", "6-web", 1),
-            Item(MenuLocations.MenuBar("debug"), "web.checkDevCertificate", "6-web", 2),
-            Item(MenuLocations.MenuBar("debug"), "web.trustDevCertificate", "6-web", 3),
-            Item(SolutionExplorerView.ContextMenuLocation, "web.manageUserSecrets", "3-web", 1, "explorerItemKind == project"),
+            Item(SolutionExplorerView.AddMenuLocation, "web.addScaffoldedItem", "1-new", 0, "(explorerItemKind == project || explorerItemKind == folder) && !explorerFolderView", "New Scaffolded Item…"),
+            Item(SolutionExplorerView.AddMenuLocation, "web.serviceReferences", "2-references", 2, "explorerItemKind == project", "Service References…"),
+            Item(SolutionExplorerView.ContextMenuLocation, "web.manageUserSecrets", "2-references", 4, "explorerItemKind == project"),
             Item(OtherWindowsMenu, "npm.taskRunner", "windows", AlphabeticalOrder("Task Runner Explorer")),
-            Item(MenuLocations.MenuBar("project"), "npm.restore", "web", 2),
             Item(SolutionExplorerView.ContextMenuLocation, "npm.restore", "3-web", 2, "explorerItemName == 'package.json'", "Restore Packages"),
             Item(SolutionExplorerView.ContextMenuLocation, "debug.webPageFile", "3-web", 3, "explorerItemName =~ /(?i)\\.html?$/"),
             Item(MenuLocations.EditorContext, "http.sendRequest", "0-http", 0, "editorLanguageId == http"),

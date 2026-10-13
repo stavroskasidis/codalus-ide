@@ -74,12 +74,6 @@ internal static partial class BuiltIns
         const string ProjectLevel = "explorerItemKind == project || explorerItemKind == dependencies || explorerItemKind == dependencyGroup";
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("project"), "packages.manage", "packages", 1),
-            Item(MenuLocations.MenuBar("project"), "packages.manageSolution", "packages", 2),
-            Item(MenuLocations.MenuBar("project"), "packages.sources", "packages", 3),
-            Item(MenuLocations.MenuBar("project"), "packages.tools", "packages", 4),
-            Item(MenuLocations.MenuBar("build"), "project.pack", "2-project", 4, title: "Pack Project"),
-
             Item(Context, "packages.manage", "2-references", 2, ProjectLevel),
             Item(Context, "packages.manageSolution", "2-references", 2, "explorerItemKind == solution"),
             Item(Context, "project.pack", "0-build", 4, "explorerItemKind == project"),

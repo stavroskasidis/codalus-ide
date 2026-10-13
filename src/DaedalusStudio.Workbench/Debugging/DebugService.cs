@@ -122,6 +122,9 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>Starts programs in the integrated terminal (M14c); without it, launches use the Debug Console.</summary>
     public ITerminalLauncher? Terminal { get; set; }
 
+    /// <summary>Starts programs in console windows of their own (Windows, <see cref="DebugConsoleKind.Window"/>).</summary>
+    public ConsoleWindowLauncher? ConsoleWindows { get; set; }
+
     /// <summary>The startup hook that holds a program launched in the terminal until the debugger attached (<see cref="HeldLaunch"/>).</summary>
     public string? StartupHook { get; set; }
 
@@ -240,6 +243,7 @@ public sealed class DebugService : IAsyncDisposable
             async ct =>
             {
                 var compound = new CompoundDebugAdapter(await parts[0].CreateAsync(ct).ConfigureAwait(false), parts[0].Name, independent: true);
+                compound.Reserve(parts.Count - 1); // the session waits for the others, even if the first program ends at once
                 compound.PartChanged += OnPartChanged;
                 return compound;
             },
@@ -255,6 +259,8 @@ public sealed class DebugService : IAsyncDisposable
             {
                 return; // the session ended meanwhile
             }
+
+            await using var released = new AsyncRelease(session);
 
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
             try
@@ -272,6 +278,12 @@ public sealed class DebugService : IAsyncDisposable
                 Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] Could not start: {ex.Message}\n"));
             }
         }
+    }
+
+    /// <summary>Releases a compound session's reserved place for a program once it joined or failed to.</summary>
+    private sealed class AsyncRelease(CompoundDebugAdapter session) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => new(session.ReleaseAsync());
     }
 
     /// <summary>
@@ -339,15 +351,16 @@ public sealed class DebugService : IAsyncDisposable
                 adapter => ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
         }
 
-        if (launch.Console == DebugConsoleKind.Terminal)
+        if (launch.Console is DebugConsoleKind.Terminal or DebugConsoleKind.Window)
         {
-            if (Terminal is { } terminal && StartupHook is { } hook)
+            var window = launch.Console == DebugConsoleKind.Window;
+            if ((window ? ConsoleWindows : Terminal) is { } terminal && StartupHook is { } hook)
             {
                 HeldLaunch? held = null;
                 return new LaunchPart(
                     launch.Name,
                     index,
-                    new DebugProcess(launch.Name, null, DebugProcess.Terminal, null),
+                    new DebugProcess(launch.Name, null, window ? DebugProcess.ConsoleWindow : DebugProcess.Terminal, null),
                     async ct => await StartForPlanAsync(launch.Plan, ct).ConfigureAwait(false),
                     async adapter =>
                     {
@@ -373,7 +386,7 @@ public sealed class DebugService : IAsyncDisposable
                     });
             }
 
-            Output?.Invoke(this, new DebugOutput("console", "The integrated terminal isn't available here: the program's console is the Debug Console.\n"));
+            Output?.Invoke(this, new DebugOutput("console", (window ? "A console window" : "The integrated terminal") + " isn't available here: the program's console is the Debug Console.\n"));
         }
 
         return new LaunchPart(
@@ -765,6 +778,8 @@ public sealed class DebugService : IAsyncDisposable
             programs = [.. _terminalProcesses];
             _terminalProcesses.Clear();
         }
+
+        ConsoleWindows?.CloseAll(); // as a classic IDE closes the console when debugging stops
 
         foreach (var pid in programs)
         {

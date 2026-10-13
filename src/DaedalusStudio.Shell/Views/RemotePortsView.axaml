@@ -1,15 +1,23 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
              x:Class="DaedalusStudio.Shell.Views.RemotePortsView"
              x:DataType="vm:RemotePortsViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
-      <Button x:Name="Forward" Content="Forward a Port…" AutomationProperties.Name="Forward a port of the remote machine" />
-      <Button x:Name="Stop" Content="Stop Forwarding" IsEnabled="{Binding CanStop}" AutomationProperties.Name="Stop forwarding the selected port" />
-      <Button x:Name="Browse" Content="Open in Browser" IsEnabled="{Binding CanStop}" AutomationProperties.Name="Open the selected forwarded port in the browser" />
-      <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Status}" />
-    </StackPanel>
+    <!-- One row that overflows into » in a narrow pane (M34d); the status is the empty state's message, wrapped. -->
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button x:Name="Forward" Classes="toolbar" ToolTip.Tip="Forward a Port…" AutomationProperties.Name="Forward a port of the remote machine">
+        <controls:Icon Kind="link-add" />
+      </Button>
+      <Button x:Name="Stop" Classes="toolbar" IsEnabled="{Binding CanStop}" ToolTip.Tip="Stop Forwarding" AutomationProperties.Name="Stop forwarding the selected port">
+        <controls:Icon Kind="stop" />
+      </Button>
+      <Button x:Name="Browse" Classes="toolbar" IsEnabled="{Binding CanStop}" ToolTip.Tip="Open in Browser" AutomationProperties.Name="Open the selected forwarded port in the browser">
+        <controls:Icon Kind="globe" />
+      </Button>
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
     <ListBox x:Name="PortList" ItemsSource="{Binding Ports}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Ports">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:RemotePortRow">

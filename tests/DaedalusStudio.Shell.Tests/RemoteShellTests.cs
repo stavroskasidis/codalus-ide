@@ -303,7 +303,7 @@ public sealed class RemoteShellTests
         await open;
         Assert.NotNull(started);
         Assert.Equal(["--remote", "ssh:pi@raspberry:2222", "/home/pi/App", "--user-data-dir", f.UserData], started);
-        Assert.Contains(f.Shell.Workbench.Menus.GetItems(Workbench.Menus.MenuLocations.MenuBar("file")), i => i.Command == "remote.open");
+        Assert.Contains(f.Shell.Workbench.Menus.GetItems(BuiltIns.FileOpenMenu), i => i.Command == "remote.open"); // File ▸ Open ▸ Remote Window…
         var parsed = ShellOptions.Parse(["--remote", "wsl:Ubuntu", "/home/me"]);
         Assert.Equal("wsl:Ubuntu", parsed.Remote);
         Assert.Equal("/home/me", parsed.Path);

@@ -95,27 +95,4 @@ internal static partial class BuiltIns
         Add("git.lfsUnlock", "Git LFS: Unlock File", () => shell.LockActiveFileAsync(unlock: true), "gitLfs");
         Add("git.lfsPull", "Git LFS: Download Files", shell.LfsPullAsync, "gitLfs");
     }
-
-    public static void RegisterHostingMenus(MenuRegistry menus)
-    {
-        var shell = ContributionSource.Shell;
-        MenuItemRule Item(string command, string group, int order) =>
-            new(MenuLocations.MenuBar("git"), command, shell) { Group = group, Order = order };
-
-        menus.Add(
-        [
-            Item("git.pullRequests", "6-hosting", 1),
-            Item("git.createPullRequest", "6-hosting", 2),
-            Item("git.workItems", "6-hosting", 3),
-            Item("git.publish", "6-hosting", 4),
-            Item("hosting.accounts", "6-hosting", 5),
-            Item("git.worktrees", "7-repository", 1),
-            Item("git.addWorktree", "7-repository", 2),
-            Item("git.switchRepository", "7-repository", 3),
-            Item("git.lfsLocks", "7-repository", 4),
-            Item("git.lfsPull", "7-repository", 5),
-            new(Views.SolutionExplorerView.ContextMenuLocation, "git.lfsLock", shell) { Group = "6-git", Order = 3, When = WhenClause.Parse("gitLfs && explorerItemKind == file") },
-            new(Views.SolutionExplorerView.ContextMenuLocation, "git.lfsUnlock", shell) { Group = "6-git", Order = 4, When = WhenClause.Parse("gitLfs && explorerItemKind == file") },
-        ]);
-    }
 }

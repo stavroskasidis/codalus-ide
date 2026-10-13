@@ -379,6 +379,99 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Design_time_builds_come_from_the_cache_until_their_inputs_change()
+    {
+        var log = new List<string>();
+        var restoreStates = new List<string>();
+        _service.Log += (_, line) => { lock (log) { log.Add(line); } };
+        _service.RestoreStateChanged += (_, e) => { lock (restoreStates) { restoreStates.Add(e.State); } };
+        var testsProject = Path.Combine(Fixture, "tests", "Core.Tests", "Core.Tests.csproj");
+        bool Ok(string path) => _service.CompilerInputs.TryGetValue(path, out var i) && i.State == CompilerInputStates.Ok;
+
+        // Each open is a new session, as after a restart: only the cache in obj/ carries over.
+        async Task<string> OpenAsync(bool restores = false)
+        {
+            lock (log)
+            {
+                log.Clear();
+            }
+
+            lock (restoreStates)
+            {
+                restoreStates.Clear();
+            }
+
+            await _service.OpenAsync(Slnx, trusted: true, restore: true, Timeout());
+            await WaitUntilAsync(() => Ok(AppProject) && Ok(CoreProject) && Ok(testsProject) && _service.DesignTimeProgress is { Completed: true }
+                                       && _service.RestoreState is "succeeded", TimeSpan.FromMinutes(4));
+            if (restores)
+            {
+                // Built once before the restore, and again once it wrote the assets files.
+                await WaitUntilAsync(() => { lock (log) { return log.Count(l => l.Contains("Design-time build of", StringComparison.Ordinal)) >= 2; } }, TimeSpan.FromMinutes(4));
+
+                // Then quiet: the file watcher's evaluations after the restore are done too.
+                var lines = -1;
+                await WaitUntilAsync(() =>
+                {
+                    Thread.Sleep(3000);
+                    lock (log)
+                    {
+                        // An evaluation in progress (whose design-time builds come next) shows in Progress.
+                        var settled = log.Count == lines && _service.Progress is { Completed: true } && _service.DesignTimeProgress is { Completed: true };
+                        lines = log.Count;
+                        return settled;
+                    }
+                }, TimeSpan.FromMinutes(2));
+            }
+
+            lock (log)
+            {
+                return string.Join(Environment.NewLine, log.Where(l => l.Contains("Design-time build of", StringComparison.Ordinal)
+                                                                       || l.Contains("Evaluated", StringComparison.Ordinal) || l.Contains("Packages of", StringComparison.Ordinal) || l.Contains("build cache:", StringComparison.Ordinal)));
+            }
+        }
+
+        var cold = await OpenAsync(restores: true);
+        Assert.DoesNotContain("from the cache", cold, StringComparison.Ordinal);
+        var coldApp = _service.CompilerInputs[AppProject];
+
+        // Unchanged: nothing builds, the inputs are the same, and the packages restored a moment ago aren't restored again.
+        var warm = await OpenAsync();
+        Assert.True(warm.Contains("Design-time build of 0 project(s)", StringComparison.Ordinal), $"Cold:{Environment.NewLine}{cold}{Environment.NewLine}Warm:{Environment.NewLine}{warm}");
+        Assert.Contains("3 unchanged project(s) from the cache", warm, StringComparison.Ordinal);
+        Assert.Contains("Design-time build cache: 3 hit(s), 0 miss(es).", warm, StringComparison.Ordinal);
+        Assert.Equal(3, _service.DesignTimeProgress?.CacheHits); // M34c: what the bench event designtime_done reports
+        Assert.Empty(_service.DesignTimeProgress?.CacheMisses ?? ["none sent"]);
+        Assert.Equal(coldApp.Arguments, _service.CompilerInputs[AppProject].Arguments);
+        lock (restoreStates)
+        {
+            Assert.Equal(["succeeded"], restoreStates);
+        }
+
+        // A new source file in Core (a glob, no project file change): Core builds again, and so do the projects that
+        // reference it; asking for design-time builds bypasses the cache.
+        File.WriteAllText(Path.Combine(Fixture, "src", "Core", "Added.cs"), "namespace Core; public static class Added { }");
+        var changed = await OpenAsync();
+        Assert.DoesNotContain("Design-time build of 0 project(s)", changed, StringComparison.Ordinal);
+        Assert.Contains(_service.CompilerInputs[CoreProject].Arguments, a => a.EndsWith("Added.cs", StringComparison.Ordinal));
+        Assert.Contains("Design-time build of 3 project(s)", changed, StringComparison.Ordinal);
+        Assert.Contains(_service.DesignTimeProgress?.CacheMisses ?? [], m => m.StartsWith("Core.csproj: ", StringComparison.Ordinal));
+
+        lock (log)
+        {
+            log.Clear();
+        }
+
+        await _service.DesignTimeBuildAsync(CoreProject, Timeout());
+        await WaitUntilAsync(() => { lock (log) { return log.Any(l => l.Contains("Design-time build of 1 project(s)", StringComparison.Ordinal)); } });
+
+        // A corrupt cache is a miss, never an error.
+        File.WriteAllText(Path.Combine(Fixture, "src", "App", "obj", "daedalus.designtime.json"), "{ not json");
+        var corrupt = await OpenAsync();
+        Assert.Contains("Design-time build of 1 project(s)", corrupt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Untrusted_solutions_get_no_design_time_builds()
     {
         await _service.OpenAsync(Slnx, trusted: false, restore: false, Timeout());

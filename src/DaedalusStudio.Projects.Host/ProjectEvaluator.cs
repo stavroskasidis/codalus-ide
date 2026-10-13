@@ -6,7 +6,21 @@ using Microsoft.Build.Exceptions;
 namespace DaedalusStudio.Projects.Host;
 
 /// <summary>A project's evaluation result plus what the watcher needs (imported files).</summary>
-internal sealed record EvaluatedProject(ProjectInfo Info, IReadOnlyList<string> Imports, string? AssetsFile = null);
+internal sealed record EvaluatedProject(ProjectInfo Info, IReadOnlyList<string> Imports, string? AssetsFile = null)
+{
+    /// <summary>The assets file's last write when the project was evaluated (<see cref="DateTime.MinValue"/>: none).</summary>
+    public DateTime AssetsStamp { get; init; }
+
+    /// <summary>
+    /// A hash of everything evaluation read (M34b): the project file and its imports with their timestamps, every item,
+    /// the assets file, the SDK and the global properties. With the referenced projects' fingerprints and the target
+    /// framework it keys the design-time build cache (<see cref="DesignTimeCache"/>).
+    /// </summary>
+    public string? Fingerprint { get; init; }
+
+    /// <summary>The project's <c>obj</c> folder (<c>BaseIntermediateOutputPath</c>).</summary>
+    public string? IntermediateDirectory { get; init; }
+}
 
 /// <summary>
 /// Evaluates SDK-style projects with MSBuild (no targets run) into the wire model. Multi-targeted projects are
@@ -71,6 +85,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             var imports = outer.Imports.Select(i => i.ImportedProject.FullPath).ToList();
             var items = new List<ProjectItemInfo>();
             var test = TestProperties.None;
+            var fingerprint = new Fingerprint(path, global, outer);
 
             if (frameworks.Length <= 1)
             {
@@ -85,6 +100,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                     var inner = Load(path, new Dictionary<string, string>(global, StringComparer.OrdinalIgnoreCase) { ["TargetFramework"] = framework }, context);
                     try
                     {
+                        fingerprint.Add(inner);
                         references.AddRange(References(inner, framework, assets));
                         imports.AddRange(inner.Imports.Select(i => i.ImportedProject.FullPath));
 
@@ -117,7 +133,17 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             {
                 IsAspireHost = string.Equals(outer.GetPropertyValue("IsAspireHost").Trim(), "true", StringComparison.OrdinalIgnoreCase),
             };
-            return new EvaluatedProject(info, imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList(), NullIfEmpty(outer.GetPropertyValue("ProjectAssetsFile")));
+            var distinctImports = imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var assetsFile = NullIfEmpty(outer.GetPropertyValue("ProjectAssetsFile"));
+            var assetsStamp = assetsFile is not null && File.Exists(assetsFile) ? File.GetLastWriteTimeUtc(assetsFile) : DateTime.MinValue;
+            return new EvaluatedProject(info, distinctImports, assetsFile)
+            {
+                AssetsStamp = assetsStamp,
+                Fingerprint = fingerprint.Finish(distinctImports, assetsFile),
+                IntermediateDirectory = NullIfEmpty(outer.GetPropertyValue("BaseIntermediateOutputPath")) is { } obj
+                    ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(outer.DirectoryPath, FixSeparators(obj))))
+                    : null,
+            };
         }
         catch (InvalidProjectFileException ex)
         {

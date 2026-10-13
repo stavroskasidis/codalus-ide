@@ -8,6 +8,7 @@
   <ItemGroup>
     <!-- Host code without MSBuild types, tested on its own. -->
     <Compile Include="..\..\src\DaedalusStudio.Projects.Host\SdkSelection.cs" Link="Host\SdkSelection.cs" />
+    <Compile Include="..\..\src\DaedalusStudio.Projects.Host\DesignTimeCache.cs" Link="Host\DesignTimeCache.cs" />
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
 </Project>

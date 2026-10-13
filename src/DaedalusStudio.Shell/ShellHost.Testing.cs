@@ -317,12 +317,6 @@ public sealed partial class ShellHost
 
     void IEditorServices.ShowEditorContextMenu(CodeEditorController editor, Control anchor)
     {
-        var items = Workbench.Menus.GetItems(MenuLocations.EditorContext).Where(i => i.Submenu is null).ToList();
-        if (items.Count == 0)
-        {
-            return;
-        }
-
         // Commands get the document and the caret (ADR 0010: editor/context).
         var caret = editor.Editor.TextArea.Caret;
         JsonElement[] args =
@@ -331,32 +325,10 @@ public sealed partial class ShellHost
             JsonSerializer.SerializeToElement(caret.Line - 1, Docking.ShellJsonContext.Default.Int32),
             JsonSerializer.SerializeToElement(caret.Column - 1, Docking.ShellJsonContext.Default.Int32),
         ];
-        var menu = new ContextMenu();
-        string? group = null;
-        foreach (var item in items)
+        if (Views.MenuBuilder.Context(this, MenuLocations.EditorContext, command => CommandFor(command, args)) is { } menu)
         {
-            if (group is not null && item.Group != group)
-            {
-                menu.Items.Add(new Separator());
-            }
-
-            group = item.Group;
-            var header = new DockPanel();
-            if (item.KeyLabel is { } keys)
-            {
-                var label = new TextBlock { Text = keys, Margin = new Thickness(32, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-                label.Classes.Add("muted");
-                DockPanel.SetDock(label, Avalonia.Controls.Dock.Right);
-                header.Children.Add(label);
-            }
-
-            header.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center });
-            var entry = new MenuItem { Header = header, IsEnabled = item.Enabled, Command = CommandFor(item.Command, args) };
-            AutomationProperties.SetName(entry, item.Title);
-            menu.Items.Add(entry);
+            menu.Open(anchor);
         }
-
-        menu.Open(anchor);
     }
 
     // ------------------------------------------------------------------ playlists

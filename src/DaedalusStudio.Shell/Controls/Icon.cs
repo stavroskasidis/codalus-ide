@@ -8,7 +8,10 @@ namespace DaedalusStudio.Shell.Controls;
 
 /// <summary>
 /// A named icon from the shell's built-in set (ADR 0003: plugins refer to icons by name so they follow the
-/// theme, including high contrast). Icons are 16×16 stroke drawings in the current foreground color.
+/// theme, including high contrast). Most names are Fluent UI System Icons (D24, M34a), compiled into geometries at
+/// build time and filled in the current foreground; the rest are 16×16 stroke drawings. Command families color their
+/// icons through classes (<c>accent-run</c>, <c>accent-git</c>…) whose brushes are theme tokens, monochrome in High
+/// Contrast.
 /// </summary>
 public sealed class Icon : Control
 {
@@ -35,26 +38,305 @@ public sealed class Icon : Control
 
     protected override Size MeasureOverride(Size availableSize) => new(16, 16);
 
+    public Icon()
+    {
+        // High Contrast draws multicolor icons in the foreground, and "kind@Family" accents follow the theme.
+        ActualThemeVariantChanged += (_, _) => InvalidateVisual();
+    }
+
     public override void Render(DrawingContext context)
     {
-        if (IconSet.Get(Kind) is not { } geometry || Foreground is not { } brush)
+        if (Foreground is not { } brush)
         {
             return;
         }
 
+        // "kind@Family" colors the icon with the family's token (Shell.Icon.Test…), for icons chosen in code.
+        var kind = Kind;
+        if (kind?.IndexOf('@', StringComparison.Ordinal) is int at and >= 0)
+        {
+            if (this.TryFindResource("Shell.Icon." + kind[(at + 1)..], ActualThemeVariant, out var accent) && accent is IBrush accentBrush)
+            {
+                brush = accentBrush;
+            }
+
+            kind = kind[..at];
+        }
+        else if (kind is not null && !kind.StartsWith("mi:", StringComparison.Ordinal) && !IsSet(ForegroundProperty) && ActualThemeVariant != Theming.ThemeService.HighContrast
+                 && CommandIcons.DefaultColorOf(kind) is { } color
+                 && this.TryFindResource("Shell.Icon." + char.ToUpperInvariant(color[0]) + color[1..], ActualThemeVariant, out var token) && token is IBrush colored)
+        {
+            // Every icon is colored (the maintainer's rule): one nothing colors takes its kind's palette color.
+            brush = colored;
+        }
+
         var size = Math.Min(Bounds.Width, Bounds.Height);
-        var scale = size / 16;
         var offset = new Point((Bounds.Width - size) / 2, (Bounds.Height - size) / 2);
-        using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(offset.X, offset.Y)))
+        if (IconSet.GetFilled(kind) is { } filled)
+        {
+            // Multicolor icons (file types) take the Visual Studio palette's nearest color in the current theme (folders its
+            // tan), except in High Contrast, where shape carries the meaning.
+            var monochrome = ActualThemeVariant == Theming.ThemeService.HighContrast;
+            var folder = kind!.StartsWith("mi:folder", StringComparison.Ordinal);
+            var scale = size / filled.DesignSize;
+            using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(offset.X, offset.Y)))
+            {
+                foreach (var layer in filled.Layers)
+                {
+                    var fill = layer.Color == 0 || monochrome
+                        ? brush
+                        : (folder ? "Folder" : PaletteColor(layer.Color)) is { } family && this.TryFindResource("Shell.Icon." + family, ActualThemeVariant, out var token) && token is IBrush palette
+                            ? palette
+                            : filled.Brush(layer.Color);
+                    context.DrawGeometry(fill, null, layer.Geometry);
+                }
+            }
+
+            return;
+        }
+
+        if (IconSet.Get(kind) is not { } geometry)
+        {
+            return;
+        }
+
+        var strokeScale = size / 16;
+        using (context.PushTransform(Matrix.CreateScale(strokeScale, strokeScale) * Matrix.CreateTranslation(offset.X, offset.Y)))
         {
             context.DrawGeometry(null, new Pen(brush, 1.25, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), geometry);
         }
+    }
+
+    private static readonly Dictionary<uint, string?> s_paletteColors = [];
+
+    /// <summary>
+    /// The palette color (<c>Shell.Icon.Blue</c>…) nearest a compiled icon's fill by hue, or null for a gray, which keeps
+    /// its own color (a classic IDE's icons have gray outlines and pages).
+    /// </summary>
+    public static string? PaletteColor(uint argb)
+    {
+        lock (s_paletteColors)
+        {
+            if (s_paletteColors.TryGetValue(argb, out var known))
+            {
+                return known;
+            }
+        }
+
+        var hsl = Color.FromUInt32(argb).ToHsl();
+        string? family = hsl.S < 0.18 || hsl.L > 0.93 || hsl.L < 0.08 ? null
+            : hsl.H is < 15 or >= 340 ? "Red"
+            : hsl.H < 42 ? (hsl.L < 0.45 ? "Folder" : "Orange")
+            : hsl.H < 70 ? "Yellow"
+            : hsl.H < 165 ? "Green"
+            : hsl.H < 255 ? "Blue"
+            : "Purple";
+        lock (s_paletteColors)
+        {
+            s_paletteColors[argb] = family;
+        }
+
+        return family;
+    }
+}
+
+/// <summary>A compiled icon: its fills and the size it was drawn for (its view box: 16, 20, 24, 32…).</summary>
+internal sealed class FilledIcon(IReadOnlyList<IconLayer> layers, double designSize)
+{
+    private readonly Dictionary<uint, IBrush> _brushes = [];
+
+    public IReadOnlyList<IconLayer> Layers { get; } = layers;
+
+    public double DesignSize { get; } = designSize;
+
+    /// <summary>The bounds of all the fills (tests).</summary>
+    public Rect Bounds => Layers.Select(l => l.Geometry.Bounds).Aggregate((a, b) => a.Union(b));
+
+    public IBrush Brush(uint color)
+    {
+        if (!_brushes.TryGetValue(color, out var brush))
+        {
+            brush = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromUInt32(color));
+            _brushes[color] = brush;
+        }
+
+        return brush;
     }
 }
 
 /// <summary>The built-in icons. Unknown names render nothing.</summary>
 public static class IconSet
 {
+    /// <summary>Our icon names that are Fluent UI System Icons (D24), by the Fluent file name (Icons/fluent-icons.txt).</summary>
+    private static readonly Dictionary<string, string> s_fluent = new(StringComparer.Ordinal)
+    {
+        // Names that existed before M34a, now drawn from Fluent.
+        ["search"] = "search_16_regular",
+        ["gear"] = "settings_16_regular",
+        ["keyboard"] = "keyboard_16_regular",
+        ["history"] = "history_16_regular",
+        ["extensions"] = "puzzle_piece_16_regular",
+        ["folder"] = "folder_16_regular",
+        ["file"] = "document_16_regular",
+        ["book"] = "book_16_regular",
+        ["check"] = "checkmark_16_regular",
+        ["home"] = "home_16_regular",
+        ["info"] = "info_16_regular",
+        ["warning"] = "warning_16_regular",
+        ["error"] = "error_circle_16_regular",
+        ["bell"] = "alert_16_regular",
+        ["close"] = "dismiss_16_regular",
+        ["refresh"] = "arrow_clockwise_16_regular",
+        ["output"] = "window_text_16_regular",
+        ["list"] = "list_16_regular",
+        ["play"] = "play_16_filled",
+        ["flame"] = "fire_16_regular",
+        ["stop"] = "stop_16_filled",
+        ["branch"] = "branch_16_regular",
+        ["debug"] = "bug_16_regular",
+        ["lock"] = "lock_closed_16_regular",
+        ["arrow-down"] = "arrow_down_16_regular",
+        ["lightbulb"] = "lightbulb_16_regular",
+        ["star"] = "star_16_regular",
+        ["edit"] = "edit_16_regular",
+        ["trash"] = "delete_16_regular",
+        ["pin"] = "pin_16_regular",
+        ["beaker"] = "beaker_16_regular",
+        ["filter"] = "filter_16_regular",
+        ["coverage"] = "data_pie_16_regular",
+        ["package"] = "box_16_regular",
+        ["link"] = "link_16_regular",
+        ["files"] = "document_multiple_16_regular",
+        ["file-add"] = "document_add_16_regular",
+        ["file-data"] = "document_data_16_regular",
+        ["tools"] = "wrench_16_regular",
+        ["arrow-left"] = "arrow_left_16_regular",
+        ["arrow-right"] = "arrow_right_16_regular",
+        ["save"] = "save_16_regular",
+        ["save-all"] = "save_multiple_16_regular",
+        ["undo"] = "arrow_undo_16_regular",
+        ["redo"] = "arrow_redo_16_regular",
+        ["play-outline"] = "play_16_regular",
+        ["pause"] = "pause_16_regular",
+        ["restart"] = "arrow_counterclockwise_16_regular",
+        ["step-over"] = "arrow_step_over_16_regular",
+        ["step-into"] = "arrow_step_in_16_regular",
+        ["step-out"] = "arrow_step_out_16_regular",
+        ["cloud"] = "cloud_16_regular",
+        ["pull-request"] = "branch_request_16_regular",
+        ["comment"] = "comment_16_regular",
+        ["account"] = "person_16_regular",
+        ["sync"] = "arrow_sync_16_regular",
+        ["database"] = "database_16_regular",
+        ["table"] = "table_16_regular",
+        ["key"] = "key_16_regular",
+
+        // Commands and tool windows in menus and toolbars (M34a).
+        ["folder-open"] = "folder_open_16_regular",
+        ["new"] = "new_16_regular",
+        ["new-solution"] = "square_multiple_16_regular",
+        ["compare"] = "branch_compare_16_regular",
+        ["cut"] = "cut_16_regular",
+        ["copy"] = "copy_16_regular",
+        ["paste"] = "clipboard_paste_16_regular",
+        ["find-in-files"] = "document_search_16_regular",
+        ["replace"] = "arrow_swap_16_regular",
+        ["go-to"] = "arrow_forward_16_regular",
+        ["go-to-line"] = "text_number_list_ltr_16_regular",
+        ["definition"] = "arrow_enter_16_regular",
+        ["references"] = "link_multiple_16_regular",
+        ["call-hierarchy"] = "flow_16_regular",
+        ["type-hierarchy"] = "list_bar_tree_16_regular",
+        ["rename"] = "rename_16_regular",
+        ["format"] = "text_align_left_16_regular",
+        ["uncomment"] = "comment_off_16_regular",
+        ["duplicate"] = "square_multiple_16_regular",
+        ["arrow-up"] = "arrow_up_16_regular",
+        ["select-expand"] = "select_all_on_16_regular",
+        ["fold"] = "text_collapse_16_regular",
+        ["unfold"] = "text_expand_16_regular",
+        ["fold-all"] = "arrow_collapse_all_16_regular",
+        ["unfold-all"] = "arrow_expand_all_16_regular",
+        ["bookmark"] = "bookmark_16_regular",
+        ["bookmarks"] = "bookmark_multiple_16_regular",
+        ["caret"] = "cursor_16_regular",
+        ["snippet"] = "code_block_16_regular",
+        ["braces"] = "braces_16_regular",
+        ["broom"] = "broom_16_regular",
+        ["code"] = "code_16_regular",
+        ["terminal"] = "window_console_20_regular",
+        ["task-list"] = "task_list_square_ltr_16_regular",
+        ["window"] = "window_multiple_16_regular",
+        ["tab"] = "tab_16_regular",
+        ["download"] = "arrow_download_16_regular",
+        ["upload"] = "arrow_upload_16_regular",
+        ["fork"] = "branch_fork_16_regular",
+        ["merge"] = "merge_16_regular",
+        ["stash"] = "archive_16_regular",
+        ["tag"] = "tag_16_regular",
+        ["link-add"] = "link_add_16_regular",
+        ["container"] = "cube_16_regular",
+        ["publish"] = "cloud_arrow_up_16_regular",
+        ["build"] = "toolbox_16_regular",
+        ["cancel"] = "dismiss_circle_16_regular",
+        ["layers"] = "stack_16_regular",
+        ["timer"] = "timer_16_regular",
+        ["check-circle"] = "checkmark_circle_16_regular",
+        ["attach"] = "plug_connected_16_regular",
+        ["breakpoint"] = "record_16_filled",
+        ["breakpoint-outline"] = "record_16_regular",
+        ["watch"] = "glasses_16_regular",
+        ["gauge"] = "gauge_16_regular",
+        ["globe"] = "globe_16_regular",
+        ["shield"] = "shield_checkmark_16_regular",
+        ["metrics"] = "data_bar_vertical_16_regular",
+        ["color"] = "color_16_regular",
+        ["templates"] = "document_copy_16_regular",
+        ["split-right"] = "split_vertical_16_regular",
+        ["split-down"] = "split_horizontal_16_regular",
+        ["close-all"] = "dismiss_square_multiple_16_regular",
+        ["layout"] = "layout_column_two_16_regular",
+        ["document-text"] = "document_text_16_regular",
+        ["update"] = "arrow_sync_circle_16_regular",
+        ["sparkle"] = "sparkle_16_regular",
+    };
+
+    private static readonly Dictionary<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);
+
+    /// <summary>Our Fluent icon names and the Fluent file each one uses (tests).</summary>
+    public static IReadOnlyDictionary<string, string> FluentNames => s_fluent;
+
+    /// <summary>The prefix of Material Icon Theme's file-type icons (<c>mi:csharp</c>, <c>mi:folder-src-open</c>; Controls/FileIcons.cs).</summary>
+    public const string MaterialPrefix = "mi:";
+
+    /// <summary>
+    /// A compiled icon, or null when <paramref name="name"/> is a stroke icon or unknown: one of our Fluent names, or
+    /// <c>mi:</c> and a Material Icon Theme file name.
+    /// </summary>
+    internal static FilledIcon? GetFilled(string? name)
+    {
+        string? file = null;
+        if (name is not null && !s_fluent.TryGetValue(name, out file) && name.StartsWith(MaterialPrefix, StringComparison.Ordinal))
+        {
+            file = name[MaterialPrefix.Length..];
+        }
+
+        if (name is null || file is null)
+        {
+            return null;
+        }
+
+        lock (s_filled)
+        {
+            if (!s_filled.TryGetValue(name, out var icon))
+            {
+                icon = CompiledIcons.Create(file) is { } layers ? new FilledIcon(layers, CompiledIcons.DesignSize(file)) : null;
+                s_filled[name] = icon;
+            }
+
+            return icon;
+        }
+    }
     private static readonly Dictionary<string, string> s_paths = new(StringComparer.Ordinal)
     {
         ["search"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14",
@@ -77,6 +359,10 @@ public static class IconSet
         ["close"] = "M4,4 L12,12 M12,4 L4,12",
         ["chevron-right"] = "M6,3.5 L10.5,8 L6,12.5",
         ["chevron-down"] = "M3.5,6 L8,10.5 L12.5,6",
+        ["zoom-in"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14 M4.75,6.75 H8.75 M6.75,4.75 V8.75",
+        ["zoom-out"] = Circle(6.75, 6.75, 4.5) + "M10.25,10.25 L14,14 M4.75,6.75 H8.75",
+        ["fit"] = "M2,5.5 V2 H5.5 M10.5,2 H14 V5.5 M14,10.5 V14 H10.5 M5.5,14 H2 V10.5",
+        ["chevron-double-right"] = "M3.5,3.5 L8,8 L3.5,12.5 M8.5,3.5 L13,8 L8.5,12.5",
         ["refresh"] = "M13,8 A5,5 0 1 1 11.54,4.46 M12,1.75 V4.75 H9",
         ["output"] = "M1.5,2.5 H14.5 V13.5 H1.5 Z M4,6 L6.5,8 L4,10 M8,10.5 H12",
         ["list"] = "M5.5,4 H14 M5.5,8 H14 M5.5,12 H14 " + Dot(2.5, 4) + Dot(2.5, 8) + Dot(2.5, 12),
@@ -167,7 +453,8 @@ public static class IconSet
 
     private static string Bell => "M3.5,11.5 V7 C3.5,4.5 5.5,2.5 8,2.5 C10.5,2.5 12.5,4.5 12.5,7 V11.5 L13.5,12.5 H2.5 Z M6.5,14.25 H9.5 ";
 
-    public static IReadOnlyCollection<string> Names => s_paths.Keys;
+    /// <summary>Every icon name, Fluent and stroke.</summary>
+    public static IReadOnlyCollection<string> Names => [.. s_paths.Keys.Union(s_fluent.Keys, StringComparer.Ordinal)];
 
     public static Geometry? Get(string? name)
     {

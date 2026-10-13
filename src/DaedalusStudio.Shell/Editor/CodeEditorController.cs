@@ -1098,15 +1098,30 @@ public sealed partial class CodeEditorController : IDisposable
             };
             _completion = window;
             window.Show();
-            if (caret > start)
+            void Select()
             {
-                window.CompletionList.SelectItem(Model.Text.GetText(start, caret - start));
+                // Filters by the typed text and picks the best match (CompletionData.Priority breaks ties).
+                if (caret > start && Editor.CaretOffset >= caret)
+                {
+                    window.CompletionList.SelectItem(Model.Text.GetText(start, Editor.CaretOffset - start));
+                }
+
+                if (window.CompletionList.SelectedItem is null && list.Items.FirstOrDefault(i => i.Preselect == true) is { } preselected)
+                {
+                    window.CompletionList.SelectedItem = window.CompletionList.CompletionData.OfType<CompletionData>().First(d => d.Item == preselected);
+                }
             }
 
-            if (window.CompletionList.SelectedItem is null && list.Items.FirstOrDefault(i => i.Preselect == true) is { } preselected)
+            Select();
+
+            // Again once the list is laid out: a selection made before its template applied doesn't stick (M34a).
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                window.CompletionList.SelectedItem = window.CompletionList.CompletionData.OfType<CompletionData>().First(d => d.Item == preselected);
-            }
+                if (_completion == window)
+                {
+                    Select();
+                }
+            }, Avalonia.Threading.DispatcherPriority.Loaded);
         }
         catch (Exception ex) when (IsTransient(ex))
         {

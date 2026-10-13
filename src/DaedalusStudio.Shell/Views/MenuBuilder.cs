@@ -1,8 +1,10 @@
+using System.Windows.Input;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using DaedalusStudio.Platform;
+using DaedalusStudio.Shell.Controls;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.Input;
 using DaedalusStudio.Workbench.Menus;
@@ -12,8 +14,9 @@ namespace DaedalusStudio.Shell.Views;
 
 /// <summary>
 /// Renders the workbench menu model: an in-window menu bar on Windows and Linux, the global menu bar
-/// (<see cref="NativeMenu"/>) on macOS. Items are rebuilt each time a menu opens, so enablement and
-/// when-clauses reflect the current context.
+/// (<see cref="NativeMenu"/>) on macOS, and the context menus. Items are rebuilt each time a menu opens, so
+/// enablement and when-clauses reflect the current context. Submenus nest (M34a), entries show their command's
+/// icon (colored by family), shortcut and full name as a tooltip.
 /// </summary>
 internal static class MenuBuilder
 {
@@ -23,6 +26,7 @@ internal static class MenuBuilder
         if (shell.Workbench.Platform == PlatformKind.MacOS)
         {
             menuBar.IsVisible = false;
+            AttachApplicationMenu(shell);
             var native = new NativeMenu();
             NativeMenu.SetMenu(window, native);
             void RebuildNative() => BuildNative(native, shell);
@@ -34,6 +38,40 @@ internal static class MenuBuilder
         void Rebuild() => Build(menuBar, shell);
         Rebuild();
         menus.Changed += (_, _) => Ui.Post(Rebuild);
+    }
+
+    /// <summary>
+    /// macOS's application menu: our About and Settings entries before the ones the system adds (Services, Hide, Quit).
+    /// Without a menu of its own, Avalonia's default shows "About Avalonia" (found on the Mac).
+    /// </summary>
+    private static void AttachApplicationMenu(ShellHost shell)
+    {
+        if (Avalonia.Application.Current is not { } app || NativeMenu.GetMenu(app) is not null)
+        {
+            return;
+        }
+
+        var menu = new NativeMenu();
+        menu.Add(new NativeMenuItem("About " + ShellInfo.ProductName) { Command = shell.CommandFor("help.about") });
+        menu.Add(new NativeMenuItemSeparator());
+        menu.Add(new NativeMenuItem("Settings…") { Command = shell.CommandFor("workbench.openOptions"), Gesture = new KeyGesture(Key.OemComma, Avalonia.Input.KeyModifiers.Meta) });
+        NativeMenu.SetMenu(app, menu);
+    }
+
+    /// <summary>
+    /// A context menu of <paramref name="location"/>'s items, or null when none is visible. <paramref name="commandFor"/>
+    /// makes each entry's command (the editor passes the document and caret).
+    /// </summary>
+    public static ContextMenu? Context(ShellHost shell, string location, Func<string, ICommand>? commandFor = null)
+    {
+        if (shell.Workbench.Menus.GetItems(location).Count == 0)
+        {
+            return null;
+        }
+
+        var menu = new ContextMenu();
+        Fill(menu.Items, location, shell, commandFor ?? (c => shell.CommandFor(c)));
+        return menu;
     }
 
     private static void Build(Menu menuBar, ShellHost shell)
@@ -49,27 +87,27 @@ internal static class MenuBuilder
 
             var top = new MenuItem { Header = menu.Title };
             AutomationProperties.SetName(top, menu.Title.Replace("_", string.Empty, StringComparison.Ordinal));
-            Fill(top, location, shell);
+            Fill(top.Items, location, shell, c => shell.CommandFor(c));
             top.SubmenuOpened += (_, e) =>
             {
                 if (e.Source == top)
                 {
-                    Fill(top, location, shell);
+                    Fill(top.Items, location, shell, c => shell.CommandFor(c));
                 }
             };
             menuBar.Items.Add(top);
         }
     }
 
-    private static void Fill(MenuItem top, string location, ShellHost shell)
+    private static void Fill(ItemCollection items, string location, ShellHost shell, Func<string, ICommand> commandFor)
     {
-        top.Items.Clear();
+        items.Clear();
         string? group = null;
         foreach (var item in shell.Workbench.Menus.GetItems(location))
         {
             if (group is not null && item.Group != group)
             {
-                top.Items.Add(new Separator());
+                items.Add(new Separator());
             }
 
             group = item.Group;
@@ -77,30 +115,45 @@ internal static class MenuBuilder
             {
                 var child = new MenuItem { Header = item.Title };
                 AutomationProperties.SetName(child, item.Title);
-                Fill(child, submenu, shell);
-                top.Items.Add(child);
+                Fill(child.Items, submenu, shell, commandFor);
+                items.Add(child);
                 continue;
             }
 
-            var header = new DockPanel { LastChildFill = true };
-            if (item.KeyLabel is { } keys)
-            {
-                var label = new TextBlock { Text = keys, Margin = new Avalonia.Thickness(32, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-                label.Classes.Add("muted");
-                DockPanel.SetDock(label, Avalonia.Controls.Dock.Right);
-                header.Children.Add(label);
-            }
-
-            header.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center });
-            var entry = new MenuItem { Header = header, IsEnabled = item.Enabled, Command = shell.CommandFor(item.Command) };
-            AutomationProperties.SetName(entry, item.Title);
-            if (item.KeyLabel is { } accelerator)
-            {
-                AutomationProperties.SetAcceleratorKey(entry, accelerator);
-            }
-
-            top.Items.Add(entry);
+            items.Add(Entry(item, shell, commandFor(item.Command)));
         }
+    }
+
+    private static MenuItem Entry(Workbench.Menus.MenuItem item, ShellHost shell, ICommand command)
+    {
+        var header = new DockPanel { LastChildFill = true };
+        if (item.KeyLabel is { } keys)
+        {
+            var label = new TextBlock { Text = keys, Margin = new Avalonia.Thickness(32, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            label.Classes.Add("muted");
+            DockPanel.SetDock(label, Avalonia.Controls.Dock.Right);
+            header.Children.Add(label);
+        }
+
+        header.Children.Add(new TextBlock { Text = item.Title, VerticalAlignment = VerticalAlignment.Center, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis });
+        var entry = new MenuItem
+        {
+            Header = header,
+            IsEnabled = item.Enabled,
+            Command = command,
+            Icon = CommandIcons.Create(item.Command, id => shell.Workbench.ToolWindows.Find(id)?.Icon),
+        };
+        AutomationProperties.SetName(entry, item.Title);
+        if (item.KeyLabel is { } accelerator)
+        {
+            AutomationProperties.SetAcceleratorKey(entry, accelerator);
+        }
+
+        // D25: the command's full name and its shortcut, after a pause, so it doesn't get in the way.
+        ToolTip.SetTip(entry, item.KeyLabel is { } shortcut ? $"{item.Description ?? item.Title} ({shortcut})" : item.Description ?? item.Title);
+        ToolTip.SetShowDelay(entry, 1200);
+        ToolTip.SetPlacement(entry, PlacementMode.RightEdgeAlignedTop);
+        return entry;
     }
 
     private static void BuildNative(NativeMenu native, ShellHost shell)
@@ -116,6 +169,10 @@ internal static class MenuBuilder
         }
     }
 
+    /// <summary>
+    /// The macOS menu bar: the same tree as native submenus. Apple's menus carry no command icons (the Human Interface
+    /// Guidelines keep them for a few system items), so the native menu shows titles and shortcuts only.
+    /// </summary>
     private static void FillNative(NativeMenu menu, string location, ShellHost shell)
     {
         menu.Items.Clear();
@@ -132,11 +189,13 @@ internal static class MenuBuilder
             {
                 var child = new NativeMenuItem(item.Title) { Menu = new NativeMenu() };
                 FillNative(child.Menu, submenu, shell);
+                child.Menu.Opening += (_, _) => FillNative(child.Menu, submenu, shell);
                 menu.Items.Add(child);
                 continue;
             }
 
-            var binding = shell.Workbench.Keybindings.GetBinding(item.Command);
+            // The binding, or the keys the controls handle themselves (Edit's ⌘Z, ⌘C…), which macOS users expect shown.
+            var binding = item.Keys;
             menu.Items.Add(new NativeMenuItem(item.Title)
             {
                 IsEnabled = item.Enabled,

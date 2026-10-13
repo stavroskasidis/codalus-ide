@@ -26,7 +26,7 @@ public sealed class XamlPreviewViewModel : ObservableObject
     private WriteableBitmap? _previous;
     private PreviewFrame? _frame;
     private double _zoom = 1;
-    private string _scale = "100%";
+    private string _scale = "1×";
     private string _theme = "Default";
     private PreviewRect? _selection;
     private int _frames;
@@ -37,6 +37,11 @@ public sealed class XamlPreviewViewModel : ObservableObject
         ZoomInCommand = new RelayCommand(() => Zoom = s_zooms.FirstOrDefault(z => z > _zoom + 0.001, s_zooms[^1]));
         ZoomOutCommand = new RelayCommand(() => Zoom = s_zooms.LastOrDefault(z => z < _zoom - 0.001, s_zooms[0]));
         ZoomResetCommand = new RelayCommand(() => Zoom = 1);
+        FitCommand = new RelayCommand(() =>
+        {
+            FitToPane = true;
+            FitRequested?.Invoke(this, EventArgs.Empty);
+        });
     }
 
     /// <summary>Refresh: rebuild if needed and render again.</summary>
@@ -62,7 +67,29 @@ public sealed class XamlPreviewViewModel : ObservableObject
 
     public ICommand ZoomResetCommand { get; }
 
-    public IReadOnlyList<string> Scales { get; } = ["100%", "125%", "150%", "200%"];
+    /// <summary>Fit: the preview scales down to the pane (and follows it) until a zoom command sets a zoom.</summary>
+    public ICommand FitCommand { get; }
+
+    /// <summary>Whether the zoom follows the pane's size (the default): a frame larger than the pane is shown whole.</summary>
+    public bool FitToPane { get; private set; } = true;
+
+    /// <summary>The view should fit the frame to its pane now.</summary>
+    public event EventHandler? FitRequested;
+
+    /// <summary>Fits the frame into <paramref name="width"/> × <paramref name="height"/> (device-independent pixels), never above 100%.</summary>
+    public void FitTo(double width, double height)
+    {
+        if (!FitToPane || _frame is null || width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        var zoom = Math.Min(1, Math.Min(width / (_frame.Width / _frame.Scale), height / (_frame.Height / _frame.Scale)));
+        SetZoom(Math.Max(0.1, zoom), fit: true);
+    }
+
+    /// <summary>The render scales (DPI) as multipliers, so the zoom button is the toolbar's only percentage (M34d).</summary>
+    public IReadOnlyList<string> Scales { get; } = ["1×", "1.25×", "1.5×", "2×"];
 
     public IReadOnlyList<string> Themes { get; } = ["Default", "Light", "Dark"];
 
@@ -116,13 +143,16 @@ public sealed class XamlPreviewViewModel : ObservableObject
     public double Zoom
     {
         get => _zoom;
-        set
+        set => SetZoom(Math.Clamp(value, s_zooms[0], s_zooms[^1]), fit: false);
+    }
+
+    private void SetZoom(double zoom, bool fit)
+    {
+        FitToPane = fit;
+        if (SetField(ref _zoom, zoom, nameof(Zoom)))
         {
-            if (SetField(ref _zoom, Math.Clamp(value, s_zooms[0], s_zooms[^1])))
-            {
-                OnPropertyChanged(nameof(ZoomText));
-                OnSizeChanged();
-            }
+            OnPropertyChanged(nameof(ZoomText));
+            OnSizeChanged();
         }
     }
 
@@ -133,9 +163,9 @@ public sealed class XamlPreviewViewModel : ObservableObject
         get => _scale;
         set
         {
-            if (SetField(ref _scale, value) && double.TryParse(value.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out var percent))
+            if (SetField(ref _scale, value) && double.TryParse(value.TrimEnd('×'), NumberStyles.Float, CultureInfo.InvariantCulture, out var factor))
             {
-                _ = Invoke(ScaleChanged, percent / 100);
+                _ = Invoke(ScaleChanged, factor);
             }
         }
     }

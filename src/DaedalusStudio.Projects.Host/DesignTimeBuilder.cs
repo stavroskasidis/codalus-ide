@@ -45,7 +45,7 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             _manager.BeginBuild(new BuildParameters(collection)
             {
                 Loggers = [errors],
-                MaxNodeCount = 1,
+                MaxNodeCount = NodeCount(requests.Count),
                 EnableNodeReuse = false,
                 DisableInProcNode = false,
             });
@@ -65,6 +65,44 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             _gate.Release();
         }
     }
+
+    /// <summary>
+    /// How many MSBuild nodes a batch uses (M34b). The in-process node runs one project at a time; a batch of several
+    /// projects adds out-of-process worker nodes (half the processors at most), which start in about a second, so small
+    /// batches (an edit) stay in process. <c>DAEDALUS_DESIGNTIME_NODES</c> sets the most; MSBuild before 17 stays in
+    /// process (its worker nodes never connect to this host, M33).
+    /// </summary>
+    internal static int NodeCount(int requests)
+    {
+        if (SolutionBuilder.InProcess || requests < ParallelThreshold)
+        {
+            return 1;
+        }
+
+        var most = int.TryParse(Environment.GetEnvironmentVariable("DAEDALUS_DESIGNTIME_NODES"), out var configured) && configured > 0
+            ? configured
+            : Math.Max(1, Environment.ProcessorCount / 2);
+        return Math.Clamp(requests / 2, 1, most);
+    }
+
+    /// <summary>Batches of fewer projects build in process only.</summary>
+    internal const int ParallelThreshold = 6;
+
+    /// <summary>
+    /// The only state a design-time build sends back: from a worker node, the whole project instance would be
+    /// serialized for nothing.
+    /// </summary>
+    private static readonly RequestedProjectState s_state = new()
+    {
+        PropertyFilters = ["TargetFramework", "TargetPath", "TargetRefPath"],
+        ItemFilters = new Dictionary<string, List<string>>
+        {
+            ["CscCommandLineArgs"] = [],
+            ["VbcCommandLineArgs"] = [],
+            ["FscCommandLineArgs"] = [],
+            ["ProjectReference"] = [],
+        },
+    };
 
     private async Task BuildOneAsync(
         Request request,
@@ -95,7 +133,7 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
                 global["TargetFramework"] = tfm;
             }
 
-            var data = new BuildRequestData(request.Path, global, null, s_targets, null, BuildRequestDataFlags.ProvideProjectStateAfterBuild);
+            var data = new BuildRequestData(request.Path, global, null, s_targets, null, BuildRequestDataFlags.ProvideSubsetOfStateAfterBuild, s_state);
             var result = await ExecuteAsync(_manager.PendBuildRequest(data)).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             var state = result.ProjectStateAfterBuild;

@@ -86,18 +86,13 @@ internal static partial class BuiltIns
 
         menus.Add(
         [
-            Item(SolutionExplorerView.ContextMenuLocation, "containers.addDockerSupport", "3-containers", 1, "explorerItemKind == project && !(" + ComposeProjectWhen + ")"),
+            Item(SolutionExplorerView.AddMenuLocation, "containers.addDockerSupport", "2-references", 3, "explorerItemKind == project && !(" + ComposeProjectWhen + ")", "Docker Support"),
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeUp", "3-containers", 2, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeDebug", "3-containers", 3, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeDown", "3-containers", 4, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(OtherWindowsMenu, "containers.show", "windows", AlphabeticalOrder("Containers")),
-            Item(MenuLocations.MenuBar("build"), "project.publish", "4-publish", 1),
             Item(SolutionExplorerView.ContextMenuLocation, "project.publish", "3-containers", 0, "explorerItemKind == project && !(" + ComposeProjectWhen + ")"),
             Item(OtherWindowsMenu, "aspire.show", "windows", AlphabeticalOrder("Aspire Resources")),
-            Item(MenuLocations.MenuBar("debug"), "aspire.openDashboard", "6-containers", 3),
-            Item(MenuLocations.MenuBar("project"), "containers.addDockerSupport", "containers", 1),
-            Item(MenuLocations.MenuBar("debug"), "containers.composeDebug", "6-containers", 1),
-            Item(MenuLocations.MenuBar("debug"), "containers.attach", "6-containers", 2),
         ]);
     }
 }

@@ -155,9 +155,53 @@ None. The GPUI prototype (M0) and its crates were removed when Avalonia was chos
 | Intel PresentMon (optional; evaluated, not used for the published metrics) | 2.6.0 | MIT |
 | Reference IDEs measured (VS Code, JetBrains Rider, Visual Studio) | installed versions | Proprietary. Only launched for measurement and never redistributed. |
 
-## Fonts and assets
+## Fonts, icons and assets
 
-None are bundled. The shell uses platform fonts (Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono) by name.
+No fonts are bundled. The shell uses platform fonts (Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono) by name.
+
+| Component | Version | License | Used for |
+|---|---|---|---|
+| Fluent UI System Icons (Microsoft, the npm package `@fluentui/svg-icons`) | 1.1.344 (SHA-256 pinned in `eng/get-fluent-icons.sh`) | MIT (checked again 2026-10-12: the repository's `LICENSE` and the package's `license` field) | **Redistributed**, compiled into the shell (D24, M34a): 125 SVGs listed in `src/DaedalusStudio.Shell/Icons/fluent-icons.txt`, copied unchanged into `Icons/Fluent/` and turned into geometries at build time (`eng/icons/CompileIcons.cs`). Its licence follows. |
+
+| Material Icon Theme (Material Extensions, the npm package `material-icon-theme`) | 5.39.0 (SHA-256 pinned in `eng/get-material-icons.sh`) | MIT (checked 2026-10-12: the package's `LICENSE` and `license` field) | **Redistributed**, compiled into the shell (D24, M34a): 123 file, folder and project SVGs listed in `src/DaedalusStudio.Shell/Icons/material-icons.txt`, copied unchanged into `Icons/Material/` and turned into colored geometries at build time (`eng/icons/CompileIcons.cs`). No brand logos of products we don't integrate are used (the theme's Visual Studio icon is left out). Its licence follows. |
+
+Fluent UI System Icons' licence:
+
+```
+MIT License
+
+Copyright (c) 2020 Microsoft Corporation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+Material Icon Theme's licence:
+
+```nThe MIT License (MIT)
+Copyright (c) 2025 Material Extensions
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
 
 ## Schemas (bundled)
 

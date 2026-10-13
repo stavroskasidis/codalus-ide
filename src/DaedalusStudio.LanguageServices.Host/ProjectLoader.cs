@@ -29,7 +29,17 @@ internal sealed class ProjectLoader
         IReadOnlyList<string> AdditionalFiles,
         IReadOnlyList<string> AnalyzerConfigFiles,
         IReadOnlyList<(string Path, MetadataReferenceProperties Properties)> References,
-        IReadOnlyList<AnalyzerReference> Analyzers);
+        IReadOnlyList<AnalyzerReference> Analyzers)
+    {
+        /// <summary>The compiler's output (<c>/out:</c>, in <c>obj/</c>): rewritten by every build of the project.</summary>
+        public string? IntermediateAssembly { get; init; }
+
+        /// <summary>The compiler's reference assembly (<c>/refout:</c>), when the project produces one.</summary>
+        public string? IntermediateRefAssembly { get; init; }
+
+        /// <summary>The documentation file the build writes (<c>/doc:</c>), when it writes one.</summary>
+        public string? DocumentationFile { get; init; }
+    }
 
     /// <summary>Parses C# command lines; other languages are not supported by this host (null).</summary>
     public Parsed? Parse(ProjectData data)
@@ -80,7 +90,14 @@ internal sealed class ProjectLoader
             [.. args.AdditionalFiles.Select(f => Path.GetFullPath(f.Path)).Distinct(Paths.Comparer)],
             [.. args.AnalyzerConfigPaths.Select(Path.GetFullPath).Distinct(Paths.Comparer)],
             references,
-            analyzers);
+            analyzers)
+        {
+            IntermediateAssembly = args.OutputFileName is { Length: > 0 } output && args.OutputDirectory is { Length: > 0 } outputDirectory
+                ? Path.GetFullPath(Path.Combine(outputDirectory, output))
+                : null,
+            IntermediateRefAssembly = args.OutputRefFilePath is { Length: > 0 } refOutput ? Path.GetFullPath(Path.Combine(directory, refOutput)) : null,
+            DocumentationFile = args.DocumentationPath is { Length: > 0 } documentation ? Path.GetFullPath(Path.Combine(directory, documentation)) : null,
+        };
     }
 
     /// <summary>A metadata reference to a file, shared by every project that references it while the file is unchanged.</summary>

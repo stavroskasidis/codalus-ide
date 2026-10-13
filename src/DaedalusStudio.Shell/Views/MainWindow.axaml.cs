@@ -39,7 +39,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
-        AddHandler(GotFocusEvent, (_, e) => OnFocusChanged(e.Source as Visual), RoutingStrategies.Bubble);
+        // handledEventsToo: the code editor's text area marks GotFocus handled, which left editorTextFocus unset, so the
+        // editor's key bindings (Ctrl+Space, F12…) never matched a focused editor (M34a).
+        AddHandler(GotFocusEvent, (_, e) => OnFocusChanged(e.Source as Visual), RoutingStrategies.Bubble, handledEventsToo: true);
         PaletteLayer.PointerPressed += (_, e) =>
         {
             if (e.Source == PaletteLayer)
@@ -382,6 +384,11 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void OnFocusChanged(Visual? source)
     {
+        if (source is not null and not MenuItem && source.FindAncestorOfType<MenuBase>() is null)
+        {
+            _shell.LastFocus = source; // Edit → Cut/Copy/Paste act on it after a menu took the focus (M34a)
+        }
+
         var pane = PaneHost.Of(source);
         var view = pane?.Dockable switch
         {

@@ -94,6 +94,14 @@ internal static partial class BuiltIns
                 Scope = SettingScope.User,
                 Order = 2,
             },
+            SettingDescriptor.Create(ShellHost.ColorTabsByProjectSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "Color Document Tabs by Project",
+                Category = "Appearance",
+                Description = "Mark each document tab with its project's color, a stripe along the tab's bottom edge.",
+                Scope = SettingScope.User,
+                Order = 3,
+            },
             SettingDescriptor.Create("workbench.notifications.autoHideSeconds", "8", SettingType.Integer, shell) with
             {
                 Title = "Auto-Hide Informational Toasts",
@@ -249,41 +257,6 @@ internal static partial class BuiltIns
         }
 
         return order;
-    }
-
-    public static void RegisterMenus(MenuRegistry menus)
-    {
-        menus.AddMenuBarMenu(new MenuBarMenu("file", "_File", 10));
-        menus.AddMenuBarMenu(new MenuBarMenu("view", "_View", 30));
-        menus.AddMenuBarMenu(new MenuBarMenu("tools", "_Tools", 70));
-        menus.AddMenuBarMenu(new MenuBarMenu("help", "_Help", 90));
-
-        var shell = ContributionSource.Shell;
-        MenuItemRule Item(string menu, string command, string group, int order = 0) =>
-            new(MenuLocations.MenuBar(menu), command, shell) { Group = group, Order = order };
-
-        menus.Add(
-        [
-            Item("file", "file.save", "file", 1),
-            Item("file", "workbench.closeActiveDocument", "file", 2),
-            // Preferences live in the Tools menu, ending with Options… (M29).
-            Item("tools", "workbench.selectTheme", "preferences", 1),
-            Item("tools", "workbench.openKeyboardShortcuts", "preferences", 2),
-            Item("tools", "workbench.openOptions", "preferences", 3),
-            Item("file", "workbench.quit", "exit"),
-            Item("view", "workbench.showCommandPalette", "navigation"),
-            MenuItemRule.ForSubmenu(MenuLocations.MenuBar("view"), OtherWindowsMenu, "Other Windows", shell) with { Group = "view", Order = 1000 },
-            MenuItemRule.ForSubmenu(MenuLocations.MenuBar("debug"), DebugWindowsMenu, "Windows", shell) with { Group = "5-windows", Order = 0 },
-            Item("view", "workbench.resetLayout", "layout", 1),
-            Item("view", "workbench.focusNextPane", "layout", 2),
-            Item("view", "workbench.focusPreviousPane", "layout", 3),
-            Item("tools", "workbench.openPluginsFolder", "plugins", 100),
-            Item("help", "workbench.showLogs", "help", 1),
-            Item("help", "help.openCrashReports", "help", 2),
-            Item("help", "help.about", "help", 3),
-            Item("help", "update.check", "updates", 1),
-            Item("help", "update.whatsNew", "updates", 2),
-        ]);
     }
 
     /// <summary>Self-update (M32, ADR 0029): Options → Environment → Updates.</summary>

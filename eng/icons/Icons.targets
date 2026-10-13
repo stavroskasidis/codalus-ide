@@ -1,0 +1,39 @@
+<Project>
+  <!--
+    Compiles the shell's icons into C# geometries before the compiler runs (D24, M34a): Fluent UI System Icons
+    (Icons/Fluent/*.svg, commands) and Material Icon Theme (Icons/Material/*.svg, file types). The task is inline C#
+    (RoslynCodeTaskFactory), so it builds with the SDK on every OS and needs no tool.
+  -->
+  <PropertyGroup>
+    <CompiledIconsSource>$(MSBuildThisFileDirectory)CompileIcons.cs</CompiledIconsSource>
+    <!-- IntermediateOutputPath isn't set yet where projects import this; the output is the same for every configuration. -->
+    <CompiledIconsOutput>$(MSBuildProjectDirectory)/$(BaseIntermediateOutputPath)CompiledIcons/CompiledIcons.g.cs</CompiledIconsOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <IconSvg Include="$(MSBuildProjectDirectory)/Icons/Fluent/*.svg;$(MSBuildProjectDirectory)/Icons/Material/*.svg" />
+    <!-- Shown in the IDE, not compiled. -->
+    <None Remove="@(IconSvg)" />
+  </ItemGroup>
+
+  <UsingTask TaskName="CompileIcons" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Icons ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputFile ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Class" Language="cs" Source="$(CompiledIconsSource)" />
+    </Task>
+  </UsingTask>
+
+  <Target Name="CompileIcons" Inputs="@(IconSvg);$(CompiledIconsSource);$(MSBuildThisFileFullPath)" Outputs="$(CompiledIconsOutput)">
+    <CompileIcons Icons="@(IconSvg)" OutputFile="$(CompiledIconsOutput)" />
+  </Target>
+
+  <Target Name="IncludeCompiledIcons" BeforeTargets="CoreCompile" DependsOnTargets="CompileIcons">
+    <ItemGroup>
+      <Compile Include="$(CompiledIconsOutput)" />
+      <FileWrites Include="$(CompiledIconsOutput)" />
+    </ItemGroup>
+  </Target>
+</Project>

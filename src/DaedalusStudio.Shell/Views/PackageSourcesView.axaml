@@ -15,8 +15,8 @@
         <Button Content="Save" Command="{Binding SaveCommand}" AutomationProperties.Name="Save package sources" />
         <Button Content="Revert" Command="{Binding RevertCommand}" />
       </StackPanel>
-      <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding ConfigFiles}" />
-      <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding GlobalPackagesFolder}" />
+      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{Binding ConfigFiles}" />
+      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{Binding GlobalPackagesFolder}" />
     </StackPanel>
     <Grid ColumnDefinitions="280,*">
       <DockPanel>
@@ -41,7 +41,7 @@
                 <CheckBox IsChecked="{Binding Enabled}" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{Binding Name, StringFormat='Enable {0}'}" />
                 <StackPanel>
                   <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                  <TextBlock Classes="muted" FontSize="11" Text="{Binding Url}" TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                  <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Url}" TextTrimming="CharacterEllipsis" MaxWidth="220" />
                 </StackPanel>
               </StackPanel>
             </DataTemplate>
@@ -57,7 +57,7 @@
         <CheckBox Content="Enabled" IsChecked="{Binding Enabled}" IsEnabled="{Binding CanEdit}" />
         <TextBlock Text="Package source mapping: patterns of packages that come only from this source (one per line, e.g. Contoso.* or *)" TextWrapping="Wrap" />
         <TextBox Text="{Binding Patterns}" AcceptsReturn="True" MinHeight="80" AutomationProperties.Name="Mapped package patterns" />
-        <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding Origin}" />
+        <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{Binding Origin}" />
       </StackPanel>
       </Panel>
     </Grid>

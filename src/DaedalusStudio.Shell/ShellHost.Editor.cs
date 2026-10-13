@@ -148,6 +148,7 @@ public sealed partial class ShellHost : IEditorServices
         });
         Languages.HostRestarted += (_, _) => Ui.Post(RefreshEditors);
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnLanguageStatus(e.LanguageId, e.Status));
+        Solutions.DesignTimeProgressChanged += (_, _) => Ui.Post(UpdateLanguageStatus);
         Languages.Diagnostics.Changed += (_, _) => Ui.Post(ScheduleDiagnosticsStatus);
         Solutions.ProjectChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
         Solutions.CompilerInputsChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
@@ -385,18 +386,38 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    private WorkspaceStatusParams? _languageStatus;
+
     private void OnLanguageStatus(string languageId, WorkspaceStatusParams status)
     {
-        Workbench.StatusBar.Set(new StatusBarItem("daedalus.languageStatus", status.State == WorkspaceStates.Ready ? string.Empty : "$(refresh) Loading C# projects…", StatusBarAlignment.Left, 50, StatusSource)
-        {
-            Visible = status.State != WorkspaceStates.Ready,
-            Tooltip = $"{status.Projects} project(s) loaded in the C# language service",
-        });
+        _languageStatus = status;
+        UpdateLanguageStatus();
         if (status.State == WorkspaceStates.Ready)
         {
             Diagnostics.BenchEvents.BenchEvents.Emit(Diagnostics.BenchEvents.BenchEventNames.LanguageReady);
             RefreshEditors();
         }
+    }
+
+    /// <summary>
+    /// The C# status with real counts (M34b): design-time builds while they run, then the projects the language service
+    /// is compiling. The editor works meanwhile; only squiggles that depend on unloaded projects wait.
+    /// </summary>
+    private void UpdateLanguageStatus()
+    {
+        if (_languageStatus is not { } status)
+        {
+            return;
+        }
+
+        var text = Solutions.DesignTimeProgress is { Completed: false, Total: > 0 } building
+            ? $"$(refresh) Loading C# projects {building.Built}/{building.Total}…"
+            : "$(refresh) Analyzing C# projects…";
+        Workbench.StatusBar.Set(new StatusBarItem("daedalus.languageStatus", status.State == WorkspaceStates.Ready ? string.Empty : text, StatusBarAlignment.Left, 50, StatusSource)
+        {
+            Visible = status.State != WorkspaceStates.Ready,
+            Tooltip = $"{status.Projects} project(s) loaded in the C# language service",
+        });
     }
 
     // ------------------------------------------------------------------ IEditorServices
@@ -610,6 +631,15 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    /// <summary>Closes every document that isn't pinned (M34d).</summary>
+    public void CloseUnpinnedDocuments()
+    {
+        foreach (var document in Layout.Documents.Where(d => !d.IsPinned).ToList())
+        {
+            Layout.CloseDocument(document);
+        }
+    }
+
     public bool HasUnsavedDocuments => _models.Values.Any(m => m.IsModified);
 
     /// <summary>Asks before quitting with unsaved changes; true when the window may close.</summary>
@@ -676,7 +706,7 @@ public sealed partial class ShellHost : IEditorServices
             .Select(e =>
             {
                 var caret = e.Controller is { } controller ? e.Model.PositionAt(controller.Editor.CaretOffset) : new Position(0, 0);
-                return new Docking.SessionDocument(e.Model.Path, caret.Line, caret.Character);
+                return new Docking.SessionDocument(e.Model.Path, caret.Line, caret.Character) { Pinned = e.IsPinned ? true : null };
             })
             .ToList();
         WriteJson(file, new Docking.EditorSession(documents, ActiveEditor?.Model.Path)
@@ -723,7 +753,10 @@ public sealed partial class ShellHost : IEditorServices
 
         foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))
         {
-            await OpenFileAsync(document.Path, preview: false, new Position(document.Line, document.Character)).ConfigureAwait(true);
+            if (await OpenFileAsync(document.Path, preview: false, new Position(document.Line, document.Character)).ConfigureAwait(true) is { } opened && document.Pinned == true)
+            {
+                Layout.SetPinned(opened, true);
+            }
         }
 
         if (session.Active is { } active && Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, active)) is { } editor)

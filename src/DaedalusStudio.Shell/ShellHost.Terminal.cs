@@ -248,13 +248,13 @@ public sealed partial class ShellHost
                 Description = "Command ids whose key bindings keep working while a terminal has focus; every other key goes to the shell. Empty: the built-in list (palette, F6, build, run, debug, terminal commands).",
                 Order = 7,
             },
-            SettingDescriptor.Create(RunConsoleSetting, "\"outputWindow\"", SettingType.String, shell) with
+            SettingDescriptor.Create(RunConsoleSetting, $"\"{DefaultRunConsole}\"", SettingType.String, shell) with
             {
                 Title = "Console for Run Without Debugging",
                 Category = "Build and Run",
-                Description = "Where console apps run: their output in the Output window, the integrated terminal (they can read input), or an external console (Windows).",
+                Description = "Where console and web apps run: their output in the Output window, the integrated terminal (they can read input), or a console window of their own (Windows, the default there).",
                 Enum = ["outputWindow", "integratedTerminal", "externalConsole"],
-                EnumDescriptions = ["Output window", "Integrated terminal", "External console (Windows)"],
+                EnumDescriptions = ["Output window", "Integrated terminal", "Console window (Windows)"],
                 Order = 3,
             },
         ];

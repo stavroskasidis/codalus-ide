@@ -13,6 +13,7 @@ namespace DaedalusStudio.LanguageServices.Host;
 internal sealed class DaedalusWorkspace(HostServices host) : Workspace(host, "Daedalus")
 {
     public void Replace(Solution solution) => SetCurrentSolution(solution);
+
 }
 
 /// <summary>
@@ -69,6 +70,36 @@ internal sealed class WorkspaceManager : IDisposable
 
     public ProjectId MiscellaneousProjectId => _miscId;
 
+    /// <summary>
+    /// The solution is still loading (more design-time builds are coming, M34b). Projects whose referenced projects
+    /// haven't arrived yet and documents in Miscellaneous Files then get syntax diagnostics only: their semantic errors
+    /// would be false (the missing projects' types).
+    /// </summary>
+    public bool Loading { get; private set; }
+
+    /// <summary>Sets <see cref="Loading"/>; returns whether it changed.</summary>
+    public bool SetLoading(bool loading)
+    {
+        lock (_gate)
+        {
+            if (Loading == loading)
+            {
+                return false;
+            }
+
+            Loading = loading;
+            return true;
+        }
+    }
+
+    private ImmutableHashSet<ProjectId> _incomplete = [];
+
+    /// <summary>
+    /// Whether a project references a project that isn't loaded, directly or through the projects it references: its
+    /// compilation lacks types it will have once loading completes.
+    /// </summary>
+    public bool IsIncomplete(ProjectId project) => _incomplete.Contains(project);
+
     public int ProjectCount
     {
         get
@@ -77,6 +108,25 @@ internal sealed class WorkspaceManager : IDisposable
             {
                 return _projects.Count;
             }
+        }
+    }
+
+    private int _generation;
+
+    /// <summary>Changes whenever projects are added, updated or removed, or closed files change on disk (not for edits of open documents).</summary>
+    public int Generation => Volatile.Read(ref _generation);
+
+    /// <summary>A loaded project as its key sees it (M34c): its design-time build and the projects it references.</summary>
+    internal sealed record ProjectSnapshot(ProjectId Id, ProjectLoader.Parsed Parsed, IReadOnlyList<ProjectId> References);
+
+    /// <summary>The keys of the loaded projects as they are now (M34c, <see cref="LanguageStateCache"/>).</summary>
+    public ProjectKeys Keys()
+    {
+        lock (_gate)
+        {
+            return new ProjectKeys(
+                _projects.Values.Where(e => e.Parsed is not null).ToDictionary(e => e.Id, e => new ProjectSnapshot(e.Id, e.Parsed!, [.. e.AppliedProjects.Select(r => r.ProjectId)])),
+                _open.ToDictionary(o => o.Key, o => o.Value.Text, Paths.Comparer));
         }
     }
 
@@ -105,13 +155,17 @@ internal sealed class WorkspaceManager : IDisposable
 
     public void UpdateProjects(IReadOnlyList<ProjectData> projects)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        TimeSpan parsing = default, applying = default, referencing = default;
         lock (_gate)
         {
             var solution = _workspace.CurrentSolution;
             foreach (var data in projects)
             {
                 var path = Path.GetFullPath(data.Path);
+                var step = System.Diagnostics.Stopwatch.GetTimestamp();
                 var parsed = _loader.Parse(data with { Path = path });
+                parsing += System.Diagnostics.Stopwatch.GetElapsedTime(step);
                 if (parsed is null)
                 {
                     continue;
@@ -123,14 +177,26 @@ internal sealed class WorkspaceManager : IDisposable
                     _projects[path] = entry;
                 }
 
+                step = System.Diagnostics.Stopwatch.GetTimestamp();
                 solution = Apply(solution, entry, parsed);
                 entry.Parsed = parsed;
                 Watch(Path.GetDirectoryName(path)!);
+                applying += System.Diagnostics.Stopwatch.GetElapsedTime(step);
             }
 
+            var references = System.Diagnostics.Stopwatch.GetTimestamp();
             solution = ApplyReferences(solution);
+            referencing = System.Diagnostics.Stopwatch.GetElapsedTime(references);
             solution = ReconcileOpenDocuments(solution);
             _workspace.Replace(solution);
+            _incomplete = Incomplete();
+            Interlocked.Increment(ref _generation);
+        }
+
+        if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalMilliseconds: > 1000 } elapsed)
+        {
+            Log?.Invoke(this, $"Loading {projects.Count} project(s) took {elapsed.TotalMilliseconds:0} ms (parsing {parsing.TotalMilliseconds:0}, "
+                              + $"adding {applying.TotalMilliseconds:0}, references {referencing.TotalMilliseconds:0}).");
         }
 
         ProjectsChanged?.Invoke(this, EventArgs.Empty);
@@ -163,9 +229,32 @@ internal sealed class WorkspaceManager : IDisposable
             solution = ApplyReferences(solution);
             solution = ReconcileOpenDocuments(solution);
             _workspace.Replace(solution);
+            _incomplete = Incomplete();
+            Interlocked.Increment(ref _generation);
         }
 
         ProjectsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The projects that reference a project that isn't loaded, directly or through other projects.</summary>
+    private ImmutableHashSet<ProjectId> Incomplete()
+    {
+        var verdicts = new Dictionary<string, bool>(Paths.Comparer);
+        bool Missing(string path)
+        {
+            if (verdicts.TryGetValue(path, out var known))
+            {
+                return known;
+            }
+
+            verdicts[path] = false; // a cycle (never valid in MSBuild) ends here
+            var missing = !_projects.TryGetValue(path, out var entry) || entry.Parsed is null
+                          || (entry.Parsed.Data.ProjectReferences ?? []).Any(Missing);
+            verdicts[path] = missing;
+            return missing;
+        }
+
+        return [.. _projects.Values.Where(e => e.Parsed is not null && (e.Parsed.Data.ProjectReferences ?? []).Any(Missing)).Select(e => e.Id)];
     }
 
     private Solution Apply(Solution solution, ProjectEntry entry, ProjectLoader.Parsed parsed)
@@ -263,6 +352,9 @@ internal sealed class WorkspaceManager : IDisposable
             }
         }
 
+        // Projects reference hundreds of the same files: each file's timestamp is read once per call, not once per project
+        // (M34b: a 96-project solution, updated a project at a time, spent a minute here).
+        var files = new Dictionary<string, MetadataReference?>(Paths.Comparer);
         foreach (var entry in _projects.Values.Where(e => e.Parsed is not null))
         {
             var metadata = new List<MetadataReference>();
@@ -289,9 +381,21 @@ internal sealed class WorkspaceManager : IDisposable
                         projects.Add(new ProjectReference(target, properties.Aliases, properties.EmbedInteropTypes));
                     }
                 }
-                else if (_loader.Metadata(path, properties) is { } reference)
+                else if (properties == MetadataReferenceProperties.Assembly)
                 {
-                    metadata.Add(reference);
+                    if (!files.TryGetValue(path, out var reference))
+                    {
+                        files[path] = reference = _loader.Metadata(path, properties);
+                    }
+
+                    if (reference is not null)
+                    {
+                        metadata.Add(reference);
+                    }
+                }
+                else if (_loader.Metadata(path, properties) is { } aliased)
+                {
+                    metadata.Add(aliased);
                 }
             }
 
@@ -679,6 +783,10 @@ internal sealed class WorkspaceManager : IDisposable
             }
 
             _workspace.Replace(solution);
+            if (reloaded.Count > 0)
+            {
+                Interlocked.Increment(ref _generation);
+            }
         }
 
         foreach (var path in reloaded)

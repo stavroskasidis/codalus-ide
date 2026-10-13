@@ -14,7 +14,7 @@
         <controls:Icon Kind="clear-all" />
       </Button>
     </StackPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="No new notifications." IsVisible="{Binding IsEmpty}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="No new notifications." IsVisible="{Binding IsEmpty}" />
     <ListBox x:Name="List" ItemsSource="{Binding Items}" Background="Transparent" AutomationProperties.Name="Notifications">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:NotificationViewModel">

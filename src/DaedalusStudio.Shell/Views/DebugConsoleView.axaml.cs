@@ -20,9 +20,12 @@ public sealed partial class DebugConsoleView : UserControl, IPaneView
     private OutputChannel? _channel;
     private int _flushScheduled;
 
+    private readonly Controls.FollowTail _tail;
+
     public DebugConsoleView()
     {
         InitializeComponent();
+        _tail = Controls.FollowTail.Attach(Editor);
         Input.KeyDown += (_, e) =>
         {
             if (DataContext is not DebugConsoleViewModel vm)
@@ -82,7 +85,7 @@ public sealed partial class DebugConsoleView : UserControl, IPaneView
             channel.Appended += OnAppended;
         }
 
-        Editor.ScrollToEnd();
+        _tail.Reset();
     }
 
     private void OnAppended(object? sender, string? text)
@@ -121,6 +124,6 @@ public sealed partial class DebugConsoleView : UserControl, IPaneView
             Editor.AppendText(batch.ToString());
         }
 
-        Editor.ScrollToEnd();
+        // FollowTail keeps the end in view while the user is there (M34a).
     }
 }

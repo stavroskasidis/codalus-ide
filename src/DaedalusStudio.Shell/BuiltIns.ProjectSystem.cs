@@ -99,23 +99,9 @@ internal static partial class BuiltIns
         const string Containers = "(explorerItemKind == project || explorerItemKind == folder || explorerItemKind == file) && !explorerFolderView";
         menus.Add(
         [
-            Item(MenuLocations.MenuBar("file"), "workbench.openFolder", "solution", 1),
-            Item(MenuLocations.MenuBar("project"), "project.addNewItem", "add", -3),
-            Item(MenuLocations.MenuBar("project"), "project.addExistingItem", "add", -2),
-            Item(MenuLocations.MenuBar("project"), "project.addExistingItemAsLink", "add", -1),
-            Item(MenuLocations.MenuBar("project"), "explorer.showAllFiles", "view", 1),
-            Item(MenuLocations.MenuBar("project"), "folder.loadAllProjects", "view", 2),
-            Item(MenuLocations.MenuBar("project"), "project.exportTemplate", "templates", 1),
-            Item(MenuLocations.MenuBar("tools"), "tools.templates", "templates", 1),
-            Item(MenuLocations.MenuBar("tools"), "tools.externalTools", "external-config", 1),
-            Item(MenuLocations.MenuBar("build"), "tasks.run", "5-tasks", 1),
-            Item(MenuLocations.MenuBar("build"), "tasks.configure", "5-tasks", 2),
-            Item(MenuLocations.MenuBar("debug"), "run.selectLaunchConfiguration", "2-startup", 3),
-            Item(MenuLocations.MenuBar("debug"), "launch.configure", "2-startup", 4),
-
-            Item(Context, "project.addNewItem", "1-new", -2, Containers),
-            Item(Context, "project.addExistingItem", "1-new", -1, Containers),
-            Item(Context, "project.addExistingItemAsLink", "1-new", 0, Containers),
+            Item(SolutionExplorerView.AddMenuLocation, "project.addNewItem", "1-new", -3, Containers, "New Item…"),
+            Item(SolutionExplorerView.AddMenuLocation, "project.addExistingItem", "1-new", -2, Containers, "Existing Item…"),
+            Item(SolutionExplorerView.AddMenuLocation, "project.addExistingItemAsLink", "1-new", -1, Containers, "Existing Item As Link…"),
             Item(Context, "explorer.excludeFromProject", "3-edit", 8, "explorerItemInProject"),
             Item(Context, "explorer.includeInProject", "3-edit", 8, "explorerItemExcluded"),
             Item(Context, "folder.loadAllProjects", "4-solution", 0, "explorerItemKind == solution && folderMode"),

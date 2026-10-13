@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using DaedalusStudio.Debugging;
 using DaedalusStudio.Shell.Infrastructure;
+using DaedalusStudio.Platform;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Debugging;
@@ -24,6 +25,9 @@ public sealed partial class ShellHost
     public const string JavaScriptDebugSetting = "debug.javaScript";
 
     private static readonly TimeSpan s_devServerTimeout = TimeSpan.FromMinutes(2);
+
+    /// <summary>How long a server has to log its address before the page opens at the launch profile's.</summary>
+    private static readonly TimeSpan s_listeningWait = TimeSpan.FromSeconds(10);
 
     private RunningProgram? _browserDebugServer;
     private TaskCompletionSource<string>? _serverListening;
@@ -150,6 +154,7 @@ public sealed partial class ShellHost
         {
             _pendingBrowserUrl = plan.BrowserUrl;
             await Debugger.LaunchAsync(plan, CancellationToken.None).ConfigureAwait(true);
+            OpenBrowserLater();
             return;
         }
 
@@ -158,12 +163,16 @@ public sealed partial class ShellHost
         await Debugger.LaunchCompoundAsync(plan, CancellationToken.None).ConfigureAwait(true);
         try
         {
-            await listening.Task.WaitAsync(s_devServerTimeout).ConfigureAwait(true);
+            await listening.Task.WaitAsync(s_listeningWait).ConfigureAwait(true);
         }
-        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+        catch (TimeoutException)
         {
-            DebugLog.AppendLine("The server didn't report the address it listens on, so the browser didn't open.");
-            return;
+            // Its logging may filter the host's messages: the page opens at the launch profile's address anyway.
+            DebugLog.AppendLine($"The server didn't log the address it listens on; opening {page.Url}.");
+        }
+        catch (OperationCanceledException)
+        {
+            return; // the session ended
         }
         finally
         {
@@ -183,7 +192,11 @@ public sealed partial class ShellHost
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
         {
             DebugLog.AppendLine("The page couldn't be debugged: " + ex.Message);
-            Workbench.Notifications.Warning($"The page couldn't be opened in {browser.Display} under the debugger: {ex.Message} The server is still debugged.");
+            Workbench.Notifications.Warning($"The page couldn't be debugged in {browser.Display}: {ex.Message} It opened without the debugger; the server is still debugged.");
+            if (Uri.TryCreate(page.Url, UriKind.Absolute, out var uri))
+            {
+                ShellIntegration.OpenUrl(uri);
+            }
         }
     }
 

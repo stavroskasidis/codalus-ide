@@ -5,7 +5,7 @@
              x:Class="DaedalusStudio.Shell.Views.CoverageResultsView"
              x:DataType="vm:CoverageResultsViewModel">
   <DockPanel>
-    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,3">
+    <controls:ToolbarPanel DockPanel.Dock="Top">
       <ToggleButton Classes="toolbar" IsChecked="{Binding ShowColoring}" ToolTip.Tip="Show Coverage Coloring in the Editor" AutomationProperties.Name="Show Coverage Coloring">
         <controls:Icon Kind="coverage" />
       </ToggleButton>
@@ -19,8 +19,8 @@
         <controls:Icon Kind="collapse-all" />
       </Button>
       <TextBox x:Name="Filter" Text="{Binding FilterText}" MinWidth="180" Margin="4,0" PlaceholderText="Search Coverage Results" AutomationProperties.Name="Search Coverage Results" />
-    </WrapPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" FontSize="11" Margin="8,0,8,3" Text="{Binding Summary}" />
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="8,0,8,3" Text="{Binding Summary}" />
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,120,80,80" Margin="8,2" IsVisible="{Binding HasCoverage}">
       <TextBlock Classes="muted" Text="Name" />
       <TextBlock Grid.Column="1" Classes="muted" Text="Lines" />
@@ -28,7 +28,7 @@
       <TextBlock Grid.Column="3" Classes="muted" Text="Branches" HorizontalAlignment="Right" />
     </Grid>
     <Grid>
-      <TextBlock Classes="muted" Margin="12" TextWrapping="Wrap" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
+      <TextBlock Classes="emptyState" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
       <ListBox x:Name="List"
                ItemsSource="{Binding Rows}"
                SelectedItem="{Binding Selected}"

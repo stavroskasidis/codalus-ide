@@ -13,6 +13,9 @@ public sealed record QuickPickItem(string Label)
     /// <summary>Key binding shown on the right.</summary>
     public string? KeyLabel { get; init; }
 
+    /// <summary>An icon before the label (a file's type, a symbol's kind; M34a).</summary>
+    public string? Icon { get; init; }
+
     public object? Tag { get; init; }
 }
 
@@ -31,6 +34,10 @@ public sealed class QuickPickRow(QuickPickItem item, IReadOnlyList<int> highligh
     public bool HasDetail => !string.IsNullOrEmpty(Item.Detail);
 
     public bool HasKeyLabel => !string.IsNullOrEmpty(Item.KeyLabel);
+
+    public string? Icon => Item.Icon;
+
+    public bool HasIcon => Item.Icon is not null;
 
     /// <summary>What screen readers announce for the row.</summary>
     public string AccessibleName => HasKeyLabel ? $"{Label}, {Item.KeyLabel}" : Label;

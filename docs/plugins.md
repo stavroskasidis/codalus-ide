@@ -76,7 +76,7 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 ### Contribution points
 
 - **commands:** `id`, `title`, `category` (shown as "Category: Title"), `enablement` (a when-clause; disabled commands are hidden from the palette and greyed in menus).
-- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|edit|view|git|project|build|debug|test|tools|window|help`, `toolWindow/title` (buttons above a tool window), `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key) and `editor/context` (the code editor's context menu; its commands get the document URI and the zero-based caret line and column as arguments; since 0.2.1). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
+- **menus:** locations `commandPalette` (only to restrict visibility with `when`; every command is in the palette by default), `menuBar/file|edit|view|git|project|build|debug|test|analyze|tools|window|help` and, since M34a, their submenus (`menuBar/edit/goTo`, `menuBar/edit/find`, `menuBar/edit/advanced`, `menuBar/edit/intelliSense`, `menuBar/edit/refactor`, `menuBar/file/new`, `menuBar/git/branches`, `menuBar/debug/windows` and the rest named in `BuiltIns.Menus.cs`), `toolWindow/title` (buttons above a tool window), `solutionExplorer/context` (the Solution Explorer's context menu; use the `explorerItemKind` context key; submenus `solutionExplorer/context/add`, `/git` and `/entityFramework` since M34a) and `editor/context` (submenus `editor/context/git`, `/snippets`, `/outlining` and `/breakpoint` since M34a) (the code editor's context menu; its commands get the document URI and the zero-based caret line and column as arguments; since 0.2.1). Entries take `command`, `group`, `order` and `when`. Groups are separated in menus.
 - **keybindings:** `key` plus optional `mac`, `linux` and `win` overrides, `command`, `when` and `args`. Chords are space-separated (`ctrl+k ctrl+h`). `primary` means ⌘ on macOS and Ctrl elsewhere. Users override bindings in the Keyboard Shortcuts editor; user bindings win over plugin bindings, which win over defaults.
 - **toolWindows:** `id`, `title`, `location` (`left`, `right`, `bottom`), `kind` (`tree` or `markdown`) and `icon`.
 - **settings:** `title` (the Settings UI category) and `properties`, each with `type` (`string`, `boolean`, `integer`, `number`, `string[]`), `default`, `description`, `enum` and `enumDescriptions`, `minimum`/`maximum`, `scope` (`user`, or `workspace` to allow per-workspace overrides) and `order`. Invalid values in settings.json fall back to the default and are reported in the Settings UI.
@@ -127,7 +127,7 @@ Implement `ITreeDataProvider<T>`: `GetChildrenAsync(element)` (null means the ro
 
 ### Icons and status bar text
 
-Icons are names from the shell's set, so they follow the theme, including high contrast: `search`, `gear`, `keyboard`, `color-mode`, `history`, `extensions`, `folder`, `file`, `book`, `check`, `circle`, `home`, `info`, `warning`, `error`, `bell`, `bell-dot`, `close`, `chevron-right`, `chevron-down`, `refresh`, `output`, `list`, `play`, `link-external`, `clear-all`, `lock`, `arrow-down`, `star`, `question`, `edit`, `discard`, `trash`, `layout`, `dot`, `solution`, `project`, `package`, `link`, `file-code`, `file-data`, and since 0.2.6 `cloud`, `pull-request`, `comment`, `issue`, `worktree`, `account`, `sync`, and since 0.2.7 `pin`. Status bar text may start with `$(icon)`, for example `"$(home) Start"`.
+Icons are names from the shell's set, so they follow the theme, including high contrast: `search`, `gear`, `keyboard`, `color-mode`, `history`, `extensions`, `folder`, `file`, `book`, `check`, `circle`, `home`, `info`, `warning`, `error`, `bell`, `bell-dot`, `close`, `chevron-right`, `chevron-down`, `refresh`, `output`, `list`, `play`, `link-external`, `clear-all`, `lock`, `arrow-down`, `star`, `question`, `edit`, `discard`, `trash`, `layout`, `dot`, `solution`, `project`, `package`, `link`, `file-code`, `file-data`, and since 0.2.6 `cloud`, `pull-request`, `comment`, `issue`, `worktree`, `account`, `sync`, and since 0.2.7 `pin`. Since M34a most of them are Fluent UI System Icons (D24), and the commands' icons are available too (`folder-open`, `save`, `save-all`, `build`, `breakpoint`, `step-into`, `merge`, `terminal` and the others in `Controls/Icon.cs`); file-type icons are `mi:` and a name from `Icons/material-icons.txt` (`mi:csharp`, `mi:folder-src-open`), and `name@Family` colors an icon with a command family's token (`beaker@Test`). Status bar text may start with `$(icon)`, for example `"$(home) Start"`.
 
 ### Shell commands for plugins
 
@@ -246,6 +246,10 @@ The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/DaedalusStudi
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### M34a (no version change)
+
+Additive (manifests for 0.2.0–0.2.8 keep working): menus may contribute to `menuBar/analyze` and to the menus' submenus (`menuBar/<menu>/<submenu>`, `editor/context/<submenu>`, `solutionExplorer/context/<submenu>`). The menu bar and the context menus are trees now: the built-in Templates plugin's New Project and New Solution moved from `menuBar/file` to `menuBar/file/new`, and its Solution Explorer entry to `solutionExplorer/context/add`. A plugin's items in a top-level menu stay there. Icon names gained the commands' icons, and most icons are drawn from Fluent UI System Icons.
 
 ### 0.2.8 (M26)
 

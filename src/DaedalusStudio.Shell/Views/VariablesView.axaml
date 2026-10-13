@@ -4,7 +4,7 @@
              x:Class="DaedalusStudio.Shell.Views.VariablesView"
              x:DataType="vm:VariablesViewModel">
   <DockPanel>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="Variables appear here while the program is stopped." IsVisible="{Binding IsEmpty}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="Variables appear here while the program is stopped." IsVisible="{Binding IsEmpty}" />
     <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="Variables">
       <TreeView.Styles>
         <Style Selector="TreeViewItem" x:DataType="vm:VariableNode">

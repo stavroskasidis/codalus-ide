@@ -10,7 +10,7 @@
       <Grid ColumnDefinitions="*,Auto">
         <StackPanel Spacing="2">
           <TextBlock Classes="heading" Text="{Binding Title}" />
-          <TextBlock Classes="muted" FontSize="11" Text="{Binding Path}" />
+          <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Path}" />
         </StackPanel>
         <Button Grid.Column="1" Content="Open File" Command="{Binding OpenCommand}" VerticalAlignment="Top" ToolTip.Tip="Open the selected node's file" />
       </Grid>
@@ -36,7 +36,7 @@
             <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
               <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
               <TextBlock Text="{Binding Text}" VerticalAlignment="Center" MaxWidth="900" MaxLines="1" TextTrimming="CharacterEllipsis" Classes.muted="{Binding IsPlaceholder}" />
-              <TextBlock Classes="muted" FontSize="11" Text="{Binding Duration}" IsVisible="{Binding HasDuration}" VerticalAlignment="Center" />
+              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Duration}" IsVisible="{Binding HasDuration}" VerticalAlignment="Center" />
             </StackPanel>
           </TreeDataTemplate>
         </TreeView.ItemTemplate>
@@ -47,7 +47,7 @@
           <DataTemplate x:DataType="vm:BinaryLogSearchRowViewModel">
             <StackPanel AutomationProperties.Name="{Binding AccessibleName}">
               <TextBlock Text="{Binding Text}" MaxLines="1" TextTrimming="CharacterEllipsis" />
-              <TextBlock Classes="muted" FontSize="11" Text="{Binding Kind}" />
+              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Kind}" />
             </StackPanel>
           </DataTemplate>
         </ListBox.ItemTemplate>

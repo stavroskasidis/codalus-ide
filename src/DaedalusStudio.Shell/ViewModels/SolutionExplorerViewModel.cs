@@ -8,8 +8,9 @@ using DaedalusStudio.Workbench.Projects;
 namespace DaedalusStudio.Shell.ViewModels;
 
 /// <summary>One visible line of the Solution Explorer (the tree is flattened so the list can virtualize).</summary>
-public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expanded) : ObservableObject
+public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expanded, Func<string, ProjectInfo?>? project = null) : ObservableObject
 {
+    private readonly Func<string, ProjectInfo?> _project = project ?? (_ => null);
     private ExplorerNode _node = node;
     private bool _isExpanded = expanded;
     private bool _isStartup;
@@ -48,7 +49,8 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 
     public bool HasDetail => _node.Detail is not null;
 
-    public string Icon => _node.Icon;
+    /// <summary>File-type, folder and project icons (M34a, <see cref="Controls.FileIcons"/>); folders open when expanded.</summary>
+    public string Icon => Controls.FileIcons.ForNode(_node, _isExpanded, _project);
 
     public bool IsWarning => _node.IsWarning;
 
@@ -71,6 +73,7 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
         {
             if (SetField(ref _isExpanded, value))
             {
+                OnPropertyChanged(nameof(Icon));
                 OnPropertyChanged(nameof(Chevron));
                 OnPropertyChanged(nameof(AccessibleName));
             }
@@ -125,6 +128,9 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private IReadOnlyList<DirectoryEntry> _folderEntries = [];
     private int _diskGeneration;
     private bool _diskQueued;
+
+    /// <summary>What the build host knows about a project (its icon: test, web, library…).</summary>
+    private ProjectInfo? ProjectInfoOf(string path) => _shell.Solutions?.Projects.GetValueOrDefault(path);
 
     public SolutionExplorerViewModel(ShellHost shell)
     {
@@ -528,7 +534,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
         for (var i = prefix; i < rows.Count - suffix; i++)
         {
-            Rows.Insert(i, new ExplorerRowViewModel(rows[i].Node, rows[i].Depth, _expanded.Contains(rows[i].Node.Id)));
+            Rows.Insert(i, new ExplorerRowViewModel(rows[i].Node, rows[i].Depth, _expanded.Contains(rows[i].Node.Id), ProjectInfoOf));
         }
 
         MarkStartupProject();

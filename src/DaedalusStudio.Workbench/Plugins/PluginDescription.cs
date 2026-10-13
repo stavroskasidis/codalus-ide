@@ -249,10 +249,37 @@ public sealed partial class PluginDescription
         State = PluginState.Ready;
     }
 
-    private static bool IsKnownMenuLocation(string location) =>
-        location is MenuLocations.CommandPalette or MenuLocations.ToolWindowTitle or MenuLocations.EditorContext or MenuLocations.SolutionExplorerContext
-        || (location.StartsWith(MenuLocations.MenuBarPrefix, StringComparison.Ordinal)
-            && location[MenuLocations.MenuBarPrefix.Length..] is "file" or "edit" or "view" or "git" or "project" or "build" or "debug" or "test" or "tools" or "window" or "help");
+    /// <summary>
+    /// The locations plugins contribute to, and since M34a their submenus (<c>menuBar/edit/advanced</c>,
+    /// <c>editor/context/git</c>…); an unknown submenu simply never shows.
+    /// </summary>
+    private static bool IsKnownMenuLocation(string location)
+    {
+        if (location is MenuLocations.CommandPalette or MenuLocations.ToolWindowTitle)
+        {
+            return true;
+        }
+
+        if (location.StartsWith(MenuLocations.EditorContext, StringComparison.Ordinal) || location.StartsWith(MenuLocations.SolutionExplorerContext, StringComparison.Ordinal))
+        {
+            var rest = location.StartsWith(MenuLocations.EditorContext, StringComparison.Ordinal) ? location[MenuLocations.EditorContext.Length..] : location[MenuLocations.SolutionExplorerContext.Length..];
+            return rest.Length == 0 || SubmenuPath().IsMatch(rest);
+        }
+
+        if (!location.StartsWith(MenuLocations.MenuBarPrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var path = location[MenuLocations.MenuBarPrefix.Length..];
+        var slash = path.IndexOf('/', StringComparison.Ordinal);
+        var top = slash < 0 ? path : path[..slash];
+        return top is "file" or "edit" or "view" or "git" or "project" or "build" or "debug" or "test" or "analyze" or "tools" or "window" or "help"
+            && (slash < 0 || SubmenuPath().IsMatch(path[slash..]));
+    }
+
+    [GeneratedRegex("^(/[A-Za-z][A-Za-z0-9]*)+$")]
+    private static partial Regex SubmenuPath();
 
     [GeneratedRegex("^[a-z0-9][a-z0-9-]*\\.[a-z0-9][a-z0-9.-]*$")]
     private static partial Regex IdPattern();

@@ -48,7 +48,7 @@
     </ItemsControl>
 
     <Grid>
-      <TextBlock Classes="muted" Margin="12" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+      <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
       <ScrollViewer IsVisible="{Binding !HasMessage}">
         <ItemsControl x:Name="Grid" ItemsSource="{Binding Categories}" AutomationProperties.Name="Properties">
           <ItemsControl.ItemTemplate>

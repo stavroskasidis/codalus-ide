@@ -149,19 +149,17 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterPackageCommands(this);
         BuiltIns.RegisterProjectManagementCommands(this);
         BuiltIns.RegisterProjectSystemCommands(this);
-        BuiltIns.RegisterMenus(Workbench.Menus);
+        BuiltIns.RegisterEditCommands(this);
+        BuiltIns.RegisterMenuBar(Workbench.Menus, Workbench.Platform);
+        BuiltIns.RegisterEditorContextMenu(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterSolutionMenus(Workbench.Menus);
-        BuiltIns.RegisterEditorMenus(Workbench.Menus);
         BuiltIns.RegisterBuildMenus(Workbench.Menus);
-        BuiltIns.RegisterDebugMenus(Workbench.Menus);
         BuiltIns.RegisterWebMenus(Workbench.Menus);
         BuiltIns.RegisterDataMenus(Workbench.Menus);
         BuiltIns.RegisterContainerMenus(Workbench.Menus);
         BuiltIns.RegisterProfilingMenus(Workbench.Menus);
         BuiltIns.RegisterXamlMenus(Workbench.Menus);
         BuiltIns.RegisterRemoteMenus(Workbench.Menus);
-        BuiltIns.RegisterGitMenus(Workbench.Menus);
-        BuiltIns.RegisterTestingMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
         BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
         BuiltIns.RegisterProjectSystemMenus(Workbench.Menus);
@@ -191,6 +189,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         DiscoverPlugins();
         RestoreLayout();
+        InitializeTabColors();
         UpdateStatusItems();
         ReportPreviousCrashes();
     }
@@ -274,6 +273,9 @@ public sealed partial class ShellHost : IAsyncDisposable
     public StatusBarViewModel StatusBar { get; }
 
     public IShellWindow? Window { get; set; }
+
+    /// <summary>The element that last had the keyboard focus outside the menus (Edit → Cut, Copy, Paste act on it).</summary>
+    public Avalonia.Visual? LastFocus { get; set; }
 
     /// <summary>The window size and position saved with the layout, if any.</summary>
     public WindowPlacement? InitialPlacement { get; private set; }

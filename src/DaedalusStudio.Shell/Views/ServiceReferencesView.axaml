@@ -24,14 +24,14 @@
                   <Run Text="{Binding Name}" FontWeight="SemiBold" />
                   <Run Text="{Binding Kind}" Foreground="{DynamicResource Shell.MutedForeground}" />
                 </TextBlock>
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Detail}" />
-                <TextBlock Classes="muted" FontSize="11" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
               </StackPanel>
             </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
-      <TextBlock Classes="muted" FontSize="11" Text="{Binding Packages}" TextWrapping="Wrap" />
+      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Packages}" TextWrapping="Wrap" />
 
       <Border Padding="10" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}" IsVisible="{Binding HasSelection}">
         <StackPanel Spacing="6">

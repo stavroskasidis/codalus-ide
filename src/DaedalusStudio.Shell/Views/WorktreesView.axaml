@@ -5,7 +5,7 @@
              x:Class="DaedalusStudio.Shell.Views.WorktreesView"
              x:DataType="vm:WorktreesViewModel">
   <DockPanel>
-    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,3">
+    <controls:ToolbarPanel DockPanel.Dock="Top">
       <Button Classes="toolbar" Content="Add…" Command="{Binding AddCommand}" ToolTip.Tip="Add a worktree for a new or existing branch" />
       <Button Classes="toolbar" Content="Open" Command="{Binding OpenCommand}" IsEnabled="{Binding HasSelection}" ToolTip.Tip="Open the worktree's solution in this window" />
       <Button Classes="toolbar" Content="Open in New Window" Command="{Binding OpenNewWindowCommand}" IsEnabled="{Binding HasSelection}" />
@@ -15,7 +15,7 @@
       <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" AutomationProperties.Name="Refresh Worktrees">
         <controls:Icon Kind="refresh" />
       </Button>
-    </WrapPanel>
+    </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Text="{Binding Message}" IsVisible="{Binding HasMessage}" Classes="muted" TextWrapping="Wrap" Margin="12,6" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Worktrees">
       <ListBox.Styles>
@@ -31,9 +31,9 @@
               <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
               <controls:Icon Kind="branch" VerticalAlignment="Center" />
               <TextBlock Text="{Binding Branch}" VerticalAlignment="Center" />
-              <TextBlock Text="{Binding Flags}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Flags}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
             </StackPanel>
-            <TextBlock Text="{Binding Location}" Classes="muted" FontSize="11" Margin="22,0,0,0" TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding Location}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="22,0,0,0" TextTrimming="CharacterEllipsis" />
           </StackPanel>
         </DataTemplate>
       </ListBox.ItemTemplate>

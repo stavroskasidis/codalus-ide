@@ -12,7 +12,7 @@
       <TextBlock Grid.Column="3" Text="Name" Classes="muted" />
       <TextBlock Grid.Column="4" Text="Location" Classes="muted" />
     </Grid>
-    <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,8" Text="Threads appear here while the program is paused." IsVisible="{Binding IsEmpty}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="Threads appear here while the program is paused." IsVisible="{Binding IsEmpty}" />
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Threads">
       <ListBox.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ThreadRow">

@@ -14,6 +14,12 @@ public enum DebugConsoleKind
     /// the debugger attaches, so Detach All leaves it running.
     /// </summary>
     Terminal,
+
+    /// <summary>
+    /// A console window of its own (Windows, as a classic IDE debugs console and web apps): held and attached to like
+    /// <see cref="Terminal"/>, the window stays open after the program ends until a key is pressed.
+    /// </summary>
+    Window,
 }
 
 /// <summary>
@@ -46,7 +52,8 @@ public sealed record DebugProcess(string Name, int? Id, string Kind, string? Tar
     public const string Launched = "Launched";
     public const string Attached = "Attached";
     public const string Terminal = "Terminal";
+    public const string ConsoleWindow = "ConsoleWindow";
 
     /// <summary>Detach All can leave it running: it was attached to, or it has a console of its own.</summary>
-    public bool CanDetach => Kind is Attached or Terminal;
+    public bool CanDetach => Kind is Attached or Terminal or ConsoleWindow;
 }

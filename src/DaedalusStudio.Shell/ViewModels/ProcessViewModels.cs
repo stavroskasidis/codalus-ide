@@ -62,6 +62,7 @@ public sealed class ProcessesViewModel : ObservableObject
                 var kind = process.Kind switch
                 {
                     DebugProcess.Terminal => "Launched in the terminal",
+                    DebugProcess.ConsoleWindow => "Launched in a console window",
                     var other => other,
                 };
                 if (process.Target is { } target)

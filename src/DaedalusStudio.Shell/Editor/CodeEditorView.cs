@@ -67,12 +67,17 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _context.SelectionChanged += OnContextSelected;
         AutomationProperties.SetName(_context, "Project context");
 
-        var root = new DockPanel();
+        // The editors fill the dock panel; popups sit beside it in a plain panel. (They used to be the dock panel's
+        // last children: the last one took the fill, and the editors were docked left at their content's width, so the
+        // minimap followed the longest line instead of the editor's right edge; M34a.)
+        var layout = new DockPanel();
         DockPanel.SetDock(_contextBar, Avalonia.Controls.Dock.Top);
         DockPanel.SetDock(_navigationBar, Avalonia.Controls.Dock.Top);
-        root.Children.Add(_contextBar);
-        root.Children.Add(_navigationBar);
-        root.Children.Add(_editors);
+        layout.Children.Add(_contextBar);
+        layout.Children.Add(_navigationBar);
+        layout.Children.Add(_editors);
+        var root = new Panel();
+        root.Children.Add(layout);
         root.Children.Add(_hover);
         root.Children.Add(_exception);
         Content = root;
@@ -220,6 +225,13 @@ public sealed class CodeEditorView : UserControl, IPaneView
         editor.Bind(TextEditor.BackgroundProperty, this.GetResourceObservable("Shell.Editor.Background"));
         editor.Bind(TextEditor.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
         editor.Bind(TextEditor.LineNumbersForegroundProperty, this.GetResourceObservable("Shell.Editor.LineNumbers"));
+
+        // Outlining markers (M34a): the theme's muted glyph on the editor's background, brighter on hover (they were
+        // white boxes in the dark themes).
+        editor.Bind(AvaloniaEdit.Folding.FoldingMargin.FoldingMarkerBrushProperty, this.GetResourceObservable("Shell.Editor.Fold"));
+        editor.Bind(AvaloniaEdit.Folding.FoldingMargin.FoldingMarkerBackgroundBrushProperty, this.GetResourceObservable("Shell.Editor.Background"));
+        editor.Bind(AvaloniaEdit.Folding.FoldingMargin.SelectedFoldingMarkerBrushProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
+        editor.Bind(AvaloniaEdit.Folding.FoldingMargin.SelectedFoldingMarkerBackgroundBrushProperty, this.GetResourceObservable("Shell.Editor.Fold.Hover"));
         AutomationProperties.SetName(editor, _document.Model.Path);
         var controller = new CodeEditorController(editor, _document, _services, _hover, attach: primary, exceptionPopup: primary ? _exception : null);
         controller.ZoomChanged += (_, _) =>

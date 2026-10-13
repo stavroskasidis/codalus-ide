@@ -36,9 +36,12 @@ public sealed partial class InteractiveView : UserControl, IPaneView
     private int _completionGeneration;
     private int _signatureGeneration;
 
+    private readonly Controls.FollowTail _tail;
+
     public InteractiveView()
     {
         InitializeComponent();
+        _tail = Controls.FollowTail.Attach(TranscriptEditor);
         InputEditor.TextArea.TextView.LineTransformers.Add(_colorizer);
         InputEditor.Options.EnableHyperlinks = false;
         InputEditor.Options.EnableEmailHyperlinks = false;
@@ -398,7 +401,7 @@ public sealed partial class InteractiveView : UserControl, IPaneView
             channel.Appended += OnAppended;
         }
 
-        TranscriptEditor.ScrollToEnd();
+        _tail.Reset();
     }
 
     private void OnAppended(object? sender, string? text)
@@ -437,6 +440,6 @@ public sealed partial class InteractiveView : UserControl, IPaneView
             TranscriptEditor.AppendText(batch.ToString());
         }
 
-        TranscriptEditor.ScrollToEnd();
+        // FollowTail keeps the end in view while the user is there (M34a).
     }
 }

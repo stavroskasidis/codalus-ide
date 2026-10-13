@@ -1,0 +1,115 @@
+# The token pairs the shell draws one on the other (M34d), with the WCAG 2.1 contrast each must meet in every theme:
+# 4.5 for text (AA, normal size), 3 for icons, focus rings and other graphics (AA, non-text contrast).
+# Format: foreground background minimum. PolishTests checks every theme in Theming/Tokens.axaml against this list,
+# and that every token whose name ends in "Foreground" appears in it.
+
+# Text on the shell's surfaces.
+Shell.Foreground Shell.Background 4.5
+Shell.Foreground Shell.Panel 4.5
+Shell.Foreground Shell.Toolbar 4.5
+Shell.Foreground Shell.Overlay 4.5
+Shell.Foreground Shell.Hover 4.5
+Shell.Foreground Shell.Selection 4.5
+Shell.Foreground Shell.Search 4.5
+Shell.MutedForeground Shell.Background 4.5
+Shell.MutedForeground Shell.Panel 4.5
+Shell.MutedForeground Shell.Toolbar 4.5
+Shell.MutedForeground Shell.Overlay 4.5
+Shell.MutedForeground Shell.Search 4.5
+Shell.MutedForeground Shell.Editor.Background 4.5
+Shell.Link Shell.Panel 4.5
+Shell.Link Shell.Background 4.5
+Shell.Link Shell.Overlay 4.5
+Shell.Match Shell.Overlay 4.5
+Shell.AccentForeground Shell.Accent 4.5
+Shell.TitleBar.Foreground Shell.TitleBar 4.5
+
+# The status bar in each of its states.
+Shell.StatusBar.Foreground Shell.StatusBar 4.5
+Shell.StatusBar.Foreground Shell.StatusBar.Hover 4.5
+Shell.StatusBar.Foreground Shell.StatusBar.Empty 4.5
+Shell.StatusBar.Foreground Shell.StatusBar.Debugging 4.5
+
+# Document tabs and tool window captions.
+Shell.Tab.Active.Foreground Shell.Tab.Active 4.5
+Shell.Tab.Inactive.Foreground Shell.Tab.Inactive 4.5
+Shell.Tab.Selected.Foreground Shell.Tab.Selected 4.5
+Shell.Tab.Hover.Foreground Shell.Tab.Hover 4.5
+Shell.Tab.Preview.Foreground Shell.Tab.Preview 4.5
+Shell.Caption.Active.Foreground Shell.Caption.Active 4.5
+Shell.Caption.Inactive.Foreground Shell.Caption.Inactive 4.5
+DockTabActiveForegroundBrush DockTabActiveBackgroundBrush 4.5
+
+# The editor.
+Shell.Editor.Foreground Shell.Editor.Background 4.5
+Shell.Editor.LineNumbers Shell.Editor.Background 4.5
+Shell.Editor.InlayHint.Foreground Shell.Editor.InlayHint.Background 4.5
+Shell.Editor.Fold Shell.Editor.Background 3
+Shell.Editor.Bracket1 Shell.Editor.Background 3
+Shell.Editor.Bracket2 Shell.Editor.Background 3
+Shell.Editor.Bracket3 Shell.Editor.Background 3
+Shell.Diff.Added Shell.Editor.Background 3
+Shell.Diff.Removed Shell.Editor.Background 3
+
+# State colors: icons and borders (graphics).
+Shell.Error Shell.Panel 3
+Shell.Warning Shell.Panel 3
+Shell.Info Shell.Panel 3
+Shell.Error Shell.Editor.Background 3
+Shell.Warning Shell.Editor.Background 3
+Shell.Info Shell.Editor.Background 3
+Shell.Diff.Added Shell.Panel 3
+Shell.Focus Shell.Background 3
+Shell.Focus Shell.Panel 3
+Shell.Modified Shell.Background 3
+
+# Command icon families on menus, toolbars and panels (M34a).
+Shell.Icon.Run Shell.Overlay 3
+Shell.Icon.Stop Shell.Overlay 3
+Shell.Icon.Save Shell.Overlay 3
+Shell.Icon.Open Shell.Overlay 3
+Shell.Icon.Build Shell.Overlay 3
+Shell.Icon.Git Shell.Overlay 3
+Shell.Icon.Test Shell.Overlay 3
+Shell.Icon.Navigate Shell.Overlay 3
+Shell.Icon.Run Shell.Toolbar 3
+Shell.Icon.Stop Shell.Toolbar 3
+Shell.Icon.Save Shell.Toolbar 3
+Shell.Icon.Open Shell.Toolbar 3
+Shell.Icon.Build Shell.Toolbar 3
+Shell.Icon.Git Shell.Toolbar 3
+Shell.Icon.Test Shell.Toolbar 3
+Shell.Icon.Navigate Shell.Toolbar 3
+Shell.Icon.Run Shell.Panel 3
+Shell.Icon.Test Shell.Panel 3
+Shell.Icon.Blue Shell.Overlay 3
+Shell.Icon.Green Shell.Overlay 3
+Shell.Icon.Red Shell.Overlay 3
+Shell.Icon.Orange Shell.Overlay 3
+Shell.Icon.Purple Shell.Overlay 3
+Shell.Icon.Yellow Shell.Overlay 3
+Shell.Icon.Folder Shell.Overlay 3
+Shell.Icon.Blue Shell.Toolbar 3
+Shell.Icon.Green Shell.Toolbar 3
+Shell.Icon.Red Shell.Toolbar 3
+Shell.Icon.Orange Shell.Toolbar 3
+Shell.Icon.Purple Shell.Toolbar 3
+Shell.Icon.Yellow Shell.Toolbar 3
+Shell.Icon.Folder Shell.Toolbar 3
+Shell.Icon.Blue Shell.Panel 3
+Shell.Icon.Green Shell.Panel 3
+Shell.Icon.Red Shell.Panel 3
+Shell.Icon.Orange Shell.Panel 3
+Shell.Icon.Purple Shell.Panel 3
+Shell.Icon.Yellow Shell.Panel 3
+Shell.Icon.Folder Shell.Panel 3
+
+# Tabs colored by project: the stripe on an unselected tab.
+Shell.TabColor.1 Shell.Tab.Inactive 3
+Shell.TabColor.2 Shell.Tab.Inactive 3
+Shell.TabColor.3 Shell.Tab.Inactive 3
+Shell.TabColor.4 Shell.Tab.Inactive 3
+Shell.TabColor.5 Shell.Tab.Inactive 3
+Shell.TabColor.6 Shell.Tab.Inactive 3
+Shell.TabColor.7 Shell.Tab.Inactive 3
+Shell.TabColor.8 Shell.Tab.Inactive 3
