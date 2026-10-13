@@ -526,6 +526,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var cached = new List<CompilerInputsInfo>();
         var misses = new List<string>();
         var keys = new Dictionary<string, (string Directory, string Entry, string Key)>(s_pathComparer);
+        var used = new Dictionary<string, (string? Framework, string Key)>(s_pathComparer);
         HashSet<string> forced;
         lock (_designTimePending)
         {
@@ -549,6 +550,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             // The persisted cache (M34b): unchanged inputs give the last build's command line without building.
             if (project.IntermediateDirectory is { } obj && DesignTimeKey(path, framework, properties) is { } key)
             {
+                used[path] = (framework, key);
                 var entry = DesignTimeCache.Entry(configuration, platform, framework);
                 if (forced.Contains(path))
                 {
@@ -600,9 +602,17 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(Interlocked.Increment(ref built), total, false)).ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);
 
+        // A project evaluated again while this batch ran (the restore's assets files can arrive one evaluation at a time)
+        // may have changed what a result here was built from: those build again, or their cache entry would keep a key
+        // the next open never matches (M34c, the Linux runner).
+        var current = SolutionProperties();
+        var stale = used.Where(u => _evaluated.TryGetValue(u.Key, out var p) && p.Info.State == ProjectStates.Loaded
+                                    && DesignTimeKey(u.Key, u.Value.Framework, current) is { } now && now != u.Value.Key)
+            .Select(u => u.Key).ToList();
         bool more;
         lock (_designTimePending)
         {
+            _designTimePending.UnionWith(stale);
             more = _designTimePending.Count > 0;
         }
 
