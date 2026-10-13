@@ -58,6 +58,16 @@ public sealed class PluginTemplateTests : IDisposable
         await Run(work, "build", "Contoso.Greeter.slnx", "-c", "Debug");
         await Run(work, Path.Combine(work, "tests", "Contoso.Greeter.Tests", "bin", "Debug", "net10.0", "Contoso.Greeter.Tests.dll"));
 
+        // dotnet pack makes a gallery package (ADR 0060) that the installer opens as this plugin.
+        await Run(work, "pack", Path.Combine("src", "Contoso.Greeter", "Contoso.Greeter.csproj"), "-c", "Debug", "--no-build", "-o", Path.Combine(_root, "packed"));
+        var nupkg = Assert.Single(Directory.GetFiles(Path.Combine(_root, "packed"), "*.nupkg"));
+        Assert.Equal("contoso.contoso.greeter.0.1.0.nupkg", Path.GetFileName(nupkg));
+        var opened = await new PluginInstaller(Path.Combine(_root, "installed"), PlatformInfo.Current).OpenAsync(nupkg, requireSignature: false, Ct);
+        Assert.True(opened.Plugin.State == PluginState.Ready, opened.Plugin.Error);
+        Assert.Equal("contoso.contoso.greeter", opened.Plugin.Id);
+        Assert.True(File.Exists(Path.Combine(opened.Folder, "Contoso.Greeter.dll")));
+        Assert.False(File.Exists(Path.Combine(opened.Folder, "Codalus.Plugins.Abstractions.dll")));
+
         // The plugin as the IDE loads it: from its build output, in a plugin host of this repository.
         var output = Path.Combine(work, "src", "Contoso.Greeter", "bin", "Debug", "net10.0");
         Assert.False(File.Exists(Path.Combine(output, "Codalus.Plugins.Abstractions.dll"))); // the host provides it

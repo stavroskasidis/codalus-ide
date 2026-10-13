@@ -19,5 +19,6 @@
   <ItemGroup>
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
     <Compile Include="..\Shared\MockGitHub.cs" Link="Shared\MockGitHub.cs" />
+    <Compile Include="..\Shared\MockNuGetFeed.cs" Link="Shared\MockNuGetFeed.cs" />
   </ItemGroup>
 </Project>

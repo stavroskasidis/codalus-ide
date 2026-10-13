@@ -108,7 +108,15 @@ Translations come from the community; [Translating](../translating.md) explains 
 
 ## Plugins
 
-The Plugins window lists the installed plugins. **Turn Off** keeps a plugin from loading, and **Turn On** brings it back. It takes effect at the next start, and the window says so until then. The list is the setting `plugins.disabled`, so profiles can differ. File → Restart restarts Codalus IDE on the same solution.
+The Plugins window lists the installed plugins. **Turn Off** keeps a plugin from loading, and **Turn On** brings it back. It takes effect at the next start, and the window says so until then. The list is the setting `plugins.disabled`, so profiles can differ, and a workspace can turn more plugins off for itself in its own settings (the lists add up). File → Restart restarts Codalus IDE on the same solution.
+
+**The Plugin Gallery** (Tools → Browse Plugins…) finds plugins on NuGet: nuget.org, and any other feed in **Plugin Sources** (`plugins.sources`).
+- **Installing.** Search, pick a plugin and a version, and choose **Install**. Before it installs you see who publishes it, whether it's signed, and the permissions it declares: the network, starting programs, files outside the workspace, stored secrets. They tell you what it does. They can't be enforced, because a .NET plugin runs with your rights, so install plugins you trust. A new plugin works at once.
+- **Signatures.** Packages from nuget.org must be signed (**Require Signed Plugins**, `plugins.requireSignature`: nuget.org's, every source's, or none), checked with `dotnet nuget verify`.
+- **Updates.** Once a day Codalus IDE checks the plugins you installed from the gallery. With **Update Plugins Automatically** (`plugins.autoUpdate`, on by default) it downloads the newer versions, which apply at the next start; **Check for Plugin Updates** checks now.
+- **Uninstalling.** It also applies at the next start. Until then, the gallery lists the change, with **Cancel This Change** and **Restart Now**.
+
+**Bisect Plugins** finds the plugin behind a problem. Codalus IDE restarts a few times, each time with half of the remaining plugins turned off (for the workspace, or for you when no folder is open), and asks whether the problem is still there. It ends by naming the plugin, and puts your plugin settings back. Built-in plugins stay on.
 
 ## Keyboard shortcuts
 

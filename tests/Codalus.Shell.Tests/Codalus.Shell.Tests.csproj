@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="..\Shared\MockNuGetFeed.cs" Link="Shared\MockNuGetFeed.cs" />
     <ProjectReference Include="..\..\src\Codalus.Shell\Codalus.Shell.csproj" />
     <!-- The live agent (M19b) is tested in-process against headless windows. -->
     <ProjectReference Include="..\..\src\Codalus.Previewer.Agent\Codalus.Previewer.Agent.csproj" />

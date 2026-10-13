@@ -262,10 +262,17 @@ public sealed class PluginManager : IAsyncDisposable
         PluginsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Whether the user turned the plugin off (<see cref="DisabledSetting"/>).</summary>
-    public bool IsTurnedOff(string pluginId) =>
-        _workbench.Settings.GetValue(DisabledSetting) is { ValueKind: System.Text.Json.JsonValueKind.Array } ids
-        && ids.EnumerateArray().Any(id => id.ValueKind == System.Text.Json.JsonValueKind.String && string.Equals(id.GetString(), pluginId, StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// Whether the user turned the plugin off (<see cref="DisabledSetting"/>): in their settings, or for the open
+    /// workspace (M22c). The two lists add up.
+    /// </summary>
+    public bool IsTurnedOff(string pluginId) => TurnedOff(SettingScope.User).Contains(pluginId) || TurnedOff(SettingScope.Workspace).Contains(pluginId);
+
+    /// <summary>The plugins turned off in one settings layer.</summary>
+    public IReadOnlySet<string> TurnedOff(SettingScope scope) =>
+        _workbench.Settings.GetLayerValue(DisabledSetting, scope) is { ValueKind: System.Text.Json.JsonValueKind.Array } ids
+            ? ids.EnumerateArray().Where(id => id.ValueKind == System.Text.Json.JsonValueKind.String).Select(id => id.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     private async Task ShowAndHandleAsync(Notification notification)
     {
@@ -553,6 +560,13 @@ public sealed class PluginManager : IAsyncDisposable
 
         if (!plugin.IsUsable)
         {
+            return false;
+        }
+
+        // Turned off for this workspace (M22c): discovered before the workspace's settings were read, so it is checked here.
+        if (!plugin.IsBuiltIn && TurnedOff(SettingScope.Workspace).Contains(plugin.Id))
+        {
+            PluginLog.AppendLine($"[{plugin.Id}] turned off for this workspace ({DisabledSetting}); not activated");
             return false;
         }
 

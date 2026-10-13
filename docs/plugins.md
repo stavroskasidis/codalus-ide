@@ -83,6 +83,7 @@ The `Codalus.Plugins.Abstractions` package isn't on nuget.org yet (it comes with
 | `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, `onTestProjects` (the open solution has a test project; since 0.2.1), `onHostingProvider:<id>` (the shell needs a hosting provider the plugin declares; since 0.2.7, implicit), `onDebug` (a debug session starts; since 0.2.7), and since 1.0 `onAuthenticationRequest:<id>` (a session is asked of an authentication provider the plugin declares; implicit) and `onCustomEditor:<viewType>` (a file opens in its custom editor; implicit). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
 | `isolation` | `shared` (default) or `dedicated` (a host process of its own). |
 | `runsOn` | Where the plugin runs in a remote window: `ui` (default), with the window on this machine, or `workspace`, on the machine the workspace is on (the server), next to its files and tools ([ADR 0057](adr/0057-plugin-placement.md)). |
+| `permissions` | What the plugin does beyond its contributions, shown before it installs from a gallery (since M22c): `network`, `processes` (starting programs), `fileSystem` (files outside the workspace) and `secrets`. They inform the user and aren't enforced; declare what you use. |
 | `enableProposedApi` | Use [proposed APIs](#proposed-apis). Honored for built-in plugins, and for others when Codalus runs with `--enable-proposed-api`. |
 
 ### Translating the manifest
@@ -336,7 +337,19 @@ By hand:
 
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
+## Publishing
+
+Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-distribution.md)), found and installed from the IDE's Plugin Gallery. The template's project packs one: `dotnet pack` puts the build output and the manifest under `plugin/`, and leaves out the plugin API, which the IDE provides.
+- The package's id and version must be the manifest's `id` and `version`.
+- Push it to nuget.org (`dotnet nuget push`) or any NuGet v3 feed your users add to **Plugin Sources**. nuget.org signs packages, and the IDE requires that signature for packages from there.
+- Declare `permissions` in the manifest; users see them before installing.
+- An update is a new version: installed copies update at their next start.
+
 ## Changelog
+
+### M22c (no API version change)
+
+The manifest's `permissions`, and plugins as NuGet packages of type `CodalusPlugin` with a Plugin Gallery in the IDE ([Publishing](#publishing)). The API didn't change.
 
 ### M22b (no API version change)
 

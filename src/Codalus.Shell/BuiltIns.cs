@@ -73,8 +73,8 @@ internal static partial class BuiltIns
             {
                 Title = "Turned-Off Plugins",
                 Category = "Plugins",
-                Description = "The ids of plugins that don't load (the Plugins window turns them off and on). Changes apply when Codalus IDE starts again.",
-                Scope = SettingScope.User,
+                Description = "The ids of plugins that don't load (the Plugins window turns them off and on). A workspace can turn more off for itself; the lists add up. Changes apply when Codalus IDE starts again.",
+                Scope = SettingScope.Workspace,
             },
             SettingDescriptor.Create(Workbench.Menus.MenuCustomizations.SettingKey, "{}", SettingType.Object, shell) with
             {

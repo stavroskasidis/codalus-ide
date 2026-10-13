@@ -6,6 +6,21 @@
     <!-- Plugins load into a load context of their own in the plugin host. -->
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
+
+  <!-- dotnet pack makes the plugin's package for a gallery (ADR 0060): type CodalusPlugin, the build output under plugin/.
+       Its id and version must be the manifest's. -->
+  <PropertyGroup>
+    <PackageId>my-publisher.myplugin</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>my-publisher</Authors>
+    <Description>A Codalus IDE plugin.</Description>
+    <PackageType>CodalusPlugin</PackageType>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackPluginFolder</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- The plugin host provides the API at run time, so it isn't copied next to the plugin. -->
     <PackageReference Include="Codalus.Plugins.Abstractions" Version="0.0.0-codalus-version" ExcludeAssets="runtime" />
@@ -13,4 +28,10 @@
   <ItemGroup>
     <None Update="codalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <Target Name="PackPluginFolder">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(OutputPath)**\*" Exclude="$(OutputPath)**\*.pdb" PackagePath="plugin\%(RecursiveDir)" />
+    </ItemGroup>
+  </Target>
 </Project>

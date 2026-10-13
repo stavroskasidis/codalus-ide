@@ -139,6 +139,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         HookAuthentication();
         InitializeSourceControlProviders();
         InitializePluginDevelopment();
+        InitializePluginGallery();
+        InitializePluginBisect();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -358,6 +360,8 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
         _ = Plugins.ActivateDebuggedPluginsAsync(CancellationToken.None);
+        _ = CheckPluginUpdatesOnStartupAsync();
+        _ = ResumePluginBisectAsync();
         OnStartupWithoutSolution();
     }
 
@@ -410,6 +414,8 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     private void DiscoverPlugins()
     {
+        // Updates and uninstalls from the Plugin Gallery wait for this start (M22c), before anything loads.
+        ApplyPendingPluginChanges();
         var builtIn = Options.BuiltInPluginsDir ?? Path.Combine(AppContext.BaseDirectory, "plugins");
         var roots = Options.PluginDirs.Select(d => (d, false))
             .Append((Paths.PluginsDirectory, false))
@@ -485,6 +491,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             XamlPreviewViewModel.ToolWindowId => XamlPreview,
             RemotePortsViewModel.ToolWindowId => PortsWindow,
             SourceControlProvidersWindow => SourceControlProviders(),
+            PluginGalleryWindow => PluginGallery(),
             _ => null,
         },
     };
