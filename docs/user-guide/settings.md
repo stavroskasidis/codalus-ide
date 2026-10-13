@@ -65,6 +65,49 @@ Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme**
 - **Full Screen** (Window → Full Screen, `Shift+Alt+Enter`, `⌃⌘F` on macOS).
 - **Distraction-Free Mode** (Window): only the documents, full screen, without the toolbar or status bar. Run it again to get your tool windows and window back as they were.
 
+## Menus and toolbars
+
+**Tools → Customize** changes the menus, context menus and toolbars:
+- **What you can change**: choose a toolbar, a menu or one of its submenus, or the editor's or Solution Explorer's context menu.
+- **Add Command…**: put any command there (the same list as the command palette).
+- **Remove**: take an item out. A removed button of the standard toolbar shows as removed, and **Restore** brings it back.
+- **Move Up, Move Down**: change the order. In menus the items then form one group, without the separators between groups. On the standard toolbar the built-in buttons keep their places and your commands move among themselves.
+- **Reset**: the menu as it was.
+- **New Toolbar…, Delete Toolbar**: your own toolbars, shown after the standard toolbar's buttons.
+
+Changes apply at once and are the setting `workbench.commandBarCustomizations`, so they belong to the profile and sync with it.
+
+## Profiles
+
+A **profile** is a named set of your settings, keyboard shortcuts, snippets, saved window layouts and the window's current layout. Settings include the keyboard scheme, the theme and the plugins you turned off. File → Profiles:
+- **Switch Profile** (or click the profile's name in the status bar): settings, shortcuts, snippets and layouts change at once. If the profiles turn different plugins off, a restart applies that, and the IDE offers it.
+- **New Profile**: start from a copy of the current profile or from the defaults, then switch to it.
+- **Delete Profile**: any but Default and the active one.
+- **Export Profile, Import Profile**: one file, the same as Tools → Export Settings. Importing creates a new profile and switches to it.
+
+The status bar names the active profile unless it's Default. Each profile's files are kept in `profiles/<name>/` in the user configuration folder while another one is active.
+
+## Settings Sync
+
+Settings Sync keeps your settings, keyboard shortcuts, snippets and saved window layouts the same on several machines. There's no Daedalus Studio service: you choose where they're kept, and nothing syncs until you turn it on.
+- **Turn on** (Settings Sync: Turn On in the command palette): pick a folder that another tool syncs (OneDrive, Dropbox, iCloud Drive, Syncthing…), or give a Git repository's URL. A private repository works, and so does a secret gist's clone URL. Git uses your own credentials.
+- **When it syncs**: when Daedalus Studio starts, a few seconds after you change something, and with Tools → Settings Sync: Sync Now. A change on one side goes to the other. If both changed since the last sync, you choose **Use Synced** or **Keep Mine**.
+- **What stays on each machine**: the sync settings themselves, and the settings you list in Settings Sync → Settings Not Synced (`settingsSync.ignoredSettings`), such as paths that differ between machines. The window's current layout isn't synced either.
+- **Profiles**: each profile syncs on its own, to the target set in it.
+- **Turn off** (Settings Sync: Turn Off): what was synced stays where it is.
+
+## Display language
+
+Environment → Display Language (`workbench.locale`) chooses the language of menus, commands, settings and windows. Empty uses the operating system's language when Daedalus Studio has it. It applies at the next start (File → Restart). `--locale <name>` overrides it for one run.
+
+Translations come from the community; [Translating](../translating.md) explains how to help. Until a language is complete, its missing strings show in English. Two pseudo-languages are for checking translations:
+- `qps-ploc` shows every translatable string accented and longer, so untranslated or clipped text stands out.
+- `qps-plocm` does the same and lays the window out right to left, as Arabic or Hebrew would.
+
+## Plugins
+
+The Plugins window lists the installed plugins. **Turn Off** keeps a plugin from loading, and **Turn On** brings it back. It takes effect at the next start, and the window says so until then. The list is the setting `plugins.disabled`, so profiles can differ. File → Restart restarts Daedalus Studio on the same solution.
+
 ## Keyboard shortcuts
 
 **Keyboard scheme** (setting Environment → Keyboard → Keyboard Scheme):
