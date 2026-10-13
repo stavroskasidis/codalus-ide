@@ -127,9 +127,8 @@ public sealed partial class ShellHost
         {
             var selected = _componentStatus[_selectedComponent];
             children.Add(new ViewNodeDto("text") { Text = selected.Component.Description });
-            children.Add(new ViewNodeDto("stack")
+            children.Add(new ViewNodeDto("toolbar")
             {
-                Orientation = "horizontal",
                 Children =
                 [
                     new ViewNodeDto("button") { Id = "install", Text = "Download Now", Disabled = selected.Installed || selected.Component.Install is null },

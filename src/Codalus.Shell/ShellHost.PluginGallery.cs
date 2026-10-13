@@ -224,12 +224,12 @@ public sealed partial class ShellHost
         var children = new List<ViewNodeDto>
         {
             new("text") { Text = "Sources: " + string.Join(", ", store.Sources()), Style = "muted" },
-            new("stack")
+            new("textbox") { Id = "query", Value = _gallery.Query, Placeholder = "Search plugins (Enter)" },
+            // A toolbar, not a row: in a narrow window its buttons overflow into a menu instead of being cut off.
+            new("toolbar")
             {
-                Orientation = "horizontal",
                 Children =
                 [
-                    new ViewNodeDto("textbox") { Id = "query", Value = _gallery.Query, Placeholder = "Search plugins (Enter)" },
                     new ViewNodeDto("button") { Id = "search", Text = "Search", Style = "primary", Disabled = _gallery.Busy },
                     new ViewNodeDto("button") { Id = "checkUpdates", Text = "Check for Updates", Disabled = _gallery.Busy },
                 ],
@@ -269,12 +269,11 @@ public sealed partial class ShellHost
             }
 
             children.Add(new ViewNodeDto("text") { Text = $"{plugin.Id} · {plugin.Authors} · {plugin.Source}", Style = "muted" });
-            children.Add(new ViewNodeDto("stack")
+            children.Add(new ViewNodeDto("dropdown") { Id = "version", Options = versions, Value = _gallery.Version ?? versions[0] });
+            children.Add(new ViewNodeDto("toolbar")
             {
-                Orientation = "horizontal",
                 Children =
                 [
-                    new ViewNodeDto("dropdown") { Id = "version", Options = versions, Value = _gallery.Version ?? versions[0] },
                     new ViewNodeDto("button")
                     {
                         Id = "install",
@@ -310,9 +309,8 @@ public sealed partial class ShellHost
             children.Add(new ViewNodeDto("separator"));
             children.Add(new ViewNodeDto("text") { Text = "Waiting for a restart", Style = "heading" });
             children.Add(new ViewNodeDto("table") { Id = "pending", Columns = ["Plugin", "Change"], Rows = [.. waiting.Select(p => new[] { p.Key, p.Value is null ? "uninstall" : "update" })] });
-            children.Add(new ViewNodeDto("stack")
+            children.Add(new ViewNodeDto("toolbar")
             {
-                Orientation = "horizontal",
                 Children =
                 [
                     new ViewNodeDto("button") { Id = "restart", Text = "Restart Now", Style = "primary" },

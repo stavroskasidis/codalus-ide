@@ -21,7 +21,7 @@ public sealed class ComponentsWindowTests
         Assert.All(table.Rows!, r => Assert.NotEmpty(r[4])); // every one has its licence
 
         await f.Shell.OnComponentsEventAsync("components", "select", 0);
-        Assert.Contains(f.Shell.ComponentsRoot().Children!, c => c.Kind == "stack" && c.Children!.Any(b => b.Id == "remove"));
+        Assert.Contains(f.Shell.ComponentsRoot().Children!, c => c.Children?.Any(b => b.Id == "remove") == true);
 
         var notALayout = Directory.CreateTempSubdirectory("codalus-not-a-layout-").FullName;
         try

@@ -213,6 +213,12 @@ public sealed class DeclarativeView : UserControl
             for (var i = 0; i < Math.Max(1, columns.Length); i++)
             {
                 var cell = new TextBlock { Text = i < cells.Count ? cells[i] : string.Empty, Margin = new Thickness(6, 3), TextTrimming = TextTrimming.CharacterEllipsis };
+                if (cell.Text.Length > 0)
+                {
+                    // A narrow pane trims cells: the whole text is a hover away (docs/ui-guidelines.md).
+                    ToolTip.SetTip(cell, cell.Text);
+                }
+
                 if (header)
                 {
                     cell.FontWeight = FontWeight.SemiBold;

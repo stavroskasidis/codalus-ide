@@ -971,9 +971,15 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var hover = await WaitForAsync(async ct => (await client.HoverAsync(editor.Model.Uri, at, ct).ConfigureAwait(true))?.Contents.Value,
                 "hover on C# in the Razor file", 120).ConfigureAwait(true);
             Check(hover!.Contains("currentCount", StringComparison.Ordinal), "the hover describes the field: " + hover);
-            var completion = await client.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("<button", StringComparison.Ordinal) + 1),
-                new LanguageServices.Protocol.CompletionContext(LanguageServices.Protocol.CompletionTriggerKind.Invoked, null), CancellationToken.None).ConfigureAwait(true);
-            Check(completion?.Items.Any(i => i.Label == "PageTitle") == true, "markup completion offers components");
+            // The components come with the project's compilation, which may still be finishing after the hover answered
+            // (the macOS runners are slower): ask again until they're there.
+            var components = await WaitForAsync(async ct =>
+            {
+                var completion = await client.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(editor.Model.Text.Text.IndexOf("<button", StringComparison.Ordinal) + 1),
+                    new LanguageServices.Protocol.CompletionContext(LanguageServices.Protocol.CompletionTriggerKind.Invoked, null), ct).ConfigureAwait(true);
+                return completion?.Items.Any(i => i.Label == "PageTitle") == true ? "found" : null;
+            }, "markup completion offers components", 60).ConfigureAwait(true);
+            Check(components == "found", "markup completion offers components");
 
             await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
             try
