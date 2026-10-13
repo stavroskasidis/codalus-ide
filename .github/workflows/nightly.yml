@@ -121,7 +121,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v${{ needs.plan.outputs.version }}"
-          gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 \n            || gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
 
   linux-repositories:
     needs: publish
