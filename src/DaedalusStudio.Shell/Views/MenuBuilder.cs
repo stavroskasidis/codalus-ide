@@ -73,13 +73,15 @@ internal static class MenuBuilder
             }
         }
 
+        // macOS adds its own separator before Services: none of ours at the end of our part (the Mac showed two in a row).
+        while (menu.Items.Count > 0 && menu.Items[0] is NativeMenuItemSeparator)
+        {
+            menu.Items.RemoveAt(0);
+        }
+
         menu.Items.Insert(0, new NativeMenuItem("About " + ShellInfo.ProductName) { Command = shell.CommandFor("help.about") });
         menu.Items.Insert(1, new NativeMenuItemSeparator());
         menu.Items.Insert(2, new NativeMenuItem("Settings…") { Command = shell.CommandFor("workbench.openOptions"), Gesture = new KeyGesture(Key.OemComma, Avalonia.Input.KeyModifiers.Meta) });
-        if (menu.Items.Count > 3 && menu.Items[3] is not NativeMenuItemSeparator)
-        {
-            menu.Items.Insert(3, new NativeMenuItemSeparator());
-        }
     }
 
     /// <summary>

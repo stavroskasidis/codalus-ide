@@ -39,6 +39,7 @@ public static class CommandIcons
     private static readonly Dictionary<string, string> s_kindColors = new(StringComparer.Ordinal)
     {
         ["account"] = Blue,
+        ["window"] = Blue,
         ["broom"] = Blue,
         ["save"] = Blue,
         ["save-all"] = Blue,
