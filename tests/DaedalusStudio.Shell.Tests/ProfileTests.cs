@@ -85,6 +85,8 @@ public sealed class ProfileTests
         Assert.Equal("Turn On", row.ToggleTitle);
         row.ToggleCommand.Execute(null);
         await ShellFixture.PumpUntil(() => !f.Shell.Plugins.IsTurnedOff("daedalus.welcome"));
-        Assert.Contains("turned on from the next start", f.Shell.PluginList.Plugins.Single(r => r.Id == "daedalus.welcome").State, StringComparison.Ordinal);
+
+        // The Plugins window refreshes after the setting is saved.
+        await ShellFixture.PumpUntil(() => f.Shell.PluginList.Plugins.Single(r => r.Id == "daedalus.welcome").State.Contains("turned on from the next start", StringComparison.Ordinal));
     }
 }

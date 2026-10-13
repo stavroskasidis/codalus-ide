@@ -1,10 +1,8 @@
 name: CI
 
-# Cost policy while the repo is private on the free plan (2,000 minutes a month; Windows bills 2x, macOS 10x):
-# pushes run Linux only and skip documentation-only changes; the full Windows/macOS/Linux matrix runs on manual
-# dispatch, once per milestone checkpoint. There is no nightly schedule.
-# Public-repo configuration (automatic once the repository is public; GitHub-hosted minutes are free there):
-# every push and every pull request runs the full matrix.
+# The repository is public, so GitHub-hosted minutes are free: every push and pull request runs the full
+# Windows/macOS/Linux matrix, in parallel jobs (tests in three shards, and the smoke test) per OS. While the repository
+# was private, pushes ran Linux only (the matrix job below keeps that rule for a private repository).
 on:
   push:
     branches: [develop, master]
@@ -45,15 +43,20 @@ jobs:
             echo 'os=["ubuntu-latest","windows-latest","macos-latest"]' >> "$GITHUB_OUTPUT"
           fi
 
-  dotnet:
+  # The tests in three shards per OS on separate runners at the same time (eng/ci-test.sh): the Shell tests in two
+  # halves (they take 15 to 25 minutes on their own) and every other project. With the smoke test on a runner of its
+  # own, a run takes as long as its longest job, not the sum of them (it took 55 minutes on Windows).
+  test:
     needs: matrix
+    name: test (${{ matrix.os }}, ${{ matrix.shard }})
     strategy:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(needs.matrix.outputs.os) }}
+        shard: [shell-1, shell-2, others]
     runs-on: ${{ matrix.os }}
     # The manual matrix run also installs and runs the target framework matrix (M33).
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 90 }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 90 || 50 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -79,7 +82,7 @@ jobs:
       - name: Target framework matrix (M33, ADR 0030; manual runs only)
         # .NET Core 2.0 to .NET 9 and older SDKs in .work/dotnet-compat: slow to install, so only in the matrix run.
         # Without it the DaedalusStudio.TargetFrameworks.Tests suite skips; with DAEDALUS_DOTNET_COMPAT it must pass.
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && matrix.shard == 'others'
         shell: bash
         run: |
           bash eng/get-runtimes.sh
@@ -90,8 +93,67 @@ jobs:
       - name: Build
         run: dotnet build DaedalusStudio.slnx -c Release --no-restore
       - name: Developer tools access (macOS)
-        # Dumps (createdump) and attaching (netcoredbg) need it, in the tests and the smoke test; otherwise the system asks
-        # for a password that nobody answers on a runner, and they time out (as a person would approve once).
+        # Dumps (createdump) and attaching (netcoredbg) need it; otherwise the system asks for a password that nobody
+        # answers on a runner, and they time out (as a person would approve once).
+        if: runner.os == 'macOS'
+        run: |
+          sudo DevToolsSecurity -enable
+          sudo dseditgroup -o edit -a "$USER" -t user _developer
+          sudo security authorizationdb write system.privilege.taskport allow
+      - name: Display for the tests (Xvfb)
+        # Tests that run real windowed apps (the Live Visual Tree's Avalonia app) need one on Linux.
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
+      - name: Test (${{ matrix.shard }})
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            xvfb-run -a -s "-screen 0 1920x1080x24" bash eng/ci-test.sh ${{ matrix.shard }}
+          else
+            bash eng/ci-test.sh ${{ matrix.shard }}
+          fi
+      - name: Processes the tests left running
+        # What the tests left behind is listed: a leak to fix.
+        if: always() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          # BSD ps (macOS) has no --sort: sort by the CPU column instead.
+          ps -eo pid,ppid,etime,pcpu,rss,args | sort -k4 -nr | head -25 | cut -c1-240 || true
+          df -h / /tmp | uniq
+
+  # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the in-process
+  # headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform). On a runner
+  # of its own (it needs the machine to itself), alongside the tests.
+  smoke:
+    needs: matrix
+    name: smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.matrix.outputs.os) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 70 || 45 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-version: |
+            9.0.x
+            11.0.100-rc.1.26425.128
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - uses: actions/cache@v4
+        with:
+          path: .work/netcoredbg
+          key: netcoredbg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/get-netcoredbg.sh') }}
+      - name: Debugger (netcoredbg, pinned and checksummed)
+        shell: bash
+        run: eng/get-netcoredbg.sh
+      - name: Developer tools access (macOS)
         if: runner.os == 'macOS'
         run: |
           sudo DevToolsSecurity -enable
@@ -99,22 +161,6 @@ jobs:
           # The windowed app runs in the runner's GUI session, where the task port right still asked (developer mode
           # was already on). Only on this throwaway runner (the maintainer's decision, 2026-10-12).
           sudo security authorizationdb write system.privilege.taskport allow
-      - name: Test (unit, integration, headless UI)
-        # A test process still running after 25 minutes (Shell.Tests normally takes 13) is dumped, and the tests that
-        # were running are named, instead of the job timing out without a word. The Windows runner has four cores: all
-        # the test projects at once (builds, debuggers, Aspire's orchestrator) timed out at random there, so it runs three
-        # at a time (and the job may take 90 minutes).
-        run: dotnet test --solution DaedalusStudio.slnx -c Release --no-build --hangdump --hangdump-timeout 25m --hangdump-type Mini ${{ runner.os == 'Windows' && '--max-parallel-test-modules 3' || '' }}
-      - name: Processes the tests left running
-        # The smoke test needs the machine to itself: what the tests left behind is listed (a leak to fix), then ended.
-        if: always() && runner.os != 'Windows'
-        shell: bash
-        run: |
-          # BSD ps (macOS) has no --sort: sort by the CPU column instead.
-          ps -eo pid,ppid,etime,pcpu,rss,args | sort -k4 -nr | head -25 | cut -c1-240 || true
-          df -h / /tmp | uniq
-          dotnet build-server shutdown > /dev/null 2>&1 || true
-          pkill -f 'chrome|chromium|msedge|dapDebugServer|blazor-devserver|BrowserDebugHost|dotnet-watch' || true
       - name: Native AOT publish must stay warning-free in our code
         shell: bash
         run: |
@@ -127,8 +173,6 @@ jobs:
         # The smoke test prints the C# host's stacks when a step fails: a host that stopped answering says where it is.
         if: runner.os != 'Windows'
         run: dotnet tool install -g dotnet-stack || true
-      # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the
-      # in-process headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform).
       - name: End-to-end smoke test of the published app
         shell: bash
         timeout-minutes: 25
@@ -140,9 +184,11 @@ jobs:
         shell: bash
         timeout-minutes: 20
         run: bash eng/compat-containers.sh
+      # Always: the screenshots are the website's (CLAUDE.md, Website), and a failure's report.
       - uses: actions/upload-artifact@v4
-        if: failure() || cancelled()
+        if: always()
         with:
           name: smoke-test-${{ runner.os }}
           path: artifacts/smoke-test/
+          retention-days: 14
           if-no-files-found: ignore

@@ -1,0 +1,37 @@
+# The Shell test classes CI runs in its second Shell shard (eng/ci-test.sh shell-2); every other class, new ones too,
+# runs in the first. Balanced by the classes' times (the xUnit runner's -xml report) so both take about as long:
+# rebalance when one shard gets clearly longer.
+CaretEditsTests
+CoverageTests
+CrashReporterTests
+CustomizeTests
+EditingDepthTests
+EditorTests
+EntityFrameworkShellTests
+EnvironmentShellTests
+GitDepthShellTests
+GitShellTests
+InstallationTests
+KeyboardSchemeTests
+LiveAgentTests
+LiveTreeShellTests
+MarkdownRendererTests
+NavigationDepthTests
+NpmShellTests
+PackageManagerTests
+PolishTests
+ProfileTests
+ProfilerToolsShellTests
+ProjectManagementTests
+PublishShellTests
+RemoteShellTests
+RenderingTests
+ShellHeadlessTests
+StartWindowTests
+TerminalTests
+TestExplorerTests
+TextFilesTests
+UxPassTests
+VsSettingsImportTests
+WebTests
+XamlShellTests

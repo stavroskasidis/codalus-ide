@@ -12,6 +12,10 @@ public sealed class LiveTreeShellTests
     [AvaloniaFact]
     public async Task A_running_avalonia_app_shows_its_tree_and_properties_takes_a_value_and_goes_to_its_xaml()
     {
+        // The app runs windowed: Linux needs a display (CI runs the tests under Xvfb).
+        Assert.SkipWhen(
+            OperatingSystem.IsLinux() && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY")) && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")),
+            "No display: the Avalonia app can't open its window.");
         await using var f = ShellFixture.Create();
         var folder = f.CopySample("Avalonia");
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);

@@ -9,6 +9,14 @@
 
 The debugger (netcoredbg) is included in the packages.
 
+**Missing something?** When Daedalus Studio starts without the .NET SDK or git, it offers to install them. When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
+- **What's found**: Help → Check Environment lists every tool it uses, with its version, its path and what needs it: the .NET SDK, git and Git LFS, Docker or Podman, and WSL on Windows.
+- **How it installs**:
+  - Windows: winget, or the download page when winget isn't there.
+  - macOS: the .NET SDK into `~/.dotnet` through Microsoft's `dotnet-install` script, and git with Apple's Command Line Tools.
+  - Linux: the .NET SDK into `~/.dotnet` the same way. git comes from your distribution's package manager (apt, dnf, zypper, pacman or apk), in the integrated terminal, where `sudo` asks for your password.
+- **What it asks first**: every install shows the exact command it runs, and nothing runs until you agree. An SDK in `~/.dotnet` is used from then on, even though it isn't on the system's `PATH`.
+
 ## Installing
 
 Every release on the [releases page](https://github.com/stavroskasidis/daedalus-studio/releases) has installers for each platform, and `SHA256SUMS.txt` to check them against. Stable releases come from `master`; nightly builds (`0.2.0-nightly.20261011.1`) come from `develop` every night it changed, and are marked as prereleases.
