@@ -4,6 +4,7 @@
 #   shell-2  those classes
 #   others   every other test project
 # Usage: eng/ci-test.sh <shard> [Release|Debug]
+# Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
 set -euo pipefail
 shard="${1:?shard: shell-1, shell-2 or others}"
 configuration="${2:-Release}"
@@ -12,17 +13,19 @@ cd "$(dirname "$0")/.."
 # A test process still running after 25 minutes is dumped, and the tests that were running are named, instead of the
 # job timing out without a word.
 common=(-c "$configuration" --no-build -- --hangdump --hangdump-timeout 25m --hangdump-type Mini)
-mapfile -t second < <(grep -v '^\s*#' eng/ci-shell-second-half.txt | sed '/^\s*$/d')
+second=()
+while IFS= read -r line; do
+  line="${line%%#*}"
+  line="$(echo "$line" | tr -d '[:space:]')"
+  [[ -n "$line" ]] && second+=("$line")
+done < eng/ci-shell-second-half.txt
 
 case "$shard" in
-  shell-1)
+  shell-1|shell-2)
+    flag=--filter-class
+    [[ "$shard" == shell-1 ]] && flag=--filter-not-class
     filters=()
-    for class in "${second[@]}"; do filters+=(--filter-not-class "DaedalusStudio.Shell.Tests.$class"); done
-    dotnet test --project tests/DaedalusStudio.Shell.Tests "${common[@]}" "${filters[@]}"
-    ;;
-  shell-2)
-    filters=()
-    for class in "${second[@]}"; do filters+=(--filter-class "DaedalusStudio.Shell.Tests.$class"); done
+    for class in "${second[@]}"; do filters+=("$flag" "DaedalusStudio.Shell.Tests.$class"); done
     dotnet test --project tests/DaedalusStudio.Shell.Tests "${common[@]}" "${filters[@]}"
     ;;
   others)
@@ -30,7 +33,7 @@ case "$shard" in
     # Windows runner has four cores, where all the projects at once timed out at random: three at a time there.
     extra=()
     [[ "${RUNNER_OS:-}" == "Windows" ]] && extra=(--max-parallel-test-modules 3)
-    dotnet test --solution DaedalusStudio.slnx -c "$configuration" --no-build "${extra[@]}" -- \
+    dotnet test --solution DaedalusStudio.slnx -c "$configuration" --no-build ${extra[@]+"${extra[@]}"} -- \
       --hangdump --hangdump-timeout 25m --hangdump-type Mini --filter-not-namespace DaedalusStudio.Shell.Tests --ignore-exit-code 8
     ;;
   *)
