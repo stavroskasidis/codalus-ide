@@ -33,7 +33,10 @@ src_files -z --cached --others --exclude-standard | rsync -a --delete-missing-ar
   <(find . -type f -not -path './.git/*' -not -path '*/bin/*' -not -path '*/obj/*' -not -path './.work/*' \
       -not -path './artifacts/*' -not -path './samples/Large100k/*' -not -path './samples/LargeMarkup100k/*' -not -path './samples/Solution50/*' -printf '%P\n' | sort) \
   <(src_files --cached --others --exclude-standard | sort) \
-  | while IFS= read -r f; do rm -f -- "$f"; done)
+  | while IFS= read -r f; do rm -f -- "$f"; done
+  # ...and the folders that left empty (git tracks no empty folder; a renamed one would linger, and tests list folders).
+  find . -mindepth 1 -type d -empty -not -path './.git/*' -not -path '*/bin/*' -not -path '*/obj/*' -not -path './.work/*' \
+    -not -path './artifacts/*' -delete)
 [ -d "$dst/.git" ] || git -C "$dst" init -q   # some tests expect to run inside a git work tree
 
 # A Chromium browser for the browser tests, and with --smoke a display (WSLg's, or a local Xvfb when it isn't
