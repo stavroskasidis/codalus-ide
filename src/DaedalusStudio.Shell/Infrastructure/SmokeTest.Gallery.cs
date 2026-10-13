@@ -130,7 +130,7 @@ internal sealed partial class SmokeTest
         var grouping = shell.TestExplorer.GroupingIndex;
         shell.TestExplorer.GroupingIndex = 2;
         shell.TestExplorer.Refresh();
-        if (shell.TestExplorer.Rows.FirstOrDefault(r => r.Label == "Fails") is { } failed)
+        if (shell.TestExplorer.Rows.FirstOrDefault(r => r.Label.EndsWith("Fails", StringComparison.Ordinal)) is { } failed)
         {
             shell.TestExplorer.Selected = failed;
             await GalleryThemesAsync(theme =>
