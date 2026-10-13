@@ -182,6 +182,30 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     public void RequestClose() => Close();
 
+    private WindowState _beforeFullScreen = WindowState.Normal;
+
+    public bool IsFullScreen
+    {
+        get => WindowState == WindowState.FullScreen;
+        set
+        {
+            if (value == IsFullScreen)
+            {
+                return;
+            }
+
+            if (value)
+            {
+                _beforeFullScreen = WindowState;
+                WindowState = WindowState.FullScreen;
+            }
+            else
+            {
+                WindowState = _beforeFullScreen;
+            }
+        }
+    }
+
     public void BringToFront()
     {
         if (WindowState == WindowState.Minimized)

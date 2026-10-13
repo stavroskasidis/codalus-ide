@@ -35,6 +35,9 @@ public interface IShellWindow
     /// <summary>Shows and activates the window (another process asked this one to open something).</summary>
     void BringToFront();
 
+    /// <summary>Full screen (M23a): the window covers the screen, without its frame; false returns to how it was.</summary>
+    bool IsFullScreen { get; set; }
+
     /// <summary>Asks for an existing file (null: cancelled).</summary>
     Task<string?> PickFileAsync(string title, string filterName, string[] patterns);
 

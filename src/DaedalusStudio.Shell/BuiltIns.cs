@@ -29,6 +29,7 @@ internal static partial class BuiltIns
           { "key": "primary+shift+p", "command": "workbench.showCommandPalette" },
           { "key": "ctrl+q", "command": "workbench.action.featureSearch", "when": "keyboardScheme != vscode" },
           { "key": "f1", "command": "workbench.showCommandPalette", "when": "keyboardScheme == vscode" },
+          { "key": "shift+alt+enter", "mac": "ctrl+cmd+f", "command": "workbench.toggleFullScreen" },
           { "key": "f1", "command": "editor.action.showHelp", "when": "keyboardScheme != vscode && editorTextFocus" },
           { "key": "primary+,", "command": "workbench.openSettings", "when": "keyboardScheme == vscode" },
           { "key": "primary+,", "command": "workbench.action.gotoAll", "when": "keyboardScheme != vscode" },
@@ -195,6 +196,11 @@ internal static partial class BuiltIns
         Add("workbench.openKeybindingsJson", "Open Keyboard Shortcuts (JSON)", "Preferences", Ui(shell.OpenKeybindingsJsonAsync));
         Add("workbench.selectTheme", "Color Theme", "Preferences", Ui(shell.SelectThemeAsync));
         Add("workbench.resetLayout", "Reset Layout", "View", Ui(shell.Layout.ResetLayout));
+        Add("workbench.saveWindowLayout", "Save Window Layout…", "View", Ui(() => shell.SaveWindowLayoutAsync()));
+        Add("workbench.applyWindowLayout", "Apply Window Layout…", "View", Ui(() => shell.ApplyWindowLayoutAsync()));
+        Add("workbench.deleteWindowLayout", "Delete Window Layout…", "View", Ui(() => shell.DeleteWindowLayoutAsync()));
+        Add("workbench.toggleFullScreen", "Full Screen", "View", Ui(shell.ToggleFullScreen));
+        Add("workbench.toggleDistractionFree", "Distraction-Free Mode", "View", Ui(shell.ToggleDistractionFree));
         Add("workbench.focusNextPane", "Focus Next Pane", "View", Ui(() => shell.Window?.FocusPane(backwards: false)));
         Add("workbench.focusPreviousPane", "Focus Previous Pane", "View", Ui(() => shell.Window?.FocusPane(backwards: true)));
         Add("workbench.clearNotifications", "Clear All Notifications", "Notifications", Ui(shell.Workbench.Notifications.DismissAll));

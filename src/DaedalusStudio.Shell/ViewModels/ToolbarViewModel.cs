@@ -22,6 +22,14 @@ public sealed class ToolbarViewModel : ObservableObject
     private readonly Action<string, string> _selectConfiguration;
     private readonly Action<string> _selectStartup;
     private bool _updating;
+    private bool _isVisible = true;
+
+    /// <summary>Hidden in distraction-free mode (M23a).</summary>
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set => SetField(ref _isVisible, value);
+    }
     private string? _configuration;
     private string? _platform;
     private StartupProjectChoice? _startup;

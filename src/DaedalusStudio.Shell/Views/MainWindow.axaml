@@ -49,7 +49,7 @@
         <Panel Grid.Column="5" x:Name="CaptionButtonsSpace" Width="0" />
       </Grid>
     </Border>
-    <views:StandardToolbar DockPanel.Dock="Top" DataContext="{Binding Toolbar}" />
+    <views:StandardToolbar DockPanel.Dock="Top" DataContext="{Binding Toolbar}" IsVisible="{Binding IsVisible}" />
 
     <Border x:Name="StatusBarHost"
             DockPanel.Dock="Bottom"

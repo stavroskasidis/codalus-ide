@@ -411,7 +411,12 @@ internal static partial class BuiltIns
             Item(Window, "workbench.closeAllDocuments", "3-close"),
             Item(Window, "workbench.closeUnpinnedDocuments", "3-close"),
             Item(Window, "workbench.closeDocumentsToTheRight", "3-close"),
+            Item(Window, "workbench.saveWindowLayout", "4-layout"),
+            Item(Window, "workbench.applyWindowLayout", "4-layout"),
+            Item(Window, "workbench.deleteWindowLayout", "4-layout"),
             Item(Window, "workbench.resetLayout", "4-layout"),
+            Item(Window, "workbench.toggleFullScreen", "5-screen"),
+            Item(Window, "workbench.toggleDistractionFree", "5-screen"),
 
             // Help. The Start page comes from the welcome plugin ("navigation").
             Item(Help, "workbench.showLogs", "help"),

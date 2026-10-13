@@ -51,6 +51,7 @@ public sealed record WindowPlacement(double Width, double Height, int? X, int? Y
     ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip,
     AllowTrailingCommas = true)]
 [JsonSerializable(typeof(LayoutSnapshot))]
+[JsonSerializable(typeof(Dictionary<string, LayoutSnapshot>))]
 [JsonSerializable(typeof(ShellState))]
 [JsonSerializable(typeof(EditorSession))]
 [JsonSerializable(typeof(BreakpointExport))]
