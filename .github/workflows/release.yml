@@ -56,6 +56,14 @@ jobs:
           echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "previous=$previous" >> "$GITHUB_OUTPUT"
           echo "Release $version from $(git rev-parse --short HEAD) (previous: ${previous:-none})" >> "$GITHUB_STEP_SUMMARY"
+      # The tag comes first, while the commit is still the branch's head: the workflow token may create a tag only on
+      # a commit whose workflow files match the default branch's (otherwise it needs the workflows permission, which
+      # it can't have), and the branch may move on with workflow changes during the build. A failed run removes it.
+      - name: Tag the commit
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v${{ steps.plan.outputs.version }}" -f sha="${{ steps.plan.outputs.ref }}" > /dev/null
 
   packages:
     needs: plan
@@ -110,6 +118,18 @@ jobs:
             git commit -m "Start $next after the ${{ needs.plan.outputs.version }} release" VERSION
           fi
           git push origin HEAD:develop
+
+  untag:
+    needs: [plan, packages, publish]
+    if: ${{ failure() && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove the tag of a release that was not published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ needs.plan.outputs.version }}"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 \n            || gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
 
   linux-repositories:
     needs: publish
