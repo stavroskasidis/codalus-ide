@@ -138,6 +138,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // The steps read programs' output in the IDE: Windows' default console windows (a classic IDE's) would keep it
         // from them and open on the desktop.
         await shell.Workbench.Settings.SetAsync(ShellHost.RunConsoleSetting, "outputWindow", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+        // The steps' terminals (here and through the remote server) keep no shell history in the real home.
+        Environment.SetEnvironmentVariable("HISTFILE", "/dev/null");
         await shell.Workbench.Settings.SetAsync(ShellHost.DebugConsoleSetting, "internalConsole", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
 
         // M1: shell and plugin foundation.
@@ -1149,7 +1152,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60)))
             {
                 var completion = await client.CompletionAsync(editor.Model.Uri, editor.Model.PositionAt(text.IndexOf("Console.WriteLine", StringComparison.Ordinal) + "Console.".Length), null, timeout.Token).ConfigureAwait(true);
-                Check(completion.Items.Any(i => i.Label == "WriteLine"), "member completion from the C# host on the server lists WriteLine");
+                Check(completion.Items.Any(i => i.Label == "WriteLine"), $"member completion from the C# host on the server lists WriteLine ({completion.Items.Length} items: {string.Join(", ", completion.Items.Take(12).Select(i => i.Label))}; document {editor.Model.Uri}).\nC#:\n"
+                    + Tail(shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "C#")?.GetText() ?? string.Empty, 3000) + "\nRemote:\n" + RemoteLog());
             }
 
             editor.Model.Text.Insert(0, "// edited in a remote window\n");
@@ -2443,6 +2447,15 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         if (requires is not null && _results.FirstOrDefault(r => r.Id == requires) is { Outcome: not "passed" })
         {
             Report(id, milestone, title, "skipped", 0, $"Needs '{requires}', which did not pass.");
+            return;
+        }
+
+        // Diagnosing one step: DAEDALUS_SMOKE_ONLY=<id>[,<id>…] runs those (steps that need an earlier one's state
+        // need it listed too).
+        if (Environment.GetEnvironmentVariable("DAEDALUS_SMOKE_ONLY") is { Length: > 0 } only
+            && !only.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(id, StringComparer.Ordinal))
+        {
+            Report(id, milestone, title, "skipped", 0, "Not in DAEDALUS_SMOKE_ONLY.");
             return;
         }
 

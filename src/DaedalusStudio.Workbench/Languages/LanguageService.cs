@@ -95,6 +95,41 @@ public sealed class LanguageService : IAsyncDisposable
     /// <summary>The compiler inputs of a project from its last design-time build, or null.</summary>
     public ProjectData? Project(string path) => _projects.GetValueOrDefault(path);
 
+    /// <summary>
+    /// Moves the language hosts (M21): sets <see cref="Placement"/> and stops the running services, whose files are the
+    /// old place's (a window that had a local solution open, then connected to a server, kept asking the local C# host
+    /// about the server's files). The next request starts each one again where it now belongs, with the open documents.
+    /// </summary>
+    public async Task ReplaceHostsAsync(Func<Rpc.ProcessLaunchInfo, Rpc.ProcessLaunchInfo?>? placement)
+    {
+        Placement = placement;
+        foreach (var (server, lazy) in _clients.ToArray())
+        {
+            if (!_clients.TryRemove(KeyValuePair.Create(server, lazy)))
+            {
+                continue;
+            }
+
+            _status.TryRemove(server, out _);
+            Diagnostics.Clear(server);
+            if (!lazy.IsValueCreated)
+            {
+                continue;
+            }
+
+            try
+            {
+                if (await lazy.Value.ConfigureAwait(false) is { } client)
+                {
+                    await client.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or JsonRpcConnectionLostException)
+            {
+            }
+        }
+    }
+
     /// <summary>The client of a language's service, starting it if needed; null when it can't be started.</summary>
     public Task<LanguageHostClient?> ClientAsync(string languageId) =>
         ServerOf(languageId) is { } server

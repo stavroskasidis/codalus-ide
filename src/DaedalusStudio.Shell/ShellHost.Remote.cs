@@ -139,7 +139,7 @@ public sealed partial class ShellHost
         StatusBar.ClearMessage();
         Remote = session;
         Solutions.Placement = session.Place;
-        Languages.Placement = session.Place;
+        await Languages.ReplaceHostsAsync(session.Place).ConfigureAwait(true); // a local C# host from before stops: its files are this machine's
         _localProfiles ??= Terminals.Profiles;
         Terminals.Profiles = [RemoteShellProfile];
         Terminals.PtyFactory = info => session.StartTerminal(info, loginShell: info.FileName == RemoteShellProfile.Executable);
@@ -298,7 +298,7 @@ public sealed partial class ShellHost
 
         Remote = null;
         Solutions.Placement = null;
-        Languages.Placement = null;
+        await Languages.ReplaceHostsAsync(null).ConfigureAwait(true);
         Terminals.PtyFactory = null;
         Terminals.Profiles = _localProfiles ?? Terminals.Profiles;
         Workbench.Context.Set("remoteConnected", false);

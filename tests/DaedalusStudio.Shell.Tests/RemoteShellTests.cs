@@ -55,6 +55,15 @@ public sealed class RemoteShellTests
     {
         await using var f = ShellFixture.Create();
         var folder = Resolved(f.CopySample("BuildAndRun"));
+
+        // A local solution first, as a window often has: its C# host must not go on serving the remote window (it
+        // answered nothing for the server's files: found by the smoke test).
+        var localFirst = f.CopySample("LanguageFeatures");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(localFirst)!);
+        await f.Shell.OpenSolutionAsync(Directory.EnumerateFiles(localFirst, "*.sln*").First());
+        await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready" }, seconds: 240);
+        await f.Shell.CloseSolutionAsync();
+
         var remote = await ConnectAsync(f);
         var local = remote.Map.ToLocal(folder); // the window's name for it
         Assert.Equal(OperatingSystem.IsWindows(), remote.Map.IsIdentity);
