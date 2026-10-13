@@ -5,6 +5,7 @@ using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Context;
 using DaedalusStudio.Workbench.Menus;
 using DaedalusStudio.Workbench.Settings;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -167,7 +168,7 @@ internal static partial class BuiltIns
             }
             else
             {
-                shell.StatusBar.ShowMessage("There is no build log: set Build Log File Verbosity to write one.", TimeSpan.FromSeconds(6));
+                shell.StatusBar.ShowMessage(Localizer.Get("msg.builtInsBuild.thereIsNoBuildLogSet", "There is no build log: set Build Log File Verbosity to write one."), TimeSpan.FromSeconds(6));
             }
         });
         Add("project.runCustomTool", "Run Custom Tool", "Project", p => shell.RunCustomToolAsync(p), "solutionOpen");

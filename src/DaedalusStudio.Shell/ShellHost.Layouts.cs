@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DaedalusStudio.Shell.Docking;
 using DaedalusStudio.Shell.ViewModels;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -54,7 +55,7 @@ public sealed partial class ShellHost
         var layouts = SavedLayouts();
         layouts[name.Trim()] = Layout.Capture(null);
         SaveLayouts(layouts);
-        StatusBar.ShowMessage($"Saved the window layout \"{name.Trim()}\".", TimeSpan.FromSeconds(4));
+        StatusBar.ShowMessage(Localizer.Format("msg.layouts.savedTheWindowLayout", "Saved the window layout \"{0}\".", name.Trim()), TimeSpan.FromSeconds(4));
     }
 
     /// <summary>Applies a saved layout (<paramref name="name"/>, or picked), or Default (the reset layout).</summary>
@@ -79,7 +80,7 @@ public sealed partial class ShellHost
         }
         else if (!layouts.TryGetValue(name, out var snapshot) || !Layout.Restore(snapshot))
         {
-            Workbench.Notifications.Warning($"The window layout \"{name}\" couldn't be applied (it was saved by another version).");
+            Workbench.Notifications.Warning(Localizer.Format("msg.layouts.theWindowLayoutCouldntBeApplied", "The window layout \"{0}\" couldn't be applied (it was saved by another version).", name));
         }
     }
 

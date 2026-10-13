@@ -6,6 +6,7 @@ using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Plugins;
 using DaedalusStudio.Workbench.Settings;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -71,7 +72,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            Workbench.Notifications.Error($"Couldn't switch to the profile {name}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.profiles.couldntSwitchToTheProfile", "Couldn't switch to the profile {0}: {1}", name, ex.Message));
             return;
         }
 
@@ -88,14 +89,14 @@ public sealed partial class ShellHost
         var pluginsChanged = Workbench.Settings.GetValue(PluginManager.DisabledSetting).GetRawText() != pluginsBefore;
         if (pluginsChanged)
         {
-            if (await Workbench.Notifications.Info($"Profile: {name}. Its plugins differ; they apply after a restart.", "Restart Now").Result.ConfigureAwait(true) == "Restart Now")
+            if (await Workbench.Notifications.Info(Localizer.Format("msg.profiles.profileItsPluginsDifferTheyApply", "Profile: {0}. Its plugins differ; they apply after a restart.", name), "Restart Now").Result.ConfigureAwait(true) == "Restart Now")
             {
                 Restart();
             }
         }
         else
         {
-            StatusBar.ShowMessage($"Profile: {name}", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Format("msg.profiles.profile", "Profile: {0}", name), TimeSpan.FromSeconds(4));
         }
 
         static LayoutSnapshot? Deserialize(string json)
@@ -114,7 +115,7 @@ public sealed partial class ShellHost
     /// <summary>Creates a profile (<paramref name="name"/> and <paramref name="copyActive"/> asked for when null) and switches to it.</summary>
     public async Task NewProfileAsync(string? name = null, bool? copyActive = null, bool switchTo = true)
     {
-        name ??= await Dialogs.InputAsync("New Profile", "A name for the profile", string.Empty, n => Profiles.Validate(n)).ConfigureAwait(true);
+        name ??= await Dialogs.InputAsync(Localizer.Get("msg.profiles.newProfile", "New Profile"), Localizer.Get("msg.profiles.aNameForTheProfile", "A name for the profile"), string.Empty, n => Profiles.Validate(n)).ConfigureAwait(true);
         if (string.IsNullOrWhiteSpace(name))
         {
             return;
@@ -136,7 +137,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            Workbench.Notifications.Error($"Couldn't create the profile: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.profiles.couldntCreateTheProfile", "Couldn't create the profile: {0}", ex.Message));
             return;
         }
 
@@ -154,7 +155,7 @@ public sealed partial class ShellHost
         {
             if (deletable.Count == 0)
             {
-                Workbench.Notifications.Info("There's no profile to delete: Default and the active profile stay.");
+                Workbench.Notifications.Info(Localizer.Get("msg.profiles.theresNoProfileToDeleteDefault", "There's no profile to delete: Default and the active profile stay."));
                 return;
             }
 
@@ -162,7 +163,7 @@ public sealed partial class ShellHost
         }
 
         if (name is null || !deletable.Contains(name)
-            || (confirm && !await Dialogs.ConfirmAsync("Delete Profile", $"Delete the profile {name}, with its settings, shortcuts, snippets and layouts?", "Delete", danger: true).ConfigureAwait(true)))
+            || (confirm && !await Dialogs.ConfirmAsync(Localizer.Get("msg.profiles.deleteProfile", "Delete Profile"), Localizer.Format("msg.profiles.deleteTheProfileWithItsSettings", "Delete the profile {0}, with its settings, shortcuts, snippets and layouts?", name), Localizer.Get("msg.profiles.delete", "Delete"), danger: true).ConfigureAwait(true)))
         {
             return;
         }
@@ -195,17 +196,17 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"The profile couldn't be imported from {path}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.profiles.theProfileCouldntBeImportedFrom", "The profile couldn't be imported from {0}: {1}", path, ex.Message));
             return;
         }
 
         var suggested = (file["profile"] as JsonValue)?.GetValue<string>() ?? Path.GetFileNameWithoutExtension(path);
-        name ??= await Dialogs.InputAsync("Import Profile", "A name for the imported profile", Profiles.Validate(suggested) is null ? suggested : string.Empty, n => Profiles.Validate(n)).ConfigureAwait(true);
+        name ??= await Dialogs.InputAsync(Localizer.Get("msg.profiles.importProfile", "Import Profile"), Localizer.Get("msg.profiles.aNameForTheImportedProfile", "A name for the imported profile"), Profiles.Validate(suggested) is null ? suggested : string.Empty, n => Profiles.Validate(n)).ConfigureAwait(true);
         if (string.IsNullOrWhiteSpace(name) || Profiles.Validate(name) is { } error)
         {
             if (!string.IsNullOrWhiteSpace(name))
             {
-                Workbench.Notifications.Error($"The profile couldn't be imported: {Profiles.Validate(name)}");
+                Workbench.Notifications.Error(Localizer.Format("msg.profiles.theProfileCouldntBeImported", "The profile couldn't be imported: {0}", Profiles.Validate(name)));
             }
 
             return;

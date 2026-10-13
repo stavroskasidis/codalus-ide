@@ -1,5 +1,6 @@
 using DaedalusStudio.Shell.Editor;
 using DaedalusStudio.Workbench.Node;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -56,7 +57,7 @@ public sealed partial class ShellHost
         catch (Exception ex) when (ex is InvalidOperationException or IOException or TimeoutException or System.ComponentModel.Win32Exception)
         {
             LanguageLog.AppendLine($"[prettier] {model.Name}: {ex.Message}");
-            StatusBar.ShowMessage($"Prettier couldn't format {model.Name}: {ex.Message.Split('\n')[0]}", TimeSpan.FromSeconds(8));
+            StatusBar.ShowMessage(Localizer.Format("msg.prettier.prettierCouldntFormat", "Prettier couldn't format {0}: {1}", model.Name, ex.Message.Split('\n')[0]), TimeSpan.FromSeconds(8));
             return true;
         }
     }

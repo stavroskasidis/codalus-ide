@@ -18,6 +18,7 @@ using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Workbench.Debugging.Remote;
 using DaedalusStudio.Workbench.Plugins;
 using DaedalusStudio.Workbench.Settings;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell.Infrastructure;
 
@@ -201,7 +202,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Workbench.Log.AppendLine("smoke test marker");
             shell.ShowLogs();
             await WaitAsync(() => window.GetVisualDescendants().OfType<OutputView>().Any(v => v.Text.Contains("smoke test marker", StringComparison.Ordinal)), "the Output window shows the log").ConfigureAwait(true);
-            shell.Workbench.Notifications.Info("Smoke test notification");
+            shell.Workbench.Notifications.Info(Localizer.Get("msg.smokeTest.smokeTestNotification", "Smoke test notification"));
             await WaitAsync(() => shell.Notifications.Count > 0, "the notification arrives").ConfigureAwait(true);
             shell.Run("workbench.clearNotifications");
             await WaitAsync(() => shell.Notifications.Count == 0, "notifications clear").ConfigureAwait(true);

@@ -4,6 +4,7 @@ using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Previewer;
 using DaedalusStudio.Workbench.Projects;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -91,7 +92,7 @@ public sealed partial class ShellHost
             var path = await session.PathAsync(node.Id, CancellationToken.None).ConfigureAwait(true);
             if (await Task.Run(() => XamlFileOf(path.WindowType)).ConfigureAwait(true) is not { } file)
             {
-                StatusBar.ShowMessage($"No XAML file declares {path.WindowType} (x:Class).", TimeSpan.FromSeconds(6));
+                StatusBar.ShowMessage(Localizer.Format("msg.liveTree.noXamlFileDeclaresXClass", "No XAML file declares {0} (x:Class).", path.WindowType), TimeSpan.FromSeconds(6));
                 return;
             }
 
@@ -105,7 +106,7 @@ public sealed partial class ShellHost
             var tree = client is null ? null : await client.XamlLogicalTreeAsync(editor.Model.Uri, timeout.Token).ConfigureAwait(true);
             if (tree is null || PreviewSelection.NodeFor(tree.Nodes, path.Steps) is not { } xaml || editor.Controller is not { } controller)
             {
-                StatusBar.ShowMessage("The element isn't in the window's XAML (a template or code made it).", TimeSpan.FromSeconds(6));
+                StatusBar.ShowMessage(Localizer.Get("msg.liveTree.theElementIsntInTheWindows", "The element isn't in the window's XAML (a template or code made it)."), TimeSpan.FromSeconds(6));
                 return;
             }
 

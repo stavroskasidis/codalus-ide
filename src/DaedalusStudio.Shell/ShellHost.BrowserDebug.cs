@@ -6,6 +6,7 @@ using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Workbench.Node;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -192,7 +193,7 @@ public sealed partial class ShellHost
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
         {
             DebugLog.AppendLine("The page couldn't be debugged: " + ex.Message);
-            Workbench.Notifications.Warning($"The page couldn't be debugged in {browser.Display}: {ex.Message} It opened without the debugger; the server is still debugged.");
+            Workbench.Notifications.Warning(Localizer.Format("msg.browserDebug.thePageCouldntBeDebuggedIn", "The page couldn't be debugged in {0}: {1} It opened without the debugger; the server is still debugged.", browser.Display, ex.Message));
             if (Uri.TryCreate(page.Url, UriKind.Absolute, out var uri))
             {
                 ShellIntegration.OpenUrl(uri);
@@ -222,7 +223,7 @@ public sealed partial class ShellHost
     {
         if (Debugger.IsActive)
         {
-            StatusBar.ShowMessage("A debug session is already running.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.browserDebug.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -245,7 +246,7 @@ public sealed partial class ShellHost
 
         if (WebPageUrl(target) is not { } url)
         {
-            Workbench.Notifications.Error($"'{target}' isn't a URL or an HTML file.");
+            Workbench.Notifications.Error(Localizer.Format("msg.browserDebug.isntAUrlOrAnHtml", "'{0}' isn't a URL or an HTML file.", target));
             return;
         }
 
@@ -267,7 +268,7 @@ public sealed partial class ShellHost
         }
         catch (InvalidOperationException ex)
         {
-            Workbench.Notifications.Error($"Could not debug {url.AbsoluteUri}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.browserDebug.couldNotDebug", "Could not debug {0}: {1}", url.AbsoluteUri, ex.Message));
         }
     }
 

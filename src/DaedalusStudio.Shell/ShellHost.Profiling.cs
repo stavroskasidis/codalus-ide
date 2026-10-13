@@ -7,6 +7,7 @@ using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Diagnostics;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -138,7 +139,7 @@ public sealed partial class ShellHost
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                shell.Workbench.Notifications.Error($"{session.Name} could not be deleted: {ex.Message}");
+                shell.Workbench.Notifications.Error(Localizer.Format("msg.profiling.couldNotBeDeleted", "{0} could not be deleted: {1}", session.Name, ex.Message));
             }
         }
     }
@@ -152,13 +153,13 @@ public sealed partial class ShellHost
     {
         if (_profiling is not null)
         {
-            Workbench.Notifications.Warning("A profiling session is already collecting: stop it first.");
+            Workbench.Notifications.Warning(Localizer.Get("msg.profiling.aProfilingSessionIsAlreadyCollecting", "A profiling session is already collecting: stop it first."));
             return null;
         }
 
         if (!Profiling.IsAvailable)
         {
-            Workbench.Notifications.Error("The diagnostics host (daedalus-diaghost) was not found.");
+            Workbench.Notifications.Error(Localizer.Get("msg.profiling.theDiagnosticsHostDaedalusDiaghostWas", "The diagnostics host (daedalus-diaghost) was not found."));
             return null;
         }
 
@@ -173,7 +174,7 @@ public sealed partial class ShellHost
             {
                 if (project is null)
                 {
-                    Workbench.Notifications.Warning("There is no startup project to profile.");
+                    Workbench.Notifications.Warning(Localizer.Get("msg.profiling.thereIsNoStartupProjectTo", "There is no startup project to profile."));
                 }
 
                 return null;
@@ -181,7 +182,7 @@ public sealed partial class ShellHost
 
             if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
             {
-                StatusBar.ShowMessage("The build failed, so nothing was profiled.", TimeSpan.FromSeconds(6));
+                StatusBar.ShowMessage(Localizer.Get("msg.profiling.theBuildFailedSoNothingWas", "The build failed, so nothing was profiled."), TimeSpan.FromSeconds(6));
                 return null;
             }
 
@@ -199,7 +200,7 @@ public sealed partial class ShellHost
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
             {
-                Workbench.Notifications.Error($"Could not start {Path.GetFileNameWithoutExtension(project)}: {ex.Message}");
+                Workbench.Notifications.Error(Localizer.Format("msg.profiling.couldNotStart", "Could not start {0}: {1}", Path.GetFileNameWithoutExtension(project), ex.Message));
                 return null;
             }
         }
@@ -240,7 +241,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
         {
-            Workbench.Notifications.Error($"Profiling {target} could not start: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.profiling.profilingCouldNotStart", "Profiling {0} could not start: {1}", target, ex.Message));
             program?.Stop();
             if (trace is not null)
             {
@@ -309,7 +310,7 @@ public sealed partial class ShellHost
         var file = string.Create(CultureInfo.InvariantCulture, $"heap-{run.Snapshots.Count + 1}.nettrace");
         try
         {
-            StatusBar.ShowMessage("Taking a heap snapshot…", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Get("msg.profiling.takingAHeapSnapshot", "Taking a heap snapshot…"), TimeSpan.FromSeconds(5));
             using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             await Profiling.TakeHeapSnapshotAsync(run.ProcessId, Path.Combine(folder, file), timeout.Token).ConfigureAwait(true);
             run.Snapshots.Add(file);
@@ -317,7 +318,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
         {
-            Workbench.Notifications.Error($"The heap snapshot could not be taken: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.profiling.theHeapSnapshotCouldNotBe", "The heap snapshot could not be taken: {0}", ex.Message));
             return null;
         }
     }
@@ -328,7 +329,7 @@ public sealed partial class ShellHost
         const string File = "full.dmp";
         try
         {
-            StatusBar.ShowMessage("Writing a full dump…", TimeSpan.FromSeconds(10));
+            StatusBar.ShowMessage(Localizer.Get("msg.profiling.writingAFullDump", "Writing a full dump…"), TimeSpan.FromSeconds(10));
             using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             await Companion.CreateDumpAsync(run.ProcessId, Path.Combine(folder, File), "full", timeout.Token).ConfigureAwait(true);
             run.Dump = File;
@@ -336,7 +337,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Workbench.Notifications.Error($"The dump could not be written: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.profiling.theDumpCouldNotBeWritten", "The dump could not be written: {0}", ex.Message));
             return null;
         }
     }
@@ -368,7 +369,7 @@ public sealed partial class ShellHost
     private async Task<ProfilerSession?> FinishProfilingAsync(ProfilingRun run, string folder, string name, string? project, DateTimeOffset startedAt, TraceRecordingHandle? trace, CounterMonitor? counters, RunningProgram? program)
     {
         Workbench.StatusBar.Remove(ProfilerStatusItem);
-        StatusBar.ShowMessage($"Stopping the profiling of {name}…", TimeSpan.FromSeconds(4));
+        StatusBar.ShowMessage(Localizer.Format("msg.profiling.stoppingTheProfilingOf", "Stopping the profiling of {0}…", name), TimeSpan.FromSeconds(4));
         string? traceFile = null;
         string? countersFile = null;
         if (trace is not null)
@@ -381,7 +382,7 @@ public sealed partial class ShellHost
             }
             catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException)
             {
-                Workbench.Notifications.Error($"The CPU trace of {name} could not be finished: {ex.Message}");
+                Workbench.Notifications.Error(Localizer.Format("msg.profiling.theCpuTraceOfCouldNot", "The CPU trace of {0} could not be finished: {1}", name, ex.Message));
             }
         }
 
@@ -399,7 +400,7 @@ public sealed partial class ShellHost
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Workbench.Notifications.Error($"The counters of {name} could not be saved: {ex.Message}");
+                Workbench.Notifications.Error(Localizer.Format("msg.profiling.theCountersOfCouldNotBe", "The counters of {0} could not be saved: {1}", name, ex.Message));
             }
         }
 
@@ -435,7 +436,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"The profiling session could not be saved: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.profiling.theProfilingSessionCouldNotBe", "The profiling session could not be saved: {0}", ex.Message));
             return null;
         }
 
@@ -503,7 +504,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        Workbench.Notifications.Warning($"{Path.GetFileName(path)} is not a profiling session or a .nettrace file.");
+        Workbench.Notifications.Warning(Localizer.Format("msg.profiling.isNotAProfilingSessionOr", "{0} is not a profiling session or a .nettrace file.", Path.GetFileName(path)));
     }
 
     /// <summary>Opens a comparison of two saved sessions (CPU functions and, with snapshots, the heap's growth).</summary>

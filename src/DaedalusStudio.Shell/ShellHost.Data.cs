@@ -7,6 +7,7 @@ using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Data;
 using DaedalusStudio.Workbench.Languages;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -384,7 +385,7 @@ public sealed partial class ShellHost
         }
 
         Layout.ShowToolWindow(DatabaseExplorerViewModel.ToolWindowId, focus: true);
-        StatusBar.ShowMessage($"Saved the connection {connection.Name}.", TimeSpan.FromSeconds(4));
+        StatusBar.ShowMessage(Localizer.Format("msg.data.savedTheConnection", "Saved the connection {0}.", connection.Name), TimeSpan.FromSeconds(4));
     }
 
     private DataConnection? SelectedConnection() =>
@@ -398,7 +399,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (await Dialogs.ConfirmAsync("Remove Connection", $"Remove the connection {connection.Name}? Its saved password is deleted too.", "Remove", danger: true).ConfigureAwait(true))
+        if (await Dialogs.ConfirmAsync(Localizer.Get("msg.data.removeConnection", "Remove Connection"), Localizer.Format("msg.data.removeTheConnectionItsSavedPassword", "Remove the connection {0}? Its saved password is deleted too.", connection.Name), Localizer.Get("msg.data.remove", "Remove"), danger: true).ConfigureAwait(true))
         {
             await Data.RemoveAsync(connection.Id, CancellationToken.None).ConfigureAwait(true);
         }
@@ -462,7 +463,7 @@ public sealed partial class ShellHost
             var created = document;
             document.CloseRequested += async (_, _) =>
             {
-                if (await Dialogs.ConfirmAsync("Discard Changes", $"{created.Title} has {created.ViewModel.PendingChanges} change(s) that aren't committed. Discard them?", "Discard", danger: true).ConfigureAwait(true))
+                if (await Dialogs.ConfirmAsync(Localizer.Get("msg.data.discardChanges", "Discard Changes"), Localizer.Format("msg.data.hasChangeSThatArentCommitted", "{0} has {1} change(s) that aren't committed. Discard them?", created.Title, created.ViewModel.PendingChanges), Localizer.Get("msg.data.discard", "Discard"), danger: true).ConfigureAwait(true))
                 {
                     created.CloseConfirmed();
                 }
@@ -495,7 +496,7 @@ public sealed partial class ShellHost
                 }
 
                 var result = await Data.ExportAsync(new ExportParams(table.ConnectionId, table.Database, Format(path), path, table.Table), CancellationToken.None).ConfigureAwait(true);
-                StatusBar.ShowMessage($"Exported {result.Rows:N0} row(s) to {Path.GetFileName(path)}.", TimeSpan.FromSeconds(6));
+                StatusBar.ShowMessage(Localizer.Format("msg.data.exportedRowSTo", "Exported {0:N0} row(s) to {1}.", result.Rows, Path.GetFileName(path)), TimeSpan.FromSeconds(6));
             }
             else if (action == "import")
             {

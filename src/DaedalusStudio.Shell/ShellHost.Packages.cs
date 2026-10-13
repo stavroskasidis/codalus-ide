@@ -4,6 +4,7 @@ using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Packages;
 using DaedalusStudio.Workbench.Projects;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -40,13 +41,13 @@ public sealed partial class ShellHost
     {
         if (Solutions.Solution is not { } solution)
         {
-            StatusBar.ShowMessage($"Open a solution to use {feature}.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Format("msg.packages.openASolutionToUse", "Open a solution to use {0}.", feature), TimeSpan.FromSeconds(4));
             return false;
         }
 
         if (!solution.Trusted)
         {
-            Workbench.Notifications.Warning($"{feature} is available only in trusted folders. Trust the solution folder first.");
+            Workbench.Notifications.Warning(Localizer.Format("msg.packages.isAvailableOnlyInTrustedFolders", "{0} is available only in trusted folders. Trust the solution folder first.", feature));
             return false;
         }
 
@@ -64,7 +65,7 @@ public sealed partial class ShellHost
         project = solution ? null : CurrentProject(project);
         if (!solution && project is null)
         {
-            StatusBar.ShowMessage("Select a project to manage its packages.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.packages.selectAProjectToManageIts", "Select a project to manage its packages."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -119,7 +120,7 @@ public sealed partial class ShellHost
     {
         if (CurrentProject(argument) is not { } project)
         {
-            StatusBar.ShowMessage("Select a project to pack.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.packages.selectAProjectToPack", "Select a project to pack."), TimeSpan.FromSeconds(4));
             return [];
         }
 

@@ -1,6 +1,7 @@
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Interactive;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -43,7 +44,7 @@ public sealed partial class ShellHost
 
         if (!Interactive.IsAvailable)
         {
-            StatusBar.ShowMessage("C# Interactive isn't available (daedalus-replhost was not found).", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Get("msg.interactive.cInteractiveIsntAvailableDaedalusReplhost", "C# Interactive isn't available (daedalus-replhost was not found)."), TimeSpan.FromSeconds(5));
             return;
         }
 
@@ -58,7 +59,7 @@ public sealed partial class ShellHost
     {
         if (CurrentProject(argument) is not { } project)
         {
-            StatusBar.ShowMessage("Select a project to initialize C# Interactive with.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.interactive.selectAProjectToInitializeC", "Select a project to initialize C# Interactive with."), TimeSpan.FromSeconds(4));
             return;
         }
 

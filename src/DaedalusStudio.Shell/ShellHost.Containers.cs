@@ -8,6 +8,7 @@ using DaedalusStudio.Workbench.Containers;
 using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Workbench.Debugging.Remote;
 using DaedalusStudio.Workbench.Output;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -77,7 +78,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"Could not open a terminal in {container}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.containers.couldNotOpenATerminalIn", "Could not open a terminal in {0}: {1}", container, ex.Message));
         }
 
         return Task.CompletedTask;
@@ -92,11 +93,11 @@ public sealed partial class ShellHost
             Directory.CreateDirectory(Path.GetDirectoryName(local)!);
             await ContainerEngine.CopyOutAsync(container, path, local, CancellationToken.None).ConfigureAwait(true);
             await OpenFileAsync(local).ConfigureAwait(true);
-            StatusBar.ShowMessage($"{path} from {container}: a copy; changes aren't written back to the container.", TimeSpan.FromSeconds(6));
+            StatusBar.ShowMessage(Localizer.Format("msg.containers.fromACopyChangesArentWritten", "{0} from {1}: a copy; changes aren't written back to the container.", path, container), TimeSpan.FromSeconds(6));
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"Could not open {path} from {container}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.containers.couldNotOpenFrom", "Could not open {0} from {1}: {2}", path, container, ex.Message));
         }
     }
 
@@ -111,7 +112,7 @@ public sealed partial class ShellHost
         var projectPath = argument ?? SelectedProjectPath() ?? Runs.StartupProject;
         if (projectPath is null || !Solutions.Projects.TryGetValue(projectPath, out var project) || project.IsComposeProject)
         {
-            Workbench.Notifications.Warning("Select a project to add Docker support to.");
+            Workbench.Notifications.Warning(Localizer.Get("msg.containers.selectAProjectToAddDocker", "Select a project to add Docker support to."));
             return null;
         }
 
@@ -126,7 +127,7 @@ public sealed partial class ShellHost
 
         var folder = Path.GetDirectoryName(projectPath)!;
         var dockerfile = Path.Combine(folder, "Dockerfile");
-        if (File.Exists(dockerfile) && !await Dialogs.ConfirmAsync("Add Docker Support", $"{project.Name} already has a Dockerfile. Replace it?", "Replace", danger: true).ConfigureAwait(true))
+        if (File.Exists(dockerfile) && !await Dialogs.ConfirmAsync(Localizer.Get("msg.containers.addDockerSupport", "Add Docker Support"), Localizer.Format("msg.containers.alreadyHasADockerfileReplaceIt", "{0} already has a Dockerfile. Replace it?", project.Name), Localizer.Get("msg.containers.replace", "Replace"), danger: true).ConfigureAwait(true))
         {
             return null;
         }
@@ -150,12 +151,12 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            Workbench.Notifications.Error($"Could not add Docker support to {project.Name}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.containers.couldNotAddDockerSupportTo", "Could not add Docker support to {0}: {1}", project.Name, ex.Message));
             return null;
         }
 
         await OpenFileAsync(dockerfile).ConfigureAwait(true);
-        Workbench.Notifications.Info($"Docker support added to {project.Name}: choose the '{DockerSupport.ContainerProfileName}' launch profile to run or debug it in a container.");
+        Workbench.Notifications.Info(Localizer.Format("msg.containers.dockerSupportAddedToChooseThe", "Docker support added to {0}: choose the '{1}' launch profile to run or debug it in a container.", project.Name, DockerSupport.ContainerProfileName));
         return dockerfile;
     }
 
@@ -177,7 +178,7 @@ public sealed partial class ShellHost
         var name = Path.GetFileNameWithoutExtension(projectPath);
         if (DockerSupport.FindDockerfile(projectPath) is not { } dockerfile)
         {
-            Workbench.Notifications.Warning($"{name} has no Dockerfile: use Add Docker Support first.");
+            Workbench.Notifications.Warning(Localizer.Format("msg.containers.hasNoDockerfileUseAddDocker", "{0} has no Dockerfile: use Add Docker Support first.", name));
             return false;
         }
 
@@ -187,13 +188,13 @@ public sealed partial class ShellHost
         var (os, error) = await engine.ServerOsAsync(CancellationToken.None).ConfigureAwait(true);
         if (os is null)
         {
-            Workbench.Notifications.Error($"{engine.Name} doesn't answer, so {name} can't run in a container: {error}");
+            Workbench.Notifications.Error(Localizer.Format("msg.containers.doesntAnswerSoCantRunIn", "{0} doesn't answer, so {1} can't run in a container: {2}", engine.Name, name, error));
             return false;
         }
 
         if (!os.Equals("linux", StringComparison.OrdinalIgnoreCase))
         {
-            Workbench.Notifications.Error($"{engine.Name} runs {os} containers; {name}'s Dockerfile needs Linux containers.");
+            Workbench.Notifications.Error(Localizer.Format("msg.containers.runsContainersSDockerfileNeedsLinux", "{0} runs {1} containers; {2}'s Dockerfile needs Linux containers.", engine.Name, os, name));
             return false;
         }
 
@@ -209,12 +210,12 @@ public sealed partial class ShellHost
             wsl ? p => WslLaunch.ToLinuxPath(p) : null);
 
         ContainerLog.AppendLine($"> {engine.Name} build -f {launch.Dockerfile}{(launch.Target is null ? string.Empty : " --target " + launch.Target)} -t {launch.Image} {launch.Context}");
-        StatusBar.ShowMessage($"Building the container image of {name}…");
+        StatusBar.ShowMessage(Localizer.Format("msg.containers.buildingTheContainerImageOf", "Building the container image of {0}…", name));
         var build = await engine.BuildAsync(launch.Dockerfile, launch.Context, launch.Image, launch.Target, line => ContainerLog.AppendLine(line), CancellationToken.None).ConfigureAwait(true);
         StatusBar.ClearMessage();
         if (!build.Succeeded)
         {
-            Workbench.Notifications.Error($"The container image of {name} didn't build (see Output → Container Tools).");
+            Workbench.Notifications.Error(Localizer.Format("msg.containers.theContainerImageOfDidntBuild", "The container image of {0} didn't build (see Output → Container Tools).", name));
             return false;
         }
 
@@ -294,7 +295,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or HttpRequestException or InvalidDataException or OperationCanceledException or System.ComponentModel.Win32Exception)
         {
-            Workbench.Notifications.Error($"Could not debug {name} in its container: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.containers.couldNotDebugInItsContainer", "Could not debug {0} in its container: {1}", name, ex.Message));
             if (Interlocked.Exchange(ref _debugContainer, null) is { } container)
             {
                 await RemoveContainerQuietlyAsync(container).ConfigureAwait(true);
@@ -371,7 +372,7 @@ public sealed partial class ShellHost
     {
         if (ComposeFileFor(argument) is not { } file)
         {
-            Workbench.Notifications.Warning("There's no compose file here (compose.yaml or docker-compose.yml).");
+            Workbench.Notifications.Warning(Localizer.Get("msg.containers.theresNoComposeFileHereCompose", "There's no compose file here (compose.yaml or docker-compose.yml)."));
             return false;
         }
 
@@ -382,7 +383,7 @@ public sealed partial class ShellHost
     {
         if (ComposeFileFor(argument) is not { } file)
         {
-            Workbench.Notifications.Warning("There's no compose file here (compose.yaml or docker-compose.yml).");
+            Workbench.Notifications.Warning(Localizer.Get("msg.containers.theresNoComposeFileHereCompose", "There's no compose file here (compose.yaml or docker-compose.yml)."));
             return false;
         }
 
@@ -395,7 +396,7 @@ public sealed partial class ShellHost
         Workbench.Output.Show(ContainerLog);
         var arguments = ComposeCommand(file, command);
         ContainerLog.AppendLine($"> {engine.Name} {string.Join(' ', arguments)}");
-        StatusBar.ShowMessage($"Compose {verb}: {Path.GetFileName(file)}…");
+        StatusBar.ShowMessage(Localizer.Format("msg.containers.compose", "Compose {0}: {1}…", verb, Path.GetFileName(file)));
         try
         {
             var result = await engine.RunAsync(arguments, CancellationToken.None, line => ContainerLog.AppendLine(line), Path.GetDirectoryName(file)).ConfigureAwait(true);
@@ -445,7 +446,7 @@ public sealed partial class ShellHost
 
         if (picked is null)
         {
-            Workbench.Notifications.Warning("No service of the compose file is running.");
+            Workbench.Notifications.Warning(Localizer.Get("msg.containers.noServiceOfTheComposeFile", "No service of the compose file is running."));
             return false;
         }
 
@@ -461,7 +462,7 @@ public sealed partial class ShellHost
             await Task.Delay(500).ConfigureAwait(true);
         }
 
-        Workbench.Notifications.Warning($"No .NET process runs in {picked.Name} to debug.");
+        Workbench.Notifications.Warning(Localizer.Format("msg.containers.noNetProcessRunsInTo", "No .NET process runs in {0} to debug.", picked.Name));
         return false;
     }
 

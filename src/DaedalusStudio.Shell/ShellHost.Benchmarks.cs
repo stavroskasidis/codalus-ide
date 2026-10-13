@@ -1,6 +1,7 @@
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Diagnostics;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -50,7 +51,7 @@ public sealed partial class ShellHost
     {
         if (Benchmarks.IsRunning)
         {
-            Workbench.Notifications.Warning("Benchmarks are already running.");
+            Workbench.Notifications.Warning(Localizer.Get("msg.benchmarks.benchmarksAreAlreadyRunning", "Benchmarks are already running."));
             return null;
         }
 
@@ -61,13 +62,13 @@ public sealed partial class ShellHost
 
         Layout.ShowToolWindow(BenchmarksViewModel.ToolWindowId, focus: false);
         Workbench.Output.Show(BenchmarkLog);
-        StatusBar.ShowMessage("Running benchmarks…", TimeSpan.FromSeconds(5));
+        StatusBar.ShowMessage(Localizer.Get("msg.benchmarks.runningBenchmarks", "Running benchmarks…"), TimeSpan.FromSeconds(5));
         try
         {
             var run = await Benchmarks.RunAsync(request, CancellationToken.None).ConfigureAwait(true);
             if (run.Results.Count == 0)
             {
-                Workbench.Notifications.Warning($"The benchmarks produced no results (exit code {run.ExitCode}); see the Benchmarks output.");
+                Workbench.Notifications.Warning(Localizer.Format("msg.benchmarks.theBenchmarksProducedNoResultsExit", "The benchmarks produced no results (exit code {0}); see the Benchmarks output.", run.ExitCode));
             }
 
             return run;

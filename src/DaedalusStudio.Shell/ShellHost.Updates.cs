@@ -5,6 +5,7 @@ using DaedalusStudio.Shell.Views;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.StatusBar;
 using DaedalusStudio.Workbench.Updates;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -78,13 +79,13 @@ public sealed partial class ShellHost
         switch (state.Status)
         {
             case UpdateStatus.Disabled:
-                Workbench.Notifications.Info($"This is a development build ({ShellInfo.Version}): it doesn't update itself.");
+                Workbench.Notifications.Info(Localizer.Format("msg.updates.thisIsADevelopmentBuildIt", "This is a development build ({0}): it doesn't update itself.", ShellInfo.Version));
                 break;
             case UpdateStatus.UpToDate:
-                Workbench.Notifications.Info($"Daedalus Studio {ShellInfo.Version} is up to date.");
+                Workbench.Notifications.Info(Localizer.Format("msg.updates.daedalusStudioIsUpToDate", "Daedalus Studio {0} is up to date.", ShellInfo.Version));
                 break;
             case UpdateStatus.Failed:
-                Workbench.Notifications.Warning($"Couldn't check for updates: {state.Error}");
+                Workbench.Notifications.Warning(Localizer.Format("msg.updates.couldntCheckForUpdates", "Couldn't check for updates: {0}", state.Error));
                 break;
         }
     }
@@ -99,7 +100,7 @@ public sealed partial class ShellHost
 
         if (Workbench.Context.GetValue("debugActive") is true || Workbench.Context.GetValue("buildRunning") is true)
         {
-            Workbench.Notifications.Info("The update waits until debugging or the build is over.");
+            Workbench.Notifications.Info(Localizer.Get("msg.updates.theUpdateWaitsUntilDebuggingOr", "The update waits until debugging or the build is over."));
             return;
         }
 
@@ -194,13 +195,13 @@ public sealed partial class ShellHost
         var state = await SelfUpdate.SwitchChannelAsync(
             channel,
             offer => Dialogs.ConfirmAsync(
-                "Switch to stable releases?",
-                $"The newest stable release, {offer.Version}, is older than this build ({ShellInfo.Version}). Install it? Settings and open solutions are kept.",
-                $"Install {offer.Version}"),
+                Localizer.Get("msg.updates.switchToStableReleases", "Switch to stable releases?"),
+                Localizer.Format("msg.updates.theNewestStableReleaseIsOlder", "The newest stable release, {0}, is older than this build ({1}). Install it? Settings and open solutions are kept.", offer.Version, ShellInfo.Version),
+                Localizer.Format("msg.updates.install", "Install {0}", offer.Version)),
             CancellationToken.None).ConfigureAwait(true);
         if (state.Status == UpdateStatus.Failed)
         {
-            Workbench.Notifications.Warning($"Couldn't switch to {channel}: {state.Error}");
+            Workbench.Notifications.Warning(Localizer.Format("msg.updates.couldntSwitchTo", "Couldn't switch to {0}: {1}", channel, state.Error));
         }
     }
 
@@ -243,7 +244,7 @@ public sealed partial class ShellHost
         var path = Path.Combine(Paths.State, WhatsNewFile);
         if (!File.Exists(path))
         {
-            Workbench.Notifications.Info($"No release notes yet: they appear here after the next update. This is Daedalus Studio {ShellInfo.Version}.");
+            Workbench.Notifications.Info(Localizer.Format("msg.updates.noReleaseNotesYetTheyAppear", "No release notes yet: they appear here after the next update. This is Daedalus Studio {0}.", ShellInfo.Version));
             return null;
         }
 

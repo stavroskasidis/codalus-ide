@@ -5,6 +5,7 @@ using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Http;
 using DaedalusStudio.Workbench.Web;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -155,7 +156,7 @@ public sealed partial class ShellHost
     public async Task SendHttpRequestAsync(string path, string text, int line)
     {
         Layout.ShowToolWindow(HttpResponseViewModel.ToolWindowId, focus: false);
-        StatusBar.ShowMessage("Sending the request…");
+        StatusBar.ShowMessage(Localizer.Get("msg.web.sendingTheRequest", "Sending the request…"));
         try
         {
             var exchange = await Http.SendAsync(path, text, line, CancellationToken.None).ConfigureAwait(true);
@@ -207,7 +208,7 @@ public sealed partial class ShellHost
         if (await Palette.ShowAsync(items, "Environment for .http requests").ConfigureAwait(true) is { Tag: string chosen })
         {
             Http.SelectEnvironment(environments.File, chosen);
-            StatusBar.ShowMessage($"Requests use the '{chosen}' environment.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Format("msg.web.requestsUseTheEnvironment", "Requests use the '{0}' environment.", chosen), TimeSpan.FromSeconds(4));
         }
     }
 
@@ -255,16 +256,16 @@ public sealed partial class ShellHost
     /// <summary>Checks the HTTPS development certificate and offers to trust it.</summary>
     public async Task CheckDevCertificateAsync()
     {
-        StatusBar.ShowMessage("Checking the HTTPS development certificate…");
+        StatusBar.ShowMessage(Localizer.Get("msg.web.checkingTheHttpsDevelopmentCertificate", "Checking the HTTPS development certificate…"));
         var state = await WebDevelopment.CheckCertificateAsync(CancellationToken.None).ConfigureAwait(true);
         StatusBar.ClearMessage();
         switch (state)
         {
             case DevCertificateState.Trusted:
-                Workbench.Notifications.Info("The ASP.NET Core HTTPS development certificate is installed and trusted.");
+                Workbench.Notifications.Info(Localizer.Get("msg.web.theAspNetCoreHttpsDevelopment", "The ASP.NET Core HTTPS development certificate is installed and trusted."));
                 break;
             case DevCertificateState.Unknown:
-                Workbench.Notifications.Warning("The certificate could not be checked: the .NET SDK was not found.");
+                Workbench.Notifications.Warning(Localizer.Get("msg.web.theCertificateCouldNotBeChecked", "The certificate could not be checked: the .NET SDK was not found."));
                 break;
             default:
                 await OfferTrustAsync(state).ConfigureAwait(true);
@@ -314,7 +315,7 @@ public sealed partial class ShellHost
 
     public async Task TrustDevCertificateAsync()
     {
-        StatusBar.ShowMessage("Trusting the HTTPS development certificate (your OS may ask you to confirm)…");
+        StatusBar.ShowMessage(Localizer.Get("msg.web.trustingTheHttpsDevelopmentCertificateYour", "Trusting the HTTPS development certificate (your OS may ask you to confirm)…"));
         var (exitCode, output) = await WebDevelopment.TrustCertificateAsync(CancellationToken.None).ConfigureAwait(true);
         StatusBar.ClearMessage();
         BuildHostLog.AppendLine("> dotnet dev-certs https --trust");
@@ -346,7 +347,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
-            Workbench.Notifications.Error($"Could not open the user secrets of {Path.GetFileNameWithoutExtension(project)}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.web.couldNotOpenTheUserSecrets", "Could not open the user secrets of {0}: {1}", Path.GetFileNameWithoutExtension(project), ex.Message));
         }
     }
 }

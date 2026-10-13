@@ -6,6 +6,7 @@ using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.ExternalTools;
 using DaedalusStudio.Workbench.Menus;
 using DaedalusStudio.Workbench.Projects;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -139,14 +140,14 @@ public sealed partial class ShellHost
     {
         if (!Solutions.IsOpen)
         {
-            StatusBar.ShowMessage("Open a solution or a folder with a project to add items.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.projectSystem.openASolutionOrAFolder", "Open a solution or a folder with a project to add items."), TimeSpan.FromSeconds(4));
             return null;
         }
 
         var target = project is not null ? (Path.GetFullPath(project), folder is null ? Path.GetDirectoryName(Path.GetFullPath(project))! : Path.GetFullPath(folder)) : ItemTarget();
         if (target is not { } chosen)
         {
-            StatusBar.ShowMessage("Select a project or one of its folders to add an item to.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.projectSystem.selectAProjectOrOneOf", "Select a project or one of its folders to add an item to."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -182,7 +183,7 @@ public sealed partial class ShellHost
     {
         if (Solutions.Solution is not { } solution)
         {
-            StatusBar.ShowMessage("Open a solution to export a project or an item as a template.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.projectSystem.openASolutionToExportA", "Open a solution to export a project or an item as a template."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -261,7 +262,7 @@ public sealed partial class ShellHost
         var arguments = Expand(tool.Arguments);
         if (tool.PromptForArguments)
         {
-            if (await Dialogs.InputAsync(tool.Title, $"Arguments for {tool.Command}:", arguments).ConfigureAwait(true) is not { } edited)
+            if (await Dialogs.InputAsync(tool.Title, Localizer.Format("msg.projectSystem.argumentsFor", "Arguments for {0}:", tool.Command), arguments).ConfigureAwait(true) is not { } edited)
             {
                 return;
             }
@@ -281,7 +282,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
-            Workbench.Notifications.Error($"Could not run {tool.Title}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.projectSystem.couldNotRun", "Could not run {0}: {1}", tool.Title, ex.Message));
         }
     }
 

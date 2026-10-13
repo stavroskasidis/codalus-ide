@@ -5,6 +5,7 @@ using DaedalusStudio.Workbench.Node;
 using DaedalusStudio.Workbench.Notifications;
 using DaedalusStudio.Workbench.Output;
 using DaedalusStudio.Workbench.Settings;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -101,7 +102,7 @@ public sealed partial class ShellHost
 
         if (NodeRuntime.Platform is null)
         {
-            Workbench.Notifications.Error("npm isn't installed, and the built-in Node.js isn't available for this platform. Install Node.js.");
+            Workbench.Notifications.Error(Localizer.Get("msg.npm.npmIsntInstalledAndTheBuilt", "npm isn't installed, and the built-in Node.js isn't available for this platform. Install Node.js."));
             return null;
         }
 
@@ -113,7 +114,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidOperationException or InvalidDataException)
         {
-            Workbench.Notifications.Error($"Node.js couldn't be installed: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.npm.nodeJsCouldntBeInstalled", "Node.js couldn't be installed: {0}", ex.Message));
             return null;
         }
     }
@@ -146,7 +147,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"Could not run the npm script '{script}': {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.npm.couldNotRunTheNpmScript", "Could not run the npm script '{0}': {1}", script, ex.Message));
         }
     }
 
@@ -164,7 +165,7 @@ public sealed partial class ShellHost
             .ToList();
         if (items.Count == 0)
         {
-            Workbench.Notifications.Info("The solution has no npm scripts.");
+            Workbench.Notifications.Info(Localizer.Get("msg.npm.theSolutionHasNoNpmScripts", "The solution has no npm scripts."));
             return;
         }
 
@@ -193,7 +194,7 @@ public sealed partial class ShellHost
     {
         if (Solutions.Solution is { Trusted: false })
         {
-            Workbench.Notifications.Warning("npm packages are restored only in trusted folders: their install scripts run code.");
+            Workbench.Notifications.Warning(Localizer.Get("msg.npm.npmPackagesAreRestoredOnlyIn", "npm packages are restored only in trusted folders: their install scripts run code."));
             return false;
         }
 
@@ -210,7 +211,7 @@ public sealed partial class ShellHost
         foreach (var target in targets)
         {
             var folder = Path.GetDirectoryName(target)!;
-            StatusBar.ShowMessage($"Restoring npm packages in {Path.GetFileName(folder)}…");
+            StatusBar.ShowMessage(Localizer.Format("msg.npm.restoringNpmPackagesIn", "Restoring npm packages in {0}…", Path.GetFileName(folder)));
             NpmLog.AppendLine($"> npm install ({folder}, {npm.Description})");
             try
             {

@@ -14,6 +14,7 @@ using DaedalusStudio.Workbench.Plugins;
 using DaedalusStudio.Workbench.Settings;
 using DaedalusStudio.Workbench.StatusBar;
 using DaedalusStudio.Workbench.ToolWindows;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -226,7 +227,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         var notification = Workbench.Notifications.Warning(
-            "Daedalus Studio crashed last time. A crash report was saved on this computer; attach it to an issue if you report the problem.",
+            Localizer.Get("msg.shellHost.daedalusStudioCrashedLastTimeA", "Daedalus Studio crashed last time. A crash report was saved on this computer; attach it to an issue if you report the problem."),
             "Open Folder");
         _ = notification.Result.ContinueWith(
             t =>
@@ -516,7 +517,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
         catch (CommandNotEnabledException)
         {
-            Ui.Post(() => StatusBar.ShowMessage($"“{Title(commandId)}” is not available right now.", TimeSpan.FromSeconds(4)));
+            Ui.Post(() => StatusBar.ShowMessage(Localizer.Format("msg.shellHost.isNotAvailableRightNow", "“{0}” is not available right now.", Title(commandId)), TimeSpan.FromSeconds(4)));
         }
         catch (Exception ex)
         {
@@ -642,7 +643,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            Workbench.Notifications.Error($"Could not open {Paths.PluginsDirectory}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.shellHost.couldNotOpen", "Could not open {0}: {1}", Paths.PluginsDirectory, ex.Message));
         }
     }
 

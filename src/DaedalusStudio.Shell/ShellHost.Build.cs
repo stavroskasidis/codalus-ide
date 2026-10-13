@@ -9,6 +9,7 @@ using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Notifications;
 using DaedalusStudio.Workbench.Projects;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -55,13 +56,13 @@ public sealed partial class ShellHost
     {
         if (Solutions.Solution is not { } solution)
         {
-            StatusBar.ShowMessage("Open a solution to build it.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.build.openASolutionToBuildIt", "Open a solution to build it."), TimeSpan.FromSeconds(4));
             return false;
         }
 
         if (!solution.Trusted)
         {
-            var notification = Workbench.Notifications.Warning("Builds run only in trusted folders.", "Trust Folder");
+            var notification = Workbench.Notifications.Warning(Localizer.Get("msg.build.buildsRunOnlyInTrustedFolders", "Builds run only in trusted folders."), "Trust Folder");
             if (await notification.Result.ConfigureAwait(true) == "Trust Folder")
             {
                 await TrustSolutionAsync().ConfigureAwait(true);
@@ -72,7 +73,7 @@ public sealed partial class ShellHost
 
         if (Builds.IsBuilding)
         {
-            StatusBar.ShowMessage("A build is already running.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.build.aBuildIsAlreadyRunning", "A build is already running."), TimeSpan.FromSeconds(4));
             return false;
         }
 
@@ -90,7 +91,7 @@ public sealed partial class ShellHost
         Workbench.Output.Show(Builds.Channel);
         if (!await BeforeBuildBindingsAsync(target, project).ConfigureAwait(true))
         {
-            StatusBar.ShowMessage("An npm script bound to the build failed, so the build didn't run (see Output → npm).", TimeSpan.FromSeconds(8));
+            StatusBar.ShowMessage(Localizer.Get("msg.build.anNpmScriptBoundToThe", "An npm script bound to the build failed, so the build didn't run (see Output → npm)."), TimeSpan.FromSeconds(8));
             return false;
         }
 
@@ -125,7 +126,7 @@ public sealed partial class ShellHost
     {
         if (CurrentProject(argument) is not { } project)
         {
-            StatusBar.ShowMessage("Select a project to build.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.build.selectAProjectToBuild", "Select a project to build."), TimeSpan.FromSeconds(4));
             return Task.FromResult(false);
         }
 
@@ -216,7 +217,7 @@ public sealed partial class ShellHost
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
             {
-                StatusBar.ShowMessage("The build failed, so the program was not started.", TimeSpan.FromSeconds(6));
+                StatusBar.ShowMessage(Localizer.Get("msg.build.theBuildFailedSoTheProgram", "The build failed, so the program was not started."), TimeSpan.FromSeconds(6));
             }
 
             return;
@@ -272,7 +273,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
         {
-            Workbench.Notifications.Error($"Could not start {Path.GetFileNameWithoutExtension(project)}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.build.couldNotStart", "Could not start {0}: {1}", Path.GetFileNameWithoutExtension(project), ex.Message));
         }
     }
 
@@ -331,7 +332,7 @@ public sealed partial class ShellHost
 
         if (profiles.Count == 0)
         {
-            StatusBar.ShowMessage($"{Path.GetFileNameWithoutExtension(project)} has no launch profiles (Properties/launchSettings.json).", TimeSpan.FromSeconds(6));
+            StatusBar.ShowMessage(Localizer.Format("msg.build.hasNoLaunchProfilesPropertiesLaunchsettings", "{0} has no launch profiles (Properties/launchSettings.json).", Path.GetFileNameWithoutExtension(project)), TimeSpan.FromSeconds(6));
             return;
         }
 

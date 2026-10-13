@@ -4,6 +4,7 @@ using DaedalusStudio.Projects.Protocol;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Data;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -165,7 +166,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        name ??= await Dialogs.InputAsync("Add Migration", "The migration's name (a C# identifier, such as AddBlogRating):", string.Empty, text =>
+        name ??= await Dialogs.InputAsync(Localizer.Get("msg.entityFramework.addMigration", "Add Migration"), Localizer.Get("msg.entityFramework.theMigrationsNameACIdentifier", "The migration's name (a C# identifier, such as AddBlogRating):"), string.Empty, text =>
             text.Trim().Length == 0 ? "Enter a name."
             : !(char.IsLetter(text.Trim()[0]) || text.Trim()[0] == '_') || !text.Trim().All(c => char.IsLetterOrDigit(c) || c == '_') ? "Use letters, digits and underscores, starting with a letter."
             : EfExplorer.Migrations.Any(m => m.Name.Equals(text.Trim(), StringComparison.Ordinal)) ? "A migration with this name exists." : null).ConfigureAwait(true);
@@ -181,7 +182,7 @@ public sealed partial class ShellHost
             await OpenFileAsync(migration, preview: false).ConfigureAwait(true);
         }
 
-        StatusBar.ShowMessage($"Added the migration {name.Trim()}.", TimeSpan.FromSeconds(5));
+        StatusBar.ShowMessage(Localizer.Format("msg.entityFramework.addedTheMigration", "Added the migration {0}.", name.Trim()), TimeSpan.FromSeconds(5));
         await EfExplorer.LoadMigrationsAsync().ConfigureAwait(true);
     }
 
@@ -196,21 +197,21 @@ public sealed partial class ShellHost
         var force = false;
         if (last.Applied == true)
         {
-            if (!await Dialogs.ConfirmAsync("Remove Migration", $"{last.Name} is applied to the database. Revert it in the database, then delete its files?", "Revert and Remove", danger: true).ConfigureAwait(true))
+            if (!await Dialogs.ConfirmAsync(Localizer.Get("msg.entityFramework.removeMigration", "Remove Migration"), Localizer.Format("msg.entityFramework.isAppliedToTheDatabaseRevert", "{0} is applied to the database. Revert it in the database, then delete its files?", last.Name), Localizer.Get("msg.entityFramework.revertAndRemove", "Revert and Remove"), danger: true).ConfigureAwait(true))
             {
                 return;
             }
 
             force = true;
         }
-        else if (!await Dialogs.ConfirmAsync("Remove Migration", $"Delete the migration {last.Name} and update the model snapshot?", "Remove", danger: true).ConfigureAwait(true))
+        else if (!await Dialogs.ConfirmAsync(Localizer.Get("msg.entityFramework.removeMigration", "Remove Migration"), Localizer.Format("msg.entityFramework.deleteTheMigrationAndUpdateThe", "Delete the migration {0} and update the model snapshot?", last.Name), Localizer.Get("msg.entityFramework.remove", "Remove"), danger: true).ConfigureAwait(true))
         {
             return;
         }
 
         EfExplorer.Busy = $"Removing {last.Name}…";
         await EntityFramework.RemoveMigrationAsync(target, force, CancellationToken.None).ConfigureAwait(true);
-        StatusBar.ShowMessage($"Removed the migration {last.Name}.", TimeSpan.FromSeconds(5));
+        StatusBar.ShowMessage(Localizer.Format("msg.entityFramework.removedTheMigration", "Removed the migration {0}.", last.Name), TimeSpan.FromSeconds(5));
         await EfExplorer.LoadMigrationsAsync().ConfigureAwait(true);
     }
 
@@ -359,7 +360,7 @@ public sealed partial class ShellHost
 
         EfExplorer.Busy = "Creating the migrations bundle…";
         var bundle = await EntityFramework.BundleAsync(target, output, selfContained.Checked.Contains("selfContained"), null, CancellationToken.None).ConfigureAwait(true);
-        var notification = Workbench.Notifications.Info($"Created the migrations bundle {bundle ?? output}. Run it with --connection to apply the migrations elsewhere.", "Open Folder");
+        var notification = Workbench.Notifications.Info(Localizer.Format("msg.entityFramework.createdTheMigrationsBundleRunIt", "Created the migrations bundle {0}. Run it with --connection to apply the migrations elsewhere.", bundle ?? output), "Open Folder");
         _ = notification.Result.ContinueWith(
             t =>
             {
@@ -416,7 +417,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        var folder = await Dialogs.InputAsync("Compiled Model", "The folder for the compiled model (relative to the project):", "CompiledModels", text => text.Trim().Length == 0 ? "Enter a folder." : null).ConfigureAwait(true);
+        var folder = await Dialogs.InputAsync(Localizer.Get("msg.entityFramework.compiledModel", "Compiled Model"), Localizer.Get("msg.entityFramework.theFolderForTheCompiledModel", "The folder for the compiled model (relative to the project):"), "CompiledModels", text => text.Trim().Length == 0 ? "Enter a folder." : null).ConfigureAwait(true);
         if (folder is null)
         {
             return;

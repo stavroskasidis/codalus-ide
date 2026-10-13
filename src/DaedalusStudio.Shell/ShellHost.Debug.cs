@@ -14,6 +14,7 @@ using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Workbench.FileSystem;
 using DaedalusStudio.Workbench.Output;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -225,7 +226,7 @@ public sealed partial class ShellHost
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
             {
-                StatusBar.ShowMessage("The build failed, so debugging did not start.", TimeSpan.FromSeconds(6));
+                StatusBar.ShowMessage(Localizer.Get("msg.debug.theBuildFailedSoDebuggingDid", "The build failed, so debugging did not start."), TimeSpan.FromSeconds(6));
             }
 
             return;
@@ -304,7 +305,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException or IOException)
         {
-            Workbench.Notifications.Error($"Could not start debugging {Path.GetFileNameWithoutExtension(project)}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.debug.couldNotStartDebugging", "Could not start debugging {0}: {1}", Path.GetFileNameWithoutExtension(project), ex.Message));
         }
     }
 
@@ -313,7 +314,7 @@ public sealed partial class ShellHost
     {
         if (Debugger.IsActive)
         {
-            StatusBar.ShowMessage("A debug session is already running.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.debug.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -348,7 +349,7 @@ public sealed partial class ShellHost
         }
         catch (InvalidOperationException ex)
         {
-            Workbench.Notifications.Error($"Could not attach to process {processId.ToString(CultureInfo.InvariantCulture)}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.debug.couldNotAttachToProcess", "Could not attach to process {0}: {1}", processId.ToString(CultureInfo.InvariantCulture), ex.Message));
         }
     }
 
@@ -547,7 +548,7 @@ public sealed partial class ShellHost
             var type = details?.TypeName ?? stop.Exception?.ExceptionId ?? "Exception";
             var message = details?.Message ?? stop.Exception?.Description ?? stop.Description ?? string.Empty;
             DebugLog.AppendLine($"Exception thrown: '{type}': {message}");
-            StatusBar.ShowMessage($"Exception thrown: {type}: {message}", TimeSpan.FromSeconds(10));
+            StatusBar.ShowMessage(Localizer.Format("msg.debug.exceptionThrown", "Exception thrown: {0}: {1}", type, message), TimeSpan.FromSeconds(10));
         }
 
         // Through the file system that holds it: a remote window's sources are the server's (M21).
@@ -557,7 +558,7 @@ public sealed partial class ShellHost
         }
         else
         {
-            StatusBar.ShowMessage("The program is paused in code without source (external code).", TimeSpan.FromSeconds(6));
+            StatusBar.ShowMessage(Localizer.Get("msg.debug.theProgramIsPausedInCode", "The program is paused in code without source (external code)."), TimeSpan.FromSeconds(6));
         }
     }
 }

@@ -15,6 +15,7 @@ using DaedalusStudio.Workbench.Menus;
 using DaedalusStudio.Workbench.Plugins;
 using DaedalusStudio.Workbench.StatusBar;
 using DaedalusStudio.Workbench.Testing;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -177,19 +178,19 @@ public sealed partial class ShellHost
     {
         if (Solutions.Solution is not { } solution)
         {
-            StatusBar.ShowMessage("Open a solution to run its tests.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.testing.openASolutionToRunIts", "Open a solution to run its tests."), TimeSpan.FromSeconds(4));
             return;
         }
 
         if (!solution.Trusted)
         {
-            Workbench.Notifications.Warning("Tests run only in trusted folders.");
+            Workbench.Notifications.Warning(Localizer.Get("msg.testing.testsRunOnlyInTrustedFolders", "Tests run only in trusted folders."));
             return;
         }
 
         if (Tests.IsRunning)
         {
-            StatusBar.ShowMessage("Tests are already running.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.testing.testsAreAlreadyRunning", "Tests are already running."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -227,7 +228,7 @@ public sealed partial class ShellHost
     {
         if (TestAtCursor() is not { } node)
         {
-            StatusBar.ShowMessage("There is no test at the cursor.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.testing.thereIsNoTestAtThe", "There is no test at the cursor."), TimeSpan.FromSeconds(4));
             return Task.CompletedTask;
         }
 
@@ -263,7 +264,7 @@ public sealed partial class ShellHost
         var failed = Tests.Read(roots => roots.SelectMany(r => r.Leaves()).Where(l => l.Outcome.IsFailure()).ToList());
         if (failed.Count == 0)
         {
-            StatusBar.ShowMessage("No failed tests.", TimeSpan.FromSeconds(3));
+            StatusBar.ShowMessage(Localizer.Get("msg.testing.noFailedTests", "No failed tests."), TimeSpan.FromSeconds(3));
             return;
         }
 
@@ -342,7 +343,7 @@ public sealed partial class ShellHost
 
         if (keys.Count == 0)
         {
-            StatusBar.ShowMessage("Select tests in the Test Explorer first.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.testing.selectTestsInTheTestExplorer", "Select tests in the Test Explorer first."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -361,7 +362,7 @@ public sealed partial class ShellHost
         }
         else
         {
-            var name = await Dialogs.InputAsync("New Playlist", "Name of the playlist:", "Playlist " + (existing.Count + 1).ToString(CultureInfo.CurrentCulture)).ConfigureAwait(true);
+            var name = await Dialogs.InputAsync(Localizer.Get("msg.testing.newPlaylist", "New Playlist"), Localizer.Get("msg.testing.nameOfThePlaylist", "Name of the playlist:"), "Playlist " + (existing.Count + 1).ToString(CultureInfo.CurrentCulture)).ConfigureAwait(true);
             if (string.IsNullOrWhiteSpace(name))
             {
                 return;
@@ -396,7 +397,7 @@ public sealed partial class ShellHost
         var existing = Playlists.Load(PlaylistAnchor(solution));
         if (existing.Count == 0)
         {
-            StatusBar.ShowMessage("This solution has no playlists.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.testing.thisSolutionHasNoPlaylists", "This solution has no playlists."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -425,7 +426,7 @@ public sealed partial class ShellHost
             var keys = Tests.Read(roots => Playlists.ImportVisualStudio(document, roots));
             if (keys.Count == 0)
             {
-                Workbench.Notifications.Warning("The playlist names no tests that the Test Explorer knows. Build the solution so the tests are discovered, then import it again.");
+                Workbench.Notifications.Warning(Localizer.Get("msg.testing.thePlaylistNamesNoTestsThat", "The playlist names no tests that the Test Explorer knows. Build the solution so the tests are discovered, then import it again."));
                 return;
             }
 
@@ -451,7 +452,7 @@ public sealed partial class ShellHost
         var leaves = Tests.Read(roots => roots.SelectMany(r => r.Leaves()).Where(l => l.Result is not null).ToList());
         if (leaves.Count == 0)
         {
-            StatusBar.ShowMessage("There are no test results to export.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.testing.thereAreNoTestResultsTo", "There are no test results to export."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -466,7 +467,7 @@ public sealed partial class ShellHost
             var document = Tests.Read(_ => Trx.Export(leaves, "Daedalus Studio", DateTimeOffset.Now));
             await using var stream = File.Create(file);
             await document.SaveAsync(stream, SaveOptions.None, CancellationToken.None).ConfigureAwait(true);
-            StatusBar.ShowMessage($"Exported {leaves.Count} results to {Path.GetFileName(file)}.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.testing.exportedResultsTo", "Exported {0} results to {1}.", leaves.Count, Path.GetFileName(file)), TimeSpan.FromSeconds(5));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -484,7 +485,7 @@ public sealed partial class ShellHost
 
         if (!Tests.Coverage.HasCoverage)
         {
-            StatusBar.ShowMessage("There is no coverage to export.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.testing.thereIsNoCoverageToExport", "There is no coverage to export."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -498,7 +499,7 @@ public sealed partial class ShellHost
             var document = Tests.Coverage.ToCobertura();
             await using var stream = File.Create(file);
             await document.SaveAsync(stream, SaveOptions.None, CancellationToken.None).ConfigureAwait(true);
-            StatusBar.ShowMessage($"Exported coverage to {Path.GetFileName(file)}.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.testing.exportedCoverageTo", "Exported coverage to {0}.", Path.GetFileName(file)), TimeSpan.FromSeconds(5));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

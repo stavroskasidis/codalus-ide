@@ -2,6 +2,7 @@ using DaedalusStudio.Platform;
 using DaedalusStudio.Projects.Protocol;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Publishing;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -21,7 +22,7 @@ public sealed partial class ShellHost
 
         if (!Solutions.Projects.TryGetValue(project, out var info) || info.IsComposeProject || info.TargetFrameworks.Length == 0)
         {
-            StatusBar.ShowMessage("Select an application project to publish.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.publishing.selectAnApplicationProjectToPublish", "Select an application project to publish."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -31,7 +32,7 @@ public sealed partial class ShellHost
                 project,
                 info.TargetFrameworks,
                 profile => PublishAsync(project, profile),
-                suggested => Dialogs.InputAsync("New Publish Profile", "The profile's name (its file is Properties/PublishProfiles/<name>.pubxml).", suggested, text => string.IsNullOrWhiteSpace(text) || text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ? "Enter a file name." : null)),
+                suggested => Dialogs.InputAsync(Localizer.Get("msg.publishing.newPublishProfile", "New Publish Profile"), Localizer.Get("msg.publishing.theProfilesNameItsFileIs", "The profile's name (its file is Properties/PublishProfiles/<name>.pubxml)."), suggested, text => string.IsNullOrWhiteSpace(text) || text.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ? "Enter a file name." : null)),
             vm => "Publish " + vm.ProjectName);
     }
 
@@ -63,12 +64,12 @@ public sealed partial class ShellHost
         {
             var image = $"{(string.IsNullOrEmpty(profile.ContainerRegistry) ? string.Empty : profile.ContainerRegistry + "/")}{profile.ContainerRepository}:{profile.ContainerImageTag ?? "latest"}";
             _ = ContainersWindow.RefreshAsync();
-            Workbench.Notifications.Info($"{name} is published as the image {image}{warnings}.");
+            Workbench.Notifications.Info(Localizer.Format("msg.publishing.isPublishedAsTheImage", "{0} is published as the image {1}{2}.", name, image, warnings));
             return $"Published the image {image}{warnings}.";
         }
 
         var folder = PublishProfiles.OutputFolder(project, profile);
-        var notification = Workbench.Notifications.Info($"{name} is published to {folder}{warnings}.", "Open Folder");
+        var notification = Workbench.Notifications.Info(Localizer.Format("msg.publishing.isPublishedTo", "{0} is published to {1}{2}.", name, folder, warnings), "Open Folder");
         _ = notification.Result.ContinueWith(
             t =>
             {

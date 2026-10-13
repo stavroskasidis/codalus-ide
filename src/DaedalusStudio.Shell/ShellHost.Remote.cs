@@ -18,6 +18,7 @@ using DaedalusStudio.Workbench.Projects;
 using DaedalusStudio.Workbench.Remote;
 using DaedalusStudio.Workbench.StatusBar;
 using DaedalusStudio.Workbench.Terminal;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -111,7 +112,7 @@ public sealed partial class ShellHost
     {
         if (Remote is not null)
         {
-            Workbench.Notifications.Warning($"This window is already connected to {Remote.Display}. Open Remote opens another window.");
+            Workbench.Notifications.Warning(Localizer.Format("msg.remote.thisWindowIsAlreadyConnectedTo", "This window is already connected to {0}. Open Remote opens another window.", Remote.Display));
             return false;
         }
 
@@ -132,7 +133,7 @@ public sealed partial class ShellHost
             RemoteLog.AppendLine($"[error] {spec.Display}: {ex}");
             StatusBar.ClearMessage();
             Workbench.StatusBar.Remove(RemoteStatusItem);
-            Workbench.Notifications.Error($"Couldn't connect to {spec.Display}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.remote.couldntConnectTo", "Couldn't connect to {0}: {1}", spec.Display, ex.Message));
             return false;
         }
 
@@ -156,7 +157,7 @@ public sealed partial class ShellHost
         RemoteLog.AppendLine($"Connected to {session.Display}: daedalus-server {server.ServerVersion} on {server.Os} {server.Architecture} as {server.User}; .NET {server.DotnetVersion ?? "not installed"}{(server.Dotnet is { } d ? " (" + d + ")" : string.Empty)}.");
         if (server.Dotnet is null)
         {
-            Workbench.Notifications.Warning($".NET isn't installed on {session.Display}: projects won't load or build there. Files and the terminal work.");
+            Workbench.Notifications.Warning(Localizer.Format("msg.remote.netIsntInstalledOnProjectsWont", ".NET isn't installed on {0}: projects won't load or build there. Files and the terminal work.", session.Display));
         }
 
         if (remotePath is not null)
@@ -185,13 +186,13 @@ public sealed partial class ShellHost
         }
         catch (IOException ex)
         {
-            Workbench.Notifications.Error($"Couldn't open {RemoteDisplay(path)}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.remote.couldntOpen", "Couldn't open {0}: {1}", RemoteDisplay(path), ex.Message));
             return;
         }
 
         if (!stat.Exists)
         {
-            Workbench.Notifications.Error($"'{RemoteDisplay(path)}' doesn't exist.");
+            Workbench.Notifications.Error(Localizer.Format("msg.remote.doesntExist", "'{0}' doesn't exist.", RemoteDisplay(path)));
             return;
         }
 
@@ -256,7 +257,7 @@ public sealed partial class ShellHost
 
         RemoteLog.AppendLine($"[error] The connection to {session.Display} ended{(error is null ? "." : ": " + error.Message)}");
         UpdateRemoteStatus();
-        Workbench.Notifications.Error($"The connection to {session.Display} was lost. Unsaved changes are kept in the editor; reconnect by opening the remote window again.");
+        Workbench.Notifications.Error(Localizer.Format("msg.remote.theConnectionToWasLostUnsaved", "The connection to {0} was lost. Unsaved changes are kept in the editor; reconnect by opening the remote window again.", session.Display));
     }
 
     private void OnPortAutoForwarded(ForwardedPort port)
@@ -336,7 +337,7 @@ public sealed partial class ShellHost
 
             if (picked == "ssh")
             {
-                var host = await Dialogs.InputAsync("Open Remote over SSH", "The host, as for ssh: user@host, user@host:port, or a Host of ~/.ssh/config. Keys and agents only; a password prompt can't appear.", string.Empty,
+                var host = await Dialogs.InputAsync(Localizer.Get("msg.remote.openRemoteOverSsh", "Open Remote over SSH"), Localizer.Get("msg.remote.theHostAsForSshUser", "The host, as for ssh: user@host, user@host:port, or a Host of ~/.ssh/config. Keys and agents only; a password prompt can't appear."), string.Empty,
                     text => RemoteTargetSpec.Parse("ssh:" + text) is null ? "That isn't a host ssh takes." : null).ConfigureAwait(true);
                 if (host is null)
                 {
@@ -353,7 +354,7 @@ public sealed partial class ShellHost
             }
         }
 
-        var path = await Dialogs.InputAsync("Open Remote", $"The folder, solution or project to open on {spec.Display} (an absolute path there; ~ is the home folder).", "~",
+        var path = await Dialogs.InputAsync(Localizer.Get("msg.remote.openRemote", "Open Remote"), Localizer.Format("msg.remote.theFolderSolutionOrProjectTo", "The folder, solution or project to open on {0} (an absolute path there; ~ is the home folder).", spec.Display), "~",
             text => text.Trim().Length > 0 && (text.Trim().StartsWith('/') || text.Trim().StartsWith('~')) ? null : "An absolute path, or one in ~.").ConfigureAwait(true);
         if (path is null)
         {
@@ -378,7 +379,7 @@ public sealed partial class ShellHost
         }
 
         StartWindow(arguments);
-        StatusBar.ShowMessage($"Opening a remote window on {spec.Display}…", TimeSpan.FromSeconds(5));
+        StatusBar.ShowMessage(Localizer.Format("msg.remote.openingARemoteWindowOn", "Opening a remote window on {0}…", spec.Display), TimeSpan.FromSeconds(5));
     }
 
     /// <summary>The remote actions (the status bar item's menu).</summary>
@@ -412,11 +413,11 @@ public sealed partial class ShellHost
     {
         if (Remote is not { } remote)
         {
-            Workbench.Notifications.Info("Ports are forwarded in a remote window.");
+            Workbench.Notifications.Info(Localizer.Get("msg.remote.portsAreForwardedInARemote", "Ports are forwarded in a remote window."));
             return;
         }
 
-        argument ??= await Dialogs.InputAsync("Forward a Port", $"The port on {remote.Display} to reach from this machine.", string.Empty,
+        argument ??= await Dialogs.InputAsync(Localizer.Get("msg.remote.forwardAPort", "Forward a Port"), Localizer.Format("msg.remote.thePortOnToReachFrom", "The port on {0} to reach from this machine.", remote.Display), string.Empty,
             text => int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var p) && p is > 0 and < 65536 ? null : "A port number, 1 to 65535.").ConfigureAwait(true);
         if (argument is null || !int.TryParse(argument, NumberStyles.None, CultureInfo.InvariantCulture, out var port))
         {
@@ -426,12 +427,12 @@ public sealed partial class ShellHost
         try
         {
             var forwarded = remote.Ports.Forward(port);
-            StatusBar.ShowMessage($"Port {port.ToString(CultureInfo.InvariantCulture)} on {remote.Display} is forwarded to {forwarded.LocalAddress}.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.remote.portOnIsForwardedTo", "Port {0} on {1} is forwarded to {2}.", port.ToString(CultureInfo.InvariantCulture), remote.Display, forwarded.LocalAddress), TimeSpan.FromSeconds(5));
             PortsWindow.Refresh();
         }
         catch (System.Net.Sockets.SocketException ex)
         {
-            Workbench.Notifications.Error($"Couldn't forward port {port.ToString(CultureInfo.InvariantCulture)}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.remote.couldntForwardPort", "Couldn't forward port {0}: {1}", port.ToString(CultureInfo.InvariantCulture), ex.Message));
         }
     }
 
@@ -494,7 +495,7 @@ public sealed partial class ShellHost
             return local;
         }
 
-        Workbench.Notifications.Error("The debugger (netcoredbg) was not found.");
+        Workbench.Notifications.Error(Localizer.Get("msg.remote.theDebuggerNetcoredbgWasNotFound", "The debugger (netcoredbg) was not found."));
         return null;
     }
 

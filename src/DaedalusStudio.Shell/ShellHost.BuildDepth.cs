@@ -7,6 +7,7 @@ using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.CustomTools;
 using DaedalusStudio.Workbench.Projects;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -131,7 +132,7 @@ public sealed partial class ShellHost
 
                     var reason = verdict.Projects.FirstOrDefault(p => !p.UpToDate)?.Reason;
                     var answer = await Workbench.Notifications.Warning(
-                        $"{Path.GetFileNameWithoutExtension(project)} is out of date ({reason}). Build it first?", "Build", "Run Anyway").Result.ConfigureAwait(true);
+                        Localizer.Format("msg.buildDepth.isOutOfDateBuildIt", "{0} is out of date ({1}). Build it first?", Path.GetFileNameWithoutExtension(project), reason), "Build", "Run Anyway").Result.ConfigureAwait(true);
                     return answer switch
                     {
                         "Build" => await BuildAsync(BuildTargets.Build, project).ConfigureAwait(true),
@@ -170,13 +171,13 @@ public sealed partial class ShellHost
     {
         if (Solutions.Solution is not { Trusted: true })
         {
-            Workbench.Notifications.Warning("Builds run only in trusted folders.");
+            Workbench.Notifications.Warning(Localizer.Get("msg.buildDepth.buildsRunOnlyInTrustedFolders", "Builds run only in trusted folders."));
             return null;
         }
 
         if (Builds.IsBuilding)
         {
-            StatusBar.ShowMessage("A build is already running.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.buildDepth.aBuildIsAlreadyRunning", "A build is already running."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -194,7 +195,7 @@ public sealed partial class ShellHost
     {
         if (Solutions.Solution is not { Trusted: true })
         {
-            StatusBar.ShowMessage("Open a trusted solution to check it.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.buildDepth.openATrustedSolutionToCheck", "Open a trusted solution to check it."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -244,7 +245,7 @@ public sealed partial class ShellHost
     {
         if (!Solutions.IsOpen)
         {
-            StatusBar.ShowMessage("Binary logs are read by the build host: open a solution first.", TimeSpan.FromSeconds(6));
+            StatusBar.ShowMessage(Localizer.Get("msg.buildDepth.binaryLogsAreReadByThe", "Binary logs are read by the build host: open a solution first."), TimeSpan.FromSeconds(6));
             return null;
         }
 
@@ -299,7 +300,7 @@ public sealed partial class ShellHost
         }
         else if (Builds.LastBuild is not null)
         {
-            StatusBar.ShowMessage("The build didn't write a binary log.", TimeSpan.FromSeconds(8));
+            StatusBar.ShowMessage(Localizer.Get("msg.buildDepth.theBuildDidntWriteABinary", "The build didn't write a binary log."), TimeSpan.FromSeconds(8));
         }
     }
 
@@ -324,7 +325,7 @@ public sealed partial class ShellHost
         {
             if (!quiet)
             {
-                StatusBar.ShowMessage($"{Path.GetFileName(path)} isn't in a loaded project.", TimeSpan.FromSeconds(5));
+                StatusBar.ShowMessage(Localizer.Format("msg.buildDepth.isntInALoadedProject", "{0} isn't in a loaded project.", Path.GetFileName(path)), TimeSpan.FromSeconds(5));
             }
 
             return null;
@@ -338,7 +339,7 @@ public sealed partial class ShellHost
             {
                 if (!quiet)
                 {
-                    StatusBar.ShowMessage($"{Path.GetFileName(path)} has no custom tool (set Custom Tool in the Properties window).", TimeSpan.FromSeconds(6));
+                    StatusBar.ShowMessage(Localizer.Format("msg.buildDepth.hasNoCustomToolSetCustom", "{0} has no custom tool (set Custom Tool in the Properties window).", Path.GetFileName(path)), TimeSpan.FromSeconds(6));
                 }
 
                 return null;
@@ -348,7 +349,7 @@ public sealed partial class ShellHost
             {
                 if (!quiet)
                 {
-                    Workbench.Notifications.Warning($"Daedalus Studio has no custom tool named '{generator}'. Plugins can add custom tools.");
+                    Workbench.Notifications.Warning(Localizer.Format("msg.buildDepth.daedalusStudioHasNoCustomTool", "Daedalus Studio has no custom tool named '{0}'. Plugins can add custom tools.", generator));
                 }
 
                 return null;
@@ -364,7 +365,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"The custom tool of {Path.GetFileName(path)} failed: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.buildDepth.theCustomToolOfFailed", "The custom tool of {0} failed: {1}", Path.GetFileName(path), ex.Message));
             return null;
         }
     }
@@ -383,11 +384,11 @@ public sealed partial class ShellHost
         {
             Workbench.Output.Show(channel);
             var first = result.Diagnostics.FirstOrDefault(d => !d.IsWarning)?.Message ?? "it produced no output";
-            Workbench.Notifications.Warning($"The custom tool of {Path.GetFileName(result.Input)} failed: {first}");
+            Workbench.Notifications.Warning(Localizer.Format("msg.buildDepth.theCustomToolOfFailed2", "The custom tool of {0} failed: {1}", Path.GetFileName(result.Input), first));
         }
         else if (!quiet)
         {
-            StatusBar.ShowMessage($"{Path.GetFileName(result.Output!)} generated from {Path.GetFileName(result.Input)}.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Format("msg.buildDepth.generatedFrom", "{0} generated from {1}.", Path.GetFileName(result.Output!), Path.GetFileName(result.Input)), TimeSpan.FromSeconds(4));
         }
     }
 

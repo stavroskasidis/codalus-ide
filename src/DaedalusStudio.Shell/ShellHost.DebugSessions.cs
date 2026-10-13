@@ -10,6 +10,7 @@ using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Workbench.Debugging.Remote;
 using DaedalusStudio.Workbench.Terminal;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -114,7 +115,7 @@ public sealed partial class ShellHost
         var targets = Runs.StartupTargets;
         if (targets.Count == 0)
         {
-            Workbench.Notifications.Warning("No startup project is set to start. Choose them in Configure Startup Projects.");
+            Workbench.Notifications.Warning(Localizer.Get("msg.debugSessions.noStartupProjectIsSetTo", "No startup project is set to start. Choose them in Configure Startup Projects."));
             return;
         }
 
@@ -122,7 +123,7 @@ public sealed partial class ShellHost
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
             {
-                StatusBar.ShowMessage("The build failed, so the startup projects did not start.", TimeSpan.FromSeconds(6));
+                StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.theBuildFailedSoTheStartup", "The build failed, so the startup projects did not start."), TimeSpan.FromSeconds(6));
             }
 
             return;
@@ -180,7 +181,7 @@ public sealed partial class ShellHost
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
             {
-                Workbench.Notifications.Error($"Could not start {name}: {ex.Message}");
+                Workbench.Notifications.Error(Localizer.Format("msg.debugSessions.couldNotStart", "Could not start {0}: {1}", name, ex.Message));
             }
         }
 
@@ -198,7 +199,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
         {
-            Workbench.Notifications.Error($"Could not start debugging {launches[0].Name}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.debugSessions.couldNotStartDebugging", "Could not start debugging {0}: {1}", launches[0].Name, ex.Message));
         }
     }
 
@@ -236,7 +237,7 @@ public sealed partial class ShellHost
         var dotnet = (await RemoteShell.RunAsync(target, "exec sh -lc 'command -v dotnet'", CancellationToken.None).ConfigureAwait(true)).Output.Trim();
         if (!dotnet.StartsWith('/'))
         {
-            Workbench.Notifications.Error($".NET isn't installed in {target.Display}: 'dotnet' isn't on its PATH. Install the runtime there to run {name} in WSL.");
+            Workbench.Notifications.Error(Localizer.Format("msg.debugSessions.netIsntInstalledInDotnetIsnt", ".NET isn't installed in {0}: 'dotnet' isn't on its PATH. Install the runtime there to run {1} in WSL.", target.Display, name));
             return null;
         }
 
@@ -255,7 +256,7 @@ public sealed partial class ShellHost
     {
         if (Debugger.IsActive)
         {
-            StatusBar.ShowMessage("A debug session is already running.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -306,8 +307,8 @@ public sealed partial class ShellHost
     private async Task<RemoteTarget?> PickSshTargetAsync()
     {
         var destination = await Dialogs.InputAsync(
-            "Attach over SSH",
-            "The machine: user@host, with :port if it isn't 22. Your ssh, its keys and ~/.ssh/config are used; netcoredbg is copied there on first use.",
+            Localizer.Get("msg.debugSessions.attachOverSsh", "Attach over SSH"),
+            Localizer.Get("msg.debugSessions.theMachineUserHostWithPort", "The machine: user@host, with :port if it isn't 22. Your ssh, its keys and ~/.ssh/config are used; netcoredbg is copied there on first use."),
             _lastSshDestination,
             text => SshTarget.Parse(text) is null ? "Enter user@host or user@host:port." : null).ConfigureAwait(true);
         if (destination is null || SshTarget.Parse(destination) is not { } target)
@@ -325,7 +326,7 @@ public sealed partial class ShellHost
         var containers = await RemoteTargets.ContainersAsync(tool, CancellationToken.None).ConfigureAwait(true);
         if (containers.Count == 0)
         {
-            StatusBar.ShowMessage($"No containers are running ({string.Join(' ', tool)} ps).", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.debugSessions.noContainersAreRunningPs", "No containers are running ({0} ps).", string.Join(' ', tool)), TimeSpan.FromSeconds(5));
             return null;
         }
 
@@ -340,7 +341,7 @@ public sealed partial class ShellHost
         var distributions = await RemoteTargets.WslDistributionsAsync(CancellationToken.None).ConfigureAwait(true);
         if (distributions.Count == 0)
         {
-            StatusBar.ShowMessage("No WSL distributions are installed.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.noWslDistributionsAreInstalled", "No WSL distributions are installed."), TimeSpan.FromSeconds(5));
             return null;
         }
 
@@ -357,7 +358,7 @@ public sealed partial class ShellHost
         IReadOnlyList<RemoteProcess> processes;
         try
         {
-            StatusBar.ShowMessage($"Listing the processes of {target.Display}…", TimeSpan.FromSeconds(10));
+            StatusBar.ShowMessage(Localizer.Format("msg.debugSessions.listingTheProcessesOf", "Listing the processes of {0}…", target.Display), TimeSpan.FromSeconds(10));
             processes = await RemoteShell.ProcessesAsync(target, CancellationToken.None).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
@@ -405,7 +406,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
         {
-            Workbench.Notifications.Error($"Could not attach to {process.Name} on {target.Display}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.debugSessions.couldNotAttachToOn", "Could not attach to {0} on {1}: {2}", process.Name, target.Display, ex.Message));
             return false;
         }
     }
@@ -430,7 +431,7 @@ public sealed partial class ShellHost
         {
             return await RemoteDebuggers.EnsureAsync(
                 target,
-                question => Dialogs.ConfirmAsync("Copy the Debugger", question, "Copy"),
+                question => Dialogs.ConfirmAsync(Localizer.Get("msg.debugSessions.copyTheDebugger", "Copy the Debugger"), question, Localizer.Get("msg.debugSessions.copy", "Copy")),
                 new Progress<string>(line => DebugLog.AppendLine(line)),
                 CancellationToken.None).ConfigureAwait(true);
         }
@@ -440,7 +441,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or HttpRequestException or InvalidDataException or System.ComponentModel.Win32Exception)
         {
-            Workbench.Notifications.Error($"The debugger couldn't be set up on {target.Display}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.debugSessions.theDebuggerCouldntBeSetUp", "The debugger couldn't be set up on {0}: {1}", target.Display, ex.Message));
             return null;
         }
     }
@@ -527,13 +528,13 @@ public sealed partial class ShellHost
         if (turnOn == true)
         {
             StartCrashWatcher();
-            StatusBar.ShowMessage("Just-In-Time debugging is on for programs started from now on.", TimeSpan.FromSeconds(6));
+            StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.justInTimeDebuggingIsOn", "Just-In-Time debugging is on for programs started from now on."), TimeSpan.FromSeconds(6));
         }
         else
         {
             _crashWatcher?.Dispose();
             _crashWatcher = null;
-            StatusBar.ShowMessage("Just-In-Time debugging is off.", TimeSpan.FromSeconds(6));
+            StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.justInTimeDebuggingIsOff", "Just-In-Time debugging is off."), TimeSpan.FromSeconds(6));
         }
     }
 
@@ -558,7 +559,7 @@ public sealed partial class ShellHost
     private async Task OfferCrashDumpAsync(CrashDump dump)
     {
         var who = dump.ProcessId is { } pid ? $"{dump.Program} (process {pid.ToString(CultureInfo.InvariantCulture)})" : dump.Program;
-        var choice = await Workbench.Notifications.Warning($"{who} crashed and wrote a dump.", "Open Dump", "Show in Folder").Result.ConfigureAwait(true);
+        var choice = await Workbench.Notifications.Warning(Localizer.Format("msg.debugSessions.crashedAndWroteADump", "{0} crashed and wrote a dump.", who), "Open Dump", "Show in Folder").Result.ConfigureAwait(true);
         if (choice == "Open Dump")
         {
             await OpenDumpAsync(dump.Path).ConfigureAwait(true);

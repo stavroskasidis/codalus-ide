@@ -6,6 +6,7 @@ using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Settings;
 using DaedalusStudio.Workbench.Terminal;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -165,7 +166,7 @@ public sealed partial class ShellHost
         var (plan, profile, error) = await Runs.PlanAsync(project, CancellationToken.None).ConfigureAwait(true);
         if (error is not null)
         {
-            Workbench.Notifications.Warning($"Ignoring the launch settings: {error}");
+            Workbench.Notifications.Warning(Localizer.Format("msg.terminal.ignoringTheLaunchSettings", "Ignoring the launch settings: {0}", error));
         }
 
         try
@@ -183,7 +184,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"Could not run {Path.GetFileName(project)} in the terminal: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.terminal.couldNotRunInTheTerminal", "Could not run {0} in the terminal: {1}", Path.GetFileName(project), ex.Message));
             return false;
         }
     }

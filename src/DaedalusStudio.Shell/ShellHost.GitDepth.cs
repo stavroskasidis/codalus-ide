@@ -4,6 +4,7 @@ using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Shell.Views;
 using DaedalusStudio.Workbench.Git;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -50,7 +51,7 @@ public sealed partial class ShellHost
     {
         if (Git.Root is null)
         {
-            StatusBar.ShowMessage("The open solution is not in a git repository.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.theOpenSolutionIsNotIn", "The open solution is not in a git repository."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -104,7 +105,7 @@ public sealed partial class ShellHost
         var blame = await Git.BlameAsync(model.Path, model.Text.Text).ConfigureAwait(true);
         if (blame.FirstOrDefault(r => line >= r.StartLine && line < r.StartLine + r.LineCount) is not { IsUncommitted: false } range)
         {
-            StatusBar.ShowMessage("This line isn't committed yet.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.thisLineIsntCommittedYet", "This line isn't committed yet."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -237,7 +238,7 @@ public sealed partial class ShellHost
         }
         catch (GitException) when (Git.Status is { Operation: not null })
         {
-            Workbench.Notifications.Warning($"{what} stopped on conflicts. Resolve them (the merge editor opens from Git Changes), then Continue, or Abort.");
+            Workbench.Notifications.Warning(Localizer.Format("msg.gitDepth.stoppedOnConflictsResolveThemThe", "{0} stopped on conflicts. Resolve them (the merge editor opens from Git Changes), then Continue, or Abort.", what));
             Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
         }
     }
@@ -300,7 +301,7 @@ public sealed partial class ShellHost
                 Layout.CloseDocument(document);
             }
 
-            StatusBar.ShowMessage($"{Path.GetFileName(path)} is resolved.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.gitDepth.isResolved", "{0} is resolved.", Path.GetFileName(path)), TimeSpan.FromSeconds(5));
         });
         document = new MergeEditorDocument(viewModel, EditorFont);
         Layout.OpenDocument(document, focus: true);
@@ -365,7 +366,7 @@ public sealed partial class ShellHost
         }
 
         Layout.DocumentClosed += OnClosed;
-        StatusBar.ShowMessage($"Waiting: close {Path.GetFileName(file)} when you're done editing.", TimeSpan.FromSeconds(10));
+        StatusBar.ShowMessage(Localizer.Format("msg.gitDepth.waitingCloseWhenYoureDoneEditing", "Waiting: close {0} when you're done editing.", Path.GetFileName(file)), TimeSpan.FromSeconds(10));
         return await done.Task.ConfigureAwait(true);
     }
 
@@ -392,7 +393,7 @@ public sealed partial class ShellHost
         if (answer.Button == "Stash")
         {
             await Git.StashAsync(answer.Input?.Trim(), answer.Checked.Contains("untracked")).ConfigureAwait(true);
-            StatusBar.ShowMessage("Changes stashed.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.changesStashed", "Changes stashed."), TimeSpan.FromSeconds(4));
         }
     });
 
@@ -402,7 +403,7 @@ public sealed partial class ShellHost
         var stashes = await Git.StashesAsync().ConfigureAwait(true);
         if (stashes.Count == 0)
         {
-            StatusBar.ShowMessage("No stashes.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.noStashes", "No stashes."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -454,7 +455,7 @@ public sealed partial class ShellHost
         var steps = await Git.RebaseTodoAsync(onto).ConfigureAwait(true);
         if (steps.Count == 0)
         {
-            StatusBar.ShowMessage($"No commits after {title} to rebase.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.gitDepth.noCommitsAfterToRebase", "No commits after {0} to rebase.", title), TimeSpan.FromSeconds(5));
             return;
         }
 
@@ -469,14 +470,14 @@ public sealed partial class ShellHost
             try
             {
                 await Git.RebaseInteractiveAsync(onto, chosen).ConfigureAwait(true);
-                StatusBar.ShowMessage("Rebased.", TimeSpan.FromSeconds(5));
+                StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.rebased", "Rebased."), TimeSpan.FromSeconds(5));
             }
             finally
             {
                 await RefreshHistoryAsync().ConfigureAwait(true);
                 if (Git.Status is { Operation: "rebase" })
                 {
-                    Workbench.Notifications.Warning("The rebase stopped on conflicts. Resolve them, then Continue, or Abort.");
+                    Workbench.Notifications.Warning(Localizer.Get("msg.gitDepth.theRebaseStoppedOnConflictsResolve", "The rebase stopped on conflicts. Resolve them, then Continue, or Abort."));
                     Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
                 }
             }
@@ -600,7 +601,7 @@ public sealed partial class ShellHost
 
         try
         {
-            StatusBar.ShowMessage($"Cloning {address.Trim()}…");
+            StatusBar.ShowMessage(Localizer.Format("msg.gitDepth.cloning", "Cloning {0}…", address.Trim()));
             await Git.CloneAsync(address.Trim(), destination.Trim(), CancellationToken.None).ConfigureAwait(true);
         }
         catch (GitException ex)
@@ -629,14 +630,14 @@ public sealed partial class ShellHost
     {
         if (Solutions.Solution is not { } solution)
         {
-            StatusBar.ShowMessage("Open a solution first.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.openASolutionFirst", "Open a solution first."), TimeSpan.FromSeconds(4));
             return;
         }
 
         var folder = solution.Directory;
         if (Git.Root is not null)
         {
-            StatusBar.ShowMessage("The solution is already in a git repository.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.theSolutionIsAlreadyInA", "The solution is already in a git repository."), TimeSpan.FromSeconds(4));
             return;
         }
 

@@ -7,6 +7,7 @@ using DaedalusStudio.Workbench.Aspire;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Debugging;
 using DaedalusStudio.Workbench.Output;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -76,7 +77,7 @@ public sealed partial class ShellHost
         }
         else
         {
-            StatusBar.ShowMessage("No Aspire dashboard is running: start an AppHost first.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Get("msg.aspire.noAspireDashboardIsRunningStart", "No Aspire dashboard is running: start an AppHost first."), TimeSpan.FromSeconds(5));
         }
     }
 
@@ -104,7 +105,7 @@ public sealed partial class ShellHost
         catch (Exception ex) when (ex is System.Net.HttpListenerException or InvalidOperationException)
         {
             await server.DisposeAsync().ConfigureAwait(true);
-            Workbench.Notifications.Error($"The Aspire IDE endpoint couldn't start: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.aspire.theAspireIdeEndpointCouldntStart", "The Aspire IDE endpoint couldn't start: {0}", ex.Message));
             return false;
         }
 
@@ -158,7 +159,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException or System.ComponentModel.Win32Exception or IOException)
         {
-            Workbench.Notifications.Error($"Could not start {name}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.aspire.couldNotStart", "Could not start {0}: {1}", name, ex.Message));
             await StopAspireAsync(run).ConfigureAwait(true);
             return false;
         }

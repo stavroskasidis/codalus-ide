@@ -4,6 +4,7 @@ using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Workbench.Languages;
 using DaedalusStudio.Workbench.Node;
 using DaedalusStudio.Workbench.Notifications;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -155,7 +156,7 @@ public sealed partial class ShellHost
         try
         {
             await Task.Run(() => WebServers.EnsureAsync(progress, CancellationToken.None)).ConfigureAwait(true);
-            StatusBar.ShowMessage("The web language services are ready.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Get("msg.webLanguages.theWebLanguageServicesAreReady", "The web language services are ready."), TimeSpan.FromSeconds(5));
             foreach (var (server, _, _, _) in s_webServers)
             {
                 await Languages.RetryAsync(server).ConfigureAwait(true);

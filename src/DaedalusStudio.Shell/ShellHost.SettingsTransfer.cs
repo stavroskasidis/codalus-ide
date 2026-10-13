@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DaedalusStudio.Shell.Docking;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Settings;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -47,7 +48,7 @@ public sealed partial class ShellHost
             ["windowLayout"] = JsonNode.Parse(CurrentWindowLayout()),
         };
         await File.WriteAllTextAsync(path, export.ToJsonString(s_readableJson)).ConfigureAwait(true);
-        Workbench.Notifications.Info($"Exported your settings, keyboard shortcuts and window layouts to {path}.");
+        Workbench.Notifications.Info(Localizer.Format("msg.settingsTransfer.exportedYourSettingsKeyboardShortcutsAnd", "Exported your settings, keyboard shortcuts and window layouts to {0}.", path));
     }
 
     public async Task ImportSettingsAsync(string? path = null, SettingsParts? parts = null)
@@ -70,7 +71,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"The settings couldn't be imported from {path}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.settingsTransfer.theSettingsCouldntBeImportedFrom", "The settings couldn't be imported from {0}: {1}", path, ex.Message));
             return;
         }
 

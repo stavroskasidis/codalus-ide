@@ -5,6 +5,7 @@ using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Projects;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -39,7 +40,7 @@ public sealed partial class ShellHost
         if (!(remote ? await DaedalusStudio.Workbench.FileSystem.FileSystems.DirectoryExistsAsync(folder, CancellationToken.None).ConfigureAwait(true) : Directory.Exists(folder)))
         {
             Recent.Remove(folder);
-            Workbench.Notifications.Error($"'{RemoteDisplay(folder)}' doesn't exist.");
+            Workbench.Notifications.Error(Localizer.Format("msg.folder.doesntExist", "'{0}' doesn't exist.", RemoteDisplay(folder)));
             return;
         }
 
@@ -73,7 +74,7 @@ public sealed partial class ShellHost
 
         try
         {
-            StatusBar.ShowMessage($"Opening {Path.GetFileName(folder)}…");
+            StatusBar.ShowMessage(Localizer.Format("msg.folder.opening", "Opening {0}…", Path.GetFileName(folder)));
             var solution = await Solutions.OpenAsync(folder, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None).ConfigureAwait(true);
             StatusBar.ClearMessage();
             _launchConfiguration = null;
@@ -132,7 +133,7 @@ public sealed partial class ShellHost
         var projects = await ProjectItems.DiscoverProjectsAsync(CancellationToken.None).ConfigureAwait(true);
         if (projects.Count == 0)
         {
-            StatusBar.ShowMessage("The folder has no project files.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.folder.theFolderHasNoProjectFiles", "The folder has no project files."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -196,7 +197,7 @@ public sealed partial class ShellHost
         {
             if (tasks.Count == 0)
             {
-                var notification = Workbench.Notifications.Info("This workspace has no tasks.", "Configure Tasks");
+                var notification = Workbench.Notifications.Info(Localizer.Get("msg.folder.thisWorkspaceHasNoTasks", "This workspace has no tasks."), "Configure Tasks");
                 if (await notification.Result.ConfigureAwait(true) == "Configure Tasks")
                 {
                     await ConfigureTasksAsync().ConfigureAwait(true);
@@ -213,7 +214,7 @@ public sealed partial class ShellHost
         {
             if (label is not null)
             {
-                Workbench.Notifications.Warning($"There is no task '{label}' in tasks.json.");
+                Workbench.Notifications.Warning(Localizer.Format("msg.folder.thereIsNoTaskInTasks", "There is no task '{0}' in tasks.json.", label));
             }
 
             return null;
@@ -228,7 +229,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
-            Workbench.Notifications.Error($"Could not run the task '{task.Label}': {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.folder.couldNotRunTheTask", "Could not run the task '{0}': {1}", task.Label, ex.Message));
             return null;
         }
     }
@@ -241,7 +242,7 @@ public sealed partial class ShellHost
     {
         if (Solutions.Solution is not { } solution)
         {
-            StatusBar.ShowMessage("Open a folder or a solution first.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.folder.openAFolderOrASolution", "Open a folder or a solution first."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -310,7 +311,7 @@ public sealed partial class ShellHost
         string Expand(string text) => FolderConfiguration.Expand(text, variables);
         if (configuration.PreLaunchTask is { } preLaunch && await RunTaskAsync(preLaunch).ConfigureAwait(true) != 0)
         {
-            StatusBar.ShowMessage($"The pre-launch task '{preLaunch}' failed, so '{configuration.Name}' did not start.", TimeSpan.FromSeconds(6));
+            StatusBar.ShowMessage(Localizer.Format("msg.folder.thePreLaunchTaskFailedSo", "The pre-launch task '{0}' failed, so '{1}' did not start.", preLaunch, configuration.Name), TimeSpan.FromSeconds(6));
             return true;
         }
 
@@ -369,7 +370,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
         {
-            Workbench.Notifications.Error($"Could not start '{configuration.Name}': {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.folder.couldNotStart", "Could not start '{0}': {1}", configuration.Name, ex.Message));
         }
 
         return true;
@@ -380,7 +381,7 @@ public sealed partial class ShellHost
         var configurations = LaunchConfigurations();
         if (configurations.Count == 0)
         {
-            var notification = Workbench.Notifications.Info("This workspace has no launch configurations.", "Configure Launch");
+            var notification = Workbench.Notifications.Info(Localizer.Get("msg.folder.thisWorkspaceHasNoLaunchConfigurations", "This workspace has no launch configurations."), "Configure Launch");
             if (await notification.Result.ConfigureAwait(true) == "Configure Launch")
             {
                 await ConfigureLaunchAsync().ConfigureAwait(true);

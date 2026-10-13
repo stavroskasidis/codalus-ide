@@ -4,6 +4,7 @@ using DaedalusStudio.Projects.Protocol;
 using DaedalusStudio.Rpc;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Workbench.Projects;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell.ViewModels;
 
@@ -348,7 +349,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         if (_shell.ActiveEditor?.Model.Path is not { } path || _root is null || FindByPath(_root, path) is not { } node)
         {
-            _shell.StatusBar.ShowMessage("The active document isn't in the solution.", TimeSpan.FromSeconds(4));
+            _shell.StatusBar.ShowMessage(Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInThe", "The active document isn't in the solution."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -660,7 +661,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return;
         }
 
-        var name = await _shell.Dialogs.InputAsync("New File", $"Create a file in {Display(directory)}.", "NewFile.cs", n => ValidateName(directory, n), (0, 7)).ConfigureAwait(true);
+        var name = await _shell.Dialogs.InputAsync(Localizer.Get("msg.solutionExplorerViewModel.newFile", "New File"), Localizer.Format("msg.solutionExplorerViewModel.createAFileIn", "Create a file in {0}.", Display(directory)), "NewFile.cs", n => ValidateName(directory, n), (0, 7)).ConfigureAwait(true);
         if (name is not null && await TryAsync(() => _shell.Solutions.CreateFileAsync(System.IO.Path.Combine(directory, name), Template(directory, name), CancellationToken.None)).ConfigureAwait(true) is { } result)
         {
             await _shell.OpenTextFileAsync(result.CreatedPaths[0], string.Empty).ConfigureAwait(true);
@@ -674,7 +675,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return;
         }
 
-        var name = await _shell.Dialogs.InputAsync("New Folder", $"Create a folder in {Display(directory)}.", "NewFolder", n => ValidateName(directory, n)).ConfigureAwait(true);
+        var name = await _shell.Dialogs.InputAsync(Localizer.Get("msg.solutionExplorerViewModel.newFolder", "New Folder"), Localizer.Format("msg.solutionExplorerViewModel.createAFolderIn", "Create a folder in {0}.", Display(directory)), "NewFolder", n => ValidateName(directory, n)).ConfigureAwait(true);
         if (name is not null)
         {
             await TryAsync(() => _shell.Solutions.CreateFolderAsync(System.IO.Path.Combine(directory, name), CancellationToken.None)).ConfigureAwait(true);
@@ -687,7 +688,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             case { Kind: ExplorerNodeKind.SolutionFolder, SolutionFolderId: { } id, Name: var current }:
             {
-                var name = await _shell.Dialogs.InputAsync("Rename Solution Folder", "New name:", current, n => string.IsNullOrWhiteSpace(n) || n.IndexOfAny(['/', '\\']) >= 0 ? "Enter a name without slashes." : null).ConfigureAwait(true);
+                var name = await _shell.Dialogs.InputAsync(Localizer.Get("msg.solutionExplorerViewModel.renameSolutionFolder", "Rename Solution Folder"), Localizer.Get("msg.solutionExplorerViewModel.newName", "New name:"), current, n => string.IsNullOrWhiteSpace(n) || n.IndexOfAny(['/', '\\']) >= 0 ? "Enter a name without slashes." : null).ConfigureAwait(true);
                 if (name is not null && name != current)
                 {
                     await TryAsync(() => _shell.Solutions.RenameSolutionFolderAsync(id, name, CancellationToken.None)).ConfigureAwait(true);
@@ -703,7 +704,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 var stem = Node.Kind == ExplorerNodeKind.Folder ? current.Length : System.IO.Path.GetFileNameWithoutExtension(current).Length;
                 var name = await _shell.Dialogs.InputAsync(
                     Node.Kind == ExplorerNodeKind.Project ? "Rename Project File" : "Rename",
-                    $"New name for '{current}':",
+                    Localizer.Format("msg.solutionExplorerViewModel.newNameFor", "New name for '{0}':", current),
                     current,
                     n => n == current ? null : ValidateName(directory, n, current),
                     (0, stem)).ConfigureAwait(true);
@@ -722,7 +723,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         switch (Node)
         {
             case { Kind: ExplorerNodeKind.SolutionFolder, SolutionFolderId: { } id, Name: var name }:
-                if (await _shell.Dialogs.ConfirmAsync("Remove Solution Folder", $"Remove the solution folder '{name}' and everything in it from the solution? Projects stay on disk.", "Remove", danger: true).ConfigureAwait(true))
+                if (await _shell.Dialogs.ConfirmAsync(Localizer.Get("msg.solutionExplorerViewModel.removeSolutionFolder", "Remove Solution Folder"), Localizer.Format("msg.solutionExplorerViewModel.removeTheSolutionFolderAndEverything", "Remove the solution folder '{0}' and everything in it from the solution? Projects stay on disk.", name), Localizer.Get("msg.solutionExplorerViewModel.remove", "Remove"), danger: true).ConfigureAwait(true))
                 {
                     await TryAsync(() => _shell.Solutions.RemoveSolutionFolderAsync(id, CancellationToken.None)).ConfigureAwait(true);
                 }
@@ -735,7 +736,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 await TryAsync(() => _shell.Solutions.RemoveProjectReferenceAsync(owner, target, CancellationToken.None)).ConfigureAwait(true);
                 break;
             case { Kind: ExplorerNodeKind.File or ExplorerNodeKind.Folder, Path: { } path, IsLinked: false, Name: var name }:
-                if (await _shell.Dialogs.ConfirmAsync("Delete", $"Move '{name}' to the {TrashName}?", "Delete", danger: true).ConfigureAwait(true))
+                if (await _shell.Dialogs.ConfirmAsync(Localizer.Get("msg.solutionExplorerViewModel.delete", "Delete"), Localizer.Format("msg.solutionExplorerViewModel.moveToThe", "Move '{0}' to the {1}?", name, TrashName), Localizer.Get("msg.solutionExplorerViewModel.delete", "Delete"), danger: true).ConfigureAwait(true))
                 {
                     await TryAsync(() => _shell.Solutions.DeleteAsync([path], CancellationToken.None)).ConfigureAwait(true);
                 }
@@ -746,7 +747,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     public async Task RemoveProjectAsync(string project)
     {
-        if (await _shell.Dialogs.ConfirmAsync("Remove Project", $"Remove '{System.IO.Path.GetFileNameWithoutExtension(project)}' from the solution? Its files stay on disk.", "Remove").ConfigureAwait(true))
+        if (await _shell.Dialogs.ConfirmAsync(Localizer.Get("msg.solutionExplorerViewModel.removeProject", "Remove Project"), Localizer.Format("msg.solutionExplorerViewModel.removeFromTheSolutionItsFiles", "Remove '{0}' from the solution? Its files stay on disk.", System.IO.Path.GetFileNameWithoutExtension(project)), Localizer.Get("msg.solutionExplorerViewModel.remove", "Remove")).ConfigureAwait(true))
         {
             await TryAsync(() => _shell.Solutions.RemoveProjectAsync(project, CancellationToken.None)).ConfigureAwait(true);
         }
@@ -857,7 +858,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     public async Task AddSolutionFolderAsync()
     {
         var parent = Node is { Kind: ExplorerNodeKind.SolutionFolder, SolutionFolderId: { } id } ? id : null;
-        var name = await _shell.Dialogs.InputAsync("New Solution Folder", "Name:", "New Folder", n => string.IsNullOrWhiteSpace(n) || n.IndexOfAny(['/', '\\']) >= 0 ? "Enter a name without slashes." : null).ConfigureAwait(true);
+        var name = await _shell.Dialogs.InputAsync(Localizer.Get("msg.solutionExplorerViewModel.newSolutionFolder", "New Solution Folder"), Localizer.Get("msg.solutionExplorerViewModel.name", "Name:"), "New Folder", n => string.IsNullOrWhiteSpace(n) || n.IndexOfAny(['/', '\\']) >= 0 ? "Enter a name without slashes." : null).ConfigureAwait(true);
         if (name is not null)
         {
             await TryAsync(() => _shell.Solutions.AddSolutionFolderAsync(name, parent, CancellationToken.None)).ConfigureAwait(true);
@@ -878,7 +879,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             .ToList();
         if (candidates.Count == 0)
         {
-            _shell.Workbench.Notifications.Info("Every other project of the solution is already referenced.");
+            _shell.Workbench.Notifications.Info(Localizer.Get("msg.solutionExplorerViewModel.everyOtherProjectOfTheSolution", "Every other project of the solution is already referenced."));
             return;
         }
 
@@ -906,7 +907,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
             {
-                _shell.Workbench.Notifications.Error($"Could not open the file manager: {ex.Message}");
+                _shell.Workbench.Notifications.Error(Localizer.Format("msg.solutionExplorerViewModel.couldNotOpenTheFileManager", "Could not open the file manager: {0}", ex.Message));
             }
         }
     }

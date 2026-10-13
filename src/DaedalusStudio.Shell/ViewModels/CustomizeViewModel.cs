@@ -3,6 +3,7 @@ using System.Windows.Input;
 using DaedalusStudio.Shell.Docking;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Workbench.Menus;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell.ViewModels;
 
@@ -198,7 +199,7 @@ public sealed class CustomizeViewModel : ObservableObject
 
     private async Task NewToolbarAsync()
     {
-        var name = await _shell.Dialogs.InputAsync("New Toolbar", "A name for the toolbar", string.Empty,
+        var name = await _shell.Dialogs.InputAsync(Localizer.Get("msg.customizeViewModel.newToolbar", "New Toolbar"), Localizer.Get("msg.customizeViewModel.aNameForTheToolbar", "A name for the toolbar"), string.Empty,
             n => n.Trim().Length == 0 ? "A toolbar needs a name." : _shell.Customizations.Toolbars.Any(t => t.Name == n.Trim()) ? "There is already a toolbar with that name." : null).ConfigureAwait(true);
         if (string.IsNullOrWhiteSpace(name))
         {

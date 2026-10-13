@@ -13,6 +13,7 @@ using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Languages;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -137,11 +138,11 @@ public sealed partial class ShellHost : IEditorServices
             var name = Workbench.LanguageServers.Get(e.LanguageId)?.DisplayName ?? e.LanguageId;
             if (e.WillRestart)
             {
-                Workbench.Notifications.Warning($"The {name} language service stopped unexpectedly and is restarting.");
+                Workbench.Notifications.Warning(Localizer.Format("msg.editor.theLanguageServiceStoppedUnexpectedlyAnd", "The {0} language service stopped unexpectedly and is restarting.", name));
             }
             else
             {
-                Workbench.Notifications.Error($"The {name} language service keeps crashing and was stopped. Reopen the solution to try again.");
+                Workbench.Notifications.Error(Localizer.Format("msg.editor.theLanguageServiceKeepsCrashingAnd", "The {0} language service keeps crashing and was stopped. Reopen the solution to try again.", name));
             }
         });
         Languages.HostRestarted += (_, _) => Ui.Post(RefreshEditors);
@@ -211,7 +212,7 @@ public sealed partial class ShellHost : IEditorServices
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Workbench.Notifications.Error($"Could not open {path}: {ex.Message}");
+                Workbench.Notifications.Error(Localizer.Format("msg.editor.couldNotOpen", "Could not open {0}: {1}", path, ex.Message));
                 return null;
             }
 
@@ -546,7 +547,7 @@ public sealed partial class ShellHost : IEditorServices
     private async Task ConfirmCloseAsync(Docking.ShellDocument document)
     {
         var name = document is CodeEditorDocument editor ? editor.Model.Name : document.Title;
-        var choice = await Workbench.Notifications.Warning($"Save changes to {name} before closing?", "Save", "Don't Save").Result.ConfigureAwait(false);
+        var choice = await Workbench.Notifications.Warning(Localizer.Format("msg.editor.saveChangesToBeforeClosing", "Save changes to {0} before closing?", name), "Save", "Don't Save").Result.ConfigureAwait(false);
         await Ui.RunAsync(async () =>
         {
             if (choice == "Save")
@@ -586,19 +587,19 @@ public sealed partial class ShellHost : IEditorServices
             await BeforeSaveAsync(model).ConfigureAwait(true);
             await model.SaveAsync(CancellationToken.None).ConfigureAwait(true);
             AfterSave(model);
-            StatusBar.ShowMessage($"Saved {model.Name}", TimeSpan.FromSeconds(3));
+            StatusBar.ShowMessage(Localizer.Format("msg.editor.saved", "Saved {0}", model.Name), TimeSpan.FromSeconds(3));
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"Could not save {model.Path}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.editor.couldNotSave", "Could not save {0}: {1}", model.Path, ex.Message));
             return false;
         }
     }
 
     private async Task ResolveConflictAsync(CodeDocument model)
     {
-        var choice = await Workbench.Notifications.Warning($"{model.Name} changed on disk, and you have unsaved changes.", "Reload", "Keep Mine").Result.ConfigureAwait(false);
+        var choice = await Workbench.Notifications.Warning(Localizer.Format("msg.editor.changedOnDiskAndYouHave", "{0} changed on disk, and you have unsaved changes.", model.Name), "Reload", "Keep Mine").Result.ConfigureAwait(false);
         if (choice == "Reload")
         {
             await Ui.RunAsync(async () =>
@@ -609,7 +610,7 @@ public sealed partial class ShellHost : IEditorServices
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
-                    Workbench.Notifications.Error($"Could not reload {model.Path}: {ex.Message}");
+                    Workbench.Notifications.Error(Localizer.Format("msg.editor.couldNotReload", "Could not reload {0}: {1}", model.Path, ex.Message));
                 }
             }).ConfigureAwait(false);
         }
@@ -654,7 +655,7 @@ public sealed partial class ShellHost : IEditorServices
         }
 
         var names = string.Join(", ", unsaved.Select(m => m.Name));
-        var choice = await Workbench.Notifications.Warning($"You have unsaved changes in {names}.", "Save All and Exit", "Exit Without Saving").Result.ConfigureAwait(true);
+        var choice = await Workbench.Notifications.Warning(Localizer.Format("msg.editor.youHaveUnsavedChangesIn", "You have unsaved changes in {0}.", names), "Save All and Exit", "Exit Without Saving").Result.ConfigureAwait(true);
         if (choice == "Save All and Exit")
         {
             foreach (var model in unsaved)
@@ -798,7 +799,7 @@ public sealed partial class ShellHost : IEditorServices
     {
         if (ActiveEditor is not { Model: { LanguageId: "markdown" } model })
         {
-            StatusBar.ShowMessage("Open a Markdown file to preview it.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.editor.openAMarkdownFileToPreview", "Open a Markdown file to preview it."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -879,7 +880,7 @@ public sealed partial class ShellHost : IEditorServices
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            Workbench.Notifications.Error($"Could not open the file manager: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.editor.couldNotOpenTheFileManager", "Could not open the file manager: {0}", ex.Message));
         }
     }
 

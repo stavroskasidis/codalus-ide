@@ -4,6 +4,7 @@ using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Projects;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -56,7 +57,7 @@ public sealed partial class ShellHost
         }
 
         await SaveAllAsync().ConfigureAwait(true);
-        StatusBar.ShowMessage("Applying the code changes…", TimeSpan.FromSeconds(3));
+        StatusBar.ShowMessage(Localizer.Get("msg.hotReload.applyingTheCodeChanges", "Applying the code changes…"), TimeSpan.FromSeconds(3));
     }
 
     private void OnHotReloadStarted(RunningProgram program)
@@ -71,7 +72,7 @@ public sealed partial class ShellHost
             UpdateHotReloadStatus();
             if (e.State == HotReloadState.Restarting)
             {
-                Workbench.Notifications.Info($"An edit couldn't be applied to the running {program.Name}, so it is restarting (a rude edit).");
+                Workbench.Notifications.Info(Localizer.Format("msg.hotReload.anEditCouldntBeAppliedTo", "An edit couldn't be applied to the running {0}, so it is restarting (a rude edit).", program.Name));
             }
         });
         UpdateHotReloadStatus();

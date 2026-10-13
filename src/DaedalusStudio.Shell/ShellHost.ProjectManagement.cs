@@ -3,6 +3,7 @@ using DaedalusStudio.Rpc;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Projects;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -111,7 +112,7 @@ public sealed partial class ShellHost
         var project = CurrentProject(argument);
         if (project is null)
         {
-            StatusBar.ShowMessage($"Select a project to {what}.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Format("msg.projectManagement.selectAProjectTo", "Select a project to {0}.", what), TimeSpan.FromSeconds(4));
         }
 
         return project;
@@ -126,7 +127,7 @@ public sealed partial class ShellHost
 
         if (Solutions.Solution?.Format == "project")
         {
-            StatusBar.ShowMessage($"{feature} needs a solution file; this is a project opened on its own.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.projectManagement.needsASolutionFileThisIs", "{0} needs a solution file; this is a project opened on its own.", feature), TimeSpan.FromSeconds(5));
             return false;
         }
 
@@ -170,7 +171,7 @@ public sealed partial class ShellHost
         }
 
         await RunManagementAsync(() => ProjectManagement.SaveFilterAsync(path, null, CancellationToken.None)).ConfigureAwait(true);
-        Workbench.Notifications.Info($"Saved {Path.GetFileName(path)}. Open it to load only these projects.");
+        Workbench.Notifications.Info(Localizer.Format("msg.projectManagement.savedOpenItToLoadOnly", "Saved {0}. Open it to load only these projects.", Path.GetFileName(path)));
     }
 
     /// <summary>Closes and reopens the solution (or filter): a new build host, e.g. after global.json changed.</summary>

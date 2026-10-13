@@ -4,6 +4,7 @@ using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Projects;
 using DaedalusStudio.Workbench.Web;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -35,7 +36,7 @@ public sealed partial class ShellHost
         var target = project is not null ? (Path.GetFullPath(project), folder is null ? null : Path.GetFullPath(folder)) : ItemTarget() is { } selected ? (selected.Project, selected.Folder) : ((string, string?)?)null;
         if (target is not { } chosen)
         {
-            StatusBar.ShowMessage("Select a project or one of its folders to scaffold into.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.webTools.selectAProjectOrOneOf", "Select a project or one of its folders to scaffold into."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -117,7 +118,7 @@ public sealed partial class ShellHost
         var what = status is { ToolAvailable: false, ManifestListsTool: true }
             ? "Restore the .NET tools (dotnet tool restore)"
             : $"Install dotnet-aspnet-codegenerator {status?.DotnetVersion ?? string.Empty} as a local tool of this solution, and add the packages the code generator needs to {Path.GetFileNameWithoutExtension(form.Project)}";
-        if (!await Dialogs.ConfirmAsync("Install the code generator", what + "? They are downloaded from your NuGet sources.", "Install").ConfigureAwait(true))
+        if (!await Dialogs.ConfirmAsync(Localizer.Get("msg.webTools.installTheCodeGenerator", "Install the code generator"), what + "? They are downloaded from your NuGet sources.", Localizer.Get("msg.webTools.install", "Install")).ConfigureAwait(true))
         {
             return;
         }
@@ -149,7 +150,7 @@ public sealed partial class ShellHost
 
         if ((project is not null ? Path.GetFullPath(project) : CurrentProject()) is not { } chosen)
         {
-            StatusBar.ShowMessage("Select a project to manage its service references.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.webTools.selectAProjectToManageIts", "Select a project to manage its service references."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -213,9 +214,9 @@ public sealed partial class ShellHost
                 case "remove" when selected is not null:
                 {
                     if (!await Dialogs.ConfirmAsync(
-                            "Remove the service reference",
-                            $"Remove the reference to {Path.GetFileName(selected.Path)} from {Path.GetFileNameWithoutExtension(form.Project)}? The document and the packages stay; delete them yourself if nothing else uses them.",
-                            "Remove").ConfigureAwait(true))
+                            Localizer.Get("msg.webTools.removeTheServiceReference", "Remove the service reference"),
+                            Localizer.Format("msg.webTools.removeTheReferenceToFromThe", "Remove the reference to {0} from {1}? The document and the packages stay; delete them yourself if nothing else uses them.", Path.GetFileName(selected.Path), Path.GetFileNameWithoutExtension(form.Project)),
+                            Localizer.Get("msg.webTools.remove", "Remove")).ConfigureAwait(true))
                     {
                         return;
                     }

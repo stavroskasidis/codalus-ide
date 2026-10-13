@@ -5,6 +5,7 @@ using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Git;
 using DaedalusStudio.Workbench.Settings;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -77,7 +78,7 @@ public sealed partial class ShellHost
             target = kind switch
             {
                 "folder" => Window is { } window ? await window.PickFolderAsync("Sync Settings with a Folder").ConfigureAwait(true) : null,
-                "git" => await Dialogs.InputAsync("Sync Settings with a Git Repository", "The repository's URL", string.Empty,
+                "git" => await Dialogs.InputAsync(Localizer.Get("msg.sync.syncSettingsWithAGitRepository", "Sync Settings with a Git Repository"), Localizer.Get("msg.sync.theRepositorysUrl", "The repository's URL"), string.Empty,
                     url => SettingsSync.IsGitTarget(url.Trim()) ? null : "A Git URL: https://…, ssh://…, git@host:path or ….git").ConfigureAwait(true),
                 _ => null,
             };
@@ -95,7 +96,7 @@ public sealed partial class ShellHost
     public async Task TurnOffSettingsSyncAsync()
     {
         await Workbench.Settings.SetAsync(SyncTargetSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
-        Workbench.Notifications.Info("Settings sync is off. What was synced stays where it is.");
+        Workbench.Notifications.Info(Localizer.Get("msg.sync.settingsSyncIsOffWhatWas", "Settings sync is off. What was synced stays where it is."));
     }
 
     /// <summary>Syncs now. <paramref name="quiet"/> (automatic syncs) reports only what needs the user.</summary>
@@ -106,7 +107,7 @@ public sealed partial class ShellHost
         {
             if (!quiet)
             {
-                Workbench.Notifications.Info("Settings sync is off. Turn it on with Settings Sync: Turn On.");
+                Workbench.Notifications.Info(Localizer.Get("msg.sync.settingsSyncIsOffTurnIt", "Settings sync is off. Turn it on with Settings Sync: Turn On."));
             }
 
             return;
@@ -135,11 +136,11 @@ public sealed partial class ShellHost
                 case SyncOutcome.Pulled:
                     await ApplySyncedAsync(result.Remote!).ConfigureAwait(true);
                     await sync.ResolveAsync(target, LocalSyncDocument(), push: false, CancellationToken.None).ConfigureAwait(true);
-                    StatusBar.ShowMessage("Settings updated from sync.", TimeSpan.FromSeconds(4));
+                    StatusBar.ShowMessage(Localizer.Get("msg.sync.settingsUpdatedFromSync", "Settings updated from sync."), TimeSpan.FromSeconds(4));
                     break;
                 case SyncOutcome.Conflict:
                     var choice = await Workbench.Notifications.Warning(
-                        $"Settings changed both here and in {target} since the last sync. Which do you keep?", "Use Synced", "Keep Mine").Result.ConfigureAwait(true);
+                        Localizer.Format("msg.sync.settingsChangedBothHereAndIn", "Settings changed both here and in {0} since the last sync. Which do you keep?", target), "Use Synced", "Keep Mine").Result.ConfigureAwait(true);
                     if (choice == "Use Synced")
                     {
                         await ApplySyncedAsync(result.Remote!).ConfigureAwait(true);
@@ -158,11 +159,11 @@ public sealed partial class ShellHost
             Workbench.Log.AppendLine($"[sync] {target}: {ex.Message}");
             if (quiet)
             {
-                StatusBar.ShowMessage("Settings sync failed (see the log).", TimeSpan.FromSeconds(6));
+                StatusBar.ShowMessage(Localizer.Get("msg.sync.settingsSyncFailedSeeTheLog", "Settings sync failed (see the log)."), TimeSpan.FromSeconds(6));
             }
             else
             {
-                Workbench.Notifications.Error($"Settings couldn't be synced with {target}: {ex.Message}");
+                Workbench.Notifications.Error(Localizer.Format("msg.sync.settingsCouldntBeSyncedWith", "Settings couldn't be synced with {0}: {1}", target, ex.Message));
             }
         }
         finally

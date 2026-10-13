@@ -9,6 +9,7 @@ using DaedalusStudio.Workbench.Notifications;
 using DaedalusStudio.Workbench.Output;
 using DaedalusStudio.Workbench.Projects;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -64,7 +65,7 @@ public sealed partial class ShellHost
             e.WillRestart ? NotificationSeverity.Warning : NotificationSeverity.Error,
             e.WillRestart ? $"The build host stopped unexpectedly (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}). Reopening the solution…"
                           : "The build host crashed repeatedly and was stopped. Reopen the solution to try again.");
-        Solutions.HostRestarted += (_, _) => Workbench.Notifications.Info("The build host restarted and the solution was reopened.");
+        Solutions.HostRestarted += (_, _) => Workbench.Notifications.Info(Localizer.Get("msg.solutions.theBuildHostRestartedAndThe", "The build host restarted and the solution was reopened."));
         UpdateSolutionStatus();
     }
 
@@ -93,7 +94,7 @@ public sealed partial class ShellHost
         if (!(remote ? await DaedalusStudio.Workbench.FileSystem.FileSystems.FileExistsAsync(path, CancellationToken.None).ConfigureAwait(true) : File.Exists(path)))
         {
             Recent.Remove(path);
-            Workbench.Notifications.Error($"'{RemoteDisplay(path)}' doesn't exist.");
+            Workbench.Notifications.Error(Localizer.Format("msg.solutions.doesntExist", "'{0}' doesn't exist.", RemoteDisplay(path)));
             return;
         }
 
@@ -128,7 +129,7 @@ public sealed partial class ShellHost
 
         try
         {
-            StatusBar.ShowMessage($"Opening {Path.GetFileName(path)}…");
+            StatusBar.ShowMessage(Localizer.Format("msg.solutions.opening", "Opening {0}…", Path.GetFileName(path)));
             await Solutions.OpenAsync(path, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None).ConfigureAwait(true);
             StatusBar.ClearMessage();
             Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
@@ -187,7 +188,7 @@ public sealed partial class ShellHost
         }
 
         var folder = solution.Directory;
-        if (await Dialogs.ConfirmAsync("Trust this folder?", $"Projects in {folder} will be evaluated and their packages restored.", "Trust").ConfigureAwait(true))
+        if (await Dialogs.ConfirmAsync(Localizer.Get("msg.solutions.trustThisFolder", "Trust this folder?"), Localizer.Format("msg.solutions.projectsInWillBeEvaluatedAnd", "Projects in {0} will be evaluated and their packages restored.", folder), Localizer.Get("msg.solutions.trust", "Trust")).ConfigureAwait(true))
         {
             Trust.Trust(folder);
             await Solutions.TrustAsync(Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None).ConfigureAwait(true);
@@ -199,7 +200,7 @@ public sealed partial class ShellHost
         var items = Recent.Items.Select(p => new QuickPickItem(Path.GetFileName(p)) { Detail = Path.GetDirectoryName(p), Tag = p, Icon = Directory.Exists(p) ? Controls.FileIcons.ForFolder(Path.GetFileName(p), open: false) : Controls.FileIcons.ForFile(Path.GetFileName(p)) }).ToList();
         if (items.Count == 0)
         {
-            Workbench.Notifications.Info("No recent solutions yet.");
+            Workbench.Notifications.Info(Localizer.Get("msg.solutions.noRecentSolutionsYet", "No recent solutions yet."));
             return;
         }
 

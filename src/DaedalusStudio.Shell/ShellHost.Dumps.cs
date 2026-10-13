@@ -2,6 +2,7 @@ using System.Globalization;
 using DaedalusStudio.LanguageServices.Protocol;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Debugging;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -39,7 +40,7 @@ public sealed partial class ShellHost
             return null;
         }
 
-        StatusBar.ShowMessage($"Opening {Path.GetFileName(path)}…", TimeSpan.FromSeconds(10));
+        StatusBar.ShowMessage(Localizer.Format("msg.dumps.opening", "Opening {0}…", Path.GetFileName(path)), TimeSpan.FromSeconds(10));
         try
         {
             var summary = await Companion.OpenDumpAsync(path, CancellationToken.None).ConfigureAwait(true);
@@ -49,7 +50,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Workbench.Notifications.Error($"Couldn't open the dump {Path.GetFileName(path)}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.dumps.couldntOpenTheDump", "Couldn't open the dump {0}: {1}", Path.GetFileName(path), ex.Message));
             return null;
         }
     }
@@ -63,7 +64,7 @@ public sealed partial class ShellHost
         var pid = int.TryParse(processId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var given) ? given : Debugger.ProcessId;
         if (pid is not { } target)
         {
-            Workbench.Notifications.Info("Start debugging a .NET process first: Create Dump writes a dump of the process being debugged.");
+            Workbench.Notifications.Info(Localizer.Get("msg.dumps.startDebuggingANetProcessFirst", "Start debugging a .NET process first: Create Dump writes a dump of the process being debugged."));
             return null;
         }
 
@@ -71,10 +72,10 @@ public sealed partial class ShellHost
         var path = Path.Combine(folder, $"dump-{target}-{DateTime.Now:yyyyMMdd-HHmmss}.dmp");
         try
         {
-            StatusBar.ShowMessage($"Writing a dump of process {target}…", TimeSpan.FromSeconds(10));
+            StatusBar.ShowMessage(Localizer.Format("msg.dumps.writingADumpOfProcess", "Writing a dump of process {0}…", target), TimeSpan.FromSeconds(10));
             var result = await Companion.CreateDumpAsync(target, path, "full", CancellationToken.None).ConfigureAwait(true);
             var size = DumpHeapRow.Bytes(result.Size);
-            if (await Workbench.Notifications.Info($"Wrote a {size} dump of process {target}: {result.Path}", "Open Dump").Result.ConfigureAwait(true) == "Open Dump")
+            if (await Workbench.Notifications.Info(Localizer.Format("msg.dumps.wroteADumpOfProcess", "Wrote a {0} dump of process {1}: {2}", size, target, result.Path), "Open Dump").Result.ConfigureAwait(true) == "Open Dump")
             {
                 await OpenDumpAsync(result.Path).ConfigureAwait(true);
             }
@@ -83,7 +84,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Workbench.Notifications.Error($"Couldn't write a dump of process {target}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.dumps.couldntWriteADumpOfProcess", "Couldn't write a dump of process {0}: {1}", target, ex.Message));
             return null;
         }
     }

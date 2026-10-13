@@ -13,7 +13,7 @@ namespace DaedalusStudio.Shell.Tests;
 /// </summary>
 public sealed partial class LocalizationCatalogTests
 {
-    private static readonly string[] s_generatedPrefixes = ["command.", "category.", "setting.", "settingCategory.", "toolWindow.", "menu."];
+    private static readonly string[] s_generatedPrefixes = ["command.", "category.", "setting.", "settingCategory.", "toolWindow.", "menu.", "msg."];
 
     private static readonly JsonSerializerOptions s_catalogJson = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
@@ -30,6 +30,9 @@ public sealed partial class LocalizationCatalogTests
 
     [GeneratedRegex(@"\{l:T ([A-Za-z0-9_.]+)\}")]
     private static partial Regex ViewKey();
+
+    [GeneratedRegex("""Localizer\.(?:Get|Format)\("([A-Za-z0-9_.]+)",\s*"((?:[^"\\]|\\.)*)" """, RegexOptions.IgnorePatternWhitespace)]
+    private static partial Regex CodeKey();
 
     private static IEnumerable<string> Views() =>
         Directory.EnumerateFiles(ShellSource, "*.axaml", SearchOption.AllDirectories)
@@ -86,6 +89,25 @@ public sealed partial class LocalizationCatalogTests
         {
             expected[$"menu.{rule.Submenu}"] = rule.Title!;
         }
+
+        // Messages built in code (eng/localize-cs.py): Localizer.Get or Format with the key and the English.
+        var conflicts = new List<string>();
+        foreach (var source in new[] { ShellSource, Path.Combine(ShellFixture.RepoRoot, "src", "DaedalusStudio.Workbench") }
+                     .SelectMany(d => Directory.EnumerateFiles(d, "*.cs", SearchOption.AllDirectories)))
+        {
+            foreach (Match match in CodeKey().Matches(File.ReadAllText(source)))
+            {
+                var english = Regex.Unescape(match.Groups[2].Value);
+                if (expected.TryGetValue(match.Groups[1].Value, out var known) && known != english)
+                {
+                    conflicts.Add($"{match.Groups[1].Value} ({Relative(source)})");
+                }
+
+                expected[match.Groups[1].Value] = english;
+            }
+        }
+
+        Assert.True(conflicts.Count == 0, $"Keys used with different English: {string.Join(", ", conflicts)}");
 
         // The views' strings live only in the catalogue.
         var catalog = JsonNode.Parse(await File.ReadAllTextAsync(CatalogPath, TestContext.Current.CancellationToken))!.AsObject();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DaedalusStudio.Workbench.Settings;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -18,7 +19,7 @@ public sealed partial class ShellHost
         folder ??= VsCodeImport.UserFolder(Workbench.Platform, Environment.GetEnvironmentVariable);
         if (folder is null)
         {
-            Workbench.Notifications.Info("VS Code's user settings weren't found on this machine (VS Code, Insiders or VSCodium).");
+            Workbench.Notifications.Info(Localizer.Get("msg.import.vsCodesUserSettingsWerentFound", "VS Code's user settings weren't found on this machine (VS Code, Insiders or VSCodium)."));
             return;
         }
 
@@ -33,18 +34,18 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"VS Code's settings couldn't be read ({folder}): {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.import.vsCodesSettingsCouldntBeRead", "VS Code's settings couldn't be read ({0}): {1}", folder, ex.Message));
             return;
         }
 
         if (settings.Imported.Count == 0 && keybindings.Imported.Count == 0)
         {
-            Workbench.Notifications.Info($"Nothing in {folder} applies to Daedalus Studio.");
+            Workbench.Notifications.Info(Localizer.Format("msg.import.nothingInAppliesToDaedalusStudio", "Nothing in {0} applies to Daedalus Studio.", folder));
             return;
         }
 
         if (confirm && await Workbench.Notifications.Info(
-                $"Import {settings.Imported.Count} settings and {keybindings.Imported.Count} keyboard shortcuts from VS Code ({folder})? They replace yours for the same settings.", "Import").Result.ConfigureAwait(true) != "Import")
+                Localizer.Format("msg.import.importSettingsAndKeyboardShortcutsFrom", "Import {0} settings and {1} keyboard shortcuts from VS Code ({2})? They replace yours for the same settings.", settings.Imported.Count, keybindings.Imported.Count, folder), "Import").Result.ConfigureAwait(true) != "Import")
         {
             return;
         }
@@ -71,7 +72,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error($"{path} couldn't be read: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.import.couldntBeRead", "{0} couldn't be read: {1}", path, ex.Message));
             return;
         }
 
@@ -83,7 +84,7 @@ public sealed partial class ShellHost
         }
 
         if (confirm && await Workbench.Notifications.Info(
-                $"Import {settings.Imported.Count} settings and {keybindings.Imported.Count} keyboard shortcuts from {Path.GetFileName(path)}? Colors are added to yours; other settings replace yours.", "Import").Result.ConfigureAwait(true) != "Import")
+                Localizer.Format("msg.import.importSettingsAndKeyboardShortcutsFrom2", "Import {0} settings and {1} keyboard shortcuts from {2}? Colors are added to yours; other settings replace yours.", settings.Imported.Count, keybindings.Imported.Count, Path.GetFileName(path)), "Import").Result.ConfigureAwait(true) != "Import")
         {
             return;
         }

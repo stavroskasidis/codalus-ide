@@ -13,6 +13,7 @@ using DaedalusStudio.Shell.Docking;
 using DaedalusStudio.Shell.Input;
 using DaedalusStudio.Workbench.Keybindings;
 using Dock.Model.Core;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell.Views;
 
@@ -380,7 +381,7 @@ public sealed partial class MainWindow : Window, IShellWindow
             case KeyDispatchKind.Pending:
                 _chordPending = true;
                 e.Handled = true;
-                _shell.StatusBar.ShowMessage($"({result.Pending!.ToLabel(platform)}) was pressed. Waiting for the next key…");
+                _shell.StatusBar.ShowMessage(Localizer.Format("msg.mainWindowaxaml.wasPressedWaitingForTheNext", "({0}) was pressed. Waiting for the next key…", result.Pending!.ToLabel(platform)));
                 break;
 
             case KeyDispatchKind.Command:
@@ -395,7 +396,7 @@ public sealed partial class MainWindow : Window, IShellWindow
                 {
                     _chordPending = false;
                     e.Handled = true;
-                    _shell.StatusBar.ShowMessage($"The key combination ({chord.ToLabel(platform)}) is not a command.", TimeSpan.FromSeconds(4));
+                    _shell.StatusBar.ShowMessage(Localizer.Format("msg.mainWindowaxaml.theKeyCombinationIsNotA", "The key combination ({0}) is not a command.", chord.ToLabel(platform)), TimeSpan.FromSeconds(4));
                 }
 
                 break;

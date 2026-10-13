@@ -7,6 +7,7 @@ using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Git;
 using DaedalusStudio.Workbench.Output;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -45,7 +46,7 @@ public sealed partial class ShellHost
     {
         if (Git.Root is null)
         {
-            StatusBar.ShowMessage("The open solution is not in a git repository.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.git.theOpenSolutionIsNotIn", "The open solution is not in a git repository."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -243,11 +244,11 @@ public sealed partial class ShellHost
             try
             {
                 await Git.MergeAsync(branch).ConfigureAwait(true);
-                StatusBar.ShowMessage($"Merged {branch}.", TimeSpan.FromSeconds(5));
+                StatusBar.ShowMessage(Localizer.Format("msg.git.merged", "Merged {0}.", branch), TimeSpan.FromSeconds(5));
             }
             catch (GitException) when (Git.Status is { IsMerging: true })
             {
-                Workbench.Notifications.Warning($"Merging {branch} produced conflicts. Resolve them in the Git Changes window, stage the files and commit, or abort the merge.");
+                Workbench.Notifications.Warning(Localizer.Format("msg.git.mergingProducedConflictsResolveThemIn", "Merging {0} produced conflicts. Resolve them in the Git Changes window, stage the files and commit, or abort the merge.", branch));
                 Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
             }
         }

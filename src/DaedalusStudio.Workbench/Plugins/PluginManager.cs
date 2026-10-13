@@ -10,6 +10,7 @@ using DaedalusStudio.Workbench.Notifications;
 using DaedalusStudio.Workbench.Settings;
 using DaedalusStudio.Workbench.StatusBar;
 using DaedalusStudio.Workbench.ToolWindows;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Workbench.Plugins;
 
@@ -516,7 +517,7 @@ public sealed class PluginManager : IAsyncDisposable
         plugin.State = PluginState.Failed;
         plugin.Error = error;
         PluginLog.AppendLine($"[{plugin.Id}] failed: {error}");
-        _ = ShowAndHandleAsync(_workbench.Notifications.Error($"Plugin '{plugin.DisplayName}' failed: {error}", "Show Log"));
+        _ = ShowAndHandleAsync(_workbench.Notifications.Error(Localizer.Format("msg.pluginManager.pluginFailed", "Plugin '{0}' failed: {1}", plugin.DisplayName, error), "Show Log"));
         PluginsChanged?.Invoke(this, EventArgs.Empty);
         return false;
     }
@@ -666,7 +667,7 @@ public sealed class PluginManager : IAsyncDisposable
                 Initialize = InitializeAsync,
             };
             _process.Crashed += OnCrashed;
-            _process.Restarted += (_, _) => _manager._workbench.Notifications.Info($"Plugin host '{_group}' restarted.");
+            _process.Restarted += (_, _) => _manager._workbench.Notifications.Info(Localizer.Format("msg.pluginManager.pluginHostRestarted", "Plugin host '{0}' restarted.", _group));
             _process.Log += (_, line) => _manager._workbench.Output.GetOrCreate("daedalus.pluginhost." + group, $"Plugin Host ({group})").AppendLine(line);
         }
 
@@ -778,7 +779,7 @@ public sealed class PluginManager : IAsyncDisposable
             var exit = e.ExitCode is { } code ? $" (exit code {code})" : string.Empty;
             if (e.WillRestart)
             {
-                _manager._workbench.Notifications.Warning($"Plugin host '{_group}' stopped unexpectedly{exit}. Restarting…");
+                _manager._workbench.Notifications.Warning(Localizer.Format("msg.pluginManager.pluginHostStoppedUnexpectedlyRestarting", "Plugin host '{0}' stopped unexpectedly{1}. Restarting…", _group, exit));
             }
             else
             {
@@ -789,7 +790,7 @@ public sealed class PluginManager : IAsyncDisposable
                 }
 
                 _ = _manager.ShowAndHandleAsync(_manager._workbench.Notifications.Error(
-                    $"Plugin host '{_group}' crashed repeatedly and was stopped for this session{exit}.", "Show Log"));
+                    Localizer.Format("msg.pluginManager.pluginHostCrashedRepeatedlyAndWas", "Plugin host '{0}' crashed repeatedly and was stopped for this session{1}.", _group, exit), "Show Log"));
             }
 
             _manager.PluginsChanged?.Invoke(_manager, EventArgs.Empty);

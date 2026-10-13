@@ -3,6 +3,7 @@ using DaedalusStudio.Shell.Editor;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.History;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -141,11 +142,11 @@ public sealed partial class ShellHost
 
         if (await CleanUpAsync(client, editor.Model).ConfigureAwait(true))
         {
-            StatusBar.ShowMessage($"Code Cleanup finished on {editor.Model.Name}.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Format("msg.editingSafety.codeCleanupFinishedOn", "Code Cleanup finished on {0}.", editor.Model.Name), TimeSpan.FromSeconds(4));
         }
         else
         {
-            StatusBar.ShowMessage("Code Cleanup found nothing to change.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.editingSafety.codeCleanupFoundNothingToChange", "Code Cleanup found nothing to change."), TimeSpan.FromSeconds(4));
         }
     }
 
@@ -257,7 +258,7 @@ public sealed partial class ShellHost
 
         var old = await File.ReadAllTextAsync(entry.File).ConfigureAwait(true);
         await OpenFileDiffAsync(entry.File, editor.Model.Path).ConfigureAwait(true); // the saved version against the file on disk
-        var choice = await Workbench.Notifications.Info($"Restore {editor.Model.Name} to the version of {entry.Time.ToLocalTime():g}?", "Restore").Result.ConfigureAwait(true);
+        var choice = await Workbench.Notifications.Info(Localizer.Format("msg.editingSafety.restoreToTheVersionOf", "Restore {0} to the version of {1:g}?", editor.Model.Name, entry.Time.ToLocalTime()), "Restore").Result.ConfigureAwait(true);
         if (choice == "Restore")
         {
             RestoreFromHistory(editor.Model, old);

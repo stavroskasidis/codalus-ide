@@ -6,6 +6,7 @@ using DaedalusStudio.Shell.Editor;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
 using DaedalusStudio.Workbench.Debugging;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -120,7 +121,7 @@ public sealed partial class ShellHost
     {
         if (node.EvaluateName is not { } expression || Debugger.State != DebugState.Stopped)
         {
-            StatusBar.ShowMessage($"The {Visualizers.Title(kind)} needs the program to be paused.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Format("msg.debugDepth.theNeedsTheProgramToBe", "The {0} needs the program to be paused.", Visualizers.Title(kind)), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -136,7 +137,7 @@ public sealed partial class ShellHost
             var bytes = await CollectionVisualizers.BytesAsync(Debugger, expression).ConfigureAwait(true);
             if (CollectionVisualizers.ImageExtension(bytes) is not { } extension)
             {
-                StatusBar.ShowMessage($"{expression} doesn't hold a PNG, JPEG, GIF, BMP, WebP or ICO image.", TimeSpan.FromSeconds(5));
+                StatusBar.ShowMessage(Localizer.Format("msg.debugDepth.doesntHoldAPngJpegGif", "{0} doesn't hold a PNG, JPEG, GIF, BMP, WebP or ICO image.", expression), TimeSpan.FromSeconds(5));
                 return;
             }
 
@@ -155,7 +156,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException or IOException or FormatException or OverflowException)
         {
-            Workbench.Notifications.Error($"The {Visualizers.Title(kind)} couldn't read {expression}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.debugDepth.theCouldntRead", "The {0} couldn't read {1}: {2}", Visualizers.Title(kind), expression, ex.Message));
         }
     }
 
@@ -164,7 +165,7 @@ public sealed partial class ShellHost
     {
         if (Plugins.DebugVisualizers.Find(visualizerId) is not { } visualizer || node.EvaluateName is not { } expression || Debugger.State != DebugState.Stopped)
         {
-            StatusBar.ShowMessage("Visualizers need the program to be paused.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.debugDepth.visualizersNeedTheProgramToBe", "Visualizers need the program to be paused."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -184,7 +185,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Workbench.Notifications.Error($"{visualizer.Title} couldn't show {expression}: {ex.Message}");
+            Workbench.Notifications.Error(Localizer.Format("msg.debugDepth.couldntShow", "{0} couldn't show {1}: {2}", visualizer.Title, expression, ex.Message));
         }
     }
 
@@ -251,7 +252,7 @@ public sealed partial class ShellHost
                 await StartDebuggingAsync().ConfigureAwait(true);
                 break;
             default:
-                StatusBar.ShowMessage("Run to Cursor needs the program to be paused (Break All, Ctrl+Alt+Break).", TimeSpan.FromSeconds(4));
+                StatusBar.ShowMessage(Localizer.Get("msg.debugDepth.runToCursorNeedsTheProgram", "Run to Cursor needs the program to be paused (Break All, Ctrl+Alt+Break)."), TimeSpan.FromSeconds(4));
                 break;
         }
     }
@@ -273,7 +274,7 @@ public sealed partial class ShellHost
         var target = processes.FirstOrDefault(p => p.Id == last.Id && p.Name == last.Name) ?? processes.FirstOrDefault(p => p.Name == last.Name);
         if (target is null)
         {
-            StatusBar.ShowMessage($"No process named {last.Name} is running.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.debugDepth.noProcessNamedIsRunning", "No process named {0} is running.", last.Name), TimeSpan.FromSeconds(5));
             return;
         }
 
@@ -379,7 +380,7 @@ public sealed partial class ShellHost
     {
         if (Debugger.Breakpoints.All.Count + Debugger.Breakpoints.Functions.Count == 0)
         {
-            StatusBar.ShowMessage("There are no breakpoints to export.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.debugDepth.thereAreNoBreakpointsToExport", "There are no breakpoints to export."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -396,7 +397,7 @@ public sealed partial class ShellHost
         try
         {
             ExportBreakpoints(target.Input.Trim());
-            StatusBar.ShowMessage($"Exported the breakpoints to {target.Input.Trim()}.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.debugDepth.exportedTheBreakpointsTo", "Exported the breakpoints to {0}.", target.Input.Trim()), TimeSpan.FromSeconds(5));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -427,7 +428,7 @@ public sealed partial class ShellHost
         try
         {
             var count = ImportBreakpoints(source.Input.Trim());
-            StatusBar.ShowMessage($"Imported {count.ToString(CultureInfo.InvariantCulture)} breakpoint(s).", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.debugDepth.importedBreakpointS", "Imported {0} breakpoint(s).", count.ToString(CultureInfo.InvariantCulture)), TimeSpan.FromSeconds(5));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {

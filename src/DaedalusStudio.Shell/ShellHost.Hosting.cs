@@ -14,6 +14,7 @@ using DaedalusStudio.Workbench.Git;
 using DaedalusStudio.Workbench.Hosting;
 using DaedalusStudio.Workbench.Secrets;
 using DaedalusStudio.Workbench.StatusBar;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -83,7 +84,7 @@ public sealed partial class ShellHost : IHostingActions
         Secrets = new SecretStorage(CredentialStore.Create(), SecretStorage.ServiceFor(userData));
         Secrets.FellBack += (_, reason) => Ui.Post(() =>
         {
-            Workbench.Notifications.Warning($"The credential store can't be used ({reason}) Sign-ins last until Daedalus Studio closes.");
+            Workbench.Notifications.Warning(Localizer.Format("msg.hosting.theCredentialStoreCantBeUsed", "The credential store can't be used ({0}) Sign-ins last until Daedalus Studio closes.", reason));
             UpdateAccounts();
         });
         Plugins.Secrets = Secrets;
@@ -107,7 +108,7 @@ public sealed partial class ShellHost : IHostingActions
         Hosting.SignInRequired += (_, providerId) => Ui.Post(() =>
         {
             var label = Hosting.Provider(providerId)?.Label ?? providerId;
-            var notification = Workbench.Notifications.Warning($"Your {label} session expired or was revoked. Sign in again to see pull requests and checks.", "Sign In");
+            var notification = Workbench.Notifications.Warning(Localizer.Format("msg.hosting.yourSessionExpiredOrWasRevoked", "Your {0} session expired or was revoked. Sign in again to see pull requests and checks.", label), "Sign In");
             _ = notification.Result.ContinueWith(t =>
             {
                 if (t.Result == "Sign In")
@@ -304,7 +305,7 @@ public sealed partial class ShellHost : IHostingActions
     {
         if (_branchStatus is not { Checks.Length: > 0 } status)
         {
-            StatusBar.ShowMessage("No checks for this branch.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.hosting.noChecksForThisBranch", "No checks for this branch."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -391,7 +392,7 @@ public sealed partial class ShellHost : IHostingActions
         {
             var account = await Hosting.SignInAsync(row.Id, token, cts.Token).ConfigureAwait(true);
             row.Token = string.Empty;
-            StatusBar.ShowMessage($"Signed in to {row.Label} as {account.Name}.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.hosting.signedInToAs", "Signed in to {0} as {1}.", row.Label, account.Name), TimeSpan.FromSeconds(5));
         }
         catch (OperationCanceledException)
         {
@@ -463,7 +464,7 @@ public sealed partial class ShellHost : IHostingActions
         {
             var checkout = await Hosting.CheckoutAsync(match, pullRequest, CancellationToken.None).ConfigureAwait(true);
             await Git.FetchAndSwitchAsync(checkout.Remote, checkout.SourceRef, checkout.LocalBranch, checkout.Track).ConfigureAwait(true);
-            StatusBar.ShowMessage($"Checked out {pullRequest.Reference} on {checkout.LocalBranch}.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Format("msg.hosting.checkedOutOn", "Checked out {0} on {1}.", pullRequest.Reference, checkout.LocalBranch), TimeSpan.FromSeconds(5));
         }
         catch (Exception ex) when (ex is HostingRequestException or HostingSignInRequiredException)
         {
@@ -528,7 +529,7 @@ public sealed partial class ShellHost : IHostingActions
             }
             else
             {
-                StatusBar.ShowMessage("This repository isn't on a host you're signed in to.", TimeSpan.FromSeconds(5));
+                StatusBar.ShowMessage(Localizer.Get("msg.hosting.thisRepositoryIsntOnAHost", "This repository isn't on a host you're signed in to."), TimeSpan.FromSeconds(5));
             }
 
             return null;
@@ -536,7 +537,7 @@ public sealed partial class ShellHost : IHostingActions
 
         if (Git.Status is not { Branch: { } branch })
         {
-            StatusBar.ShowMessage("Switch to a branch first.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.hosting.switchToABranchFirst", "Switch to a branch first."), TimeSpan.FromSeconds(4));
             return null;
         }
 
@@ -601,7 +602,7 @@ public sealed partial class ShellHost : IHostingActions
 
             var created = await Hosting.CreatePullRequestAsync(match, form.Title.Trim(), form.Description, form.SourceBranch, form.Target!, form.IsDraft, CancellationToken.None).ConfigureAwait(true);
             form.Created = $"Created {created.Reference}: {created.Title}";
-            var notification = Workbench.Notifications.Info($"Created pull request {created.Reference}: {created.Title}", "Open in Browser");
+            var notification = Workbench.Notifications.Info(Localizer.Format("msg.hosting.createdPullRequest", "Created pull request {0}: {1}", created.Reference, created.Title), "Open in Browser");
             _ = notification.Result.ContinueWith(t =>
             {
                 if (t.Result == "Open in Browser")
@@ -684,7 +685,7 @@ public sealed partial class ShellHost : IHostingActions
         var providers = Hosting.Providers;
         if (providers.Count == 0)
         {
-            StatusBar.ShowMessage("No hosting plugin is installed.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Get("msg.hosting.noHostingPluginIsInstalled", "No hosting plugin is installed."), TimeSpan.FromSeconds(5));
             return;
         }
 
@@ -703,7 +704,7 @@ public sealed partial class ShellHost : IHostingActions
         if (Hosting.AccountFor(provider.Id) is null)
         {
             ShowAccounts(provider.Id);
-            StatusBar.ShowMessage($"Sign in to {provider.Label}, then publish again.", TimeSpan.FromSeconds(6));
+            StatusBar.ShowMessage(Localizer.Format("msg.hosting.signInToThenPublishAgain", "Sign in to {0}, then publish again.", provider.Label), TimeSpan.FromSeconds(6));
             return;
         }
 
@@ -743,12 +744,12 @@ public sealed partial class ShellHost : IHostingActions
                 return;
             }
 
-            StatusBar.ShowMessage($"Publishing to {provider.Label}…");
+            StatusBar.ShowMessage(Localizer.Format("msg.hosting.publishingTo", "Publishing to {0}…", provider.Label));
             var published = await Hosting.PublishAsync(provider.Id, owner.Id, repositoryName.Trim(), description.Input is { Length: > 0 } d ? d.Trim() : null, isPrivate, CancellationToken.None).ConfigureAwait(true);
             var remote = await Git.FreeRemoteNameAsync("origin", provider.Id).ConfigureAwait(true);
             await Git.AddRemoteAsync(remote, published.CloneUrl).ConfigureAwait(true);
             await Git.PublishBranchAsync(remote, Git.Status?.Branch ?? "main").ConfigureAwait(true);
-            var notification = Workbench.Notifications.Info($"Published to {published.WebUrl} (the remote '{remote}').", "Open in Browser");
+            var notification = Workbench.Notifications.Info(Localizer.Format("msg.hosting.publishedToTheRemote", "Published to {0} (the remote '{1}').", published.WebUrl, remote), "Open in Browser");
             _ = notification.Result.ContinueWith(t =>
             {
                 if (t.Result == "Open in Browser")
@@ -777,11 +778,11 @@ public sealed partial class ShellHost : IHostingActions
             {
                 if (Solutions.Solution is not { } solution)
                 {
-                    StatusBar.ShowMessage("Open a solution first.", TimeSpan.FromSeconds(4));
+                    StatusBar.ShowMessage(Localizer.Get("msg.hosting.openASolutionFirst", "Open a solution first."), TimeSpan.FromSeconds(4));
                     return false;
                 }
 
-                if (!await Dialogs.ConfirmAsync("Publish Repository", "The solution isn't in a git repository. Create one with a first commit of its files, then publish it?", "Create and Publish").ConfigureAwait(true))
+                if (!await Dialogs.ConfirmAsync(Localizer.Get("msg.hosting.publishRepository", "Publish Repository"), Localizer.Get("msg.hosting.theSolutionIsntInAGit", "The solution isn't in a git repository. Create one with a first commit of its files, then publish it?"), Localizer.Get("msg.hosting.createAndPublish", "Create and Publish")).ConfigureAwait(true))
                 {
                     return false;
                 }
@@ -914,7 +915,7 @@ public sealed partial class ShellHost : IHostingActions
     {
         if (Git.Repositories.Count < 2)
         {
-            StatusBar.ShowMessage("The solution is in a single repository.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.hosting.theSolutionIsInASingle", "The solution is in a single repository."), TimeSpan.FromSeconds(4));
             return;
         }
 
@@ -1022,11 +1023,11 @@ public sealed partial class ShellHost : IHostingActions
     {
         if (row.Worktree.IsMain || row.IsCurrent)
         {
-            StatusBar.ShowMessage("The main worktree, or the one open here, can't be removed.", TimeSpan.FromSeconds(5));
+            StatusBar.ShowMessage(Localizer.Get("msg.hosting.theMainWorktreeOrTheOne", "The main worktree, or the one open here, can't be removed."), TimeSpan.FromSeconds(5));
             return;
         }
 
-        if (!await Dialogs.ConfirmAsync("Remove Worktree", $"Remove the worktree {row.Name} ({row.Location})? Its branch stays.", "Remove", danger: true).ConfigureAwait(true))
+        if (!await Dialogs.ConfirmAsync(Localizer.Get("msg.hosting.removeWorktree", "Remove Worktree"), Localizer.Format("msg.hosting.removeTheWorktreeItsBranchStays", "Remove the worktree {0} ({1})? Its branch stays.", row.Name, row.Location), Localizer.Get("msg.hosting.remove", "Remove"), danger: true).ConfigureAwait(true))
         {
             return;
         }
@@ -1037,7 +1038,7 @@ public sealed partial class ShellHost : IHostingActions
         }
         catch (GitException ex)
         {
-            if (await Dialogs.ConfirmAsync("Remove Worktree", $"{ex.Message}\n\nRemove it anyway? Its uncommitted changes are lost.", "Remove Anyway", danger: true).ConfigureAwait(true))
+            if (await Dialogs.ConfirmAsync(Localizer.Get("msg.hosting.removeWorktree", "Remove Worktree"), Localizer.Format("msg.hosting.nNremoveItAnywayItsUncommitted", "{0}\n\nRemove it anyway? Its uncommitted changes are lost.", ex.Message), Localizer.Get("msg.hosting.removeAnyway", "Remove Anyway"), danger: true).ConfigureAwait(true))
             {
                 await Git.RemoveWorktreeAsync(row.Worktree.Path, force: true).ConfigureAwait(true);
             }
@@ -1131,7 +1132,7 @@ public sealed partial class ShellHost : IHostingActions
 
         if (lfs.Locks.Count == 0)
         {
-            StatusBar.ShowMessage("No Git LFS locks.", TimeSpan.FromSeconds(4));
+            StatusBar.ShowMessage(Localizer.Get("msg.hosting.noGitLfsLocks", "No Git LFS locks."), TimeSpan.FromSeconds(4));
             return;
         }
 

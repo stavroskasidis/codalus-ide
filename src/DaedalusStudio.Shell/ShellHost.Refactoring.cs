@@ -3,6 +3,7 @@ using DaedalusStudio.LanguageServices.Protocol;
 using DaedalusStudio.Shell.Editor;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Shell.ViewModels;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell;
 
@@ -141,7 +142,7 @@ public sealed partial class ShellHost
         var range = new LanguageServices.Protocol.Range(model.PositionAt(start), model.PositionAt(end));
         var line = range.Start.Line;
         var diagnostics = Languages.Diagnostics.For(model.Path).Where(d => d.Range.Start.Line <= line && d.Range.End.Line >= line).ToArray();
-        StatusBar.ShowMessage("Looking for code actions…");
+        StatusBar.ShowMessage(Localizer.Get("msg.refactoring.lookingForCodeActions", "Looking for code actions…"));
         var actions = (await client.CodeActionsAsync(model.Uri, range, diagnostics, CancellationToken.None).ConfigureAwait(true)).Select(a => (Action: a, Client: client)).ToList();
 
         // A linter's quick fixes (ESLint, ADR 0027): its edits come with the action.

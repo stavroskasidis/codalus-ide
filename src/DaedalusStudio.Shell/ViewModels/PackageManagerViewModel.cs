@@ -8,6 +8,7 @@ using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Workbench.Notifications;
 using DaedalusStudio.Workbench.Packages;
 using DaedalusStudio.Workbench.Projects;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell.ViewModels;
 
@@ -901,7 +902,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
             : [Project!];
         if (targets.Count == 0)
         {
-            _context.Notifications.Info("Choose the projects to install the package into.");
+            _context.Notifications.Info(Localizer.Get("msg.packageManagerViewModel.chooseTheProjectsToInstallThe", "Choose the projects to install the package into."));
             return;
         }
 
@@ -933,7 +934,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
             : [Project!];
         if (targets.Count == 0)
         {
-            _context.Notifications.Info("Choose the projects to uninstall the package from.");
+            _context.Notifications.Info(Localizer.Get("msg.packageManagerViewModel.chooseTheProjectsToUninstallThe", "Choose the projects to uninstall the package from."));
             return;
         }
 
@@ -986,7 +987,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
             RestoreStatus = changed.Count == 0 ? null : "Restoring packages…";
             if (changed.Count == 0)
             {
-                _context.Notifications.Info("Nothing changed.");
+                _context.Notifications.Info(Localizer.Get("msg.packageManagerViewModel.nothingChanged", "Nothing changed."));
             }
         }
         catch (Exception ex) when (IsExpected(ex))

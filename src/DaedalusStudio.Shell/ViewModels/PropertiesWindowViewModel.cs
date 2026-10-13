@@ -4,6 +4,7 @@ using System.Windows.Input;
 using DaedalusStudio.Projects.Protocol;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Workbench.Projects;
+using DaedalusStudio.Workbench.Localization;
 
 namespace DaedalusStudio.Shell.ViewModels;
 
@@ -466,14 +467,14 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var name = await _shell.Dialogs.InputAsync("Add Metadata", $"The metadata's name for {System.IO.Path.GetFileName(path)}.", string.Empty,
+        var name = await _shell.Dialogs.InputAsync(Localizer.Get("msg.propertiesWindowViewModel.addMetadata", "Add Metadata"), Localizer.Format("msg.propertiesWindowViewModel.theMetadatasNameFor", "The metadata's name for {0}.", System.IO.Path.GetFileName(path)), string.Empty,
             n => n.Length == 0 || !n.All(c => char.IsLetterOrDigit(c) || c is '_' or '-') || !char.IsLetter(n[0]) ? "Use letters, digits, '_' and '-', starting with a letter." : null).ConfigureAwait(true);
         if (name is null)
         {
             return;
         }
 
-        var value = await _shell.Dialogs.InputAsync("Add Metadata", $"The value of {name}.", string.Empty).ConfigureAwait(true);
+        var value = await _shell.Dialogs.InputAsync(Localizer.Get("msg.propertiesWindowViewModel.addMetadata", "Add Metadata"), Localizer.Format("msg.propertiesWindowViewModel.theValueOf", "The value of {0}.", name), string.Empty).ConfigureAwait(true);
         if (value is not null)
         {
             await SetAsync(project, path, null, name, value).ConfigureAwait(true);
