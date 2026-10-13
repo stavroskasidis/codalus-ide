@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using DaedalusStudio.Projects.Protocol;
+using DaedalusStudio.Workbench.FileSystem;
 
 namespace DaedalusStudio.Workbench.Build;
 
@@ -118,6 +119,33 @@ public static class LaunchSettings
         {
             error = $"{path}: {ex.Message}";
             return [];
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Read"/> through the file system that holds <paramref name="path"/>: a remote window's files are the
+    /// server's (M21), under a root that doesn't exist here.
+    /// </summary>
+    public static async Task<(IReadOnlyList<LaunchProfile> Profiles, string? Error)> ReadAsync(string? path, CancellationToken cancellationToken)
+    {
+        if (path is null || FileSystems.For(path) is not { IsRemote: true } provider)
+        {
+            var local = Read(path, out var error);
+            return (local, error);
+        }
+
+        try
+        {
+            if (!(await provider.StatAsync(path, cancellationToken).ConfigureAwait(false)).Exists)
+            {
+                return ([], null);
+            }
+
+            return (Parse(Encoding.UTF8.GetString(await provider.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false))), null);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return ([], $"{path}: {ex.Message}");
         }
     }
 

@@ -298,7 +298,7 @@ public sealed class RunService : IDisposable
     public async Task<(RunInfo Info, IReadOnlyList<LaunchProfile> Profiles, string? Error)> GetProfilesAsync(string projectPath, CancellationToken cancellationToken)
     {
         var info = await _solutions.GetRunInfoAsync(projectPath, cancellationToken).ConfigureAwait(false);
-        var profiles = LaunchSettings.Read(info.LaunchSettings, out var error);
+        var (profiles, error) = await LaunchSettings.ReadAsync(info.LaunchSettings, cancellationToken).ConfigureAwait(false);
         return (info, profiles, error);
     }
 

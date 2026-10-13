@@ -137,9 +137,13 @@ public sealed class RemoteServerTests
             changed.TrySetResult();
         }))
         {
-            await Task.Delay(300, Timeout()); // the watch is set up asynchronously
-            await File.WriteAllTextAsync(Path.Combine(folder, "sub", "b.txt"), "outside", Timeout());
-            await changed.Task.WaitAsync(Timeout());
+            // The watch is set up asynchronously (slowly under load, FSEvents on macOS): write until it sees one.
+            var timeout = Timeout();
+            for (var attempt = 0; !changed.Task.IsCompleted; attempt++)
+            {
+                await File.WriteAllTextAsync(Path.Combine(folder, "sub", "b.txt"), "outside " + attempt, timeout);
+                await Task.WhenAny(changed.Task, Task.Delay(500, timeout));
+            }
         }
 
         lock (changes)
@@ -407,7 +411,8 @@ public sealed class RemoteServerTests
             Assert.EndsWith("/.daedalus-server/" + version, installed.Folder, StringComparison.Ordinal);
             Assert.False(installed.SelfContained);
             Assert.NotNull(installed.Platform);
-            Assert.Equal(target is WslTarget, installed.WslDistribution is not null);
+            // The fake ssh runs here: inside WSL (Linux validation from Windows) that is a WSL distribution too.
+            Assert.Equal(target is WslTarget || Environment.GetEnvironmentVariable("WSL_DISTRO_NAME") is { Length: > 0 }, installed.WslDistribution is not null);
 
             // Again: the checksum there matches, nothing is copied.
             Assert.False((await bundle.EnsureAsync(target, null, Timeout(300))).Copied);

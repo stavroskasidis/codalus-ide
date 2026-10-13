@@ -28,6 +28,13 @@ public sealed class RemoteShellTests
         typeof(RemoteShellTests).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
             .Cast<System.Reflection.AssemblyMetadataAttribute>().Single(a => a.Key == "DaedalusConfiguration").Value!, "net10.0", "daedalus-server.dll");
 
+    /// <summary>
+    /// A folder as the server's programs see it: macOS's temp folder is under the <c>/var</c> link, and the debugger
+    /// and the program's working directory name <c>/private/var</c>.
+    /// </summary>
+    private static string Resolved(string folder) =>
+        OperatingSystem.IsMacOS() && (folder.StartsWith("/var/", StringComparison.Ordinal) || folder.StartsWith("/tmp/", StringComparison.Ordinal)) ? "/private" + folder : folder;
+
     private static async Task<RemoteSession> ConnectAsync(ShellFixture f)
     {
         var options = new RemoteSessionOptions(RemoteTargetSpec.Parse("local")!, ShellInfo.Version, f.Shell.Paths.Cache)
@@ -47,7 +54,7 @@ public sealed class RemoteShellTests
     public async Task A_remote_window_opens_edits_completes_builds_runs_and_forwards_ports_through_the_server()
     {
         await using var f = ShellFixture.Create();
-        var folder = f.CopySample("BuildAndRun");
+        var folder = Resolved(f.CopySample("BuildAndRun"));
         var remote = await ConnectAsync(f);
         var local = remote.Map.ToLocal(folder); // the window's name for it
         Assert.Equal(OperatingSystem.IsWindows(), remote.Map.IsIdentity);
@@ -161,7 +168,7 @@ public sealed class RemoteShellTests
     {
         Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
         await using var f = ShellFixture.Create();
-        var folder = f.CopySample("BuildAndRun");
+        var folder = Resolved(f.CopySample("BuildAndRun"));
         var remote = await ConnectAsync(f);
         var local = remote.Map.ToLocal(folder);
         f.Shell.Trust.Trust(Path.GetDirectoryName(local)!);

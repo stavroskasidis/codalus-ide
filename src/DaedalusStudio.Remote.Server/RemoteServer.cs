@@ -301,15 +301,29 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
         // Output arrives on the PTY's reader thread: queued, so the channel gets it in order without blocking that thread.
         var output = System.Threading.Channels.Channel.CreateUnbounded<byte[]>(new System.Threading.Channels.UnboundedChannelOptions { SingleReader = true });
         terminal.Output += data => output.Writer.TryWrite(data.ToArray());
-        terminal.Exited += code =>
+        var exitHandled = 0;
+        void OnExited(int code)
         {
+            if (Interlocked.Exchange(ref exitHandled, 1) != 0)
+            {
+                return;
+            }
+
             output.Writer.TryComplete();
             _ = Task.Run(async () =>
             {
                 _terminals.TryRemove(p.Channel, out _);
                 await Notify(RemoteMethods.Exited, new ExitedParams(p.Channel, code), Json.ExitedParams).ConfigureAwait(false);
             });
-        };
+        }
+
+        terminal.Exited += OnExited;
+
+        // A quick program can exit before the handler is attached (its output is kept for the first handler, its exit isn't).
+        if (terminal.ExitCode is { } exitCode)
+        {
+            OnExited(exitCode);
+        }
         _ = Task.Run(async () =>
         {
             try
