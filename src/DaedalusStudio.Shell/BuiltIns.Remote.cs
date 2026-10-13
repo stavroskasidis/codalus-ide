@@ -66,7 +66,7 @@ internal static partial class BuiltIns
             // In the menu tree (M34a): File ▸ Open ▸ Remote Window…, and Close Remote Connection with the other closes.
             Item(FileOpenMenu, "remote.open", "2-remote", 5) with { Title = "Remote Window…" },
             Item(MenuLocations.MenuBar("file"), "remote.close", "2-close", 6, "remoteConnected"),
-            Item(OtherWindowsMenu, "remote.ports", "windows", AlphabeticalOrder("Ports")),
+            Item(OtherWindowsMenu, "remote.ports", "windows", AlphabeticalOrder("Forwarded Ports")),
         ]);
     }
 }
