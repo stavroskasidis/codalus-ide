@@ -344,7 +344,16 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
             await Task.Delay(500, TestContext.Current.CancellationToken);
             Assert.False(process.HasExited);
             await _diagnostics.ResumeAsync(process.Id, Timeout());
-            Assert.StartsWith("CpuBound ", await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken), StringComparison.Ordinal);
+            // The program's first line; a slow resume (a loaded machine) lets the runtime print its "configured to pause
+            // during startup" banner first, on the same stdout.
+            string? line;
+            do
+            {
+                line = await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+            }
+            while (line is not null && !line.StartsWith("CpuBound ", StringComparison.Ordinal) && (line.Length == 0 || line.Contains("Diagnostics IPC", StringComparison.Ordinal) || line.StartsWith("The runtime has been configured", StringComparison.Ordinal)));
+
+            Assert.StartsWith("CpuBound ", line, StringComparison.Ordinal);
             await process.WaitForExitAsync(Timeout());
 
             await exited.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
