@@ -230,6 +230,46 @@ public sealed class TestExplorerViewModel : ObservableObject
         Refresh();
     }
 
+    private IReadOnlyList<TestEnvironment> _environments = [];
+    private TestEnvironment? _environment;
+
+    /// <summary>Where tests run (M21b): here, or an environment of <c>testenvironments.json</c>.</summary>
+    public IReadOnlyList<string> EnvironmentNames => ["Local", .. _environments.Select(e => e.Name)];
+
+    public bool HasEnvironments => _environments.Count > 0;
+
+    public int EnvironmentIndex
+    {
+        get => _environment is null ? 0 : _environments.ToList().FindIndex(e => e.Name == _environment.Name) + 1;
+        set
+        {
+            var environment = value <= 0 || value > _environments.Count ? null : _environments[value - 1];
+            if (environment?.Name != _environment?.Name)
+            {
+                _environment = environment;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>The environment tests run in; null for this machine.</summary>
+    public TestEnvironment? Environment => _environment;
+
+    public void SetEnvironments(IReadOnlyList<TestEnvironment> environments)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => SetEnvironments(environments));
+            return;
+        }
+
+        _environments = environments;
+        _environment = environments.FirstOrDefault(e => e.Name == _environment?.Name);
+        OnPropertyChanged(nameof(EnvironmentNames));
+        OnPropertyChanged(nameof(HasEnvironments));
+        OnPropertyChanged(nameof(EnvironmentIndex));
+    }
+
     public IReadOnlyList<string> PlaylistNames => ["All Tests", .. _playlists.Select(p => p.Name)];
 
     public int PlaylistIndex

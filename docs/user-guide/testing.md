@@ -103,6 +103,34 @@ A playlist is a saved set of tests: pick it in the Test Explorer's playlist box 
 - **Import**: Test → Import Test Results (TRX)… shows a results file (from CI, for example) on the matching tests.
   Tests are matched by name; the notification says how many matched.
 
+## Running tests in another environment
+
+A `testenvironments.json` next to the solution (or in a folder above it, up to the repository's root) lists other places to run the tests: a WSL distribution, a Docker image, or a machine over SSH. It's the format other IDEs read:
+
+```json
+{
+  "version": "1",
+  "environments": [
+    { "name": "Ubuntu", "type": "wsl", "wslDistribution": "Ubuntu" },
+    { "name": ".NET SDK image", "type": "docker", "dockerImage": "mcr.microsoft.com/dotnet/sdk:10.0" },
+    { "name": "Build server", "type": "ssh", "remoteUri": "ssh://me@buildbox:22" }
+  ]
+}
+```
+
+The Test Explorer's toolbar then has a **target environment** list: **Local** and the environments. With an environment picked, running tests works like this:
+1. The test projects are built here.
+2. Their output runs there with `dotnet test <assembly>`, filtered to the tests you picked.
+3. The results come back onto the tree, and the run shows in the history under the environment's name.
+4. The **Tests** output channel shows what ran there.
+
+Each type of environment:
+- **WSL** runs the output through `/mnt/<drive>/`. Windows only.
+- **Docker** starts a container from the image (or builds `dockerFile`, relative to the solution) with your docker or podman. It mounts the solution's folder at `/workspaces/<folder>` and keeps the container for the next run. The project outputs must be under the solution's folder.
+- **SSH** copies each project's output to `~/.daedalus-tests/` there, with your own `ssh` and its keys or agent.
+
+The environment needs the .NET SDK (`dotnet test`) and the runtime of the test projects' framework; `~/.dotnet` is used when it's there. Debugging and coverage run locally only, and Run Failed Tests, Run Tests That Have Not Run and Repeat Last Run run locally too.
+
 ## Create Unit Tests
 
 Right-click a class or method → **Create Unit Tests…** (also in the Test menu). Pick a test project; Daedalus writes
@@ -134,4 +162,4 @@ DiffTools.AddTool(
 
 - .NET Framework test projects are not supported (Daedalus targets .NET 8 and later).
 - Tests that run in child processes they start themselves can't be debugged.
-- Remote test environments (WSL, containers, SSH) come with remote development; Live Unit Testing is not planned.
+- Tests in other environments run but can't be debugged or covered there yet. Live Unit Testing is not planned.

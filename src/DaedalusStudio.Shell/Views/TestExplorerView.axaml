@@ -41,6 +41,7 @@
       <Border Classes="toolbarSeparator" />
       <ComboBox Classes="toolbar" ItemsSource="{Binding Groupings}" SelectedIndex="{Binding GroupingIndex}" Width="176" ToolTip.Tip="{l:T testExplorer.groupBy}" AutomationProperties.Name="{l:T testExplorer.groupBy}" />
       <ComboBox Classes="toolbar" ItemsSource="{Binding PlaylistNames}" SelectedIndex="{Binding PlaylistIndex}" Width="110" ToolTip.Tip="{l:T testExplorer.playlist}" AutomationProperties.Name="{l:T testExplorer.playlist}" />
+      <ComboBox Classes="toolbar" ItemsSource="{Binding EnvironmentNames}" SelectedIndex="{Binding EnvironmentIndex}" Width="120" IsVisible="{Binding HasEnvironments}" ToolTip.Tip="{l:T testExplorer.targetEnvironment}" AutomationProperties.Name="{l:T testExplorer.targetEnvironment}" />
     </controls:ToolbarPanel>
     <!-- The search box has its own row, the pane's width. -->
     <TextBox x:Name="Filter" DockPanel.Dock="Top" Margin="4,0,4,4" Text="{Binding FilterText}" PlaceholderText="{l:T testExplorer.searchTestExplorer}"

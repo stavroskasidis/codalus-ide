@@ -423,7 +423,7 @@ public sealed class RemoteServerTests
     // ------------------------------------------------------------------ installing on a target (stand-ins)
 
     /// <summary>A target that stands in for another machine: WSL on Windows, a fake ssh running here on Linux and macOS.</summary>
-    private static RemoteTarget? StandIn(string folder)
+    internal static RemoteTarget? StandIn(string folder)
     {
         if (OperatingSystem.IsWindows())
         {

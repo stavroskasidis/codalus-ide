@@ -119,10 +119,12 @@ public sealed partial class ShellHost
         {
             _testsActivated = false;
             TestExplorer.SetPlaylists([]);
+            TestExplorer.SetEnvironments([]);
             return;
         }
 
         TestExplorer.SetPlaylists(Playlists.Load(PlaylistAnchor(solution)));
+        LoadTestEnvironments();
         if (Solutions.Projects.Values.Any(p => p.IsTestProject))
         {
             ActivateTestProviders();
@@ -191,6 +193,12 @@ public sealed partial class ShellHost
         if (Tests.IsRunning)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.testing.testsAreAlreadyRunning", "Tests are already running."), TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        if (TestExplorer.Environment is { } environment)
+        {
+            await RunTestsInEnvironmentAsync(environment, kind, keys).ConfigureAwait(true);
             return;
         }
 

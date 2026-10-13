@@ -145,8 +145,8 @@ public static class DevContainers
             : localFolder;
 
     /// <summary>The <c>run</c> of the container: the folder at the workspace, kept alive, labelled with the folder.</summary>
-    public static ContainerRunSpec RunSpec(DevContainerConfig config, string localFolder, ContainerEngine engine, string image) =>
-        new(ContainerName(localFolder), image)
+    public static ContainerRunSpec RunSpec(DevContainerConfig config, string localFolder, ContainerEngine engine, string image, string? name = null) =>
+        new(name ?? ContainerName(localFolder), image)
         {
             Labels = [new(FolderLabel, Path.TrimEndingDirectorySeparator(Path.GetFullPath(localFolder))), new(ContainerEngine.ProjectLabel, Path.TrimEndingDirectorySeparator(Path.GetFullPath(localFolder)))],
             Mounts = [$"{HostPath(localFolder, engine)}:{config.WorkspaceFolder}", .. config.Mounts.Where(m => !m.Contains("type=", StringComparison.Ordinal))],
@@ -161,9 +161,9 @@ public static class DevContainers
     /// Brings the folder's dev container up: running already (reused), stopped (started), or created (the image built
     /// or used, the container run, <c>postCreateCommand</c> run in it). Returns the container's name.
     /// </summary>
-    public static async Task<string> UpAsync(ContainerEngine engine, DevContainerConfig config, string localFolder, Action<string> log, CancellationToken cancellationToken)
+    public static async Task<string> UpAsync(ContainerEngine engine, DevContainerConfig config, string localFolder, Action<string> log, CancellationToken cancellationToken, string? name = null)
     {
-        var name = ContainerName(localFolder);
+        name ??= ContainerName(localFolder);
         if (await engine.InspectAsync(name, cancellationToken).ConfigureAwait(false) is { } existing)
         {
             if (!existing.State.Equals("running", StringComparison.OrdinalIgnoreCase))
@@ -197,7 +197,7 @@ public static class DevContainers
         }
 
         log($"Creating the dev container {name} from {image}…");
-        var run = await engine.RunAsync(ContainerEngine.RunArguments(RunSpec(config, localFolder, engine, image)), cancellationToken, log).ConfigureAwait(false);
+        var run = await engine.RunAsync(ContainerEngine.RunArguments(RunSpec(config, localFolder, engine, image, name)), cancellationToken, log).ConfigureAwait(false);
         if (!run.Succeeded)
         {
             throw new InvalidOperationException($"The dev container didn't start: {run.Message}");

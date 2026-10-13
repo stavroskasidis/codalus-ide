@@ -558,6 +558,49 @@ public sealed class TestService : ITestSink, IDisposable
         }
     }
 
+    /// <summary>
+    /// A run outside the controllers (a remote test environment, M21b): the service is running until the returned
+    /// handle is disposed, and <see cref="Cancel"/> cancels its token.
+    /// </summary>
+    public (IDisposable Handle, CancellationToken Token) BeginExternalRun()
+    {
+        var cancellation = new CancellationTokenSource();
+        lock (_gate)
+        {
+            _current = cancellation;
+        }
+
+        Interlocked.Increment(ref _activeRequests);
+        RunningChanged?.Invoke(this, EventArgs.Empty);
+        return (new ExternalRun(() =>
+        {
+            lock (_gate)
+            {
+                if (_current == cancellation)
+                {
+                    _current = null;
+                }
+            }
+
+            cancellation.Dispose();
+            Interlocked.Decrement(ref _activeRequests);
+            RunningChanged?.Invoke(this, EventArgs.Empty);
+        }), cancellation.Token);
+    }
+
+    private sealed class ExternalRun(Action end) : IDisposable
+    {
+        private int _ended;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _ended, 1) == 0)
+            {
+                end();
+            }
+        }
+    }
+
     /// <summary>Asks every controller that can refresh to reload its tests.</summary>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
