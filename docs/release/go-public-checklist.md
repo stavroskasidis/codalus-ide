@@ -35,7 +35,7 @@ The history audit (section 6) found no secrets. A few tracked files are working 
 
 ## 3. CI
 
-No workflow edit is needed. Once the repository is public: `ci.yml` runs the full Windows/macOS/Linux matrix on every push and pull request; `benchmarks.yml` runs its regression gate on every push to `master`; `nightly.yml` runs every night `develop` changed; `release.yml` runs on every push to `master`; and both add Linux ARM64 (GitHub's ARM64 runners are free for public repositories).
+No workflow edit is needed. Once the repository is public: `ci.yml` runs the full Windows/macOS/Linux matrix on every push and pull request; `benchmarks.yml` runs its regression gate on every push to `master`; `release.yml` makes a nightly every night `develop` changed and a stable release on every push to `master`, and both kinds add Linux ARM64 (GitHub's ARM64 runners are free for public repositories).
 - [ ] Dispatch `ci.yml` once after the flip and check that all three jobs are green.
 - [ ] Dispatch `benchmarks.yml` a few times to build up a baseline for its `compare` gate (it compares with the median of earlier runs).
 
@@ -48,7 +48,7 @@ No workflow edit is needed. Once the repository is public: `ci.yml` runs the ful
 
 The workflows build, test and publish (ADR 0028); a dispatch without the dry run publishes.
 - [ ] Check `VERSION` on `develop` (the first private releases were `v0.1.0` and its nightlies).
-- [ ] Dispatch `nightly.yml` once with the dry run off, and install the nightly on each platform.
+- [ ] Dispatch `release.yml` (kind `nightly`) once with the dry run off, and install the nightly on each platform.
 - [ ] Merge `develop` into `master`: `release.yml` publishes `vX.Y.Z`, the apt and dnf repositories follow, and `develop` moves to the next minor version.
 - [ ] Run `benchmarks check` on the reference machine (ADR 0002) and attach the summary.
 - [ ] Submit the winget manifests (`winget-manifests-<version>.zip` in the release) to `microsoft/winget-pkgs`: they point at the release's `Setup.exe`.

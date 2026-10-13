@@ -1,19 +1,29 @@
 name: Release
 
-# A stable release from master (M31, ADR 0028, D20/D21): every merge from develop (and every hotfix) publishes
-# v<VERSION>, the version in the VERSION file. The release fails if that tag exists already. It carries the installers
-# for every platform, the update feeds (M32), the winget manifests and checksums, with notes generated from the commits
-# since the previous stable release. Afterwards develop moves past the released version (and takes in a hotfix).
-# While the repository is private this runs on manual dispatch only; the push trigger switches on by itself once the
-# repository is public. A dry run builds and tests everything and publishes nothing.
+# Releases (M31, ADR 0028, D20/D21), stable and nightly in one workflow; the packages come from packages.yml.
+# - Stable: every merge from develop into master (and every hotfix) publishes v<VERSION>, the version in the VERSION
+#   file; each completed milestone is one (a minor release). The release fails if that tag exists already. It carries
+#   the installers for every platform, the update feeds (M32), the winget manifests and checksums, with notes generated
+#   from the commits since the previous stable release. Afterwards develop moves past the released version (and takes
+#   in a hotfix), the AUR package is pushed, and the site with the apt and dnf repositories is deployed.
+# - Nightly: develop at night, when it changed since the last nightly, published as a GitHub prerelease
+#   v<VERSION>-nightly.<date>.<run> with the commits since the previous nightly as its notes. The newest 14 are kept.
+# Manual dispatch chooses the kind; a dry run (the default) builds and tests everything and publishes nothing.
 on:
   push:
     branches: [master]
     paths-ignore:
       - "docs/**"
       - "**/*.md"
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
     inputs:
+      kind:
+        description: stable (from master) or nightly (from develop)
+        type: choice
+        options: [nightly, stable]
+        default: nightly
       dry_run:
         description: Build and test without publishing
         type: boolean
@@ -23,25 +33,28 @@ permissions:
   contents: write
 
 concurrency:
-  group: release
+  group: release-${{ github.event_name == 'schedule' && 'nightly' || github.event_name == 'push' && 'stable' || inputs.kind }}
   cancel-in-progress: false
 
 env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  KIND: ${{ github.event_name == 'schedule' && 'nightly' || github.event_name == 'push' && 'stable' || inputs.kind }}
 
 jobs:
   plan:
     if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-latest
     outputs:
+      kind: ${{ steps.plan.outputs.kind }}
       version: ${{ steps.plan.outputs.version }}
       ref: ${{ steps.plan.outputs.ref }}
       previous: ${{ steps.plan.outputs.previous }}
+      build: ${{ steps.plan.outputs.build }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: master
+          ref: ${{ env.KIND == 'stable' && 'master' || 'develop' }}
           fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
@@ -49,28 +62,42 @@ jobs:
       - id: plan
         shell: bash
         run: |
-          version="$(dotnet run --project eng/Codalus.Release -- version stable)"
-          dotnet run --project eng/Codalus.Release -- check-tag "$version"
-          previous="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          ref="$(git rev-parse HEAD)"
+          build=true
+          if [[ "$KIND" == "stable" ]]; then
+            version="$(dotnet run --project eng/Codalus.Release -- version stable)"
+            dotnet run --project eng/Codalus.Release -- check-tag "$version"
+            previous="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          else
+            previous="$(git tag --list 'v*-nightly.*' --sort=-v:refname | head -n 1)"
+            # The schedule skips a night when develop hasn't changed since the last nightly.
+            if [[ "${{ github.event_name }}" == "schedule" && -n "$previous" && "$(git rev-parse "$previous^{commit}")" == "$ref" ]]; then
+              build=false
+            fi
+            version="$(dotnet run --project eng/Codalus.Release -- version nightly --run "${{ github.run_number }}")"
+          fi
+          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "previous=$previous" >> "$GITHUB_OUTPUT"
-          echo "Release $version from $(git rev-parse --short HEAD) (previous: ${previous:-none})" >> "$GITHUB_STEP_SUMMARY"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "Release ($KIND) $version from $(git rev-parse --short HEAD) (previous: ${previous:-none}; build: $build)" >> "$GITHUB_STEP_SUMMARY"
       # The tag comes first, while the commit is still the branch's head: the workflow token may create a tag only on
       # a commit whose workflow files match the default branch's (otherwise it needs the workflows permission, which
       # it can't have), and the branch may move on with workflow changes during the build. A failed run removes it.
       - name: Tag the commit
-        if: ${{ !inputs.dry_run }}
+        if: steps.plan.outputs.build == 'true' && !inputs.dry_run
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v${{ steps.plan.outputs.version }}" -f sha="${{ steps.plan.outputs.ref }}" > /dev/null
 
   packages:
     needs: plan
+    if: needs.plan.outputs.build == 'true'
     uses: ./.github/workflows/packages.yml
     with:
       version: ${{ needs.plan.outputs.version }}
-      kind: stable
+      kind: ${{ needs.plan.outputs.kind }}
       ref: ${{ needs.plan.outputs.ref }}
       previous: ${{ needs.plan.outputs.previous }}
       arm64: ${{ !github.event.repository.private }}
@@ -78,7 +105,7 @@ jobs:
 
   publish:
     needs: [plan, packages]
-    if: ${{ !inputs.dry_run }}
+    if: needs.plan.outputs.build == 'true' && !inputs.dry_run
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,8 +123,17 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash eng/publish-release.sh stable "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.ref }}" downloaded
+        run: bash eng/publish-release.sh "${{ needs.plan.outputs.kind }}" "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.ref }}" downloaded
+      - name: Keep the newest 14 nightlies
+        if: needs.plan.outputs.kind == 'nightly'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- '-nightly\.' | sort -rV | tail -n +15 \
+            | while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done
       - name: Move develop past the release (and take in a hotfix)
+        if: needs.plan.outputs.kind == 'stable'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -121,7 +157,7 @@ jobs:
 
   untag:
     needs: [plan, packages, publish]
-    if: ${{ failure() && !inputs.dry_run }}
+    if: failure() && needs.plan.outputs.build == 'true' && !inputs.dry_run
     runs-on: ubuntu-latest
     steps:
       - name: Remove the tag of a release that was not published
@@ -133,6 +169,7 @@ jobs:
 
   aur:
     needs: [plan, publish]
+    if: needs.plan.outputs.kind == 'stable'
     runs-on: ubuntu-latest
     steps:
       - name: Push the AUR package (codalus-bin)
@@ -162,10 +199,10 @@ jobs:
           git diff --cached --quiet || { git commit -q -m "Update to $VERSION"; git push -q origin HEAD:master; }
 
   linux-repositories:
-    needs: publish
-    # GitHub Pages needs a public repository on the free plan (D20): until then the apt and dnf repositories wait.
-    if: ${{ !github.event.repository.private }}
-    # Only master deploys the site (the github-pages environment allows master), and a release runs on master.
+    needs: [plan, publish]
+    # GitHub Pages needs a public repository on the free plan (D20). Only master deploys the site (the github-pages
+    # environment allows master), so only a stable release, which runs on master, does; nightlies don't.
+    if: needs.plan.outputs.kind == 'stable' && !github.event.repository.private
     # A called workflow gets no more than its caller grants, and GitHub checks that before any job runs.
     permissions:
       contents: read

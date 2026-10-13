@@ -1,7 +1,7 @@
 name: Packages
 
 # Builds the installers on every platform (eng/package.sh), installs them the way users would and smoke-tests the
-# installed app (eng/smoke-test.sh --packages), then uploads them. Called by nightly.yml and release.yml (M31, ADR 0028).
+# installed app (eng/smoke-test.sh --packages), then uploads them. Called by release.yml for stable releases and nightlies (M31, ADR 0028).
 on:
   workflow_call:
     inputs:

@@ -45,6 +45,7 @@ M7 shipped hand-run packages (ADR 0009): a portable zip, a `.dmg`, a `.tar.gz`, 
 - `release.yml` runs on every push to `master` and on manual dispatch. It publishes `vX.Y.Z` as the latest release, then merges `master` into `develop` (a hotfix) and moves `develop`'s `VERSION` past the release.
 - Both publish through `eng/publish-release.sh`: every platform's files, one `SHA256SUMS.txt`, the winget manifests (stable) and the generated notes.
 - Both have a dry run (the dispatch default): build and test everything, publish nothing.
+- *Update 2026-10-13:* the two are one workflow, `release.yml`, whose trigger picks the kind (the schedule a nightly, a push to `master` a stable release, manual dispatch either); the jobs they shared are written once.
 - While the repository is private, the schedule and the push trigger do nothing (a job condition on `github.event.repository.private`), so they switch on by themselves when it goes public.
 
 **apt and dnf repositories** (D18). `linux-repos.yml` rebuilds them after each release, from the newest stable release and the newest nightly:

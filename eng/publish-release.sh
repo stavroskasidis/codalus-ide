@@ -28,7 +28,7 @@ if [ "$kind" = stable ] && [ -f "$assets/codalus-$version-linux-x64.tar.gz" ] &&
 fi
 
 dotnet run --project "$repo/eng/Codalus.Release" -- notes "$kind" "$version" --repo "${GITHUB_REPOSITORY:-stavroskasidis/codalus-ide}" --to "$ref" > "$work/notes.md"
-# The workflow tagged the commit when it started (see nightly.yml): the release goes on that tag.
+# The workflow tagged the commit when it started (see release.yml): the release goes on that tag.
 flags=(--verify-tag --title "Codalus IDE $version" --notes-file "$work/notes.md")
 if [ "$kind" = nightly ]; then flags+=(--prerelease); else flags+=(--latest); fi
 

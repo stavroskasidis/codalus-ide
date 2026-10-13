@@ -922,7 +922,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - Versions stay 0.x until the maintainer says otherwise, even after the repository goes public (D14).
 - **Builds** (D27): Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. The Linux ARM64 packages use GitHub's ARM64 Linux runners.
 - **Workflows:**
-  - **`nightly.yml`** runs once a night from `develop` if `develop` changed since the last nightly, and on manual dispatch.
+  - **Nightlies** run once a night from `develop` if `develop` changed since the last nightly, and on manual dispatch (`release.yml` with kind `nightly`; a workflow of its own, `nightly.yml`, until 2026-10-13).
     - It builds the installers on three OSes and smoke-tests the installed packages.
     - It publishes a GitHub prerelease, `v0.2.0-nightly.20261011.1`, with the commits since the previous nightly as its notes.
     - Only the last 14 nightlies are kept.
