@@ -174,8 +174,15 @@ public sealed class ErrorListViewModel : ObservableObject
     {
         var active = _activePath();
         var projects = _solutions.Projects.Values.ToList();
+        // A project that lists the file, else the one whose folder holds it (the deepest: a test project's files weren't
+        // matched, M34d's review).
         string ProjectOf(string path) =>
-            projects.FirstOrDefault(p => p.Items.Any(i => SolutionService.PathComparer.Equals(i.Path, path)))?.Name ?? string.Empty;
+            (projects.FirstOrDefault(p => p.Items.Any(i => SolutionService.PathComparer.Equals(i.Path, path)))
+             ?? projects.Where(p => Path.GetDirectoryName(p.Path) is { } folder && IsUnder(path, folder)).MaxBy(p => p.Path.Length))?.Name ?? string.Empty;
+
+        static bool IsUnder(string path, string folder) =>
+            path.Length > folder.Length && path.StartsWith(folder, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)
+            && path[folder.Length] is '/' or '\\';
 
         bool InScope(string path) => !_currentDocumentOnly || SolutionService.PathComparer.Equals(path, active);
         var intelliSense = _sourceFilter == 1
