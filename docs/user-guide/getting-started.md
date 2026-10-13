@@ -20,7 +20,7 @@ Every release on the [releases page](https://github.com/stavroskasidis/daedalus-
 | macOS | `daedalus-studio-<version>-osx-arm64.pkg` | Open it and choose to install for you (`~/Applications`) or for every user (`/Applications`). The app updates itself. |
 | macOS | `daedalus-studio-<version>-osx-arm64.app.zip` | The app on its own: unzip it and move it where you like. |
 | Linux | `.AppImage` | `chmod +x` the file and run it. It updates itself. |
-| Linux | `.deb` and `.rpm` | Install from our apt or dnf repository, so that they update with the system (the instructions are on the [packages page](https://stavroskasidis.github.io/daedalus-studio/), once the repository is public), or install the file: `sudo apt install ./daedalus-studio-<version>-linux-x64.deb`, `sudo dnf install ./daedalus-studio-<version>-linux-x64.rpm`. |
+| Linux | `.deb` and `.rpm` | Install from our apt or dnf repository, so that they update with the system (the instructions are on the [packages page](https://stavroskasidis.com/daedalus-studio/)), or install the file: `sudo apt install ./daedalus-studio-<version>-linux-x64.deb`, `sudo dnf install ./daedalus-studio-<version>-linux-x64.rpm`. |
 | Linux | `.tar.gz` | Extract it and run `daedalus-studio/daedalus`. |
 
 **The installers aren't code-signed yet**, so the first start asks for confirmation:

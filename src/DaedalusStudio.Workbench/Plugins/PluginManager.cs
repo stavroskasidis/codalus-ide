@@ -59,7 +59,8 @@ public static class PluginHostLocator
 /// </summary>
 public sealed class PluginManager : IAsyncDisposable
 {
-    private static readonly TimeSpan s_activationTimeout = TimeSpan.FromSeconds(10);
+    // A guard against a hung plugin, generous enough for a first activation on a busy machine (a build, a CI runner).
+    private static readonly TimeSpan s_activationTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan s_treeTimeout = TimeSpan.FromSeconds(5);
 
     private readonly WorkbenchServices _workbench;
