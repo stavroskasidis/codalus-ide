@@ -35,6 +35,17 @@ To build from source, see the repository's README.
 
 ## First start
 
+**The start window** asks "What would you like to do?" when Daedalus Studio starts without a solution:
+- **Recent list**: on the left, your recent solutions, projects and folders, grouped as Pinned, Today, Yesterday, This week, This month and Older.
+  - Search them with `Alt+S`; `Enter` opens the first match.
+  - Pin one with its pin button.
+  - Right-click for Open in New Window, Copy Path and Remove from List (`Delete` removes the selected entry).
+  - An entry whose files are gone offers to leave the list.
+- **Actions**: on the right, Create a new project, Open a project or solution, Open a folder, and Clone a repository.
+- **Continue without code** (or `Esc`) opens the empty IDE.
+
+File → Start Window brings it back. Environment → On Startup (`workbench.startup`) can open an empty window or the last solution instead.
+
 The Start page opens with **Get Started**: choose a color theme and a keyboard scheme (Default, VS Code, ReSharper or Emacs), import your VS Code settings and key bindings or a file exported from another machine, and adjust Fonts and Colors. **Done** hides these steps (Help → Get Started shows them again). Below them are the common actions, recent solutions and a tip that runs what it describes.
 
 1. **Open a solution**: File → Open Solution or Project (`Ctrl+Shift+O`). Pick a `.sln`, `.slnx` or a project file (`.csproj`). You can also pass one on the command line: `daedalus path/to/App.sln`.

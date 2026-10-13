@@ -91,6 +91,7 @@ internal static partial class BuiltIns
             Item(FileOpenMenu, "workbench.openFolder", "1-open", "Folder…"),
             Item(File, "git.clone", "1-open"),
             Item(File, "workbench.openRecent", "1-open"),
+            Item(File, "workbench.showStartWindow", "1-open"),
             Item(File, "workbench.closeActiveDocument", "2-close"),
             Item(File, "workbench.closeSolution", "2-close"),
             Item(File, "file.save", "3-save"),

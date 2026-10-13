@@ -97,6 +97,15 @@ internal static partial class BuiltIns
                 Description = "Settings that stay on this machine (the sync settings always do), such as paths that differ between machines.",
                 Scope = SettingScope.User,
             },
+            SettingDescriptor.Create(ShellHost.StartupSetting, "\"startWindow\"", SettingType.String, shell) with
+            {
+                Title = "On Startup",
+                Category = "Environment",
+                Description = "What Daedalus Studio shows when it starts without a solution: the start window (recent solutions, create, open, clone), an empty window, or the last solution.",
+                Enum = ["startWindow", "empty", "lastSolution"],
+                EnumDescriptions = ["The start window", "An empty window", "The last solution"],
+                Scope = SettingScope.User,
+            },
             SettingDescriptor.Create(KeyboardSchemeSetting, "\"default\"", SettingType.String, shell) with
             {
                 Title = "Keyboard Scheme",
@@ -250,6 +259,7 @@ internal static partial class BuiltIns
         Add("update.whatsNew", "What's New", "Help", Ui(() => shell.ShowWhatsNew()));
         Add("update.restart", "Restart to Update", "Help", Ui(shell.RestartToUpdate));
         Add("workbench.restart", "Restart", "File", Ui(shell.Restart));
+        Add("workbench.showStartWindow", "Start Window", "File", Ui(shell.ShowStartWindow));
         Add("settingsSync.turnOn", "Settings Sync: Turn On…", "Preferences", Ui(() => shell.TurnOnSettingsSyncAsync()));
         Add("settingsSync.syncNow", "Settings Sync: Sync Now", "Preferences", Ui(() => shell.SyncSettingsAsync()));
         Add("settingsSync.turnOff", "Settings Sync: Turn Off", "Preferences", Ui(shell.TurnOffSettingsSyncAsync));

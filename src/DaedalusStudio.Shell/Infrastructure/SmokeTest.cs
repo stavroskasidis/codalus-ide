@@ -224,6 +224,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => tree.Roots.Count > 0, "the Start page has items").ConfigureAwait(true);
         }).ConfigureAwait(true);
 
+        // M38: the start window, with the recent list the run has so far (the website's screenshot).
+        await StepAsync("shell.startWindow", "M38", "The start window lists recent solutions and closes on Continue without code", async () =>
+        {
+            shell.Recent.Add(Path.Combine(samples, "BuildAndRun", "BuildAndRun.slnx"));
+            shell.ShowStartWindow();
+            await WaitAsync(() => shell.IsStartWindowOpen && shell.StartWindowModel is { IsEmpty: false }, "the start window opens with its recent list").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("start-window.png", Avalonia.Controls.TopLevel.GetTopLevel(Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                ? desktop.Windows.OfType<Views.StartWindow>().FirstOrDefault()
+                : null));
+            shell.StartWindowModel!.ContinueCommand.Execute(null);
+            await WaitAsync(() => !shell.IsStartWindowOpen, "Continue without code closes it").ConfigureAwait(true);
+        }).ConfigureAwait(true);
+
         // M23: personalization in the shipped app; the screenshots are the website's.
         await StepAsync("shell.personalization", "M23", "Fonts and Colors, Customize, and a profile switched to and back", async () =>
         {
@@ -2797,17 +2811,18 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     // ------------------------------------------------------------------ report
 
-    private void Screenshot(string name)
+    private void Screenshot(string name, Avalonia.Controls.TopLevel? of = null)
     {
         try
         {
-            Visual root = window; // up to the host, with the decorations Avalonia draws
+            var target = of ?? window;
+            Visual root = target; // up to the host, with the decorations Avalonia draws
             while (root.GetVisualParent() is { } parent)
             {
                 root = parent;
             }
 
-            var scaling = window.RenderScaling;
+            var scaling = target.RenderScaling;
             var size = new PixelSize(Math.Max(1, (int)(root.Bounds.Width * scaling)), Math.Max(1, (int)(root.Bounds.Height * scaling)));
             using var bitmap = new RenderTargetBitmap(size, new Vector(96 * scaling, 96 * scaling));
             bitmap.Render(root);

@@ -342,6 +342,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
+        OnStartupWithoutSolution();
     }
 
     private Infrastructure.SingleInstance? _instance;

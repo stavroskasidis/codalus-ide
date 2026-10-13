@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DaedalusStudio.Projects.Protocol;
 using DaedalusStudio.Workbench.Projects;
 
@@ -112,5 +113,51 @@ public sealed class TrustAndRecentsTests : IDisposable
         recent.Add(Path.Combine(_dir, "a.sln"));
 
         Assert.Equal(["a.sln", "b.slnx"], new RecentSolutions(Path.Combine(_dir, "recent.json")).Items.Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public void Recent_entries_keep_their_times_and_pins_group_by_date_and_read_the_older_file()
+    {
+        // Wednesday 14 October 2026, noon.
+        var now = new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
+        var clock = now;
+        var file = Path.Combine(_dir, "recent.json");
+        var recent = new RecentSolutions(file, () => clock);
+        void Opened(string name, TimeSpan ago)
+        {
+            clock = now - ago;
+            recent.Add(Path.Combine(_dir, name));
+        }
+
+        Opened("older.sln", TimeSpan.FromDays(60));
+        Opened("month.sln", TimeSpan.FromDays(10)); // 4 October: this month, last week
+        Opened("week.sln", TimeSpan.FromDays(2)); // Monday
+        Opened("yesterday.sln", TimeSpan.FromDays(1));
+        Opened("today.sln", TimeSpan.FromHours(1));
+        recent.SetPinned(Path.Combine(_dir, "older.sln"), true);
+
+        var reloaded = new RecentSolutions(file, () => now);
+        var groups = RecentSolutions.Group(reloaded.Entries, now);
+        Assert.Equal(["Pinned", "Today", "Yesterday", "This week", "This month"], groups.Select(g => g.Group));
+        Assert.Equal("older.sln", groups[0].Entries.Single().Name);
+        Assert.Equal(now - TimeSpan.FromHours(1), reloaded.Entries[0].LastOpened);
+
+        // Opening a pinned entry keeps it pinned; the others are capped, the pinned stay.
+        reloaded.Add(Path.Combine(_dir, "older.sln"));
+        Assert.True(reloaded.Entries[0].Pinned);
+        for (var i = 0; i < RecentSolutions.Max + 5; i++)
+        {
+            reloaded.Add(Path.Combine(_dir, $"many{i}.sln"));
+        }
+
+        Assert.Equal(RecentSolutions.Max + 1, reloaded.Entries.Count);
+        Assert.Contains(reloaded.Entries, e => e is { Pinned: true, Name: "older.sln" });
+
+        // A file from before M38 (paths only): the same order, no times, nothing pinned.
+        var old = Path.Combine(_dir, "old-recent.json");
+        File.WriteAllText(old, $$"""{ "solutions": [ {{JsonSerializer.Serialize(Path.Combine(_dir, "x.sln"))}}, {{JsonSerializer.Serialize(Path.Combine(_dir, "y.sln"))}} ] }""");
+        var migrated = new RecentSolutions(old);
+        Assert.Equal(["x.sln", "y.sln"], migrated.Items.Select(Path.GetFileName));
+        Assert.Equal("Older", RecentSolutions.Group(migrated.Entries, now).Single().Group);
     }
 }

@@ -69,16 +69,40 @@ public sealed class TrustStore(string file)
     }
 }
 
-/// <summary>Recently opened solutions, most recent first (File → Open Recent, the Start page).</summary>
-public sealed class RecentSolutions(string file)
+/// <summary>A recent solution, project or folder (M38): when it was last opened, and whether the user pinned it.</summary>
+public sealed record RecentEntry(string Path, DateTimeOffset LastOpened, bool Pinned)
 {
-    private const int Max = 15;
+    /// <summary>The solution's or folder's name.</summary>
+    public string Name => System.IO.Path.GetFileName(System.IO.Path.TrimEndingDirectorySeparator(Path));
+}
+
+/// <summary>
+/// Recently opened solutions, projects and folders, most recent first (File → Open Recent, the start window, the Start
+/// page). Pinned entries stay however many others are opened; the others keep the newest <see cref="Max"/>.
+/// </summary>
+public sealed class RecentSolutions(string file, Func<DateTimeOffset>? clock = null)
+{
+    public const int Max = 50;
     private readonly Lock _gate = new();
-    private List<string>? _items;
+    private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.Now);
+    private List<RecentEntry>? _entries;
 
     public event EventHandler? Changed;
 
+    /// <summary>The paths, most recently opened first.</summary>
     public IReadOnlyList<string> Items
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. Load().Select(e => e.Path)];
+            }
+        }
+    }
+
+    /// <summary>The entries, most recently opened first.</summary>
+    public IReadOnlyList<RecentEntry> Entries
     {
         get
         {
@@ -92,29 +116,71 @@ public sealed class RecentSolutions(string file)
     public void Add(string path) => Update(list =>
     {
         var full = Path.GetFullPath(path);
-        list.RemoveAll(p => SolutionService.PathComparer.Equals(p, full));
-        list.Insert(0, full);
-        if (list.Count > Max)
+        var pinned = list.Any(e => SolutionService.PathComparer.Equals(e.Path, full) && e.Pinned);
+        list.RemoveAll(e => SolutionService.PathComparer.Equals(e.Path, full));
+        list.Insert(0, new RecentEntry(full, _clock(), pinned));
+        var unpinned = list.Where(e => !e.Pinned).Skip(Max).ToList();
+        list.RemoveAll(unpinned.Contains);
+    });
+
+    public void Remove(string path) => Update(list => list.RemoveAll(e => SolutionService.PathComparer.Equals(e.Path, Path.GetFullPath(path))));
+
+    public void SetPinned(string path, bool pinned) => Update(list =>
+    {
+        var index = list.FindIndex(e => SolutionService.PathComparer.Equals(e.Path, Path.GetFullPath(path)));
+        if (index >= 0)
         {
-            list.RemoveRange(Max, list.Count - Max);
+            list[index] = list[index] with { Pinned = pinned };
         }
     });
 
-    public void Remove(string path) => Update(list => list.RemoveAll(p => SolutionService.PathComparer.Equals(p, Path.GetFullPath(path))));
+    /// <summary>The entries the start window shows, in groups: Pinned, Today, Yesterday, This week, This month, Older.</summary>
+    public static IReadOnlyList<(string Group, IReadOnlyList<RecentEntry> Entries)> Group(IEnumerable<RecentEntry> entries, DateTimeOffset now)
+    {
+        var today = now.Date;
+        var weekStart = today.AddDays(-(((int)today.DayOfWeek + 6) % 7)); // weeks start on Monday
+        string GroupOf(RecentEntry e)
+        {
+            var day = e.LastOpened.ToOffset(now.Offset).Date;
+            return e.Pinned ? "Pinned"
+                : day >= today ? "Today"
+                : day == today.AddDays(-1) ? "Yesterday"
+                : day >= weekStart ? "This week"
+                : day.Year == today.Year && day.Month == today.Month ? "This month"
+                : "Older";
+        }
 
-    private void Update(Action<List<string>> change)
+        string[] order = ["Pinned", "Today", "Yesterday", "This week", "This month", "Older"];
+        return [.. entries.GroupBy(GroupOf).OrderBy(g => Array.IndexOf(order, g.Key))
+            .Select(g => (g.Key, (IReadOnlyList<RecentEntry>)[.. g.OrderByDescending(e => e.LastOpened)]))];
+    }
+
+    private void Update(Action<List<RecentEntry>> change)
     {
         lock (_gate)
         {
             var list = Load();
             change(list);
-            StateFile.Write(file, new RecentState { Solutions = [.. list] }, StateJsonContext.Default.RecentState);
+            StateFile.Write(file, new RecentState { Entries = [.. list.Select(e => new RecentStateEntry(e.Path, e.LastOpened, e.Pinned ? true : null))] }, StateJsonContext.Default.RecentState);
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private List<string> Load() => _items ??= [.. StateFile.Read(file, StateJsonContext.Default.RecentState)?.Solutions ?? []];
+    /// <summary>The file's entries; an older file has only paths, which keep their order and no time ("Older").</summary>
+    private List<RecentEntry> Load()
+    {
+        if (_entries is not null)
+        {
+            return _entries;
+        }
+
+        var state = StateFile.Read(file, StateJsonContext.Default.RecentState);
+        _entries = state?.Entries is { } entries
+            ? [.. entries.Select(e => new RecentEntry(e.Path, e.LastOpened, e.Pinned == true))]
+            : [.. (state?.Solutions ?? []).Select(p => new RecentEntry(p, DateTimeOffset.MinValue, false))];
+        return _entries;
+    }
 }
 
 internal sealed record TrustState
@@ -124,10 +190,15 @@ internal sealed record TrustState
 
 internal sealed record RecentState
 {
+    /// <summary>The paths, as files before M38 wrote them.</summary>
     public IReadOnlyList<string>? Solutions { get; init; }
+
+    public IReadOnlyList<RecentStateEntry>? Entries { get; init; }
 }
 
-[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+internal sealed record RecentStateEntry(string Path, DateTimeOffset LastOpened, bool? Pinned);
+
+[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(TrustState))]
 [JsonSerializable(typeof(RecentState))]
 internal sealed partial class StateJsonContext : JsonSerializerContext;

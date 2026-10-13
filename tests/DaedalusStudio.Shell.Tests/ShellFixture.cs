@@ -53,6 +53,7 @@ internal sealed class ShellFixture : IAsyncDisposable
         {
             UserDataDir = userData,
             WatchFiles = false,
+            StartWindow = false,
             BuiltInPluginsDir = builtInPlugins ?? PluginBin("DaedalusStudio.Plugins.Welcome"),
         });
         Window = new MainWindow(Shell);

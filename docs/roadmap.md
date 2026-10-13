@@ -54,7 +54,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
 | M34 | UI polish | M34a at checkpoint ([m34a](checkpoints/m34a.md)), pulled forward by the maintainer on 2026-10-12: Fluent UI System Icons compiled at build time (D24) with command-family colors, every menu a tree like a classic IDE's, output windows that follow new output, the minimap docked at the editor's edge, completion keys per OS (the editor's key bindings now match a focused editor), then Material Icon Theme's file, folder and project icons, a flat navigation bar and themed outlining markers; M34b at checkpoint ([m34b](checkpoints/m34b.md)), pulled forward the same day: batched project loading in the language host, no false errors while loading, a parallel background pass, parallel design-time builds and their persisted cache, restore on open only when needed; M34d at checkpoint ([m34d](checkpoints/m34d.md)), 2026-10-13: spacing, size and type tokens, document tabs and captions in every state (selected without the focus, pinned, preview on the right, colored by project), toolbars that overflow instead of wrapping, High Contrast's black menus, the gallery in the smoke test, clipped-text and WCAG AA contrast tests, the UI guide; M34c at checkpoint ([m34c](checkpoints/m34c.md)), 2026-10-13: the language host keeps diagnostics and reference assemblies between sessions, open documents compile against unchanged projects' assemblies, and CS4014 the build wouldn't report is left out (ADR 0049); the rest of M34 stays the last milestone before Visual Basic and F# |
 | M37 | Environment setup | planned (2026-10-13): detect a missing or mismatched .NET SDK, git and the optional tools, Help → Check Environment, and install them with the user's consent (winget, the official installers, `dotnet-install`, the distribution's package manager); later MAUI's workloads |
-| M38 | Start window | planned (2026-10-13): "What would you like to do?" at startup, with recent solutions (search, pinned, grouped by date) and Create, Open, Open Folder and Clone |
+| M38 | Start window | at checkpoint ([m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
 | M35 | Visual Basic | planned, always second to last |
 | M36 | F# | planned, always last |
 
@@ -1761,7 +1761,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 **Tests.** The window's model: grouping by date (with a fixed clock), search, pin, remove and missing entries. A headless shell test opens the IDE without a solution, sees the window, and opens a recent solution from it. Screenshots in light and dark for the static site.
 
-**Status.** Planned (added by the maintainer on 2026-10-13).
+**Status.** At checkpoint: [m38](checkpoints/m38.md).
 
 ---
 

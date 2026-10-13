@@ -373,6 +373,7 @@ public static class CommandIcons
         ["workbench.openOptions"] = new("gear"),
         ["welcome.show"] = new("home"),
         ["workbench.restart"] = new("restart"),
+        ["workbench.showStartWindow"] = new("home"),
         ["workbench.customize"] = new("tools"),
         ["settingsSync.turnOn"] = new("sync"),
         ["settingsSync.syncNow"] = new("sync"),

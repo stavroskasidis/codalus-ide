@@ -1,0 +1,101 @@
+<Window xmlns:l="using:DaedalusStudio.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+        xmlns:controls="using:DaedalusStudio.Shell.Controls"
+        x:Class="DaedalusStudio.Shell.Views.StartWindow"
+        x:DataType="vm:StartWindowViewModel"
+        Title="{l:T start.daedalusStudio}"
+        Width="1040" Height="680" MinWidth="640" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Shell.Background}">
+  <Window.Styles>
+    <Style Selector="Button.pin">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="Button.pin.pinned, ListBoxItem:pointerover Button.pin, ListBoxItem:selected Button.pin">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Button.startAction">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="8,6" />
+    </Style>
+  </Window.Styles>
+  <Grid ColumnDefinitions="*,300" RowDefinitions="Auto,*,Auto" Margin="24,18,24,16">
+    <TextBlock Grid.ColumnSpan="2" Classes="heading" FontSize="22" Text="{l:T start.whatWouldYouLikeToDo}" Margin="0,0,0,14" />
+
+    <DockPanel Grid.Row="1" Margin="0,0,24,0">
+      <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Text="{Binding Search}" PlaceholderText="{l:T start.searchRecentAltS}"
+               AutomationProperties.Name="{l:T start.searchRecent}" Margin="0,0,0,8" />
+      <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" TextWrapping="Wrap" Margin="4,8" />
+      <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent"
+               AutomationProperties.Name="{l:T start.recentSolutionsProjectsAndFolders}">
+        <ListBox.DataTemplates>
+          <DataTemplate DataType="vm:StartGroupRowViewModel">
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Margin="0,8,0,2" />
+          </DataTemplate>
+          <DataTemplate DataType="vm:StartEntryRowViewModel">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" Background="Transparent">
+              <Grid.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="{l:T start.open}" Command="{Binding OpenCommand}" />
+                  <MenuItem Header="{l:T start.openInNewWindow}" Command="{Binding OpenInNewWindowCommand}" />
+                  <MenuItem Header="{Binding PinTitle}" Command="{Binding PinCommand}" />
+                  <MenuItem Header="{l:T start.copyPath}" Command="{Binding CopyPathCommand}" />
+                  <MenuItem Header="{l:T start.removeFromList}" Command="{Binding RemoveCommand}" />
+                </ContextMenu>
+              </Grid.ContextMenu>
+              <controls:Icon Kind="{Binding Icon}" Width="16" Height="16" VerticalAlignment="Top" Margin="0,3,10,0" />
+              <StackPanel Grid.Column="1" Spacing="1">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted" Text="{Binding Folder}" FontSize="{DynamicResource Shell.FontSize.Small}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <TextBlock Grid.Column="2" Classes="muted" Text="{Binding Opened}" VerticalAlignment="Center" Margin="12,0" />
+              <Button Grid.Column="3" Classes="toolbar pin" Classes.pinned="{Binding IsPinned}" Command="{Binding PinCommand}"
+                      ToolTip.Tip="{Binding PinTitle}" AutomationProperties.Name="{Binding PinTitle}">
+                <controls:Icon Kind="pin" />
+              </Button>
+            </Grid>
+          </DataTemplate>
+        </ListBox.DataTemplates>
+      </ListBox>
+    </DockPanel>
+
+    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="2">
+      <TextBlock Text="{l:T start.getStarted}" FontWeight="SemiBold" Margin="8,0,0,6" />
+      <Button Classes="startAction" Command="{Binding CreateProjectCommand}" AutomationProperties.Name="{l:T start.createANewProject}">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+          <ContentControl x:Name="CreateIcon" Grid.RowSpan="2" Margin="0,2,10,0" VerticalAlignment="Top" />
+          <TextBlock Grid.Column="1" Text="{l:T start.createANewProject}" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{l:T start.chooseATemplateWithItsOptions}" />
+        </Grid>
+      </Button>
+      <Button Classes="startAction" Command="{Binding OpenSolutionCommand}" AutomationProperties.Name="{l:T start.openAProjectOrSolution}">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+          <ContentControl x:Name="OpenIcon" Grid.RowSpan="2" Margin="0,2,10,0" VerticalAlignment="Top" />
+          <TextBlock Grid.Column="1" Text="{l:T start.openAProjectOrSolution}" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{l:T start.aSlnSlnxOrProjectFile}" />
+        </Grid>
+      </Button>
+      <Button Classes="startAction" Command="{Binding OpenFolderCommand}" AutomationProperties.Name="{l:T start.openAFolder}">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+          <ContentControl x:Name="FolderIcon" Grid.RowSpan="2" Margin="0,2,10,0" VerticalAlignment="Top" />
+          <TextBlock Grid.Column="1" Text="{l:T start.openAFolder}" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{l:T start.anyFolderWithOrWithoutA}" />
+        </Grid>
+      </Button>
+      <Button Classes="startAction" Command="{Binding CloneCommand}" AutomationProperties.Name="{l:T start.cloneARepository}">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+          <ContentControl x:Name="CloneIcon" Grid.RowSpan="2" Margin="0,2,10,0" VerticalAlignment="Top" />
+          <TextBlock Grid.Column="1" Text="{l:T start.cloneARepository}" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" TextWrapping="Wrap" Text="{l:T start.fromGithubAzureDevopsGitlabOr}" />
+        </Grid>
+      </Button>
+    </StackPanel>
+
+    <Button Grid.Row="2" Grid.Column="1" Classes="link" HorizontalAlignment="Right" Margin="0,12,0,0"
+            Command="{Binding ContinueCommand}" Content="{l:T start.continueWithoutCode}" />
+  </Grid>
+</Window>

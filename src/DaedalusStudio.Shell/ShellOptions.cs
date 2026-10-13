@@ -28,6 +28,9 @@ public sealed record ShellOptions
 
     public string? UserDataDir { get; init; }
 
+    /// <summary>Whether the start window may open when nothing else is to be opened (M38; tests turn it off).</summary>
+    public bool StartWindow { get; init; } = true;
+
     /// <summary>The display language for this run (M23b), over the setting.</summary>
     public string? Locale { get; init; }
 
