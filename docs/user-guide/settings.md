@@ -40,7 +40,7 @@ Tools → Color Theme (`Ctrl+K Ctrl+T`): Blue, Light, Dark, High Contrast, or Fo
 - **The editor**: selection, current line, highlighted references, matching braces, find matches, and the error, warning, info and hint squiggles.
 - **The window**: its background, text, borders, accents and the other main colors. The setting below takes any of the theme's `Shell.*` resource keys.
 
-Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For All Themes** applies it to every theme instead of the current one, and Reset goes back to the theme's color. The colors are saved in VS Code's shape, so they can also be edited as JSON:
+Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme** applies it to every theme instead of the current one, and Reset goes back to the theme's color. The colors are saved in VS Code's shape, so they can also be edited as JSON:
 - `editor.tokenColorCustomizations`: `{ "comments": "#6A9955", "semanticTokenColors": { "property": "#9CDCFE" } }`.
 - `workbench.colorCustomizations`: `{ "editor.selectionBackground": "#26496980" }`, alpha last.
 - Put either under `"[Dark]"` (a theme's name) to apply to that theme only.
