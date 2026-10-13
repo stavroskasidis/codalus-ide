@@ -135,16 +135,17 @@
     <!--
       Each server is its own `dotnet publish`, with its own restore phase: in one MSBuild call (or one build's
       project instances) Publish reads the assets file as it was before that call's restore, and a restore for one
-      platform replaces another's (NETSDK1047, found on the Mac).
+      platform replaces another's (NETSDK1047, found on the Mac). Each gets the shell's version, which the client
+      checks against the server's: a release build stamps both (`-p:Version`), a local build has both end in -dev.
     -->
     <PropertyGroup>
       <_CodalusDotnet>$(DOTNET_HOST_PATH)</_CodalusDotnet>
       <_CodalusDotnet Condition="'$(_CodalusDotnet)' == ''">dotnet</_CodalusDotnet>
       <_CodalusServerProject>@(RemoteServer->'%(FullPath)')</_CodalusServerProject>
     </PropertyGroup>
-    <Exec Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusServerProject)&quot; -c $(Configuration) --no-self-contained -p:UseAppHost=false -o &quot;$(_CodalusRemoteDir)server&quot; -nologo" />
+    <Exec Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusServerProject)&quot; -c $(Configuration) --no-self-contained -p:UseAppHost=false -p:Version=$(Version) -o &quot;$(_CodalusRemoteDir)server&quot; -nologo" />
     <Exec Condition="'@(_CodalusServerRid)' != ''"
-          Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusServerProject)&quot; -c $(Configuration) -r %(_CodalusServerRid.Identity) --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o &quot;$(_CodalusRemoteDir)%(_CodalusServerRid.Identity)&quot; -nologo" />
+          Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusServerProject)&quot; -c $(Configuration) -r %(_CodalusServerRid.Identity) --self-contained -p:PublishSingleFile=true -p:Version=$(Version) -p:PublishTrimmed=true -p:DebugType=none -o &quot;$(_CodalusRemoteDir)%(_CodalusServerRid.Identity)&quot; -nologo" />
   </Target>
   <Target Name="CodalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
