@@ -11,6 +11,7 @@ using DaedalusStudio.Shell.Views;
 using DaedalusStudio.Workbench.Build;
 using DaedalusStudio.Workbench.Commands;
 using DaedalusStudio.Workbench.Debugging;
+using DaedalusStudio.Workbench.FileSystem;
 using DaedalusStudio.Workbench.Output;
 using DaedalusStudio.Workbench.StatusBar;
 
@@ -518,6 +519,18 @@ public sealed partial class ShellHost
         });
     }
 
+    private static async Task<bool> SourceExistsAsync(string path)
+    {
+        try
+        {
+            return await FileSystems.FileExistsAsync(path, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
     private async Task OnDebugStoppedAsync(StopInfo stop)
     {
         if (!_debugWindowsShown)
@@ -536,7 +549,8 @@ public sealed partial class ShellHost
             StatusBar.ShowMessage($"Exception thrown: {type}: {message}", TimeSpan.FromSeconds(10));
         }
 
-        if (Debugger.SelectedFrame is { Source.Path: { } path } frame && File.Exists(path))
+        // Through the file system that holds it: a remote window's sources are the server's (M21).
+        if (Debugger.SelectedFrame is { Source.Path: { } path } frame && await SourceExistsAsync(path).ConfigureAwait(true))
         {
             await OpenFileAsync(path, preview: false, new Position(Math.Max(0, frame.Line - 1), Math.Max(0, frame.Column - 1))).ConfigureAwait(true);
         }

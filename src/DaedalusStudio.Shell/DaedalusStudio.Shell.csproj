@@ -131,12 +131,19 @@
     <ItemGroup>
       <_DaedalusServerRid Include="$(DaedalusServerRids)" />
     </ItemGroup>
-    <MSBuild Projects="@(RemoteServer)" Targets="Restore;Publish"
-             Properties="Configuration=$(Configuration);UseAppHost=false;SelfContained=false;PublishDir=$(_DaedalusRemoteDir)server\"
-             RemoveProperties="RuntimeIdentifier;PublishAot;PublishReadyToRun;_IsPublishing" />
-    <MSBuild Projects="@(RemoteServer)" Targets="Restore;Publish" Condition="'@(_DaedalusServerRid)' != ''"
-             Properties="Configuration=$(Configuration);RuntimeIdentifier=%(_DaedalusServerRid.Identity);SelfContained=true;PublishSingleFile=true;PublishTrimmed=true;CopyOutputSymbolsToPublishDirectory=false;PublishDir=$(_DaedalusRemoteDir)%(_DaedalusServerRid.Identity)\"
-             RemoveProperties="PublishAot;PublishReadyToRun;_IsPublishing" />
+    <!--
+      Each server is its own `dotnet publish`, with its own restore phase: in one MSBuild call (or one build's
+      project instances) Publish reads the assets file as it was before that call's restore, and a restore for one
+      platform replaces another's (NETSDK1047, found on the Mac).
+    -->
+    <PropertyGroup>
+      <_DaedalusDotnet>$(DOTNET_HOST_PATH)</_DaedalusDotnet>
+      <_DaedalusDotnet Condition="'$(_DaedalusDotnet)' == ''">dotnet</_DaedalusDotnet>
+      <_DaedalusServerProject>@(RemoteServer->'%(FullPath)')</_DaedalusServerProject>
+    </PropertyGroup>
+    <Exec Command="&quot;$(_DaedalusDotnet)&quot; publish &quot;$(_DaedalusServerProject)&quot; -c $(Configuration) --no-self-contained -p:UseAppHost=false -o &quot;$(_DaedalusRemoteDir)server&quot; -nologo" />
+    <Exec Condition="'@(_DaedalusServerRid)' != ''"
+          Command="&quot;$(_DaedalusDotnet)&quot; publish &quot;$(_DaedalusServerProject)&quot; -c $(Configuration) -r %(_DaedalusServerRid.Identity) --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o &quot;$(_DaedalusRemoteDir)%(_DaedalusServerRid.Identity)&quot; -nologo" />
   </Target>
   <Target Name="DaedalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>

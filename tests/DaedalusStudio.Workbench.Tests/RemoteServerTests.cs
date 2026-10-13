@@ -420,7 +420,7 @@ public sealed class RemoteServerTests
             // It runs there (the framework-dependent build, on the target's dotnet).
             var (program, arguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder));
             await using var connection = await RemoteConnection.StartAsync(new RemoteTransport(program, arguments, "stand-in"), ServerVersion, Timeout(120));
-            Assert.Equal("linux", connection.Server.Os);
+            Assert.Equal(target is WslTarget || OperatingSystem.IsLinux() ? "linux" : "macos", connection.Server.Os); // the fake ssh runs it here
             Assert.Equal(installed.Folder + "/server/", connection.Server.ServerFolder.Replace('\\', '/'));
         }
         finally

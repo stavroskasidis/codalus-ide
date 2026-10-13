@@ -181,7 +181,14 @@ public sealed class RemoteShellTests
         f.Shell.Debugger.Breakpoints.Toggle(program, line);
         f.Shell.Run("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 300);
-        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } c2 && c2.Model.Path == program && c.CurrentDebugLine() == line, seconds: 30);
+        try
+        {
+            await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } c2 && c2.Model.Path == program && c.CurrentDebugLine() == line, seconds: 30);
+        }
+        catch (Xunit.Sdk.TrueException)
+        {
+            Assert.Fail($"Expected {program}:{line}, the active editor is {f.Shell.ActiveEditor?.Model.Path}:{f.Shell.ActiveEditor?.Controller?.CurrentDebugLine()}.\n{f.Shell.DebugLog.GetText()}");
+        }
         Assert.Contains(remote.Display, f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
         await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "args"), seconds: 30);
 

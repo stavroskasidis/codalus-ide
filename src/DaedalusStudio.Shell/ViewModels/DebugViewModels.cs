@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using DaedalusStudio.Debugging;
 using DaedalusStudio.Shell.Infrastructure;
 using DaedalusStudio.Workbench.Debugging;
+using DaedalusStudio.Workbench.FileSystem;
 using DaedalusStudio.Workbench.Output;
 
 namespace DaedalusStudio.Shell.ViewModels;
@@ -470,10 +471,25 @@ public sealed class CallStackViewModel : ObservableObject
     public async Task ActivateAsync(FrameRow row)
     {
         _debugger.SelectFrame(row.Frame);
-        if (row.Frame.Source?.Path is { } path && File.Exists(path))
+        if (row.Frame.Source?.Path is not { } path)
         {
-            await _open(path, row.Frame.Line).ConfigureAwait(true);
+            return;
         }
+
+        try
+        {
+            // Through the file system that holds it: a remote window's sources are the server's (M21).
+            if (!await FileSystems.FileExistsAsync(path, CancellationToken.None).ConfigureAwait(true))
+            {
+                return;
+            }
+        }
+        catch (IOException)
+        {
+            return;
+        }
+
+        await _open(path, row.Frame.Line).ConfigureAwait(true);
     }
 }
 
