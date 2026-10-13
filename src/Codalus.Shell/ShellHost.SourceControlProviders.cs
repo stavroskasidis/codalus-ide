@@ -41,7 +41,7 @@ public sealed partial class ShellHost
             (_, _) =>
             {
                 Ui.Post(() => Layout.ShowToolWindow(SourceControlProvidersWindow, focus: true));
-                return Task.FromResult<object?>(null);
+                return Task.FromResult<System.Text.Json.JsonElement?>(null);
             });
         Workbench.Menus.Add([new MenuItemRule(BuiltIns.OtherWindowsMenu, ShowSourceControlProvidersCommand, ContributionSource.Shell) { Group = "windows", Order = BuiltIns.AlphabeticalOrder("Source Control Providers") }]);
     }
