@@ -310,7 +310,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             _diagnostics.DocumentChanged(path);
         }
 
-        _diagnostics.ScheduleBackground();
+        _diagnostics.ScheduleBackground(_workspace.Loading ? null : TimeSpan.FromMilliseconds(200));
         _xamlDiagnostics.OthersChanged();
     }
 

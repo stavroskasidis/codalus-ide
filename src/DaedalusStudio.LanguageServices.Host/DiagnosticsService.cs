@@ -223,8 +223,11 @@ internal sealed class DiagnosticsService : IDisposable
 
     // ------------------------------------------------------------------ the whole solution
 
-    /// <summary>Restarts the background pass after a quiet period.</summary>
-    public void ScheduleBackground()
+    /// <summary>
+    /// Restarts the background pass after a quiet period: <paramref name="delay"/>, or 1.5 s, which lets a burst of edits
+    /// settle (projects that finished loading need no such wait, M34c).
+    /// </summary>
+    public void ScheduleBackground(TimeSpan? delay = null)
     {
         CancellationToken token;
         CancellationTokenSource? previous;
@@ -241,7 +244,7 @@ internal sealed class DiagnosticsService : IDisposable
         {
             try
             {
-                await Task.Delay(s_backgroundDelay, token).ConfigureAwait(false);
+                await Task.Delay(delay ?? s_backgroundDelay, token).ConfigureAwait(false);
                 await BackgroundPassAsync(token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
