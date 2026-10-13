@@ -31,4 +31,7 @@ Plugins carry their own translations next to their manifests (`daedalus-plugin.n
 - `daedalus --locale qps-plocm` does the same right to left.
 - `--screenshot <png>` captures the window.
 
-**Still in English** (M23c): most views' text, notifications and other messages built in code, and plugins' own runtime text (the plugin API has no translation call yet).
+- **Messages built in code** (notifications, status bar messages, dialogs) use `Localizer.Get("msg.<file>.<words>", "English")` or `Localizer.Format(…, "English {0}", value)`. `python3 eng/localize-cs.py <file.cs>…` converts those calls' literals, and the catalogue test reads their English into `en.json`.
+- **Plugins** translate their own text with `context.Localize("key", "English")`, from their `nls` files ([Plugins](plugins.md#translating-the-manifest)).
+
+**Still in English** (after M23c): text that view models build for display (labels such as "No documents open" or "0 Errors"), quick pick entries, and log lines. The pseudo-languages show them.

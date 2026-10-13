@@ -29,7 +29,7 @@ public sealed class WelcomePlugin : IDaedalusPlugin
     public Task ActivateAsync(IPluginContext context, CancellationToken cancellationToken)
     {
         _context = context;
-        _tree = new StartTree(context.Commands, context.Settings);
+        _tree = new StartTree(context.Commands, context.Settings, context.Localize);
         _tree.ShowOnStartup = context.Settings.GetValue(ShowOnStartupSetting, true);
         context.Subscriptions.Add(context.Window.RegisterTreeDataProvider(ViewId, _tree));
         context.Subscriptions.Add(context.Commands.Register("welcome.show", async (_, ct) =>
@@ -41,8 +41,8 @@ public sealed class WelcomePlugin : IDaedalusPlugin
         context.Subscriptions.Add(context.Commands.Register("welcome.chooseKeyboardScheme", async (_, ct) =>
         {
             var current = context.Settings.GetValue(KeyboardSchemeSetting, "default");
-            var items = KeyboardSchemes.Select(s => new QuickPickItem(s.Title) { Description = s.Id == current ? "current" : null, Detail = s.Description, Tag = s.Id }).ToList();
-            if (await context.Window.ShowQuickPickAsync(items, "Choose a keyboard scheme", ct).ConfigureAwait(false) is { Tag: string id })
+            var items = KeyboardSchemes.Select(s => new QuickPickItem(context.Localize($"scheme.{s.Id}", s.Title)) { Description = s.Id == current ? context.Localize("start.current", "current") : null, Detail = context.Localize($"scheme.{s.Id}.description", s.Description), Tag = s.Id }).ToList();
+            if (await context.Window.ShowQuickPickAsync(items, context.Localize("start.chooseAKeyboardScheme2", "Choose a keyboard scheme"), ct).ConfigureAwait(false) is { Tag: string id })
             {
                 await context.Commands.ExecuteAsync("workbench.setSetting", ct, KeyboardSchemeSetting, id).ConfigureAwait(false);
             }
@@ -72,8 +72,8 @@ public sealed class WelcomePlugin : IDaedalusPlugin
         }));
 
         var status = context.Window.CreateStatusBarItem("start", StatusBarAlignment.Left, priority: -100);
-        status.Text = "$(home) Start";
-        status.Tooltip = "Show the Start page";
+        status.Text = "$(home) " + context.Localize("start.start", "Start");
+        status.Tooltip = context.Localize("start.showTheStartPage", "Show the Start page");
         status.Command = "welcome.show";
         status.Show();
         context.Subscriptions.Add(status);
@@ -142,8 +142,10 @@ internal sealed record StartNode(string Label)
 /// The Start tree: Get Started (until done), groups of actions, the recent solutions (from the shell's
 /// <c>workbench.getRecentSolutions</c>) and a tip.
 /// </summary>
-internal sealed class StartTree(ICommands? commands, ISettings? settings = null) : ITreeDataProvider<StartNode>
+internal sealed class StartTree(ICommands? commands, ISettings? settings = null, Func<string, string, string>? localize = null) : ITreeDataProvider<StartNode>
 {
+    private string T(string key, string english) => localize?.Invoke(key, english) ?? english;
+
     private const string Repository = "https://github.com/stavroskasidis/daedalus-studio";
 
     /// <summary>Tips: each runs what it describes.</summary>
@@ -221,55 +223,56 @@ internal sealed class StartTree(ICommands? commands, ISettings? settings = null)
     {
         var theme = settings?.GetValue(WelcomePlugin.ThemeSetting, "followSystem") ?? "followSystem";
         var scheme = settings?.GetValue(WelcomePlugin.KeyboardSchemeSetting, "default") ?? "default";
-        return Group("Get Started",
-            Action("Choose a Color Theme", "color-mode", "workbench.selectTheme") with { Description = theme == "followSystem" ? "Follow System" : theme },
-            Action("Choose a Keyboard Scheme", "keyboard", "welcome.chooseKeyboardScheme") with
+        return Group(T("start.getStarted", "Get Started"),
+            Action(T("start.chooseAColorTheme", "Choose a Color Theme"), "color-mode", "workbench.selectTheme") with { Description = theme == "followSystem" ? T("start.followSystem", "Follow System") : theme },
+            Action(T("start.chooseAKeyboardScheme", "Choose a Keyboard Scheme"), "keyboard", "welcome.chooseKeyboardScheme") with
             {
                 Description = WelcomePlugin.KeyboardSchemes.FirstOrDefault(s => s.Id == scheme).Title ?? scheme,
-                Tooltip = "Default, VS Code, ReSharper or Emacs keys",
+                Tooltip = T("start.defaultVsCodeResharperOr", "Default, VS Code, ReSharper or Emacs keys"),
             },
-            Action("Import from VS Code…", "download", "workbench.importVsCodeSettings") with { Tooltip = "Settings and key bindings from VS Code's user folder" },
-            Action("Import Settings from a File…", "download", "workbench.importSettings") with { Tooltip = "A file exported with Tools → Export Settings" },
-            Action("Fonts and Colors", "color", "workbench.openFontsAndColors"),
-            Action("Done", "check-circle", "welcome.finishOnboarding") with { Tooltip = "Hide Get Started (Help → Get Started brings it back)" });
+            Action(T("start.importFromVsCode", "Import from VS Code…"), "download", "workbench.importVsCodeSettings") with { Tooltip = T("start.settingsAndKeyBindingsFrom", "Settings and key bindings from VS Code's user folder") },
+            Action(T("start.importSettingsFromAFile", "Import Settings from a File…"), "download", "workbench.importSettings") with { Tooltip = T("start.aFileExportedWithTools", "A file exported with Tools → Export Settings") },
+            Action(T("start.fontsAndColors", "Fonts and Colors"), "color", "workbench.openFontsAndColors"),
+            Action(T("start.done", "Done"), "check-circle", "welcome.finishOnboarding") with { Tooltip = T("start.hideGetStartedHelpGet", "Hide Get Started (Help → Get Started brings it back)") });
     }
 
     private StartNode Tip()
     {
-        var tip = Tips[(DateTime.Today.DayOfYear + TipOffset) % Tips.Count];
-        return Group("Tip",
-            new StartNode(tip.Text) { Icon = "lightbulb", Tooltip = tip.Text, Command = new TreeItemCommand(tip.Command) },
-            Action("Next Tip", "arrow-right", "welcome.nextTip"));
+        var index = (DateTime.Today.DayOfYear + TipOffset) % Tips.Count;
+        var tip = Tips[index];
+        return Group(T("start.tip", "Tip"),
+            new StartNode(T($"tip.{index}", tip.Text)) { Icon = "lightbulb", Tooltip = T($"tip.{index}", tip.Text), Command = new TreeItemCommand(tip.Command) },
+            Action(T("start.nextTip", "Next Tip"), "arrow-right", "welcome.nextTip"));
     }
 
     private IEnumerable<StartNode> Common(IReadOnlyList<StartNode> recent) =>
     [
-        Group("Start",
-            Action("Open Solution or Project…", "folder", "workbench.openSolution"),
-            Action("Show All Commands", "search", "workbench.showCommandPalette"),
-            Action("Open Settings", "gear", "workbench.openSettings"),
-            Action("Keyboard Shortcuts", "keyboard", "workbench.openKeyboardShortcuts"),
-            Action("Select Color Theme", "color-mode", "workbench.selectTheme")),
+        Group(T("start.start", "Start"),
+            Action(T("start.openSolutionOrProject", "Open Solution or Project…"), "folder", "workbench.openSolution"),
+            Action(T("start.showAllCommands", "Show All Commands"), "search", "workbench.showCommandPalette"),
+            Action(T("start.openSettings", "Open Settings"), "gear", "workbench.openSettings"),
+            Action(T("start.keyboardShortcuts", "Keyboard Shortcuts"), "keyboard", "workbench.openKeyboardShortcuts"),
+            Action(T("start.selectColorTheme", "Select Color Theme"), "color-mode", "workbench.selectTheme")),
 
-        Group("Recent", recent.Count > 0
+        Group(T("start.recent", "Recent"), recent.Count > 0
             ? [.. recent]
-            : [new StartNode("No recent solutions yet") { Icon = "history", Tooltip = "Solutions you open will be listed here." }]),
+            : [new StartNode(T("start.noRecentSolutionsYet", "No recent solutions yet")) { Icon = "history", Tooltip = T("start.solutionsYouOpenWillBe", "Solutions you open will be listed here.") }]),
 
         Tip(),
 
-        Group("Plugins",
-            Action("Installed Plugins", "extensions", "workbench.view.plugins"),
-            Action("Open User Plugins Folder", "folder", "workbench.openPluginsFolder")),
+        Group(T("start.plugins", "Plugins"),
+            Action(T("start.installedPlugins", "Installed Plugins"), "extensions", "workbench.view.plugins"),
+            Action(T("start.openUserPluginsFolder", "Open User Plugins Folder"), "folder", "workbench.openPluginsFolder")),
 
-        Group("Learn",
-            Action("Documentation", "book", "workbench.openExternal", Repository + "#readme"),
-            Action("Writing Plugins", "book", "workbench.openExternal", Repository + "/blob/master/docs/plugins.md")),
+        Group(T("start.learn", "Learn"),
+            Action(T("start.documentation", "Documentation"), "book", "workbench.openExternal", Repository + "#readme"),
+            Action(T("start.writingPlugins", "Writing Plugins"), "book", "workbench.openExternal", Repository + "/blob/master/docs/plugins.md")),
 
-        new StartNode("Show Start Page on Startup")
+        new StartNode(T("start.showStartPageOnStartup", "Show Start Page on Startup"))
         {
             Icon = ShowOnStartup ? "check" : "circle",
-            Description = ShowOnStartup ? "On" : "Off",
-            Tooltip = "Toggle whether this page opens when Daedalus Studio starts.",
+            Description = ShowOnStartup ? T("start.on", "On") : T("start.off", "Off"),
+            Tooltip = T("start.toggleWhetherThisPageOpens", "Toggle whether this page opens when Daedalus Studio starts."),
             Command = new TreeItemCommand("welcome.toggleShowOnStartup"),
         },
     ];

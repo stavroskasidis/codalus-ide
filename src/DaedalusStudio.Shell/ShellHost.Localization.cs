@@ -42,6 +42,9 @@ public sealed partial class ShellHost
         locale ??= OperatingSystemLocale();
         Localizer.Load(locale, Catalog);
         Workbench.Context.Set("locale", Localizer.Locale);
+
+        // The plugin hosts (and every process started from here) learn it from the environment: PluginLocalization (API 0.2.9).
+        Environment.SetEnvironmentVariable("DAEDALUS_DISPLAY_LOCALE", Localizer.Locale);
     }
 
     /// <summary>The OS's language when there's a catalogue for it (or its language without the region), else English.</summary>

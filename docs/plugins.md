@@ -75,7 +75,7 @@ The `DaedalusStudio.Plugins.Abstractions` package is not published yet (the repo
 
 ### Translating the manifest
 
-A manifest string that is a whole `%key%` (VS Code's convention) is replaced when the manifest loads. The text comes from `daedalus-plugin.nls.<locale>.json` for the display language (`pt-BR`, then `pt`), else from `daedalus-plugin.nls.json` (English) next to the manifest. Each file is a flat `{ "key": "text" }` object. Titles, descriptions, categories, setting texts and anything else the manifest shows can be translated this way. A key no file has stays as written. Ship the `nls` files next to the manifest; the built-in Welcome plugin does. The display language is the setting `workbench.locale` (or `--locale`); `qps-ploc` shows every replaced string pseudo-translated, so untranslated text stands out.
+A manifest string that is a whole `%key%` (VS Code's convention) is replaced when the manifest loads. The text comes from `daedalus-plugin.nls.<locale>.json` for the display language (`pt-BR`, then `pt`), else from `daedalus-plugin.nls.json` (English) next to the manifest. Each file is a flat `{ "key": "text" }` object. Titles, descriptions, categories, setting texts and anything else the manifest shows can be translated this way. A key no file has stays as written. Ship the `nls` files next to the manifest; the built-in Welcome plugin does. A plugin's own text (tree labels, messages) uses the same files through `context.Localize("key", "English")` (since 0.2.9). The display language is the setting `workbench.locale` (or `--locale`); `qps-ploc` shows every replaced string pseudo-translated, so untranslated text stands out.
 
 ### Contribution points
 
@@ -250,6 +250,10 @@ The built-in GitHub, Azure DevOps and GitLab plugins (`src/Plugins/DaedalusStudi
 Installed plugins live in the user plugins folder (**Tools → Open User Plugins Folder**), one subfolder per plugin.
 
 ## Changelog
+
+### 0.2.9 (M23c)
+
+Additive (plugins built for 0.2.0–0.2.8 keep working): `context.Localize(key, english)` and `context.Localize(key, english, args…)` (`PluginLocalization`) give a plugin's own text in the display language. The text comes from the same `daedalus-plugin.nls.<locale>.json` files as the [manifest's](#translating-the-manifest), else `english`. The display language reaches the plugin host as `DAEDALUS_DISPLAY_LOCALE`. The built-in Welcome plugin translates its Start page this way.
 
 ### M23b (no version change)
 

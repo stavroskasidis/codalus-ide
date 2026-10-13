@@ -9,7 +9,7 @@ public static class PluginApi
     /// The API version that a plugin's <c>engines.daedalus</c> range is checked against. During 0.x a minor
     /// version may contain breaking changes (see docs/plugins.md#changelog).
     /// </summary>
-    public const string Version = "0.2.8";
+    public const string Version = "0.2.9";
 }
 
 /// <summary>
