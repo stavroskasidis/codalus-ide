@@ -37,6 +37,29 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
 
     public ISecrets Secrets => _services.Secrets;
 
+    public IFileSystems FileSystems => _fileSystems ??= new PluginFileSystems(_server, Id, Own);
+
+    private PluginFileSystems? _fileSystems;
+
+    /// <summary>The plugin's file system providers, registered with the host and announced to the shell.</summary>
+    private sealed class PluginFileSystems(PluginHostServer server, string pluginId, Func<IDisposable, IDisposable> own) : IFileSystems
+    {
+        public IDisposable RegisterProvider(string scheme, IFileSystemProvider provider)
+        {
+            if (scheme.Length == 0 || !scheme.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '.'))
+            {
+                throw new ArgumentException($"'{scheme}' isn't a scheme: letters, digits, '-' and '.'.", nameof(scheme));
+            }
+
+            return own(server.RegisterFileSystem(pluginId, scheme, provider));
+        }
+
+        public string RootOf(string scheme) => FileSystemRoots.RootOf(scheme);
+
+        public void NotifyChanged(string scheme, IReadOnlyList<string> paths, string kind = "changed") =>
+            server.Post(PluginMethods.FsChanged, new FsChangedParams(scheme, [.. paths], kind), PluginJsonContext.Default.FsChangedParams);
+    }
+
     /// <summary>New proposals (none at 1.0), for plugins that enable them.</summary>
     public IProposedApi? Proposed => _enableProposedApi ? _services : null;
 

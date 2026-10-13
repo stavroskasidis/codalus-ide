@@ -89,6 +89,27 @@ public sealed record ViewIdParams(string ViewId);
 
 public sealed record CustomEditorTextParams(string PluginId, string ViewId, string Text);
 
+public sealed record FsSchemeParams(string PluginId, string Scheme);
+
+public sealed record FsChangedParams(string Scheme, string[] Paths, string Kind);
+
+/// <summary>A provider operation: <see cref="Path"/> in the scheme's terms; the others as the operation needs them.</summary>
+public sealed record FsRequestParams(string Scheme, string Path)
+{
+    public string? Target { get; init; }
+    public byte[]? Content { get; init; }
+    public bool Recursive { get; init; }
+    public bool Overwrite { get; init; }
+}
+
+public sealed record FsStatResult(bool Exists, bool IsDirectory, long Size, DateTimeOffset Modified);
+
+public sealed record FsEntryDto(string Name, bool IsDirectory, long Size, DateTimeOffset Modified);
+
+public sealed record FsReadDirectoryResult(FsEntryDto[] Entries);
+
+public sealed record FsReadFileResult(byte[] Content);
+
 public sealed record OutputParams(string PluginId, string Channel, string? Text);
 
 public sealed record StatusBarUpdateParams(string PluginId, string ItemId, string Text, string? Tooltip, string? Command, string Alignment, int Priority, bool Visible);

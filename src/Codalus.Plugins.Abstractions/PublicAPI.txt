@@ -89,6 +89,17 @@ class Codalus.Plugins.DeviceCode
   UserCode { get; init; } : System.String
   VerificationUri { get; init; } : System.String
   VerificationUriComplete { get; init; } : System.String
+class Codalus.Plugins.DirectoryEntry
+  .ctor(System.String Name, System.Boolean IsDirectory, System.Int64 Size, System.DateTimeOffset Modified)
+  Deconstruct(ref System.String Name, ref System.Boolean IsDirectory, ref System.Int64 Size, ref System.DateTimeOffset Modified) -> System.Void
+  Equals(Codalus.Plugins.DirectoryEntry other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsDirectory { get; init; } : System.Boolean
+  Modified { get; init; } : System.DateTimeOffset
+  Name { get; init; } : System.String
+  Size { get; init; } : System.Int64
+  ToString() -> System.String
 class Codalus.Plugins.DocumentTestCandidates
   .ctor(System.String Uri, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestCandidate> Candidates)
   Candidates { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestCandidate>
@@ -110,6 +121,18 @@ class Codalus.Plugins.FileCoverage
   Lines { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.LineCoverage>
   ToString() -> System.String
   Uri { get; init; } : System.String
+class Codalus.Plugins.FileStat
+  .ctor(System.Boolean Exists, System.Boolean IsDirectory, System.Int64 Size, System.DateTimeOffset Modified)
+  Deconstruct(ref System.Boolean Exists, ref System.Boolean IsDirectory, ref System.Int64 Size, ref System.DateTimeOffset Modified) -> System.Void
+  Equals(Codalus.Plugins.FileStat other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  Exists { get; init; } : System.Boolean
+  GetHashCode() -> System.Int32
+  IsDirectory { get; init; } : System.Boolean
+  Missing { get; } : Codalus.Plugins.FileStat
+  Modified { get; init; } : System.DateTimeOffset
+  Size { get; init; } : System.Int64
+  ToString() -> System.String
 class Codalus.Plugins.HostingAccount
   .ctor(System.String Name, System.String Host)
   Deconstruct(ref System.String Name, ref System.String Host) -> System.Void
@@ -202,6 +225,18 @@ interface Codalus.Plugins.IDebugVisualizerContext
   Value { get; } : System.String
 interface Codalus.Plugins.IDeviceCodePrompt
   ShowAsync(Codalus.Plugins.DeviceCode code, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+interface Codalus.Plugins.IFileSystemProvider
+  CreateDirectoryAsync(System.String path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+  DeleteAsync(System.String path, System.Boolean recursive, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+  ReadDirectoryAsync(System.String path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.DirectoryEntry>>
+  ReadFileAsync(System.String path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Byte[]>
+  RenameAsync(System.String source, System.String target, System.Boolean overwrite, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+  StatAsync(System.String path, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.FileStat>
+  WriteFileAsync(System.String path, System.Byte[] content, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+interface Codalus.Plugins.IFileSystems
+  NotifyChanged(System.String scheme, System.Collections.Generic.IReadOnlyList<System.String> paths, System.String kind = changed) -> System.Void
+  RegisterProvider(System.String scheme, Codalus.Plugins.IFileSystemProvider provider) -> System.IDisposable
+  RootOf(System.String scheme) -> System.String
 interface Codalus.Plugins.IHosting
   RegisterProvider(Codalus.Plugins.HostingProvider provider) -> System.IDisposable
 interface Codalus.Plugins.IOutputChannel
@@ -214,6 +249,7 @@ interface Codalus.Plugins.IPluginContext
   Build { get; } : Codalus.Plugins.IBuild
   Commands { get; } : Codalus.Plugins.ICommands
   Debug { get; } : Codalus.Plugins.IDebug
+  FileSystems { get; } : Codalus.Plugins.IFileSystems
   Hosting { get; } : Codalus.Plugins.IHosting
   Log { get; } : Codalus.Plugins.IPluginLog
   Plugin { get; } : Codalus.Plugins.PluginInfo

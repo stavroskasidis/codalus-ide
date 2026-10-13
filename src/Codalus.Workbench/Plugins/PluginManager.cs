@@ -635,6 +635,42 @@ public sealed class PluginManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, (string PluginId, ViewNodeDto Root)> _views = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _customEditorOwners = new(StringComparer.Ordinal);
 
+    private readonly ConcurrentDictionary<string, (string PluginId, PluginFileSystem FileSystem, IDisposable Mount)> _fileSystems = new(StringComparer.Ordinal);
+
+    /// <summary>The file system schemes plugins serve (API 1.0), with the root each shows under.</summary>
+    public IReadOnlyList<(string Scheme, string Root, string PluginId)> FileSystems =>
+        [.. _fileSystems.Select(f => (f.Key, f.Value.FileSystem.Root, f.Value.PluginId)).OrderBy(f => f.Key, StringComparer.Ordinal)];
+
+    /// <summary>A plugin started or stopped serving a file system.</summary>
+    public event EventHandler? FileSystemsChanged;
+
+    private void RegisterFileSystem(string pluginId, string scheme)
+    {
+        var fileSystem = new PluginFileSystem(scheme, () => Find(pluginId) is { } plugin && GetHost(plugin.HostGroup) is { IsRunning: true } host ? host.Connection : null);
+        var mount = Codalus.Workbench.FileSystem.FileSystems.Mount(fileSystem.Root, fileSystem);
+        if (_fileSystems.TryRemove(scheme, out var previous))
+        {
+            previous.Mount.Dispose();
+        }
+
+        _fileSystems[scheme] = (pluginId, fileSystem, mount);
+        PluginLog.AppendLine($"[{pluginId}] serves the file system '{scheme}' at {fileSystem.Root}");
+        FileSystemsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void UnregisterFileSystems(Func<string, string, bool> which)
+    {
+        foreach (var (scheme, entry) in _fileSystems.Where(f => which(f.Key, f.Value.PluginId)).ToList())
+        {
+            if (_fileSystems.TryRemove(new KeyValuePair<string, (string, PluginFileSystem, IDisposable)>(scheme, entry)))
+            {
+                entry.Mount.Dispose();
+            }
+        }
+
+        FileSystemsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>A declarative view changed (its id).</summary>
     public event EventHandler<string>? ViewChanged;
 
@@ -975,6 +1011,9 @@ public sealed class PluginManager : IAsyncDisposable
         /// <summary>Test controllers, hosting providers and visualizers the host's plugins registered go; its active plugins are ready again.</summary>
         private void ReleaseContributions()
         {
+            var members = Members.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
+            _manager.UnregisterFileSystems((_, plugin) => members.Contains(plugin));
+
             foreach (var id in _progress.Keys)
             {
                 if (_progress.TryRemove(id, out var task))
@@ -1095,6 +1134,15 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 _manager._markdown[p.ViewId] = p.Markdown;
                 _manager.MarkdownChanged?.Invoke(_manager, p.ViewId);
+            });
+            connection.OnNotification(PluginMethods.FsRegister, json.FsSchemeParams, p => _manager.RegisterFileSystem(p.PluginId, p.Scheme));
+            connection.OnNotification(PluginMethods.FsUnregister, json.FsSchemeParams, p => _manager.UnregisterFileSystems((scheme, plugin) => scheme == p.Scheme && plugin == p.PluginId));
+            connection.OnNotification(PluginMethods.FsChanged, json.FsChangedParams, p =>
+            {
+                if (_manager._fileSystems.TryGetValue(p.Scheme, out var entry))
+                {
+                    entry.FileSystem.OnChanged(p.Paths, p.Kind);
+                }
             });
             connection.OnNotification(PluginMethods.ViewSet, json.ViewSetParams, p =>
             {

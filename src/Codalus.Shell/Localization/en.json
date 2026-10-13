@@ -533,6 +533,7 @@
   "command.workbench.action.navigateToLastEditLocation": "Go to Last Edit Location",
   "command.workbench.action.openSnippets": "Configure User Snippets",
   "command.workbench.applyWindowLayout": "Apply Window Layout…",
+  "command.workbench.browsePluginFiles": "Browse a Plugin's Files…",
   "command.workbench.clearNotifications": "Clear All Notifications",
   "command.workbench.closeActiveDocument": "Close Document",
   "command.workbench.closeAllDocuments": "Close All Documents",

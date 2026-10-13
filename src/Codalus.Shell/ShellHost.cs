@@ -131,6 +131,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeUpdates();
         InitializeRemote();
         InitializeProgress();
+        InitializePluginFiles();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)

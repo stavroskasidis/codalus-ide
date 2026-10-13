@@ -14,7 +14,9 @@
       { "id": "hello.refresh", "title": "Refresh", "category": "Hello" },
       { "id": "hello.callShell", "title": "Call a Shell Command (test)", "category": "Hello" },
       { "id": "hello.crashHost", "title": "Crash the Plugin Host (test)", "category": "Hello" },
-      { "id": "hello.count", "title": "Count to Ten Slowly", "category": "Hello" }
+      { "id": "hello.count", "title": "Count to Ten Slowly", "category": "Hello" },
+      { "id": "hello.mountFiles", "title": "Serve the hello: File System", "category": "Hello" },
+      { "id": "hello.readFile", "title": "Read a hello: File (test)", "category": "Hello" }
     ],
     "menus": {
       "commandPalette": [

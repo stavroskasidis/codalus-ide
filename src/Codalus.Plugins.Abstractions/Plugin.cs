@@ -79,6 +79,9 @@ public interface IPluginContext
 
     /// <summary>The plugin's secrets, in the OS credential store.</summary>
     ISecrets Secrets => throw new NotSupportedException("This context has no secrets.");
+
+    /// <summary>File systems the plugin provides (since 1.0).</summary>
+    IFileSystems FileSystems => throw new NotSupportedException("This context has no file systems.");
 }
 
 /// <summary>The arguments a command was invoked with (JSON values, so commands work across processes).</summary>

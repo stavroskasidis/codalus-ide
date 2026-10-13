@@ -66,6 +66,16 @@ public sealed class HelloPlugin : ICodalusPlugin
                 return "done";
             }, cancellable: true, ct)));
 
+        // A file system (API 1.0): files in memory under the scheme "hello", which the editor opens and saves.
+        var files = new MemoryFiles();
+        context.Subscriptions.Add(context.Commands.Register("hello.mountFiles", (_, _) =>
+        {
+            context.Subscriptions.Add(context.FileSystems.RegisterProvider("hello", files));
+            return Task.FromResult<object?>(context.FileSystems.RootOf("hello"));
+        }));
+        context.Subscriptions.Add(context.Commands.Register("hello.readFile", async (invocation, ct) =>
+            System.Text.Encoding.UTF8.GetString(await files.ReadFileAsync(invocation.Arg<string>(0)!, ct))));
+
         // Simulates a fatal plugin bug, so the shell's host supervision can be exercised.
         context.Subscriptions.Add(context.Commands.Register("hello.crashHost", () => Environment.Exit(42)));
 
@@ -111,4 +121,90 @@ public sealed class HelloPlugin : ICodalusPlugin
             ? new TreeItem(element) { Icon = "info", Collapsible = TreeItemCollapsibleState.Collapsed, Command = new TreeItemCommand("hello.sayHello") }
             : new TreeItem(element[(element.IndexOf(':') + 1)..]) { Description = "letter " + element[..element.IndexOf(':')] };
     }
+}
+
+/// <summary>A small writable file system in memory: <c>/readme.md</c> and <c>/notes/todo.txt</c> to start with.</summary>
+internal sealed class MemoryFiles : IFileSystemProvider
+{
+    private readonly Dictionary<string, byte[]> _files = new(StringComparer.Ordinal)
+    {
+        ["/readme.md"] = "# Hello\n\nServed by the Hello World plugin.\n"u8.ToArray(),
+        ["/notes/todo.txt"] = "water the plants\n"u8.ToArray(),
+    };
+
+    private static string Parent(string path) => path.LastIndexOf('/') is var slash and > 0 ? path[..slash] : "/";
+
+    private bool IsDirectory(string path) => path == "/" || _files.Keys.Any(f => f.StartsWith(path + "/", StringComparison.Ordinal));
+
+    public Task<FileStat> StatAsync(string path, CancellationToken cancellationToken)
+    {
+        lock (_files)
+        {
+            return Task.FromResult(_files.TryGetValue(path, out var content) ? new FileStat(true, false, content.Length, DateTimeOffset.UnixEpoch)
+                : IsDirectory(path) ? new FileStat(true, true, 0, DateTimeOffset.UnixEpoch) : FileStat.Missing);
+        }
+    }
+
+    public Task<IReadOnlyList<DirectoryEntry>> ReadDirectoryAsync(string path, CancellationToken cancellationToken)
+    {
+        var prefix = path == "/" ? "/" : path + "/";
+        lock (_files)
+        {
+            IReadOnlyList<DirectoryEntry> entries = [.. _files.Keys.Where(f => f.StartsWith(prefix, StringComparison.Ordinal))
+                .Select(f => f[prefix.Length..].Split('/')[0]).Distinct()
+                .Select(name => _files.TryGetValue(prefix + name, out var content)
+                    ? new DirectoryEntry(name, false, content.Length, DateTimeOffset.UnixEpoch)
+                    : new DirectoryEntry(name, true, 0, DateTimeOffset.UnixEpoch))];
+            return Task.FromResult(entries);
+        }
+    }
+
+    public Task<byte[]> ReadFileAsync(string path, CancellationToken cancellationToken)
+    {
+        lock (_files)
+        {
+            return _files.TryGetValue(path, out var content) ? Task.FromResult(content) : throw new FileNotFoundException("No such file.", path);
+        }
+    }
+
+    public Task WriteFileAsync(string path, byte[] content, CancellationToken cancellationToken)
+    {
+        lock (_files)
+        {
+            _files[path] = content;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(string path, bool recursive, CancellationToken cancellationToken)
+    {
+        lock (_files)
+        {
+            _files.Remove(path);
+            foreach (var key in _files.Keys.Where(f => recursive && f.StartsWith(path + "/", StringComparison.Ordinal)).ToList())
+            {
+                _files.Remove(key);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task RenameAsync(string source, string target, bool overwrite, CancellationToken cancellationToken)
+    {
+        lock (_files)
+        {
+            if (!_files.Remove(source, out var content))
+            {
+                throw new FileNotFoundException("No such file.", source);
+            }
+
+            _files[target] = content;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task CreateDirectoryAsync(string path, CancellationToken cancellationToken) => Task.CompletedTask;
 }

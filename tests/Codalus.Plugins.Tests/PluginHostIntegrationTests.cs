@@ -100,6 +100,39 @@ public sealed class PluginHostIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_plugins_file_system_is_mounted_read_listed_and_written_through_the_plugin()
+    {
+        // IFileSystems (API 1.0): the plugin serves "hello"; the editor's file systems reach it under its root.
+        var root = (await _workbench.Commands.ExecuteAsync("hello.mountFiles", Timeout()))!.Value.GetString()!;
+        Assert.Equal(Codalus.Plugins.Protocol.FileSystemRoots.RootOf("hello"), root);
+        await WaitUntilAsync(() => _manager.FileSystems.Any(f => f.Scheme == "hello" && f.PluginId == "codalus-samples.hello"));
+
+        var readme = Path.Combine(root, "readme.md");
+        var fileSystem = Workbench.FileSystem.FileSystems.For(readme);
+        Assert.True(fileSystem.IsRemote);
+        Assert.StartsWith("# Hello", System.Text.Encoding.UTF8.GetString(await fileSystem.ReadAllBytesAsync(readme, Timeout())), StringComparison.Ordinal);
+        Assert.Equal((true, false), ((await fileSystem.StatAsync(readme, Timeout())).Exists, (await fileSystem.StatAsync(readme, Timeout())).IsDirectory));
+        Assert.True((await fileSystem.StatAsync(Path.Combine(root, "notes"), Timeout())).IsDirectory);
+        Assert.False((await fileSystem.StatAsync(Path.Combine(root, "missing.txt"), Timeout())).Exists);
+        var entries = await fileSystem.ReadDirectoryAsync(root, Timeout());
+        Assert.Contains(entries, e => e is { Name: "readme.md", IsDirectory: false });
+        Assert.Contains(entries, e => e is { Name: "notes", IsDirectory: true });
+
+        // A write is the plugin's: it reads the new content back.
+        var todo = Path.Combine(root, "notes", "todo.txt");
+        await fileSystem.WriteAllBytesAsync(todo, "feed the cat\n"u8.ToArray(), Timeout());
+        Assert.Equal("feed the cat\n", (await _workbench.Commands.ExecuteAsync("hello.readFile", [Json("\"/notes/todo.txt\"")], Timeout()))!.Value.GetString());
+
+        // The provider's errors come back as the file system's.
+        await Assert.ThrowsAsync<FileNotFoundException>(() => fileSystem.ReadAllBytesAsync(Path.Combine(root, "missing.txt"), Timeout()));
+
+        // The plugin's host goes (a crash): so does its file system.
+        _ = _workbench.Commands.ExecuteAsync("hello.crashHost", Timeout()).ContinueWith(_ => { }, TaskScheduler.Default);
+        await WaitUntilAsync(() => _manager.FileSystems.Count == 0);
+        Assert.False(Workbench.FileSystem.FileSystems.For(readme).IsRemote);
+    }
+
+    [Fact]
     public async Task A_plugin_task_reports_its_progress_and_the_user_can_cancel_it()
     {
         // IWindow.WithProgressAsync (API 1.0): the task is the workbench's while it runs, and Cancel reaches the plugin.

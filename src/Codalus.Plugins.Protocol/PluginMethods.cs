@@ -54,6 +54,22 @@ public static class PluginMethods
 
     /// <summary>Host → shell: a custom editor's file has new text.</summary>
     public const string CustomEditorSetText = "customEditor/setText";
+
+    /// <summary>Host → shell: a plugin serves a file system scheme (API 1.0), or stops (<c>fs/unregister</c>).</summary>
+    public const string FsRegister = "fs/register";
+    public const string FsUnregister = "fs/unregister";
+
+    /// <summary>Host → shell: files of a scheme changed.</summary>
+    public const string FsChanged = "fs/changed";
+
+    /// <summary>Shell → host (requests): the provider's operations.</summary>
+    public const string FsStat = "fs/stat";
+    public const string FsReadDirectory = "fs/readDirectory";
+    public const string FsReadFile = "fs/readFile";
+    public const string FsWriteFile = "fs/writeFile";
+    public const string FsCreateDirectory = "fs/createDirectory";
+    public const string FsDelete = "fs/delete";
+    public const string FsRename = "fs/rename";
     public const string OutputAppend = "output/append";
     public const string OutputClear = "output/clear";
     public const string OutputShow = "output/show";
@@ -75,4 +91,19 @@ public static class PluginErrorCodes
 
     /// <summary>A proposed API the shell doesn't offer (here), or a plugin that didn't enable proposed APIs.</summary>
     public const int ProposedApiUnavailable = -33005;
+}
+
+/// <summary>Where a plugin's file system scheme shows on this machine (API 1.0): a root the editor's file systems mount.</summary>
+public static class FileSystemRoots
+{
+    public static string RootOf(string scheme) =>
+        OperatingSystem.IsWindows() ? @"\\codalus-plugin.invalid\" + scheme : "/codalus-plugin/" + scheme;
+}
+
+/// <summary>JSON-RPC error codes of file system operations (the shell maps them back to exceptions).</summary>
+public static class FsErrors
+{
+    public const int NotFound = -33100;
+    public const int Denied = -33101;
+    public const int Failed = -33102;
 }

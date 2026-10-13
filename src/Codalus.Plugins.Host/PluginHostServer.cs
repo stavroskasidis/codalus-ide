@@ -74,6 +74,35 @@ internal sealed class PluginHostServer : IAsyncDisposable
             return new GetTreeChildrenResult([.. await tree.GetChildrenAsync(p.Handle, ct).ConfigureAwait(false)]);
         });
         _connection.OnNotification(PluginMethods.SettingsDidChange, json.SettingsDidChangeParams, p => Settings.Apply(p.Changes));
+        _connection.OnRequest(PluginMethods.FsStat, json.FsRequestParams, json.FsStatResult, (p, ct) => FsCallAsync(async () =>
+        {
+            var stat = await FileSystem(p).StatAsync(p.Path, ct).ConfigureAwait(false);
+            return new FsStatResult(stat.Exists, stat.IsDirectory, stat.Size, stat.Modified);
+        }));
+        _connection.OnRequest(PluginMethods.FsReadDirectory, json.FsRequestParams, json.FsReadDirectoryResult, (p, ct) => FsCallAsync(async () =>
+            new FsReadDirectoryResult([.. (await FileSystem(p).ReadDirectoryAsync(p.Path, ct).ConfigureAwait(false)).Select(e => new FsEntryDto(e.Name, e.IsDirectory, e.Size, e.Modified))])));
+        _connection.OnRequest(PluginMethods.FsReadFile, json.FsRequestParams, json.FsReadFileResult, (p, ct) => FsCallAsync(async () =>
+            new FsReadFileResult(await FileSystem(p).ReadFileAsync(p.Path, ct).ConfigureAwait(false))));
+        _connection.OnRequest(PluginMethods.FsWriteFile, json.FsRequestParams, json.EmptyResult, (p, ct) => FsCallAsync(async () =>
+        {
+            await FileSystem(p).WriteFileAsync(p.Path, p.Content ?? [], ct).ConfigureAwait(false);
+            return new EmptyResult();
+        }));
+        _connection.OnRequest(PluginMethods.FsCreateDirectory, json.FsRequestParams, json.EmptyResult, (p, ct) => FsCallAsync(async () =>
+        {
+            await FileSystem(p).CreateDirectoryAsync(p.Path, ct).ConfigureAwait(false);
+            return new EmptyResult();
+        }));
+        _connection.OnRequest(PluginMethods.FsDelete, json.FsRequestParams, json.EmptyResult, (p, ct) => FsCallAsync(async () =>
+        {
+            await FileSystem(p).DeleteAsync(p.Path, p.Recursive, ct).ConfigureAwait(false);
+            return new EmptyResult();
+        }));
+        _connection.OnRequest(PluginMethods.FsRename, json.FsRequestParams, json.EmptyResult, (p, ct) => FsCallAsync(async () =>
+        {
+            await FileSystem(p).RenameAsync(p.Path, p.Target ?? throw new JsonRpcHandlerException(FsErrors.Failed, "No target."), p.Overwrite, ct).ConfigureAwait(false);
+            return new EmptyResult();
+        }));
         _connection.OnRequest(PluginMethods.ViewEvent, json.ViewEventParams, json.EmptyResult, async (p, ct) =>
         {
             if (_viewHandlers.TryGetValue(p.ViewId, out var handler))
@@ -278,6 +307,53 @@ internal sealed class PluginHostServer : IAsyncDisposable
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<ViewEvent, CancellationToken, Task>> _viewHandlers = new(StringComparer.Ordinal);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ICustomEditorProvider> _customEditors = new(StringComparer.Ordinal);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ICustomEditorProvider> _openCustomEditors = new(StringComparer.Ordinal);
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IFileSystemProvider> _fileSystems = new(StringComparer.Ordinal);
+
+    internal IDisposable RegisterFileSystem(string pluginId, string scheme, IFileSystemProvider provider)
+    {
+        if (!_fileSystems.TryAdd(scheme, provider))
+        {
+            throw new InvalidOperationException($"The scheme '{scheme}' is already served.");
+        }
+
+        Post(PluginMethods.FsRegister, new FsSchemeParams(pluginId, scheme), PluginJsonContext.Default.FsSchemeParams);
+        return new Disposable(() =>
+        {
+            if (_fileSystems.TryRemove(new KeyValuePair<string, IFileSystemProvider>(scheme, provider)))
+            {
+                Post(PluginMethods.FsUnregister, new FsSchemeParams(pluginId, scheme), PluginJsonContext.Default.FsSchemeParams);
+            }
+        });
+    }
+
+    private IFileSystemProvider FileSystem(FsRequestParams p) =>
+        _fileSystems.TryGetValue(p.Scheme, out var provider) ? provider : throw new JsonRpcHandlerException(PluginErrorCodes.PluginNotActivated, $"No file system serves '{p.Scheme}'.");
+
+    /// <summary>A provider's call, with its file system errors as JSON-RPC errors the shell turns back into exceptions.</summary>
+    private static async Task<T> FsCallAsync<T>(Func<Task<T>> call)
+    {
+        try
+        {
+            return await call().ConfigureAwait(false);
+        }
+        catch (FileNotFoundException ex)
+        {
+            throw new JsonRpcHandlerException(FsErrors.NotFound, ex.Message);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            throw new JsonRpcHandlerException(FsErrors.NotFound, ex.Message);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new JsonRpcHandlerException(FsErrors.Denied, ex.Message);
+        }
+        catch (IOException ex)
+        {
+            throw new JsonRpcHandlerException(FsErrors.Failed, ex.Message);
+        }
+    }
 
     internal IDisposable RegisterViewHandler(string viewId, Func<ViewEvent, CancellationToken, Task> handler)
     {
