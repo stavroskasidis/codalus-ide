@@ -437,12 +437,22 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, "language.ready").ConfigureAwait(true);
 
         // M4: build and run.
-        await StepAsync("build.solution", "M4", "Build Solution succeeds", async () =>
+        await StepAsync("build.solution", "M4", "Build Solution succeeds, shown in the status bar as a task with a progress bar", async () =>
         {
             var before = shell.Builds.LastBuild;
             shell.Run("build.buildSolution");
+
+            // While it runs, the status bar shows it as a task with a progress bar and cancel (M22a); the site shows it.
+            await WaitAsync(() => shell.StatusBar.HasProgress || (shell.Builds.LastBuild is { } done && done != before), "the build shows in the status bar", 60).ConfigureAwait(true);
+            if (shell.StatusBar.HasProgress)
+            {
+                Check(shell.StatusBar.DisplayMessage.StartsWith("Building ", StringComparison.Ordinal) && shell.StatusBar.CanCancelProgress, $"the status bar says what's building and offers cancel ({shell.StatusBar.DisplayMessage})");
+                Screenshot("smoke-test-progress.png");
+            }
+
             await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 420).ConfigureAwait(true);
             Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+            await WaitAsync(() => !shell.StatusBar.HasProgress, "the status bar is ready again", 30).ConfigureAwait(true);
             Check(!shell.ErrorList.Rows.Any(r => r.Source == ErrorListViewModel.BuildSource && r.Code.StartsWith("CS", StringComparison.Ordinal)), "the Error List has no build errors");
         }, "projects.open").ConfigureAwait(true);
 
