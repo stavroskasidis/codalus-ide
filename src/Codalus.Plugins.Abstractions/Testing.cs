@@ -1,4 +1,4 @@
-namespace Codalus.Plugins.Proposed;
+namespace Codalus.Plugins;
 
 /// <summary>Creates test controllers (ADR 0010), modelled on VS Code's testing API.</summary>
 public interface ITests

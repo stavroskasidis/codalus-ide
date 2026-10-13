@@ -74,6 +74,19 @@ internal sealed class PluginHostServer : IAsyncDisposable
             return new GetTreeChildrenResult([.. await tree.GetChildrenAsync(p.Handle, ct).ConfigureAwait(false)]);
         });
         _connection.OnNotification(PluginMethods.SettingsDidChange, json.SettingsDidChangeParams, p => Settings.Apply(p.Changes));
+        _connection.OnNotification(PluginMethods.ProgressCancel, json.ProgressIdParams, p =>
+        {
+            if (_progress.TryGetValue(p.Id, out var cancel))
+            {
+                try
+                {
+                    cancel.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+            }
+        });
         _connection.OnRequest(PluginMethods.Shutdown, json.EmptyParams, json.EmptyResult, async (_, ct) =>
         {
             foreach (var plugin in _plugins.Values)
@@ -221,6 +234,18 @@ internal sealed class PluginHostServer : IAsyncDisposable
         }
 
         return new ExecuteCommandResult(result is null ? null : ToJson(result));
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> _progress = new(StringComparer.Ordinal);
+    private long _nextProgress;
+
+    internal string NewProgressId() => Interlocked.Increment(ref _nextProgress).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>A running task's cancellation, for <c>window/progressCancel</c>.</summary>
+    internal IDisposable RegisterProgress(string id, CancellationTokenSource cancel)
+    {
+        _progress[id] = cancel;
+        return new Disposable(() => _progress.TryRemove(id, out _));
     }
 
     internal IDisposable RegisterTree(string viewId, ITreeAdapter adapter)

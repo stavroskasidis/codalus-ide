@@ -1,4 +1,4 @@
-namespace Codalus.Plugins.Proposed;
+namespace Codalus.Plugins;
 
 /// <summary>
 /// A debugger visualizer a plugin offers (M14b, ADR 0032): it appears in the View menu of the debugger's variable trees

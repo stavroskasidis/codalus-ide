@@ -1,4 +1,4 @@
-namespace Codalus.Plugins.Proposed;
+namespace Codalus.Plugins;
 
 /// <summary>The open solution as the build host evaluated it, plus test discovery from source.</summary>
 public interface IWorkspace

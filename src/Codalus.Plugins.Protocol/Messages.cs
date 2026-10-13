@@ -55,6 +55,13 @@ public sealed record ShowInputBoxParams(string PluginId, string Title, string? P
 /// <summary>The entered text, or null when cancelled.</summary>
 public sealed record ShowInputBoxResult(string? Value);
 
+/// <summary>A plugin's task (API 1.0): <see cref="Id"/> is the host's, unique within it.</summary>
+public sealed record ProgressStartParams(string PluginId, string Id, string Title, bool Cancellable);
+
+public sealed record ProgressReportParams(string PluginId, string Id, string? Message, double? Percent);
+
+public sealed record ProgressIdParams(string PluginId, string Id);
+
 public sealed record OutputParams(string PluginId, string Channel, string? Text);
 
 public sealed record StatusBarUpdateParams(string PluginId, string ItemId, string Text, string? Tooltip, string? Command, string Alignment, int Priority, bool Visible);

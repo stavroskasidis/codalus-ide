@@ -8,7 +8,7 @@ public sealed class AzureDevOpsPlugin : ICodalusPlugin
     public Task ActivateAsync(IPluginContext context, CancellationToken cancellationToken)
     {
         var provider = new AzureDevOpsProvider(context);
-        context.Subscriptions.Add(context.Proposed().Hosting.RegisterProvider(provider));
+        context.Subscriptions.Add(context.Hosting.RegisterProvider(provider));
         context.Subscriptions.Add(provider);
         return Task.CompletedTask;
     }

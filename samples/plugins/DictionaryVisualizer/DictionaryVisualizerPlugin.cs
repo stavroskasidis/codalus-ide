@@ -15,7 +15,7 @@ public sealed class DictionaryVisualizerPlugin : ICodalusPlugin
 
     public Task ActivateAsync(IPluginContext context, CancellationToken cancellationToken)
     {
-        context.Subscriptions.Add(context.Proposed().Debug.RegisterVisualizer(
+        context.Subscriptions.Add(context.Debug.RegisterVisualizer(
             new DebugVisualizerOptions("dictionary", "Dictionary Visualizer", ["System.Collections.Generic.Dictionary<*"]),
             VisualizeAsync));
         return Task.CompletedTask;

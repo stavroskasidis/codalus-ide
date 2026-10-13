@@ -7,7 +7,7 @@ public static class PluginMethods
     public const string ProtocolVersion = "0.2";
 
     /// <summary>The plugin API version that <c>engines.codalus</c> ranges are checked against.</summary>
-    public const string ApiVersion = "0.3.0";
+    public const string ApiVersion = "1.0.0";
 
     // shell → host
     public const string Initialize = "initialize";
@@ -31,6 +31,14 @@ public static class PluginMethods
 
     /// <summary>Since API 0.1.1.</summary>
     public const string ShowInputBox = "window/showInputBox";
+
+    /// <summary>Host → shell: a plugin's task starts (API 1.0); <c>window/progressReport</c> and <c>window/progressEnd</c> follow.</summary>
+    public const string ProgressStart = "window/progressStart";
+    public const string ProgressReport = "window/progressReport";
+    public const string ProgressEnd = "window/progressEnd";
+
+    /// <summary>Shell → host: the user cancelled a cancellable task.</summary>
+    public const string ProgressCancel = "window/progressCancel";
     public const string OutputAppend = "output/append";
     public const string OutputClear = "output/clear";
     public const string OutputShow = "output/show";

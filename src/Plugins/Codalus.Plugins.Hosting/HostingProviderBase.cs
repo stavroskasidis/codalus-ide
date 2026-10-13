@@ -51,7 +51,7 @@ public abstract class HostingProviderBase : HostingProvider, IDisposable
         : base(id)
     {
         Context = context;
-        Secrets = context.Proposed().Secrets;
+        Secrets = context.Secrets;
         Http = new HostingHttp($"Codalus/{context.Plugin.Version}");
         Http.Authorize = AuthorizeAsync;
         context.Settings.Changed += (_, e) =>

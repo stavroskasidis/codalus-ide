@@ -6,10 +6,14 @@ namespace Codalus.Plugins;
 public static class PluginApi
 {
     /// <summary>
-    /// The API version that a plugin's <c>engines.codalus</c> range is checked against. During 0.x a minor
-    /// version may contain breaking changes (see docs/plugins.md#changelog).
+    /// The API version that a plugin's <c>engines.codalus</c> range is checked against. Since 1.0 (M22a), minor versions
+    /// only add to the API and a member goes away only after a major version, deprecated first with the
+    /// <see cref="DeprecationDiagnostic"/> warning (ADR 0003, docs/plugins.md#changelog).
     /// </summary>
-    public const string Version = "0.3.0";
+    public const string Version = "1.0.0";
+
+    /// <summary>The diagnostic id of deprecated API members (<c>[Obsolete(..., DiagnosticId = "CODALUS0001")]</c>).</summary>
+    public const string DeprecationDiagnostic = "CODALUS0001";
 }
 
 /// <summary>
@@ -51,6 +55,30 @@ public interface IPluginContext
 
     /// <summary>Disposables owned by the plugin; disposed when it is deactivated.</summary>
     IList<IDisposable> Subscriptions { get; }
+
+    // The services below were proposed APIs (0.2.1 to 0.2.7) and are stable since 1.0. The plugin host implements
+    // every one; the defaults let a test's own context implement only what it needs.
+
+    /// <summary>Test controllers for the Test Explorer (ADR 0010).</summary>
+    ITests Tests => throw new NotSupportedException("This context has no test controllers.");
+
+    /// <summary>The open solution, its projects, packages and outputs, and test candidates from the language service.</summary>
+    IWorkspace Workspace => throw new NotSupportedException("This context has no workspace.");
+
+    /// <summary>Builds through the IDE's build (one at a time, with the Build output).</summary>
+    IBuild Build => throw new NotSupportedException("This context has no build.");
+
+    /// <summary>Debug sessions through the IDE's debugger, and debugger visualizers.</summary>
+    IDebug Debug => throw new NotSupportedException("This context has no debugger.");
+
+    /// <summary>Integrated terminals: open a shell or run a command in one, send it text, read its output.</summary>
+    ITerminals Terminals => throw new NotSupportedException("This context has no terminals.");
+
+    /// <summary>Git hosting providers: pull requests, review comments, CI status, work items, publishing (ADR 0031).</summary>
+    IHosting Hosting => throw new NotSupportedException("This context has no hosting.");
+
+    /// <summary>The plugin's secrets, in the OS credential store.</summary>
+    ISecrets Secrets => throw new NotSupportedException("This context has no secrets.");
 }
 
 /// <summary>The arguments a command was invoked with (JSON values, so commands work across processes).</summary>
@@ -120,6 +148,13 @@ public interface IWindow
 
     /// <summary>Asks the user for a line of text. Completes with the text, or null when cancelled. Since API 0.1.1.</summary>
     Task<string?> ShowInputBoxAsync(InputBoxOptions options, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> as a task the user sees in the status bar, with what it reports (since 1.0). When
+    /// <paramref name="cancellable"/>, the user can cancel it: the token passed to <paramref name="work"/> is cancelled.
+    /// </summary>
+    Task<T> WithProgressAsync<T>(string title, Func<IProgress<ProgressReport>, CancellationToken, Task<T>> work, bool cancellable = false, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This window has no progress.");
 
     /// <summary>A channel of the Output window, shown as "&lt;plugin&gt;: &lt;name&gt;".</summary>
     IOutputChannel CreateOutputChannel(string name);
@@ -318,3 +353,6 @@ public sealed record InputBoxOptions(string Title)
     /// <summary>The initial text.</summary>
     public string? Value { get; init; }
 }
+
+/// <summary>What a task reports: a message, and how far it is (0 to 100). A null keeps the previous value.</summary>
+public sealed record ProgressReport(string? Message = null, double? Percent = null);

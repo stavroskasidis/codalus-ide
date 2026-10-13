@@ -8,7 +8,7 @@ public sealed class GitHubPlugin : ICodalusPlugin
     public Task ActivateAsync(IPluginContext context, CancellationToken cancellationToken)
     {
         var provider = new GitHubProvider(context);
-        context.Subscriptions.Add(context.Proposed().Hosting.RegisterProvider(provider));
+        context.Subscriptions.Add(context.Hosting.RegisterProvider(provider));
         context.Subscriptions.Add(provider);
         return Task.CompletedTask;
     }

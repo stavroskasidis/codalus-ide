@@ -1,0 +1,774 @@
+class Codalus.Plugins.BranchStatus
+  .ctor(System.String State, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.StatusCheck> Checks)
+  Checks { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.StatusCheck>
+  Deconstruct(ref System.String State, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.StatusCheck> Checks) -> System.Void
+  Equals(Codalus.Plugins.BranchStatus other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  State { get; init; } : System.String
+  ToString() -> System.String
+  Url { get; init; } : System.String
+class Codalus.Plugins.BuildFinishedEventArgs
+  .ctor(System.String target, System.String project, Codalus.Plugins.BuildResult result)
+  Project { get; } : System.String
+  Result { get; } : Codalus.Plugins.BuildResult
+  Target { get; } : System.String
+class Codalus.Plugins.BuildResult
+  .ctor(System.Boolean Succeeded, System.Boolean Canceled, System.Int32 Errors, System.Int32 Warnings)
+  Canceled { get; init; } : System.Boolean
+  Deconstruct(ref System.Boolean Succeeded, ref System.Boolean Canceled, ref System.Int32 Errors, ref System.Int32 Warnings) -> System.Void
+  Equals(Codalus.Plugins.BuildResult other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  Errors { get; init; } : System.Int32
+  GetHashCode() -> System.Int32
+  Succeeded { get; init; } : System.Boolean
+  ToString() -> System.String
+  Warnings { get; init; } : System.Int32
+class Codalus.Plugins.CommandInvocation
+  .ctor(System.Collections.Generic.IReadOnlyList<System.Text.Json.JsonElement> args)
+  Arg<T>(System.Int32 index, T fallback = null) -> T
+  Args { get; } : System.Collections.Generic.IReadOnlyList<System.Text.Json.JsonElement>
+class Codalus.Plugins.CoverageReport
+  .ctor(System.Collections.Generic.IReadOnlyList<Codalus.Plugins.FileCoverage> Files, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.MethodCoverage> Methods)
+  Deconstruct(ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.FileCoverage> Files, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.MethodCoverage> Methods) -> System.Void
+  Equals(Codalus.Plugins.CoverageReport other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  Files { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.FileCoverage>
+  GetHashCode() -> System.Int32
+  Methods { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.MethodCoverage>
+  ToString() -> System.String
+class Codalus.Plugins.DebugLaunchOptions
+  .ctor(System.String Program, System.Collections.Generic.IReadOnlyList<System.String> Arguments, System.String WorkingDirectory)
+  Arguments { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  Deconstruct(ref System.String Program, ref System.Collections.Generic.IReadOnlyList<System.String> Arguments, ref System.String WorkingDirectory) -> System.Void
+  Environment { get; init; } : System.Collections.Generic.IReadOnlyDictionary<System.String, System.String>
+  Equals(Codalus.Plugins.DebugLaunchOptions other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Program { get; init; } : System.String
+  ToString() -> System.String
+  WorkingDirectory { get; init; } : System.String
+class Codalus.Plugins.DebugValue
+  .ctor(System.String Value, System.String Type)
+  Deconstruct(ref System.String Value, ref System.String Type) -> System.Void
+  Equals(Codalus.Plugins.DebugValue other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  ToString() -> System.String
+  Type { get; init; } : System.String
+  Value { get; init; } : System.String
+class Codalus.Plugins.DebugVisualizerOptions
+  .ctor(System.String Id, System.String Title, System.Collections.Generic.IReadOnlyList<System.String> Types)
+  Deconstruct(ref System.String Id, ref System.String Title, ref System.Collections.Generic.IReadOnlyList<System.String> Types) -> System.Void
+  Equals(Codalus.Plugins.DebugVisualizerOptions other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  Title { get; init; } : System.String
+  ToString() -> System.String
+  Types { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+class Codalus.Plugins.DeviceCode
+  .ctor(System.String UserCode, System.String VerificationUri, System.DateTimeOffset ExpiresAt)
+  Deconstruct(ref System.String UserCode, ref System.String VerificationUri, ref System.DateTimeOffset ExpiresAt) -> System.Void
+  Equals(Codalus.Plugins.DeviceCode other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  ExpiresAt { get; init; } : System.DateTimeOffset
+  GetHashCode() -> System.Int32
+  Message { get; init; } : System.String
+  ToString() -> System.String
+  UserCode { get; init; } : System.String
+  VerificationUri { get; init; } : System.String
+  VerificationUriComplete { get; init; } : System.String
+class Codalus.Plugins.DocumentTestCandidates
+  .ctor(System.String Uri, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestCandidate> Candidates)
+  Candidates { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestCandidate>
+  Deconstruct(ref System.String Uri, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestCandidate> Candidates) -> System.Void
+  Equals(Codalus.Plugins.DocumentTestCandidates other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  ToString() -> System.String
+  Uri { get; init; } : System.String
+class Codalus.Plugins.DocumentsChangedEventArgs
+  .ctor(System.Collections.Generic.IReadOnlyList<System.String> uris)
+  Uris { get; } : System.Collections.Generic.IReadOnlyList<System.String>
+class Codalus.Plugins.FileCoverage
+  .ctor(System.String Uri, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.LineCoverage> Lines)
+  Deconstruct(ref System.String Uri, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.LineCoverage> Lines) -> System.Void
+  Equals(Codalus.Plugins.FileCoverage other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Lines { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.LineCoverage>
+  ToString() -> System.String
+  Uri { get; init; } : System.String
+class Codalus.Plugins.HostingAccount
+  .ctor(System.String Name, System.String Host)
+  Deconstruct(ref System.String Name, ref System.String Host) -> System.Void
+  DisplayName { get; init; } : System.String
+  Equals(Codalus.Plugins.HostingAccount other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Host { get; init; } : System.String
+  Name { get; init; } : System.String
+  ToString() -> System.String
+  Url { get; init; } : System.String
+class Codalus.Plugins.HostingAuthenticationException
+  .ctor()
+  .ctor(System.String message)
+  .ctor(System.String message, System.Exception innerException)
+class Codalus.Plugins.HostingOwner
+  .ctor(System.String Id, System.String Name, System.String Kind)
+  Deconstruct(ref System.String Id, ref System.String Name, ref System.String Kind) -> System.Void
+  Equals(Codalus.Plugins.HostingOwner other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  Kind { get; init; } : System.String
+  Name { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.HostingProvider
+  CreatePullRequestAsync(Codalus.Plugins.HostingRepository repository, Codalus.Plugins.NewPullRequest request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.PullRequest>
+  GetAccountAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.HostingAccount>
+  GetBranchStatusAsync(Codalus.Plugins.HostingRepository repository, System.String branch, System.String commit, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.BranchStatus>
+  GetCheckoutAsync(Codalus.Plugins.HostingRepository repository, Codalus.Plugins.PullRequest pullRequest, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.PullRequestCheckout>
+  GetOwnersAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.HostingOwner>>
+  GetPullRequestAsync(Codalus.Plugins.HostingRepository repository, System.String number, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.PullRequestDetails>
+  GetPullRequestsAsync(Codalus.Plugins.HostingRepository repository, Codalus.Plugins.PullRequestFilter filter, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.PullRequest>>
+  GetRepositoryInfoAsync(Codalus.Plugins.HostingRepository repository, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.HostingRepositoryInfo>
+  GetWorkItemsAsync(Codalus.Plugins.HostingRepository repository, Codalus.Plugins.WorkItemQuery query, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.WorkItem>>
+  Id { get; } : System.String
+  PublishAsync(Codalus.Plugins.NewRepository request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.PublishedRepository>
+  ResolveRepository(System.String remoteUrl) -> Codalus.Plugins.HostingRepository
+  SignInAsync(Codalus.Plugins.IDeviceCodePrompt prompt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.HostingAccount>
+  SignInWithTokenAsync(System.String token, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.HostingAccount>
+  SignOutAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+class Codalus.Plugins.HostingRepository
+  .ctor(System.String Id, System.String Owner, System.String Name, System.String WebUrl)
+  Deconstruct(ref System.String Id, ref System.String Owner, ref System.String Name, ref System.String WebUrl) -> System.Void
+  Equals(Codalus.Plugins.HostingRepository other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Host { get; init; } : System.String
+  Id { get; init; } : System.String
+  Name { get; init; } : System.String
+  Owner { get; init; } : System.String
+  Remote { get; init; } : System.String
+  ToString() -> System.String
+  WebUrl { get; init; } : System.String
+class Codalus.Plugins.HostingRepositoryInfo
+  .ctor(System.String DefaultBranch, System.String WebUrl)
+  Deconstruct(ref System.String DefaultBranch, ref System.String WebUrl) -> System.Void
+  DefaultBranch { get; init; } : System.String
+  Equals(Codalus.Plugins.HostingRepositoryInfo other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsPrivate { get; init; } : System.Boolean
+  ToString() -> System.String
+  WebUrl { get; init; } : System.String
+interface Codalus.Plugins.IBuild
+  BuildAsync(System.Collections.Generic.IReadOnlyList<System.String> projects, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.BuildResult>
+  Finished event System.EventHandler<Codalus.Plugins.BuildFinishedEventArgs>
+interface Codalus.Plugins.ICodalusPlugin
+  ActivateAsync(Codalus.Plugins.IPluginContext context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+  DeactivateAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+interface Codalus.Plugins.ICommands
+  ExecuteAsync(System.String commandId, System.Threading.CancellationToken cancellationToken, params System.Object[] args) -> System.Threading.Tasks.Task<System.Nullable<System.Text.Json.JsonElement>>
+  Register(System.String commandId, System.Action handler) -> System.IDisposable
+  Register(System.String commandId, System.Func<Codalus.Plugins.CommandInvocation, System.Threading.CancellationToken, System.Threading.Tasks.Task<System.Object>> handler) -> System.IDisposable
+interface Codalus.Plugins.IDebug
+  AttachAsync(System.Int32 processId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.IDebugSession>
+  LaunchAsync(Codalus.Plugins.DebugLaunchOptions options, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.IDebugSession>
+  RegisterVisualizer(Codalus.Plugins.DebugVisualizerOptions options, System.Func<Codalus.Plugins.IDebugVisualizerContext, System.Threading.CancellationToken, System.Threading.Tasks.Task<Codalus.Plugins.VisualizerView>> visualize) -> System.IDisposable
+interface Codalus.Plugins.IDebugSession
+  Ended { get; } : System.Threading.Tasks.Task<System.Nullable<System.Int32>>
+  ProcessId { get; } : System.Int32
+  StopAsync(System.Threading.CancellationToken cancellationToken = null) -> System.Threading.Tasks.Task
+interface Codalus.Plugins.IDebugVisualizerContext
+  EvaluateAsync(System.String expression, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.DebugValue>
+  Expression { get; } : System.String
+  Type { get; } : System.String
+  Value { get; } : System.String
+interface Codalus.Plugins.IDeviceCodePrompt
+  ShowAsync(Codalus.Plugins.DeviceCode code, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+interface Codalus.Plugins.IHosting
+  RegisterProvider(Codalus.Plugins.HostingProvider provider) -> System.IDisposable
+interface Codalus.Plugins.IOutputChannel
+  Append(System.String text) -> System.Void
+  AppendLine(System.String line) -> System.Void
+  Clear() -> System.Void
+  Name { get; } : System.String
+  Show() -> System.Void
+interface Codalus.Plugins.IPluginContext
+  Build { get; } : Codalus.Plugins.IBuild
+  Commands { get; } : Codalus.Plugins.ICommands
+  Debug { get; } : Codalus.Plugins.IDebug
+  Hosting { get; } : Codalus.Plugins.IHosting
+  Log { get; } : Codalus.Plugins.IPluginLog
+  Plugin { get; } : Codalus.Plugins.PluginInfo
+  Secrets { get; } : Codalus.Plugins.ISecrets
+  Settings { get; } : Codalus.Plugins.ISettings
+  Subscriptions { get; } : System.Collections.Generic.IList<System.IDisposable>
+  Terminals { get; } : Codalus.Plugins.ITerminals
+  Tests { get; } : Codalus.Plugins.ITests
+  Window { get; } : Codalus.Plugins.IWindow
+  Workspace { get; } : Codalus.Plugins.IWorkspace
+interface Codalus.Plugins.IPluginLog
+  Write(Codalus.Plugins.PluginLogLevel level, System.String message) -> System.Void
+interface Codalus.Plugins.ISecrets
+  DeleteAsync(System.String key, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+  GetAsync(System.String key, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.String>
+  StoreAsync(System.String key, System.String value, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+interface Codalus.Plugins.ISettings
+  Changed event System.EventHandler<Codalus.Plugins.SettingsChangedEventArgs>
+  GetValue<T>(System.String key, T fallback) -> T
+interface Codalus.Plugins.IStatusBarItem
+  Command { get; set; } : System.String
+  Hide() -> System.Void
+  Show() -> System.Void
+  Text { get; set; } : System.String
+  Tooltip { get; set; } : System.String
+interface Codalus.Plugins.ITerminal
+  Exited { get; } : System.Threading.Tasks.Task<System.Nullable<System.Int32>>
+  Id { get; } : System.String
+  KillAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+  Output event System.EventHandler<Codalus.Plugins.TerminalOutputEventArgs>
+  ProcessId { get; } : System.Int32
+  SendTextAsync(System.String text, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
+interface Codalus.Plugins.ITerminals
+  CreateAsync(Codalus.Plugins.TerminalOptions options, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.ITerminal>
+interface Codalus.Plugins.ITestController
+  CreateRun(Codalus.Plugins.TestRunRequest request, System.String name = null) -> Codalus.Plugins.ITestRun
+  CreateRunProfile(System.String label, Codalus.Plugins.TestRunProfileKind kind, System.Func<Codalus.Plugins.TestRunRequest, System.Threading.CancellationToken, System.Threading.Tasks.Task> handler, System.Boolean isDefault = True) -> Codalus.Plugins.ITestRunProfile
+  Find(System.String id) -> Codalus.Plugins.TestItem
+  Id { get; } : System.String
+  Items { get; } : Codalus.Plugins.TestItemCollection
+  Label { get; } : System.String
+  RefreshHandler { get; set; } : System.Func<System.Threading.CancellationToken, System.Threading.Tasks.Task>
+interface Codalus.Plugins.ITestRun
+  AddAttachment(Codalus.Plugins.TestAttachment attachment) -> System.Void
+  AddCoverage(Codalus.Plugins.CoverageReport coverage) -> System.Void
+  AppendOutput(System.String text, Codalus.Plugins.TestItem item = null) -> System.Void
+  Complete() -> System.Void
+  Enqueued(Codalus.Plugins.TestItem item) -> System.Void
+  Errored(Codalus.Plugins.TestItem item, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestMessage> messages, System.Nullable<System.TimeSpan> duration = null) -> System.Void
+  Failed(Codalus.Plugins.TestItem item, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestMessage> messages, System.Nullable<System.TimeSpan> duration = null) -> System.Void
+  Name { get; } : System.String
+  Passed(Codalus.Plugins.TestItem item, System.Nullable<System.TimeSpan> duration = null) -> System.Void
+  Skipped(Codalus.Plugins.TestItem item, System.String reason = null) -> System.Void
+  Started(Codalus.Plugins.TestItem item) -> System.Void
+interface Codalus.Plugins.ITestRunProfile
+  IsDefault { get; } : System.Boolean
+  Kind { get; } : Codalus.Plugins.TestRunProfileKind
+  Label { get; } : System.String
+interface Codalus.Plugins.ITests
+  CreateController(System.String id, System.String label) -> Codalus.Plugins.ITestController
+interface Codalus.Plugins.ITreeDataProvider<T>
+  Changed event System.EventHandler<Codalus.Plugins.TreeDataChangedEventArgs<T>>
+  GetChildrenAsync(T element, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<T>>
+  GetTreeItem(T element) -> Codalus.Plugins.TreeItem
+interface Codalus.Plugins.IWindow
+  CreateOutputChannel(System.String name) -> Codalus.Plugins.IOutputChannel
+  CreateStatusBarItem(System.String id, Codalus.Plugins.StatusBarAlignment alignment = Left, System.Int32 priority = 0) -> Codalus.Plugins.IStatusBarItem
+  RegisterTreeDataProvider<T>(System.String viewId, Codalus.Plugins.ITreeDataProvider<T> provider) -> System.IDisposable
+  SetMarkdown(System.String viewId, System.String markdown) -> System.Void
+  ShowInputBoxAsync(Codalus.Plugins.InputBoxOptions options, System.Threading.CancellationToken cancellationToken = null) -> System.Threading.Tasks.Task<System.String>
+  ShowNotificationAsync(Codalus.Plugins.NotificationSeverity severity, System.String message, System.Collections.Generic.IReadOnlyList<System.String> actions = null, System.Threading.CancellationToken cancellationToken = null) -> System.Threading.Tasks.Task<System.String>
+  ShowQuickPickAsync(System.Collections.Generic.IReadOnlyList<Codalus.Plugins.QuickPickItem> items, System.String placeholder = null, System.Threading.CancellationToken cancellationToken = null) -> System.Threading.Tasks.Task<Codalus.Plugins.QuickPickItem>
+  WithProgressAsync<T>(System.String title, System.Func<System.IProgress<Codalus.Plugins.ProgressReport>, System.Threading.CancellationToken, System.Threading.Tasks.Task<T>> work, System.Boolean cancellable = False, System.Threading.CancellationToken cancellationToken = null) -> System.Threading.Tasks.Task<T>
+interface Codalus.Plugins.IWorkspace
+  DocumentsChanged event System.EventHandler<Codalus.Plugins.DocumentsChangedEventArgs>
+  FindTestCandidatesAsync(System.Collections.Generic.IReadOnlyList<System.String> documentUris, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.DocumentTestCandidates>>
+  GetPackagesAsync(System.String projectPath, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.WorkspacePackage>>
+  GetProjectOutputAsync(System.String projectPath, System.String targetFramework, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.ProjectOutput>
+  GetProjectPropertiesAsync(System.String projectPath, System.Collections.Generic.IReadOnlyList<System.String> names, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyDictionary<System.String, System.String>>
+  GetSolutionAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.WorkspaceSolution>
+  GetTypeOutlineAsync(System.String documentUri, System.Int32 line, System.Int32 character, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.TypeOutline>
+  SolutionChanged event System.EventHandler
+class Codalus.Plugins.InputBoxOptions
+  .ctor(System.String Title)
+  Deconstruct(ref System.String Title) -> System.Void
+  Equals(Codalus.Plugins.InputBoxOptions other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Prompt { get; init; } : System.String
+  Title { get; init; } : System.String
+  ToString() -> System.String
+  Value { get; init; } : System.String
+class Codalus.Plugins.LineCoverage
+  .ctor(System.Int32 Line, System.Int32 Hits, System.Int32 BranchesCovered = 0, System.Int32 BranchesTotal = 0)
+  BranchesCovered { get; init; } : System.Int32
+  BranchesTotal { get; init; } : System.Int32
+  Deconstruct(ref System.Int32 Line, ref System.Int32 Hits, ref System.Int32 BranchesCovered, ref System.Int32 BranchesTotal) -> System.Void
+  Equals(Codalus.Plugins.LineCoverage other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Hits { get; init; } : System.Int32
+  Line { get; init; } : System.Int32
+  ToString() -> System.String
+class Codalus.Plugins.MethodCoverage
+  .ctor(System.String Assembly, System.String Namespace, System.String Class, System.String Method, System.String Uri, System.Int32 Line, System.Int32 LinesCovered, System.Int32 LinesTotal, System.Int32 BranchesCovered, System.Int32 BranchesTotal)
+  Assembly { get; init; } : System.String
+  BranchesCovered { get; init; } : System.Int32
+  BranchesTotal { get; init; } : System.Int32
+  Class { get; init; } : System.String
+  Deconstruct(ref System.String Assembly, ref System.String Namespace, ref System.String Class, ref System.String Method, ref System.String Uri, ref System.Int32 Line, ref System.Int32 LinesCovered, ref System.Int32 LinesTotal, ref System.Int32 BranchesCovered, ref System.Int32 BranchesTotal) -> System.Void
+  Equals(Codalus.Plugins.MethodCoverage other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Line { get; init; } : System.Int32
+  LinesCovered { get; init; } : System.Int32
+  LinesTotal { get; init; } : System.Int32
+  Method { get; init; } : System.String
+  Namespace { get; init; } : System.String
+  ToString() -> System.String
+  Uri { get; init; } : System.String
+class Codalus.Plugins.MethodOutline
+  .ctor(System.String Name, System.String ReturnType, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ParameterOutline> Parameters, System.Boolean IsStatic, System.Boolean IsAsync, System.Int32 Line)
+  Deconstruct(ref System.String Name, ref System.String ReturnType, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ParameterOutline> Parameters, ref System.Boolean IsStatic, ref System.Boolean IsAsync, ref System.Int32 Line) -> System.Void
+  Equals(Codalus.Plugins.MethodOutline other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsAsync { get; init; } : System.Boolean
+  IsStatic { get; init; } : System.Boolean
+  Line { get; init; } : System.Int32
+  Name { get; init; } : System.String
+  Parameters { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ParameterOutline>
+  ReturnType { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.NewPullRequest
+  .ctor(System.String Title, System.String SourceBranch, System.String TargetBranch)
+  Deconstruct(ref System.String Title, ref System.String SourceBranch, ref System.String TargetBranch) -> System.Void
+  Description { get; init; } : System.String
+  Equals(Codalus.Plugins.NewPullRequest other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsDraft { get; init; } : System.Boolean
+  SourceBranch { get; init; } : System.String
+  TargetBranch { get; init; } : System.String
+  Title { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.NewRepository
+  .ctor(System.String Owner, System.String Name)
+  Deconstruct(ref System.String Owner, ref System.String Name) -> System.Void
+  Description { get; init; } : System.String
+  Equals(Codalus.Plugins.NewRepository other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsPrivate { get; init; } : System.Boolean
+  Name { get; init; } : System.String
+  Owner { get; init; } : System.String
+  ToString() -> System.String
+enum Codalus.Plugins.NotificationSeverity
+  Error = 2
+  Info = 0
+  Warning = 1
+class Codalus.Plugins.ParameterOutline
+  .ctor(System.String Name, System.String Type)
+  Deconstruct(ref System.String Name, ref System.String Type) -> System.Void
+  Equals(Codalus.Plugins.ParameterOutline other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Name { get; init; } : System.String
+  ToString() -> System.String
+  Type { get; init; } : System.String
+static class Codalus.Plugins.PluginApi
+  DeprecationDiagnostic : System.String = CODALUS0001
+  Version : System.String = 1.0.0
+class Codalus.Plugins.PluginInfo
+  .ctor(System.String Id, System.String Version, System.String InstallPath)
+  Deconstruct(ref System.String Id, ref System.String Version, ref System.String InstallPath) -> System.Void
+  Equals(Codalus.Plugins.PluginInfo other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  InstallPath { get; init; } : System.String
+  ToString() -> System.String
+  Version { get; init; } : System.String
+static class Codalus.Plugins.PluginLocalization
+  LocaleVariable : System.String = CODALUS_DISPLAY_LOCALE
+  Localize(Codalus.Plugins.IPluginContext context, System.String key, System.String english) -> System.String
+  Localize(Codalus.Plugins.IPluginContext context, System.String key, System.String english, params System.Object[] args) -> System.String
+static class Codalus.Plugins.PluginLogExtensions
+  Debug(Codalus.Plugins.IPluginLog log, System.String message) -> System.Void
+  Error(Codalus.Plugins.IPluginLog log, System.String message) -> System.Void
+  Info(Codalus.Plugins.IPluginLog log, System.String message) -> System.Void
+  Warning(Codalus.Plugins.IPluginLog log, System.String message) -> System.Void
+enum Codalus.Plugins.PluginLogLevel
+  Debug = 0
+  Error = 3
+  Info = 1
+  Warning = 2
+class Codalus.Plugins.ProgressReport
+  .ctor(System.String Message = null, System.Nullable<System.Double> Percent = null)
+  Deconstruct(ref System.String Message, ref System.Nullable<System.Double> Percent) -> System.Void
+  Equals(Codalus.Plugins.ProgressReport other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Message { get; init; } : System.String
+  Percent { get; init; } : System.Nullable<System.Double>
+  ToString() -> System.String
+class Codalus.Plugins.ProjectOutput
+  .ctor(System.String Path, System.String TargetFramework, System.String TargetPath, System.String RunCommand, System.String RunArguments, System.String RunWorkingDirectory)
+  Deconstruct(ref System.String Path, ref System.String TargetFramework, ref System.String TargetPath, ref System.String RunCommand, ref System.String RunArguments, ref System.String RunWorkingDirectory) -> System.Void
+  Equals(Codalus.Plugins.ProjectOutput other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Path { get; init; } : System.String
+  RunArguments { get; init; } : System.String
+  RunCommand { get; init; } : System.String
+  RunWorkingDirectory { get; init; } : System.String
+  TargetFramework { get; init; } : System.String
+  TargetPath { get; init; } : System.String
+  ToString() -> System.String
+interface Codalus.Plugins.Proposed.IProposedApi
+interface Codalus.Plugins.Proposed.IProposedApiProvider
+  Proposed { get; } : Codalus.Plugins.Proposed.IProposedApi
+static class Codalus.Plugins.Proposed.ProposedApiExtensions
+  Proposed(Codalus.Plugins.IPluginContext context) -> Codalus.Plugins.Proposed.IProposedApi
+class Codalus.Plugins.PublishedRepository
+  .ctor(System.String CloneUrl, System.String WebUrl)
+  CloneUrl { get; init; } : System.String
+  Deconstruct(ref System.String CloneUrl, ref System.String WebUrl) -> System.Void
+  Equals(Codalus.Plugins.PublishedRepository other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  SshUrl { get; init; } : System.String
+  ToString() -> System.String
+  WebUrl { get; init; } : System.String
+class Codalus.Plugins.PullRequest
+  .ctor(System.String Number, System.String Title, System.String Author, System.String SourceBranch, System.String TargetBranch, System.String WebUrl)
+  Author { get; init; } : System.String
+  CreatedAt { get; init; } : System.Nullable<System.DateTimeOffset>
+  Deconstruct(ref System.String Number, ref System.String Title, ref System.String Author, ref System.String SourceBranch, ref System.String TargetBranch, ref System.String WebUrl) -> System.Void
+  Equals(Codalus.Plugins.PullRequest other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsDraft { get; init; } : System.Boolean
+  Number { get; init; } : System.String
+  Reference { get; init; } : System.String
+  Reviewers { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  SourceBranch { get; init; } : System.String
+  SourceCloneUrl { get; init; } : System.String
+  SourceCommit { get; init; } : System.String
+  SourceRepository { get; init; } : System.String
+  State { get; init; } : System.String
+  TargetBranch { get; init; } : System.String
+  Title { get; init; } : System.String
+  ToString() -> System.String
+  UpdatedAt { get; init; } : System.Nullable<System.DateTimeOffset>
+  WebUrl { get; init; } : System.String
+class Codalus.Plugins.PullRequestCheckout
+  .ctor(System.String Remote, System.String SourceRef, System.String LocalBranch, System.Boolean Track)
+  Deconstruct(ref System.String Remote, ref System.String SourceRef, ref System.String LocalBranch, ref System.Boolean Track) -> System.Void
+  Equals(Codalus.Plugins.PullRequestCheckout other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  LocalBranch { get; init; } : System.String
+  Remote { get; init; } : System.String
+  SourceRef { get; init; } : System.String
+  ToString() -> System.String
+  Track { get; init; } : System.Boolean
+class Codalus.Plugins.PullRequestDetails
+  .ctor(Codalus.Plugins.PullRequest PullRequest, System.String Description, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ReviewThread> Threads)
+  Comments { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ReviewComment>
+  Deconstruct(ref Codalus.Plugins.PullRequest PullRequest, ref System.String Description, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ReviewThread> Threads) -> System.Void
+  Description { get; init; } : System.String
+  Equals(Codalus.Plugins.PullRequestDetails other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  PullRequest { get; init; } : Codalus.Plugins.PullRequest
+  Threads { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ReviewThread>
+  ToString() -> System.String
+enum Codalus.Plugins.PullRequestFilter
+  All = 0
+  Mine = 1
+  ReviewRequested = 2
+class Codalus.Plugins.QuickPickItem
+  .ctor(System.String Label)
+  Deconstruct(ref System.String Label) -> System.Void
+  Description { get; init; } : System.String
+  Detail { get; init; } : System.String
+  Equals(Codalus.Plugins.QuickPickItem other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Label { get; init; } : System.String
+  Tag { get; init; } : System.Object
+  ToString() -> System.String
+class Codalus.Plugins.ReviewComment
+  .ctor(System.String Author, System.String Body, System.DateTimeOffset CreatedAt)
+  Author { get; init; } : System.String
+  Body { get; init; } : System.String
+  CreatedAt { get; init; } : System.DateTimeOffset
+  Deconstruct(ref System.String Author, ref System.String Body, ref System.DateTimeOffset CreatedAt) -> System.Void
+  Equals(Codalus.Plugins.ReviewComment other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  ToString() -> System.String
+  Url { get; init; } : System.String
+class Codalus.Plugins.ReviewThread
+  .ctor(System.String Id, System.String Path, System.Int32 Line, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ReviewComment> Comments)
+  Comments { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ReviewComment>
+  Deconstruct(ref System.String Id, ref System.String Path, ref System.Int32 Line, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.ReviewComment> Comments) -> System.Void
+  Equals(Codalus.Plugins.ReviewThread other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  IsOutdated { get; init; } : System.Boolean
+  IsResolved { get; init; } : System.Boolean
+  Line { get; init; } : System.Int32
+  Path { get; init; } : System.String
+  StartLine { get; init; } : System.Nullable<System.Int32>
+  ToString() -> System.String
+  Url { get; init; } : System.String
+class Codalus.Plugins.SettingsChangedEventArgs
+  .ctor(System.Collections.Generic.IReadOnlyCollection<System.String> keys)
+  Affects(System.String keyOrSection) -> System.Boolean
+  Keys { get; } : System.Collections.Generic.IReadOnlyCollection<System.String>
+enum Codalus.Plugins.StatusBarAlignment
+  Left = 0
+  Right = 1
+class Codalus.Plugins.StatusCheck
+  .ctor(System.String Name, System.String State)
+  Deconstruct(ref System.String Name, ref System.String State) -> System.Void
+  Description { get; init; } : System.String
+  Equals(Codalus.Plugins.StatusCheck other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Name { get; init; } : System.String
+  State { get; init; } : System.String
+  ToString() -> System.String
+  Url { get; init; } : System.String
+class Codalus.Plugins.TerminalOptions
+  .ctor()
+  Arguments { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  Environment { get; init; } : System.Collections.Generic.IReadOnlyDictionary<System.String, System.String>
+  Equals(Codalus.Plugins.TerminalOptions other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Name { get; init; } : System.String
+  Profile { get; init; } : System.String
+  Program { get; init; } : System.String
+  ReportOutput { get; init; } : System.Boolean
+  Show { get; init; } : System.Boolean
+  ToString() -> System.String
+  WorkingDirectory { get; init; } : System.String
+class Codalus.Plugins.TerminalOutputEventArgs
+  .ctor(System.String text)
+  Text { get; } : System.String
+class Codalus.Plugins.TestAttachment
+  .ctor(System.String Uri, System.String DisplayName = null)
+  Deconstruct(ref System.String Uri, ref System.String DisplayName) -> System.Void
+  DisplayName { get; init; } : System.String
+  Equals(Codalus.Plugins.TestAttachment other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  ToString() -> System.String
+  Uri { get; init; } : System.String
+class Codalus.Plugins.TestCandidate
+  .ctor(System.String Kind, System.String Name, System.String Type, System.String Namespace, Codalus.Plugins.TestRange Range, Codalus.Plugins.TestRange SelectionRange, System.Boolean Parameterized)
+  ClassKind : System.String = class
+  Deconstruct(ref System.String Kind, ref System.String Name, ref System.String Type, ref System.String Namespace, ref Codalus.Plugins.TestRange Range, ref Codalus.Plugins.TestRange SelectionRange, ref System.Boolean Parameterized) -> System.Void
+  Equals(Codalus.Plugins.TestCandidate other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Kind { get; init; } : System.String
+  MethodKind : System.String = method
+  Name { get; init; } : System.String
+  Namespace { get; init; } : System.String
+  Parameterized { get; init; } : System.Boolean
+  Range { get; init; } : Codalus.Plugins.TestRange
+  SelectionRange { get; init; } : Codalus.Plugins.TestRange
+  ToString() -> System.String
+  Type { get; init; } : System.String
+class Codalus.Plugins.TestItem
+  .ctor(System.String id, System.String label)
+  Changed event System.EventHandler
+  Children { get; } : Codalus.Plugins.TestItemCollection
+  Description { get; set; } : System.String
+  Error { get; set; } : System.String
+  Id { get; } : System.String
+  Label { get; set; } : System.String
+  Parent { get; } : Codalus.Plugins.TestItem
+  Range { get; set; } : Codalus.Plugins.TestRange
+  SortText { get; set; } : System.String
+  ToString() -> System.String
+  Traits { get; set; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestTrait>
+  Uri { get; set; } : System.String
+class Codalus.Plugins.TestItemCollection
+  Add(Codalus.Plugins.TestItem item) -> System.Void
+  Changed event System.EventHandler<Codalus.Plugins.TestItemCollectionChangedEventArgs>
+  Count { get; } : System.Int32
+  CreateRoot() -> Codalus.Plugins.TestItemCollection
+  Get(System.String id) -> Codalus.Plugins.TestItem
+  GetEnumerator() -> System.Collections.Generic.IEnumerator<Codalus.Plugins.TestItem>
+  Remove(System.String id) -> System.Boolean
+  Replace(System.Collections.Generic.IEnumerable<Codalus.Plugins.TestItem> items) -> System.Void
+class Codalus.Plugins.TestItemCollectionChangedEventArgs
+  .ctor(System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem> added, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem> removed)
+  Added { get; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem>
+  Removed { get; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem>
+class Codalus.Plugins.TestMessage
+  .ctor(System.String Message)
+  Actual { get; init; } : System.String
+  Deconstruct(ref System.String Message) -> System.Void
+  Equals(Codalus.Plugins.TestMessage other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  Expected { get; init; } : System.String
+  GetHashCode() -> System.Int32
+  Message { get; init; } : System.String
+  Range { get; init; } : Codalus.Plugins.TestRange
+  StackTrace { get; init; } : System.String
+  ToString() -> System.String
+  Uri { get; init; } : System.String
+class Codalus.Plugins.TestRange
+  .ctor(System.Int32 StartLine, System.Int32 StartCharacter, System.Int32 EndLine, System.Int32 EndCharacter)
+  Deconstruct(ref System.Int32 StartLine, ref System.Int32 StartCharacter, ref System.Int32 EndLine, ref System.Int32 EndCharacter) -> System.Void
+  EndCharacter { get; init; } : System.Int32
+  EndLine { get; init; } : System.Int32
+  Equals(Codalus.Plugins.TestRange other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  StartCharacter { get; init; } : System.Int32
+  StartLine { get; init; } : System.Int32
+  ToString() -> System.String
+enum Codalus.Plugins.TestRunProfileKind
+  Coverage = 2
+  Debug = 1
+  Run = 0
+class Codalus.Plugins.TestRunRequest
+  .ctor(System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem> Include, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem> Exclude, Codalus.Plugins.ITestRunProfile Profile)
+  Deconstruct(ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem> Include, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem> Exclude, ref Codalus.Plugins.ITestRunProfile Profile) -> System.Void
+  Equals(Codalus.Plugins.TestRunRequest other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  Exclude { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem>
+  GetHashCode() -> System.Int32
+  Include { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.TestItem>
+  Profile { get; init; } : Codalus.Plugins.ITestRunProfile
+  ToString() -> System.String
+class Codalus.Plugins.TestTrait
+  .ctor(System.String Name, System.String Value)
+  Deconstruct(ref System.String Name, ref System.String Value) -> System.Void
+  Equals(Codalus.Plugins.TestTrait other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Name { get; init; } : System.String
+  ToString() -> System.String
+  Value { get; init; } : System.String
+class Codalus.Plugins.TreeDataChangedEventArgs<T>
+  .ctor(T element)
+  Element { get; } : T
+class Codalus.Plugins.TreeItem
+  .ctor(System.String Label)
+  Collapsible { get; init; } : Codalus.Plugins.TreeItemCollapsibleState
+  Command { get; init; } : Codalus.Plugins.TreeItemCommand
+  Deconstruct(ref System.String Label) -> System.Void
+  Description { get; init; } : System.String
+  Equals(Codalus.Plugins.TreeItem other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Icon { get; init; } : System.String
+  Label { get; init; } : System.String
+  ToString() -> System.String
+  Tooltip { get; init; } : System.String
+enum Codalus.Plugins.TreeItemCollapsibleState
+  Collapsed = 1
+  Expanded = 2
+  None = 0
+class Codalus.Plugins.TreeItemCommand
+  .ctor(System.String CommandId, params System.Object[] Args)
+  Args { get; init; } : System.Object[]
+  CommandId { get; init; } : System.String
+  Deconstruct(ref System.String CommandId, ref System.Object[] Args) -> System.Void
+  Equals(Codalus.Plugins.TreeItemCommand other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  ToString() -> System.String
+class Codalus.Plugins.TypeOutline
+  .ctor(System.String Name, System.String Namespace, System.String NestedName, System.Boolean IsStatic, System.Boolean HasParameterlessConstructor, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.MethodOutline> Methods, System.String SelectedMethod)
+  Deconstruct(ref System.String Name, ref System.String Namespace, ref System.String NestedName, ref System.Boolean IsStatic, ref System.Boolean HasParameterlessConstructor, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.MethodOutline> Methods, ref System.String SelectedMethod) -> System.Void
+  Equals(Codalus.Plugins.TypeOutline other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  HasParameterlessConstructor { get; init; } : System.Boolean
+  IsStatic { get; init; } : System.Boolean
+  Methods { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.MethodOutline>
+  Name { get; init; } : System.String
+  Namespace { get; init; } : System.String
+  NestedName { get; init; } : System.String
+  SelectedMethod { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.VisualizerView
+  .ctor()
+  Columns { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  Equals(Codalus.Plugins.VisualizerView other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  FromTable(System.Collections.Generic.IReadOnlyList<System.String> columns, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<System.String>> rows) -> Codalus.Plugins.VisualizerView
+  FromText(System.String text, System.String languageId = null) -> Codalus.Plugins.VisualizerView
+  GetHashCode() -> System.Int32
+  LanguageId { get; init; } : System.String
+  Rows { get; init; } : System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<System.String>>
+  Text { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.WorkItem
+  .ctor(System.String Number, System.String Title, System.String Reference, System.String WebUrl)
+  AssignedTo { get; init; } : System.String
+  Deconstruct(ref System.String Number, ref System.String Title, ref System.String Reference, ref System.String WebUrl) -> System.Void
+  Equals(Codalus.Plugins.WorkItem other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Number { get; init; } : System.String
+  Reference { get; init; } : System.String
+  State { get; init; } : System.String
+  Title { get; init; } : System.String
+  ToString() -> System.String
+  Type { get; init; } : System.String
+  WebUrl { get; init; } : System.String
+class Codalus.Plugins.WorkItemQuery
+  .ctor()
+  AssignedToMe { get; init; } : System.Boolean
+  Equals(Codalus.Plugins.WorkItemQuery other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Limit { get; init; } : System.Int32
+  Text { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.WorkspacePackage
+  .ctor(System.String Id, System.String RequestedVersion, System.String ResolvedVersion, System.Boolean IsTransitive, System.Collections.Generic.IReadOnlyList<System.String> TargetFrameworks)
+  Deconstruct(ref System.String Id, ref System.String RequestedVersion, ref System.String ResolvedVersion, ref System.Boolean IsTransitive, ref System.Collections.Generic.IReadOnlyList<System.String> TargetFrameworks) -> System.Void
+  Equals(Codalus.Plugins.WorkspacePackage other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  IsTransitive { get; init; } : System.Boolean
+  RequestedVersion { get; init; } : System.String
+  ResolvedVersion { get; init; } : System.String
+  TargetFrameworks { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  ToString() -> System.String
+class Codalus.Plugins.WorkspaceProject
+  .ctor(System.String Path, System.String Name, System.String State, System.Collections.Generic.IReadOnlyList<System.String> TargetFrameworks, System.String OutputType, System.Boolean IsTestProject, System.String TestPlatform, System.Collections.Generic.IReadOnlyList<System.String> CompileFiles, System.Collections.Generic.IReadOnlyList<System.String> ProjectReferences)
+  CompileFiles { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  Deconstruct(ref System.String Path, ref System.String Name, ref System.String State, ref System.Collections.Generic.IReadOnlyList<System.String> TargetFrameworks, ref System.String OutputType, ref System.Boolean IsTestProject, ref System.String TestPlatform, ref System.Collections.Generic.IReadOnlyList<System.String> CompileFiles, ref System.Collections.Generic.IReadOnlyList<System.String> ProjectReferences) -> System.Void
+  Equals(Codalus.Plugins.WorkspaceProject other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsTestProject { get; init; } : System.Boolean
+  Name { get; init; } : System.String
+  OutputType { get; init; } : System.String
+  Path { get; init; } : System.String
+  ProjectReferences { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  State { get; init; } : System.String
+  TargetFrameworks { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  TestPlatform { get; init; } : System.String
+  ToString() -> System.String
+class Codalus.Plugins.WorkspaceSolution
+  .ctor(System.String Path, System.Boolean Trusted, System.String Configuration, System.String Platform, System.String SdkPath, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.WorkspaceProject> Projects)
+  Configuration { get; init; } : System.String
+  Deconstruct(ref System.String Path, ref System.Boolean Trusted, ref System.String Configuration, ref System.String Platform, ref System.String SdkPath, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.WorkspaceProject> Projects) -> System.Void
+  Equals(Codalus.Plugins.WorkspaceSolution other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Path { get; init; } : System.String
+  Platform { get; init; } : System.String
+  Projects { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.WorkspaceProject>
+  SdkPath { get; init; } : System.String
+  ToString() -> System.String
+  Trusted { get; init; } : System.Boolean

@@ -6,21 +6,39 @@ using Codalus.Plugins.Protocol;
 namespace Codalus.Plugins.Host;
 
 /// <summary>The <see cref="IPluginContext"/> handed to one plugin; tracks everything it registers.</summary>
-internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPluginLog, IProposedApiProvider
+internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPluginLog, IProposedApiProvider, IDisposable
 {
     private readonly PluginHostServer _server;
     private readonly List<IDisposable> _owned = [];
-    private readonly PluginProposedApi? _proposed;
+    private readonly PluginProposedApi _services;
+    private readonly bool _enableProposedApi;
 
     public PluginContext(PluginHostServer server, PluginHostServer.LoadedPlugin plugin)
     {
         _server = server;
         Plugin = plugin.Info;
         Settings = new PluginSettings(server.Settings);
-        _proposed = plugin.EnableProposedApi ? new PluginProposedApi(server.Proposed, plugin.Info.Id) : null;
+        _services = new PluginProposedApi(server.Proposed, plugin.Info.Id);
+        _enableProposedApi = plugin.EnableProposedApi;
     }
 
-    public IProposedApi? Proposed => _proposed;
+    // Stable since API 1.0 (proposed in 0.2.x): every plugin has them.
+    public ITests Tests => _services;
+
+    public IWorkspace Workspace => _services;
+
+    public IBuild Build => _services;
+
+    public IDebug Debug => _services;
+
+    public ITerminals Terminals => _services;
+
+    public IHosting Hosting => _services;
+
+    public ISecrets Secrets => _services.Secrets;
+
+    /// <summary>New proposals (none at 1.0), for plugins that enable them.</summary>
+    public IProposedApi? Proposed => _enableProposedApi ? _services : null;
 
     public PluginInfo Plugin { get; }
 
@@ -47,6 +65,8 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
         return disposable;
     }
 
+    public void Dispose() => DisposeAll();
+
     /// <summary>Disposes the plugin's subscriptions and everything it registered (deactivation).</summary>
     public void DisposeAll()
     {
@@ -67,7 +87,7 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
         }
 
         ((PluginSettings)Settings).Detach();
-        _proposed?.Dispose();
+        _services.Dispose();
     }
 
     // ------------------------------------------------------------------ commands
@@ -126,6 +146,30 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
             PluginJsonContext.Default.ShowInputBoxResult,
             cancellationToken).ConfigureAwait(false);
         return result.Value;
+    }
+
+    public async Task<T> WithProgressAsync<T>(string title, Func<IProgress<ProgressReport>, CancellationToken, Task<T>> work, bool cancellable = false, CancellationToken cancellationToken = default)
+    {
+        var json = PluginJsonContext.Default;
+        var id = _server.NewProgressId();
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var registration = _server.RegisterProgress(id, cancel);
+        _server.Post(PluginMethods.ProgressStart, new ProgressStartParams(Id, id, title, cancellable), json.ProgressStartParams);
+        try
+        {
+            var progress = new Progress(report => _server.Post(PluginMethods.ProgressReport, new ProgressReportParams(Id, id, report.Message, report.Percent), json.ProgressReportParams));
+            return await work(progress, cancel.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _server.Post(PluginMethods.ProgressEnd, new ProgressIdParams(Id, id), json.ProgressIdParams);
+        }
+    }
+
+    /// <summary>Reports straight away, in order (<see cref="Progress{T}"/> would post to a synchronization context).</summary>
+    private sealed class Progress(Action<ProgressReport> report) : IProgress<ProgressReport>
+    {
+        public void Report(ProgressReport value) => report(value);
     }
 
     public IOutputChannel CreateOutputChannel(string name) => new OutputChannel(_server, Id, name);

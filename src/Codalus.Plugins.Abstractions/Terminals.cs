@@ -1,4 +1,4 @@
-namespace Codalus.Plugins.Proposed;
+namespace Codalus.Plugins;
 
 /// <summary>The integrated terminals (ADR 0014). Since API 0.2.3.</summary>
 public interface ITerminals

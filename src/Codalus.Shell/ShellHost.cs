@@ -130,6 +130,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeXaml();
         InitializeUpdates();
         InitializeRemote();
+        InitializeProgress();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)

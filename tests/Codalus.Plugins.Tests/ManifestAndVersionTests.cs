@@ -122,7 +122,7 @@ public sealed class ManifestValidationTests : IDisposable
     {
         var dir = Variant("projectsystem", m =>
         {
-            m["engines"]!["codalus"] = "^0.3.0";
+            m["engines"]!["codalus"] = "^1.0.0";
             m["contributes"]!["propertyProviders"] = JsonNode.Parse("""[ { "command": "hello.properties", "when": "explorerItemKind == file" }, { "command": "" } ]""");
             m["contributes"]!["externalToolMacros"] = JsonNode.Parse("""[ { "name": "Greeting", "command": "hello.greeting", "description": "A greeting." } ]""");
             m["contributes"]!["customTools"] = JsonNode.Parse("""[ { "name": "HelloGenerator", "command": "hello.generate", "extension": ".g.cs" }, { "name": "", "command": "x" } ]""");

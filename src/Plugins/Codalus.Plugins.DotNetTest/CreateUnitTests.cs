@@ -22,7 +22,7 @@ internal enum TestFramework
 /// </summary>
 internal static class CreateUnitTests
 {
-    public static async Task<object?> RunAsync(IPluginContext context, IProposedApi api, CommandInvocation args, CancellationToken cancellationToken)
+    public static async Task<object?> RunAsync(IPluginContext context, IPluginContext api, CommandInvocation args, CancellationToken cancellationToken)
     {
         var (uri, line, character) = await PositionAsync(context, args, cancellationToken).ConfigureAwait(false);
         if (uri is null)

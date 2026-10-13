@@ -46,6 +46,26 @@ public sealed class HelloPlugin : ICodalusPlugin
 
         context.Subscriptions.Add(context.Commands.Register("hello.refresh", tree.Refresh));
 
+        // A task in the status bar (API 1.0): counts to ten, reporting each step, until done or cancelled.
+        context.Subscriptions.Add(context.Commands.Register("hello.count", async (_, ct) =>
+            await context.Window.WithProgressAsync<object?>("Counting", async (progress, token) =>
+            {
+                for (var i = 1; i <= 10; i++)
+                {
+                    progress.Report(new ProgressReport($"{i} of 10", i * 10));
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(400), token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return $"cancelled at {i}";
+                    }
+                }
+
+                return "done";
+            }, cancellable: true, ct)));
+
         // Simulates a fatal plugin bug, so the shell's host supervision can be exercised.
         context.Subscriptions.Add(context.Commands.Register("hello.crashHost", () => Environment.Exit(42)));
 

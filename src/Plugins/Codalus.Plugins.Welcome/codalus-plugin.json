@@ -4,7 +4,7 @@
   "displayName": "%displayName%",
   "publisher": "codalus",
   "description": "%description%",
-  "engines": { "codalus": "^0.3.0" },
+  "engines": { "codalus": "^1.0.0" },
   "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.Welcome.dll" },
   "activationEvents": [ "onStartup" ],
   "contributes": {

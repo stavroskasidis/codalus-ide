@@ -30,6 +30,7 @@ public sealed class WorkbenchServices : IDisposable
         Menus = new MenuRegistry(Commands, Keybindings, Context);
         Settings = new SettingsService(paths.SettingsFile, workspaceSettingsFile, watchFiles);
         Notifications = new NotificationService();
+        Progress = new ProgressService();
         Output = new OutputService();
         StatusBar = new StatusBarService();
         ToolWindows = new ToolWindowRegistry();
@@ -60,6 +61,9 @@ public sealed class WorkbenchServices : IDisposable
     public SettingsService Settings { get; }
 
     public NotificationService Notifications { get; }
+
+    /// <summary>Long operations shown in the status bar, cancellable when their owner allows it (API 1.0).</summary>
+    public ProgressService Progress { get; }
 
     public OutputService Output { get; }
 

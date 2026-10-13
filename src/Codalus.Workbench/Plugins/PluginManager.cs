@@ -605,7 +605,7 @@ public sealed class PluginManager : IAsyncDisposable
     private void OnProposedNotification(object? sender, ProposedNotification notification)
     {
         var json = PluginJsonContext.Default;
-        foreach (var host in _hosts.Values.Where(h => h.IsRunning && h.UsesProposedApi))
+        foreach (var host in _hosts.Values.Where(h => h.IsRunning))
         {
             _ = notification switch
             {
@@ -698,6 +698,9 @@ public sealed class PluginManager : IAsyncDisposable
         private readonly string _group;
         private readonly SupervisedProcess _process;
 
+        // Tasks this host's plugins show (ended when the host goes).
+        private readonly ConcurrentDictionary<string, Notifications.ProgressTask> _progress = new(StringComparer.Ordinal);
+
         // Test controllers created by this host's plugins (disposed when the host crashes).
         private readonly ConcurrentDictionary<string, byte> _controllers = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, byte> _visualizers = new(StringComparer.Ordinal);
@@ -736,9 +739,6 @@ public sealed class PluginManager : IAsyncDisposable
         }
 
         public bool IsRunning => _process.IsRunning;
-
-        /// <summary>Whether a plugin of this host may use proposed APIs (and so wants workspace notifications).</summary>
-        public bool UsesProposedApi => Members.Any(p => p.Manifest?.EnableProposedApi == true);
 
         public JsonRpcConnection Connection => _process.Connection;
 
@@ -838,6 +838,14 @@ public sealed class PluginManager : IAsyncDisposable
         /// <summary>Test controllers, hosting providers and visualizers the host's plugins registered go; its active plugins are ready again.</summary>
         private void ReleaseContributions()
         {
+            foreach (var id in _progress.Keys)
+            {
+                if (_progress.TryRemove(id, out var task))
+                {
+                    task.End();
+                }
+            }
+
             foreach (var controller in _controllers.Keys)
             {
                 _controllers.TryRemove(controller, out _);
@@ -860,8 +868,6 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 plugin.State = PluginState.Ready;
             }
-
-            Active = [];
         }
 
         private void Configure(JsonRpcConnection connection)
@@ -912,6 +918,28 @@ public sealed class PluginManager : IAsyncDisposable
                 new ShowInputBoxResult(_manager.Prompts is { } prompts
                     ? await prompts.InputAsync(p.Title, p.Prompt, p.Value, _manager.Find(p.PluginId)?.DisplayName ?? p.PluginId, ct).ConfigureAwait(false)
                     : null));
+            connection.OnNotification(PluginMethods.ProgressStart, json.ProgressStartParams, p =>
+            {
+                var source = _manager.Find(p.PluginId)?.DisplayName ?? p.PluginId;
+                Action? cancel = p.Cancellable
+                    ? () => _ = NotifySafeAsync(PluginMethods.ProgressCancel, new ProgressIdParams(p.PluginId, p.Id), json.ProgressIdParams)
+                    : null;
+                _progress[p.Id] = workbench.Progress.Begin(p.Title, source, cancel);
+            });
+            connection.OnNotification(PluginMethods.ProgressReport, json.ProgressReportParams, p =>
+            {
+                if (_progress.TryGetValue(p.Id, out var task))
+                {
+                    task.Report(p.Message, p.Percent);
+                }
+            });
+            connection.OnNotification(PluginMethods.ProgressEnd, json.ProgressIdParams, p =>
+            {
+                if (_progress.TryRemove(p.Id, out var task))
+                {
+                    task.End();
+                }
+            });
             connection.OnNotification(PluginMethods.OutputAppend, json.OutputParams, p => Channel(p).Append(p.Text ?? string.Empty));
             connection.OnNotification(PluginMethods.OutputClear, json.OutputParams, p => Channel(p).Clear());
             connection.OnNotification(PluginMethods.OutputShow, json.OutputParams, p => workbench.Output.Show(Channel(p)));

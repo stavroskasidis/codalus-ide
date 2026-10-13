@@ -4,11 +4,10 @@
   "displayName": ".NET Tests",
   "publisher": "codalus",
   "description": "Discovers, runs and debugs xUnit, NUnit, MSTest and TUnit tests on VSTest and Microsoft.Testing.Platform, with coverage from Coverlet.",
-  "engines": { "codalus": "^0.3.0" },
+  "engines": { "codalus": "^1.0.0" },
   "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.DotNetTest.dll" },
   "isolation": "dedicated",
   "runsOn": "workspace",
-  "enableProposedApi": true,
   "activationEvents": ["onTestProjects", "onView:testExplorer", "onCommand:dotnettest.createUnitTests"],
   "contributes": {
     "commands": [

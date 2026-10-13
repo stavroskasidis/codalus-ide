@@ -1,4 +1,4 @@
-namespace Codalus.Plugins.Proposed;
+namespace Codalus.Plugins;
 
 /// <summary>
 /// Git hosting providers (ADR 0031): GitHub, Azure DevOps, GitLab, or another host. The shell shows the pull requests,

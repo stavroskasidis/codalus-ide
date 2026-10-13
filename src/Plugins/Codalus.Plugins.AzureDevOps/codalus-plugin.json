@@ -4,9 +4,8 @@
   "displayName": "Azure DevOps",
   "publisher": "codalus",
   "description": "Pull requests, review comments, pipelines, work items and publishing for Azure DevOps. Inactive until you sign in.",
-  "engines": { "codalus": "^0.3.0" },
+  "engines": { "codalus": "^1.0.0" },
   "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.AzureDevOps.dll" },
-  "enableProposedApi": true,
   "contributes": {
     "hostingProviders": [
       { "id": "azure-devops", "label": "Azure DevOps", "hosts": ["dev.azure.com", "*.visualstudio.com", "ssh.dev.azure.com", "vs-ssh.visualstudio.com"], "serverSetting": "azureDevOps.serverUrl", "icon": "cloud" }

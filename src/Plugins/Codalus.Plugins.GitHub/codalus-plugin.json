@@ -4,9 +4,8 @@
   "displayName": "GitHub",
   "publisher": "codalus",
   "description": "Pull requests, review comments, checks, issues and publishing for GitHub and GitHub Enterprise Server. Inactive until you sign in.",
-  "engines": { "codalus": "^0.3.0" },
+  "engines": { "codalus": "^1.0.0" },
   "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.GitHub.dll" },
-  "enableProposedApi": true,
   "contributes": {
     "hostingProviders": [
       { "id": "github", "label": "GitHub", "hosts": ["github.com", "ssh.github.com"], "serverSetting": "github.serverUrl", "icon": "cloud" }

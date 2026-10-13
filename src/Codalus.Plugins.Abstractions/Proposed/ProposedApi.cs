@@ -3,30 +3,14 @@ namespace Codalus.Plugins.Proposed;
 /// <summary>
 /// Proposed APIs (ADR 0003): not yet covered by the versioning policy and free to change in any release. A plugin
 /// must set <c>"enableProposedApi": true</c>; third-party plugins also need a development build
-/// (<c>--enable-proposed-api</c>). Built-in plugins may use them in every build (ADR 0010). Since API 0.2.1.
+/// (<c>--enable-proposed-api</c>). Built-in plugins may use them in every build (ADR 0010).
+/// <para>
+/// API 1.0 promoted every proposal that built-in plugins had proved (tests, workspace, build, debug, terminals,
+/// hosting, secrets and visualizers) to <see cref="IPluginContext"/>. New proposals start here.
+/// </para>
 /// </summary>
 public interface IProposedApi
 {
-    /// <summary>Test controllers for the Test Explorer.</summary>
-    ITests Tests { get; }
-
-    /// <summary>The open solution, its projects, and test candidates from the language service.</summary>
-    IWorkspace Workspace { get; }
-
-    /// <summary>Builds through the shell's build (one at a time, with the Build output).</summary>
-    IBuild Build { get; }
-
-    /// <summary>Debug sessions through the shell's debugger.</summary>
-    IDebug Debug { get; }
-
-    /// <summary>Integrated terminals: open a shell or run a command in one, send it text, read its output. Since API 0.2.3.</summary>
-    ITerminals Terminals { get; }
-
-    /// <summary>Git hosting providers: pull requests, review comments, CI status, work items, publishing. Since API 0.2.6.</summary>
-    IHosting Hosting { get; }
-
-    /// <summary>The plugin's secrets, in the OS credential store. Since API 0.2.6.</summary>
-    ISecrets Secrets { get; }
 }
 
 /// <summary>Implemented by plugin contexts that can offer proposed APIs.</summary>

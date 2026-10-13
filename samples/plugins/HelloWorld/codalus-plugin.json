@@ -4,7 +4,7 @@
   "displayName": "Hello World",
   "publisher": "codalus-samples",
   "description": "A sample plugin that exercises every v0 contribution point.",
-  "engines": { "codalus": "^0.3.0" },
+  "engines": { "codalus": "^1.0.0" },
   "entry": { "runtime": "dotnet", "assembly": "HelloWorld.dll" },
   "activationEvents": [ "onSettingChanged:hello.announce" ],
   "contributes": {
@@ -13,7 +13,8 @@
       { "id": "hello.echo", "title": "Echo Arguments", "category": "Hello" },
       { "id": "hello.refresh", "title": "Refresh", "category": "Hello" },
       { "id": "hello.callShell", "title": "Call a Shell Command (test)", "category": "Hello" },
-      { "id": "hello.crashHost", "title": "Crash the Plugin Host (test)", "category": "Hello" }
+      { "id": "hello.crashHost", "title": "Crash the Plugin Host (test)", "category": "Hello" },
+      { "id": "hello.count", "title": "Count to Ten Slowly", "category": "Hello" }
     ],
     "menus": {
       "commandPalette": [

@@ -16,7 +16,7 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
     private readonly Dictionary<string, ProjectTests> _projects = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTime> _discoveredBuilds = new(StringComparer.OrdinalIgnoreCase);
     private IPluginContext _context = null!;
-    private IProposedApi _api = null!;
+    private IPluginContext _api = null!;
     private ITestController _controller = null!;
     private TestTree _tree = null!;
     private VsTestRunner _vstest = null!;
@@ -33,7 +33,7 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
     public Task ActivateAsync(IPluginContext context, CancellationToken cancellationToken)
     {
         _context = context;
-        _api = context.Proposed();
+        _api = context;
         _lifetime = new CancellationTokenSource();
         _controller = _api.Tests.CreateController("dotnet", ".NET");
         _tree = new TestTree(_controller);

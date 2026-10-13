@@ -4,7 +4,7 @@
   "displayName": "Todo Lists",
   "publisher": "codalus-samples",
   "description": "A sample declarative plugin: the .todo language with a TextMate grammar and an LSP server.",
-  "engines": { "codalus": "^0.3.0" },
+  "engines": { "codalus": "^1.0.0" },
   "contributes": {
     "languages": [
       { "id": "todo", "aliases": [ "Todo", "todo" ], "extensions": [ ".todo" ], "filenames": [ "TODO" ], "configuration": "language-configuration.json" }
