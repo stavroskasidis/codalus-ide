@@ -10,7 +10,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 
 1. Read `CLAUDE.md`, then the latest checkpoint summary, then this document's [status table](#status).
 2. Pick the next milestone allowed by the [dependency graph](#dependency-graph) and the maintainer's instructions. The numbers are identifiers, not a strict order. The maintainer may reorder phases.
-3. Check the milestone's **Decisions** entries against the [decision register](#decision-register). Every decision there is closed as of 2026-10-10. If a new question comes up, don't start work that depends on it. Add it to the register and raise it with the maintainer.
+3. Check the milestone's **Decisions** entries against the [decision register](#decision-register). Every decision there is closed as of 2026-10-10, except D31 (2026-10-13). If a new question comes up, don't start work that depends on it. Add it to the register and raise it with the maintainer.
 4. Follow the milestone workflow:
    - plan mode
    - ADRs before code
@@ -53,9 +53,14 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M32 | Self-update | at checkpoint ([m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
 | M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
 | M34 | UI polish | M34a at checkpoint ([m34a](checkpoints/m34a.md)), pulled forward by the maintainer on 2026-10-12: Fluent UI System Icons compiled at build time (D24) with command-family colors, every menu a tree like a classic IDE's, output windows that follow new output, the minimap docked at the editor's edge, completion keys per OS (the editor's key bindings now match a focused editor), then Material Icon Theme's file, folder and project icons, a flat navigation bar and themed outlining markers; M34b at checkpoint ([m34b](checkpoints/m34b.md)), pulled forward the same day: batched project loading in the language host, no false errors while loading, a parallel background pass, parallel design-time builds and their persisted cache, restore on open only when needed; M34d at checkpoint ([m34d](checkpoints/m34d.md)), 2026-10-13: spacing, size and type tokens, document tabs and captions in every state (selected without the focus, pinned, preview on the right, colored by project), toolbars that overflow instead of wrapping, High Contrast's black menus, the gallery in the smoke test, clipped-text and WCAG AA contrast tests, the UI guide; M34c at checkpoint ([m34c](checkpoints/m34c.md)), 2026-10-13: the language host keeps diagnostics and reference assemblies between sessions, open documents compile against unchanged projects' assemblies, and CS4014 the build wouldn't report is left out (ADR 0049); the rest of M34 stays the last milestone before Visual Basic and F# |
-| M39 | Rename to Codalus IDE | in progress (the name chosen 2026-10-13, ADR 0056): the clean rename of everything from Daedalus Studio (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs) with `eng/rename.py`, with no compatibility (no users yet); the new mark (violet and ember wings) |
+| M39 | Rename to Codalus IDE | done in the repository (the name chosen 2026-10-13, ADR 0056; validated on Windows, WSL, the Mac and CI; the repository renamed to `stavroskasidis/codalus-ide`): the clean rename of everything from Daedalus Studio (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs) with `eng/rename.py`, with no compatibility (no users yet); the new mark (violet and ember wings). Reserving the NuGet prefix and the AUR package wait for the maintainer |
 | M37 | Environment setup | at checkpoint ([m37](checkpoints/m37.md)): a missing or mismatched .NET SDK (a solution's `global.json`), git, Git LFS, Docker, Podman and WSL found, Help → Check Environment, installs with the user's consent (winget, `dotnet-install` into `~/.dotnet`, `xcode-select`, the distribution's packages in the terminal); MAUI's workloads come with M20 |
 | M38 | Start window | at checkpoint ([m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
+| M40 | WinForms and WPF projects, WPF XAML and previewer | proposed ([Windows desktop](#proposed-phase-windows-desktop)), waits for D31 |
+| M41 | Windows Forms designer | proposed, waits for D31 |
+| M42 | WCF | proposed, unscheduled (cross-platform, so it doesn't wait for D31) |
+| M43 | .NET Framework | proposed, waits for D31 and a spike on debugging the desktop CLR |
+| M44 | MAUI on Windows and WinUI 3 | proposed, waits for D31 and M20 |
 | M35 | Visual Basic | planned, always second to last |
 | M36 | F# | planned, always last |
 
@@ -97,7 +102,8 @@ These come up repeatedly in post-MVP areas. They are **off limits** unless a lat
 - **AI and collaboration:** IntelliCode, the GitHub Copilot language server and Copilot's Visual Studio integrations, Live Share.
 - **Testing:** Microsoft Fakes, IntelliTest (Pex), and the Visual Studio test adapters' proprietary extensions.
 - **Remote and cloud debugging:** the Visual Studio remote debugger (msvsmon) and the Snapshot Debugger.
-- **UI designers:** the .NET MAUI extension for VS Code and Visual Studio's XAML designer and XAML Hot Reload.
+- **UI designers:** the .NET MAUI extension for VS Code and Visual Studio's XAML designer and XAML Hot Reload, and its Windows Forms designer.
+- **Windows desktop and .NET Framework:** Visual Studio's WCF Test Client and Service Configuration Editor, and Visual Studio's MSBuild and targets (Build Tools): only ever the user's own install, and only if its licence allows it (M43).
 - **Visual Studio packages:** most `Microsoft.VisualStudio.*` packages, which ship under Visual Studio licence terms. Check each one. Some, such as `Microsoft.VisualStudio.Threading`, are MIT.
 - **Hosted services:** Dev Tunnels and other Microsoft-hosted services. Don't depend on them by default. If one is ever offered, it is an opt-in plugin.
 
@@ -135,6 +141,7 @@ All seven are settled:
 | 8. Remote | M21 | SSH, WSL, Dev Containers. |
 | 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
 | 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
+| Proposed: Windows desktop | M40–M44 | WinForms, WPF, WCF, .NET Framework and MAUI's Windows target, on Windows and from the other OSes through a Windows machine. Waits for D31; M42 (WCF) doesn't. |
 | 11. Polish | M34, M39, M37, M38 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38). |
 | 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
@@ -184,6 +191,12 @@ graph LR
   M14 --> M20
   M19 --> M20
   M17 --> M21
+  M19 --> M40
+  M40 --> M41 & M43 & M44
+  M15 --> M42
+  M33 --> M43
+  M20 --> M43 & M44
+  M21 -.-> M40 & M41 & M43 & M44
   M8 & M11 & M14 --> M22
 ```
 
@@ -1580,7 +1593,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 **Constraints.**
 - MAUI has no Linux target, so on Linux only the Android target works.
-- Its Windows target is WinUI, which the mission lists as a non-goal technology, so the Windows target is out of scope.
+- Its Windows target is WinUI, which the mission lists as a non-goal technology, so the Windows target is out of scope. M44 proposes it (D31).
 - iOS and Mac Catalyst builds need macOS and Xcode. Android needs the Android SDK and a JDK.
 - MAUI apps run on the **Mono runtime** on Android and iOS, and **netcoredbg doesn't debug Mono**. M20 needs a Mono soft-debugger DAP adapter. MonoDevelop's debugger libraries and `vscode-mono-debug` are MIT.
 - Microsoft's MAUI XAML language service, XAML Hot Reload and Live Preview are proprietary. We build our own or accept gaps.
@@ -1597,7 +1610,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 - **Workloads:** the status and installation of the `maui`, `android`, `ios` and `maccatalyst` workloads (M9's workload status).
 - **Templates:** `dotnet new maui` and the related templates in the New Project dialog.
 - **Gaps:**
-  - the WinUI target (non-goal)
+  - the WinUI target (non-goal; proposed for M44)
   - a XAML previewer (none exists in open source; candidate)
   - XAML Hot Reload (candidate)
 
@@ -1615,6 +1628,192 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 - The workloads' size and installation time.
 - Keeping the Xcode version aligned with the workloads.
 - Apple signing for physical devices.
+
+---
+
+## Proposed phase: Windows desktop
+
+**Status.** Proposed on 2026-10-13, from the maintainer's question: how far could the Windows-specific technologies left out of scope be supported, on Windows and from the other OSes, through emulation, Mono or a Windows machine? Nothing here is scheduled. WinForms, WPF, WinUI, non-SDK-style projects and .NET Framework run and debug are non-goals ([Out of scope](#out-of-scope)), and moving them into scope is D31. M42 (WCF) uses nothing Windows-only, so it can be scheduled without D31. Sizes are in sub-milestones the size of M19a, estimated before any spike.
+
+**Why.** A large share of the .NET code in companies is WinForms, WPF and .NET Framework. The people who maintain it are among the users most likely to want an IDE other than Visual Studio, including on a Mac or a Linux machine.
+
+**Three facts shape the plan.**
+1. **Building and editing don't need Windows.** WinForms and WPF projects on modern .NET (`net8.0-windows`) build on Linux and macOS with `EnableWindowsTargeting=true`, and SDK-style .NET Framework projects build there with `Microsoft.NETFramework.ReferenceAssemblies` (MIT). Roslyn doesn't care which OS it runs on. So the editor, IntelliSense, navigation, refactoring and builds work on every OS.
+2. **Running, debugging and rendering do.** From macOS and Linux they go through a Windows machine as a remote target: a local VM (Parallels or UTM on the Mac, QEMU/KVM or VirtualBox on Linux) or a PC on the network. Designers and previewers stream frames back the way the Avalonia previewer does, so they don't need a remote desktop. The running app's own window stays on the Windows desktop, seen through the VM's window or the user's remote desktop client.
+3. **Emulation is a fallback, not a base.** Mono (maintained by WineHQ since 2024) runs much of .NET Framework 4.x, never had WPF, and doesn't run `net*-windows` apps; debugging on it comes from M20's Mono adapter. Wine runs some WinForms apps and WPF poorly, and debugging under it isn't realistic: at most a "Run under Wine" launch profile, as an experiment.
+
+**At a glance.**
+
+| | Windows | Linux and macOS | Size | Hardest part |
+|---|---|---|---|---|
+| WinForms and WPF projects, run, debug (M40a) | CoreCLR apps: netcoredbg debugs them | Edit and build locally; run and debug on the Windows target | ~⅓ | Nothing hard |
+| WPF XAML editing (M40a) | The M19a engine | The same, locally | ~1 | WPF's conventions |
+| WPF previewer and Live Visual Tree (M40b) | M19's designs on WPF | Frames from the Windows target | ~1–1.5 | Loading the project's own controls |
+| WinForms designer (M41) | dotnet/winforms' design-time code (MIT) | Frames from the Windows target | ~2–3 | Reading and writing `InitializeComponent` |
+| WCF (M42) | Clients, CoreWCF, `dotnet-svcutil` | The same | ~½–1 | Nothing hard |
+| .NET Framework (M43) | Build, run; a desktop-CLR debugger | Edit and build locally; run on Mono or the Windows target | ~3+ | The debugger |
+| MAUI on Windows and WinUI 3 (M44) | CoreCLR: netcoredbg | Only through the Windows target | ~1 | MSIX launch and attach |
+
+Together about 10–14 sub-milestones, plus the Windows target (below).
+
+**Shared prerequisite: Windows as a remote target.** M21's scope already includes SSH to Windows machines, and the M21a checkpoint left it as a `TODO(issue)`: the path map is Unix-only. These milestones need it on the other OSes, with:
+- Windows paths under the local root: drive letters, case-insensitive matching and `\` separators (`RemotePathMap`).
+- A `win-x64` bundle in `$(CodalusServerRids)`, and terminals on ConPTY with pwsh or cmd (Windows ships its own OpenSSH server).
+- The previewer and designer hosts placed on the server, with their frames on a channel, and the remote-aware previewer that M21a listed as missing.
+- About 1–1.5, inside M21b or split out of it.
+
+**Order (recommended).** M42 at any time, since it is small and cross-platform. Then, once D31 is decided: the Windows target in M21b, M40, M41, M44 after M20, and M43 last, after a spike on its debugger. The phase should come before M34's last pass, so that polish covers the designers.
+
+### M40 — WinForms and WPF projects, WPF XAML and previewer
+
+**Goal.** WinForms and WPF apps on modern .NET open, build, run, debug and test on Windows, and open, edit and build on every OS. WPF XAML gets the M19 engine and a previewer.
+
+**Depends on.** M19 (the XAML engine, the previewer and the live agent), M14 (debugger depth), M21b's Windows targets for the other OSes.
+
+**Constraints.**
+- WinForms and WPF run only on Windows. They are CoreCLR apps there, so netcoredbg debugs them, and startup hooks work.
+- Visual Studio's XAML designer and XAML Hot Reload are proprietary ([known traps](#known-proprietary-traps)).
+
+**Scope.**
+- **Projects:**
+  - `UseWPF` and `UseWindowsForms` projects. On Linux and macOS, design-time builds set `EnableWindowsTargeting`, so these projects load with IntelliSense instead of failing with NETSDK1100.
+  - Validate run, debug, tests (`net*-windows` test projects) and Hot Reload through `dotnet watch` on Windows.
+  - The `wpf`, `wpflib`, `wpfusercontrollib`, `winforms`, `winformslib` and `winformscontrollib` templates. Add New Item gets Window, Page, User Control and Resource Dictionary for WPF, and Form and User Control for WinForms. `.xaml.cs` and `.Designer.cs` nest under their files.
+- **WPF XAML editing** (`.xaml`):
+  - The M19a engine, with WPF's namespace from `XmlnsDefinitionAttribute`, dependency and attached properties by convention (`FooProperty`, `GetFoo`/`SetFoo`), and WPF's markup extensions (`StaticResource`, `DynamicResource`, `Binding`, `x:Static`, `RelativeSource`, `TemplateBinding`).
+  - Styles, triggers and setters, and resource lookup through merged dictionaries and `App.xaml`.
+  - Binding paths from `d:DataContext` and `d:DesignInstance`. WPF bindings aren't compiled, so a wrong path is a warning, not an error.
+  - The markup compiler's `MC*` errors, mapped back from builds as M19a does with `AVLN`.
+- **WPF previewer** (Windows, or the Windows target):
+  - A designer host on the project's own build output and its WPF version: `XamlReader` on the edited text, frames from `RenderTargetBitmap`, input forwarded.
+  - Design-time data, zoom, and selection both ways, reusing `XamlPreviewViewModel` and the previewer protocol's shape.
+- **Live Visual Tree and Live Property Explorer for WPF:** M19b's agent model over `VisualTreeHelper`, `LogicalTreeHelper` and `DependencyPropertyHelper.GetValueSource`, added by a startup hook.
+- **Gaps:**
+  - XAML Hot Reload (a candidate, as for Avalonia).
+  - WPF and WinForms on .NET Framework (M43).
+
+**Split.** M40a: projects, run, debug and XAML editing (~1.5). M40b: the previewer and the live tree (~1–1.5).
+
+**Process.** The WPF designer host is a new process per previewed project, like Avalonia's. It runs user code, so only for trusted folders. On the other OSes it runs on the Windows target.
+
+**ADRs.** "WPF XAML language service" (or an amendment to ADR 0047). "WPF previewer hosting".
+
+**Fixtures and tests.**
+- `samples/WindowsDesktop/`: a WPF MVVM app with resources, styles and a user control; a WinForms app with a form, a user control and resources; a test project for each.
+- XAML editing tests run on every OS (Roslyn only). Run, debug and previewer tests run on Windows and skip elsewhere.
+
+**Risks.** Third-party control suites in previews; WPF's XAML conventions are looser than Avalonia's, so completion has more to guess.
+
+### M41 — Windows Forms designer
+
+**Goal.** Design forms and user controls visually: a design surface, the Toolbox and the Properties window, with `InitializeComponent` written back as Visual Studio writes it.
+
+**Depends on.** M40a, and M26a's Properties window.
+
+**Constraints.**
+- Visual Studio's Windows Forms designer is proprietary. The parts it is built from are open: `DesignSurface`, the control designers, `UndoEngine` and the CodeDOM serializers are in dotnet/winforms (MIT). SharpDevelop 5's Windows Forms designer (MIT) was a whole designer built on them, and is the reference.
+- The designer renders real controls, so it runs on Windows, or on the Windows target.
+
+**Scope.**
+- **Loading:** a Roslyn-based reader from `InitializeComponent` (and the fields in `.Designer.cs`) into CodeDOM. Code it can't read opens as code, with the reason, as Visual Studio does.
+- **Writing:** CodeDOM back to C# through our own generator, applied as text edits, so that undo, local history and source control see a normal diff. Everything outside `InitializeComponent` is kept.
+- **Surface:** selection, moving, resizing, snap lines, tab order, docking and anchoring, the component tray, smart tags (designer actions), menus and tool strips.
+- **Toolbox:** the framework's controls, plus the project's own and its references' controls (`ToolboxItem` attributes).
+- **Properties and events:** the M26a Properties window over the selected components' property descriptors, and an Events view that generates handlers.
+- **Resources:** localizable forms (a `.resx` per culture), images into resources.
+- **Optional:** a WPF design surface (selection, dragging, the Properties window over dependency properties) on M40b's previewer, with SharpDevelop's WpfDesigner (MIT) as prior art. About 2 more; decided at plan time.
+- **Gaps:** data sources and the data binding designer.
+
+**Architecture.**
+- The designer host is a Windows process on the project's target framework, loading its build output. `DesignSurface` renders to bitmaps for the shell, and input comes back, the same shape as the previewer.
+- Reading and writing CodeDOM happen in the C# host (Roslyn), so the code and the designer's model can't drift apart.
+
+**Size.** About 2–3, the largest milestone of the phase.
+
+**Risks.**
+- Round-tripping `InitializeComponent` that Visual Studio wrote, without noisy diffs.
+- Commercial control suites that rely on design-time licensing (`licenses.licx`) or on Visual Studio's own services.
+
+### M42 — WCF
+
+**Goal.** Build WCF clients and CoreWCF services on every OS.
+
+**Depends on.** M15c (service references and scaffolding).
+
+**Constraints.**
+- Nothing here is Windows-only: WCF's client libraries (`System.ServiceModel.*`, dotnet/wcf, MIT), `dotnet-svcutil` (MIT) and CoreWCF (MIT) run on .NET everywhere. So M42 doesn't wait for D31.
+- Visual Studio's WCF Test Client and Service Configuration Editor are proprietary.
+
+**Scope.**
+- **Add Service Reference for WCF:** from a URL or a WSDL file, through `dotnet-svcutil` as a local or global tool (as M15c runs the code generator). Options: namespace, collection types, synchronous or asynchronous operations, reused types. Update and Remove; `ConnectedService.json` as Visual Studio writes it.
+- **CoreWCF services:** templates, and the service's metadata at run time.
+- **A test client of our own:** the service's operations from its metadata, requests built from the contract, responses shown. Duplex contracts and message security are gaps.
+- **Configuration:** the `system.serviceModel` schema for `app.config` and `web.config` in the markup host (useful with M43).
+
+**Size.** About ½–1.
+
+**Fixtures.** `samples/Wcf/`: a CoreWCF service and a client generated from it.
+
+### M43 — .NET Framework
+
+**Goal.** .NET Framework 4.x projects open, build, run, debug and test on Windows, and open, edit and build on every OS. They run on Mono where they can.
+
+**Depends on.** M33 (older targets), M8 (tests), M20 (the Mono debugger adapter), M21b's Windows targets, M40 and M41 for desktop apps.
+
+**Constraints.**
+- **Debugging:** netcoredbg debugs only CoreCLR, and vsdbg is proprietary. The desktop CLR has the same ICorDebug API, but sessions start differently (`ICLRMetaHost`, `ICLRDebugging`), so the base is a desktop-CLR port of netcoredbg (MIT). A spike decides whether the port is viable before the milestone is committed.
+- **Visual Studio's targets:** old-style projects that import Visual Studio's own targets (`Microsoft.WebApplication.targets` and others under `MSBuild\Microsoft\VisualStudio`) build only with Visual Studio's MSBuild. It is proprietary: we could use only the user's own Build Tools install, and only if its licence allows a third-party IDE to drive it. That needs a check.
+- **Runtimes:** .NET Framework runs on Windows. Mono runs much of the 4.x API on Linux and macOS, without WPF and with WinForms through libgdiplus.
+- **ASP.NET on System.Web** (Web Forms, MVC 5) needs IIS or IIS Express, and stays a non-goal.
+
+**Scope.**
+- **Projects:**
+  - SDK-style `net4x` projects through the reference assemblies package, on every OS.
+  - Non-SDK-style projects: evaluation and builds in the build host wherever the SDK's targets are enough; `packages.config` restore (`RestorePackagesConfig`); the Dependencies node from `<Reference>` and `HintPath`.
+  - Convert to SDK-style: our own converter, in the spirit of `try-convert`, with a preview of the result.
+  - Projects that need Visual Studio's targets: on Windows, a .NET Framework build host on the user's Build Tools MSBuild, if the licence check allows it. Otherwise they open and say why they can't build.
+- **IntelliSense:** each framework's default C# version (7.3), its reference assemblies, and binding redirects in `app.config`.
+- **Run:** on Windows directly; on Linux and macOS with the user's `mono` (a launch profile) or on the Windows target.
+- **Debug:** the desktop-CLR adapter on Windows, and M20's Mono soft-debugger adapter for apps running on Mono.
+- **Tests:** VSTest's .NET Framework test hosts (xUnit 2, NUnit 3, MSTest v2) on Windows, and on Mono where the adapters run.
+- **WPF and WinForms on .NET Framework:** M40's XAML editing and M41's designer against the Framework's assemblies.
+- **.NET Framework 2.0–3.5** (CLR 2): building and IntelliSense from the reference packages, and running where .NET 3.5 is installed. Debugging is a stretch, since it needs another version of ICorDebug.
+- **Gaps:** COM references (`ResolveComReference`), ClickOnce, the EF6 designer, Web Forms, C++/CLI and VSTO.
+
+**Split.** M43a: projects, builds, IntelliSense and run (~1). M43b: the debugger and tests (~2 or more), only if the spike shows that the netcoredbg port works.
+
+**Process.** A new debug adapter (netcoredbg built for the desktop CLR, in `debugger/netfx/`), and a build host on .NET Framework only if Build Tools are used.
+
+**ADRs.** ".NET Framework projects and builds". "Debugging the desktop CLR".
+
+**Fixtures.** `samples/NetFramework/`: an SDK-style `net48` console app and library, an old-style project with `packages.config`, an xUnit test project, and a WinForms app on `net48`.
+
+**Risks.**
+- The netcoredbg port: expression evaluation and the runtime's internals differ from CoreCLR's.
+- The Build Tools licence.
+- Mono's maintenance status.
+
+### M44 — MAUI on Windows and WinUI 3
+
+**Goal.** MAUI's Windows target and WinUI 3 apps (Windows App SDK) build, deploy, run and debug on Windows, and from the other OSes through the Windows target.
+
+**Depends on.** M20 (MAUI), M40a (WPF-style XAML conventions), M21b's Windows targets.
+
+**Constraints.**
+- WinUI 3 apps run on CoreCLR, so netcoredbg debugs them, unlike MAUI's Mono targets.
+- As far as we know, the Windows App SDK's build tools (the WinUI XAML compiler, resource indexing, MSIX packaging) run only on Windows. Check at plan time. Until then, the other OSes go through the Windows target for everything but editing.
+- UWP stays a non-goal (.NET Native is retired).
+
+**Scope.**
+- The `net*-windows10.0.x` target in MAUI projects and in the target picker, and the Windows App SDK's prerequisites in M37's environment check.
+- **Unpackaged apps:** run and debug as programs.
+- **Packaged apps (MSIX):** register the build's layout, launch through `IApplicationActivationManager`, attach netcoredbg. Developer mode is detected and explained.
+- **WinUI XAML editing:** the M19 engine with WinUI's namespaces and `x:Bind`.
+- **Gaps:** a previewer (Microsoft has none for WinUI either) and XAML Hot Reload.
+
+**Size.** About 1.
+
+**Fixtures.** The `samples/Maui/` app's Windows target, and a WinUI 3 app in `samples/WindowsDesktop/`.
 
 ---
 
@@ -2078,6 +2277,7 @@ The "Codalus" column uses these terms:
 | Shared projects (`.shproj`, `.projitems`) | M9 (low priority) |
 | Project, assembly and analyzer references | M9 |
 | COM references | Non-goal |
+| WCF service references and a WCF test client | Proposed for M42 |
 | Connected Services, OpenAPI and gRPC service references | M15c (ADR 0041): `OpenApiReference` with NSwag, `Protobuf` with `Grpc.Tools`; Kiota and other connected services (Azure, databases) are gaps |
 | Custom tools (single-file generators), T4 text templates | M26b |
 | User secrets | M15 |
@@ -2085,8 +2285,8 @@ The "Codalus" column uses these terms:
 | Docker Compose projects (`.dcproj`) | M17a (done: loaded from their XML as a solution item, left out of builds; compose up, down and debug) |
 | SQL database projects (`.sqlproj`) | M27b (done: SDK-style, Microsoft.Build.Sql) |
 | Target frameworks from .NET Core 2.0 to the newest .NET, with the SDK chosen by `global.json` | M30 (.NET 11, then each new .NET; M30a: `global.json` honored, .NET 11 projects); M33 (.NET Core 2.0 to .NET 10, and SDKs down to 2.1.200 in `global.json`: at checkpoint, ADR 0030) |
-| Non-SDK-style projects, .NET Framework-only scenarios | Non-goal |
-| WinForms, WPF, UWP and WinUI project types and designers | Non-goal |
+| Non-SDK-style projects, .NET Framework-only scenarios | Non-goal; proposed for M43 (D31) |
+| WinForms, WPF, UWP and WinUI project types and designers | Non-goal; WinForms and WPF proposed for M40 and M41, WinUI for M44 (D31); UWP stays a non-goal |
 | C++, Python and Node.js workloads | Not first-party: plugins over the M11 LSP bridge (C++/CLI is a non-goal) |
 | Visual Studio Installer Projects | Non-goal (Windows-only). WiX SDK projects build through MSBuild like any project. |
 
@@ -2285,7 +2485,7 @@ The "Codalus" column uses these terms:
 
 | Visual Studio feature | Codalus |
 |---|---|
-| WinForms, WPF, UWP and WinUI designers | Non-goal |
+| WinForms, WPF, UWP and WinUI designers | Non-goal; proposed for M40 (WPF previewer) and M41 (WinForms designer, D31); UWP and WinUI designers stay non-goals |
 | XAML editing, previewer, Live Visual Tree and Live Property Explorer (Avalonia) | M19 |
 | XAML Hot Reload (Avalonia) | Candidate |
 | .NET MAUI XAML, Hot Reload, Live Preview, Android and iOS deployment | M20. The previewer and XAML Hot Reload are gaps. |
@@ -2359,7 +2559,7 @@ These are VS or Rider features, or common requests, that aren't scheduled. The m
 
 ## Out of scope
 
-Restated from the original project brief, plus what follows from it for the areas above:
+Restated from the original project brief, plus what follows from it for the areas above. D31 proposes moving WinForms, WPF, MAUI's Windows target and .NET Framework into scope ([Windows desktop](#proposed-phase-windows-desktop)); until it is decided, they stay here.
 - **Windows-only technologies:** WinForms, WPF, UWP and WinUI, including their designers, and therefore MAUI's Windows target (see M20). IIS and IIS Express. C++/CLI and COM. Visual Studio Installer Projects. DirectX graphics debugging.
 - **Retired Visual Studio features:** load and web performance tests, Coded UI tests, and the EF6 Entity Data Model designer (.NET Framework).
 - **Legacy projects:** non-SDK-style projects and .NET Framework-only run and debug scenarios.
@@ -2369,7 +2569,7 @@ Restated from the original project brief, plus what follows from it for the area
 
 ## Decision register
 
-These are the maintainer decisions this plan depends on. Update the status column at each checkpoint. As of 2026-10-10 every decision here is closed. New questions get the next free number.
+These are the maintainer decisions this plan depends on. Update the status column at each checkpoint. As of 2026-10-10 every decision here is closed; D31 is open (2026-10-13). New questions get the next free number.
 
 | ID | Question | Needed by | Recommendation | Status |
 |---|---|---|---|---|
@@ -2403,6 +2603,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D28 | Approving the proposed budgets, and the Rider comparison of ADR 0002 | Now | Approve them, and the maintainer measures Rider once | decided 2026-10-10: the budgets proposed at M8–M16 are approved as gates, and budget 4 is final as it stands. Rider is no longer a reference. Where a milestone says "compare with Rider", it sets an absolute target instead. |
 | D29 | When the repository goes public | M32 | After M32 | decided 2026-10-10: after M32's checkpoint, through the go-public checklist. Changing the visibility stays the maintainer's action. |
 | D30 | The unscheduled candidates | After M36 | Review them after the last milestone | decided 2026-10-10: as recommended. Managed settings for organizations (from M23) and the instrumentation profiler (from M18) join the candidates. |
+| D31 | Windows desktop: move WinForms, WPF, MAUI's Windows target and .NET Framework from the non-goals into scope ([proposed phase](#proposed-phase-windows-desktop))? | Before any of M40, M41, M43, M44 | Yes for M40, M41 and M44, with the other OSes served through a Windows machine as a remote target; M43 only after a spike shows a desktop-CLR port of netcoredbg works, and Build Tools only after a licence check. M42 (WCF) needs no decision. | open (2026-10-13) |
 
 ## Change log
 
@@ -2517,3 +2718,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-12: M34b (performance pass) pulled forward by the maintainer, beside M34a, and at its checkpoint ([m34b](checkpoints/m34b.md)). A 96-project web solution took about two minutes on "Loading C# projects…", with 78 false errors from its open files compiled in Miscellaneous Files meanwhile. Now: design-time build results go to the language host in batches and an update costs about a second (it was quadratic), documents whose projects are still loading get syntax diagnostics only, the background pass waits for loading and then compiles in parallel, dependencies and open documents first, design-time builds use worker nodes and a cache in `obj/codalus.designtime.json` keyed by their inputs, and restore on open runs only when packages may have changed. On that solution the first real diagnostics of the open files came after 35–38 s instead of 89–109 s (warm), and on `Solution50` the language service is ready in 6.7 s warm and 9.0 s cold instead of 19 s. New budgets for the cold and warm open.
 - 2026-10-13: M34c (performance pass, round 2) at its checkpoint ([m34c](checkpoints/m34c.md), ADR 0049). The language host keeps each project's diagnostics and reference assembly between sessions under a key of its inputs, so a warm open of the 96-project web solution compiles nothing and is ready in about 7 s (53–58 s before); the open documents compile against unchanged projects' assemblies (first diagnostics after about 12 s, 35–38 s before); the three CS4014 errors were the workspace's compilation references, not the compiler's version, and are left out where the build doesn't report them.
 - 2026-10-13: M34d (UI polish, round 2) at its checkpoint ([m34d](checkpoints/m34d.md)). Spacing, size and type tokens next to the colors, applied through classes; document tabs and captions in every state (the selected tab of a pane without the focus readable in Light and High Contrast, Blue's dark inactive tabs, pinned tabs, the preview tab on the right, tabs colored by project, inactive captions); High Contrast's black menus, drop-downs, buttons and combo boxes; tool window toolbars that overflow into a menu instead of wrapping (`ToolbarPanel`), and tables that scroll sideways in narrow panes; the gallery in the smoke test (every tool window, the main documents and the window, empty, with data and in an error state, in four themes); `PolishTests` for WCAG AA contrast of every token pair and text cut off at 280 px; the UI guide, [`ui-guidelines.md`](ui-guidelines.md).
+- 2026-10-13: a proposed phase, [Windows desktop](#proposed-phase-windows-desktop) (M40–M44), from the maintainer's question on supporting the Windows-specific technologies left out of scope: WinForms and WPF projects, WPF XAML and a previewer (M40), a Windows Forms designer (M41), WCF (M42), .NET Framework (M43), and MAUI's Windows target with WinUI 3 (M44). Editing and builds work on every OS; running, debugging and design surfaces need Windows, which the other OSes reach through a Windows machine as a remote target (M21b). Mono and Wine are fallbacks only. Unscheduled: D31 (open) decides the scope change, except for M42, which is cross-platform. The numbers are the next free ones, as for M37–M39.
