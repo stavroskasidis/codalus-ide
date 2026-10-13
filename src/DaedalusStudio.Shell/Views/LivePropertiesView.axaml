@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DaedalusStudio.Shell.ViewModels"
+             xmlns:controls="using:DaedalusStudio.Shell.Controls"
+             x:Class="DaedalusStudio.Shell.Views.LivePropertiesView"
+             x:DataType="vm:LivePropertiesViewModel">
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Top" Margin="8,4,8,0" Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+    <controls:ToolbarPanel DockPanel.Dock="Top" Margin="6,4">
+      <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="Search properties" MinWidth="80" AutomationProperties.Name="Search properties" />
+    </controls:ToolbarPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="180,*,110" Margin="8,2">
+      <TextBlock Text="Property" Classes="muted" />
+      <TextBlock Grid.Column="1" Text="Value" Classes="muted" />
+      <TextBlock Grid.Column="2" Text="Source" Classes="muted" />
+    </Grid>
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="Live properties">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:LivePropertyRow">
+          <Setter Property="Padding" Value="2" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:LivePropertyRow">
+          <Grid ColumnDefinitions="180,*,110" RowDefinitions="Auto,Auto">
+            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontWeight="{Binding NameWeight}"
+                       ToolTip.Tip="{Binding Type}" />
+            <TextBox Grid.Column="1" Classes="cell" Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" IsReadOnly="{Binding IsReadOnly}"
+                     VerticalAlignment="Center" AutomationProperties.Name="{Binding Name}" />
+            <TextBlock Grid.Column="2" Text="{Binding Source}" Classes="muted" VerticalAlignment="Center" Margin="6,0,0,0" />
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

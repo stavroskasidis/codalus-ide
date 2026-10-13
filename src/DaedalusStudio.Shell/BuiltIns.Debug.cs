@@ -48,6 +48,8 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(QuickWatchViewModel.ToolWindowId, "QuickWatch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
         yield return new ToolWindowDescriptor(ThreadsViewModel.ToolWindowId, "Threads", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "timer" };
         yield return new ToolWindowDescriptor(ModulesViewModel.ToolWindowId, "Modules", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "package" };
+        yield return new ToolWindowDescriptor(LiveTreeViewModel.ToolWindowId, "Live Visual Tree", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "type-hierarchy" };
+        yield return new ToolWindowDescriptor(LivePropertiesViewModel.ToolWindowId, "Live Property Explorer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "properties" };
         yield return new ToolWindowDescriptor(ParallelStacksViewModel.ToolWindowId, "Parallel Stacks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "layers" };
         yield return new ToolWindowDescriptor(ParallelWatchViewModel.ToolWindowId, "Parallel Watch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
         yield return new ToolWindowDescriptor(ProcessesViewModel.ToolWindowId, "Processes", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "gauge" };
@@ -56,6 +58,13 @@ internal static partial class BuiltIns
 
     public static IReadOnlyList<SettingDescriptor> DebugSettings() =>
     [
+        SettingDescriptor.Create(ShellHost.LiveVisualTreeSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Live Visual Tree for Avalonia apps",
+            Category = "Debugging",
+            Description = "Running or debugging an Avalonia app loads Daedalus Studio's agent into it (a .NET startup hook), for the Live Visual Tree and Live Property Explorer.",
+            Order = 30,
+        },
         SettingDescriptor.Create(ShellHost.JustMyCodeSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
         {
             Title = "Just My Code",

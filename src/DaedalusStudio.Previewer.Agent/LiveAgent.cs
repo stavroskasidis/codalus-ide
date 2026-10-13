@@ -42,11 +42,17 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
     private object? _adorner;
     private object? _adornerLayer;
     private bool _picking;
+    private bool _started;
 
     public string Handle(string[] request)
     {
         var command = request[1];
         string Arg(int index) => request.Length > index ? request[index] : string.Empty;
+        if (command != "ping")
+        {
+            EnsureStarted();
+        }
+
         return command switch
         {
             "ping" => "pong",
@@ -59,6 +65,31 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
             "path" => OnUiThread(() => Path(Element(Arg(2)))),
             _ => throw new InvalidOperationException("Unknown command " + command),
         };
+    }
+
+    /// <summary>
+    /// Nothing of Avalonia's until the app has started it. The agent connects before <c>Main</c>, and the first touch of
+    /// <c>Dispatcher.UIThread</c> binds Avalonia's UI thread to the caller: from here, the app then failed to start
+    /// ("the calling thread cannot access this object"). <c>Application.Current</c> is set after Avalonia's platform
+    /// made the dispatcher on the app's thread, and reading it touches nothing. Until then: an error the IDE retries.
+    /// </summary>
+    private void EnsureStarted()
+    {
+        if (_started)
+        {
+            return;
+        }
+
+        var application = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(a => a.GetName().Name == "Avalonia.Base" || a.GetName().Name == "Avalonia.Controls")
+            .Select(a => a.GetType("Avalonia.Application", throwOnError: false))
+            .FirstOrDefault(t => t is not null)
+            ?.GetProperty("Current", Static)?.GetValue(null);
+        _started = application is not null || roots is not null; // tests pass their windows: started
+        if (!_started)
+        {
+            throw new InvalidOperationException("The app hasn't started Avalonia yet.");
+        }
     }
 
     // ------------------------------------------------------------------ elements and ids

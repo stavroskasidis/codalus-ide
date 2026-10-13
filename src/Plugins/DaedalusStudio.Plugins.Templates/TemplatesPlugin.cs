@@ -25,12 +25,33 @@ public sealed partial class TemplatesPlugin : IDaedalusPlugin
         return Task.CompletedTask;
     }
 
+    /// <summary>The Avalonia project templates' package (M19b), offered in New Project when none is installed.</summary>
+    private const string AvaloniaTemplates = "Avalonia.Templates";
+
     private async Task<object?> NewProjectAsync(CancellationToken cancellationToken)
     {
         _templates ??= TemplateCatalog.LoadAsync(Context.Log, CancellationToken.None);
         var templates = await _templates.ConfigureAwait(false);
         var items = templates.Select(t => new QuickPickItem(t.Name) { Description = t.ShortName, Detail = t.Languages, Tag = t }).ToList();
-        if (await Context.Window.ShowQuickPickAsync(items, "Select a project template", cancellationToken).ConfigureAwait(false) is not { Tag: ProjectTemplate template })
+        // The Avalonia templates (M19b) when they aren't installed: dotnet new install, then the list again.
+        if (!templates.Any(t => t.ShortName.StartsWith("avalonia", StringComparison.OrdinalIgnoreCase)))
+        {
+            items.Add(new QuickPickItem("Install the Avalonia templates…") { Description = AvaloniaTemplates, Detail = "dotnet new install " + AvaloniaTemplates, Tag = AvaloniaTemplates });
+        }
+
+        var picked = await Context.Window.ShowQuickPickAsync(items, "Select a project template", cancellationToken).ConfigureAwait(false);
+        if (picked is { Tag: AvaloniaTemplates })
+        {
+            if (!await RunDotnetAsync(["new", "install", AvaloniaTemplates], cancellationToken).ConfigureAwait(false))
+            {
+                return null;
+            }
+
+            _templates = null;
+            return await NewProjectAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (picked is not { Tag: ProjectTemplate template })
         {
             return null;
         }

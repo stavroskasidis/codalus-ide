@@ -85,6 +85,7 @@ public sealed partial class ShellHost
         Watch.Changed += (_, _) => SaveEditorSession();
         Debugger.ProcessesChanged += (_, _) => Ui.Post(() => Workbench.Context.Set("debugCanDetach", Debugger.CanDetach));
         InitializeDebugDepth();
+        InitializeLiveTree();
         InitializeDebugSessions();
         OnDebugStateChanged();
     }
