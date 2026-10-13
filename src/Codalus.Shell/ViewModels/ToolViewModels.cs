@@ -61,7 +61,7 @@ public sealed class OutputViewModel : ObservableObject
     public ICommand ClearCommand { get; }
 }
 
-public sealed class PluginRowViewModel(PluginDescription plugin, bool turnedOff, Action<string, bool>? setTurnedOff)
+public sealed class PluginRowViewModel(PluginDescription plugin, bool turnedOff, Action<string, bool>? setTurnedOff, long? hostMemory = null)
 {
     public string Name => plugin.DisplayName;
 
@@ -84,7 +84,37 @@ public sealed class PluginRowViewModel(PluginDescription plugin, bool turnedOff,
 
     public bool HasError => !string.IsNullOrEmpty(plugin.Error) && plugin.State is PluginState.Failed or PluginState.Invalid or PluginState.Incompatible;
 
-    public string Details => $"{plugin.Id} {Version} · {(plugin.IsBuiltIn ? "built-in" : "installed")} · {plugin.HostGroup} host";
+    public string Details => $"{plugin.Id} {Version} · {(plugin.IsBuiltIn ? "built-in" : "installed")} · {plugin.HostGroup} host{Performance}";
+
+    /// <summary>
+    /// Where its time and memory go (M22d): the activation, its commands this session, and its host's memory (shared
+    /// by the plugins in that host).
+    /// </summary>
+    public string Performance
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (plugin.ActivationTime is { } activation)
+            {
+                parts.Add($"activated in {Milliseconds(activation)}");
+            }
+
+            if (plugin.Commands is { Calls: > 0 } commands)
+            {
+                parts.Add($"{commands.Calls} command{(commands.Calls == 1 ? "" : "s")}, slowest {Milliseconds(commands.Slowest)}");
+            }
+
+            if (hostMemory is { } bytes)
+            {
+                parts.Add($"host {bytes / (1024 * 1024)} MB");
+            }
+
+            return parts.Count == 0 ? string.Empty : " · " + string.Join(" · ", parts);
+        }
+    }
+
+    private static string Milliseconds(TimeSpan time) => time.TotalSeconds >= 1 ? $"{time.TotalSeconds:0.0} s" : $"{time.TotalMilliseconds:0} ms";
 
     public string AccessibleName => $"{Name}, {State}";
 }
@@ -112,7 +142,7 @@ public sealed class PluginsViewModel : ObservableObject
         Plugins.Clear();
         foreach (var plugin in _manager.Plugins.OrderBy(p => p.DisplayName, StringComparer.CurrentCultureIgnoreCase))
         {
-            Plugins.Add(new PluginRowViewModel(plugin, _manager.IsTurnedOff(plugin.Id), _setTurnedOff));
+            Plugins.Add(new PluginRowViewModel(plugin, _manager.IsTurnedOff(plugin.Id), _setTurnedOff, plugin.State == PluginState.Active ? _manager.HostMemory(plugin.HostGroup) : null));
         }
 
         OnPropertyChanged(nameof(IsEmpty));

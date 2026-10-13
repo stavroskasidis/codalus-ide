@@ -625,8 +625,15 @@ public sealed class PluginManager : IAsyncDisposable
 
             plugin.State = PluginState.Active;
             host.Active.Add(plugin.Id);
-            PluginLog.AppendLine($"[{plugin.Id}] activated ({reason}) in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms");
+            var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+            plugin.ActivationTime = elapsed;
+            PluginLog.AppendLine($"[{plugin.Id}] activated ({reason}) in {elapsed.TotalMilliseconds:0} ms");
             PluginsChanged?.Invoke(this, EventArgs.Empty);
+            if (elapsed >= SlowActivation && !plugin.IsDebugged)
+            {
+                SlowPlugin?.Invoke(this, plugin);
+            }
+
             return true;
         }
         catch (Exception ex) when (ex is JsonRpcConnectionLostException or JsonRpcRemoteException or InvalidOperationException
@@ -658,11 +665,19 @@ public sealed class PluginManager : IAsyncDisposable
         }
 
         var host = GetHost(plugin.HostGroup)!;
-        var result = await host.Connection.InvokeAsync(
-            PluginMethods.ExecuteCommand, new ExecuteCommandParams(commandId, [.. args]),
-            PluginJsonContext.Default.ExecuteCommandParams, PluginJsonContext.Default.ExecuteCommandResult,
-            cancellationToken).ConfigureAwait(false);
-        return result.Result;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            var result = await host.Connection.InvokeAsync(
+                PluginMethods.ExecuteCommand, new ExecuteCommandParams(commandId, [.. args]),
+                PluginJsonContext.Default.ExecuteCommandParams, PluginJsonContext.Default.ExecuteCommandResult,
+                cancellationToken).ConfigureAwait(false);
+            return result.Result;
+        }
+        finally
+        {
+            plugin.RecordCommand(System.Diagnostics.Stopwatch.GetElapsedTime(started));
+        }
     }
 
     // ------------------------------------------------------------------ views
@@ -1018,6 +1033,31 @@ public sealed class PluginManager : IAsyncDisposable
         return _hosts.GetOrAdd(group, g => new HostConnection(this, g, launch) { PluginPath = pluginPath, IsRemote = remote });
     }
 
+    /// <summary>How long an activation may take before <see cref="SlowPlugin"/> is raised (M22d).</summary>
+    public TimeSpan SlowActivation { get; init; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>A plugin took <see cref="SlowActivation"/> or more to activate (M22d, performance attribution).</summary>
+    public event EventHandler<PluginDescription>? SlowPlugin;
+
+    /// <summary>The memory a plugin host process uses on this machine (its working set), or null when it isn't running here.</summary>
+    public long? HostMemory(string group)
+    {
+        if (!_hosts.TryGetValue(group, out var host) || host.IsRemote || host.ProcessId is not { } id)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(id);
+            return process.WorkingSet64;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>The plugin host groups started so far, and whether each runs on a remote window's server.</summary>
     public IReadOnlyList<(string Group, bool Running, bool Remote)> Hosts =>
         [.. _hosts.Select(h => (h.Key, h.Value.IsRunning, h.Value.IsRemote)).OrderBy(h => h.Key, StringComparer.Ordinal)];
@@ -1109,6 +1149,8 @@ public sealed class PluginManager : IAsyncDisposable
         }
 
         public bool IsRunning => _process.IsRunning;
+
+        public int? ProcessId => _process.ProcessId;
 
         public JsonRpcConnection Connection => _process.Connection;
 

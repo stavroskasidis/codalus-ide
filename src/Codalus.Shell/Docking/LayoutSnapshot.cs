@@ -59,6 +59,7 @@ public sealed record WindowPlacement(double Width, double Height, int? X, int? Y
 [JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(int))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
+[JsonSerializable(typeof(Dictionary<string, string[]>))]
 internal sealed partial class ShellJsonContext : JsonSerializerContext;
 
 /// <summary>The documents open in a solution, reopened with it (<c>sessions/&lt;hash&gt;.json</c> in the state folder).</summary>

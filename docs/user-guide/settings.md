@@ -116,7 +116,15 @@ The Plugins window lists the installed plugins. **Turn Off** keeps a plugin from
 - **Updates.** Once a day Codalus IDE checks the plugins you installed from the gallery. With **Update Plugins Automatically** (`plugins.autoUpdate`, on by default) it downloads the newer versions, which apply at the next start; **Check for Plugin Updates** checks now.
 - **Uninstalling.** It also applies at the next start. Until then, the gallery lists the change, with **Cancel This Change** and **Restart Now**.
 
+**Performance.** Each plugin's row in the Plugins window says how long it took to start, how many of its commands ran and the slowest, and how much memory its host uses (the host's, shared by the plugins in it). When a plugin keeps slowing the start (more than two seconds, in three sessions), Codalus IDE says so and offers to turn it off.
+
 **Bisect Plugins** finds the plugin behind a problem. Codalus IDE restarts a few times, each time with half of the remaining plugins turned off (for the workspace, or for you when no folder is open), and asks whether the problem is still there. It ends by naming the plugin, and puts your plugin settings back. Built-in plugins stay on.
+
+## Components
+
+Some tools are downloaded the first time a feature needs them: Node.js, the web language servers, the browser debugger, netcoredbg for remote machines, and converted icon themes. **Tools → Components…** lists them with their version, size and licence. **Download Now** gets one ahead of time, and **Remove** frees its space; it comes back when a feature needs it.
+
+**Offline layout**: on a machine with internet access, **Export Offline Layout…** copies the downloaded components to a folder. On a machine without it, **Import Offline Layout…** copies them in, so no feature tries to download anything. The .NET SDK has its own offline installer, and the layout doesn't include it.
 
 ## Keyboard shortcuts
 

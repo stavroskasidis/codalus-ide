@@ -63,6 +63,39 @@ public sealed partial class PluginDescription
     /// <summary>A plugin under development in a debugged host of its own (M22b).</summary>
     public bool IsDebugged { get; internal set; }
 
+    /// <summary>How long its last activation took (M22d, performance attribution).</summary>
+    public TimeSpan? ActivationTime { get; internal set; }
+
+    private readonly Lock _commandsGate = new();
+    private int _commandCalls;
+    private TimeSpan _commandTime;
+    private TimeSpan _slowestCommand;
+
+    /// <summary>Its commands run this session: how many, how long in all, and the slowest (M22d).</summary>
+    public (int Calls, TimeSpan Total, TimeSpan Slowest) Commands
+    {
+        get
+        {
+            lock (_commandsGate)
+            {
+                return (_commandCalls, _commandTime, _slowestCommand);
+            }
+        }
+    }
+
+    internal void RecordCommand(TimeSpan elapsed)
+    {
+        lock (_commandsGate)
+        {
+            _commandCalls++;
+            _commandTime += elapsed;
+            if (elapsed > _slowestCommand)
+            {
+                _slowestCommand = elapsed;
+            }
+        }
+    }
+
     public const string WorkspaceGroupPrefix = "workspace:";
 
     /// <summary>The manifest's <c>runsOn</c> is <c>workspace</c>.</summary>

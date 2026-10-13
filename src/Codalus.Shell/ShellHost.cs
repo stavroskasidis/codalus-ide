@@ -141,6 +141,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializePluginDevelopment();
         InitializePluginGallery();
         InitializePluginBisect();
+        InitializePluginPerformance();
+        InitializeComponentsPage();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -492,6 +494,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             RemotePortsViewModel.ToolWindowId => PortsWindow,
             SourceControlProvidersWindow => SourceControlProviders(),
             PluginGalleryWindow => PluginGallery(),
+            ComponentsWindow => ComponentsPage(),
             _ => null,
         },
     };
