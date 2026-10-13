@@ -1,0 +1,251 @@
+{
+  "target": "shell",
+  "scenario": "open-solution-50",
+  "machine": {
+    "os": "windows",
+    "osVersion": "Microsoft Windows 10.0.26300",
+    "architecture": "x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13600KF",
+    "logicalCores": 20,
+    "memoryBytes": 34186018816,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "displayRefreshHz": 165,
+    "isCi": false
+  },
+  "startedAt": "2026-10-13T00:30:06.5754797+00:00",
+  "method": "instrumented\u002Bblack-box",
+  "samples": {
+    "solution_structure_ms": [
+      585.155,
+      707.186,
+      613.244
+    ],
+    "solution_loaded_ms": [
+      1561.43,
+      1855.596,
+      1684.622
+    ],
+    "solution_ready_ms": [
+      1633.6732,
+      1936.0415,
+      1793.0224
+    ],
+    "designtime_done_ms": [
+      4006.065,
+      4844.339,
+      4724.177
+    ],
+    "designtime_cache_hits": [
+      0,
+      0,
+      0
+    ],
+    "designtime_cache_misses": [
+      50,
+      50,
+      50
+    ],
+    "language_ready_ms": [
+      8078.285,
+      9127.734,
+      8948.291
+    ],
+    "memory_solution_private_mb": [
+      528.171875,
+      532.6796875,
+      535.59375
+    ],
+    "warm_solution_structure_ms": [
+      667.107,
+      611.743,
+      622.332
+    ],
+    "warm_solution_loaded_ms": [
+      1857.854,
+      1697.405,
+      1763.679
+    ],
+    "warm_designtime_done_ms": [
+      2236.821,
+      2077.604,
+      2164.854
+    ],
+    "warm_designtime_cache_hits": [
+      50,
+      50,
+      50
+    ],
+    "warm_designtime_cache_misses": [
+      0,
+      0,
+      0
+    ],
+    "warm_language_ready_ms": [
+      2924.062,
+      3098.742,
+      2875.053
+    ],
+    "warm_memory_solution_private_mb": [
+      385.87890625,
+      394.3671875,
+      388.81640625
+    ]
+  },
+  "summary": {
+    "solution_structure_ms": {
+      "n": 3,
+      "min": 585.155,
+      "p50": 613.244,
+      "p95": 707.186,
+      "p99": 707.186,
+      "max": 707.186,
+      "mean": 635.195,
+      "stdDev": 63.90834093449777
+    },
+    "solution_loaded_ms": {
+      "n": 3,
+      "min": 1561.43,
+      "p50": 1684.622,
+      "p95": 1855.596,
+      "p99": 1855.596,
+      "max": 1855.596,
+      "mean": 1700.5493333333334,
+      "stdDev": 147.72836169582783
+    },
+    "solution_ready_ms": {
+      "n": 3,
+      "min": 1633.6732,
+      "p50": 1793.0224,
+      "p95": 1936.0415,
+      "p99": 1936.0415,
+      "max": 1936.0415,
+      "mean": 1787.5790333333334,
+      "stdDev": 151.25762754890528
+    },
+    "designtime_done_ms": {
+      "n": 3,
+      "min": 4006.065,
+      "p50": 4724.177,
+      "p95": 4844.339,
+      "p99": 4844.339,
+      "max": 4844.339,
+      "mean": 4524.860333333333,
+      "stdDev": 453.28928398687435
+    },
+    "designtime_cache_hits": {
+      "n": 3,
+      "min": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0,
+      "mean": 0,
+      "stdDev": 0
+    },
+    "designtime_cache_misses": {
+      "n": 3,
+      "min": 50,
+      "p50": 50,
+      "p95": 50,
+      "p99": 50,
+      "max": 50,
+      "mean": 50,
+      "stdDev": 0
+    },
+    "language_ready_ms": {
+      "n": 3,
+      "min": 8078.285,
+      "p50": 8948.291,
+      "p95": 9127.734,
+      "p99": 9127.734,
+      "max": 9127.734,
+      "mean": 8718.103333333334,
+      "stdDev": 561.3159291471545
+    },
+    "memory_solution_private_mb": {
+      "n": 3,
+      "min": 528.171875,
+      "p50": 532.6796875,
+      "p95": 535.59375,
+      "p99": 535.59375,
+      "max": 535.59375,
+      "mean": 532.1484375,
+      "stdDev": 3.739348479452169
+    },
+    "warm_solution_structure_ms": {
+      "n": 3,
+      "min": 611.743,
+      "p50": 622.332,
+      "p95": 667.107,
+      "p99": 667.107,
+      "max": 667.107,
+      "mean": 633.7273333333334,
+      "stdDev": 29.3884899294491
+    },
+    "warm_solution_loaded_ms": {
+      "n": 3,
+      "min": 1697.405,
+      "p50": 1763.679,
+      "p95": 1857.854,
+      "p99": 1857.854,
+      "max": 1857.854,
+      "mean": 1772.9793333333334,
+      "stdDev": 80.62780258901601
+    },
+    "warm_designtime_done_ms": {
+      "n": 3,
+      "min": 2077.604,
+      "p50": 2164.854,
+      "p95": 2236.821,
+      "p99": 2236.821,
+      "max": 2236.821,
+      "mean": 2159.7596666666664,
+      "stdDev": 79.73065562462999
+    },
+    "warm_designtime_cache_hits": {
+      "n": 3,
+      "min": 50,
+      "p50": 50,
+      "p95": 50,
+      "p99": 50,
+      "max": 50,
+      "mean": 50,
+      "stdDev": 0
+    },
+    "warm_designtime_cache_misses": {
+      "n": 3,
+      "min": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0,
+      "mean": 0,
+      "stdDev": 0
+    },
+    "warm_language_ready_ms": {
+      "n": 3,
+      "min": 2875.053,
+      "p50": 2924.062,
+      "p95": 3098.742,
+      "p99": 3098.742,
+      "max": 3098.742,
+      "mean": 2965.952333333333,
+      "stdDev": 117.58100271869336
+    },
+    "warm_memory_solution_private_mb": {
+      "n": 3,
+      "min": 385.87890625,
+      "p50": 388.81640625,
+      "p95": 394.3671875,
+      "p99": 394.3671875,
+      "max": 394.3671875,
+      "mean": 389.6875,
+      "stdDev": 4.310665016646757
+    }
+  },
+  "notes": [
+    "Fresh user data per launch: the built-in Welcome plugin starts its plugin host after the window is interactive.",
+    "The fixture copy is restored (dotnet restore) before each launch; restore time is not measured."
+  ],
+  "discardedRuns": 0
+}

@@ -15,7 +15,11 @@
     { "target": "shell", "scenario": "open-solution-50", "metric": "warm_solution_loaded_ms", "stat": "p50", "max": 5000, "source": "M34b (warm open, as ADR 0002 #4)" },
     { "target": "shell", "scenario": "open-solution-50", "metric": "warm_designtime_done_ms", "stat": "p50", "max": 3500, "source": "M34b (warm open: the design-time build cache)" },
     { "target": "shell", "scenario": "open-solution-50", "metric": "warm_designtime_cache_misses", "stat": "max", "max": 0, "source": "M34c (a warm open of an unchanged copy takes every project from the design-time build cache)" },
-    { "target": "shell", "scenario": "open-solution-50", "metric": "warm_language_ready_ms", "stat": "p50", "max": 10000, "source": "M34b (warm open)" },
+    { "target": "shell", "scenario": "open-solution-50", "metric": "warm_language_ready_ms", "stat": "p50", "max": 4500, "source": "M34c (warm open: the language state between sessions; 10000 in M34b)" },
+    { "target": "shell", "scenario": "open-solution-50", "metric": "warm_memory_solution_private_mb", "stat": "p50", "max": 450, "source": "M34c (warm open: unchanged projects aren't compiled)" },
+    { "target": "shell", "scenario": "completion-50", "metric": "warm_completion_first_ms", "stat": "p50", "max": 4000, "source": "M34c (first completion with items after a warm open, from launch)" },
+    { "target": "shell", "scenario": "completion-50", "metric": "completion_ready_ms", "stat": "p99", "max": 250, "source": "M34c (completion once the C# service is ready)" },
+    { "target": "shell", "scenario": "completion-50", "metric": "loading_typing_ms", "stat": "p50", "max": 16, "source": "M34c (typing while the solution loads, in-app; p99 is a TODO)" },
 
     { "target": "shell", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p50", "max": 13, "os": "windows", "source": "ADR 0002 #2" },
     { "target": "shell", "scenario": "editor-100k", "metric": "typing_input_to_display_ms", "stat": "p99", "max": 20, "os": "windows", "source": "ADR 0002 #2" },
