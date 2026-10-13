@@ -321,8 +321,8 @@ public partial class PolishTests
             Assert.True(used <= strip.Bounds.Width + 1 || tabs.All(t => t.Bounds.Width <= FittingTabPanel.MinTabWidth + 1),
                 $"{tabs.Count} tabs take {used:0} px of {strip.Bounds.Width:0}");
             var titles = tabs.SelectMany(t => t.GetVisualDescendants().OfType<TextBlock>().Where(b => b.Classes.Contains("tabTitle"))).ToList();
-            Assert.All(titles, b => Assert.Equal(b.Text, ToolTip.GetTip(b)));
-            if (titles.Any(b => !double.IsPositiveInfinity(b.MaxWidth)))
+            Assert.All(titles, b => Assert.Equal(b.Text, ToolTip.GetTip((Control)b.GetVisualParent()!)));
+            if (titles.Any(b => !double.IsPositiveInfinity(b.MaxWidth)) || tabs.Any(FittingTabPanel.GetIconOnly))
             {
                 crowded++;
                 Assert.All(titles, b => Assert.Equal(TextTrimming.CharacterEllipsis, b.TextTrimming));
@@ -330,6 +330,10 @@ public partial class PolishTests
         }
 
         Assert.True(crowded > 0, "with every tool window open, some group has shrunk tabs");
+        // The most crowded groups show only icons, each tab no wider than its icon and padding.
+        var iconTabs = f.Window.GetVisualDescendants().OfType<FittingTabPanel>().SelectMany(p => p.Children).Where(FittingTabPanel.GetIconOnly).ToList();
+        Assert.NotEmpty(iconTabs);
+        Assert.All(iconTabs, t => Assert.True(t.Bounds.Width < FittingTabPanel.MinTabWidth, $"an icon-only tab is {t.Bounds.Width:0} px"));
         if (Environment.GetEnvironmentVariable("DAEDALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
         {
             Directory.CreateDirectory(snapshots);

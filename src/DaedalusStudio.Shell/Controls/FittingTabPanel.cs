@@ -1,5 +1,7 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data.Converters;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
 using Avalonia.VisualTree;
@@ -9,8 +11,10 @@ namespace DaedalusStudio.Shell.Controls;
 /// <summary>
 /// The tabs of a tool window group: one row that fits the pane. When the tabs are wider than the pane, the widest ones
 /// shrink first, down to a shared width, and their titles end in an ellipsis (as a classic IDE's tool window tabs do);
-/// the title's tooltip has the whole name. A tab's title is the <see cref="TextBlock"/> with the class
-/// <c>tabTitle</c>, whose <c>MaxWidth</c> binds to <see cref="TitleMaxWidthProperty"/> on its tab.
+/// a tab with no room left for a readable title shows only its icon (<see cref="IconOnlyProperty"/>), and the
+/// tooltip has the whole name. A tab's title is the <see cref="TextBlock"/> with the class <c>tabTitle</c>, whose
+/// <c>MaxWidth</c> binds to <see cref="TitleMaxWidthProperty"/> on its tab; its icon is the <see cref="Icon"/> with the
+/// class <c>tabIcon</c>.
 /// </summary>
 public sealed class FittingTabPanel : Panel
 {
@@ -18,8 +22,23 @@ public sealed class FittingTabPanel : Panel
     public static readonly AttachedProperty<double> TitleMaxWidthProperty =
         AvaloniaProperty.RegisterAttached<FittingTabPanel, Control, double>("TitleMaxWidth", double.PositiveInfinity);
 
-    /// <summary>The narrowest a tab gets: its icon and a few letters.</summary>
+    /// <summary>A tab whose title would be narrower than this shows only its icon, when it has one.</summary>
+    public static readonly AttachedProperty<bool> IconOnlyProperty =
+        AvaloniaProperty.RegisterAttached<FittingTabPanel, Control, bool>("IconOnly");
+
+    /// <summary>The narrowest a tab with a title gets.</summary>
     public const double MinTabWidth = 40;
+
+    /// <summary>The narrowest a title gets before its tab shows only the icon.</summary>
+    public const double MinTitleWidth = 24;
+
+    /// <summary>The gap between a tab's icon and its title, on the title.</summary>
+    public static readonly IValueConverter TitleMarginConverter =
+        new FuncValueConverter<bool, Thickness>(hasIcon => hasIcon ? new Thickness(4, 0, 0, 0) : default);
+
+    public static bool GetIconOnly(Control control) => control.GetValue(IconOnlyProperty);
+
+    public static void SetIconOnly(Control control, bool value) => control.SetValue(IconOnlyProperty, value);
 
     public static double GetTitleMaxWidth(Control control) => control.GetValue(TitleMaxWidthProperty);
 
@@ -30,6 +49,8 @@ public sealed class FittingTabPanel : Panel
         var children = Children.Where(c => c.IsVisible).ToList();
         var naturals = new double[children.Count];
         var overheads = new double[children.Count];
+        var hasIcon = new bool[children.Count];
+        var margins = new double[children.Count];
         for (var i = 0; i < children.Count; i++)
         {
             var child = children[i];
@@ -38,17 +59,39 @@ public sealed class FittingTabPanel : Panel
             var titleNow = title?.DesiredSize.Width ?? 0;
             overheads[i] = Math.Max(0, child.DesiredSize.Width - titleNow);
             naturals[i] = overheads[i] + (title is null ? titleNow : NaturalWidth(title));
+            margins[i] = title is null ? 0 : title.Margin.Left + title.Margin.Right;
+            hasIcon[i] = title is not null && child.GetVisualDescendants().OfType<Icon>().Any(c => c.Classes.Contains("tabIcon") && c.Kind is not null);
         }
 
-        var cap = Cap(naturals, availableSize.Width);
+        // Tabs that would keep fewer than MinTitleWidth of their title show only their icon; the width they free goes
+        // to the others, so repeat until no more tabs change.
+        var iconOnly = new bool[children.Count];
+        var widths = (double[])naturals.Clone();
+        var cap = Cap(widths, availableSize.Width);
+        for (var changed = true; changed;)
+        {
+            changed = false;
+            for (var i = 0; i < children.Count; i++)
+            {
+                if (!iconOnly[i] && hasIcon[i] && naturals[i] > cap && Math.Max(cap, MinTabWidth) - overheads[i] < MinTitleWidth)
+                {
+                    iconOnly[i] = true;
+                    widths[i] = overheads[i];
+                    changed = true;
+                }
+            }
+
+            cap = Cap(widths, availableSize.Width);
+        }
         double width = 0, height = 0;
         for (var i = 0; i < children.Count; i++)
         {
             var child = children[i];
-            var titleMax = naturals[i] > cap ? Math.Max(0, Math.Max(cap, MinTabWidth) - overheads[i]) : double.PositiveInfinity;
-            if (!SameWidth(GetTitleMaxWidth(child), titleMax))
+            var titleMax = !iconOnly[i] && naturals[i] > cap ? Math.Max(0, Math.Max(cap, MinTabWidth) - overheads[i] - margins[i]) : double.PositiveInfinity; // MaxWidth leaves out the margin
+            if (!SameWidth(GetTitleMaxWidth(child), titleMax) || GetIconOnly(child) != iconOnly[i])
             {
                 SetTitleMaxWidth(child, titleMax);
+                SetIconOnly(child, iconOnly[i]);
                 child.Measure(Size.Infinity);
             }
 

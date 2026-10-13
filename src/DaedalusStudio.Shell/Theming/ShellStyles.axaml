@@ -23,12 +23,21 @@
       </DataTemplate>
     </Setter>
   </Style>
-  <!-- Tool window tabs fit their pane: the widest shrink first and end in an ellipsis, the tooltip has the name. -->
+  <!--
+    Tool window tabs fit their pane (FittingTabPanel): the widest shrink first and end in an ellipsis; tabs with no room
+    left for a title show only their icon. The tooltip has the name.
+  -->
   <Style Selector="ToolControl">
     <Setter Property="HeaderTemplate">
-      <DataTemplate DataType="core:IDockable">
-        <TextBlock Classes="tabTitle" Text="{Binding Title}" Padding="2" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}"
-                   MaxWidth="{Binding $parent[ToolTabStripItem].(controls:FittingTabPanel.TitleMaxWidth)}" />
+      <DataTemplate DataType="docking:ToolWindowDockable">
+        <StackPanel Orientation="Horizontal" ToolTip.Tip="{Binding Title}">
+          <controls:Icon Classes="tabIcon" Kind="{Binding TabIcon}" IsVisible="{Binding HasTabIcon}" Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,0,0" />
+          <!-- The title's left margin (not the panel's spacing) keeps a tab's other parts the same width with or without it. -->
+          <TextBlock Classes="tabTitle" Text="{Binding Title}" Padding="2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                     Margin="{Binding HasTabIcon, Converter={x:Static controls:FittingTabPanel.TitleMarginConverter}}"
+                     IsVisible="{Binding !$parent[ToolTabStripItem].(controls:FittingTabPanel.IconOnly)}"
+                     MaxWidth="{Binding $parent[ToolTabStripItem].(controls:FittingTabPanel.TitleMaxWidth)}" />
+        </StackPanel>
       </DataTemplate>
     </Setter>
   </Style>

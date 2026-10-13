@@ -31,6 +31,16 @@ public sealed class ToolWindowDockable : Tool
     public ToolWindowDescriptor Descriptor { get; }
 
     public object? Content { get; }
+
+    /// <summary>
+    /// The tab's icon: the one its View menu entry shows, in its command family's color (<c>kind@Family</c>), or null.
+    /// A tab too narrow for its title shows only this icon.
+    /// </summary>
+    public string? TabIcon => Controls.CommandIcons.For(BuiltIns.ViewCommandPrefix + Descriptor.Id, _ => Descriptor.Icon) is { } icon
+        ? icon.Accent is { } accent ? $"{icon.Kind}@{char.ToUpperInvariant(accent[0])}{accent[1..]}" : icon.Kind
+        : null;
+
+    public bool HasTabIcon => TabIcon is not null;
 }
 
 /// <summary>A document tab (Settings, Keyboard Shortcuts, a text file…).</summary>
