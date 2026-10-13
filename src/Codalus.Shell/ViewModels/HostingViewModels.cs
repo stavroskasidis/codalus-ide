@@ -197,6 +197,36 @@ public sealed class AccountsViewModel : ObservableObject
     public bool IsDisabled => !_isEnabled;
 
     public AccountProviderRow? Row(string providerId) => Providers.FirstOrDefault(p => p.Id == providerId);
+
+    /// <summary>Plugins' authentication providers' sessions (plugin API 1.0).</summary>
+    public ObservableCollection<AuthenticationSessionRow> Sessions { get; } = [];
+
+    public bool HasSessions => Sessions.Count > 0;
+
+    public void SetSessions(IEnumerable<AuthenticationSessionRow> sessions)
+    {
+        Sessions.Clear();
+        foreach (var session in sessions)
+        {
+            Sessions.Add(session);
+        }
+
+        OnPropertyChanged(nameof(HasSessions));
+    }
+}
+
+/// <summary>A session of a plugin's authentication provider, with Sign Out.</summary>
+public sealed class AuthenticationSessionRow(string provider, string account, IReadOnlyList<string> scopes, Action signOut)
+{
+    public string Provider { get; } = provider;
+
+    public string Account { get; } = account;
+
+    public string Detail => scopes.Count == 0 ? Provider : $"{Provider} · {string.Join(", ", scopes)}";
+
+    public RelayCommand SignOutCommand { get; } = new(signOut);
+
+    public string AccessibleName => $"{Account}, {Provider}";
 }
 
 public sealed class AccountsDocument : ShellDocument

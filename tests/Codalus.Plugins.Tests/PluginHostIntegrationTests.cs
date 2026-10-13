@@ -1,3 +1,4 @@
+using Codalus.Plugins.Protocol;
 using System.Reflection;
 using System.Text.Json;
 using Codalus.Platform;
@@ -97,6 +98,43 @@ public sealed class PluginHostIntegrationTests : IAsyncLifetime
         Assert.Equal(3, result!.Value.GetProperty("count").GetInt32());
         Assert.Equal("two", result.Value.GetProperty("args")[1].GetString());
         Assert.Equal(3, result.Value.GetProperty("args")[2].GetProperty("a")[0].GetInt32());
+    }
+
+    [Fact]
+    public async Task An_authentication_provider_signs_in_lists_sessions_asks_consent_and_signs_out()
+    {
+        // IAuthentication (API 1.0). Asking the provider for its sessions activates its plugin (onAuthenticationRequest).
+        Assert.Empty(await _manager.GetAuthenticationSessionsAsync("hello-accounts", Timeout()));
+        Assert.Contains(_manager.AuthenticationProviders, p => p is { Id: "hello-accounts", Label: "Hello Accounts", PluginId: "codalus-samples.hello" });
+
+        // The plugin signs in with its own provider: no consent needed.
+        Assert.Equal("user 1", (await _workbench.Commands.ExecuteAsync("hello.signIn", Timeout()))!.Value.GetString());
+        var session = Assert.Single(await _manager.GetAuthenticationSessionsAsync("hello-accounts", Timeout()));
+        Assert.Equal(("user 1", "token-1"), (session.Account, session.AccessToken));
+        Assert.Equal("user 1", (await _workbench.Commands.ExecuteAsync("hello.signIn", Timeout()))!.Value.GetString()); // the same session again
+
+        // Another plugin asks: the user is asked once; a refusal gives nothing.
+        var asked = new List<string>();
+        var allow = false;
+        _manager.AskConsent = message =>
+        {
+            asked.Add(message);
+            return Task.FromResult(allow);
+        };
+        Assert.Null(await _manager.GetSessionForAsync(new AuthGetSessionParams("other.plugin", "hello-accounts", ["read"], false), Timeout()));
+        allow = true;
+        Assert.Equal("user 1", (await _manager.GetSessionForAsync(new AuthGetSessionParams("other.plugin", "hello-accounts", ["read"], false), Timeout()))!.Account);
+        Assert.Equal("user 1", (await _manager.GetSessionForAsync(new AuthGetSessionParams("other.plugin", "hello-accounts", ["read"], false), Timeout()))!.Account);
+        Assert.Equal(2, asked.Count);
+        Assert.Contains("'other.plugin' wants to use your Hello Accounts account (user 1).", asked);
+
+        // A scope the session hasn't: a new sign-in, when asked for.
+        Assert.Null(await _manager.GetSessionForAsync(new AuthGetSessionParams("other.plugin", "hello-accounts", ["write"], false), Timeout()));
+        Assert.Equal("user 2", (await _manager.GetSessionForAsync(new AuthGetSessionParams("other.plugin", "hello-accounts", ["write"], true), Timeout()))!.Account);
+
+        // Signing out.
+        await _manager.SignOutAsync("hello-accounts", session.Id, Timeout());
+        Assert.Equal(["user 2"], (await _manager.GetAuthenticationSessionsAsync("hello-accounts", Timeout())).Select(s => s.Account));
     }
 
     [Fact]

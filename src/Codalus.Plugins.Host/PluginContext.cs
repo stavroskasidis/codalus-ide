@@ -39,6 +39,27 @@ internal sealed class PluginContext : IPluginContext, ICommands, IWindow, IPlugi
 
     public IFileSystems FileSystems => _fileSystems ??= new PluginFileSystems(_server, Id, Own);
 
+    public IAuthentication Authentication => _authentication ??= new PluginAuthentication(_server, Id, Own);
+
+    private PluginAuthentication? _authentication;
+
+    /// <summary>The plugin's authentication providers, and its requests for sessions (which the shell answers).</summary>
+    private sealed class PluginAuthentication(PluginHostServer server, string pluginId, Func<IDisposable, IDisposable> own) : IAuthentication
+    {
+        public IDisposable RegisterProvider(string id, string label, IAuthenticationProvider provider) =>
+            own(server.RegisterAuthentication(pluginId, id, label, provider));
+
+        public async Task<AuthenticationSession?> GetSessionAsync(string providerId, IReadOnlyList<string> scopes, bool createIfNone, CancellationToken cancellationToken)
+        {
+            var result = await server.RequestAsync(PluginMethods.AuthGetSession, new AuthGetSessionParams(pluginId, providerId, [.. scopes], createIfNone),
+                PluginJsonContext.Default.AuthGetSessionParams, PluginJsonContext.Default.AuthSessionResult, cancellationToken).ConfigureAwait(false);
+            return result.Session is { } s ? new AuthenticationSession(s.Id, s.AccessToken, s.Account, s.Scopes) : null;
+        }
+
+        public void NotifySessionsChanged(string providerId) =>
+            server.Post(PluginMethods.AuthSessionsChanged, new AuthProviderParams(pluginId, providerId, string.Empty), PluginJsonContext.Default.AuthProviderParams);
+    }
+
     private PluginFileSystems? _fileSystems;
 
     /// <summary>The plugin's file system providers, registered with the host and announced to the shell.</summary>

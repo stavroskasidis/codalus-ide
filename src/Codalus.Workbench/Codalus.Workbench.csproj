@@ -21,5 +21,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
     <InternalsVisibleTo Include="Codalus.Debugging.Tests" />
+    <InternalsVisibleTo Include="Codalus.Plugins.Tests" />
   </ItemGroup>
 </Project>

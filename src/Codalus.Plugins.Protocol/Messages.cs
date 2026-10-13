@@ -91,6 +91,23 @@ public sealed record CustomEditorTextParams(string PluginId, string ViewId, stri
 
 public sealed record FsSchemeParams(string PluginId, string Scheme);
 
+public sealed record AuthProviderParams(string PluginId, string ProviderId, string Label);
+
+public sealed record AuthGetSessionParams(string PluginId, string ProviderId, string[] Scopes, bool CreateIfNone);
+
+/// <summary>A provider operation: <see cref="Scopes"/> for listing and creating, <see cref="SessionId"/> for removing.</summary>
+public sealed record AuthRequestParams(string ProviderId)
+{
+    public string[]? Scopes { get; init; }
+    public string? SessionId { get; init; }
+}
+
+public sealed record AuthSessionDto(string Id, string AccessToken, string Account, string[] Scopes);
+
+public sealed record AuthSessionResult(AuthSessionDto? Session);
+
+public sealed record AuthSessionsResult(AuthSessionDto[] Sessions);
+
 public sealed record FsChangedParams(string Scheme, string[] Paths, string Kind);
 
 /// <summary>A provider operation: <see cref="Path"/> in the scheme's terms; the others as the operation needs them.</summary>

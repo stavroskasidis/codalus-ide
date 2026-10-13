@@ -8,6 +8,7 @@
   "entry": { "runtime": "dotnet", "assembly": "HelloWorld.dll" },
   "activationEvents": [ "onSettingChanged:hello.announce" ],
   "contributes": {
+    "authentication": [ { "id": "hello-accounts", "label": "Hello Accounts" } ],
     "commands": [
       { "id": "hello.sayHello", "title": "Say Hello", "category": "Hello" },
       { "id": "hello.echo", "title": "Echo Arguments", "category": "Hello" },
@@ -16,7 +17,8 @@
       { "id": "hello.crashHost", "title": "Crash the Plugin Host (test)", "category": "Hello" },
       { "id": "hello.count", "title": "Count to Ten Slowly", "category": "Hello" },
       { "id": "hello.mountFiles", "title": "Serve the hello: File System", "category": "Hello" },
-      { "id": "hello.readFile", "title": "Read a hello: File (test)", "category": "Hello" }
+      { "id": "hello.readFile", "title": "Read a hello: File (test)", "category": "Hello" },
+      { "id": "hello.signIn", "title": "Sign In to Hello Accounts", "category": "Hello" }
     ],
     "menus": {
       "commandPalette": [

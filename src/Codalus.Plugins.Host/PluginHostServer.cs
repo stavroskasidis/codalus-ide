@@ -74,6 +74,15 @@ internal sealed class PluginHostServer : IAsyncDisposable
             return new GetTreeChildrenResult([.. await tree.GetChildrenAsync(p.Handle, ct).ConfigureAwait(false)]);
         });
         _connection.OnNotification(PluginMethods.SettingsDidChange, json.SettingsDidChangeParams, p => Settings.Apply(p.Changes));
+        _connection.OnRequest(PluginMethods.AuthGetSessions, json.AuthRequestParams, json.AuthSessionsResult, async (p, ct) =>
+            new AuthSessionsResult([.. (await Authentication(p).GetSessionsAsync(p.Scopes, ct).ConfigureAwait(false)).Select(ToDto)]));
+        _connection.OnRequest(PluginMethods.AuthCreateSession, json.AuthRequestParams, json.AuthSessionResult, async (p, ct) =>
+            new AuthSessionResult(ToDto(await Authentication(p).CreateSessionAsync(p.Scopes ?? [], ct).ConfigureAwait(false))));
+        _connection.OnRequest(PluginMethods.AuthRemoveSession, json.AuthRequestParams, json.EmptyResult, async (p, ct) =>
+        {
+            await Authentication(p).RemoveSessionAsync(p.SessionId ?? string.Empty, ct).ConfigureAwait(false);
+            return new EmptyResult();
+        });
         _connection.OnRequest(PluginMethods.FsStat, json.FsRequestParams, json.FsStatResult, (p, ct) => FsCallAsync(async () =>
         {
             var stat = await FileSystem(p).StatAsync(p.Path, ct).ConfigureAwait(false);
@@ -309,6 +318,29 @@ internal sealed class PluginHostServer : IAsyncDisposable
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ICustomEditorProvider> _openCustomEditors = new(StringComparer.Ordinal);
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IFileSystemProvider> _fileSystems = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IAuthenticationProvider> _authentication = new(StringComparer.Ordinal);
+
+    internal IDisposable RegisterAuthentication(string pluginId, string id, string label, IAuthenticationProvider provider)
+    {
+        if (!_authentication.TryAdd(id, provider))
+        {
+            throw new InvalidOperationException($"The authentication provider '{id}' is already offered.");
+        }
+
+        Post(PluginMethods.AuthRegister, new AuthProviderParams(pluginId, id, label), PluginJsonContext.Default.AuthProviderParams);
+        return new Disposable(() =>
+        {
+            if (_authentication.TryRemove(new KeyValuePair<string, IAuthenticationProvider>(id, provider)))
+            {
+                Post(PluginMethods.AuthUnregister, new AuthProviderParams(pluginId, id, label), PluginJsonContext.Default.AuthProviderParams);
+            }
+        });
+    }
+
+    private IAuthenticationProvider Authentication(AuthRequestParams p) =>
+        _authentication.TryGetValue(p.ProviderId, out var provider) ? provider : throw new JsonRpcHandlerException(PluginErrorCodes.PluginNotActivated, $"No authentication provider '{p.ProviderId}'.");
+
+    private static AuthSessionDto ToDto(AuthenticationSession s) => new(s.Id, s.AccessToken, s.Account, [.. s.Scopes]);
 
     internal IDisposable RegisterFileSystem(string pluginId, string scheme, IFileSystemProvider provider)
     {

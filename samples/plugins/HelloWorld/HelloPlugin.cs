@@ -76,6 +76,11 @@ public sealed class HelloPlugin : ICodalusPlugin
         context.Subscriptions.Add(context.Commands.Register("hello.readFile", async (invocation, ct) =>
             System.Text.Encoding.UTF8.GetString(await files.ReadFileAsync(invocation.Arg<string>(0)!, ct))));
 
+        // An authentication provider (API 1.0): sessions in memory; any plugin can ask for one, with the user's consent.
+        context.Subscriptions.Add(context.Authentication.RegisterProvider("hello-accounts", "Hello Accounts", new MemoryAccounts()));
+        context.Subscriptions.Add(context.Commands.Register("hello.signIn", async (_, ct) =>
+            (await context.Authentication.GetSessionAsync("hello-accounts", ["read"], createIfNone: true, ct))?.Account));
+
         // Simulates a fatal plugin bug, so the shell's host supervision can be exercised.
         context.Subscriptions.Add(context.Commands.Register("hello.crashHost", () => Environment.Exit(42)));
 
@@ -207,4 +212,39 @@ internal sealed class MemoryFiles : IFileSystemProvider
     }
 
     public Task CreateDirectoryAsync(string path, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+/// <summary>Sign-ins in memory: each new session is the next "user N", with a made-up token.</summary>
+internal sealed class MemoryAccounts : IAuthenticationProvider
+{
+    private readonly List<AuthenticationSession> _sessions = [];
+
+    public Task<IReadOnlyList<AuthenticationSession>> GetSessionsAsync(IReadOnlyList<string>? scopes, CancellationToken cancellationToken)
+    {
+        lock (_sessions)
+        {
+            IReadOnlyList<AuthenticationSession> sessions = [.. _sessions.Where(s => scopes is null || scopes.All(s.Scopes.Contains))];
+            return Task.FromResult(sessions);
+        }
+    }
+
+    public Task<AuthenticationSession> CreateSessionAsync(IReadOnlyList<string> scopes, CancellationToken cancellationToken)
+    {
+        lock (_sessions)
+        {
+            var session = new AuthenticationSession(Guid.NewGuid().ToString("N"), "token-" + (_sessions.Count + 1), $"user {_sessions.Count + 1}", scopes);
+            _sessions.Add(session);
+            return Task.FromResult(session);
+        }
+    }
+
+    public Task RemoveSessionAsync(string sessionId, CancellationToken cancellationToken)
+    {
+        lock (_sessions)
+        {
+            _sessions.RemoveAll(s => s.Id == sessionId);
+        }
+
+        return Task.CompletedTask;
+    }
 }

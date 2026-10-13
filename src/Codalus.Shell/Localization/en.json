@@ -8,6 +8,8 @@
   "accounts.hostingProviders": "Hosting providers",
   "accounts.orSignInWithAPersonal": "Or sign in with a personal access token:",
   "accounts.personalAccessToken": "Personal access token",
+  "accounts.pluginSignIns": "Other sign-ins",
+  "accounts.pluginSignInsDescription": "Accounts plugins signed you in to. Signing out forgets the plugin's token.",
   "accounts.signIn": "Sign In",
   "accounts.signInToSeePullRequests": "Sign in to see pull requests, review comments, CI status and work items, and to publish repositories. Nothing is sent to a host until you sign in to it.",
   "accounts.signInWithToken": "Sign In with Token",

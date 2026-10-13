@@ -62,6 +62,19 @@ public static class PluginMethods
     /// <summary>Host → shell: files of a scheme changed.</summary>
     public const string FsChanged = "fs/changed";
 
+    /// <summary>Host → shell: an authentication provider is offered (API 1.0), withdrawn, or its sessions changed.</summary>
+    public const string AuthRegister = "auth/register";
+    public const string AuthUnregister = "auth/unregister";
+    public const string AuthSessionsChanged = "auth/sessionsChanged";
+
+    /// <summary>Host → shell (request): a plugin asks for a session of a provider.</summary>
+    public const string AuthGetSession = "auth/getSession";
+
+    /// <summary>Shell → host (requests): a provider's operations.</summary>
+    public const string AuthGetSessions = "auth/getSessions";
+    public const string AuthCreateSession = "auth/createSession";
+    public const string AuthRemoveSession = "auth/removeSession";
+
     /// <summary>Shell → host (requests): the provider's operations.</summary>
     public const string FsStat = "fs/stat";
     public const string FsReadDirectory = "fs/readDirectory";

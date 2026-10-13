@@ -84,6 +84,9 @@ public sealed record ManifestContributions
     /// <summary>Custom editors for files by name pattern (API 1.0, M22a); activation event <c>onCustomEditor:&lt;viewType&gt;</c>.</summary>
     public ManifestCustomEditor[]? CustomEditors { get; init; }
 
+    /// <summary>Authentication providers (API 1.0, M22a): the plugin activates when a session is asked of one (<c>onAuthenticationRequest:&lt;id&gt;</c>).</summary>
+    public ManifestAuthentication[]? Authentication { get; init; }
+
     /// <summary>Rows for the Properties window, from a command (API 0.2.8, M26, ADR 0033).</summary>
     public ManifestPropertyProvider[]? PropertyProviders { get; init; }
 
@@ -154,6 +157,9 @@ public sealed record ManifestTheme(string Id, string Label, string UiTheme, stri
 /// the user chooses the text editor (Open With).
 /// </summary>
 public sealed record ManifestCustomEditor(string ViewType, string DisplayName, string[] FilenamePatterns);
+
+/// <summary>An authentication provider the plugin offers: its id and the name users see.</summary>
+public sealed record ManifestAuthentication(string Id, string Label);
 
 /// <summary>
 /// A debug adapter speaking DAP over stdio: launch configurations whose <c>type</c> is <see cref="Type"/> start
@@ -299,6 +305,11 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(ViewIdParams))]
 [JsonSerializable(typeof(CustomEditorTextParams))]
 [JsonSerializable(typeof(FsSchemeParams))]
+[JsonSerializable(typeof(AuthProviderParams))]
+[JsonSerializable(typeof(AuthGetSessionParams))]
+[JsonSerializable(typeof(AuthRequestParams))]
+[JsonSerializable(typeof(AuthSessionResult))]
+[JsonSerializable(typeof(AuthSessionsResult))]
 [JsonSerializable(typeof(FsChangedParams))]
 [JsonSerializable(typeof(FsRequestParams))]
 [JsonSerializable(typeof(FsStatResult))]

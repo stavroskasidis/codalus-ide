@@ -239,6 +239,15 @@ public sealed partial class PluginDescription
             }
         }
 
+        // A session asked of a contributed authentication provider activates its plugin (API 1.0).
+        foreach (var provider in c?.Authentication ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(provider.Id))
+            {
+                events.Add("onAuthenticationRequest:" + provider.Id);
+            }
+        }
+
         // Opening a file in a contributed custom editor activates its plugin (API 1.0).
         foreach (var editor in c?.CustomEditors ?? [])
         {

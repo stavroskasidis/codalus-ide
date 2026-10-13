@@ -62,6 +62,30 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
+
+      <!-- Plugins' authentication providers' sessions (plugin API 1.0). -->
+      <StackPanel Spacing="8" IsVisible="{Binding HasSessions}">
+        <TextBlock Classes="heading" Text="{l:T accounts.pluginSignIns}" />
+        <TextBlock TextWrapping="Wrap" Classes="muted" Text="{l:T accounts.pluginSignInsDescription}" />
+        <ItemsControl ItemsSource="{Binding Sessions}" AutomationProperties.Name="{l:T accounts.pluginSignIns}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:AuthenticationSessionRow">
+              <Border BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="4" Padding="14,10" Margin="0,0,0,8" AutomationProperties.Name="{Binding AccessibleName}">
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Content="{l:T accounts.signOut}" Command="{Binding SignOutCommand}" VerticalAlignment="Center" AutomationProperties.Name="{Binding Account, StringFormat='Sign out of {0}'}" />
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <controls:Icon Kind="account" Width="20" Height="20" VerticalAlignment="Center" />
+                    <StackPanel>
+                      <TextBlock Text="{Binding Account}" Classes="subheading" />
+                      <TextBlock Text="{Binding Detail}" Classes="muted" />
+                    </StackPanel>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

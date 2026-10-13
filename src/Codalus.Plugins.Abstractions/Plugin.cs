@@ -82,6 +82,9 @@ public interface IPluginContext
 
     /// <summary>File systems the plugin provides (since 1.0).</summary>
     IFileSystems FileSystems => throw new NotSupportedException("This context has no file systems.");
+
+    /// <summary>Authentication providers: offering one, and asking any for a session (since 1.0).</summary>
+    IAuthentication Authentication => throw new NotSupportedException("This context has no authentication.");
 }
 
 /// <summary>The arguments a command was invoked with (JSON values, so commands work across processes).</summary>

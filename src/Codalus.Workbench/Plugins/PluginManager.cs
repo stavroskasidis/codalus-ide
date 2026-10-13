@@ -671,6 +671,100 @@ public sealed class PluginManager : IAsyncDisposable
         FileSystemsChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    // ------------------------------------------------------------------ authentication providers (API 1.0)
+
+    private readonly ConcurrentDictionary<string, (string PluginId, string Label)> _authProviders = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> _authConsents = new(StringComparer.Ordinal);
+
+    /// <summary>The authentication providers plugins offer.</summary>
+    public IReadOnlyList<(string Id, string Label, string PluginId)> AuthenticationProviders =>
+        [.. _authProviders.Select(p => (p.Key, p.Value.Label, p.Value.PluginId)).OrderBy(p => p.Label, StringComparer.CurrentCultureIgnoreCase)];
+
+    /// <summary>A provider came, went, or its sessions changed (its id).</summary>
+    public event EventHandler<string>? AuthenticationChanged;
+
+    /// <summary>Asks the user to allow what the message says; the shell sets it. Without it, another plugin's provider is refused.</summary>
+    public Func<string, Task<bool>>? AskConsent { get; set; }
+
+    private async Task<HostConnection?> AuthenticationHostAsync(string providerId, CancellationToken cancellationToken)
+    {
+        if (!_authProviders.ContainsKey(providerId))
+        {
+            // Its plugin activates on the request; the registration follows the activation.
+            await ActivateByEventAsync("onAuthenticationRequest:" + providerId, cancellationToken).ConfigureAwait(false);
+            for (var waited = 0; waited < 50 && !_authProviders.ContainsKey(providerId); waited++)
+            {
+                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return _authProviders.TryGetValue(providerId, out var provider) && Find(provider.PluginId) is { } plugin && GetHost(plugin.HostGroup) is { IsRunning: true } host ? host : null;
+    }
+
+    /// <summary>The provider's sessions (the Accounts page).</summary>
+    public async Task<IReadOnlyList<AuthSessionDto>> GetAuthenticationSessionsAsync(string providerId, CancellationToken cancellationToken) =>
+        await AuthenticationHostAsync(providerId, cancellationToken).ConfigureAwait(false) is { } host
+            ? (await host.Connection.InvokeAsync(PluginMethods.AuthGetSessions, new AuthRequestParams(providerId), PluginJsonContext.Default.AuthRequestParams, PluginJsonContext.Default.AuthSessionsResult, cancellationToken).ConfigureAwait(false)).Sessions
+            : [];
+
+    /// <summary>Signs a session out.</summary>
+    public async Task SignOutAsync(string providerId, string sessionId, CancellationToken cancellationToken)
+    {
+        if (await AuthenticationHostAsync(providerId, cancellationToken).ConfigureAwait(false) is { } host)
+        {
+            await host.Connection.InvokeAsync(PluginMethods.AuthRemoveSession, new AuthRequestParams(providerId) { SessionId = sessionId }, PluginJsonContext.Default.AuthRequestParams, PluginJsonContext.Default.EmptyResult, cancellationToken).ConfigureAwait(false);
+            AuthenticationChanged?.Invoke(this, providerId);
+        }
+    }
+
+    /// <summary>
+    /// A plugin's request for a session: an existing one with the scopes, or a new sign-in when asked. A plugin using
+    /// another plugin's provider needs the user's consent, once per session of the IDE.
+    /// </summary>
+    internal async Task<AuthSessionDto?> GetSessionForAsync(AuthGetSessionParams request, CancellationToken cancellationToken)
+    {
+        if (await AuthenticationHostAsync(request.ProviderId, cancellationToken).ConfigureAwait(false) is not { } host)
+        {
+            return null;
+        }
+
+        var (providerPlugin, label) = _authProviders[request.ProviderId];
+        var consumer = Find(request.PluginId)?.DisplayName ?? request.PluginId;
+        var consentKey = request.PluginId + "|" + request.ProviderId;
+        async Task<bool> ConsentAsync(string message)
+        {
+            if (request.PluginId == providerPlugin || _authConsents.ContainsKey(consentKey))
+            {
+                return true;
+            }
+
+            if (AskConsent is not { } ask || !await ask(message).ConfigureAwait(false))
+            {
+                return false;
+            }
+
+            _authConsents[consentKey] = 0;
+            return true;
+        }
+
+        var sessions = (await host.Connection.InvokeAsync(PluginMethods.AuthGetSessions, new AuthRequestParams(request.ProviderId) { Scopes = request.Scopes },
+            PluginJsonContext.Default.AuthRequestParams, PluginJsonContext.Default.AuthSessionsResult, cancellationToken).ConfigureAwait(false)).Sessions;
+        if (sessions.FirstOrDefault(s => request.Scopes.All(scope => s.Scopes.Contains(scope, StringComparer.Ordinal))) is { } existing)
+        {
+            return await ConsentAsync($"'{consumer}' wants to use your {label} account ({existing.Account}).").ConfigureAwait(false) ? existing : null;
+        }
+
+        if (!request.CreateIfNone || !await ConsentAsync($"'{consumer}' wants to sign you in to {label}.").ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var created = (await host.Connection.InvokeAsync(PluginMethods.AuthCreateSession, new AuthRequestParams(request.ProviderId) { Scopes = request.Scopes },
+            PluginJsonContext.Default.AuthRequestParams, PluginJsonContext.Default.AuthSessionResult, cancellationToken).ConfigureAwait(false)).Session;
+        AuthenticationChanged?.Invoke(this, request.ProviderId);
+        return created;
+    }
+
     /// <summary>A declarative view changed (its id).</summary>
     public event EventHandler<string>? ViewChanged;
 
@@ -1013,6 +1107,11 @@ public sealed class PluginManager : IAsyncDisposable
         {
             var members = Members.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
             _manager.UnregisterFileSystems((_, plugin) => members.Contains(plugin));
+            foreach (var (id, _) in _manager._authProviders.Where(p => members.Contains(p.Value.PluginId)).ToList())
+            {
+                _manager._authProviders.TryRemove(id, out _);
+                _manager.AuthenticationChanged?.Invoke(_manager, id);
+            }
 
             foreach (var id in _progress.Keys)
             {
@@ -1135,6 +1234,21 @@ public sealed class PluginManager : IAsyncDisposable
                 _manager._markdown[p.ViewId] = p.Markdown;
                 _manager.MarkdownChanged?.Invoke(_manager, p.ViewId);
             });
+            connection.OnNotification(PluginMethods.AuthRegister, json.AuthProviderParams, p =>
+            {
+                _manager._authProviders[p.ProviderId] = (p.PluginId, p.Label);
+                _manager.AuthenticationChanged?.Invoke(_manager, p.ProviderId);
+            });
+            connection.OnNotification(PluginMethods.AuthUnregister, json.AuthProviderParams, p =>
+            {
+                if (_manager._authProviders.TryRemove(p.ProviderId, out _))
+                {
+                    _manager.AuthenticationChanged?.Invoke(_manager, p.ProviderId);
+                }
+            });
+            connection.OnNotification(PluginMethods.AuthSessionsChanged, json.AuthProviderParams, p => _manager.AuthenticationChanged?.Invoke(_manager, p.ProviderId));
+            connection.OnRequest(PluginMethods.AuthGetSession, json.AuthGetSessionParams, json.AuthSessionResult, async (p, ct) =>
+                new AuthSessionResult(await _manager.GetSessionForAsync(p, ct).ConfigureAwait(false)));
             connection.OnNotification(PluginMethods.FsRegister, json.FsSchemeParams, p => _manager.RegisterFileSystem(p.PluginId, p.Scheme));
             connection.OnNotification(PluginMethods.FsUnregister, json.FsSchemeParams, p => _manager.UnregisterFileSystems((scheme, plugin) => scheme == p.Scheme && plugin == p.PluginId));
             connection.OnNotification(PluginMethods.FsChanged, json.FsChangedParams, p =>

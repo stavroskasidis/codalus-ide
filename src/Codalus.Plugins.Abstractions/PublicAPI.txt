@@ -1,3 +1,14 @@
+class Codalus.Plugins.AuthenticationSession
+  .ctor(System.String Id, System.String AccessToken, System.String Account, System.Collections.Generic.IReadOnlyList<System.String> Scopes)
+  AccessToken { get; init; } : System.String
+  Account { get; init; } : System.String
+  Deconstruct(ref System.String Id, ref System.String AccessToken, ref System.String Account, ref System.Collections.Generic.IReadOnlyList<System.String> Scopes) -> System.Void
+  Equals(Codalus.Plugins.AuthenticationSession other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  Scopes { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  ToString() -> System.String
 class Codalus.Plugins.BranchStatus
   .ctor(System.String State, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.StatusCheck> Checks)
   Checks { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.StatusCheck>
@@ -197,6 +208,14 @@ class Codalus.Plugins.HostingRepositoryInfo
   IsPrivate { get; init; } : System.Boolean
   ToString() -> System.String
   WebUrl { get; init; } : System.String
+interface Codalus.Plugins.IAuthentication
+  GetSessionAsync(System.String providerId, System.Collections.Generic.IReadOnlyList<System.String> scopes, System.Boolean createIfNone, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.AuthenticationSession>
+  NotifySessionsChanged(System.String providerId) -> System.Void
+  RegisterProvider(System.String id, System.String label, Codalus.Plugins.IAuthenticationProvider provider) -> System.IDisposable
+interface Codalus.Plugins.IAuthenticationProvider
+  CreateSessionAsync(System.Collections.Generic.IReadOnlyList<System.String> scopes, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.AuthenticationSession>
+  GetSessionsAsync(System.Collections.Generic.IReadOnlyList<System.String> scopes, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.AuthenticationSession>>
+  RemoveSessionAsync(System.String sessionId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
 interface Codalus.Plugins.IBuild
   BuildAsync(System.Collections.Generic.IReadOnlyList<System.String> projects, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.BuildResult>
   Finished event System.EventHandler<Codalus.Plugins.BuildFinishedEventArgs>
@@ -246,6 +265,7 @@ interface Codalus.Plugins.IOutputChannel
   Name { get; } : System.String
   Show() -> System.Void
 interface Codalus.Plugins.IPluginContext
+  Authentication { get; } : Codalus.Plugins.IAuthentication
   Build { get; } : Codalus.Plugins.IBuild
   Commands { get; } : Codalus.Plugins.ICommands
   Debug { get; } : Codalus.Plugins.IDebug

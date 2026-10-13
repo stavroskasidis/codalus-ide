@@ -327,6 +327,7 @@ public sealed partial class ShellHost : IHostingActions
     public AccountsDocument ShowAccounts(string? provider = null)
     {
         UpdateAccounts();
+        _ = RefreshAuthenticationSessionsAsync();
         var document = Layout.FindDocument<AccountsDocument>(AccountsDocument.DocumentId) ?? new AccountsDocument(Accounts);
         Layout.OpenDocument(document, focus: true);
         if (provider is not null && Accounts.Row(provider) is { CanSignIn: true } row)
@@ -1169,4 +1170,46 @@ public sealed partial class ShellHost : IHostingActions
             : Task.CompletedTask;
 
     public Task LfsPullAsync() => GitActionAsync(() => Git.LfsPullAsync(), "Downloading Git LFS files…");
+
+    // ------------------------------------------------------------------ plugins' authentication providers (API 1.0)
+
+    private bool _authenticationHooked;
+
+    /// <summary>The consent prompt for plugins' sessions, and the Accounts page's list of them.</summary>
+    private void HookAuthentication()
+    {
+        if (_authenticationHooked)
+        {
+            return;
+        }
+
+        _authenticationHooked = true;
+        Plugins.AskConsent = async message =>
+            await Workbench.Notifications.Info(message, "Allow", "Deny").Result.ConfigureAwait(false) == "Allow";
+        Plugins.AuthenticationChanged += (_, _) => Ui.Post(() => _ = RefreshAuthenticationSessionsAsync());
+    }
+
+    /// <summary>Lists the sessions of every provider plugins offer (without starting any plugin).</summary>
+    public async Task RefreshAuthenticationSessionsAsync()
+    {
+        var rows = new List<AuthenticationSessionRow>();
+        foreach (var (id, label, _) in Plugins.AuthenticationProviders)
+        {
+            try
+            {
+                foreach (var session in await Plugins.GetAuthenticationSessionsAsync(id, CancellationToken.None).ConfigureAwait(true))
+                {
+                    var providerId = id;
+                    var sessionId = session.Id;
+                    rows.Add(new AuthenticationSessionRow(label, session.Account, session.Scopes, () => _ = Plugins.SignOutAsync(providerId, sessionId, CancellationToken.None)));
+                }
+            }
+            catch (Exception ex) when (ex is Codalus.Rpc.JsonRpcRemoteException or Codalus.Rpc.JsonRpcConnectionLostException or IOException)
+            {
+                Workbench.Log.AppendLine($"The sessions of {label} couldn't be listed: {ex.Message}");
+            }
+        }
+
+        Accounts.SetSessions(rows);
+    }
 }
