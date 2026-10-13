@@ -42,9 +42,8 @@ public sealed class ConsoleWindowTests
             listener.Stop();
         }
 
-        var running = true;
-        var probe = ServerProbe.WaitUntilListeningAsync(new Uri($"http://127.0.0.1:{port}/"), TimeSpan.FromSeconds(30), () => running, TestContext.Current.CancellationToken);
-        running = false;
+        // A program that ended: no answer, at once (the freed port may already be another test's on Linux).
+        var probe = ServerProbe.WaitUntilListeningAsync(new Uri($"http://127.0.0.1:{port}/"), TimeSpan.FromSeconds(30), () => false, TestContext.Current.CancellationToken);
         Assert.False(await probe.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
     }
 }

@@ -64,9 +64,9 @@ internal static partial class BuiltIns
     public static IEnumerable<ToolWindowDescriptor> WebToolWindows()
     {
         var shell = ContributionSource.Shell;
-        yield return new ToolWindowDescriptor(EndpointsExplorerViewModel.ToolWindowId, "Endpoints Explorer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
-        yield return new ToolWindowDescriptor(HttpResponseViewModel.ToolWindowId, "HTTP Response", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
-        yield return new ToolWindowDescriptor(TaskRunnerViewModel.ToolWindowId, "Task Runner Explorer", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(EndpointsExplorerViewModel.ToolWindowId, "Endpoints Explorer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "globe" };
+        yield return new ToolWindowDescriptor(HttpResponseViewModel.ToolWindowId, "HTTP Response", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "sync" };
+        yield return new ToolWindowDescriptor(TaskRunnerViewModel.ToolWindowId, "Task Runner Explorer", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "task-list" };
     }
 
     public static void RegisterWebCommands(ShellHost shell)

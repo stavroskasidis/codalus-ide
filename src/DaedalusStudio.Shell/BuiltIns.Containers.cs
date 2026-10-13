@@ -37,8 +37,8 @@ internal static partial class BuiltIns
 
     public static IEnumerable<ToolWindowDescriptor> ContainerToolWindows()
     {
-        yield return new ToolWindowDescriptor(ContainersViewModel.ToolWindowId, "Containers", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "list" };
-        yield return new ToolWindowDescriptor(AspireViewModel.ToolWindowId, "Aspire", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(ContainersViewModel.ToolWindowId, "Containers", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "container" };
+        yield return new ToolWindowDescriptor(AspireViewModel.ToolWindowId, "Aspire", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "cloud" };
     }
 
     public static void RegisterContainerCommands(ShellHost shell)

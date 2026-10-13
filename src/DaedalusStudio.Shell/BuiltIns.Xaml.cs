@@ -17,7 +17,7 @@ internal static partial class BuiltIns
 
     public static IEnumerable<ToolWindowDescriptor> XamlToolWindows()
     {
-        yield return new ToolWindowDescriptor(XamlPreviewViewModel.ToolWindowId, "XAML Previewer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "layout" };
+        yield return new ToolWindowDescriptor(XamlPreviewViewModel.ToolWindowId, "XAML Previewer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "window" };
     }
 
     public static void RegisterXamlCommands(ShellHost shell)

@@ -39,18 +39,18 @@ internal static partial class BuiltIns
     public static IEnumerable<ToolWindowDescriptor> DebugToolWindows()
     {
         var shell = ContributionSource.Shell;
-        yield return new ToolWindowDescriptor(VariablesViewModel.LocalsWindowId, "Locals", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
-        yield return new ToolWindowDescriptor(VariablesViewModel.AutosWindowId, "Autos", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(VariablesViewModel.LocalsWindowId, "Locals", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "table" };
+        yield return new ToolWindowDescriptor(VariablesViewModel.AutosWindowId, "Autos", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "sparkle" };
         yield return new ToolWindowDescriptor(WatchViewModel.ToolWindowId, "Watch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
-        yield return new ToolWindowDescriptor(CallStackViewModel.ToolWindowId, "Call Stack", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(CallStackViewModel.ToolWindowId, "Call Stack", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "call-hierarchy" };
         yield return new ToolWindowDescriptor(BreakpointsViewModel.ToolWindowId, "Breakpoints", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "circle" };
         yield return new ToolWindowDescriptor(DebugConsoleViewModel.ToolWindowId, "Debug Console", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "debug" };
         yield return new ToolWindowDescriptor(QuickWatchViewModel.ToolWindowId, "QuickWatch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
-        yield return new ToolWindowDescriptor(ThreadsViewModel.ToolWindowId, "Threads", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
-        yield return new ToolWindowDescriptor(ModulesViewModel.ToolWindowId, "Modules", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
-        yield return new ToolWindowDescriptor(ParallelStacksViewModel.ToolWindowId, "Parallel Stacks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "layout" };
+        yield return new ToolWindowDescriptor(ThreadsViewModel.ToolWindowId, "Threads", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "timer" };
+        yield return new ToolWindowDescriptor(ModulesViewModel.ToolWindowId, "Modules", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "package" };
+        yield return new ToolWindowDescriptor(ParallelStacksViewModel.ToolWindowId, "Parallel Stacks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "layers" };
         yield return new ToolWindowDescriptor(ParallelWatchViewModel.ToolWindowId, "Parallel Watch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
-        yield return new ToolWindowDescriptor(ProcessesViewModel.ToolWindowId, "Processes", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "list" };
+        yield return new ToolWindowDescriptor(ProcessesViewModel.ToolWindowId, "Processes", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "gauge" };
         yield return new ToolWindowDescriptor(ExceptionSettingsViewModel.ToolWindowId, "Exception Settings", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "circle" };
     }
 

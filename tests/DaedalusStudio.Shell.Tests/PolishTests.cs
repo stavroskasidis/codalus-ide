@@ -316,10 +316,11 @@ public partial class PolishTests
             var panel = strip.GetVisualDescendants().OfType<FittingTabPanel>().FirstOrDefault();
             Assert.NotNull(panel);
             var tabs = panel.Children.Where(c => c.IsVisible).ToList();
+            // Every tab shown fits: those that don't, even collapsed, are left out whole (never cut at the edge).
             var used = tabs.Sum(t => t.Bounds.Width);
-            // They fit, unless even the narrowest tabs can't (33 tool windows in one group): then each is at the floor.
-            Assert.True(used <= strip.Bounds.Width + 1 || tabs.All(t => t.Bounds.Width <= FittingTabPanel.MinTabWidth + 1),
-                $"{tabs.Count} tabs take {used:0} px of {strip.Bounds.Width:0}");
+            Assert.True(used <= strip.Bounds.Width + 1, $"{tabs.Count} tabs take {used:0} px of {strip.Bounds.Width:0}");
+            Assert.All(tabs.Where(t => t.Bounds.Width > 0), t => Assert.True(t.Bounds.Right <= strip.Bounds.Width + 1, $"a tab ends at {t.Bounds.Right:0} of {strip.Bounds.Width:0}"));
+            Assert.Contains(tabs, t => t is Avalonia.Controls.Primitives.TabStripItem { IsSelected: true } && t.Bounds.Width > 0);
             var titles = tabs.SelectMany(t => t.GetVisualDescendants().OfType<TextBlock>().Where(b => b.Classes.Contains("tabTitle"))).ToList();
             Assert.All(titles, b => Assert.Equal(b.Text, ToolTip.GetTip((Control)b.GetVisualParent()!)));
             if (titles.Any(b => !double.IsPositiveInfinity(b.MaxWidth)) || tabs.Any(FittingTabPanel.GetIconOnly))
