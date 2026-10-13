@@ -40,9 +40,11 @@ public sealed partial class ShellHost
         var export = new JsonObject
         {
             ["daedalusSettings"] = 1,
+            ["profile"] = Profiles.Active,
             ["settings"] = ReadNode(Paths.SettingsFile) as JsonObject ?? [],
             ["keybindings"] = ReadNode(Paths.KeybindingsFile) as JsonArray ?? [],
             ["layouts"] = ReadNode(LayoutsFile) as JsonObject ?? [],
+            ["windowLayout"] = JsonNode.Parse(CurrentWindowLayout()),
         };
         await File.WriteAllTextAsync(path, export.ToJsonString(s_readableJson)).ConfigureAwait(true);
         Workbench.Notifications.Info($"Exported your settings, keyboard shortcuts and window layouts to {path}.");

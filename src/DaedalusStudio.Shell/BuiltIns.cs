@@ -226,6 +226,11 @@ internal static partial class BuiltIns
         Add("update.whatsNew", "What's New", "Help", Ui(() => shell.ShowWhatsNew()));
         Add("update.restart", "Restart to Update", "Help", Ui(shell.RestartToUpdate));
         Add("workbench.restart", "Restart", "File", Ui(shell.Restart));
+        Add("workbench.profiles.switch", "Switch Profile…", "Profiles", Ui(() => shell.SwitchProfileAsync()));
+        Add("workbench.profiles.new", "New Profile…", "Profiles", Ui(() => shell.NewProfileAsync()));
+        Add("workbench.profiles.delete", "Delete Profile…", "Profiles", Ui(() => shell.DeleteProfileAsync()));
+        Add("workbench.profiles.export", "Export Profile…", "Profiles", Ui(() => shell.ExportSettingsAsync()));
+        Add("workbench.profiles.import", "Import Profile…", "Profiles", Ui(() => shell.ImportProfileAsync()));
 
         // Helpers for plugins (not in the palette): plugins reach shell features through commands.
         Add("workbench.openExternal", "Open URL", "Developer", async (args, _) =>

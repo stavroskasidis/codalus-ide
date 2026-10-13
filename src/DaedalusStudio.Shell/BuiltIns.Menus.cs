@@ -21,6 +21,7 @@ internal static partial class BuiltIns
     public const string EditFindMenu = "menuBar/edit/find";
     public const string EditPasteSpecialMenu = "menuBar/edit/pasteSpecial";
     public const string EditAdvancedMenu = "menuBar/edit/advanced";
+    public const string FileProfilesMenu = "menuBar/file/profiles";
     public const string EditBookmarksMenu = "menuBar/edit/bookmarks";
     public const string EditIntelliSenseMenu = "menuBar/edit/intelliSense";
     public const string EditCaretsMenu = "menuBar/edit/multipleCarets";
@@ -98,6 +99,13 @@ internal static partial class BuiltIns
             Item(File, "workbench.action.localHistory", "4-history"),
             Item(File, "workbench.compareFiles", "4-history"),
             Item(File, "workbench.compareActiveWith", "4-history"),
+            Sub(File, FileProfilesMenu, "Profiles", "5-profiles"),
+            Item(FileProfilesMenu, "workbench.profiles.switch", "1-switch"),
+            Item(FileProfilesMenu, "workbench.profiles.new", "2-manage"),
+            Item(FileProfilesMenu, "workbench.profiles.delete", "2-manage"),
+            Item(FileProfilesMenu, "workbench.profiles.export", "3-transfer"),
+            Item(FileProfilesMenu, "workbench.profiles.import", "3-transfer"),
+            Item(File, "workbench.restart", "exit"),
             Item(File, "workbench.quit", "exit"),
 
             // Edit.
