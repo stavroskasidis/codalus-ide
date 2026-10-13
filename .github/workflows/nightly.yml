@@ -122,16 +122,3 @@ jobs:
         run: |
           tag="v${{ needs.plan.outputs.version }}"
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
-
-  linux-repositories:
-    needs: publish
-    # GitHub Pages needs a public repository on the free plan (D20): until then the apt and dnf repositories wait.
-    if: ${{ !github.event.repository.private }}
-    # A called workflow gets no more than its caller grants, and GitHub checks that before any job runs (even a
-    # skipped one): without these the whole run fails to start.
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/linux-repos.yml
-    secrets: inherit
