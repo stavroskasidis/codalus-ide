@@ -395,6 +395,7 @@ internal static partial class BuiltIns
             Item(Tools, "workbench.openPluginsFolder", "plugins") with { Order = 100 },
             Item(Tools, "workbench.selectTheme", "z-preferences"),
             Item(Tools, "workbench.openKeyboardShortcuts", "z-preferences"),
+            Item(Tools, "workbench.openFontsAndColors", "z-preferences"),
             Item(Tools, "workbench.openOptions", "z-preferences"),
 
             // Window.

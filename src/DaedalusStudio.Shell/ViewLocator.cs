@@ -17,6 +17,7 @@ public sealed class ViewLocator : IDataTemplate
         ToolWindowDockable tool => new PaneHost(tool, BuildToolContent(tool.Content)),
         SettingsDocument document => new PaneHost(document, new SettingsView { DataContext = document.ViewModel }),
         KeyboardShortcutsDocument document => new PaneHost(document, new KeyboardShortcutsView { DataContext = document.ViewModel }),
+        FontsAndColorsDocument document => new PaneHost(document, new FontsAndColorsView { DataContext = document.ViewModel }),
         CodeEditorDocument document => EditorHost(document),
         DiffDocument document => new PaneHost(document, new DiffView(document.ViewModel, document.Font)),
         PackageManagerDocument document => new PaneHost(document, new PackageManagerView { DataContext = document.ViewModel }),

@@ -564,6 +564,20 @@ public sealed partial class ShellHost : IAsyncDisposable
         Theme.Preview(null);
     }
 
+    /// <summary>Settings, searched for <paramref name="search"/> (Fonts and Colors' link to the font settings).</summary>
+    public void OpenSettings(string search)
+    {
+        OpenSettings();
+        if (Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId) is { } settings)
+        {
+            settings.ViewModel.Search = search;
+        }
+    }
+
+    /// <summary>Tools → Fonts and Colors (M23a).</summary>
+    public void OpenFontsAndColors() =>
+        Layout.OpenDocument(Layout.FindDocument<FontsAndColorsDocument>(FontsAndColorsDocument.DocumentId) ?? new FontsAndColorsDocument(new FontsAndColorsViewModel(this)));
+
     public void OpenSettings() =>
         Layout.OpenDocument(Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId)
             ?? new SettingsDocument(new SettingsViewModel(Workbench.Settings, () => Run("workbench.openSettingsJson"))));

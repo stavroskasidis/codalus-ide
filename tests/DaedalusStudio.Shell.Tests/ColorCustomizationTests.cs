@@ -68,6 +68,40 @@ public sealed class ColorCustomizationTests
     }
 
     [AvaloniaFact]
+    public async Task The_fonts_and_colors_page_writes_a_color_for_the_theme_or_every_theme_and_resets_it()
+    {
+        await using var f = ShellFixture.Create();
+        var settings = f.Shell.Workbench.Settings;
+        await settings.SetAsync(Theming.ThemeService.SettingKey, "dark", SettingScope.User, CancellationToken.None);
+        ShellFixture.Pump();
+        f.Shell.Run("workbench.openFontsAndColors");
+        ShellFixture.Pump();
+        var page = Assert.IsType<ViewModels.FontsAndColorsDocument>(f.Shell.Layout.ActiveDocument).ViewModel;
+        Assert.Equal("Dark", page.ThemeTitle);
+        var comment = page.All.Single(i => i.Kind == ViewModels.ColorItemKind.Syntax && i.Key == "comment");
+        Assert.Equal(ColorCustomizations.Format(Editor.EditorTheme.Dark.TokenColor("comment")!.Value), comment.Hex);
+        Assert.False(comment.IsCustom);
+
+        // For the active theme: under "[Dark]".
+        comment.Hex = "#ABCDEF";
+        await ShellFixture.PumpUntil(() => f.Shell.EditorTheme.TokenColor("comment") == 0xFFABCDEF && comment.IsCustom);
+        Assert.Equal("#ABCDEF", settings.GetValue(ColorCustomizations.TokensKey).GetProperty("[Dark]").GetProperty("semanticTokenColors").GetProperty("comment").GetString());
+
+        // For every theme: at the top.
+        page.ForAllThemes = true;
+        var selection = page.All.Single(i => i.Key == "editor.selectionBackground");
+        selection.Hex = "#11223344";
+        await ShellFixture.PumpUntil(() => f.Shell.EditorTheme.ElementColor("editor.selectionBackground") == 0x44112233);
+        Assert.Equal("#11223344", settings.GetValue(ColorCustomizations.WorkbenchKey).GetProperty("editor.selectionBackground").GetString());
+
+        // A bad color says so and writes nothing; Reset returns to the theme's.
+        selection.Hex = "blue";
+        Assert.True(selection.HasError);
+        comment.ResetCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.EditorTheme.TokenColor("comment") == Editor.EditorTheme.Dark.TokenColor("comment") && !comment.IsCustom);
+    }
+
+    [AvaloniaFact]
     public async Task Customized_colors_reach_the_editor_and_the_ui_and_follow_the_theme()
     {
         await using var f = ShellFixture.Create();
