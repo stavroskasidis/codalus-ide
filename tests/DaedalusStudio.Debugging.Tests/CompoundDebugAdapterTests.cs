@@ -221,6 +221,52 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task A_reserved_place_keeps_the_session_open_when_the_first_program_ends_before_the_next_joins()
+    {
+        // Found on a loaded Windows runner: the first program exited before the second's adapter was ready, the session
+        // ended, and the second's start was cancelled.
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var second = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var compound = new CompoundDebugAdapter(first, "Partner", independent: true);
+        compound.Reserve(1);
+        var events = new List<DapEvent>();
+        compound.EventReceived += e =>
+        {
+            lock (events)
+            {
+                events.Add(e);
+            }
+
+            return Task.CompletedTask;
+        };
+
+        await first.RaiseAsync(DapEvents.Terminated, new ExitedEvent(7), DapJsonContext.Default.ExitedEvent);
+        Assert.DoesNotContain(events, e => e.Name == DapEvents.Terminated);
+        Assert.False(compound.Closed.IsCompleted);
+
+        await compound.AddAsync(second, "Debuggee", _ => Task.CompletedTask, Ct);
+        await compound.ReleaseAsync();
+        Assert.False(compound.Closed.IsCompleted); // the second program runs
+
+        await second.RaiseAsync(DapEvents.Terminated, new ExitedEvent(0), DapJsonContext.Default.ExitedEvent);
+        Assert.Single(events, e => e.Name == DapEvents.Terminated);
+        Assert.True(compound.Closed.IsCompleted);
+    }
+
+    [Fact]
+    public async Task Releasing_the_last_reserved_place_ends_a_session_whose_programs_all_ended()
+    {
+        var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var compound = new CompoundDebugAdapter(first, "Partner", independent: true);
+        compound.Reserve(1);
+        await first.RaiseAsync(DapEvents.Terminated, new ExitedEvent(7), DapJsonContext.Default.ExitedEvent);
+        Assert.False(compound.Closed.IsCompleted);
+
+        await compound.ReleaseAsync(); // the second program couldn't start
+        Assert.True(compound.Closed.IsCompleted);
+    }
+
+    [Fact]
     public async Task An_independent_programs_stop_still_waits_for_the_one_shown()
     {
         var first = new FakeAdapter([new DapThread(1, "Main Thread")]);
