@@ -98,6 +98,10 @@ public sealed partial class ShellHost
         return parts;
     }
 
+    /// <summary>The options a remote window connects with: the hosts to carry over, a simulated latency if one is set.</summary>
+    public RemoteSessionOptions DefaultRemoteOptions(RemoteTargetSpec spec) =>
+        new(spec, ShellInfo.Version, Paths.Cache) { Hosts = RemoteHostParts(), Latency = SimulatedLatency() };
+
     private static TimeSpan? SimulatedLatency() =>
         int.TryParse(Environment.GetEnvironmentVariable(RemoteLatencyVariable), NumberStyles.None, CultureInfo.InvariantCulture, out var ms) && ms > 0
             ? TimeSpan.FromMilliseconds(ms)
@@ -116,7 +120,7 @@ public sealed partial class ShellHost
             return false;
         }
 
-        options ??= new RemoteSessionOptions(spec, ShellInfo.Version, Paths.Cache) { Hosts = RemoteHostParts(), Latency = SimulatedLatency() };
+        options ??= DefaultRemoteOptions(spec);
         Workbench.StatusBar.Set(new StatusBarItem(RemoteStatusItem, $"$(sync) {spec.Display}…", StatusBarAlignment.Left, 100, ContributionSource.Shell.Id) { Tooltip = "Connecting…" });
         var progress = new Progress<string>(line =>
         {
@@ -146,6 +150,16 @@ public sealed partial class ShellHost
         Terminals.PtyFactory = info => session.StartTerminal(info, loginShell: info.FileName == RemoteShellProfile.Executable);
         session.Connection.Log += (_, line) => RemoteLog.AppendLine(line);
         session.Disconnected += (_, error) => Ui.Post(() => OnRemoteDisconnected(session, error));
+        session.Connection.Reconnecting += (_, error) => Ui.Post(() =>
+        {
+            RemoteLog.AppendLine($"The connection to {session.Display} dropped{(error is null ? string.Empty : " (" + error.Message + ")")}; reconnecting…");
+            UpdateRemoteStatus();
+        });
+        session.Connection.Reconnected += (_, down) => Ui.Post(() =>
+        {
+            RemoteLog.AppendLine($"Reconnected to {session.Display} after {down.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s; nothing was lost.");
+            UpdateRemoteStatus();
+        });
         session.LatencyChanged += (_, _) => Ui.Post(UpdateRemoteStatus);
         session.Ports.AutoForward = Workbench.Settings.GetBoolean(AutoForwardPortsSetting, true);
         session.Ports.Changed += (_, _) => Ui.Post(PortsWindow.Refresh);
@@ -239,6 +253,17 @@ public sealed partial class ShellHost
         }
 
         var connected = remote.Connection.IsConnected;
+        if (connected && !remote.Connection.IsLinked)
+        {
+            Workbench.StatusBar.Set(new StatusBarItem(RemoteStatusItem, $"$(sync) {remote.Display}: reconnecting…", StatusBarAlignment.Left, 100, ContributionSource.Shell.Id)
+            {
+                Tooltip = $"The connection to {remote.Display} dropped. Reconnecting; the server keeps running, and nothing is lost meanwhile.",
+                Command = "remote.menu",
+                AccessibleName = $"Reconnecting to {remote.Display}",
+            });
+            return;
+        }
+
         var latency = remote.Latency is { } rtt ? " · " + Math.Max(1, (int)Math.Round(rtt.TotalMilliseconds)).ToString(CultureInfo.InvariantCulture) + " ms" : string.Empty;
         Workbench.StatusBar.Set(new StatusBarItem(RemoteStatusItem, connected ? $"$(link) {remote.Display}{latency}" : $"$(warning) {remote.Display}: disconnected", StatusBarAlignment.Left, 100, ContributionSource.Shell.Id)
         {

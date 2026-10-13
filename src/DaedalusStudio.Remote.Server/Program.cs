@@ -4,7 +4,7 @@ using DaedalusStudio.Remote.Server;
 using DaedalusStudio.Rpc;
 using DaedalusStudio.Rpc.Multiplexing;
 
-// Usage: daedalus-server [--stdio]. The remote development server (M21, ADR 0050, docs/remote-protocol.md): it prints
+// Usage: daedalus-server [--stdio | --relay <session>]. The remote development server (M21, ADR 0050, docs/remote-protocol.md): it prints
 // its preamble line, then speaks multiplexed frames (ADR 0051) on stdin and stdout until stdin ends. It never listens
 // on a network port. `daedalus-server --echo` copies stdin to stdout and exits with 3 (a test program for spawning).
 if (args is ["--echo", ..])
@@ -19,6 +19,23 @@ if (args is ["--version", ..])
 {
     Console.WriteLine(RemoteServer.Version);
     return 0;
+}
+
+// `--relay <session> [--grace <seconds>]` and `--daemon <session> …`: a server that outlives its link (M21b, ADR 0054).
+if (args is [("--relay" or "--daemon") and var mode, var session, ..])
+{
+    if (!ServerDaemon.IsValidSession(session))
+    {
+        Console.Error.WriteLine($"daedalus-server: '{session}' isn't a session id.");
+        return 2;
+    }
+
+    var grace = args is [_, _, "--grace", var seconds, ..] && int.TryParse(seconds, System.Globalization.CultureInfo.InvariantCulture, out var value) && value > 0
+        ? TimeSpan.FromSeconds(value)
+        : ServerDaemon.DefaultGrace;
+    return mode == "--relay"
+        ? await ServerDaemon.RelayAsync(session, grace).ConfigureAwait(false)
+        : await ServerDaemon.DaemonAsync(session, grace).ConfigureAwait(false);
 }
 
 var stdin = Console.OpenStandardInput();

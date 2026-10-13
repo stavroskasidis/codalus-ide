@@ -108,6 +108,77 @@ public sealed class RemoteServerTests
         await Assert.ThrowsAsync<JsonRpcRemoteException>(() => connection.SpawnAsync(new SpawnParams(0, "/no/such/program-daedalus", []), Timeout()));
     }
 
+    // ------------------------------------------------------------------ reconnecting (M21b, ADR 0054)
+
+    private static Task<RemoteConnection> ConnectResumableAsync() =>
+        RemoteConnection.StartAsync(new RemoteTransport("dotnet", [ServerDll, "--relay", Guid.NewGuid().ToString("N"), "--grace", "120"], "local relay"), ServerVersion, Timeout());
+
+    private static async Task<string> ReadLineAsync(Stream stream)
+    {
+        var buffer = new byte[256];
+        var read = 0;
+        while (!Encoding.ASCII.GetString(buffer, 0, read).Contains('\n', StringComparison.Ordinal))
+        {
+            var count = await stream.ReadAsync(buffer.AsMemory(read), Timeout());
+            Assert.NotEqual(0, count);
+            read += count;
+        }
+
+        return Encoding.ASCII.GetString(buffer, 0, read);
+    }
+
+    [Fact]
+    public async Task A_dropped_link_reconnects_and_the_server_and_its_processes_go_on()
+    {
+        await using var connection = await ConnectResumableAsync();
+        Assert.True(connection.IsResumable);
+        await using var process = await connection.SpawnAsync(new SpawnParams(0, ServerDll, ["--echo"]), Timeout());
+        await process.Input.WriteAsync("before\n"u8.ToArray(), Timeout());
+        Assert.Equal("before\n", await ReadLineAsync(process.Output));
+
+        var reconnected = new TaskCompletionSource<TimeSpan>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disconnected = false;
+        connection.Reconnected += (_, down) => reconnected.TrySetResult(down);
+        connection.Disconnected += (_, _) => disconnected = true;
+
+        // The network goes: the process on the server doesn't notice, what's written meanwhile arrives afterwards.
+        connection.DropLink();
+        await process.Input.WriteAsync("during\n"u8.ToArray(), Timeout());
+        var down = await reconnected.Task.WaitAsync(Timeout());
+        Assert.True(down < TimeSpan.FromSeconds(5), $"Reconnecting took {down}.");
+        Assert.Equal("during\n", await ReadLineAsync(process.Output));
+        _ = await connection.ListPortsAsync(Timeout());
+        Assert.False(process.Exited.IsCompleted);
+        Assert.Equal(1, connection.Reconnections);
+        Assert.False(disconnected);
+
+        // Again, while requests are waiting.
+        var ping = connection.PingAsync(Timeout());
+        connection.DropLink();
+        await ping;
+        await process.Input.WriteAsync("after\n"u8.ToArray(), Timeout());
+        Assert.Equal("after\n", await ReadLineAsync(process.Output));
+        await process.Channel.CloseOutputAsync();
+        Assert.Equal(3, await process.Exited.WaitAsync(Timeout()));
+    }
+
+    [Fact]
+    public async Task A_server_that_ended_while_the_link_was_down_ends_the_session()
+    {
+        await using var connection = await ConnectResumableAsync();
+        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Disconnected += (_, _) => disconnected.TrySetResult();
+
+        // The daemon goes (the machine restarted): the next relay starts another one, which isn't this session.
+        using (var daemon = Process.GetProcessById(connection.Server.ProcessId))
+        {
+            daemon.Kill();
+        }
+
+        await disconnected.Task.WaitAsync(Timeout());
+        Assert.False(connection.IsConnected);
+    }
+
     [Fact]
     public async Task Files_are_read_written_listed_renamed_watched_and_deleted_through_the_server()
     {
@@ -424,6 +495,19 @@ public sealed class RemoteServerTests
             // The server names its folder canonically: macOS's /tmp is a link to /private/tmp.
             static string Canonical(string path) => OperatingSystem.IsMacOS() && path.StartsWith("/tmp/", StringComparison.Ordinal) ? "/private" + path : path;
             Assert.Equal(Canonical(installed.Folder + "/server/"), Canonical(connection.Server.ServerFolder.Replace('\\', '/')));
+
+            // Resumable there (M21b): the daemon outlives the transport, which is started again.
+            var (relayProgram, relayArguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder, ["--relay", Guid.NewGuid().ToString("N"), "--grace", "60"]));
+            await using var resumable = await RemoteConnection.StartAsync(new RemoteTransport(relayProgram, relayArguments, "stand-in"), ServerVersion, Timeout(120));
+            Assert.True(resumable.IsResumable);
+            var daemon = resumable.Server.ProcessId;
+            var reconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            resumable.Reconnected += (_, _) => reconnected.TrySetResult();
+            resumable.DropLink();
+            await reconnected.Task.WaitAsync(Timeout(60));
+            await resumable.PingAsync(Timeout());
+            var hello = await resumable.Control.InvokeAsync(RemoteMethods.Hello, new HelloParams(ServerVersion, RemoteMethods.ProtocolVersion), RemoteJsonContext.Default.HelloParams, RemoteJsonContext.Default.HelloResult, Timeout());
+            Assert.Equal(daemon, hello.ProcessId);
         }
         finally
         {

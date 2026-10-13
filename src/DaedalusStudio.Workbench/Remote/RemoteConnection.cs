@@ -21,7 +21,7 @@ public sealed record RemoteTransport(string Program, IReadOnlyList<string> Argum
 public sealed class RemoteConnection : IAsyncDisposable
 {
     private static readonly RemoteJsonContext Json = RemoteJsonContext.Default;
-    private readonly Process _transport;
+    private Process _transport;
     private readonly ChannelMultiplexer _multiplexer;
     private readonly JsonRpcConnection _control;
     private readonly ConcurrentDictionary<uint, ChannelProcess> _processes = new();
@@ -76,9 +76,96 @@ public sealed class RemoteConnection : IAsyncDisposable
 
     /// <summary>
     /// Starts the server through <paramref name="transport"/>, waits for its preamble (skipping what a login shell
-    /// printed first) and says hello. <paramref name="latency"/> simulates a slower network (budgets, tests).
+    /// printed first) and says hello. <paramref name="latency"/> simulates a slower network (budgets, tests). A server
+    /// started with <c>--relay</c> is resumable: when the transport drops, it is started again and the session goes on.
     /// </summary>
     public static async Task<RemoteConnection> StartAsync(RemoteTransport transport, string clientVersion, CancellationToken cancellationToken, TimeSpan? latency = null, TimeSpan? timeout = null)
+    {
+        var link = await OpenLinkAsync(transport, timeout ?? TimeSpan.FromSeconds(60), null, cancellationToken).ConfigureAwait(false);
+        Stream input = link.Frames;
+        Stream output = link.Process.StandardInput.BaseStream;
+        ResumableStream? resumable = null;
+        if (link.Instance is not null)
+        {
+            resumable = new ResumableStream();
+            try
+            {
+                using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                wait.CancelAfter(TimeSpan.FromSeconds(30));
+                await resumable.AttachAsync(input, output, wait.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or InvalidDataException)
+            {
+                resumable.Close();
+                Kill(link.Process, tree: false);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+
+                throw new InvalidOperationException($"The remote server on {transport.Display} didn't answer: {ex.Message}", ex);
+            }
+
+            input = output = resumable;
+        }
+
+        LatencyStream? simulated = null;
+        if (latency is { } delay)
+        {
+            input = simulated = new LatencyStream(input, delay);
+        }
+
+        var multiplexer = new ChannelMultiplexer(input, output);
+        var control = multiplexer.Start();
+        var connection = new JsonRpcConnection(control.Stream, control.Stream);
+        var remote = new RemoteConnection(link.Process, multiplexer, connection, transport.Display)
+        {
+            _latency = simulated,
+            _transportSpec = transport,
+            _resumable = resumable,
+            _instance = link.Instance,
+        };
+        link.Log = line => remote.Log?.Invoke(remote, line);
+        remote.AppendStderr(link.Stderr);
+        remote.Configure();
+        multiplexer.Disconnected += (_, error) => remote.OnDisconnected(error);
+        if (resumable is not null)
+        {
+            resumable.LinkLost += (_, error) => remote.OnLinkLost(error);
+            _ = remote.WatchLinkAsync();
+        }
+
+        connection.Start();
+        try
+        {
+            remote.Server = await connection.InvokeAsync(RemoteMethods.Hello, new HelloParams(clientVersion, RemoteMethods.ProtocolVersion), Json.HelloParams, Json.HelloResult, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
+        {
+            await remote.DisposeAsync().ConfigureAwait(false);
+            throw new InvalidOperationException($"The remote server on {transport.Display} didn't answer: {ex.Message}", ex);
+        }
+
+        return remote;
+    }
+
+    /// <summary>A started transport, past the server's preamble.</summary>
+    private sealed class TransportLink(Process process, Stream frames, string? instance, StringBuilder stderr)
+    {
+        public Process Process { get; } = process;
+
+        public Stream Frames { get; } = frames;
+
+        /// <summary>A resumable server's instance (<c>--relay</c>); null for one on its stdio.</summary>
+        public string? Instance { get; } = instance;
+
+        public StringBuilder Stderr { get; } = stderr;
+
+        public Action<string>? Log { get; set; }
+    }
+
+    /// <summary>Starts the transport and waits for the server's preamble; the process is killed if it doesn't come.</summary>
+    private static async Task<TransportLink> OpenLinkAsync(RemoteTransport transport, TimeSpan timeout, Action<string>? log, CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo(transport.Program)
         {
@@ -106,7 +193,7 @@ public sealed class RemoteConnection : IAsyncDisposable
 
         var process = Process.Start(start) ?? throw new InvalidOperationException($"{transport.Program} did not start.");
         var stderr = new StringBuilder();
-        Action<string>? log = null;
+        TransportLink? link = null;
         process.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is { } line)
@@ -119,21 +206,24 @@ public sealed class RemoteConnection : IAsyncDisposable
                     }
                 }
 
-                log?.Invoke(line);
+                (link?.Log ?? log)?.Invoke(line);
             }
         };
         process.BeginErrorReadLine();
 
-        Stream output;
         try
         {
             using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            wait.CancelAfter(timeout ?? TimeSpan.FromSeconds(60));
-            output = await SkipToFramesAsync(process.StandardOutput.BaseStream, wait.Token).ConfigureAwait(false);
+            wait.CancelAfter(timeout);
+            var (frames, preamble) = await ReadPreambleAsync(process.StandardOutput.BaseStream, wait.Token).ConfigureAwait(false);
+            var fields = preamble.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var instance = fields is [_, _, _, "resumable", var id, ..] ? id : null;
+            link = new TransportLink(process, frames, instance, stderr) { Log = log };
+            return link;
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or InvalidDataException)
         {
-            Kill(process);
+            Kill(process, tree: false);
             string said;
             lock (stderr)
             {
@@ -149,41 +239,14 @@ public sealed class RemoteConnection : IAsyncDisposable
                 $"The remote server didn't start on {transport.Display}{(ex is OperationCanceledException ? " in time" : string.Empty)}"
                 + (said.Length > 0 ? ": " + Debugging.Remote.RemoteShell.Trim(said) : "."), ex);
         }
-
-        LatencyStream? simulated = null;
-        if (latency is { } delay)
-        {
-            output = simulated = new LatencyStream(output, delay);
-        }
-
-        var multiplexer = new ChannelMultiplexer(output, process.StandardInput.BaseStream);
-        var control = multiplexer.Start();
-        var connection = new JsonRpcConnection(control.Stream, control.Stream);
-        var remote = new RemoteConnection(process, multiplexer, connection, transport.Display) { _latency = simulated };
-        log = line => remote.Log?.Invoke(remote, line);
-        lock (stderr)
-        {
-            remote._stderr.Append(stderr);
-        }
-
-        remote.Configure();
-        multiplexer.Disconnected += (_, error) => remote.OnDisconnected(error);
-        connection.Start();
-        try
-        {
-            remote.Server = await connection.InvokeAsync(RemoteMethods.Hello, new HelloParams(clientVersion, RemoteMethods.ProtocolVersion), Json.HelloParams, Json.HelloResult, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
-        {
-            await remote.DisposeAsync().ConfigureAwait(false);
-            throw new InvalidOperationException($"The remote server on {transport.Display} didn't answer: {ex.Message}", ex);
-        }
-
-        return remote;
     }
 
     /// <summary>Reads up to and including the preamble line; returns the stream of frames that follow.</summary>
-    internal static async Task<Stream> SkipToFramesAsync(Stream stream, CancellationToken cancellationToken)
+    internal static async Task<Stream> SkipToFramesAsync(Stream stream, CancellationToken cancellationToken) =>
+        (await ReadPreambleAsync(stream, cancellationToken).ConfigureAwait(false)).Frames;
+
+    /// <summary>Reads up to and including the preamble line; returns the frames that follow and the line.</summary>
+    internal static async Task<(Stream Frames, string Preamble)> ReadPreambleAsync(Stream stream, CancellationToken cancellationToken)
     {
         var marker = Encoding.ASCII.GetBytes("\n" + RemoteMethods.Preamble + " ");
         var buffer = new byte[4096];
@@ -215,8 +278,145 @@ public sealed class RemoteConnection : IAsyncDisposable
                 continue;
             }
 
+            var line = Encoding.ASCII.GetString(bytes.Slice(at + 1, end)).TrimEnd('\r');
             var rest = bytes[(at + 1 + end + 1)..].ToArray();
-            return new PrefixedStream(rest, stream);
+            return (new PrefixedStream(rest, stream), line);
+        }
+    }
+
+    // ------------------------------------------------------------------ reconnecting (M21b, ADR 0054)
+
+    private RemoteTransport? _transportSpec;
+    private ResumableStream? _resumable;
+    private string? _instance;
+    private int _reconnecting;
+
+    /// <summary>How long a dropped link is retried before the session is given up (the server's grace is the same by default).</summary>
+    public TimeSpan ReconnectFor { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>How long a link may stay silent (a ping unanswered) before it's taken for dropped.</summary>
+    public TimeSpan LinkTimeout { get; set; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>Whether the server outlives a dropped link (started with <c>--relay</c>).</summary>
+    public bool IsResumable => _resumable is not null;
+
+    /// <summary>False while a resumable connection's link is down and being reconnected.</summary>
+    public bool IsLinked => _resumable?.IsLinked ?? IsConnected;
+
+    /// <summary>The link dropped; the connection is reconnecting (requests wait, nothing is lost).</summary>
+    public event EventHandler<Exception?>? Reconnecting;
+
+    /// <summary>The link is back, with how long it was down.</summary>
+    public event EventHandler<TimeSpan>? Reconnected;
+
+    /// <summary>How many times the link came back.</summary>
+    public int Reconnections { get; private set; }
+
+    private void AppendStderr(StringBuilder stderr)
+    {
+        lock (stderr)
+        {
+            lock (_stderr)
+            {
+                _stderr.Append(stderr);
+            }
+        }
+    }
+
+    /// <summary>Drops the current link as a network failure would (tests, the Reconnect command).</summary>
+    public void DropLink()
+    {
+        Kill(Volatile.Read(ref _transport), tree: false);
+        _resumable?.Detach(new IOException("The link was dropped."));
+    }
+
+    private void OnLinkLost(Exception? error)
+    {
+        if (Volatile.Read(ref _disposed) != 0 || _resumable is not { IsClosed: false } || Interlocked.Exchange(ref _reconnecting, 1) != 0)
+        {
+            return;
+        }
+
+        Kill(Volatile.Read(ref _transport), tree: false);
+        Reconnecting?.Invoke(this, error);
+        _ = Task.Run(ReconnectAsync, CancellationToken.None);
+    }
+
+    private async Task ReconnectAsync()
+    {
+        var down = Stopwatch.StartNew();
+        var backoff = TimeSpan.FromMilliseconds(250);
+        string? failure = null;
+        while (Volatile.Read(ref _disposed) == 0 && down.Elapsed < ReconnectFor)
+        {
+            try
+            {
+                using var attempt = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                var link = await OpenLinkAsync(_transportSpec!, TimeSpan.FromSeconds(30), line => Log?.Invoke(this, line), attempt.Token).ConfigureAwait(false);
+                if (link.Instance != _instance)
+                {
+                    // Another server answered: the one this session ran in has ended (its grace ran out, the machine restarted).
+                    Kill(link.Process, tree: false);
+                    failure = "The remote server's session ended while the connection was down.";
+                    break;
+                }
+
+                var previous = Interlocked.Exchange(ref _transport, link.Process);
+                previous.Dispose();
+                try
+                {
+                    await _resumable!.AttachAsync(link.Frames, link.Process.StandardInput.BaseStream, attempt.Token).ConfigureAwait(false);
+                }
+                catch (InvalidDataException ex)
+                {
+                    Kill(link.Process, tree: false);
+                    failure = ex.Message;
+                    break;
+                }
+
+                Volatile.Write(ref _reconnecting, 0);
+                Reconnections++;
+                Reconnected?.Invoke(this, down.Elapsed);
+                return;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException or OperationCanceledException or System.ComponentModel.Win32Exception)
+            {
+                Log?.Invoke(this, "Reconnecting: " + ex.Message);
+            }
+
+            await Task.Delay(backoff).ConfigureAwait(false);
+            backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, TimeSpan.FromSeconds(10).Ticks));
+        }
+
+        // Given up: the session ends as a dropped connection did before.
+        Log?.Invoke(this, failure ?? $"Gave up reconnecting after {down.Elapsed:mm\\:ss}.");
+        _resumable?.Close();
+    }
+
+    /// <summary>A link can die without an error (a sleeping laptop, a dropped Wi-Fi): unanswered pings say so.</summary>
+    private async Task WatchLinkAsync()
+    {
+        while (Volatile.Read(ref _disposed) == 0 && _resumable is { IsClosed: false } resumable)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            if (!resumable.IsLinked || Volatile.Read(ref _reconnecting) != 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                using var timeout = new CancellationTokenSource(LinkTimeout);
+                await _multiplexer.PingAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (resumable.IsLinked && Volatile.Read(ref _reconnecting) == 0)
+            {
+                Log?.Invoke(this, $"No answer from the server in {LinkTimeout.TotalSeconds:0} s; reconnecting.");
+                DropLink();
+            }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or JsonRpcConnectionLostException or InvalidOperationException)
+            {
+            }
         }
     }
 
@@ -397,23 +597,24 @@ public sealed class RemoteConnection : IAsyncDisposable
         }
 
         await _control.DisposeAsync().ConfigureAwait(false);
+        _resumable?.Close();
         await _multiplexer.DisposeAsync().ConfigureAwait(false);
         var exited = _transport.WaitForExitAsync();
         if (await Task.WhenAny(exited, Task.Delay(TimeSpan.FromSeconds(3))).ConfigureAwait(false) != exited)
         {
-            Kill(_transport);
+            Kill(_transport, tree: _resumable is null);
         }
 
         _transport.Dispose();
     }
 
-    private static void Kill(Process process)
+    private static void Kill(Process process, bool tree = true)
     {
         try
         {
             if (!process.HasExited)
             {
-                process.Kill(entireProcessTree: true);
+                process.Kill(entireProcessTree: tree);
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)

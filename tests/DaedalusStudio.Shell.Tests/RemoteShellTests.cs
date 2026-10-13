@@ -35,13 +35,14 @@ public sealed class RemoteShellTests
     private static string Resolved(string folder) =>
         OperatingSystem.IsMacOS() && (folder.StartsWith("/var/", StringComparison.Ordinal) || folder.StartsWith("/tmp/", StringComparison.Ordinal)) ? "/private" + folder : folder;
 
-    private static async Task<RemoteSession> ConnectAsync(ShellFixture f)
+    private static async Task<RemoteSession> ConnectAsync(ShellFixture f, bool resumable = false)
     {
         var options = new RemoteSessionOptions(RemoteTargetSpec.Parse("local")!, ShellInfo.Version, f.Shell.Paths.Cache)
         {
             LocalServer = ServerDll,
             Latency = TimeSpan.Zero, // adjustable for the budget
             MapLocalPaths = true,
+            Resumable = resumable,
         };
         Assert.True(await f.Shell.ConnectRemoteAsync(options.Spec, null, options));
         return f.Shell.Remote!;
@@ -64,7 +65,7 @@ public sealed class RemoteShellTests
         await ShellFixture.PumpUntil(() => f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: "ready" }, seconds: 240);
         await f.Shell.CloseSolutionAsync();
 
-        var remote = await ConnectAsync(f);
+        var remote = await ConnectAsync(f, resumable: true);
         var local = remote.Map.ToLocal(folder); // the window's name for it
         Assert.Equal(OperatingSystem.IsWindows(), remote.Map.IsIdentity);
         f.Shell.Trust.Trust(Path.GetDirectoryName(local)!);
@@ -163,6 +164,14 @@ public sealed class RemoteShellTests
         f.Shell.PortsWindow.OpenInBrowser();
         Assert.Single(opened);
         Assert.Equal(remote.Ports.Forwarded.First(p => p.RemotePort == port).LocalPort, opened[0].Port);
+
+        // The link drops (M21b, ADR 0054): the window reconnects to the same server, and the terminal goes on.
+        remote.Connection.DropLink();
+        await ShellFixture.PumpUntil(() => remote.Connection is { Reconnections: 1, IsLinked: true }, seconds: 30);
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.StatusBar.GetItems(StatusBarAlignment.Left).Any(i => i.Id == ShellHost.RemoteStatusItem && i.Text.StartsWith("$(link)", StringComparison.Ordinal)));
+        shell.Write(OperatingSystem.IsWindows() ? "echo again-%COMPUTERNAME%-ok\r" : "echo again-$((6*7))-ok\r");
+        await ShellFixture.PumpUntil(() => Screen(shell).Contains(OperatingSystem.IsWindows() ? "again-" + Environment.MachineName + "-ok" : "again-42-ok", StringComparison.OrdinalIgnoreCase), seconds: 60);
+        Assert.Contains("Reconnected to", f.Shell.Workbench.Output.Channels.First(c => c.Name == "Remote").GetText(), StringComparison.Ordinal);
 
         // Closing the connection makes the window local again.
         await f.Shell.DisconnectRemoteAsync();

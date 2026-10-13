@@ -94,7 +94,9 @@ A remote window (M21a, ADR 0050 and 0051, protocol in `docs/remote-protocol.md`)
 - **The bundle.** Server and hosts are copied as a checksummed `.tar.gz` into `~/.daedalus-server/<version>/` (`RemoteServerBundle`). A published install has `remote/server/` (framework-dependent) and `remote/<rid>/` (self-contained, `$(DaedalusServerRids)`).
 - **Development and tests.** `DAEDALUS_SERVER` points at a server build, `DAEDALUS_REMOTE_LATENCY_MS` simulates latency, and `--remote local` is a stand-in server on this machine (tests and the smoke step `remote.session`).
 - **Stand-ins.** Remote tests use stand-ins only: the local server, WSL (`DAEDALUS_TEST_WSL`), and a fake `ssh` on Linux and macOS.
-- **M21b** adds Dev Containers, attach to a container, `testenvironments.json`, `runsOn` and reconnecting.
+- **Containers** (M21b, ADR 0053): `container:<name>` targets through `docker exec`/Podman's, and Dev Containers (`DevContainers`, a C# subset of `devcontainer.json`; `ShellHost.DevContainers.cs`).
+- **Reconnecting** (M21b, ADR 0054): remote targets start `daedalus-server --relay <session>`, which connects to (or starts) the session's daemon on a Unix socket; the multiplexer runs on a `ResumableStream` (`DaedalusStudio.Rpc/Multiplexing`), and `RemoteConnection` starts the transport again when the link drops and resumes it (`DropLink()` in tests). The local stand-in is resumable only with `RemoteSessionOptions.Resumable`. Killing a transport never kills its tree: the relay's child is the daemon.
+- **M21b** still adds `testenvironments.json` and `runsOn`.
 
 ## Terminal and C# Interactive
 

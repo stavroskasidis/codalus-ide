@@ -86,6 +86,15 @@ public sealed record RemoteSessionOptions(RemoteTargetSpec Spec, string ClientVe
     /// <summary>The hosts to copy with the server (folder name and local folder).</summary>
     public IReadOnlyList<BundlePart> Hosts { get; init; } = [];
 
+    /// <summary>
+    /// Whether the server outlives a dropped link (M21b, ADR 0054: <c>--relay</c>, reconnected for
+    /// <see cref="ReconnectFor"/>). Null: for remote targets, not the local stand-in.
+    /// </summary>
+    public bool? Resumable { get; init; }
+
+    /// <summary>How long a dropped link is retried, and how long the server waits for it.</summary>
+    public TimeSpan ReconnectFor { get; init; } = TimeSpan.FromMinutes(15);
+
     /// <summary>Paths of a local stand-in go through a virtual root as on a real remote machine (Linux and macOS clients; tests).</summary>
     public bool MapLocalPaths { get; init; } = !OperatingSystem.IsWindows();
 }
@@ -161,23 +170,28 @@ public sealed class RemoteSession : IAsyncDisposable
         var spec = options.Spec;
         RemoteTransport transport;
         InstalledServer? installed = null;
+        var resumable = options.Resumable ?? spec.Target is not null;
+        string[] mode = resumable
+            ? ["--relay", Guid.NewGuid().ToString("N"), "--grace", ((int)options.ReconnectFor.TotalSeconds).ToString(CultureInfo.InvariantCulture)]
+            : ["--stdio"];
         if (spec.Target is { } target)
         {
             var bundle = new RemoteServerBundle(options.CacheFolder, options.ClientVersion, options.Hosts, RemoteServerBundle.LocateServer, options.ServerHome);
             progress?.Report($"Checking the Daedalus server on {spec.Display}…");
             installed = await bundle.EnsureAsync(target, progress, cancellationToken).ConfigureAwait(false);
-            var (program, arguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder));
+            var (program, arguments) = target.Shell(RemoteServerBundle.StartScript(installed.Folder, mode));
             transport = new RemoteTransport(program, arguments, spec.Display);
         }
         else
         {
             var server = options.LocalServer ?? LocalServerPath() ?? throw new InvalidOperationException("The remote server (daedalus-server) isn't part of this installation.");
-            var launch = ProcessLaunchInfo.FromPath(server, "--stdio");
+            var launch = ProcessLaunchInfo.FromPath(server, mode);
             transport = new RemoteTransport(launch.FileName, launch.Arguments, spec.Display);
         }
 
         progress?.Report($"Connecting to {spec.Display}…");
         var connection = await RemoteConnection.StartAsync(transport, options.ClientVersion, cancellationToken, options.Latency).ConfigureAwait(false);
+        connection.ReconnectFor = options.ReconnectFor;
         try
         {
             if (connection.Server.ServerVersion != options.ClientVersion)

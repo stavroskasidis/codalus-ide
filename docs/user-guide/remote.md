@@ -46,4 +46,15 @@ On the first connection, Daedalus Studio copies its server into `~/.daedalus-ser
 - **Terminals** open your login shell there.
 - **Ports.** When a program there starts listening on a port, the port is forwarded to `localhost` here, on the same number when it's free. A notification offers to open it in the browser. A web app's launch URL opens once its port is forwarded. **View → Other Windows → Ports** lists the forwarded and listening ports: forward another one, stop one, or open one in the browser. Turn automatic forwarding off with **Remote → Forward Ports Automatically** (`remote.autoForwardPorts`).
 
-Not yet in a remote window: Git, NuGet's package manager, Find in Files, the Test Explorer, the data, profiler, container and Aspire tools, C# Interactive, Hot Reload, multiple startup projects, plugins and the web language servers. Running tests remotely and reconnecting after a network drop come next. If the connection drops, unsaved changes stay in the editor; open the remote window again to reconnect.
+Not yet in a remote window: Git, NuGet's package manager, Find in Files, the Test Explorer, the data, profiler, container and Aspire tools, C# Interactive, Hot Reload, multiple startup projects, plugins and the web language servers. Running tests remotely comes next.
+
+## When the network drops
+
+A remote window reconnects by itself. When the link drops (Wi-Fi, a VPN, a laptop's sleep):
+- the server on the other machine keeps running, with your solution, the C# host, programs, terminals and debugging sessions;
+- the status bar shows **reconnecting…**;
+- the window starts ssh (or wsl.exe, or docker exec) again;
+- what either side sent meanwhile arrives once the link is back, and nothing is lost or repeated;
+- the **Remote** output channel says how long the link was down.
+
+The server waits 15 minutes for the window to come back, then stops everything it started. If the window can't reconnect within that time, or the other machine restarted, the connection is lost: unsaved changes stay in the editor, and opening the remote window again connects anew.

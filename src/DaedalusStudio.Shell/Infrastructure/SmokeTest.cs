@@ -1152,7 +1152,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         // M21: a remote window on the local stand-in server (the shipped remote/server); it disconnects at its end.
-        await StepAsync("remote.session", "M21", "A remote window on a local server: the solution loads in its build host, a file is completed and saved through it, the program runs in its terminal, and a new port is forwarded", RemoteStepAsync, "build.solution").ConfigureAwait(true);
+        await StepAsync("remote.session", "M21", "A remote window on a local server: the solution loads in its build host, a file is completed and saved through it, the program runs in its terminal, a new port is forwarded, and a dropped link reconnects", RemoteStepAsync, "build.solution").ConfigureAwait(true);
 
         // Last: it opens a solution of 38 projects, and nothing after it depends on what it leaves behind.
         await StepAsync("dotnet.older", "M33", "Projects of .NET Core 2.0 to .NET 10 open and build; Hot Reload says why it needs .NET 6", OlderFrameworksStepAsync).ConfigureAwait(true);
@@ -1161,7 +1161,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// <summary>
     /// Remote development (M21, ADR 0050) on the local stand-in: the window connects to the shipped server, opens a copy
     /// of BuildAndRun through it, completes and saves a file, builds, runs the program in the server's terminal and sees
-    /// a new listening port forwarded; then it disconnects, local again. Every wait is bounded.
+    /// a new listening port forwarded; its link drops and reconnects (M21b) with the session intact; then it
+    /// disconnects, local again. Every wait is bounded.
     /// </summary>
     private async Task RemoteStepAsync()
     {
@@ -1175,7 +1176,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Copy(Path.Combine(samples, "BuildAndRun"), folder);
         string RemoteLog() => Tail(shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Remote")?.GetText() ?? string.Empty, 3000);
         var spec = Workbench.Remote.RemoteTargetSpec.Parse("local")!;
-        var connect = shell.ConnectRemoteAsync(spec, null);
+        var connect = shell.ConnectRemoteAsync(spec, null, shell.DefaultRemoteOptions(spec) with { Resumable = true });
         await WaitAsync(() => connect.IsCompleted, "the window connects to the local server", 120).ConfigureAwait(true);
         Check(await connect.ConfigureAwait(true) && shell.Remote is not null, "the window connected to the local server:\n" + RemoteLog());
         var remote = shell.Remote!;
@@ -1222,6 +1223,21 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             listener.Start();
             var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
             await WaitAsync(() => remote.Ports.Forwarded.Any(p => p.RemotePort == port), $"port {port} is detected and forwarded", 60).ConfigureAwait(true);
+
+            // The network drops (M21b, ADR 0054): the server and its hosts go on, the window reconnects, and an edit
+            // saved meanwhile reaches the file afterwards.
+            Check(remote.Connection.IsResumable, "the server is resumable (started through its relay)");
+            var dropped = System.Diagnostics.Stopwatch.StartNew();
+            remote.Connection.DropLink();
+            editor.Model.Text.Insert(0, "// saved across a reconnect\n");
+            var save = shell.SaveAllAsync();
+            await WaitAsync(() => remote.Connection.Reconnections == 1 && remote.Connection.IsLinked, "the window reconnects to the server", 60).ConfigureAwait(true);
+            Console.Out.WriteLine($"  reconnected in {dropped.Elapsed.TotalSeconds:0.0} s");
+            Check(dropped.Elapsed < TimeSpan.FromSeconds(5), $"reconnecting took {dropped.Elapsed.TotalSeconds:0.0} s, within the 5 s budget:\n" + RemoteLog());
+            await save.ConfigureAwait(true);
+            Check(File.ReadAllText(Path.Combine(folder, "src", "Hello", "Program.cs")).StartsWith("// saved across a reconnect", StringComparison.Ordinal), "the save reached the file after the reconnect");
+            Check(shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Any(i => i.Id == ShellHost.RemoteStatusItem && i.Text.StartsWith("$(link)", StringComparison.Ordinal)), "the status bar shows the connection again");
+            Check(shell.Languages.RunningClient(ShellHost.CSharpLanguageId) == client, "the C# host on the server went on through the reconnect");
         }
         finally
         {

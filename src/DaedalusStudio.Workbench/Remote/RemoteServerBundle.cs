@@ -123,13 +123,21 @@ public sealed class RemoteServerBundle(string cacheFolder, string version, IRead
         echo "{{sha256}}" > "$t/.bundle" && rm -rf "$d" && mv "$t" "$d" && echo "ok $d"
         """.Replace("\r\n", "\n", StringComparison.Ordinal);
 
-    /// <summary>The command that runs the installed server on the target: its own executable, or <c>dotnet</c> with its dll.</summary>
-    public static string StartScript(string folder) => $$"""
-        [ -f "$HOME/.profile" ] && . "$HOME/.profile" >/dev/null 2>&1 </dev/null
-        PATH="$PATH:$HOME/.dotnet"; export PATH
-        d="{{folder}}"
-        if [ -f "$d/server/daedalus-server.dll" ]; then exec dotnet "$d/server/daedalus-server.dll" --stdio; else exec "$d/server/daedalus-server" --stdio; fi
-        """.Replace("\r\n", "\n", StringComparison.Ordinal);
+    /// <summary>
+    /// The command that runs the installed server on the target: its own executable, or <c>dotnet</c> with its dll,
+    /// with <paramref name="mode"/>'s arguments (<c>--stdio</c> by default, or <c>--relay</c> with a session id and a
+    /// grace period: words without spaces or quotes).
+    /// </summary>
+    public static string StartScript(string folder, IReadOnlyList<string>? mode = null)
+    {
+        var arguments = string.Join(' ', mode ?? ["--stdio"]);
+        return $$"""
+            [ -f "$HOME/.profile" ] && . "$HOME/.profile" >/dev/null 2>&1 </dev/null
+            PATH="$PATH:$HOME/.dotnet"; export PATH
+            d="{{folder}}"
+            if [ -f "$d/server/daedalus-server.dll" ]; then exec dotnet "$d/server/daedalus-server.dll" {{arguments}}; else exec "$d/server/daedalus-server" {{arguments}}; fi
+            """.Replace("\r\n", "\n", StringComparison.Ordinal);
+    }
 
     /// <summary>The bundle's archive (cached by its files' names, sizes and times) and its SHA-256.</summary>
     public async Task<(string Path, string Sha256, long Size)> ArchiveAsync(IReadOnlyList<BundlePart> parts, IProgress<string>? progress, CancellationToken cancellationToken)
