@@ -9,9 +9,12 @@ public sealed class WindowLayoutTests
     public async Task A_saved_layout_comes_back_and_distraction_free_mode_hides_everything_but_the_documents_and_returns()
     {
         await using var f = ShellFixture.Create();
+
+        // The tool windows the test arranges: the Start page opens on its own when the Welcome plugin activates.
+        List<string> Tools() => [.. f.Shell.Layout.OpenToolWindows.Select(t => t.Id).Where(id => id != "welcome.view").Order(StringComparer.Ordinal)];
         f.Shell.Layout.ShowToolWindow(ViewModels.ErrorListViewModel.ToolWindowId, focus: false);
         ShellFixture.Pump();
-        var withErrorList = f.Shell.Layout.OpenToolWindows.Select(t => t.Id).Order(StringComparer.Ordinal).ToList();
+        var withErrorList = Tools();
         Assert.Contains(ViewModels.ErrorListViewModel.ToolWindowId, withErrorList);
 
         // Saved, changed, applied: the tool windows are back.
@@ -22,7 +25,7 @@ public sealed class WindowLayoutTests
         Assert.False(f.Shell.Layout.IsVisible(ViewModels.ErrorListViewModel.ToolWindowId));
         await f.Shell.ApplyWindowLayoutAsync("Debugging");
         ShellFixture.Pump();
-        Assert.Equal(withErrorList, f.Shell.Layout.OpenToolWindows.Select(t => t.Id).Order(StringComparer.Ordinal));
+        Assert.Equal(withErrorList, Tools());
         await f.Shell.DeleteWindowLayoutAsync("Debugging");
         Assert.DoesNotContain("Debugging", f.Shell.SavedLayouts().Keys);
 
@@ -36,7 +39,7 @@ public sealed class WindowLayoutTests
         f.Shell.Run("workbench.toggleDistractionFree");
         ShellFixture.Pump();
         Assert.True(f.Shell.IsDistractionFree);
-        Assert.Empty(f.Shell.Layout.OpenToolWindows);
+        Assert.Empty(Tools());
         Assert.False(f.Shell.Toolbar.IsVisible);
         Assert.False(f.Shell.StatusBar.IsVisible);
         Assert.True(f.Shell.Window.IsFullScreen);
@@ -44,7 +47,7 @@ public sealed class WindowLayoutTests
         f.Shell.Run("workbench.toggleDistractionFree");
         ShellFixture.Pump();
         Assert.False(f.Shell.IsDistractionFree);
-        Assert.Equal(withErrorList, f.Shell.Layout.OpenToolWindows.Select(t => t.Id).Order(StringComparer.Ordinal));
+        Assert.Equal(withErrorList, Tools());
         Assert.True(f.Shell.Toolbar.IsVisible);
         Assert.True(f.Shell.StatusBar.IsVisible);
         Assert.False(f.Shell.Window.IsFullScreen);
