@@ -335,7 +335,38 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         await _events.LogAsync("info", $"Evaluated {projects.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms ({Active.Name}).").ConfigureAwait(false);
         ScheduleDesignTimeBuilds(designTime == DesignTimeMode.Always
             ? projects
-            : [.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]);
+            : WithDependents([.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]));
+    }
+
+    /// <summary>
+    /// <paramref name="projects"/> and the loaded projects that reference them, directly or not (M34c): a project's
+    /// design-time result (and its cache key) includes what it references, so it is checked again when they change, or
+    /// its cache entry keeps the old key and the next open misses it (the Linux runner, where the restore's assets files
+    /// arrive one evaluation at a time).
+    /// </summary>
+    private IReadOnlyCollection<string> WithDependents(IReadOnlyCollection<string> projects)
+    {
+        if (projects.Count == 0)
+        {
+            return projects;
+        }
+
+        var result = new HashSet<string>(projects, s_pathComparer);
+        bool added;
+        do
+        {
+            added = false;
+            foreach (var (path, evaluated) in _evaluated)
+            {
+                if (!result.Contains(path) && evaluated.Info.References.Any(r => r.Kind == ReferenceKinds.Project && r.Path is not null && result.Contains(r.Path)))
+                {
+                    added |= result.Add(path);
+                }
+            }
+        }
+        while (added);
+
+        return result;
     }
 
     private static bool SameInfo(ProjectInfo a, ProjectInfo b) =>
@@ -495,6 +526,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var cached = new List<CompilerInputsInfo>();
         var misses = new List<string>();
         var keys = new Dictionary<string, (string Directory, string Entry, string Key)>(s_pathComparer);
+        var used = new Dictionary<string, (string? Framework, string Key)>(s_pathComparer);
         HashSet<string> forced;
         lock (_designTimePending)
         {
@@ -518,6 +550,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             // The persisted cache (M34b): unchanged inputs give the last build's command line without building.
             if (project.IntermediateDirectory is { } obj && DesignTimeKey(path, framework, properties) is { } key)
             {
+                used[path] = (framework, key);
                 var entry = DesignTimeCache.Entry(configuration, platform, framework);
                 if (forced.Contains(path))
                 {
@@ -534,6 +567,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 }
 
                 keys[path] = (obj, entry, key);
+            }
+            else
+            {
+                misses.Add($"{System.IO.Path.GetFileName(path)}: no cache key (no intermediate folder, or a referenced project has none)");
             }
 
             requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework));
@@ -565,19 +602,49 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(Interlocked.Increment(ref built), total, false)).ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);
 
+        // A project evaluated again while this batch ran (the restore's assets files can arrive one evaluation at a time)
+        // may have changed what a result here was built from: those build again, or their cache entry would keep a key
+        // the next open never matches (M34c, the Linux runner).
+        var current = SolutionProperties();
+        var stale = used.Where(u => _evaluated.TryGetValue(u.Key, out var p) && p.Info.State == ProjectStates.Loaded
+                                    && DesignTimeKey(u.Key, u.Value.Framework, current) is { } now && now != u.Value.Key)
+            .Select(u => u.Key).ToList();
         bool more;
         lock (_designTimePending)
         {
+            _designTimePending.UnionWith(stale);
             more = _designTimePending.Count > 0;
         }
 
-        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, total, !more)).ConfigureAwait(false);
+        // Hits and misses since the last completed progress go with the next one (M34c: benchmarks assert that warm opens
+        // hit the cache).
+        int hits;
+        string[] missed;
+        lock (_cacheStatistics)
+        {
+            _cacheHits += cached.Count;
+            _cacheStatistics.AddRange(misses);
+            hits = _cacheHits;
+            missed = [.. _cacheStatistics];
+            if (!more)
+            {
+                _cacheHits = 0;
+                _cacheStatistics.Clear();
+            }
+        }
+
+        await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, total, !more)
+        {
+            CacheHits = more ? null : hits,
+            CacheMisses = more ? null : missed,
+        }).ConfigureAwait(false);
         await _events.LogAsync("info", $"Design-time build of {requests.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms"
                                        + (cached.Count > 0 ? $"; {cached.Count} unchanged project(s) from the cache." : ".")).ConfigureAwait(false);
-        if (misses.Count > 0)
+        if (cached.Count + misses.Count > 0)
         {
-            // Why each project built instead of coming from the cache (the Output window's build host log).
-            await _events.LogAsync("info", "Design-time build cache: " + string.Join("; ", misses.Take(20))).ConfigureAwait(false);
+            // Why each project built instead of coming from the cache (the build host log, in the Output window).
+            await _events.LogAsync("info", $"Design-time build cache: {cached.Count} hit(s), {misses.Count} miss(es)"
+                                           + (misses.Count > 0 ? ": " + string.Join("; ", misses.Take(20)) + (misses.Count > 20 ? $"; and {misses.Count - 20} more" : string.Empty) : ".")).ConfigureAwait(false);
         }
     }
 

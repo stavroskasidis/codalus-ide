@@ -286,7 +286,17 @@ public sealed record CompilerInputsInfo(
     string? OutputPath,
     string? OutputRefPath);
 
-public sealed record DesignTimeProgressParams(int Built, int Total, bool Completed);
+public sealed record DesignTimeProgressParams(int Built, int Total, bool Completed)
+{
+    /// <summary>
+    /// On a completed progress: how many projects' compiler inputs came from the design-time build cache since the last
+    /// completed progress (M34c, for benchmarks and the log).
+    /// </summary>
+    public int? CacheHits { get; init; }
+
+    /// <summary>On a completed progress: the projects that missed the cache since the last one, each with its reason (<c>Name: reason</c>).</summary>
+    public string[]? CacheMisses { get; init; }
+}
 
 // ------------------------------------------------------------------ builds
 

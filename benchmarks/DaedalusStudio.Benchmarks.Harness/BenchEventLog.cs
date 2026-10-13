@@ -5,6 +5,9 @@ namespace DaedalusStudio.Benchmarks.Harness;
 /// <summary>One line of a prototype's bench-event file (see DaedalusStudio.Diagnostics.BenchEvents).</summary>
 internal sealed record BenchEvent(string Name, long WallMicros, long MonoMicros, IReadOnlyDictionary<string, long> Fields)
 {
+    /// <summary>String fields (M34c: <c>designtime_done</c>'s <c>cache_miss_reasons</c>).</summary>
+    public IReadOnlyDictionary<string, string> Text { get; init; } = new Dictionary<string, string>();
+
     public long Field(string key) => Fields.TryGetValue(key, out var value) ? value : 0;
 }
 
@@ -31,6 +34,7 @@ internal static class BenchEventLog
             {
                 using var doc = JsonDocument.Parse(line);
                 var fields = new Dictionary<string, long>(StringComparer.Ordinal);
+                var text = new Dictionary<string, string>(StringComparer.Ordinal);
                 string? name = null;
                 long wall = 0, mono = 0;
                 foreach (var property in doc.RootElement.EnumerateObject())
@@ -51,6 +55,10 @@ internal static class BenchEventLog
                             {
                                 fields[property.Name] = property.Value.GetInt64();
                             }
+                            else if (property.Value.ValueKind == JsonValueKind.String)
+                            {
+                                text[property.Name] = property.Value.GetString()!;
+                            }
 
                             break;
                     }
@@ -58,7 +66,7 @@ internal static class BenchEventLog
 
                 if (name is not null)
                 {
-                    events.Add(new BenchEvent(name, wall, mono, fields));
+                    events.Add(new BenchEvent(name, wall, mono, fields) { Text = text });
                 }
             }
             catch (JsonException)

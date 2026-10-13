@@ -21,6 +21,7 @@ internal sealed class LanguageServer : IAsyncDisposable
     private readonly CodeActionsFeature _codeActions;
     private readonly CodeCleanupFeature _cleanup;
     private readonly DiagnosticsService _diagnostics;
+    private readonly AnalysisSolution _analysis;
     private readonly Xaml.XamlDiagnostics _xamlDiagnostics;
     private readonly TaskCompletionSource _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -28,7 +29,8 @@ internal sealed class LanguageServer : IAsyncDisposable
     {
         _connection = connection;
         _razor = new Razor.RazorFeatures(_completion, message => Log(MessageType.Log, message));
-        _diagnostics = new DiagnosticsService(_workspace, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
+        _analysis = new AnalysisSolution(_workspace, message => Log(MessageType.Log, message));
+        _diagnostics = new DiagnosticsService(_workspace, _analysis, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _xamlDiagnostics = new Xaml.XamlDiagnostics(_workspace, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _cleanup = new CodeCleanupFeature(_diagnostics, message => Log(MessageType.Log, message));
@@ -53,6 +55,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             }
 
             var version = typeof(LanguageServer).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
             return Task.FromResult(new InitializeResult(
                 new ServerCapabilities
                 {
@@ -107,6 +110,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         {
             if (DocumentUris.ToPath(p.TextDocument.Uri) is { } path && _workspace.Change(path, p.TextDocument.Version, p.ContentChanges))
             {
+                _analysis.DocumentChanged(path);
                 _diagnostics.DocumentChanged(path);
                 XamlChanged(path);
             }
@@ -148,15 +152,16 @@ internal sealed class LanguageServer : IAsyncDisposable
         OnPosition(Methods.Completion, json.CompletionParams, json.CompletionList, p => (p.TextDocument, p.Position),
             async (document, offset, p, ct) => await _completion.CompleteAsync(document, offset, p.Context, ct).ConfigureAwait(false), new CompletionList(false, []),
             (mapping, offset, p, ct) => _razor.CompleteAsync(mapping, offset, p.Context, ct),
-            async (xaml, offset, _, ct) => await Xaml.XamlCompletion.CompleteAsync(xaml, offset, ct).ConfigureAwait(false));
+            async (xaml, offset, _, ct) => await Xaml.XamlCompletion.CompleteAsync(xaml, offset, ct).ConfigureAwait(false), Semantics.Analysis);
         _connection.OnRequest(Methods.CompletionResolve, json.CompletionItem, json.CompletionItem, (item, ct) => _completion.ResolveAsync(item, ct));
         OnPosition(Methods.Hover, json.TextDocumentPositionParams, json.Hover, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => HoverFeature.HoverAsync(document, offset, ct), null,
             (mapping, offset, _, ct) => _razor.HoverAsync(mapping, offset, ct),
-            (xaml, offset, _, ct) => Xaml.XamlNavigation.HoverAsync(xaml, offset, ct));
+            (xaml, offset, _, ct) => Xaml.XamlNavigation.HoverAsync(xaml, offset, ct), Semantics.Analysis);
         OnPosition(Methods.SignatureHelp, json.SignatureHelpParams, json.SignatureHelp, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => SignatureHelpFeature.SignatureHelpAsync(document, offset, ct), null,
-            (mapping, offset, _, ct) => mapping.ToGenerated(offset) is { } generated ? SignatureHelpFeature.SignatureHelpAsync(mapping.Generated, generated, ct) : Task.FromResult<SignatureHelp?>(null));
+            (mapping, offset, _, ct) => mapping.ToGenerated(offset) is { } generated ? SignatureHelpFeature.SignatureHelpAsync(mapping.Generated, generated, ct) : Task.FromResult<SignatureHelp?>(null),
+            semantics: Semantics.Analysis);
         OnPosition(Methods.Definition, json.TextDocumentPositionParams, json.LocationArray, p => (p.TextDocument, p.Position),
             async (document, offset, _, ct) => await NavigationFeature.DefinitionAsync(document, offset, ct).ConfigureAwait(false), [],
             async (mapping, offset, _, ct) => await _razor.DefinitionAsync(mapping, offset, ct).ConfigureAwait(false),
@@ -165,14 +170,14 @@ internal sealed class LanguageServer : IAsyncDisposable
             async (document, offset, _, ct) => await NavigationFeature.ImplementationAsync(document, offset, ct).ConfigureAwait(false), []);
         OnPosition(Methods.DocumentHighlight, json.TextDocumentPositionParams, json.DocumentHighlightArray, p => (p.TextDocument, p.Position),
             async (document, offset, _, ct) => await NavigationFeature.HighlightsAsync(document, offset, ct).ConfigureAwait(false), [],
-            async (mapping, offset, _, ct) => await _razor.HighlightsAsync(mapping, offset, ct).ConfigureAwait(false));
+            async (mapping, offset, _, ct) => await _razor.HighlightsAsync(mapping, offset, ct).ConfigureAwait(false), semantics: Semantics.Analysis);
         OnDocument(Methods.FoldingRange, json.FoldingRangeParams, json.FoldingRangeArray, p => p.TextDocument,
             async (document, _, ct) => await FoldingFeature.FoldingRangesAsync(document, ct).ConfigureAwait(false), [],
             (xaml, _, _) => Task.FromResult<FoldingRange[]?>(Xaml.XamlAnalysis.Folding(xaml)));
         OnDocument(Methods.SemanticTokensFull, json.SemanticTokensParams, json.SemanticTokens, p => p.TextDocument,
-            async (document, _, ct) => await SemanticTokensFeature.TokensAsync(document, null, ct).ConfigureAwait(false), new SemanticTokens([]));
+            async (document, _, ct) => await SemanticTokensFeature.TokensAsync(document, null, ct).ConfigureAwait(false), new SemanticTokens([]), semantics: Semantics.Analysis);
         OnDocument(Methods.SemanticTokensRange, json.SemanticTokensRangeParams, json.SemanticTokens, p => p.TextDocument,
-            async (document, p, ct) => await SemanticTokensFeature.TokensAsync(document, p.Range, ct).ConfigureAwait(false), new SemanticTokens([]));
+            async (document, p, ct) => await SemanticTokensFeature.TokensAsync(document, p.Range, ct).ConfigureAwait(false), new SemanticTokens([]), semantics: Semantics.Analysis);
         OnDocument(Methods.DocumentOptions, json.DocumentOptionsParams, json.DocumentOptions, p => p.TextDocument,
             DocumentOptionsAsync, new DocumentOptions(true, 4, 4, null));
         OnPosition(Methods.References, json.ReferenceParams, json.LocationArray, p => (p.TextDocument, p.Position),
@@ -243,7 +248,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         {
             var text = await document.GetTextAsync(ct).ConfigureAwait(false);
             return await InlayHintsFeature.HintsAsync(document, Positions.ToSpan(text, p.Range), ct).ConfigureAwait(false);
-        }, []);
+        }, [], semantics: Semantics.Analysis);
         OnDocument(Methods.CodeLens, json.CodeLensParams, json.CodeLensArray, p => p.TextDocument,
             async (document, _, ct) => await CodeLensFeature.LensesAsync(document, ct).ConfigureAwait(false), []);
         _connection.OnRequest(Methods.CodeLensResolve, json.CodeLens, json.CodeLens, (lens, ct) => CodeLensFeature.ResolveAsync(_workspace.CurrentSolution, lens, ct));
@@ -305,7 +310,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             _diagnostics.DocumentChanged(path);
         }
 
-        _diagnostics.ScheduleBackground();
+        _diagnostics.ScheduleBackground(_workspace.Loading ? null : TimeSpan.FromMilliseconds(200));
         _xamlDiagnostics.OthersChanged();
     }
 
@@ -355,12 +360,13 @@ internal sealed class LanguageServer : IAsyncDisposable
         Func<Document, int, TParams, CancellationToken, Task<TResult?>> handler,
         TResult? empty,
         Func<Razor.RazorMapping, int, TParams, CancellationToken, Task<TResult?>>? razor = null,
-        Func<Xaml.XamlContext, int, TParams, CancellationToken, Task<TResult?>>? xaml = null)
+        Func<Xaml.XamlContext, int, TParams, CancellationToken, Task<TResult?>>? xaml = null,
+        Semantics semantics = Semantics.Workspace)
     {
         _connection.OnRequest(method, paramsInfo, resultInfo, async (p, ct) =>
         {
-            var solution = _workspace.CurrentSolution;
             var (identifier, position) = where(p);
+            var solution = await SolutionForAsync(identifier, semantics, ct).ConfigureAwait(false);
             if (DocumentUris.ToPath(identifier.Uri) is { } xamlPath && Xaml.XamlContext.IsXaml(xamlPath))
             {
                 // Avalonia XAML (ADR 0047): its own features, never C#'s on a Miscellaneous File.
@@ -385,6 +391,7 @@ internal sealed class LanguageServer : IAsyncDisposable
                 return empty!;
             }
 
+
             var text = await document.GetTextAsync(ct).ConfigureAwait(false);
             return await handler(document, Positions.ToOffset(text, position), p, ct).ConfigureAwait(false) ?? empty!;
         });
@@ -397,11 +404,12 @@ internal sealed class LanguageServer : IAsyncDisposable
         Func<TParams, TextDocumentIdentifier> where,
         Func<Document, TParams, CancellationToken, Task<TResult?>> handler,
         TResult? empty,
-        Func<Xaml.XamlContext, TParams, CancellationToken, Task<TResult?>>? xaml = null)
+        Func<Xaml.XamlContext, TParams, CancellationToken, Task<TResult?>>? xaml = null,
+        Semantics semantics = Semantics.Workspace)
     {
         _connection.OnRequest(method, paramsInfo, resultInfo, async (p, ct) =>
         {
-            var solution = _workspace.CurrentSolution;
+            var solution = await SolutionForAsync(where(p), semantics, ct).ConfigureAwait(false);
             if (DocumentUris.ToPath(where(p).Uri) is { } xamlPath && Xaml.XamlContext.IsXaml(xamlPath))
             {
                 return xaml is not null && await Xaml.XamlContext.CreateAsync(solution, xamlPath, _workspace.OpenText(xamlPath), ct).ConfigureAwait(false) is { } context
@@ -414,6 +422,22 @@ internal sealed class LanguageServer : IAsyncDisposable
                 : empty!;
         });
     }
+
+    /// <summary>Which solution a request reads (M34c).</summary>
+    private enum Semantics
+    {
+        /// <summary>The workspace's: navigation and refactoring, whose symbols must be the projects' sources.</summary>
+        Workspace,
+
+        /// <summary>The <see cref="AnalysisSolution"/> while the document's references haven't compiled: the document's own semantics.</summary>
+        Analysis,
+
+    }
+
+    private async ValueTask<Solution> SolutionForAsync(TextDocumentIdentifier identifier, Semantics semantics, CancellationToken cancellationToken) =>
+        semantics != Semantics.Workspace && DocumentUris.ToPath(identifier.Uri) is { } path && !Xaml.XamlContext.IsXaml(path)
+            ? await _analysis.ForDocumentAsync(Path.GetFullPath(path), cancellationToken).ConfigureAwait(false)
+            : _workspace.CurrentSolution;
 
     private static async Task<DocumentOptions?> DocumentOptionsAsync(Document document, DocumentOptionsParams parameters, CancellationToken cancellationToken)
     {

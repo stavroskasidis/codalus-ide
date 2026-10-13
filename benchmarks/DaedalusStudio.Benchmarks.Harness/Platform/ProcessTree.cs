@@ -32,8 +32,10 @@ internal static class ProcessTree
         {
             foreach (var (pid, parent) in parents)
             {
+                // A process whose start time can't be read (another user's, protected) is never ours: our launches'
+                // descendants are readable. Seen in M34c: a protected process with a recycled parent id added 21 GB.
                 if (parent == result[i] && pid != result[i] && !result.Contains(pid)
-                    && !(Started(pid) is { } child && Started(parent) is { } parentStart && child < parentStart))
+                    && Started(pid) is { } child && !(Started(parent) is { } parentStart && child < parentStart))
                 {
                     result.Add(pid);
                 }
@@ -153,6 +155,10 @@ internal static class ProcessTree
             }
             catch (System.ComponentModel.Win32Exception)
             {
+            }
+            catch (AggregateException)
+            {
+                // Part of the tree couldn't be killed (Access is denied): best effort.
             }
         }
     }

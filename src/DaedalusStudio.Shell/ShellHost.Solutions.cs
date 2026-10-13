@@ -51,7 +51,11 @@ public sealed partial class ShellHost
             if (progress is { Completed: true, Total: > 0 } && !_designTimeReported)
             {
                 _designTimeReported = true;
-                BenchEvents.Emit(BenchEventNames.DesignTimeDone);
+                var misses = progress.CacheMisses ?? [];
+                BenchEvents.Emit(
+                    BenchEventNames.DesignTimeDone,
+                    [("cache_hits", progress.CacheHits ?? 0), ("cache_misses", misses.Length)],
+                    misses.Length > 0 ? [("cache_miss_reasons", string.Join("; ", misses))] : []);
             }
         };
         Solutions.RestoreStateChanged += (_, e) => Ui.Post(() => OnRestoreState(e));
