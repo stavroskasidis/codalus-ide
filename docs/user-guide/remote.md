@@ -46,7 +46,10 @@ On the first connection, Codalus IDE copies its server into `~/.codalus-server/<
 - **Terminals** open your login shell there.
 - **Ports.** When a program there starts listening on a port, the port is forwarded to `localhost` here, on the same number when it's free. A notification offers to open it in the browser. A web app's launch URL opens once its port is forwarded. **View → Other Windows → Ports** lists the forwarded and listening ports: forward another one, stop one, or open one in the browser. Turn automatic forwarding off with **Remote → Forward Ports Automatically** (`remote.autoForwardPorts`).
 
-Not yet in a remote window: Git, NuGet's package manager, Find in Files, the Test Explorer, the data, profiler, container and Aspire tools, C# Interactive, Hot Reload, multiple startup projects, plugins and the web language servers. Running tests remotely comes next.
+- **Tests.** The Test Explorer discovers, runs and debugs tests on the other machine: the .NET test plugin runs there.
+- **Plugins** run with the window, except those made to run where the workspace is (their manifest says `"runsOn": "workspace"`), which run on the other machine.
+
+Not yet in a remote window: Git, NuGet's package manager, Find in Files, the data, profiler, container and Aspire tools, C# Interactive, Hot Reload, multiple startup projects and the web language servers. To run a local solution's tests in WSL, a container or over SSH without a remote window, see [test environments](testing.md#running-tests-in-another-environment).
 
 ## When the network drops
 

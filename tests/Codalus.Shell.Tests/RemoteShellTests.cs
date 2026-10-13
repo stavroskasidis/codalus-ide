@@ -12,6 +12,7 @@ using Codalus.Workbench.Debugging.Remote;
 using Codalus.Workbench.FileSystem;
 using Codalus.Workbench.Remote;
 using Codalus.Workbench.StatusBar;
+using Codalus.Workbench.Testing;
 
 namespace Codalus.Shell.Tests;
 
@@ -339,5 +340,38 @@ public sealed class RemoteShellTests
         var parsed = ShellOptions.Parse(["--remote", "wsl:Ubuntu", "/home/me"]);
         Assert.Equal("wsl:Ubuntu", parsed.Remote);
         Assert.Equal("/home/me", parsed.Path);
+    }
+
+    [AvaloniaFact]
+    public async Task Tests_run_on_the_server_through_the_workspace_plugin()
+    {
+        // runsOn (M21b, ADR 0057): the .NET test plugin runs on the workspace's machine, so its test runners do too.
+        await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.DotNetTest"));
+        var folder = Resolved(f.CopySample("Testing"));
+        var remote = await ConnectAsync(f);
+        var local = remote.Map.ToLocal(folder);
+        f.Shell.Trust.Trust(Path.GetDirectoryName(local)!);
+        Assert.True(f.Shell.Plugins.WorkspacePluginsAreRemote);
+
+        await f.Shell.OpenRemoteAsync(Path.Combine(local, "Testing.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.Projects.Count > 0, seconds: 240);
+        f.Shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Shell.Tests.Read(roots => roots.Any(r => r.Label == "XunitV2Tests" && r.Leaves().Any(l => l.Label == "Fails"))), seconds: 240);
+
+        // The plugin's host was started on the server.
+        Assert.Contains(f.Shell.Plugins.Hosts, h => h.Group.StartsWith("workspace:", StringComparison.Ordinal) && h.Running && h.Remote);
+
+        var (adds, fails) = f.Shell.Tests.Read(roots =>
+        {
+            var leaves = roots.Single(r => r.Label == "XunitV2Tests").Leaves().ToList();
+            return (leaves.Single(l => l.Label == "Adds"), leaves.Single(l => l.Label == "Fails"));
+        });
+        await f.Shell.RunTestsAsync(TestRunKind.Run, [adds.Key, fails.Key]);
+        await ShellFixture.PumpUntil(() => !f.Shell.Tests.IsRunning && adds.Outcome == TestOutcome.Passed && fails.Outcome == TestOutcome.Failed, seconds: 300);
+
+        // Local again: the workspace plugins' hosts stop, to start here when next needed.
+        await f.Shell.DisconnectRemoteAsync();
+        Assert.False(f.Shell.Plugins.WorkspacePluginsAreRemote);
+        Assert.DoesNotContain(f.Shell.Plugins.Hosts, h => h.Remote);
     }
 }

@@ -107,11 +107,12 @@ public sealed record RemoteSessionOptions(RemoteTargetSpec Spec, string ClientVe
 public sealed class RemoteSession : IAsyncDisposable
 {
     /// <summary>The hosts that run on the server, by their folder next to the shell.</summary>
-    public static readonly IReadOnlyList<string> RemoteHosts = ["buildhost", "lshost", "markuphost"];
+    public static readonly IReadOnlyList<string> RemoteHosts = ["buildhost", "lshost", "markuphost", "pluginhost"];
 
     private readonly List<IDisposable> _mounts = [];
     private readonly CancellationTokenSource _lifetime = new();
     private readonly InstalledServer? _installed;
+    private IReadOnlyList<BundlePart> _parts = [];
 
     private RemoteSession(RemoteTargetSpec spec, RemoteConnection connection, RemotePathMap map, InstalledServer? installed, string? workspaceRoot)
     {
@@ -219,7 +220,7 @@ public sealed class RemoteSession : IAsyncDisposable
             }
 
             var root = map.IsIdentity ? workspace is null ? null : Directory.Exists(workspace) ? workspace : Path.GetDirectoryName(workspace) : null;
-            var session = new RemoteSession(spec, connection, map, installed, root);
+            var session = new RemoteSession(spec, connection, map, installed, root) { _parts = options.Hosts };
             await session.Ports.StartAsync(cancellationToken).ConfigureAwait(false);
             return session;
         }
@@ -259,6 +260,7 @@ public sealed class RemoteSession : IAsyncDisposable
             "codalus-buildhost" => "buildhost",
             "codalus-lshost" => "lshost",
             "codalus-markuphost" => "markuphost",
+            "codalus-pluginhost" => "pluginhost",
             _ => null,
         };
         if (folder is null)
@@ -273,6 +275,28 @@ public sealed class RemoteSession : IAsyncDisposable
 
         // Always the dll there: this machine's apphost is for this OS.
         return new ProcessLaunchInfo("dotnet", [$"{_installed.Folder}/{folder}/{name}.dll", .. rest.Select(Map.ToRemote)]) { Launcher = Launcher };
+    }
+
+    /// <summary>
+    /// A folder or file of this machine that the bundle carries (a plugin's folder, ADR 0057) as the server has it; the
+    /// path itself for the local stand-in, or when the bundle doesn't carry it.
+    /// </summary>
+    public string ToBundlePath(string local) => _installed is null ? local : BundlePath(_installed.Folder, _parts, local) ?? local;
+
+    /// <summary><paramref name="local"/> under the bundle's <paramref name="folder"/> on the server, by the part that carries it; null for none.</summary>
+    internal static string? BundlePath(string folder, IReadOnlyList<BundlePart> parts, string local)
+    {
+        var full = Path.GetFullPath(local);
+        foreach (var part in parts)
+        {
+            var relative = Path.GetRelativePath(Path.GetFullPath(part.Source), full);
+            if (relative == "." || (!relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative)))
+            {
+                return $"{folder}/{part.Name}" + (relative == "." ? string.Empty : "/" + relative.Replace('\\', '/'));
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

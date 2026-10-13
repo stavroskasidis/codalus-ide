@@ -71,6 +71,7 @@ The `Codalus.Plugins.Abstractions` package is not published yet (the repository 
 | `entry` | `runtime` is `dotnet`; `assembly` is the plugin DLL next to the manifest. If it contains more than one public `ICodalusPlugin`, name one with `type`. |
 | `activationEvents` | `onStartup`, `onCommand:<id>`, `onView:<toolWindowId>`, `onSettingChanged:<key>`, `onSolutionOpened`, `onTestProjects` (the open solution has a test project; since 0.2.1), `onHostingProvider:<id>` (the shell needs a hosting provider the plugin declares; since 0.2.7, implicit), and `onDebug` (a debug session starts; since 0.2.7). Contributed commands and tool windows activate the plugin implicitly, so most plugins list nothing here. Prefer lazy events: `onStartup` costs every user startup time. `onView:testExplorer` fires when the Test Explorer opens. |
 | `isolation` | `shared` (default) or `dedicated` (a host process of its own). |
+| `runsOn` | Where the plugin runs in a remote window: `ui` (default), with the window on this machine, or `workspace`, on the machine the workspace is on (the server), next to its files and tools ([ADR 0057](adr/0057-plugin-placement.md)). |
 | `enableProposedApi` | Use [proposed APIs](#proposed-apis). Honored for built-in plugins, and for others when Codalus runs with `--enable-proposed-api`. |
 
 ### Translating the manifest
@@ -259,7 +260,9 @@ Breaking: the product is renamed from Daedalus Studio to Codalus IDE ([ADR 0056]
 - activation events, ids and context keys keep their shapes, with `codalus` for `daedalus` (`codalus.welcome`);
 - environment variables are `CODALUS_*`, and protocol extensions `codalus/…`.
 
-Nothing else changed: a plugin that builds against 0.3.0 behaves as it did on 0.2.9.
+Added in 0.3.0: the manifest's `runsOn` (`ui` or `workspace`) places a plugin in a remote window. A workspace plugin runs in a plugin host on the server, from its folder copied with the server.
+
+Otherwise a plugin that builds against 0.3.0 behaves as it did on 0.2.9.
 
 ### 0.2.9 (M23c)
 

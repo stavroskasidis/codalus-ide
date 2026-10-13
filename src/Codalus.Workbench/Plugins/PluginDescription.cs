@@ -50,8 +50,17 @@ public sealed partial class PluginDescription
 
     public ContributionSource Source => ContributionSource.Plugin(Id, IsBuiltIn);
 
-    /// <summary><c>builtin</c>, <c>default</c>, or <c>dedicated:&lt;id&gt;</c> (ADR 0003).</summary>
-    public string HostGroup => Manifest?.Isolation == "dedicated" ? "dedicated:" + Id : IsBuiltIn ? "builtin" : "default";
+    /// <summary>
+    /// <c>builtin</c>, <c>default</c>, or <c>dedicated:&lt;id&gt;</c> (ADR 0003); with <c>workspace:</c> before it for a
+    /// plugin that runs on the workspace's machine (ADR 0057), which in a remote window is the server.
+    /// </summary>
+    public string HostGroup => (RunsOnWorkspace ? WorkspaceGroupPrefix : string.Empty)
+        + (Manifest?.Isolation == "dedicated" ? "dedicated:" + Id : IsBuiltIn ? "builtin" : "default");
+
+    public const string WorkspaceGroupPrefix = "workspace:";
+
+    /// <summary>The manifest's <c>runsOn</c> is <c>workspace</c>.</summary>
+    public bool RunsOnWorkspace => Manifest?.RunsOn == "workspace";
 
     public PluginState State { get; internal set; }
 
@@ -138,6 +147,12 @@ public sealed partial class PluginDescription
         if (m.Isolation is not (null or "shared" or "dedicated"))
         {
             Fail($"Invalid isolation '{m.Isolation}': expected 'shared' or 'dedicated'.");
+            return;
+        }
+
+        if (m.RunsOn is not (null or "ui" or "workspace"))
+        {
+            Fail($"Invalid runsOn '{m.RunsOn}': expected 'ui' or 'workspace'.");
             return;
         }
 

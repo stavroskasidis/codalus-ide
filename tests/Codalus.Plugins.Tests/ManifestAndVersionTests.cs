@@ -86,6 +86,7 @@ public sealed class ManifestValidationTests : IDisposable
     [InlineData("id", "Not A Valid Id")]
     [InlineData("version", "one")]
     [InlineData("isolation", "maybe")]
+    [InlineData("runsOn", "server")]
     public void Invalid_manifests_are_rejected(string property, string value)
     {
         var plugin = PluginDescription.Read(Variant(property, m => m[property] = value), false, PlatformKind.Windows);
@@ -154,6 +155,24 @@ public sealed class ManifestValidationTests : IDisposable
     {
         Assert.Equal("dedicated:codalus-samples.hello", PluginDescription.Read(Variant("dedicated", m => m["isolation"] = "dedicated"), false, PlatformKind.Windows).HostGroup);
         Assert.Equal("builtin", PluginDescription.Read(PluginHostIntegrationTests.HelloWorldDir, isBuiltIn: true, PlatformKind.Windows).HostGroup);
+    }
+
+    [Fact]
+    public void Workspace_plugins_get_host_groups_of_their_own()
+    {
+        // runsOn (API 0.3.0, ADR 0057): a workspace plugin's host can move to a remote window's server on its own.
+        var workspace = PluginDescription.Read(Variant("workspace", m => m["runsOn"] = "workspace"), false, PlatformKind.Windows);
+        Assert.Equal(PluginState.Ready, workspace.State);
+        Assert.True(workspace.RunsOnWorkspace);
+        Assert.Equal("workspace:default", workspace.HostGroup);
+        Assert.Equal("workspace:dedicated:codalus-samples.hello", PluginDescription.Read(Variant("workspacededicated", m =>
+        {
+            m["runsOn"] = "workspace";
+            m["isolation"] = "dedicated";
+        }), false, PlatformKind.Windows).HostGroup);
+        var ui = PluginDescription.Read(Variant("ui", m => m["runsOn"] = "ui"), false, PlatformKind.Windows);
+        Assert.False(ui.RunsOnWorkspace);
+        Assert.Equal("default", ui.HostGroup);
     }
 
     [Fact]

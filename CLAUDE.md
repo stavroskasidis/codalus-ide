@@ -97,7 +97,7 @@ A remote window (M21a, ADR 0050 and 0051, protocol in `docs/remote-protocol.md`)
 - **Containers** (M21b, ADR 0053): `container:<name>` targets through `docker exec`/Podman's, and Dev Containers (`DevContainers`, a C# subset of `devcontainer.json`; `ShellHost.DevContainers.cs`).
 - **Reconnecting** (M21b, ADR 0054): remote targets start `codalus-server --relay <session>`, which connects to (or starts) the session's daemon on a Unix socket; the multiplexer runs on a `ResumableStream` (`Codalus.Rpc/Multiplexing`), and `RemoteConnection` starts the transport again when the link drops and resumes it (`DropLink()` in tests). The local stand-in is resumable only with `RemoteSessionOptions.Resumable`. Killing a transport never kills its tree: the relay's child is the daemon.
 - **Test environments** (M21b, ADR 0055): `testenvironments.json` (`TestEnvironments`, `EnvironmentTestRunner` in workbench `Testing/`; `ShellHost.TestEnvironments.cs`, the Test Explorer's target environment). Tests build here and run there with `dotnet test <assembly>`, from `/tmp` so the solution's `global.json` doesn't apply; TRX results go through `TestService.ApplyImported`.
-- **M21b** still adds `runsOn`.
+- **Plugin placement** (M21b, ADR 0057): a manifest's `"runsOn": "workspace"` gives the plugin a `workspace:` host group; in a remote window `PluginManager.SetWorkspacePlacementAsync` places that host on the server (`RemoteSession.Place`, `ToBundlePath`; the bundle carries `pluginhost/` and each workspace plugin as `plugins/<id>`). The .NET test plugin is one, so the Test Explorer works remotely.
 
 ## Terminal and C# Interactive
 

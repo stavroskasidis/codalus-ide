@@ -14,6 +14,7 @@ using Codalus.Workbench.FileSystem;
 using Codalus.Workbench.Languages;
 using Codalus.Workbench.Notifications;
 using Codalus.Workbench.Output;
+using Codalus.Workbench.Plugins;
 using Codalus.Workbench.Projects;
 using Codalus.Workbench.Remote;
 using Codalus.Workbench.StatusBar;
@@ -98,9 +99,25 @@ public sealed partial class ShellHost
         return parts;
     }
 
-    /// <summary>The options a remote window connects with: the hosts to carry over, a simulated latency if one is set.</summary>
+    /// <summary>
+    /// The options a remote window connects with: the hosts to carry over (and the plugin host with the plugins that
+    /// run on the workspace's machine, ADR 0057), a simulated latency if one is set.
+    /// </summary>
     public RemoteSessionOptions DefaultRemoteOptions(RemoteTargetSpec spec) =>
-        new(spec, ShellInfo.Version, Paths.Cache) { Hosts = RemoteHostParts(), Latency = SimulatedLatency() };
+        new(spec, ShellInfo.Version, Paths.Cache) { Hosts = [.. RemoteHostParts(), .. WorkspacePluginParts()], Latency = SimulatedLatency() };
+
+    /// <summary>The plugin host and each <c>runsOn: workspace</c> plugin's folder, for the server bundle.</summary>
+    internal IReadOnlyList<BundlePart> WorkspacePluginParts()
+    {
+        var plugins = Plugins.Plugins.Where(p => p.RunsOnWorkspace && p.IsUsable && !p.IsDeclarative && Directory.Exists(p.InstallPath)).ToList();
+        if (plugins.Count == 0 || PluginHostLocator.Resolve() is not { } host)
+        {
+            return [];
+        }
+
+        var hostPath = host.FileName == "dotnet" && host.Arguments.Count > 0 ? host.Arguments[0] : host.FileName;
+        return [new BundlePart("pluginhost", Path.GetDirectoryName(Path.GetFullPath(hostPath))!), .. plugins.Select(p => new BundlePart("plugins/" + p.Id, p.InstallPath))];
+    }
 
     private static TimeSpan? SimulatedLatency() =>
         int.TryParse(Environment.GetEnvironmentVariable(RemoteLatencyVariable), NumberStyles.None, CultureInfo.InvariantCulture, out var ms) && ms > 0
@@ -144,6 +161,7 @@ public sealed partial class ShellHost
         StatusBar.ClearMessage();
         Remote = session;
         Solutions.Placement = session.Place;
+        await Plugins.SetWorkspacePlacementAsync(new WorkspacePlacement(session.Place, session.ToBundlePath)).ConfigureAwait(true);
         await Languages.ReplaceHostsAsync(session.Place).ConfigureAwait(true); // a local C# host from before stops: its files are this machine's
         _localProfiles ??= Terminals.Profiles;
         Terminals.Profiles = [RemoteShellProfile];
@@ -324,6 +342,7 @@ public sealed partial class ShellHost
 
         Remote = null;
         Solutions.Placement = null;
+        await Plugins.SetWorkspacePlacementAsync(null).ConfigureAwait(true);
         await Languages.ReplaceHostsAsync(null).ConfigureAwait(true);
         Terminals.PtyFactory = null;
         Terminals.Profiles = _localProfiles ?? Terminals.Profiles;

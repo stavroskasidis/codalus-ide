@@ -7,6 +7,7 @@
   "engines": { "codalus": "^0.3.0" },
   "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.DotNetTest.dll" },
   "isolation": "dedicated",
+  "runsOn": "workspace",
   "enableProposedApi": true,
   "activationEvents": ["onTestProjects", "onView:testExplorer", "onCommand:dotnettest.createUnitTests"],
   "contributes": {

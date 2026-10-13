@@ -26,6 +26,7 @@
       }
     },
     "isolation": { "type": "string", "enum": [ "shared", "dedicated" ], "description": "Whether the plugin shares a plugin host process." },
+    "runsOn": { "type": "string", "enum": [ "ui", "workspace" ], "description": "Where the plugin runs in a remote window: with the window (ui, the default) or on the workspace's machine (workspace)." },
     "enableProposedApi": { "type": "boolean", "description": "Use proposed APIs (third-party plugins also need --enable-proposed-api)." },
     "activationEvents": {
       "type": "array",

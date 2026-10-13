@@ -32,6 +32,13 @@ public interface IPluginPrompts
     Task<string?> InputAsync(string title, string? prompt, string? value, string source, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Where <c>runsOn: workspace</c> plugins run in a remote window (ADR 0057): <see cref="Place"/> turns this machine's
+/// plugin host into the server's (null when it can't run there), and <see cref="PluginPath"/> maps a plugin's folder
+/// to its copy on the server.
+/// </summary>
+public sealed record WorkspacePlacement(Func<ProcessLaunchInfo, ProcessLaunchInfo?> Place, Func<string, string> PluginPath);
+
 /// <summary>Locates <c>codalus-pluginhost</c>: <c>CODALUS_PLUGINHOST</c>, then <c>pluginhost/</c> next to the shell.</summary>
 public static class PluginHostLocator
 {
@@ -73,6 +80,7 @@ public sealed class PluginManager : IAsyncDisposable
     private readonly SupervisionPolicy? _hostPolicy;
     private readonly List<PluginDescription> _plugins = [];
     private readonly ConcurrentDictionary<string, HostConnection> _hosts = new(StringComparer.Ordinal);
+    private WorkspacePlacement? _workspacePlacement;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _activationLocks = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _markdown = new(StringComparer.Ordinal);
     private readonly Lock _gate = new();
@@ -623,8 +631,48 @@ public sealed class PluginManager : IAsyncDisposable
             return null;
         }
 
-        return _hosts.GetOrAdd(group, g => new HostConnection(this, g, launch));
+        // A workspace plugin in a remote window: its host runs on the server, its folder is the server's copy.
+        Func<string, string>? pluginPath = null;
+        if (group.StartsWith(PluginDescription.WorkspaceGroupPrefix, StringComparison.Ordinal) && Volatile.Read(ref _workspacePlacement) is { } placement)
+        {
+            if (placement.Place(launch) is not { } placed)
+            {
+                return null;
+            }
+
+            launch = placed;
+            pluginPath = placement.PluginPath;
+        }
+
+        var remote = launch.Launcher is not null;
+        return _hosts.GetOrAdd(group, g => new HostConnection(this, g, launch) { PluginPath = pluginPath, IsRemote = remote });
     }
+
+    /// <summary>The plugin host groups started so far, and whether each runs on a remote window's server.</summary>
+    public IReadOnlyList<(string Group, bool Running, bool Remote)> Hosts =>
+        [.. _hosts.Select(h => (h.Key, h.Value.IsRunning, h.Value.IsRemote)).OrderBy(h => h.Key, StringComparer.Ordinal)];
+
+    /// <summary>
+    /// Where <c>runsOn: workspace</c> plugins run (M21b, ADR 0057): a remote window's server (<paramref name="placement"/>),
+    /// or this machine (null). Their running hosts stop, and their plugins activate again in the new place on their
+    /// next activation event; the returned task ends when the old hosts have stopped.
+    /// </summary>
+    public async Task SetWorkspacePlacementAsync(WorkspacePlacement? placement)
+    {
+        Volatile.Write(ref _workspacePlacement, placement);
+        foreach (var (group, host) in _hosts.Where(h => h.Key.StartsWith(PluginDescription.WorkspaceGroupPrefix, StringComparison.Ordinal)).ToList())
+        {
+            if (_hosts.TryRemove(new KeyValuePair<string, HostConnection>(group, host)))
+            {
+                await host.RetireAsync().ConfigureAwait(false);
+            }
+        }
+
+        PluginsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Whether a workspace plugin's host runs elsewhere now (a remote window).</summary>
+    public bool WorkspacePluginsAreRemote => Volatile.Read(ref _workspacePlacement) is not null;
 
     private PluginDescription? Find(string id) => Plugins.FirstOrDefault(p => p.Id == id);
 
@@ -674,6 +722,19 @@ public sealed class PluginManager : IAsyncDisposable
         /// <summary>Plugins active in this host (re-activated after a restart).</summary>
         public ConcurrentBag<string> Active { get; private set; } = [];
 
+        /// <summary>A plugin folder as this host sees it (a remote window's server copy); null when it's this machine's.</summary>
+        public Func<string, string>? PluginPath { get; init; }
+
+        /// <summary>The host runs on a remote window's server.</summary>
+        public bool IsRemote { get; init; }
+
+        /// <summary>Stops the host for good (its place changed): what its plugins contributed at run time goes, and they can activate again elsewhere.</summary>
+        public async Task RetireAsync()
+        {
+            ReleaseContributions();
+            await _process.DisposeAsync().ConfigureAwait(false);
+        }
+
         public bool IsRunning => _process.IsRunning;
 
         /// <summary>Whether a plugin of this host may use proposed APIs (and so wants workspace notifications).</summary>
@@ -711,7 +772,7 @@ public sealed class PluginManager : IAsyncDisposable
             var members = Members.Where(p => p.IsUsable).ToList();
             var load = await connection.InvokeAsync(
                 PluginMethods.LoadPlugins,
-                new LoadPluginsParams([.. members.Select(p => new PluginLoadEntry(p.Id, p.Manifest!.Version, p.InstallPath, p.Manifest.Entry!.Assembly, p.Manifest.Entry.Type, p.Manifest.EnableProposedApi))]),
+                new LoadPluginsParams([.. members.Select(p => new PluginLoadEntry(p.Id, p.Manifest!.Version, PluginPath is { } map ? map(p.InstallPath) : p.InstallPath, p.Manifest.Entry!.Assembly, p.Manifest.Entry.Type, p.Manifest.EnableProposedApi))]),
                 json.LoadPluginsParams, json.LoadPluginsResult, cancellationToken).ConfigureAwait(false);
             foreach (var result in load.Results.Where(r => !r.Loaded))
             {
@@ -753,6 +814,30 @@ public sealed class PluginManager : IAsyncDisposable
 
         private void OnCrashed(object? sender, ProcessCrashedEventArgs e)
         {
+            ReleaseContributions();
+            var exit = e.ExitCode is { } code ? $" (exit code {code})" : string.Empty;
+            if (e.WillRestart)
+            {
+                _manager._workbench.Notifications.Warning(Localizer.Format("msg.pluginManager.pluginHostStoppedUnexpectedlyRestarting", "Plugin host '{0}' stopped unexpectedly{1}. Restarting…", _group, exit));
+            }
+            else
+            {
+                foreach (var plugin in Members.Where(p => p.IsUsable))
+                {
+                    plugin.State = PluginState.Failed;
+                    plugin.Error = "Its plugin host crashed repeatedly and was stopped for this session.";
+                }
+
+                _ = _manager.ShowAndHandleAsync(_manager._workbench.Notifications.Error(
+                    Localizer.Format("msg.pluginManager.pluginHostCrashedRepeatedlyAndWas", "Plugin host '{0}' crashed repeatedly and was stopped for this session{1}.", _group, exit), "Show Log"));
+            }
+
+            _manager.PluginsChanged?.Invoke(_manager, EventArgs.Empty);
+        }
+
+        /// <summary>Test controllers, hosting providers and visualizers the host's plugins registered go; its active plugins are ready again.</summary>
+        private void ReleaseContributions()
+        {
             foreach (var controller in _controllers.Keys)
             {
                 _controllers.TryRemove(controller, out _);
@@ -776,24 +861,7 @@ public sealed class PluginManager : IAsyncDisposable
                 plugin.State = PluginState.Ready;
             }
 
-            var exit = e.ExitCode is { } code ? $" (exit code {code})" : string.Empty;
-            if (e.WillRestart)
-            {
-                _manager._workbench.Notifications.Warning(Localizer.Format("msg.pluginManager.pluginHostStoppedUnexpectedlyRestarting", "Plugin host '{0}' stopped unexpectedly{1}. Restarting…", _group, exit));
-            }
-            else
-            {
-                foreach (var plugin in Members.Where(p => p.IsUsable))
-                {
-                    plugin.State = PluginState.Failed;
-                    plugin.Error = "Its plugin host crashed repeatedly and was stopped for this session.";
-                }
-
-                _ = _manager.ShowAndHandleAsync(_manager._workbench.Notifications.Error(
-                    Localizer.Format("msg.pluginManager.pluginHostCrashedRepeatedlyAndWas", "Plugin host '{0}' crashed repeatedly and was stopped for this session{1}.", _group, exit), "Show Log"));
-            }
-
-            _manager.PluginsChanged?.Invoke(_manager, EventArgs.Empty);
+            Active = [];
         }
 
         private void Configure(JsonRpcConnection connection)

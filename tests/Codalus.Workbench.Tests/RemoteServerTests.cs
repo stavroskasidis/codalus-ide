@@ -108,6 +108,18 @@ public sealed class RemoteServerTests
         await Assert.ThrowsAsync<JsonRpcRemoteException>(() => connection.SpawnAsync(new SpawnParams(0, "/no/such/program-codalus", []), Timeout()));
     }
 
+    [Fact]
+    public void Plugin_folders_map_to_their_copies_in_the_bundle()
+    {
+        // ADR 0057: a workspace plugin's folder on this machine is the bundle's plugins/<id> on the server.
+        var root = Path.Combine(Path.GetTempPath(), "bundle-paths");
+        IReadOnlyList<BundlePart> parts = [new("pluginhost", Path.Combine(root, "pluginhost")), new("plugins/codalus.dotnettest", Path.Combine(root, "plugins", "DotNetTest"))];
+        Assert.Equal("/home/me/.codalus-server/1.0/plugins/codalus.dotnettest", RemoteSession.BundlePath("/home/me/.codalus-server/1.0", parts, Path.Combine(root, "plugins", "DotNetTest")));
+        Assert.Equal("/s/pluginhost/codalus-pluginhost.dll", RemoteSession.BundlePath("/s", parts, Path.Combine(root, "pluginhost", "codalus-pluginhost.dll")));
+        Assert.Null(RemoteSession.BundlePath("/s", parts, Path.Combine(root, "plugins", "Other")));
+        Assert.Null(RemoteSession.BundlePath("/s", parts, Path.Combine(root, "plugins", "DotNetTest2")));
+    }
+
     // ------------------------------------------------------------------ reconnecting (M21b, ADR 0054)
 
     private static Task<RemoteConnection> ConnectResumableAsync() =>

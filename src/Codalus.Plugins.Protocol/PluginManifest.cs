@@ -28,6 +28,12 @@ public sealed record PluginManifest
     /// <summary><c>shared</c> (default) or <c>dedicated</c>.</summary>
     public string? Isolation { get; init; }
 
+    /// <summary>
+    /// Where the plugin runs in a remote window (API 0.3.0, M21b, ADR 0057): <c>ui</c> (default) with the window, or
+    /// <c>workspace</c> on the machine the workspace is on, next to its files and tools.
+    /// </summary>
+    public string? RunsOn { get; init; }
+
     public string[]? ActivationEvents { get; init; }
 
     public ManifestContributions? Contributes { get; init; }
