@@ -18,6 +18,38 @@ public sealed partial class TreeToolView : UserControl, IPaneView
         Tree.Tapped += OnTapped;
         Tree.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
         Tree.GotFocus += (_, _) => (DataContext as TreeToolViewModel)?.RefreshActions();
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is TreeToolViewModel vm)
+            {
+                vm.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(TreeToolViewModel.Actions))
+                    {
+                        FillActions(vm.Actions);
+                    }
+                };
+                FillActions(vm.Actions);
+            }
+        };
+    }
+
+    /// <summary>The title commands as toolbar buttons (the panel overflows what doesn't fit into its menu).</summary>
+    private void FillActions(IReadOnlyList<ToolbarActionViewModel> actions)
+    {
+        foreach (var old in ActionBar.Children.OfType<Button>().Where(b => !b.Classes.Contains("overflow")).ToList())
+        {
+            ActionBar.Children.Remove(old);
+        }
+
+        foreach (var action in actions)
+        {
+            var button = new Button { Content = action.Title, Command = action.Command, FontSize = 12 };
+            button.Classes.Add("toolbar");
+            ToolTip.SetTip(button, action.Tooltip);
+            Avalonia.Automation.AutomationProperties.SetName(button, action.Title);
+            ActionBar.Children.Add(button);
+        }
     }
 
     public void FocusPrimary()

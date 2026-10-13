@@ -11,17 +11,17 @@
         <TextBlock Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" Text="{Binding ManifestText}" />
         <Button Grid.Column="1" Classes="link" Content="Open Manifest" Command="{Binding OpenManifestCommand}" IsVisible="{Binding HasManifest}" />
       </Grid>
-      <WrapPanel Orientation="Horizontal">
-        <Button Margin="0,0,6,4" Content="Install Local Tool…" Command="{Binding InstallLocalCommand}" />
-        <Button Margin="0,0,6,4" Content="Install Global Tool…" Command="{Binding InstallGlobalCommand}" />
-        <Button Margin="0,0,6,4" Content="Update" Command="{Binding UpdateCommand}" />
-        <Button Margin="0,0,6,4" Content="Uninstall" Command="{Binding UninstallCommand}" />
-        <Button Margin="0,0,6,4" Content="Restore Local Tools" Command="{Binding RestoreCommand}" />
-        <Button Margin="0,0,6,4" Content="Create Manifest" Command="{Binding CreateManifestCommand}" />
-        <Button Classes="toolbar" Margin="0,0,6,4" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" AutomationProperties.Name="Refresh">
+      <controls:ToolbarPanel>
+        <Button Content="Install Local Tool…" Command="{Binding InstallLocalCommand}" />
+        <Button Content="Install Global Tool…" Command="{Binding InstallGlobalCommand}" />
+        <Button Content="Update" Command="{Binding UpdateCommand}" />
+        <Button Content="Uninstall" Command="{Binding UninstallCommand}" />
+        <Button Content="Restore Local Tools" Command="{Binding RestoreCommand}" />
+        <Button Content="Create Manifest" Command="{Binding CreateManifestCommand}" />
+        <Button Classes="toolbar" Command="{Binding RefreshCommand}" ToolTip.Tip="Refresh" AutomationProperties.Name="Refresh">
           <controls:Icon Kind="refresh" />
         </Button>
-      </WrapPanel>
+      </controls:ToolbarPanel>
       <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsBusy}" />
     </StackPanel>
     <TextBox DockPanel.Dock="Bottom" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="160" Text="{Binding Output}" IsVisible="{Binding HasOutput}"
