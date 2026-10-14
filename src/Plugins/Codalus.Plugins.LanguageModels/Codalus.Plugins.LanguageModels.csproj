@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared by the built-in language model provider plugins (ADR 0062): keys in the OS credential store, streamed HTTP requests and server-sent events. Copied next to each of them.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The plugin host provides the API at runtime, so it is not copied next to the plugins. -->
+    <ProjectReference Include="..\..\Codalus.Plugins.Abstractions\Codalus.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Plugins.OpenAI" />
+    <InternalsVisibleTo Include="Codalus.Plugins.Anthropic" />
+    <InternalsVisibleTo Include="Codalus.Plugins.Tests" />
+  </ItemGroup>
+</Project>

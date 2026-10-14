@@ -328,6 +328,23 @@ public sealed partial class PluginDescription
             events.Add("onHostingProvider:" + provider.Id);
         }
 
+        foreach (var provider in m.Contributes?.LanguageModelProviders ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(provider.Id) || string.IsNullOrWhiteSpace(provider.Label) || !HostingIdPattern().IsMatch(provider.Id))
+            {
+                warnings.Add($"Ignoring language model provider '{provider.Id}': it needs an id (lower case letters, digits and dashes) and a label.");
+                continue;
+            }
+
+            if (m.Entry is null)
+            {
+                warnings.Add($"Language model provider '{provider.Id}' needs plugin code (an entry).");
+                continue;
+            }
+
+            events.Add("onLanguageModelProvider:" + provider.Id);
+        }
+
         ActivationEvents = events;
         State = PluginState.Ready;
     }
@@ -367,7 +384,7 @@ public sealed partial class PluginDescription
     [GeneratedRegex("^[a-z0-9][a-z0-9-]*\\.[a-z0-9][a-z0-9.-]*$")]
     private static partial Regex IdPattern();
 
-    [GeneratedRegex("^(onCommand|onView|onSettingChanged|onHostingProvider):[A-Za-z0-9._/-]+$")]
+    [GeneratedRegex("^(onCommand|onView|onSettingChanged|onHostingProvider|onLanguageModelProvider):[A-Za-z0-9._/-]+$")]
     private static partial Regex ActivationEventPattern();
 
     [GeneratedRegex("^[a-z0-9][a-z0-9-]*$")]

@@ -15,6 +15,11 @@
     <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" />
     <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" />
     <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.GitLab\Codalus.Plugins.GitLab.csproj" />
+    <!-- The language model providers (ADR 0062): tested directly and in the host, against mock servers. -->
+    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.LanguageModels\Codalus.Plugins.LanguageModels.csproj" />
+    <ProjectReference Include="..\..\src\Codalus.Plugins.Testing\Codalus.Plugins.Testing.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.OpenAI\Codalus.Plugins.OpenAI.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.Anthropic\Codalus.Plugins.Anthropic.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />

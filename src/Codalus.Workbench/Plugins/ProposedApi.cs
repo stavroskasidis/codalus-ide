@@ -96,6 +96,17 @@ public interface IHostingConnection
         CancellationToken cancellationToken);
 }
 
+/// <summary>Receives language model providers as their plugins register them (the workbench's <c>LanguageModelService</c>, ADR 0062).</summary>
+public interface ILanguageModelSink
+{
+    void ProviderRegistered(string pluginId, string providerId, IHostingConnection connection);
+
+    void ProviderUnregistered(string providerId);
+
+    /// <summary>A part of a running chat (<c>languageModels/chatPart</c>).</summary>
+    void ChatPart(ChatPartParams part);
+}
+
 /// <summary>Requests to a test controller's plugin.</summary>
 public interface ITestControllerConnection
 {

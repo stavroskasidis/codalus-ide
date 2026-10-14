@@ -48,6 +48,8 @@
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" PluginId="codalus.github" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" PluginId="codalus.azuredevops" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitLab\Codalus.Plugins.GitLab.csproj" PluginId="codalus.gitlab" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.OpenAI\Codalus.Plugins.OpenAI.csproj" PluginId="codalus.openai" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Anthropic\Codalus.Plugins.Anthropic.csproj" PluginId="codalus.anthropic" />
     <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
   </ItemGroup>
 
