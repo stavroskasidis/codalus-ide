@@ -17,6 +17,7 @@
     <Project Path="src/Codalus.Data.Protocol/Codalus.Data.Protocol.csproj" />
     <Project Path="src/Codalus.Debugging/Codalus.Debugging.csproj" />
     <Project Path="src/Codalus.Debugging.Host/Codalus.Debugging.Host.csproj" />
+    <Project Path="src/Codalus.Debugging.Mono/Codalus.Debugging.Mono.csproj" />
     <Project Path="src/Codalus.Debugging.StartupHook/Codalus.Debugging.StartupHook.csproj" />
     <Project Path="src/Codalus.Previewer.Agent/Codalus.Previewer.Agent.csproj" />
     <Project Path="src/Codalus.Diagnostics.BenchEvents/Codalus.Diagnostics.BenchEvents.csproj" />
@@ -55,6 +56,12 @@
     <Project Path="src/Plugins/Codalus.Plugins.Hosting/Codalus.Plugins.Hosting.csproj" />
     <Project Path="src/Plugins/Codalus.Plugins.Templates/Codalus.Plugins.Templates.csproj" />
     <Project Path="src/Plugins/Codalus.Plugins.Welcome/Codalus.Plugins.Welcome.csproj" />
+  </Folder>
+  <Folder Name="/src/ThirdParty/" />
+  <Folder Name="/src/ThirdParty/debugger-libs/">
+    <Project Path="src/ThirdParty/debugger-libs/Mono.Debugger.Soft/Mono.Debugger.Soft.csproj" />
+    <Project Path="src/ThirdParty/debugger-libs/Mono.Debugging.Soft/Mono.Debugging.Soft.csproj" />
+    <Project Path="src/ThirdParty/debugger-libs/Mono.Debugging/Mono.Debugging.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Codalus.Benchmarks.Harness.Tests/Codalus.Benchmarks.Harness.Tests.csproj" />

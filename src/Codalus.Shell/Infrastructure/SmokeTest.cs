@@ -443,8 +443,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Run("build.buildSolution");
 
             // While it runs, the status bar shows it as a task with a progress bar and cancel (M22a); the site shows it.
-            await WaitAsync(() => shell.StatusBar.HasProgress || (shell.Builds.LastBuild is { } done && done != before), "the build shows in the status bar", 60).ConfigureAwait(true);
-            if (shell.StatusBar.HasProgress)
+            // Another task (a project reloading after the rename's save) may hold the status bar first: wait for the build's.
+            bool Building() => shell.StatusBar.HasProgress && shell.StatusBar.DisplayMessage.StartsWith("Building ", StringComparison.Ordinal);
+            await WaitAsync(() => Building() || (shell.Builds.LastBuild is { } done && done != before), "the build shows in the status bar", 60).ConfigureAwait(true);
+            if (Building())
             {
                 Check(shell.StatusBar.DisplayMessage.StartsWith("Building ", StringComparison.Ordinal) && shell.StatusBar.CanCancelProgress, $"the status bar says what's building and offers cancel ({shell.StatusBar.DisplayMessage})");
                 Screenshot("smoke-test-progress.png");

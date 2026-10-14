@@ -22,6 +22,9 @@ public sealed partial class ShellHost
 {
     public const string DevicesWindow = "mobile.devices";
 
+    /// <summary>Set to 1, F5 on a mobile app debugs it with the Mono debugger (M20b, experimental).</summary>
+    public const string MobileDebugVariable = "CODALUS_MOBILE_DEBUG";
+
     private AndroidDevices? _android;
     private IReadOnlyList<MobileDevice> _devices = [];
     private string? _deviceId;
@@ -151,8 +154,10 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (debug)
+        if (debug && Environment.GetEnvironmentVariable(MobileDebugVariable) != "1")
         {
+            // The Mono debugger connects to the app and hits breakpoints, but the runtime's agent isn't dependable yet
+            // (M20b's checkpoint): it stays behind this variable until it is.
             Workbench.Notifications.Info("Debugging .NET MAUI apps on a device isn't available yet: Start Without Debugging (Ctrl+F5) runs it.");
             return;
         }
@@ -176,16 +181,31 @@ public sealed partial class ShellHost
 
         var channel = Workbench.Output.GetOrCreate("codalus.run." + info.Name, "Run: " + info.Name);
         channel.Clear();
-        var runner = new AndroidRunner(Android, Builds, Runs, ProjectManagement);
+        var runner = new AndroidRunner(Android, Builds, Runs, ProjectManagement, Solutions);
         var task = Workbench.Progress.Begin($"Starting {info.Name} on {device.Label}", "mobile");
         try
         {
-            var program = await runner.RunAsync(info, device, line =>
+            void Log(string line)
             {
                 channel.AppendLine(line);
                 Ui.Post(() => StatusBar.ShowMessage(line, TimeSpan.FromSeconds(5)));
-            }, CancellationToken.None).ConfigureAwait(true);
-            if (program is null)
+            }
+
+            bool started;
+            if (debug)
+            {
+                // The Mono adapter on the device's runtime (M20b, ADR 0065).
+                Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
+                Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
+                Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
+                started = await runner.DebugAsync(info, device, Debugger, Log, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                started = await runner.RunAsync(info, device, Log, CancellationToken.None).ConfigureAwait(true) is not null;
+            }
+
+            if (!started)
             {
                 StatusBar.ShowMessage(Localizer.Get("msg.build.theBuildFailedSoTheProgram", "The build failed, so the program was not started."), TimeSpan.FromSeconds(6));
             }

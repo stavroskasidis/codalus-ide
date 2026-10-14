@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- mono/debugger-libs (MIT), the Mono Soft Debugger's wire protocol client; see ../README.md. -->
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);MONO_DATACONVERTER_STATIC_METHODS;ENABLE_CECIL</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" />
+  </ItemGroup>
+</Project>

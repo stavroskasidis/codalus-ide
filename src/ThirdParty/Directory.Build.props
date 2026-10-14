@@ -1,0 +1,18 @@
+<Project>
+  <!-- Third-party sources, kept as they are upstream: the repository's settings, without its analyzers and warning rules. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+  <PropertyGroup>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <RunAnalyzers>false</RunAnalyzers>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <AnalysisLevel>none</AnalysisLevel>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- Upstream code names variables `field`, a keyword in C# 14 property accessors. -->
+    <LangVersion>12</LangVersion>
+    <WarningLevel>0</WarningLevel>
+    <NoWarn>$(NoWarn);CS0168;CS0169;CS0219;CS0414;CS0618;CS0649;CS0659;CS0661;CS0672;CS1570;CS1572;CS1573;CS1574;CS1587;CS1591;CS8981;SYSLIB0011;SYSLIB0012;SYSLIB0051</NoWarn>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

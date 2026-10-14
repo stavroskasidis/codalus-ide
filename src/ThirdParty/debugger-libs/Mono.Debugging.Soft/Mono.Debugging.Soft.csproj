@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- mono/debugger-libs (MIT), Mono.Debugging's backend for the Mono Soft Debugger; see ../README.md. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Mono.Debugging\Mono.Debugging.csproj" />
+    <ProjectReference Include="..\Mono.Debugger.Soft\Mono.Debugger.Soft.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Mono.Cecil" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Newtonsoft.Json" />
+    <PackageReference Include="Mono.Unix" />
+  </ItemGroup>
+</Project>

@@ -36,4 +36,6 @@ Create emulators with Android Studio's Device Manager (or the SDK's `avdmanager`
 
 **Stop** stops the app on the device. A build error stops the start, with the errors in the Error List as for any build.
 
-Starting with the debugger (F5) isn't available for device apps yet.
+## Debugging
+
+Starting with the debugger (F5) isn't available for device apps yet: Start Without Debugging (Ctrl+F5) runs them. MAUI apps on Android run on the Mono runtime, which needs its own debugger. Codalus IDE has one, but it isn't dependable on Android yet.

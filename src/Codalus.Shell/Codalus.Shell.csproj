@@ -38,6 +38,7 @@
     <HelperProcess Include="..\Codalus.Debugging.Host\Codalus.Debugging.Host.csproj" Folder="debughost" />
     <HelperProcess Include="..\Codalus.TextTemplating.Host\Codalus.TextTemplating.Host.csproj" Folder="t4host" />
     <HelperProcess Include="..\Codalus.Diagnostics.Host\Codalus.Diagnostics.Host.csproj" Folder="diaghost" />
+    <HelperProcess Include="..\Codalus.Debugging.Mono\Codalus.Debugging.Mono.csproj" Folder="monodbg" />
     <ProjectReference Include="@(HelperProcess)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
     <!-- The remote development server (M21, ADR 0050): remote/server/ (framework-dependent, any OS) and remote/<rid>/ (self-contained). -->
     <RemoteServer Include="..\Codalus.Remote.Server\Codalus.Remote.Server.csproj" />

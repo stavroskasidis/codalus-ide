@@ -54,10 +54,20 @@ Last verified: 2026-10-12 (M19a: no new shipped packages. The XAML language serv
 | Microsoft.SqlServer.TransactSql.ScriptDom | 180.117.0 | MIT | data host (the SQL language server: T-SQL parsing and formatting) |
 | Microsoft.Data.SqlClient.SNI.runtime (resolved, excluded with `ExcludeAssets="all"`, not shipped) | 7.1.0 | Microsoft proprietary | none |
 | KernelTraceControl.dll, KernelTraceControl.Win61.dll, msdia140.dll (native binaries inside the TraceEvent package; its build assets are excluded, so they are not copied or shipped) | with TraceEvent 3.2.8 | Microsoft proprietary (Windows Performance Toolkit, Visual Studio DIA SDK redistributables) | none |
+| Mono.Cecil | 0.11.6 | MIT | Mono debug adapter (M20b; the vendored debugger-libs) |
+| Newtonsoft.Json | 13.0.4 | MIT | Mono debug adapter (the vendored debugger-libs read Source Link with it) |
+| Mono.Unix | 7.1.0-final.1.21458.1 | MIT | Mono debug adapter (the vendored debugger-libs resolve symbolic links with it) |
 | System.Drawing.Common | 10.0.12 | MIT | benchmark harness (Windows probes) |
 | Vortice.DXGI, Vortice.Direct3D11, Vortice.DirectX, SharpGen.Runtime(.COM) | 3.8.3 / 2.4.2-beta | MIT | benchmark harness (Desktop Duplication) |
 
 All 181 resolved NuGet package versions (163 packages, direct and transitive) were checked: 159 are MIT (four of them link the .NET (corefx) or .NET Standard license, which is MIT), 19 are Apache-2.0 (the NuGet client libraries, compile-time only, SQLitePCLRaw, and test-only xUnit, see below), 1 is BSD-3-Clause (ANGLE), 1 is the PostgreSQL License (Npgsql), and 1 is proprietary and excluded from the build (the SqlClient SNI runtime, above).
+
+## Mono debugger libraries (source, vendored in `src/ThirdParty/debugger-libs`, M20b)
+
+| Component | Version | License | Used by |
+|---|---|---|---|
+| Mono.Debugger.Soft, Mono.Debugging, Mono.Debugging.Soft from JaneySprings/Mono.Debugger, the maintained fork of mono/debugger-libs (Copyright Novell, Inc. and Xamarin Inc.) | commit 9edc6120 | MIT | the Mono debug adapter, for apps on the Mono runtime (.NET for Android and iOS). The repository's CorApi samples under Microsoft's EULA aren't taken. Our changes are listed in the folder's README. |
+| vscode-mono-debug (Microsoft): the adapter's mapping of DAP onto Mono.Debugging follows its MonoDebugSession | n/a (design reference, no code copied) | MIT | the Mono debug adapter |
 
 ## Coverlet (bundled with the .NET test plugin, ADR 0011)
 

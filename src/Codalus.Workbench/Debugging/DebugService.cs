@@ -530,6 +530,24 @@ public sealed class DebugService : IAsyncDisposable
         OnProcess(processId);
     }
 
+    /// <summary>
+    /// Attaches the Mono adapter (M20b, ADR 0065) to an app's debugger agent: an app on an Android device or emulator.
+    /// <paramref name="ended"/> runs when the session ends (stopping the app, removing the port forward).
+    /// </summary>
+    public async Task AttachMonoAsync(DebugAdapterStartInfo adapter, MonoAttachArguments arguments, string name, Func<Task>? ended, CancellationToken cancellationToken)
+    {
+        await StartAsync(
+            ct => DebugAdapter.StartAsync(adapter, ct),
+            a => a.AttachAsync(arguments with { JustMyCode = JustMyCode }, DapJsonContext.Default.MonoAttachArguments, cancellationToken),
+            attached: true,
+            [new DebugProcess(name, null, DebugProcess.Attached, arguments.Name)],
+            cancellationToken).ConfigureAwait(false);
+        if (ended is not null)
+        {
+            _ = _ended.Task.ContinueWith(_ => ended(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+        }
+    }
+
     private static string ProcessName(int processId)
     {
         try

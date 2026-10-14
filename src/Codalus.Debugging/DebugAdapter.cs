@@ -268,6 +268,10 @@ public sealed class DebugAdapter : IDebugAdapter
     public Task AttachAsync(AttachArguments arguments, CancellationToken cancellationToken) =>
         _connection.RequestAsync("attach", arguments, Json.AttachArguments, cancellationToken);
 
+    /// <summary>Attaches with arguments of another adapter's shape (the Mono adapter's, M20b).</summary>
+    public Task AttachAsync<T>(T arguments, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken) =>
+        _connection.RequestAsync("attach", arguments, info, cancellationToken);
+
     public Task ConfigurationDoneAsync(CancellationToken cancellationToken) =>
         _connection.RequestAsync("configurationDone", new EmptyArguments(), Json.EmptyArguments, cancellationToken);
 

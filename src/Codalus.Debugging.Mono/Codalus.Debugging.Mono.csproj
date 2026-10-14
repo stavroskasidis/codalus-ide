@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>codalus-monodbg</AssemblyName>
+    <RootNamespace>Codalus.Debugging.Mono</RootNamespace>
+    <Description>The Mono debug adapter (M20b, ADR 0065): a Debug Adapter Protocol server on its stdio over the Mono Soft Debugger (mono/debugger-libs), for apps on the Mono runtime (.NET for Android and iOS).</Description>
+    <!-- On .NET 10 when installed, else the next newer .NET (ADR 0025). -->
+    <RollForward>Major</RollForward>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ThirdParty\debugger-libs\Mono.Debugging.Soft\Mono.Debugging.Soft.csproj" />
+    <ProjectReference Include="..\ThirdParty\debugger-libs\Mono.Debugging\Mono.Debugging.csproj" />
+    <ProjectReference Include="..\ThirdParty\debugger-libs\Mono.Debugger.Soft\Mono.Debugger.Soft.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Debugging.Tests" />
+  </ItemGroup>
+</Project>

@@ -71,6 +71,13 @@ public sealed record LaunchArguments(
 public sealed record AttachArguments(int ProcessId, bool JustMyCode = true, string Name = ".NET Attach", string Type = "coreclr", string Request = "attach", bool EnableStepFiltering = true);
 
 /// <summary>
+/// The Mono adapter's attach (M20b, ADR 0065): the app's debugger agent at <see cref="Address"/>:<see cref="Port"/> (an
+/// Android app through <c>adb forward</c>, greeted with <c>start debugger: sdb</c>), retried for
+/// <see cref="ConnectTimeout"/> seconds; <see cref="Assemblies"/> is the build output with the user's PDBs.
+/// </summary>
+public sealed record MonoAttachArguments(int Port, string Address = "127.0.0.1", string Name = "Mono Attach", bool Greet = true, string? Assemblies = null, bool JustMyCode = true, int ConnectTimeout = 60, string Type = "mono", string Request = "attach");
+
+/// <summary>
 /// The <c>runInTerminal</c> reverse request (M14c): start <see cref="Args"/> (the program first) in a terminal.
 /// <see cref="Kind"/> is <c>integrated</c> or <c>external</c>; an <see cref="Env"/> value of null unsets the variable.
 /// </summary>
@@ -226,6 +233,7 @@ public static class DapEvents
 [JsonSerializable(typeof(Capabilities))]
 [JsonSerializable(typeof(LaunchArguments))]
 [JsonSerializable(typeof(AttachArguments))]
+[JsonSerializable(typeof(MonoAttachArguments))]
 [JsonSerializable(typeof(RunInTerminalRequestArguments))]
 [JsonSerializable(typeof(RunInTerminalResponse))]
 [JsonSerializable(typeof(BrowserLaunchArguments))]
