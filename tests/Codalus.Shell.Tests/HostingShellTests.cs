@@ -308,8 +308,9 @@ public sealed class HostingShellTests
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("gitRepositories"));
 
         f.Shell.GitChanges.SelectedRepository = f.Shell.GitChanges.Repositories.Single(r => r.Name == "Greetings");
-        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "trunk" });
-        Assert.Equal("Greetings", f.Shell.GitChanges.SelectedRepository?.Name);
+        // Until the switch ends: the status turns to trunk before it does, and a discovery that the git init above
+        // scheduled can land while the repository reopens (Root null) and clear the picker's choice meanwhile.
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "trunk" } && f.Shell.GitChanges.SelectedRepository?.Name == "Greetings");
         var greeter = Path.Combine(greetings, "Greeter.cs");
         Assert.Equal(Path.GetFullPath(greetings), f.Shell.Git.RepositoryFor(greeter));
         Assert.NotNull(await f.Shell.Git.ShowInRepositoryAsync(Path.Combine(folder, "README.md"), "HEAD"));
