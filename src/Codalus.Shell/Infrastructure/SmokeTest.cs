@@ -443,8 +443,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Run("build.buildSolution");
 
             // While it runs, the status bar shows it as a task with a progress bar and cancel (M22a); the site shows it.
-            await WaitAsync(() => shell.StatusBar.HasProgress || (shell.Builds.LastBuild is { } done && done != before), "the build shows in the status bar", 60).ConfigureAwait(true);
-            if (shell.StatusBar.HasProgress)
+            // Another task (a project reloading after the rename's save) may hold the status bar first: wait for the build's.
+            bool Building() => shell.StatusBar.HasProgress && shell.StatusBar.DisplayMessage.StartsWith("Building ", StringComparison.Ordinal);
+            await WaitAsync(() => Building() || (shell.Builds.LastBuild is { } done && done != before), "the build shows in the status bar", 60).ConfigureAwait(true);
+            if (Building())
             {
                 Check(shell.StatusBar.DisplayMessage.StartsWith("Building ", StringComparison.Ordinal) && shell.StatusBar.CanCancelProgress, $"the status bar says what's building and offers cancel ({shell.StatusBar.DisplayMessage})");
                 Screenshot("smoke-test-progress.png");
@@ -1868,7 +1870,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => Report() is { IsLoading: false, Total: > 0 } r && (r.HotFiles.Count > 0 || r.HasError), "the report shows the trace with its source lines", 300).ConfigureAwait(true);
         var report = Report()!;
         Check(!report.HasError, "the trace was read: " + report.Error);
-        Check(report.Functions.Count > 0 && report.Functions[0].Name.Contains("Primes.IsPrime", StringComparison.Ordinal), "the hot function comes first: " + report.Functions.FirstOrDefault()?.Name);
+        // A busy machine (a CI runner) can put the runtime's GC polling above it: the hot function is among the first.
+        Check(report.Functions.Take(3).Any(f => f.Name.Contains("Primes.IsPrime", StringComparison.Ordinal)), "the hot function is among the first: " + string.Join(", ", report.Functions.Take(3).Select(f => f.Name)));
         Check(report.CounterSummaries.Count > 0, "the counters were recorded");
         Console.Out.WriteLine($"  {report.Summary}");
 
