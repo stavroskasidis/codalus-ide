@@ -205,10 +205,8 @@ jobs:
           - { os: ubuntu-24.04-arm, rid: linux-arm64 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
-    env:
-      VERSION: ${{ needs.plan.outputs.version }}
-      KIND: ${{ needs.plan.outputs.kind }}
-      PREVIOUS: ${{ needs.plan.outputs.previous }}
+    # The version and kind go into each command, never the job's environment: MSBuild reads environment variables as
+    # properties, so a VERSION there would stamp every project the smoke test builds (Plain.1.0.0.nupkg wasn't).
     steps:
       - uses: actions/checkout@v4
         with:
@@ -226,17 +224,17 @@ jobs:
         if: runner.os == 'macOS'
         run: command -v zstd || brew install zstd
       - name: The previous release of this channel (Velopack delta packages)
-        if: env.PREVIOUS != ''
+        if: needs.plan.outputs.previous != ''
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          channel="${{ matrix.rid }}-$KIND"
-          gh release download "$PREVIOUS" -D previous-release -p "releases.$channel.json" -p "*-$channel-full.nupkg" \
-            || echo "No $channel files in $PREVIOUS: no delta package this time."
+          channel="${{ matrix.rid }}-${{ needs.plan.outputs.kind }}"
+          gh release download "${{ needs.plan.outputs.previous }}" -D previous-release -p "releases.$channel.json" -p "*-$channel-full.nupkg" \
+            || echo "No $channel files in ${{ needs.plan.outputs.previous }}: no delta package this time."
       - name: Release notes
         shell: bash
-        run: dotnet run --project eng/Codalus.Release -- notes "$KIND" "$VERSION" --repo "$GITHUB_REPOSITORY" > release-notes.md
+        run: dotnet run --project eng/Codalus.Release -- notes "${{ needs.plan.outputs.kind }}" "${{ needs.plan.outputs.version }}" --repo "$GITHUB_REPOSITORY" > release-notes.md
       - name: Package
         shell: bash
         env:
@@ -248,7 +246,7 @@ jobs:
           CODALUS_CODESIGN_IDENTITY: ${{ secrets.CODALUS_CODESIGN_IDENTITY }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
-          bash eng/package.sh "$VERSION" "$KIND"
+          bash eng/package.sh "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.kind }}"
       - name: A Chromium browser (Linux arm64)
         # Browser debugging (blazor.wasmDebug, blazor.compoundDebug) needs one. The x64 runners have Chrome; there's no
         # Chrome or Chrome for Testing for Linux arm64, and Ubuntu's chromium is a snap, so Playwright's build (pinned).
