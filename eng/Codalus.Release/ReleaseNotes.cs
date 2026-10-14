@@ -152,13 +152,39 @@ internal static class ReleaseNotesSource
         var tag = ReleaseVersion.Tag(version);
         since ??= PreviousTag(git, kind, to, excluding: tag);
         var range = since is null ? to : $"{since}..{to}";
-        var commits = git.Lines("log", "--reverse", "--no-merges", "--format=%h%x1f%s", range)
-            .Select(line => line.Split('\u001f', 2)).Select(parts => new Commit(parts[0], parts[1])).ToList();
+        var released = since is null ? [] : ReleasedPatches(git, kind, since);
+        var patches = released.Count == 0 ? [] : PatchIds(git, range);
+        var commits = git.Lines("log", "--reverse", "--no-merges", "--format=%H%x1f%h%x1f%s", range)
+            .Select(line => line.Split('\u001f', 3))
+            .Where(parts => !(patches.TryGetValue(parts[0], out var patch) && released.Contains(patch)))
+            .Select(parts => new Commit(parts[1], parts[2])).ToList();
         var checkpoints = git.Lines("ls-tree", "--name-only", to, "docs/checkpoints/").Select(Path.GetFileName).OfType<string>()
             .Where(name => name.EndsWith(".md", StringComparison.Ordinal)).ToList();
         var changelog = changelogFile is not null && File.Exists(Path.Combine(git.Repository, changelogFile))
             ? File.ReadAllText(Path.Combine(git.Repository, changelogFile))
             : null;
         return new ReleaseNotesInput(version, repository, tag, since, commits, checkpoints, changelog);
+    }
+
+    /// <summary>
+    /// The patches the previous release (<paramref name="since"/>) brought, since the release before it. A fix made on
+    /// <c>master</c> for a hotfix and copied onto <c>develop</c> has another hash there, so the copy isn't in the
+    /// previous release's history, but the change is: the next release's notes leave it out.
+    /// </summary>
+    private static HashSet<string> ReleasedPatches(Git git, ReleaseKind kind, string since)
+    {
+        var older = PreviousTag(git, kind, since, excluding: since);
+        return [.. PatchIds(git, older is null ? since : $"{older}..{since}").Values];
+    }
+
+    /// <summary>Each commit's stable patch id (<c>git patch-id --stable</c>), by full hash; commits without a diff have none.</summary>
+    private static Dictionary<string, string> PatchIds(Git git, string range)
+    {
+        var log = git.Run("log", "--no-merges", "-p", "--no-color", "--no-ext-diff", "--format=commit %H", range);
+        return git.RunWithInput(log, "patch-id", "--stable")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.Split(' ', 2))
+            .Where(parts => parts.Length == 2)
+            .ToDictionary(parts => parts[1], parts => parts[0]);
     }
 }
