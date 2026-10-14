@@ -383,17 +383,28 @@ public sealed class ScaffoldViewModel : ObservableObject
 /// <summary>A reference in the list: what it is, its document, and how its code is generated.</summary>
 public sealed record ServiceReferenceRow(ServiceReferenceInfo Info)
 {
-    public string Kind => Info.Kind == ServiceReferenceKinds.OpenApi ? "OpenAPI" : "gRPC";
+    public bool IsWcf => Info.Kind == ServiceReferenceKinds.Wcf;
 
-    public string Name => Path.GetFileName(Info.Path);
+    public string Kind => Info.Kind switch
+    {
+        ServiceReferenceKinds.OpenApi => "OpenAPI",
+        ServiceReferenceKinds.Wcf => "WCF",
+        _ => "gRPC",
+    };
 
-    public string Icon => Info.Kind == ServiceReferenceKinds.OpenApi ? "cloud" : "link";
+    /// <summary>A WCF reference is its folder's name; the others are their documents'.</summary>
+    public string Name => IsWcf ? Info.ClassName ?? Info.Include : Path.GetFileName(Info.Path);
 
-    public string Detail => Info.Kind == ServiceReferenceKinds.OpenApi
-        ? $"{Info.CodeGenerator ?? "NSwagCSharp"}{(Info.ClassName is { } name ? ", class " + name : string.Empty)}{(Info.Namespace is { } ns ? ", namespace " + ns : string.Empty)}"
-        : $"Services: {Info.GrpcServices ?? GrpcServiceKinds.Both}{(Info.Access is { } access ? ", " + access.ToLowerInvariant() : string.Empty)}";
+    public string Icon => Info.Kind == ServiceReferenceKinds.Grpc ? "link" : "cloud";
 
-    public string Source => Info.SourceUrl ?? Info.Include;
+    public string Detail => Info.Kind switch
+    {
+        ServiceReferenceKinds.OpenApi => $"{Info.CodeGenerator ?? "NSwagCSharp"}{(Info.ClassName is { } name ? ", class " + name : string.Empty)}{(Info.Namespace is { } ns ? ", namespace " + ns : string.Empty)}",
+        ServiceReferenceKinds.Wcf => $"dotnet-svcutil{(Info.Namespace is { } wcfNs ? ", namespace " + wcfNs : string.Empty)}, {ServiceReferencesViewModel.OperationsLabel(Info.Wcf?.Operations).ToLowerInvariant()}{(Info.Wcf?.Internal == true ? ", internal" : string.Empty)}",
+        _ => $"Services: {Info.GrpcServices ?? GrpcServiceKinds.Both}{(Info.Access is { } access ? ", " + access.ToLowerInvariant() : string.Empty)}",
+    };
+
+    public string Source => IsWcf ? Info.Input ?? Info.Include : Info.SourceUrl ?? Info.Include;
 }
 
 /// <summary>
@@ -414,6 +425,13 @@ public sealed class ServiceReferencesViewModel : ObservableObject
     private string _editClassName = string.Empty;
     private string _editOptions = string.Empty;
     private string _editServices = GrpcServiceKinds.Client;
+    private string _wcfName = "ServiceReference";
+    private string _wcfOperations = OperationsLabel(WcfOperationKinds.Async);
+    private string _wcfCollectionType = ArraysLabel;
+    private bool _wcfInternal;
+    private bool _wcfReuseTypes = true;
+    private string _editOperations = OperationsLabel(WcfOperationKinds.Async);
+    private bool _editInternal;
     private string _packages = string.Empty;
     private bool _isBusy;
     private string? _error;
@@ -430,6 +448,7 @@ public sealed class ServiceReferencesViewModel : ObservableObject
         RemoveCommand = new RelayCommand(() => _ = RunAsync("remove"));
         OpenCommand = new RelayCommand(() => _ = RunAsync("open"));
         ReloadCommand = new RelayCommand(() => _ = RunAsync("reload"));
+        TestCommand = new RelayCommand(() => _ = RunAsync("test"));
     }
 
     public string Project { get; }
@@ -451,7 +470,11 @@ public sealed class ServiceReferencesViewModel : ObservableObject
                 EditClassName = value?.Info.ClassName ?? string.Empty;
                 EditOptions = value?.Info.Options ?? string.Empty;
                 EditServices = value?.Info.GrpcServices ?? GrpcServiceKinds.Both;
+                EditOperations = OperationsLabel(value?.Info.Wcf?.Operations);
+                EditInternal = value?.Info.Wcf?.Internal == true;
                 OnPropertyChanged(nameof(HasSelection));
+                OnPropertyChanged(nameof(SelectedIsWcf));
+                OnPropertyChanged(nameof(SelectedHasNamespace));
                 OnPropertyChanged(nameof(SelectedIsOpenApi));
                 OnPropertyChanged(nameof(SelectedIsGrpc));
                 OnPropertyChanged(nameof(CanRefresh));
@@ -465,21 +488,28 @@ public sealed class ServiceReferencesViewModel : ObservableObject
 
     public bool SelectedIsGrpc => _selected?.Info.Kind == ServiceReferenceKinds.Grpc;
 
-    public bool CanRefresh => _selected?.Info.SourceUrl is not null;
+    /// <summary>A WCF reference is generated again from its metadata; the others download their documents again.</summary>
+    public bool CanRefresh => _selected?.Info.SourceUrl is not null || SelectedIsWcf;
 
-    public IReadOnlyList<string> Kinds { get; } = ["OpenAPI", "gRPC"];
+    public bool SelectedIsWcf => _selected?.Info.Kind == ServiceReferenceKinds.Wcf;
+
+    public bool SelectedHasNamespace => SelectedIsOpenApi || SelectedIsWcf;
+
+    public IReadOnlyList<string> Kinds { get; } = ["OpenAPI", "gRPC", "WCF"];
 
     public string KindLabel
     {
-        get => _kind == ServiceReferenceKinds.OpenApi ? "OpenAPI" : "gRPC";
+        get => _kind switch { ServiceReferenceKinds.Grpc => "gRPC", ServiceReferenceKinds.Wcf => "WCF", _ => "OpenAPI" };
         set
         {
-            var kind = value == "gRPC" ? ServiceReferenceKinds.Grpc : ServiceReferenceKinds.OpenApi;
+            var kind = value switch { "gRPC" => ServiceReferenceKinds.Grpc, "WCF" => ServiceReferenceKinds.Wcf, _ => ServiceReferenceKinds.OpenApi };
             if (SetField(ref _kind, kind, nameof(Kind)))
             {
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsOpenApi));
                 OnPropertyChanged(nameof(IsGrpc));
+                OnPropertyChanged(nameof(IsWcf));
+                OnPropertyChanged(nameof(HasNamespace));
             }
         }
     }
@@ -489,6 +519,98 @@ public sealed class ServiceReferencesViewModel : ObservableObject
     public bool IsOpenApi => _kind == ServiceReferenceKinds.OpenApi;
 
     public bool IsGrpc => _kind == ServiceReferenceKinds.Grpc;
+
+    /// <summary>A WCF client generated by dotnet-svcutil (M42).</summary>
+    public bool IsWcf => _kind == ServiceReferenceKinds.Wcf;
+
+    public bool HasNamespace => IsOpenApi || IsWcf;
+
+    // ------------------------------------------------------------------ WCF (M42)
+
+    private const string ArraysLabel = "Arrays";
+
+    /// <summary>The choices of the generated operations, as labels.</summary>
+    public IReadOnlyList<string> OperationChoices { get; } =
+        [OperationsLabel(WcfOperationKinds.Async), OperationsLabel(WcfOperationKinds.Both), OperationsLabel(WcfOperationKinds.Sync)];
+
+    public static string OperationsLabel(string? kind) => kind switch
+    {
+        WcfOperationKinds.Both => "Synchronous and asynchronous operations",
+        WcfOperationKinds.Sync => "Synchronous operations",
+        _ => "Asynchronous operations",
+    };
+
+    private static string OperationsKind(string label) =>
+        label == OperationsLabel(WcfOperationKinds.Both) ? WcfOperationKinds.Both : label == OperationsLabel(WcfOperationKinds.Sync) ? WcfOperationKinds.Sync : WcfOperationKinds.Async;
+
+    /// <summary>The collection types Visual Studio offers for the generated data contracts.</summary>
+    public IReadOnlyList<string> CollectionTypes { get; } =
+    [
+        ArraysLabel, "System.Collections.Generic.List`1", "System.Collections.ObjectModel.ObservableCollection`1",
+        "System.Collections.ObjectModel.Collection`1", "System.Collections.Generic.LinkedList`1",
+    ];
+
+    /// <summary>The new reference's name: its folder under Connected Services and its namespace's last part.</summary>
+    public string WcfName
+    {
+        get => _wcfName;
+        set => SetField(ref _wcfName, value ?? string.Empty);
+    }
+
+    public string WcfOperations
+    {
+        get => _wcfOperations;
+        set => SetField(ref _wcfOperations, value ?? OperationsLabel(WcfOperationKinds.Async));
+    }
+
+    public string WcfCollectionType
+    {
+        get => _wcfCollectionType;
+        set => SetField(ref _wcfCollectionType, value ?? ArraysLabel);
+    }
+
+    public bool WcfInternal
+    {
+        get => _wcfInternal;
+        set => SetField(ref _wcfInternal, value);
+    }
+
+    /// <summary>Reuse the types of the project's references instead of generating them.</summary>
+    public bool WcfReuseTypes
+    {
+        get => _wcfReuseTypes;
+        set => SetField(ref _wcfReuseTypes, value);
+    }
+
+    public string EditOperations
+    {
+        get => _editOperations;
+        set => SetField(ref _editOperations, value ?? OperationsLabel(WcfOperationKinds.Async));
+    }
+
+    public bool EditInternal
+    {
+        get => _editInternal;
+        set => SetField(ref _editInternal, value);
+    }
+
+    /// <summary>The new WCF reference, from the form.</summary>
+    public WcfReferenceParams WcfRequest() => new(
+        Project,
+        WcfName.Trim(),
+        Source.Trim(),
+        string.IsNullOrWhiteSpace(Namespace) ? null : Namespace.Trim(),
+        new WcfOptions(OperationsKind(WcfOperations), WcfCollectionType == ArraysLabel ? null : WcfCollectionType, WcfInternal, ReuseTypes: WcfReuseTypes));
+
+    /// <summary>The selected WCF reference with the edited namespace and options, to generate again.</summary>
+    public WcfReferenceParams? WcfEdit() => _selected?.Info is { Kind: ServiceReferenceKinds.Wcf, ClassName: { } name } info
+        ? new WcfReferenceParams(
+            Project,
+            name,
+            null,
+            string.IsNullOrWhiteSpace(EditNamespace) ? null : EditNamespace.Trim(),
+            (info.Wcf ?? new WcfOptions()) with { Operations = OperationsKind(EditOperations), Internal = EditInternal })
+        : null;
 
     /// <summary>A file path, or an http(s) URL to download the document from.</summary>
     public string Source
@@ -602,6 +724,9 @@ public sealed class ServiceReferencesViewModel : ObservableObject
 
     public ICommand OpenCommand { get; }
 
+    /// <summary>Opens the WCF Test Client on the selected WCF reference's metadata.</summary>
+    public ICommand TestCommand { get; }
+
     public ICommand ReloadCommand { get; }
 
     public void SetReferences(ServiceReferencesResult result)
@@ -625,7 +750,9 @@ public sealed class ServiceReferencesViewModel : ObservableObject
     {
         if (action == "add" && Source.Trim().Length == 0)
         {
-            Error = "Choose the document: a file, or the URL of an OpenAPI document or a .proto file.";
+            Error = IsWcf
+                ? "Choose the service's metadata: its address (or a ?wsdl address), or a WSDL file."
+                : "Choose the document: a file, or the URL of an OpenAPI document or a .proto file.";
             return;
         }
 

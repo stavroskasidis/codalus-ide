@@ -25,24 +25,37 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
         return Task.CompletedTask;
     }
 
-    /// <summary>The Avalonia project templates' package (M19b), offered in New Project when none is installed.</summary>
-    private const string AvaloniaTemplates = "Avalonia.Templates";
+    /// <summary>
+    /// Template packages offered in New Project while none of their templates is installed: Avalonia's (M19b) and
+    /// CoreWCF's services (M42). Each is the short names' prefix, the package and what the offer says.
+    /// </summary>
+    private static readonly (string Prefix, string Package, string Label)[] s_offeredPackages =
+    [
+        ("avalonia", "Avalonia.Templates", "Install the Avalonia templates…"),
+        ("corewcf", "CoreWCF.Templates", "Install the CoreWCF service templates…"),
+    ];
+
+    /// <summary>The tag of an offer to install a template package.</summary>
+    private sealed record InstallOffer(string Package);
 
     private async Task<object?> NewProjectAsync(CancellationToken cancellationToken)
     {
         _templates ??= TemplateCatalog.LoadAsync(Context.Log, CancellationToken.None);
         var templates = await _templates.ConfigureAwait(false);
         var items = templates.Select(t => new QuickPickItem(t.Name) { Description = t.ShortName, Detail = t.Languages, Tag = t }).ToList();
-        // The Avalonia templates (M19b) when they aren't installed: dotnet new install, then the list again.
-        if (!templates.Any(t => t.ShortName.StartsWith("avalonia", StringComparison.OrdinalIgnoreCase)))
+        // Template packages that aren't installed: dotnet new install, then the list again.
+        foreach (var (prefix, package, label) in s_offeredPackages)
         {
-            items.Add(new QuickPickItem("Install the Avalonia templates…") { Description = AvaloniaTemplates, Detail = "dotnet new install " + AvaloniaTemplates, Tag = AvaloniaTemplates });
+            if (!templates.Any(t => t.ShortName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                items.Add(new QuickPickItem(label) { Description = package, Detail = "dotnet new install " + package, Tag = new InstallOffer(package) });
+            }
         }
 
         var picked = await Context.Window.ShowQuickPickAsync(items, "Select a project template", cancellationToken).ConfigureAwait(false);
-        if (picked is { Tag: AvaloniaTemplates })
+        if (picked is { Tag: InstallOffer offer })
         {
-            if (!await RunDotnetAsync(["new", "install", AvaloniaTemplates], cancellationToken).ConfigureAwait(false))
+            if (!await RunDotnetAsync(["new", "install", offer.Package], cancellationToken).ConfigureAwait(false))
             {
                 return null;
             }

@@ -303,9 +303,10 @@ internal sealed partial class SolutionSession
     {
         var project = System.IO.Path.GetFullPath(parameters.Project);
         using var evaluation = EvaluateForPackages(project);
-        var references = ProjectManagement.ServiceReferences.Read(evaluation.Outer);
+        // WCF references (M42) are folders of generated code, not items.
+        ServiceReferenceInfo[] references = [.. ProjectManagement.ServiceReferences.Read(evaluation.Outer), .. WcfReferences.Read(System.IO.Path.GetDirectoryName(project)!)];
         var packages = DeclaredPackages(project)
-            .Where(r => ProjectManagement.ServiceReferences.AllPackages.Contains(r.Key, StringComparer.OrdinalIgnoreCase))
+            .Where(r => ProjectManagement.ServiceReferences.AllPackages.Contains(r.Key, StringComparer.OrdinalIgnoreCase) || WcfReferences.Packages.Contains(r.Key, StringComparer.OrdinalIgnoreCase))
             .Select(r => new ServiceReferencePackage(r.Key, r.Value))
             .ToArray();
         return new ServiceReferencesResult(references, packages);

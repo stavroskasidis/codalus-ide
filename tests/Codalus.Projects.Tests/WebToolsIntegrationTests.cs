@@ -129,7 +129,7 @@ public sealed class WebToolsIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Service_references_are_added_listed_changed_refreshed_and_removed()
     {
-        var references = new ServiceReferenceService(_solutions);
+        var references = new ServiceReferenceService(_solutions, _output);
         var client = Path.GetDirectoryName(Client)!;
 
         // OpenAPI from a file outside the project: copied into OpenAPIs, the item and three packages added.
@@ -193,7 +193,7 @@ public sealed class WebToolsIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task A_grpc_reference_generates_its_client_at_build_time()
     {
-        var references = new ServiceReferenceService(_solutions);
+        var references = new ServiceReferenceService(_solutions, _output);
         await references.AddAsync(
             new ServiceReferenceRequest(Client, ServiceReferenceKinds.Grpc, Path.Combine(Fixture, "contracts", "greet.proto"), GrpcServices: GrpcServiceKinds.Client, Restore: false, Versions: GrpcVersions),
             Timeout());

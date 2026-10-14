@@ -1072,6 +1072,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
 
         await StepAsync("web.scaffolding", "M15", "Add New Scaffolded Item runs dotnet-aspnet-codegenerator (an API controller over a DbContext); a gRPC service reference generates its client at build time", ScaffoldingStepAsync).ConfigureAwait(true);
+        await StepAsync("wcf.testClient", "M42", "The WCF Test Client reads a service's WSDL, lists its operations and builds a request from the contract", async () =>
+        {
+            var wsdl = Path.Combine(samples, "Wcf", "contracts", "Calculator.wsdl");
+            Check(File.Exists(wsdl), $"the samples folder {samples} has Wcf/contracts/Calculator.wsdl");
+            var client = shell.OpenWcfTestClient(wsdl);
+            await WaitAsync(() => client.Operations.Count == 3 || client.HasError, "the WSDL's operations are listed", 60).ConfigureAwait(true);
+            Check(!client.HasError, "the WSDL loads: " + client.Error);
+            Check(client.Operations.Select(o => o.Name).SequenceEqual(["Add", "Greet", "Distance"]), "the operations are Add, Greet and Distance: " + string.Join(", ", client.Operations.Select(o => o.Name)));
+            client.Selected = client.Operations.Single(o => o.Name == "Distance");
+            Check(client.Request.Contains("<from>", StringComparison.Ordinal) && client.Request.Contains("<X>0</X>", StringComparison.Ordinal), "Distance's request has its data contract parameters:\n" + client.Request);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-wcf.png");
+        }).ConfigureAwait(true);
         await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
 
         // M17a: containers (ADR 0042), where an engine runs Linux containers (GitHub's Linux runner; Podman here).
@@ -1282,8 +1295,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Solutions.Projects.Count == 38 && shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState is "succeeded" or "failed",
             "the 38 projects are open and restored", 600).ConfigureAwait(true);
         Check(shell.Solutions.RestoreState == "succeeded", "the restore succeeded");
-        var lib = shell.Solutions.Projects.Values.Single(p => p.Name == "Core21.Lib");
-        Check(lib.References.Any(r => r is { Kind: Codalus.Projects.Protocol.ReferenceKinds.Framework, Name: "Microsoft.NETCore.App", Resolved: true }), "netcoreapp2.1's framework is the Microsoft.NETCore.App package");
+        // The design-time builds after the restore resolve it: wait for them rather than look once.
+        await WaitAsync(() => shell.Solutions.Projects.Values.Single(p => p.Name == "Core21.Lib").References
+            .Any(r => r is { Kind: Codalus.Projects.Protocol.ReferenceKinds.Framework, Name: "Microsoft.NETCore.App", Resolved: true }), "netcoreapp2.1's framework is the Microsoft.NETCore.App package", 120).ConfigureAwait(true);
 
         var core31 = shell.Solutions.Projects.Values.Single(p => p.Name == "Core31.App").Path;
         shell.Runs.SetStartupProject(core31);

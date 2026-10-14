@@ -1,0 +1,43 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.WcfTestClientView"
+             x:DataType="vm:WcfTestClientViewModel">
+  <DockPanel Margin="12,8">
+    <StackPanel DockPanel.Dock="Top" Spacing="6">
+      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T wcfTestClient.callAWcfServiceSOperations}" />
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBox x:Name="AddressBox" Text="{Binding Address}" PlaceholderText="{l:T wcfTestClient.httpLocalhost5000ServiceSvcWsdl}" AutomationProperties.Name="{l:T wcfTestClient.serviceAddressOrWsdlFile}" />
+        <Button Grid.Column="1" Margin="6,0,0,0" Content="{l:T wcfTestClient.browse}" Command="{Binding BrowseCommand}" />
+        <Button Grid.Column="2" Margin="6,0,0,0" Classes="accent" Content="{l:T wcfTestClient.load}" Command="{Binding LoadCommand}" IsEnabled="{Binding !IsBusy}" />
+      </Grid>
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+    </StackPanel>
+    <Grid ColumnDefinitions="260,4,*" Margin="0,8,0,0">
+      <ListBox ItemsSource="{Binding Operations}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T wcfTestClient.operations}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:WcfOperationRow">
+            <StackPanel Margin="0,2" ToolTip.Tip="{Binding Detail}">
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Classes.muted="{Binding !IsSupported}" />
+              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding EndpointLabel}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
+      <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto,Auto,*" Margin="8,0,0,0" IsVisible="{Binding HasSelection}">
+        <TextBlock FontWeight="SemiBold" Text="{l:T wcfTestClient.request}" />
+        <TextBox Grid.Row="1" Margin="0,4" Text="{Binding Request}" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="{l:T wcfTestClient.requestBody}" />
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,2,0,6">
+          <Button Classes="accent" Content="{l:T wcfTestClient.invoke}" Command="{Binding InvokeCommand}" IsEnabled="{Binding CanInvoke}" AutomationProperties.Name="{l:T wcfTestClient.invokeTheOperation}" />
+          <Button Content="{l:T wcfTestClient.resetRequest}" Command="{Binding ResetCommand}" />
+          <ProgressBar IsIndeterminate="True" Width="100" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+          <SelectableTextBlock Text="{Binding Status}" VerticalAlignment="Center" FontWeight="SemiBold" Classes.error="{Binding IsFault}" TextWrapping="Wrap" />
+        </StackPanel>
+        <TextBlock Grid.Row="3" FontWeight="SemiBold" Text="{l:T wcfTestClient.response}" />
+        <TextBox Grid.Row="4" Margin="0,4,0,0" Text="{Binding Response}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,monospace" AutomationProperties.Name="{l:T wcfTestClient.responseBody}" />
+      </Grid>
+    </Grid>
+  </DockPanel>
+</UserControl>

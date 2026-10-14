@@ -22,7 +22,7 @@ public sealed partial class ShellHost
     private void InitializeWebTools()
     {
         Scaffolding = new ScaffoldingService(Solutions, ProjectManagement, Workbench.Output);
-        ServiceReferences = new ServiceReferenceService(Solutions);
+        ServiceReferences = new ServiceReferenceService(Solutions, Workbench.Output);
     }
 
     /// <summary>Add New Scaffolded Item, for the selected project (or folder), or <paramref name="project"/>.</summary>
@@ -162,6 +162,7 @@ public sealed partial class ShellHost
         }
 
         var viewModel = new ServiceReferencesViewModel(chosen, ServiceReferenceActionAsync);
+        viewModel.WcfName = ServiceReferenceService.SuggestWcfName(chosen, []);
         Layout.OpenDocument(new SolutionManagementDocument(id, $"Service References ({Path.GetFileNameWithoutExtension(chosen)})", viewModel), focus: true);
         _ = viewModel.RunAsync("reload");
         return viewModel;
@@ -176,6 +177,13 @@ public sealed partial class ShellHost
             {
                 case "reload":
                     break;
+                case "browse" when form.IsWcf:
+                    if (Window is not null && await Window.PickFileAsync("Choose a WSDL document", "WSDL documents", ["*.wsdl", "*.xml"]).ConfigureAwait(true) is { } wsdl)
+                    {
+                        form.Source = wsdl;
+                    }
+
+                    return;
                 case "browse":
                     if (Window is not null && await Window.PickFileAsync(
                             form.IsOpenApi ? "Choose an OpenAPI document" : "Choose a .proto file",
@@ -186,6 +194,25 @@ public sealed partial class ShellHost
                     }
 
                     return;
+                case "add" when form.IsWcf:
+                {
+                    if (!await EnsureSvcutilAsync(form.Project).ConfigureAwait(true))
+                    {
+                        return;
+                    }
+
+                    var request = form.WcfRequest();
+                    var generated = await ServiceReferences.AddWcfAsync(request, CancellationToken.None).ConfigureAwait(true);
+                    form.Result = $"Generated {Path.GetRelativePath(Path.GetDirectoryName(form.Project)!, Path.Combine(generated.Folder, "Reference.cs"))} with dotnet-svcutil"
+                                  + (generated.Modified.Any(f => PathComparer.Equals(f, form.Project)) ? ", and added the System.ServiceModel packages." : ".");
+                    form.Source = string.Empty;
+                    form.Namespace = string.Empty;
+                    var listed = await ServiceReferences.ListAsync(form.Project, CancellationToken.None).ConfigureAwait(true);
+                    form.SetReferences(listed);
+                    form.WcfName = ServiceReferenceService.SuggestWcfName(form.Project, listed.References);
+                    return;
+                }
+
                 case "add":
                 {
                     var (file, edit) = await ServiceReferences.AddAsync(form.Request(), CancellationToken.None).ConfigureAwait(true);
@@ -196,6 +223,10 @@ public sealed partial class ShellHost
                     break;
                 }
 
+                case "save" when selected is { Kind: ServiceReferenceKinds.Wcf } && form.WcfEdit() is { } wcfEdit:
+                    await ServiceReferences.UpdateWcfAsync(wcfEdit, CancellationToken.None).ConfigureAwait(true);
+                    form.Result = $"Generated {selected.ClassName} again with the new options.";
+                    break;
                 case "save" when selected is not null:
                     await ServiceReferences.UpdateAsync(
                         new ServiceReferenceParams(form.Project, selected.Kind, selected.Path, selected.SourceUrl,
@@ -206,11 +237,34 @@ public sealed partial class ShellHost
                     break;
                 case "refresh" when selected is not null:
                     await ServiceReferences.RefreshAsync(form.Project, selected, CancellationToken.None).ConfigureAwait(true);
-                    form.Result = $"Downloaded {Path.GetFileName(selected.Path)} again from {selected.SourceUrl}.";
+                    form.Result = selected.Kind == ServiceReferenceKinds.Wcf
+                        ? $"Generated {selected.ClassName} again from {selected.Input}."
+                        : $"Downloaded {Path.GetFileName(selected.Path)} again from {selected.SourceUrl}.";
                     break;
+                case "open" when selected is { Kind: ServiceReferenceKinds.Wcf }:
+                    await OpenFileAsync(Path.Combine(Path.GetDirectoryName(selected.Path)!, "Reference.cs"), preview: false).ConfigureAwait(true);
+                    return;
+                case "test" when selected is { Kind: ServiceReferenceKinds.Wcf }:
+                    OpenWcfTestClient(selected.Input);
+                    return;
                 case "open" when selected is not null:
                     await OpenFileAsync(selected.Path, preview: false).ConfigureAwait(true);
                     return;
+                case "remove" when selected is { Kind: ServiceReferenceKinds.Wcf }:
+                {
+                    if (!await Dialogs.ConfirmAsync(
+                            Localizer.Get("msg.webTools.removeTheServiceReference", "Remove the service reference"),
+                            Localizer.Format("msg.webTools.removeTheWcfReference", "Remove {0} from {1}? Its folder of generated code goes to the trash; the System.ServiceModel packages stay.", selected.ClassName, Path.GetFileNameWithoutExtension(form.Project)),
+                            Localizer.Get("msg.webTools.remove", "Remove")).ConfigureAwait(true))
+                    {
+                        return;
+                    }
+
+                    await ServiceReferences.RemoveAsync(form.Project, selected, deleteFile: true, CancellationToken.None).ConfigureAwait(true);
+                    form.Result = $"Removed {selected.ClassName}.";
+                    break;
+                }
+
                 case "remove" when selected is not null:
                 {
                     if (!await Dialogs.ConfirmAsync(
@@ -239,4 +293,31 @@ public sealed partial class ShellHost
     }
 
     private static string? Empty(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static readonly StringComparer PathComparer = OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+
+    /// <summary>
+    /// Makes sure dotnet-svcutil runs for the project (M42): when it doesn't, offers to restore it from the tool
+    /// manifest or to install it as a local tool. False when it can't run.
+    /// </summary>
+    private async Task<bool> EnsureSvcutilAsync(string project)
+    {
+        var tool = await ServiceReferences.WcfToolAsync(project, install: false, CancellationToken.None).ConfigureAwait(true);
+        if (tool.Available)
+        {
+            return true;
+        }
+
+        var question = tool.ManifestListsTool
+            ? Localizer.Get("msg.webTools.restoreSvcutil", "dotnet-svcutil is in the tool manifest but isn't restored. Restore the .NET tools now?")
+            : Localizer.Get("msg.webTools.installSvcutil", "WCF references are generated by dotnet-svcutil, which isn't installed. Install it as a local tool of this repository (dotnet tool install dotnet-svcutil)?");
+        if (!await Dialogs.ConfirmAsync(Localizer.Get("msg.webTools.svcutilTitle", "dotnet-svcutil"), question,
+                tool.ManifestListsTool ? Localizer.Get("msg.webTools.restore", "Restore") : Localizer.Get("msg.webTools.install", "Install")).ConfigureAwait(true))
+        {
+            return false;
+        }
+
+        tool = await ServiceReferences.WcfToolAsync(project, install: true, CancellationToken.None).ConfigureAwait(true);
+        return tool.Available ? true : throw new InvalidOperationException(tool.Message ?? "dotnet-svcutil isn't available.");
+    }
 }

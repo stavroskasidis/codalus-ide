@@ -22,6 +22,7 @@ internal sealed record XmlContext(XmlContextKind Kind, IReadOnlyList<string> Ele
 /// <summary>
 /// XML (well-formedness) and MSBuild (ADR 0016): completion of elements, properties, items, metadata, attributes and
 /// values, hover with documentation and the evaluated value from the build host, and checks of well-known values.
+/// WCF's <c>system.serviceModel</c> in <c>.config</c> files (M42) is in <c>XmlLanguage.ServiceModel.cs</c>.
 /// </summary>
 internal sealed partial class XmlLanguage(Func<string, string, CancellationToken, Task<EvaluatedProperty?>>? evaluate)
 {
@@ -45,6 +46,11 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
             var start = document.OffsetAt(position);
             diagnostics.Add(new Diagnostic(document.RangeOf(start, Math.Min(document.Text.Length, start + 1)), DiagnosticSeverity.Error, "xml.syntax", "xml", e.Message.Split(" Line ")[0]));
             return diagnostics;
+        }
+
+        if (IsServiceModelConfig(document))
+        {
+            ServiceModelDiagnostics(document, diagnostics);
         }
 
         if (IsMsBuild(document))
@@ -79,7 +85,7 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
     {
         if (!IsMsBuild(document))
         {
-            return new CompletionList(false, []);
+            return IsServiceModelConfig(document) ? ServiceModelCompletion(document, offset) : new CompletionList(false, []);
         }
 
         var context = Locate(document.Text, offset);
@@ -135,7 +141,7 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
     {
         if (!IsMsBuild(document))
         {
-            return null;
+            return IsServiceModelConfig(document) ? ServiceModelHover(document, offset) : null;
         }
 
         // The element name under the position.

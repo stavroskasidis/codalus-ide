@@ -207,6 +207,10 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         _connection.OnRequest(ServiceReferenceMethods.Add, json.ServiceReferenceParams, json.ServiceReferenceEditResult, (p, ct) => Guard(() => Session.AddServiceReferenceAsync(p, ct)));
         _connection.OnRequest(ServiceReferenceMethods.Update, json.ServiceReferenceParams, json.ServiceReferenceEditResult, (p, _) => Guard(() => Session.UpdateServiceReferenceAsync(p)));
         _connection.OnRequest(ServiceReferenceMethods.Remove, json.ServiceReferenceRemoveParams, json.ServiceReferenceEditResult, (p, _) => Guard(() => Session.RemoveServiceReferenceAsync(p)));
+        _connection.OnRequest(WcfMethods.Tool, json.WcfToolParams, json.WcfToolResult, (p, ct) => Guard(() => Session.WcfToolAsync(p, ct)));
+        _connection.OnRequest(WcfMethods.Add, json.WcfReferenceParams, json.WcfReferenceResult, (p, ct) => Guard(() => Session.AddWcfReferenceAsync(p, ct)));
+        _connection.OnRequest(WcfMethods.Update, json.WcfReferenceParams, json.WcfReferenceResult, (p, ct) => Guard(() => Session.UpdateWcfReferenceAsync(p, ct)));
+        _connection.OnRequest(WcfMethods.Remove, json.WcfRemoveParams, json.ServiceReferenceEditResult, (p, _) => Guard(() => Session.RemoveWcfReferenceAsync(p)));
     }
 
     /// <summary>NuGet packages and .NET tools (ADR 0012).</summary>

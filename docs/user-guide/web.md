@@ -177,10 +177,28 @@ It is completed with the same schema as `appsettings.json`.
 - The code generator needs a local or global `dotnet-aspnet-codegenerator`, and the project needs `Microsoft.VisualStudio.Web.CodeGeneration.Design` (and `Microsoft.EntityFrameworkCore.Tools` for the Entity Framework scaffolders). When something is missing the form says so; **Install** restores or installs the tool as a local tool of the solution and adds the packages, at the project's .NET version.
 - Scaffolding runs only in trusted folders: the code generator builds and loads your project.
 
-## Service references (OpenAPI and gRPC)
+## Service references (OpenAPI, gRPC and WCF)
 
-A project's context menu → **Service References…** (or Project → Service References) lists its OpenAPI and gRPC references and adds new ones:
+A project's context menu → **Service References…** (or Project → Service References) lists its OpenAPI, gRPC and WCF references and adds new ones:
 - **OpenAPI:** an OpenAPI (Swagger) document, from a file or a URL. The project gets an `OpenApiReference` item and the `NSwag.ApiDescription.Client` and `Microsoft.Extensions.ApiDescription.Client` packages, and NSwag generates a C# (or TypeScript) client when the project builds. Set the namespace and class name, and NSwag options such as `/UseBaseUrl:false`.
 - **gRPC:** a `.proto` file, from a file or a URL. The project gets a `Protobuf` item and the gRPC packages (`Grpc.Net.ClientFactory`, `Google.Protobuf` and `Grpc.Tools` for a client; `Grpc.AspNetCore` for a service), and `Grpc.Tools` generates the client or the service base when the project builds. Choose Client, Server, Both or None.
 
-A document outside the project is copied into its `OpenAPIs` or `Protos` folder; a URL is downloaded there, and **Refresh** downloads it again. **Remove** removes the reference and keeps the document and the packages. These are the items `dotnet-openapi` and Visual Studio write, so the project builds the same way from the command line. `.proto` files are colored.
+- **WCF:** a WCF service's metadata, from its address (or a `?wsdl` address) or a WSDL file. `dotnet-svcutil` generates the client into `Connected Services/<name>/Reference.cs` and adds the `System.ServiceModel` packages. Choose the name, the namespace (the project's root namespace and the name by default), asynchronous or synchronous operations, the collection type, internal types, and whether to reuse the types of the project's references. When `dotnet-svcutil` isn't installed, Codalus IDE offers to install it as a local tool (`dotnet tool install dotnet-svcutil`). Its output is in the Service References output.
+
+A document outside the project is copied into its `OpenAPIs` or `Protos` folder; a URL is downloaded there, and **Refresh** downloads it again. For a WCF reference, **Refresh** generates the client again from its metadata, **Save** generates it with the changed namespace and options, **Open Document** opens `Reference.cs`, and **Test…** opens the WCF Test Client on its service. **Remove** sends a WCF reference's folder to the trash and keeps the packages. WCF references keep their options in `dotnet-svcutil.params.json` and in the `ConnectedService.json` Visual Studio reads, so either IDE updates them. **Remove** removes the reference and keeps the document and the packages. These are the items `dotnet-openapi` and Visual Studio write, so the project builds the same way from the command line. `.proto` files are colored.
+
+## The WCF Test Client
+
+**Tools → WCF Test Client** calls a WCF service's operations without writing a client:
+1. Enter the service's address (for example `http://localhost:5290/CalculatorService.svc`), a `?wsdl` address, or a WSDL file, and choose **Load**. For an address, the metadata is read from `?singleWsdl`, then `?wsdl`.
+2. The list shows each endpoint's operations. An operation that can't be tested says why: message security, a duplex callback, or a transport other than HTTP (net.tcp, named pipes).
+3. Choose an operation: its request is filled in from the contract, with a value of each parameter's type. Edit the values (it's XML) and choose **Invoke**.
+4. The response shows the result, the HTTP status and the time; a fault shows its message.
+
+**Reset Request** puts the sample request back. SOAP 1.1 and 1.2 endpoints work, with WS-Addressing headers where the binding uses them.
+
+## CoreWCF services
+
+**File → New Project** offers **Install the CoreWCF service templates…** until `CoreWCF.Templates` is installed; then **CoreWCF Service** (`corewcf`) creates a service. A CoreWCF service that publishes its metadata (`ServiceMetadataBehavior.HttpGetEnabled`) can be referenced and tested at its address while it runs.
+
+In `app.config` and `web.config`, `<system.serviceModel>` has completion of its elements, attributes and values (the `bindingConfiguration` and `behaviorConfiguration` values come from the file), hover, and warnings for unknown elements and values.

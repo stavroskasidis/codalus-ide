@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:wsap="http://schemas.xmlsoap.org/ws/2004/08/addressing/policy" xmlns:wsa10="http://www.w3.org/2005/08/addressing" xmlns:wsaw="http://www.w3.org/2006/05/addressing/wsdl" xmlns:wsam="http://www.w3.org/2007/05/addressing/metadata" xmlns:wsx="http://schemas.xmlsoap.org/ws/2004/09/mex" xmlns:msc="http://schemas.microsoft.com/ws/2005/12/wsdl/contract" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:tns="http://codalus.dev/samples/calculator" name="CalculatorService" targetNamespace="http://codalus.dev/samples/calculator">
+  <wsdl:types>
+    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="http://codalus.dev/samples/calculator">
+      <xs:element name="Add">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element minOccurs="0" name="a" type="xs:int"/>
+            <xs:element minOccurs="0" name="b" type="xs:int"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="AddResponse">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element minOccurs="0" name="AddResult" type="xs:int"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Greet">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element minOccurs="0" name="name" nillable="true" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="GreetResponse">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element minOccurs="0" name="GreetResult" nillable="true" type="xs:string"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="Distance">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element minOccurs="0" name="from" nillable="true" type="tns:Point"/>
+            <xs:element minOccurs="0" name="to" nillable="true" type="tns:Point"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:complexType name="Point">
+        <xs:sequence>
+          <xs:element minOccurs="0" name="X" type="xs:double"/>
+          <xs:element minOccurs="0" name="Y" type="xs:double"/>
+        </xs:sequence>
+      </xs:complexType>
+      <xs:element name="Point" nillable="true" type="tns:Point"/>
+      <xs:element name="DistanceResponse">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element minOccurs="0" name="DistanceResult" type="xs:double"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:schema>
+    <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://schemas.microsoft.com/2003/10/Serialization/" attributeFormDefault="qualified" elementFormDefault="qualified" targetNamespace="http://schemas.microsoft.com/2003/10/Serialization/">
+      <xs:element name="anyType" nillable="true" type="xs:anyType"/>
+      <xs:element name="anyURI" nillable="true" type="xs:anyURI"/>
+      <xs:element name="base64Binary" nillable="true" type="xs:base64Binary"/>
+      <xs:element name="boolean" nillable="true" type="xs:boolean"/>
+      <xs:element name="byte" nillable="true" type="xs:byte"/>
+      <xs:element name="dateTime" nillable="true" type="xs:dateTime"/>
+      <xs:element name="decimal" nillable="true" type="xs:decimal"/>
+      <xs:element name="double" nillable="true" type="xs:double"/>
+      <xs:element name="float" nillable="true" type="xs:float"/>
+      <xs:element name="int" nillable="true" type="xs:int"/>
+      <xs:element name="long" nillable="true" type="xs:long"/>
+      <xs:element name="QName" nillable="true" type="xs:QName"/>
+      <xs:element name="short" nillable="true" type="xs:short"/>
+      <xs:element name="string" nillable="true" type="xs:string"/>
+      <xs:element name="unsignedByte" nillable="true" type="xs:unsignedByte"/>
+      <xs:element name="unsignedInt" nillable="true" type="xs:unsignedInt"/>
+      <xs:element name="unsignedLong" nillable="true" type="xs:unsignedLong"/>
+      <xs:element name="unsignedShort" nillable="true" type="xs:unsignedShort"/>
+      <xs:element name="char" nillable="true" type="tns:char"/>
+      <xs:simpleType name="char">
+        <xs:restriction base="xs:int"/>
+      </xs:simpleType>
+      <xs:element name="duration" nillable="true" type="tns:duration"/>
+      <xs:simpleType name="duration">
+        <xs:restriction base="xs:duration">
+          <xs:pattern value="\-?P(\d*D)?(T(\d*H)?(\d*M)?(\d*(\.\d*)?S)?)?"/>
+          <xs:minInclusive value="-P10675199DT2H48M5.4775808S"/>
+          <xs:maxInclusive value="P10675199DT2H48M5.4775807S"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:element name="guid" nillable="true" type="tns:guid"/>
+      <xs:simpleType name="guid">
+        <xs:restriction base="xs:string">
+          <xs:pattern value="[\da-fA-F]{8}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{4}-[\da-fA-F]{12}"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:attribute name="FactoryType" type="xs:QName"/>
+      <xs:attribute name="Id" type="xs:ID"/>
+      <xs:attribute name="Ref" type="xs:IDREF"/>
+      <xs:simpleType name="dateOnly">
+        <xs:restriction base="xs:date">
+          <xs:pattern value="([0-9]{4})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType name="timeOnly">
+        <xs:restriction base="xs:time">
+          <xs:pattern value="([01][0-9]|2[0-3]):([0-5][0-9])(:([0-5][0-9])(\.[0-9]{1,7})?)?"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:schema>
+  </wsdl:types>
+  <wsdl:message name="ICalculatorService_Add_InputMessage">
+    <wsdl:part name="parameters" element="tns:Add"/>
+  </wsdl:message>
+  <wsdl:message name="ICalculatorService_Add_OutputMessage">
+    <wsdl:part name="parameters" element="tns:AddResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ICalculatorService_Greet_InputMessage">
+    <wsdl:part name="parameters" element="tns:Greet"/>
+  </wsdl:message>
+  <wsdl:message name="ICalculatorService_Greet_OutputMessage">
+    <wsdl:part name="parameters" element="tns:GreetResponse"/>
+  </wsdl:message>
+  <wsdl:message name="ICalculatorService_Distance_InputMessage">
+    <wsdl:part name="parameters" element="tns:Distance"/>
+  </wsdl:message>
+  <wsdl:message name="ICalculatorService_Distance_OutputMessage">
+    <wsdl:part name="parameters" element="tns:DistanceResponse"/>
+  </wsdl:message>
+  <wsdl:portType name="ICalculatorService">
+    <wsdl:operation name="Add">
+      <wsdl:input wsaw:Action="http://codalus.dev/samples/calculator/ICalculatorService/Add" message="tns:ICalculatorService_Add_InputMessage"/>
+      <wsdl:output wsaw:Action="http://codalus.dev/samples/calculator/ICalculatorService/AddResponse" message="tns:ICalculatorService_Add_OutputMessage"/>
+    </wsdl:operation>
+    <wsdl:operation name="Greet">
+      <wsdl:input wsaw:Action="http://codalus.dev/samples/calculator/ICalculatorService/Greet" message="tns:ICalculatorService_Greet_InputMessage"/>
+      <wsdl:output wsaw:Action="http://codalus.dev/samples/calculator/ICalculatorService/GreetResponse" message="tns:ICalculatorService_Greet_OutputMessage"/>
+    </wsdl:operation>
+    <wsdl:operation name="Distance">
+      <wsdl:input wsaw:Action="http://codalus.dev/samples/calculator/ICalculatorService/Distance" message="tns:ICalculatorService_Distance_InputMessage"/>
+      <wsdl:output wsaw:Action="http://codalus.dev/samples/calculator/ICalculatorService/DistanceResponse" message="tns:ICalculatorService_Distance_OutputMessage"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="BasicHttpBinding_ICalculatorService" type="tns:ICalculatorService">
+    <soap:binding transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="Add">
+      <soap:operation soapAction="http://codalus.dev/samples/calculator/ICalculatorService/Add" style="document"/>
+      <wsdl:input>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="Greet">
+      <soap:operation soapAction="http://codalus.dev/samples/calculator/ICalculatorService/Greet" style="document"/>
+      <wsdl:input>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="Distance">
+      <soap:operation soapAction="http://codalus.dev/samples/calculator/ICalculatorService/Distance" style="document"/>
+      <wsdl:input>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="CalculatorService">
+    <wsdl:port name="BasicHttpBinding_ICalculatorService" binding="tns:BasicHttpBinding_ICalculatorService">
+      <soap:address location="http://localhost:5290/CalculatorService.svc"/>
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

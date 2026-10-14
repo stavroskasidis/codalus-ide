@@ -31,7 +31,7 @@ public sealed class MarkupHostTests : IAsyncLifetime
         Directory.CreateDirectory(_root);
         foreach (var (id, extensions, names) in new (string, string[], string[])[]
         {
-            ("json", [".json"], []), ("jsonc", [".jsonc"], ["launchSettings.json"]), ("xml", [".xml"], []), ("msbuild", [".csproj", ".props"], []),
+            ("json", [".json"], []), ("jsonc", [".jsonc"], ["launchSettings.json"]), ("xml", [".xml", ".config"], []), ("msbuild", [".csproj", ".props"], []),
             ("yaml", [".yml", ".yaml"], []), ("editorconfig", [], [".editorconfig"]),
         })
         {
@@ -162,6 +162,46 @@ public sealed class MarkupHostTests : IAsyncLifetime
         await _service.ChangeAsync(project, ++_version, [new TextDocumentContentChangeEvent(null, fixedText)]);
         var warning = Assert.Single(await DiagnosticsAsync(project, d => d.Count == 1 && d[0].Code == "msbuild.value", ct));
         Assert.Contains("Exe", warning.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Wcf_configuration_completes_and_is_checked()
+    {
+        // M42: system.serviceModel in app.config and web.config.
+        var ct = Timeout();
+        var text = string.Join('\n',
+            "<configuration>",
+            "  <system.serviceModel>",
+            "    <bindings>",
+            "      <basicHttpBinding>",
+            "        <binding name=\"Large\" maxReceivedMessageSize=\"1048576\" transferMode=\"Buffred\" />",
+            "      </basicHttpBinding>",
+            "    </bindings>",
+            "    <client>",
+            "      <endpoint address=\"http://localhost/c.svc\" binding=\"basicHttpBinding\" bindingConfiguration=\"\" contract=\"ICalculator\" />",
+            "    </client>",
+            "    <behaviours />",
+            "    ",
+            "  </system.serviceModel>",
+            "</configuration>",
+            "");
+        var (config, uri, client) = await OpenAsync("app.config", text);
+        var problems = await DiagnosticsAsync(config, d => d.Count >= 2, ct);
+        Assert.Contains(problems, d => d.Code == "config.value" && d.Message.Contains("Buffered", StringComparison.Ordinal));
+        Assert.Contains(problems, d => d.Code == "config.element" && d.Message.Contains("<behaviours>", StringComparison.Ordinal));
+
+        var typing = text.Replace("<behaviours />\n    \n", "<behaviours />\n    <\n", StringComparison.Ordinal);
+        await _service.ChangeAsync(config, ++_version, [new TextDocumentContentChangeEvent(null, typing)]);
+        var sections = await client.CompletionAsync(uri, At(typing, "<behaviours />\n    <"), null, ct);
+        Assert.Contains(sections.Items, i => i.Label == "services");
+        Assert.Contains(sections.Items, i => i.Label == "behaviors");
+        await _service.ChangeAsync(config, ++_version, [new TextDocumentContentChangeEvent(null, text)]);
+        var modes = await client.CompletionAsync(uri, At(text, "transferMode=\""), null, ct);
+        Assert.Contains(modes.Items, i => i.Label == "Streamed");
+        var configurations = await client.CompletionAsync(uri, At(text, "bindingConfiguration=\""), null, ct);
+        Assert.Equal(["Large"], configurations.Items.Select(i => i.Label));
+        var hover = await client.HoverAsync(uri, At(text, "        <bindi"), ct);
+        Assert.Contains("bindingConfiguration", hover!.Contents.Value, StringComparison.Ordinal);
     }
 
     [Fact]

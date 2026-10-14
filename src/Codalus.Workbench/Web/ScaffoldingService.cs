@@ -39,7 +39,13 @@ public sealed class ScaffoldingService
         _solutions = solutions;
         _projects = projects;
         _output = output;
-        solutions.ScaffoldOutput += (_, o) => Channel.AppendLine(o.Level == "error" && !o.Line.StartsWith('>') ? "error: " + o.Line : o.Line);
+        solutions.ScaffoldOutput += (_, o) =>
+        {
+            if (o.Source is null)
+            {
+                Channel.AppendLine(o.Level == "error" && !o.Line.StartsWith('>') ? "error: " + o.Line : o.Line);
+            }
+        };
     }
 
     public OutputChannel Channel => _output.GetOrCreate(OutputChannelId, "Scaffolding");

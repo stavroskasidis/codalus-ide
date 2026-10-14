@@ -77,6 +77,7 @@ public sealed class ViewLocator : IDataTemplate
         BinaryLogViewModel vm => new BinaryLogView { DataContext = vm },
         ScaffoldViewModel vm => new ScaffoldView { DataContext = vm },
         ServiceReferencesViewModel vm => new ServiceReferencesView { DataContext = vm },
+        WcfTestClientViewModel vm => new WcfTestClientView { DataContext = vm },
         PerformanceProfilerViewModel vm => new PerformanceProfilerView { DataContext = vm },
         ProfilingReportViewModel vm => new ProfilingReportView { DataContext = vm },
         ProfilingComparisonViewModel vm => new ProfilingComparisonView { DataContext = vm },

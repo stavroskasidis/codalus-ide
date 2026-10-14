@@ -89,7 +89,8 @@ internal static partial class BuiltIns
         Add("web.trustDevCertificate", "Trust the HTTPS Development Certificate", "ASP.NET Core", _ => shell.TrustDevCertificateAsync());
         Add("web.manageUserSecrets", "Manage User Secrets", "ASP.NET Core", shell.ManageUserSecretsAsync, "solutionOpen && solutionTrusted");
         Add("web.addScaffoldedItem", "Add New Scaffolded Item…", "ASP.NET Core", project => { shell.OpenAddScaffoldedItem(project); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
-        Add("web.serviceReferences", "Service References (OpenAPI, gRPC)…", "ASP.NET Core", project => { shell.OpenServiceReferences(project); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
+        Add("web.serviceReferences", "Service References (OpenAPI, gRPC, WCF)…", "ASP.NET Core", project => { shell.OpenServiceReferences(project); return Task.CompletedTask; }, "solutionOpen && solutionTrusted");
+        Add("wcf.testClient", "WCF Test Client", "WCF", address => { shell.OpenWcfTestClient(address); return Task.CompletedTask; });
         Add("web.installLanguageServers", "Install the Web Language Servers (Node.js)", "Web", _ => shell.InstallWebLanguagesAsync());
         Add("npm.taskRunner", "Task Runner Explorer", "npm", _ => shell.ShowTaskRunnerAsync());
         Add("npm.runScript", "Run npm Script…", "npm", _ => shell.PickNpmScriptAsync(), "solutionOpen");

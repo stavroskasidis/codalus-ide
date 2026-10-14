@@ -1,4 +1,5 @@
 using Codalus.Projects.Protocol;
+using Codalus.Workbench.Output;
 using Codalus.Workbench.Projects;
 
 namespace Codalus.Workbench.Web;
@@ -26,20 +27,77 @@ public sealed record ServiceReferenceRequest(
 /// project (copied or downloaded here), the build host writes the <c>OpenApiReference</c> or <c>Protobuf</c> item and
 /// adds the packages, and the client (or server base) is generated at build time. UI-agnostic.
 /// </summary>
-public sealed class ServiceReferenceService(SolutionService solutions)
+public sealed class ServiceReferenceService
 {
     public const string OpenApiFolder = "OpenAPIs";
     public const string ProtosFolder = "Protos";
+    public const string OutputChannelId = "codalus.serviceReferences";
     private const long MaxDocumentBytes = 16 * 1024 * 1024;
 
     private static readonly HttpClient s_http = new() { Timeout = TimeSpan.FromSeconds(60) };
     private static WebToolsJsonContext Json => WebToolsJsonContext.Default;
 
+    private readonly SolutionService _solutions;
+    private readonly OutputService _output;
+
+    public ServiceReferenceService(SolutionService solutions, OutputService output)
+    {
+        _solutions = solutions;
+        _output = output;
+        // dotnet-svcutil's output (M42).
+        solutions.ScaffoldOutput += (_, o) =>
+        {
+            if (o.Source == ServiceReferenceKinds.Wcf)
+            {
+                Channel.AppendLine(o.Level == "error" && !o.Line.StartsWith('>') ? "error: " + o.Line : o.Line);
+            }
+        };
+    }
+
+    public OutputChannel Channel => _output.GetOrCreate(OutputChannelId, "Service References");
+
     /// <summary>A reference was added, changed, removed or refreshed in the project.</summary>
     public event EventHandler<string>? Changed;
 
+    // ------------------------------------------------------------------ WCF (M42)
+
+    /// <summary>Whether <c>dotnet-svcutil</c> runs for the project; <paramref name="install"/> restores it, or installs it as a local tool.</summary>
+    public Task<WcfToolResult> WcfToolAsync(string project, bool install, CancellationToken cancellationToken) =>
+        _solutions.RequestAsync(WcfMethods.Tool, new WcfToolParams(project, install), Json.WcfToolParams, Json.WcfToolResult, cancellationToken, TimeSpan.FromMinutes(3));
+
+    /// <summary>Generates a WCF client from a WSDL file or a metadata address into <c>Connected Services/&lt;name&gt;</c>.</summary>
+    public async Task<WcfReferenceResult> AddWcfAsync(WcfReferenceParams parameters, CancellationToken cancellationToken)
+    {
+        var result = await _solutions.RequestAsync(WcfMethods.Add, parameters, Json.WcfReferenceParams, Json.WcfReferenceResult, cancellationToken, TimeSpan.FromMinutes(6)).ConfigureAwait(false);
+        Changed?.Invoke(this, parameters.Project);
+        return result;
+    }
+
+    /// <summary>Generates the reference again: as recorded (only the name given), or with new inputs, namespace or options.</summary>
+    public async Task<WcfReferenceResult> UpdateWcfAsync(WcfReferenceParams parameters, CancellationToken cancellationToken)
+    {
+        var result = await _solutions.RequestAsync(WcfMethods.Update, parameters, Json.WcfReferenceParams, Json.WcfReferenceResult, cancellationToken, TimeSpan.FromMinutes(6)).ConfigureAwait(false);
+        Changed?.Invoke(this, parameters.Project);
+        return result;
+    }
+
+    /// <summary>The name to suggest for a new reference: <c>ServiceReference</c>, then <c>ServiceReference2</c>…, unused in the project.</summary>
+    public static string SuggestWcfName(string project, IEnumerable<ServiceReferenceInfo> existing)
+    {
+        var taken = existing.Where(r => r.Kind == ServiceReferenceKinds.Wcf).Select(r => r.ClassName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var folder = Path.Combine(Path.GetDirectoryName(project)!, "Connected Services");
+        for (var i = 1; ; i++)
+        {
+            var name = i == 1 ? "ServiceReference" : "ServiceReference" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (!taken.Contains(name) && !Directory.Exists(Path.Combine(folder, name)))
+            {
+                return name;
+            }
+        }
+    }
+
     public Task<ServiceReferencesResult> ListAsync(string project, CancellationToken cancellationToken) =>
-        solutions.RequestAsync(ServiceReferenceMethods.List, new ServiceReferencesParams(project), Json.ServiceReferencesParams, Json.ServiceReferencesResult, cancellationToken);
+        _solutions.RequestAsync(ServiceReferenceMethods.List, new ServiceReferencesParams(project), Json.ServiceReferencesParams, Json.ServiceReferencesResult, cancellationToken);
 
     public static bool IsUrl(string source) =>
         Uri.TryCreate(source.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
@@ -94,7 +152,7 @@ public sealed class ServiceReferenceService(SolutionService solutions)
             }
         }
 
-        var edit = await solutions.RequestAsync(
+        var edit = await _solutions.RequestAsync(
             ServiceReferenceMethods.Add,
             new ServiceReferenceParams(request.Project, request.Kind, file, sourceUrl, Empty(request.Namespace), Empty(request.ClassName), Empty(request.CodeGenerator), Empty(request.Options), Empty(request.GrpcServices), Empty(request.Access), request.Restore, request.Versions),
             Json.ServiceReferenceParams,
@@ -108,6 +166,13 @@ public sealed class ServiceReferenceService(SolutionService solutions)
     /// <summary>Downloads the reference's document again from its <see cref="ServiceReferenceInfo.SourceUrl"/>.</summary>
     public async Task RefreshAsync(string project, ServiceReferenceInfo reference, CancellationToken cancellationToken)
     {
+        if (reference.Kind == ServiceReferenceKinds.Wcf)
+        {
+            // dotnet-svcutil reads the metadata again (an address, or the WSDL file as it is now) and regenerates.
+            await UpdateWcfAsync(new WcfReferenceParams(project, reference.ClassName!), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (reference.SourceUrl is not { Length: > 0 } url)
         {
             throw new InvalidOperationException($"{Path.GetFileName(reference.Path)} has no source URL: it was added from a file, so it changes when you edit it.");
@@ -119,14 +184,22 @@ public sealed class ServiceReferenceService(SolutionService solutions)
 
     public async Task<ServiceReferenceEditResult> UpdateAsync(ServiceReferenceParams parameters, CancellationToken cancellationToken)
     {
-        var edit = await solutions.RequestAsync(ServiceReferenceMethods.Update, parameters, Json.ServiceReferenceParams, Json.ServiceReferenceEditResult, cancellationToken).ConfigureAwait(false);
+        var edit = await _solutions.RequestAsync(ServiceReferenceMethods.Update, parameters, Json.ServiceReferenceParams, Json.ServiceReferenceEditResult, cancellationToken).ConfigureAwait(false);
         Changed?.Invoke(this, parameters.Project);
         return edit;
     }
 
     public async Task<ServiceReferenceEditResult> RemoveAsync(string project, ServiceReferenceInfo reference, bool deleteFile, CancellationToken cancellationToken)
     {
-        var edit = await solutions.RequestAsync(
+        if (reference.Kind == ServiceReferenceKinds.Wcf)
+        {
+            // Its folder of generated code goes to the trash; the packages stay.
+            var removed = await _solutions.RequestAsync(WcfMethods.Remove, new WcfRemoveParams(project, reference.ClassName!), Json.WcfRemoveParams, Json.ServiceReferenceEditResult, cancellationToken).ConfigureAwait(false);
+            Changed?.Invoke(this, project);
+            return removed;
+        }
+
+        var edit = await _solutions.RequestAsync(
             ServiceReferenceMethods.Remove,
             new ServiceReferenceRemoveParams(project, reference.Kind, reference.Path, deleteFile),
             Json.ServiceReferenceRemoveParams,
