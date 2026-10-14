@@ -61,7 +61,7 @@ Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs nativ
 - [User guide](docs/user-guide/README.md): installing, solutions, NuGet, editing, build and run, debugging, web development, data, containers, profiling, Avalonia, remote development, testing, Git, terminal and C# Interactive, older .NET versions, settings, troubleshooting.
 - [Roadmap](docs/roadmap.md): the post-MVP milestones and the decisions behind them.
 - [Writing plugins](docs/plugins.md).
-- [Architecture decisions](docs/adr), [accessibility](docs/accessibility.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md).
+- [Architecture decisions](docs/adr), [environment variables](docs/environment-variables.md), [accessibility](docs/accessibility.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md).
 
 ## Architecture in one paragraph
 
