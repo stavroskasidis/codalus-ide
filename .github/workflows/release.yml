@@ -178,7 +178,9 @@ jobs:
 
   untag:
     needs: [plan, packages, ci, benchmarks, site, publish]
-    if: (failure() || cancelled()) && needs.plan.outputs.build == 'true' && !inputs.dry_run
+    # Whenever the release wasn't published. A gate whose job was cancelled (a runner never acquired) is neither
+    # failure() nor cancelled(), which is the whole workflow's: 0.2.1's first run kept its tag that way.
+    if: always() && needs.plan.outputs.build == 'true' && !inputs.dry_run && needs.publish.result != 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Remove the tag of a release that was not published
