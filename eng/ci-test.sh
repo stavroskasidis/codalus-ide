@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs one shard of the tests (CI runs the shards on separate runners at the same time; ci.yml):
+# Runs one shard of the tests (CI runs the shards on separate runners at the same time; pipeline.yml):
 #   shell-1  the Shell tests but the classes listed in eng/ci-shell-second-half.txt
 #   shell-2  those classes
 #   others   every other test project

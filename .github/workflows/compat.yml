@@ -1,0 +1,59 @@
+name: Older .NET
+
+# The target framework matrix (M33, ADR 0030), by hand: slow to install, so not in every pipeline run.
+# - target-frameworks: .NET Core 2.0 to .NET 9 and older SDKs in .work/dotnet-compat (eng/get-runtimes.sh), and
+#   Codalus.TargetFrameworks.Tests against them (it skips without them; with CODALUS_DOTNET_COMPAT it must pass).
+# - containers: the old runtimes in containers of their distributions (eng/compat-containers.sh).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  target-frameworks:
+    name: target-frameworks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          extra-sdks: true
+          nuget-cache: true
+          netcoredbg: true
+          devtools: true
+          display: true
+      - name: Older runtimes and SDKs (and the x64 debugger on Apple silicon)
+        shell: bash
+        run: |
+          bash eng/get-runtimes.sh
+          echo "CODALUS_DOTNET_COMPAT=${{ github.workspace }}/.work/dotnet-compat" >> "$GITHUB_ENV"
+          bash eng/get-netcoredbg.sh --x64
+      - run: dotnet restore Codalus.slnx
+      - run: dotnet build Codalus.slnx -c Release --no-restore
+      - name: Test
+        run: dotnet test --project tests/Codalus.TargetFrameworks.Tests -c Release --no-build
+
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: bash eng/compat-containers.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compat-containers
+          path: artifacts/compat-containers.md
+          if-no-files-found: ignore

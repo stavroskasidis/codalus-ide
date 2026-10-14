@@ -4,11 +4,11 @@ name: Website and Linux repositories
 # the newest nightly (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret), checked by installing from
 # them with apt, dnf and zypper, signatures verified (eng/test-linux-repos.sh) (M31, D18); then the website, the Blazor
 # app in website/ exported to static files with those releases' download links. Only master deploys (the maintainer's
-# rule, 2026-10-13): release.yml calls this after each release, and a push to master that changes the website or the
-# user guide runs it; nightlies don't deploy, so the nightly channel and the site's nightly links move on with master.
+# rule, 2026-10-13): each stable release does, and a push to master that changes the website or the user guide runs
+# this; nightlies don't deploy, so the nightly channel and the site's nightly links move on with master.
 # Started on another branch (workflow_dispatch), it builds and checks the site without deploying it.
-# A release (release.yml) calls it before publishing anything, with the release's own packages from its run and
-# deploy: false: the repositories are built and installed from, and the site exported, as a gate. The release deploys
+# A stable release (pipeline.yml) calls it before publishing anything, with the release's own packages from its run and
+# deploy: false: the repositories are built and installed from, and the site exported, as a gate. The pipeline deploys
 # the Pages artifact this uploads only once every gate passed and the release is published (atomic releases).
 on:
   workflow_call:

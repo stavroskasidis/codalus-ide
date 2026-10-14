@@ -1,0 +1,522 @@
+name: Pipeline
+
+# The one pipeline for develop, master and pull requests (M31, ADR 0028, D20/D21). Every run builds, tests and
+# smoke-tests on Windows, macOS and Linux (CI), and a branch's run releases what passed:
+# - develop: a nightly, v<VERSION>-nightly.<date>.<run>, published as a GitHub prerelease with the commits since the
+#   previous nightly as its notes. The newest 14 are kept.
+# - master: a stable release, v<VERSION> (every merge from develop, and every hotfix; the run fails if that tag exists
+#   already), the latest release, with notes from the commits since the previous stable release. Afterwards the site with
+#   the apt and dnf repositories is deployed, the AUR package pushed, and develop moves past the released version (and
+#   takes in a hotfix).
+# - pull requests and other branches: CI only.
+# A release is atomic (the maintainer's rule, 2026-10-14): every gate runs first on the release's own commit: CI (test,
+# smoke), the packages installed and smoke-tested on every platform (packages), and for a stable release also the
+# benchmarks and the apt, dnf and zypper repositories built and installed from with the site exported (site,
+# linux-repos.yml with deploy: false). Only when all of them pass is anything published; otherwise the tag goes.
+# Manual dispatch runs the branch's pipeline as a dry run by default (everything built and tested, nothing published).
+# The target framework matrix (M33) is compat.yml, by hand.
+on:
+  push:
+    branches: [develop, master]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and test without publishing
+        type: boolean
+        default: true
+      benchmarks:
+        description: Also run the benchmarks (a stable release always does)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.ref }}
+  # A newer push to develop (or a pull request) replaces the run in progress, and an unpublished nightly's tag goes with
+  # it (untag); a stable release always runs to the end.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  # What this run releases: a nightly from develop, a stable release from master, nothing from anywhere else.
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the release's tag
+    outputs:
+      kind: ${{ steps.kind.outputs.kind }}
+      version: ${{ steps.plan.outputs.version }}
+      previous: ${{ steps.plan.outputs.previous }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - id: kind
+        shell: bash
+        run: |
+          kind=""
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
+            case "$GITHUB_REF" in
+              refs/heads/master) kind=stable ;;
+              refs/heads/develop) kind=nightly ;;
+            esac
+          fi
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+      - if: steps.kind.outputs.kind != ''
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - if: steps.kind.outputs.kind != ''
+        uses: ./.github/actions/setup
+      - id: plan
+        if: steps.kind.outputs.kind != ''
+        shell: bash
+        env:
+          KIND: ${{ steps.kind.outputs.kind }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [[ "$KIND" == "stable" ]]; then
+            version="$(dotnet run --project eng/Codalus.Release -- version stable)"
+            dotnet run --project eng/Codalus.Release -- check-tag "$version"
+            previous="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          else
+            version="$(dotnet run --project eng/Codalus.Release -- version nightly --run "$GITHUB_RUN_NUMBER")"
+            previous="$(git tag --list 'v*-nightly.*' --sort=-v:refname | head -n 1)"
+          fi
+          publish=true
+          [[ "$DRY_RUN" == "true" ]] && publish=false
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "Release ($KIND) $version from ${GITHUB_SHA::7} (previous: ${previous:-none}; publish: $publish)" >> "$GITHUB_STEP_SUMMARY"
+      # The tag comes first, while the commit is still the branch's head: the workflow token may create a tag only on
+      # a commit whose workflow files match the default branch's (otherwise it needs the workflows permission, which
+      # it can't have), and the branch may move on with workflow changes during the build. untag removes it again.
+      - name: Tag the commit
+        if: steps.plan.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v${{ steps.plan.outputs.version }}" -f sha="$GITHUB_SHA" > /dev/null
+
+  # The tests in three shards per OS on separate runners at the same time (eng/ci-test.sh): the Shell tests in two
+  # halves (they take 15 to 25 minutes on their own) and every other project. With the smoke test on a runner of its
+  # own, a run takes as long as its longest job, not the sum of them (it took 55 minutes on Windows).
+  test:
+    name: test (${{ matrix.os }}, ${{ matrix.shard }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        shard: [shell-1, shell-2, others]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      # The display is for tests that run real windowed apps (the Live Visual Tree's Avalonia app).
+      - uses: ./.github/actions/setup
+        with:
+          extra-sdks: true
+          nuget-cache: true
+          netcoredbg: true
+          devtools: true
+          display: true
+      - run: dotnet restore Codalus.slnx
+      - run: dotnet build Codalus.slnx -c Release --no-restore
+      - name: Test (${{ matrix.shard }})
+        shell: bash
+        run: bash eng/ci-test.sh ${{ matrix.shard }}
+      - name: Processes the tests left running
+        # What the tests left behind is listed: a leak to fix.
+        if: always() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          # BSD ps (macOS) has no --sort: sort by the CPU column instead.
+          ps -eo pid,ppid,etime,pcpu,rss,args | sort -k4 -nr | head -25 | cut -c1-240 || true
+          df -h / /tmp | uniq
+
+  # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the in-process
+  # headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform). On a runner
+  # of its own (it needs the machine to itself), alongside the tests.
+  smoke:
+    name: smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          extra-sdks: true
+          nuget-cache: true
+          netcoredbg: true
+          devtools: true
+          display: true
+      - name: Native AOT publish must stay warning-free in our code
+        shell: bash
+        run: |
+          rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
+          dotnet publish src/Codalus.Shell -c Release -r "$rid" -o artifacts/shell
+      - name: Stack traces for a smoke test failure (dotnet-stack)
+        # The smoke test prints the C# host's stacks when a step fails: a host that stopped answering says where it is.
+        if: runner.os != 'Windows'
+        run: dotnet tool install -g dotnet-stack || true
+      - name: End-to-end smoke test of the published app
+        shell: bash
+        timeout-minutes: 25
+        env:
+          CODALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
+        run: bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test
+      # Always: the screenshots are the website's (CLAUDE.md, Website), and a failure's report.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-${{ runner.os }}
+          path: artifacts/smoke-test/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # The installers on every platform (eng/package.sh), installed the way users would and the installed app
+  # smoke-tested (eng/smoke-test.sh --packages), then uploaded for publish.
+  packages:
+    needs: plan
+    if: needs.plan.outputs.kind != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64 }
+          - { os: macos-latest, rid: osx-arm64 }
+          - { os: ubuntu-latest, rid: linux-x64 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      KIND: ${{ needs.plan.outputs.kind }}
+      PREVIOUS: ${{ needs.plan.outputs.previous }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the release notes read the history and the tags
+      # The smoke test has a .NET 11 step (M30); dumps and attaching need the developer tools (debug.companion,
+      # debug.roslyn, debug.remote).
+      - uses: ./.github/actions/setup
+        with:
+          extra-sdks: true
+          devtools: true
+      - name: Linux prerequisites (Native AOT, AppImage, rpm, delta packages, Xvfb)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev squashfs-tools rpm zstd xvfb
+      - name: macOS prerequisites (delta packages)
+        if: runner.os == 'macOS'
+        run: command -v zstd || brew install zstd
+      - name: The previous release of this channel (Velopack delta packages)
+        if: env.PREVIOUS != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          channel="${{ matrix.rid }}-$KIND"
+          gh release download "$PREVIOUS" -D previous-release -p "releases.$channel.json" -p "*-$channel-full.nupkg" \
+            || echo "No $channel files in $PREVIOUS: no delta package this time."
+      - name: Release notes
+        shell: bash
+        run: dotnet run --project eng/Codalus.Release -- notes "$KIND" "$VERSION" --repo "$GITHUB_REPOSITORY" > release-notes.md
+      - name: Package
+        shell: bash
+        env:
+          CODALUS_PREVIOUS_RELEASE: ${{ github.workspace }}/previous-release
+          CODALUS_RELEASE_NOTES: ${{ github.workspace }}/release-notes.md
+          # The update feed's signature (M32): installed builds refuse a feed without it.
+          CODALUS_FEED_KEY: ${{ secrets.FEED_SIGNING_KEY }}
+          # Code signing (D19) waits behind this secret.
+          CODALUS_CODESIGN_IDENTITY: ${{ secrets.CODALUS_CODESIGN_IDENTITY }}
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
+          bash eng/package.sh "$VERSION" "$KIND"
+      - name: A Chromium browser (Linux arm64)
+        # Browser debugging (blazor.wasmDebug, blazor.compoundDebug) needs one. The x64 runners have Chrome; there's no
+        # Chrome or Chrome for Testing for Linux arm64, and Ubuntu's chromium is a snap, so Playwright's build (pinned).
+        # Ubuntu 24.04's AppArmor denies unprivileged user namespaces to programs without a profile (Chrome's package
+        # brings one), so this build would abort with "No usable sandbox!" and js-debug time out connecting to it:
+        # allow them on this throwaway runner rather than run the browser without its sandbox.
+        if: matrix.rid == 'linux-arm64'
+        shell: bash
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          npx -y playwright@1.56.1 install --with-deps chromium
+          chrome="$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux*/chrome' -type f | head -n 1)"
+          [ -x "$chrome" ] || { echo "::error::Playwright's Chromium wasn't found"; exit 1; }
+          sudo ln -sf "$chrome" /usr/local/bin/chromium
+          chromium --version
+      - name: Stack traces for a smoke test failure (dotnet-stack)
+        if: runner.os != 'Windows'
+        run: dotnet tool install -g dotnet-stack || true
+      - name: Install, smoke-test and uninstall the packages
+        shell: bash
+        timeout-minutes: 40
+        run: bash eng/smoke-test.sh --packages artifacts/packages artifacts/smoke-test
+      - uses: actions/upload-artifact@v4
+        if: failure() || cancelled()
+        with:
+          name: smoke-test-${{ matrix.rid }}
+          path: artifacts/smoke-test/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.rid }}
+          path: artifacts/packages/
+          if-no-files-found: error
+      # Self-update end to end (M32): version N and N+1 of the installer, N installed, a tampered feed refused, then N
+      # updated to N+1 through a signed local feed. After the upload, in its own folder.
+      - name: Self-update test
+        shell: bash
+        timeout-minutes: 45
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
+          bash eng/test-update.sh "$RUNNER_TEMP/update-test"
+
+  # The benchmarks on GitHub-hosted runners, a gate of every stable release (and on a dispatch that asks). These are
+  # GPU-less VMs, so the numbers are indicative only; authoritative numbers come from reference hardware
+  # (docs/adr/0002-performance-budgets.md). On master the regression gate (`compare`) fails when a scenario regresses
+  # against the median of earlier runs on the same runner OS.
+  benchmarks:
+    needs: plan
+    if: needs.plan.outputs.kind == 'stable' || inputs.benchmarks
+    permissions:
+      contents: read
+      actions: read # earlier runs' results, the regression baseline
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          display: true
+      - name: Linux dependencies (Native AOT toolchain, VS Code)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang zlib1g-dev libfontconfig1
+          curl -fsSL -o /tmp/code.deb "https://update.code.visualstudio.com/latest/linux-deb-x64/stable"
+          sudo apt-get install -y /tmp/code.deb
+      - name: macOS VS Code
+        if: runner.os == 'macOS'
+        run: brew install --cask visual-studio-code
+      - name: Windows VS Code
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install vscode -y --no-progress
+          "CODALUS_BENCH_VSCODE=C:\Program Files\Microsoft VS Code\Code.exe" >> $env:GITHUB_ENV
+      - name: Generate fixtures
+        run: dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -c Release -- all samples
+      - name: Publish the shell (with its hosts and built-in plugins)
+        shell: bash
+        run: |
+          rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
+          dotnet publish src/Codalus.Shell -c Release -r "$rid" -o artifacts/shell
+      - name: Run benchmarks
+        # Bounded below the job's limit: a slow run still reports what it measured, and its log is kept.
+        timeout-minutes: 70
+        run: >-
+          dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release -- run --results ci-results
+          --targets shell,vscode --scenarios cold-start,editor-100k,self-driven,binary-size --runs 3
+      - name: Report
+        if: always()
+        run: dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release -- report --results ci-results --out ci-results/summary-${{ runner.os }}.md
+      - name: Download the baseline (last 10 successful runs)
+        if: github.ref == 'refs/heads/master'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p baseline
+          # Earlier results: this pipeline's runs, and those of the workflows it replaced (benchmarks.yml, release.yml).
+          for id in $(for workflow in pipeline.yml release.yml benchmarks.yml; do
+                        gh run list --workflow "$workflow" --branch master --status success --limit 10 --json databaseId -q '.[].databaseId' 2> /dev/null || true
+                      done | sort -rn | head -n 10); do
+            gh run download "$id" --name "bench-results-${RUNNER_OS}" --dir "baseline/$id" || echo "run $id has no results for ${RUNNER_OS}"
+          done
+      - name: Regression gate (ADR 0002)
+        if: github.ref == 'refs/heads/master'
+        shell: bash
+        run: |
+          dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release -- compare \
+            --results ci-results --baseline baseline --confirm --out ci-results/regression-${RUNNER_OS}.md
+          cat ci-results/regression-${RUNNER_OS}.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results-${{ runner.os }}
+          path: ci-results/
+
+  # A stable release's apt, dnf and zypper repositories and site, built from its own packages and checked; the pages
+  # job deploys them once the release is published.
+  site:
+    needs: [plan, packages]
+    if: needs.plan.outputs.kind == 'stable'
+    # A called workflow gets no more than its caller grants, and GitHub checks that before any job runs.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/linux-repos.yml
+    with:
+      release: v${{ needs.plan.outputs.version }}
+      deploy: false
+    secrets: inherit
+
+  publish:
+    needs: [plan, test, smoke, packages, benchmarks, site]
+    # Every gate passed: CI and the packages for both kinds, the benchmarks and the site too for a stable release.
+    if: >-
+      !cancelled() && needs.plan.outputs.publish == 'true'
+      && needs.test.result == 'success' && needs.smoke.result == 'success' && needs.packages.result == 'success'
+      && (needs.plan.outputs.kind == 'nightly' || (needs.benchmarks.result == 'success' && needs.site.result == 'success'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          path: downloaded
+      - name: Publish the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash eng/publish-release.sh "${{ needs.plan.outputs.kind }}" "${{ needs.plan.outputs.version }}" "$GITHUB_SHA" downloaded
+      - name: Keep the newest 14 nightlies
+        if: needs.plan.outputs.kind == 'nightly'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- '-nightly\.' | sort -rV | tail -n +15 \
+            | while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done
+
+  untag:
+    needs: [plan, publish]
+    # Whenever the release wasn't published: a gate failed, or was cancelled (a runner never acquired, which is neither
+    # failure() nor cancelled(): 0.2.1's first run kept its tag that way), or the run was.
+    if: always() && needs.plan.outputs.publish == 'true' && needs.publish.result != 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Remove the tag of a release that was not published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ needs.plan.outputs.version }}"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
+
+  # After a stable release is published, in this order: the site with the repositories (the Pages artifact the site
+  # gate uploaded), the AUR package, and develop last.
+  pages:
+    needs: [plan, publish]
+    if: needs.plan.outputs.kind == 'stable'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.address.outputs.url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      # Pages reports http:// for a project site under its owner's custom domain, though the site is served over HTTPS.
+      - id: address
+        shell: bash
+        run: |
+          url="${{ steps.deployment.outputs.page_url }}"
+          echo "url=https://${url#*://}" >> "$GITHUB_OUTPUT"
+
+  aur:
+    needs: [plan, pages]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Push the AUR package (codalus-bin)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          # The maintainer's AUR account key (a repository secret). Without it the package is on the release page only.
+          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo "::notice::AUR_SSH_PRIVATE_KEY isn't set: codalus-bin $VERSION is attached to the release, not pushed to the AUR."
+            exit 0
+          fi
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" -p "aur-codalus-bin-$VERSION.zip" -D package
+          unzip -q "package/aur-codalus-bin-$VERSION.zip" -d package
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur && chmod 600 ~/.ssh/aur
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2> /dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes"
+          git clone -q ssh://aur@aur.archlinux.org/codalus-bin.git aur
+          cp package/PKGBUILD package/.SRCINFO aur/
+          cd aur
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+          git diff --cached --quiet || { git commit -q -m "Update to $VERSION"; git push -q origin HEAD:master; }
+
+  # Last: develop moves past the release (and takes in a hotfix), once everything is out. The workflow token's push
+  # starts no run, so it makes no nightly.
+  finish:
+    needs: [plan, aur]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Move develop past the release (and take in a hotfix)
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin develop master
+          git switch -c develop-after-release origin/develop
+          if ! git merge --no-edit origin/master; then
+            # A hotfix released from master: develop's VERSION wins (the bump below moves it past the release); any
+            # other conflict needs the maintainer.
+            if [[ "$(git diff --name-only --diff-filter=U)" == "VERSION" ]]; then
+              git checkout --ours VERSION && git add VERSION && git commit --no-edit
+            else
+              echo "::error::Merging master into develop conflicts beyond VERSION; merge it by hand." && exit 1
+            fi
+          fi
+          next="$(dotnet run --project eng/Codalus.Release -- bump --after "${{ needs.plan.outputs.version }}")"
+          if ! git diff --quiet VERSION; then
+            git commit -m "Start $next after the ${{ needs.plan.outputs.version }} release" VERSION
+          fi
+          git push origin HEAD:develop

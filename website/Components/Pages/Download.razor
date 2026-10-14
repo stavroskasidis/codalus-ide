@@ -109,7 +109,7 @@
             <div class="card card-outline">
                 <h2>Stable and nightly</h2>
                 <p>
-                    Stable releases come from master. Nightly builds come from develop every night it changed, and are marked as prereleases.
+                    Stable releases come from master. Nightly builds come from each change to develop that passes the tests on every platform, and are marked as prereleases.
                     @if (Releases.Stable is not null && Releases.Nightly is { } nightly)
                     {
                         @("The newest is ")<a href="@Releases.ReleaseUrl(nightly)">@nightly</a>@(".")

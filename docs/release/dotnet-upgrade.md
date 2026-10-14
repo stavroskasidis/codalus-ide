@@ -8,7 +8,7 @@ Codalus still runs on the current .NET. Its build host rolls forward onto the ne
 
 - [ ] **Install the SDK where the tests run.**
   - `samples/Net<N>/global.json` pins the release candidate (copy `samples/Net11` for a new version).
-  - `.github/workflows/ci.yml` and `release.yml` (`setup-dotnet`'s `dotnet-version`) install the same version.
+  - `.github/actions/setup/action.yml` (`setup-dotnet`'s `dotnet-version`, used by every workflow) installs the same version.
   - `eng/validate.sh` installs it from the fixture's `global.json`, on Linux (WSL) and the Mac.
 - [ ] **Projects:** the fixture opens, evaluates, builds, runs, debugs, tests (on both frameworks) and Hot Reloads: `DotnetVersionsTests` (Projects), `Net11Tests` (Shell) and the smoke test's `dotnet.net11` step. Update them for the new version.
 - [ ] **netcoredbg:** debugging on the new runtime works with the pinned netcoredbg (`eng/get-netcoredbg.sh`), or a newer release is pinned. If none works, record the gap.

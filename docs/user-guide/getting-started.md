@@ -19,7 +19,7 @@ The debugger (netcoredbg) is included in the packages.
 
 ## Installing
 
-Every release on the [releases page](https://github.com/stavroskasidis/codalus-ide/releases) has installers for each platform, and `SHA256SUMS.txt` to check them against. Stable releases come from `master`; nightly builds (`0.2.0-nightly.20261011.1`) come from `develop` every night it changed, and are marked as prereleases.
+Every release on the [releases page](https://github.com/stavroskasidis/codalus-ide/releases) has installers for each platform, and `SHA256SUMS.txt` to check them against. Stable releases come from `master`; nightly builds (`0.2.0-nightly.20261011.1`) come from each change to `develop` that passes the tests on every platform, and are marked as prereleases.
 
 | OS | Download | How |
 |---|---|---|
