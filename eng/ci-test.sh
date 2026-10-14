@@ -31,10 +31,17 @@ case "$shard" in
   others)
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The
     # Windows runner has four cores, where all the projects at once timed out at random: three at a time there.
+    # The tests that write full core dumps run on their own afterwards: next to every other test process (a macOS
+    # runner has 7 GB) createdump stalled past its timeout or wrote a truncated core.
     extra=()
     [[ "${RUNNER_OS:-}" == "Windows" ]] && extra=(--max-parallel-test-modules 3)
+    dumps=(Codalus.Debugging.Tests.CompanionTests Codalus.Debugging.Tests.JitDebuggingTests)
+    without=()
+    alone=()
+    for class in "${dumps[@]}"; do without+=(--filter-not-class "$class"); alone+=(--filter-class "$class"); done
     dotnet test --solution Codalus.slnx -c "$configuration" --no-build ${extra[@]+"${extra[@]}"} -- \
-      --hangdump --hangdump-timeout 25m --hangdump-type Mini --filter-not-namespace Codalus.Shell.Tests --ignore-exit-code 8
+      --hangdump --hangdump-timeout 25m --hangdump-type Mini --filter-not-namespace Codalus.Shell.Tests "${without[@]}" --ignore-exit-code 8
+    dotnet test --project tests/Codalus.Debugging.Tests "${common[@]}" "${alone[@]}"
     ;;
   *)
     echo "Unknown shard: $shard" >&2

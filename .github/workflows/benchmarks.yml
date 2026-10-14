@@ -5,14 +5,10 @@ name: Benchmarks
 # (docs/adr/0002-performance-budgets.md). The regression gate is `compare`: it fails when a scenario regresses
 # against the median of earlier runs on the same runner OS.
 # While the repo is private: manual dispatch only (at milestone checkpoints), because CI minutes are limited.
-# Once it is public: also on every push to master (code changes only).
+# Once it is public: also in every stable release (release.yml calls it as a gate before publishing anything).
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
+  workflow_call:
 
 permissions:
   contents: read
@@ -83,7 +79,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p baseline
-          for id in $(gh run list --workflow benchmarks.yml --branch master --status success --limit 10 --json databaseId -q '.[].databaseId'); do
+          # Earlier results: this workflow's own runs, and the stable releases that ran it.
+          for id in $( (gh run list --workflow benchmarks.yml --branch master --status success --limit 10 --json databaseId -q '.[].databaseId'; \
+                        gh run list --workflow release.yml --branch master --status success --limit 10 --json databaseId -q '.[].databaseId') | sort -rn | head -n 10); do
             gh run download "$id" --name "bench-results-${RUNNER_OS}" --dir "baseline/$id" || echo "run $id has no results for ${RUNNER_OS}"
           done
       - name: Regression gate (ADR 0002)

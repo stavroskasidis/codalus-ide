@@ -2,6 +2,12 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.2.1
+
+A maintenance release: the same app as 0.2.0, released again by the new release process.
+- **Releases are atomic.** A stable release now publishes nothing until every check has passed: the tests and the smoke tests on every OS, the benchmarks, the installers installed and smoke-tested, and the apt, dnf and zypper repositories built and installed from. Then it publishes the release page, the website with the Linux repositories, and the AUR package, in that order. For 0.2.0 the website and the Linux repositories didn't update.
+- Fixes in the tests and the tools around the release, none in the app.
+
 ## 0.2.0
 
 **Daedalus Studio is now Codalus IDE** ([ADR 0056](docs/adr/0056-rename-to-codalus.md)): the CLI is `codalus`, the packages are `codalus` (and `codalus-bin` on the AUR), and the repository is `stavroskasidis/codalus-ide`. It's a clean break, made while there are no users to move:
