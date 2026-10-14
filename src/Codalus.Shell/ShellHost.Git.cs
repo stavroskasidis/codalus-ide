@@ -30,6 +30,7 @@ public sealed partial class ShellHost
         Git.Log += (_, line) => GitLog.AppendLine(line);
         Git.StatusChanged += (_, _) => Ui.Post(UpdateGitStatus);
         GitChanges = new GitChangesViewModel(Git, (path, staged) => OpenDiffAsync(path, staged), command => RunGitCommandAsync(command));
+        GitChanges.OpenFile = path => OpenFileAsync(path);
         GitChangesView.ReportError = ReportGitError;
         DiffView.ReportError = ReportGitError;
         UpdateGitStatus();
@@ -82,6 +83,11 @@ public sealed partial class ShellHost
         if (command.StartsWith("git.mergeEditor:", StringComparison.Ordinal))
         {
             return OpenMergeEditorAsync(command["git.mergeEditor:".Length..]);
+        }
+
+        if (command.StartsWith("git.dropStash:", StringComparison.Ordinal))
+        {
+            return DropStashAsync(command["git.dropStash:".Length..]);
         }
 
         Run(command);
@@ -259,6 +265,17 @@ public sealed partial class ShellHost
     public Task PullAsync() => GitActionAsync(() => Git.PullAsync(), "Pulling…");
 
     public Task PushAsync() => GitActionAsync(() => Git.PushAsync(), "Pushing…");
+
+    /// <summary>Pulls, then pushes the branch's own commits.</summary>
+    public Task SyncAsync() => GitActionAsync(async () =>
+    {
+        if (Git.Status?.Upstream is not null)
+        {
+            await Git.PullAsync().ConfigureAwait(true);
+        }
+
+        await Git.PushAsync().ConfigureAwait(true);
+    }, "Syncing…");
 
     public Task AbortMergeAsync() => GitActionAsync(() => Git.AbortMergeAsync());
 

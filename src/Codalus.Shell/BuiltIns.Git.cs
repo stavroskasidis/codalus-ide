@@ -37,6 +37,7 @@ internal static partial class BuiltIns
         Add("git.fetch", "Fetch", shell.FetchAsync);
         Add("git.pull", "Pull", shell.PullAsync);
         Add("git.push", "Push", shell.PushAsync);
+        Add("git.sync", "Sync (Pull then Push)", shell.SyncAsync);
         Add("git.showDiff", "Compare with Unmodified", shell.ShowActiveFileDiffAsync, "gitRepository && activeDocumentKind == textFile");
         Add("git.stageFile", "Stage Active File", shell.StageActiveFileAsync, "gitRepository && activeDocumentKind == textFile");
         Add("git.toggleBlame", "Toggle Blame", shell.ToggleBlameAsync, "gitRepository && activeDocumentKind == textFile");
@@ -53,6 +54,7 @@ internal static partial class BuiltIns
         Add("git.skip", "Skip Commit", shell.SkipOperationAsync, "gitOperation");
         Add("git.stash", "Stash Changes…", shell.StashAsync);
         Add("git.stashes", "Stashes…", shell.ShowStashesAsync);
+        Add("git.dropAllStashes", "Drop All Stashes", shell.DropAllStashesAsync);
         Add("git.rebase", "Rebase Current Branch…", shell.RebaseAsync);
         Add("git.interactiveRebase", "Interactive Rebase…", shell.InteractiveRebaseAsync);
         Add("git.tags", "Tags…", shell.ManageTagsAsync);

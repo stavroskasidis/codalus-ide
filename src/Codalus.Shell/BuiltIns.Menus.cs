@@ -201,6 +201,7 @@ internal static partial class BuiltIns
             Item(Git, "git.fetch", "2-remote"),
             Item(Git, "git.pull", "2-remote"),
             Item(Git, "git.push", "2-remote"),
+            Item(Git, "git.sync", "2-remote"),
             Item(Git, "git.remotes", "2-remote"),
             Sub(Git, GitBranchesMenu, "Branches", "3-more"),
             Sub(Git, GitStashMenu, "Stash", "3-more"),
@@ -223,6 +224,7 @@ internal static partial class BuiltIns
 
             Item(GitStashMenu, "git.stash", "1-stash"),
             Item(GitStashMenu, "git.stashes", "1-stash"),
+            Item(GitStashMenu, "git.dropAllStashes", "1-stash"),
 
             Item(GitFileMenu, "git.showDiff", "1-diff"),
             Item(GitFileMenu, "git.compareWith", "1-diff"),

@@ -426,6 +426,44 @@ public sealed partial class ShellHost
         }
     });
 
+    /// <summary>Drops a stash (by its <c>stash@{n}</c> name) after asking.</summary>
+    public Task DropStashAsync(string name) => GitActionAsync(async () =>
+    {
+        if ((await Git.StashesAsync().ConfigureAwait(true)).FirstOrDefault(s => s.Name == name) is not { } stash)
+        {
+            return;
+        }
+
+        var choice = await Dialogs.ShowAsync(new DialogRequest(
+            Localizer.Format("msg.gitDepth.dropStash", "Drop {0}?", stash.Name),
+            Localizer.Format("msg.gitDepth.theStashWillBeDeleted", "“{0}” will be deleted.", stash.Message),
+            ["Drop", "Cancel"]) { DefaultButton = "Cancel" }).ConfigureAwait(true);
+        if (choice.Button == "Drop")
+        {
+            await Git.DropStashAsync(stash).ConfigureAwait(true);
+        }
+    });
+
+    /// <summary>Drops every stash after asking.</summary>
+    public Task DropAllStashesAsync() => GitActionAsync(async () =>
+    {
+        var count = (await Git.StashesAsync().ConfigureAwait(true)).Count;
+        if (count == 0)
+        {
+            StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.noStashes", "No stashes."), TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        var choice = await Dialogs.ShowAsync(new DialogRequest(
+            Localizer.Get("msg.gitDepth.dropAllStashes", "Drop all stashes?"),
+            Localizer.Format("msg.gitDepth.allStashesWillBeDeleted", "{0} stash(es) will be deleted. This can't be undone.", count.ToString(CultureInfo.CurrentCulture)),
+            ["Drop All", "Cancel"]) { DefaultButton = "Cancel" }).ConfigureAwait(true);
+        if (choice.Button == "Drop All")
+        {
+            await Git.ClearStashesAsync().ConfigureAwait(true);
+        }
+    });
+
     // ------------------------------------------------------------------ rebase
 
     public Task RebaseAsync() => GitActionAsync(async () =>

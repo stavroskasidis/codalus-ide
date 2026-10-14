@@ -2,28 +2,158 @@
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:git="using:Codalus.Workbench.Git"
              xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.GitChangesView"
              x:DataType="vm:GitChangesViewModel">
+  <UserControl.Styles>
+    <!-- A collapsible section's header (Related Items, Changes, Stashes): a chevron that turns when it's open. -->
+    <Style Selector="ToggleButton.section">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="2,4" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
+    </Style>
+    <Style Selector="ToggleButton.section /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <Style Selector="ToggleButton.section:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <Style Selector="ToggleButton.section:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+    </Style>
+    <Style Selector="ToggleButton.section controls|Icon.chevron">
+      <Setter Property="RenderTransform" Value="rotate(0deg)" />
+    </Style>
+    <Style Selector="ToggleButton.section:checked controls|Icon.chevron">
+      <Setter Property="RenderTransform" Value="rotate(90deg)" />
+    </Style>
+    <!-- A file's stage, unstage and discard buttons show while the pointer is over its row. -->
+    <Style Selector="Grid.changeRow StackPanel.rowActions">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="Grid.changeRow:pointerover StackPanel.rowActions">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ListBox.changeList ListBoxItem">
+      <Setter Property="Padding" Value="4,1" />
+      <Setter Property="MinHeight" Value="22" />
+    </Style>
+    <Style Selector="TreeView.changeTree">
+      <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    </Style>
+    <Style Selector="ListBox.changeList">
+      <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    </Style>
+    <Style Selector="ListBox.changeList ListBoxItem">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="TreeView.changeTree TreeViewItem" x:DataType="vm:GitChangeNode">
+      <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+      <Setter Property="MinHeight" Value="22" />
+    </Style>
+    <Style Selector="Button.columnHeader">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0,0,1,1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="4,3" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.columnHeader:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    </Style>
+    <Style Selector="TextBlock.sectionEmpty">
+      <Setter Property="Margin" Value="24,2,4,6" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+  </UserControl.Styles>
   <UserControl.Resources>
+    <!-- A file of the list view: Name and Path columns, the hover actions, and its status letter. -->
     <DataTemplate x:Key="FileRow" x:DataType="vm:GitFileRow">
-      <Grid ColumnDefinitions="18,*,Auto" Background="Transparent">
-        <TextBlock Text="{Binding Letter}" FontWeight="SemiBold" ToolTip.Tip="{Binding Description}" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-          <TextBlock Text="{Binding Name}" />
-          <Border IsVisible="{Binding HasBadge}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="3" Padding="3,0" VerticalAlignment="Center" ToolTip.Tip="{Binding BadgeTooltip}">
+      <Grid Classes="changeRow" ColumnDefinitions="2*,3*,54,18" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
+        <Grid.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="{l:T gitChanges.compareWithUnmodified}" Tag="diff" Click="OnFileAction" />
+            <MenuItem Header="{l:T gitChanges.openFile}" Tag="open" Click="OnFileAction" IsVisible="{Binding !IsDeleted}" />
+            <Separator />
+            <MenuItem Header="{l:T gitChanges.stage}" Tag="stage" Click="OnFileAction" IsVisible="{Binding CanStage}" />
+            <MenuItem Header="{l:T gitChanges.unstage}" Tag="unstage" Click="OnFileAction" IsVisible="{Binding CanUnstage}" />
+            <MenuItem Header="{l:T gitChanges.discardChanges}" Tag="discard" Click="OnFileAction" IsVisible="{Binding CanStage}" />
+          </ContextMenu>
+        </Grid.ContextMenu>
+        <DockPanel ClipToBounds="True">
+          <controls:Icon DockPanel.Dock="Left" Kind="{Binding Icon}" VerticalAlignment="Center" Margin="0,0,6,0" />
+          <Border DockPanel.Dock="Right" IsVisible="{Binding HasBadge}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="3" Padding="3,0" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip.Tip="{Binding BadgeTooltip}">
             <TextBlock Text="{Binding Badge}" FontSize="{DynamicResource Shell.FontSize.Small}" Classes="muted" />
           </Border>
-          <TextBlock Text="{Binding Folder}" Classes="muted" TextTrimming="CharacterEllipsis" />
-        </StackPanel>
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
-          <Button Classes="toolbar" Content="+" ToolTip.Tip="{l:T gitChanges.stage}" IsVisible="{Binding CanStage}" Tag="stage" Click="OnRowAction" AutomationProperties.Name="{l:T gitChanges.stage}" />
-          <Button Classes="toolbar" Content="−" ToolTip.Tip="{l:T gitChanges.unstage}" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnRowAction" AutomationProperties.Name="{l:T gitChanges.unstage}" />
-          <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.discardChanges}" IsVisible="{Binding CanStage}" Tag="discard" Click="OnRowAction" AutomationProperties.Name="{l:T gitChanges.discardChanges}">
+          <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+        </DockPanel>
+        <TextBlock Grid.Column="1" Text="{Binding Location}" Margin="6,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Location}" />
+        <StackPanel Grid.Column="2" Classes="rowActions" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right">
+          <Button Classes="toolbar" Content="+" ToolTip.Tip="{l:T gitChanges.stage}" IsVisible="{Binding CanStage}" Tag="stage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.stage}" />
+          <Button Classes="toolbar" Content="−" ToolTip.Tip="{l:T gitChanges.unstage}" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.unstage}" />
+          <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.discardChanges}" IsVisible="{Binding CanStage}" Tag="discard" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.discardChanges}">
             <controls:Icon Kind="discard" />
           </Button>
         </StackPanel>
+        <TextBlock Grid.Column="3" Text="{Binding Letter}" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding Description}" />
       </Grid>
+    </DataTemplate>
+    <!-- A node of the tree view: the repository, a folder or a file, with the file's actions and status letter. -->
+    <TreeDataTemplate x:Key="NodeRow" x:DataType="vm:GitChangeNode" ItemsSource="{Binding Children}">
+      <Grid Classes="changeRow" ColumnDefinitions="Auto,*,Auto,18" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
+        <Grid.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="{l:T gitChanges.compareWithUnmodified}" Tag="diff" Click="OnFileAction" IsVisible="{Binding IsFile}" />
+            <MenuItem Header="{l:T gitChanges.openFile}" Tag="open" Click="OnFileAction" IsVisible="{Binding IsFile}" />
+            <Separator IsVisible="{Binding IsFile}" />
+            <MenuItem Header="{l:T gitChanges.stage}" Tag="stage" Click="OnFileAction" IsVisible="{Binding CanStage}" />
+            <MenuItem Header="{l:T gitChanges.unstage}" Tag="unstage" Click="OnFileAction" IsVisible="{Binding CanUnstage}" />
+            <MenuItem Header="{l:T gitChanges.discardChanges}" Tag="discard" Click="OnFileAction" IsVisible="{Binding CanDiscard}" />
+          </ContextMenu>
+        </Grid.ContextMenu>
+        <controls:Icon Kind="{Binding Icon}" Margin="0,0,6,0" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="{Binding Text}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+          <Border IsVisible="{Binding HasBadge}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="3" Padding="3,0" VerticalAlignment="Center" ToolTip.Tip="{Binding BadgeTooltip}">
+            <TextBlock Text="{Binding Badge}" FontSize="{DynamicResource Shell.FontSize.Small}" Classes="muted" />
+          </Border>
+        </StackPanel>
+        <StackPanel Grid.Column="2" Classes="rowActions" Orientation="Horizontal" Spacing="2" Margin="6,0,0,0">
+          <Button Classes="toolbar" Content="+" ToolTip.Tip="{l:T gitChanges.stage}" IsVisible="{Binding CanStage}" Tag="stage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.stage}" />
+          <Button Classes="toolbar" Content="−" ToolTip.Tip="{l:T gitChanges.unstage}" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.unstage}" />
+          <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.discardChanges}" IsVisible="{Binding CanDiscard}" Tag="discard" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.discardChanges}">
+            <controls:Icon Kind="discard" />
+          </Button>
+        </StackPanel>
+        <TextBlock Grid.Column="3" Text="{Binding Letter}" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding Description}" />
+      </Grid>
+    </TreeDataTemplate>
+    <DataTemplate x:Key="StashRow" x:DataType="git:GitStash">
+      <DockPanel Background="Transparent" ToolTip.Tip="{l:T gitChanges.doubleClickAppliesTheStash}">
+        <DockPanel.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="{l:T gitChanges.apply}" Tag="apply" Click="OnStashAction" />
+            <MenuItem Header="{l:T gitChanges.pop}" Tag="pop" Click="OnStashAction" />
+            <Separator />
+            <MenuItem Header="{l:T gitChanges.drop}" Tag="drop" Click="OnStashAction" />
+          </ContextMenu>
+        </DockPanel.ContextMenu>
+        <controls:Icon Kind="stash" Margin="0,0,6,0" />
+        <TextBlock DockPanel.Dock="Right" Text="{Binding Name}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Margin="6,0,0,0" />
+        <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
     </DataTemplate>
   </UserControl.Resources>
   <Panel>
@@ -33,7 +163,7 @@
       <Button Content="{l:T gitChanges.createGitRepository}" Tag="git.init" Click="OnCommand" HorizontalAlignment="Left" AutomationProperties.Name="{l:T gitChanges.createGitRepository}" />
     </StackPanel>
     <DockPanel IsVisible="{Binding HasRepository}">
-      <StackPanel DockPanel.Dock="Top" Margin="6,4" Spacing="4">
+      <StackPanel DockPanel.Dock="Top" Margin="6,6,6,4" Spacing="6">
         <ComboBox ItemsSource="{Binding Repositories}" SelectedItem="{Binding SelectedRepository}" IsVisible="{Binding HasSeveralRepositories}"
                   HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T gitChanges.repository}" ToolTip.Tip="{l:T gitChanges.theSolutionSpansSeveralRepositoriesThe}">
           <ComboBox.ItemTemplate>
@@ -46,16 +176,66 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
+
+        <!-- The branch, and fetch, pull, push, sync and more. -->
         <DockPanel>
-          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
-            <Button Classes="toolbar" Content="{l:T gitChanges.fetch}" Tag="git.fetch" Click="OnCommand" />
-            <Button Classes="toolbar" Content="{l:T gitChanges.pull}" Tag="git.pull" Click="OnCommand" />
-            <Button Classes="toolbar" Content="{l:T gitChanges.push}" Tag="git.push" Click="OnCommand" />
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="4,0,0,0">
+            <Button Classes="toolbar" Tag="git.fetch" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.fetch}" AutomationProperties.Name="{l:T gitChanges.fetch}">
+              <controls:Icon Kind="arrow-down" />
+            </Button>
+            <Button Classes="toolbar" Tag="git.pull" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.pull}" AutomationProperties.Name="{l:T gitChanges.pull}">
+              <controls:Icon Kind="download" />
+            </Button>
+            <Button Classes="toolbar" Tag="git.push" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.push}" AutomationProperties.Name="{l:T gitChanges.push}">
+              <controls:Icon Kind="upload" />
+            </Button>
+            <Button Classes="toolbar" Tag="git.sync" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.syncPullThenPush}" AutomationProperties.Name="{l:T gitChanges.sync}">
+              <controls:Icon Kind="sync" />
+            </Button>
+            <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.moreActions}" AutomationProperties.Name="{l:T gitChanges.moreActions}">
+              <controls:Icon Kind="more" />
+              <Button.Flyout>
+                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                  <MenuItem Header="{l:T gitChanges.newBranch}" Tag="git.createBranch" Click="OnMenuCommand" />
+                  <MenuItem Header="{l:T gitChanges.mergeBranch}" Tag="git.merge" Click="OnMenuCommand" />
+                  <MenuItem Header="{l:T gitChanges.rebaseCurrentBranch}" Tag="git.rebase" Click="OnMenuCommand" />
+                  <Separator />
+                  <MenuItem Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
+                  <MenuItem Header="{l:T gitChanges.viewHistory}" Tag="git.history" Click="OnMenuCommand" />
+                  <MenuItem Header="{l:T gitChanges.manageRemotes}" Tag="git.remotes" Click="OnMenuCommand" />
+                  <MenuItem Header="{l:T gitChanges.manageTags}" Tag="git.tags" Click="OnMenuCommand" />
+                  <Separator />
+                  <MenuItem Header="{l:T gitChanges.refresh}" Tag="git.refresh" Click="OnMenuCommand" />
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
           </StackPanel>
-          <Button Classes="toolbar" Tag="git.switchBranch" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.switchBranch}" AutomationProperties.Name="{l:T gitChanges.branch}">
-            <TextBlock Text="{Binding BranchText}" FontWeight="SemiBold" />
+          <Button Tag="git.switchBranch" Click="OnCommand" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Padding="8,3"
+                  ToolTip.Tip="{l:T gitChanges.switchBranch}" AutomationProperties.Name="{l:T gitChanges.branch}">
+            <DockPanel>
+              <controls:Icon DockPanel.Dock="Right" Kind="chevron-down" Margin="6,0,0,0" />
+              <TextBlock Text="{Binding BranchName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </DockPanel>
           </Button>
         </DockPanel>
+
+        <!-- Outgoing / incoming commits, the history, and pull requests. -->
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Classes="toolbar" Tag="git.createPullRequest" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.createAPullRequest}" AutomationProperties.Name="{l:T gitChanges.createAPullRequest}">
+            <controls:Icon Kind="pull-request" />
+          </Button>
+          <WrapPanel ItemSpacing="8" VerticalAlignment="Center">
+            <Button Classes="toolbar" Tag="git.history" Click="OnCommand" Padding="2,1" ToolTip.Tip="{Binding OutgoingIncomingTooltip}" AutomationProperties.Name="{Binding OutgoingIncomingTooltip}">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <controls:Icon Kind="arrow-up-down" />
+                <TextBlock Text="{Binding OutgoingIncomingText}" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <Button Classes="link" Content="{l:T gitChanges.viewAllCommits}" Tag="git.history" Click="OnCommand" VerticalAlignment="Center" />
+            <Button Classes="link" Content="{l:T gitChanges.publishBranch}" Tag="git.push" Click="OnCommand" IsVisible="{Binding IsNotPublished}" ToolTip.Tip="{Binding OutgoingIncomingTooltip}" VerticalAlignment="Center" />
+          </WrapPanel>
+        </DockPanel>
+
         <WrapPanel Orientation="Horizontal" IsVisible="{Binding HasCi}">
           <Button Classes="link" Tag="hosting.showChecks" Click="OnCommand" ToolTip.Tip="{Binding CiTooltip}" AutomationProperties.Name="{Binding CiText}">
             <StackPanel Orientation="Horizontal" Spacing="4">
@@ -70,8 +250,16 @@
             <TextBlock Text="{Binding PullRequestText}" TextTrimming="CharacterEllipsis" />
           </StackPanel>
         </Button>
+
+        <!-- The message, with the mention button in its bottom strip. -->
         <Panel>
-          <TextBox x:Name="Message" Text="{Binding Message}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" MaxHeight="160" PlaceholderText="{l:T gitChanges.commitMessageCtrlEnterToCommit}" AutomationProperties.Name="{l:T gitChanges.commitMessage}" />
+          <TextBox x:Name="Message" Text="{Binding Message}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="84" MaxHeight="200" Padding="8,6,8,32"
+                   PlaceholderText="{l:T gitChanges.enterAMessageRequired}" AutomationProperties.Name="{l:T gitChanges.commitMessage}" />
+          <Border VerticalAlignment="Bottom" Margin="1,0,1,1" Height="28" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Shell.Border}">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,4,0">
+              <Button Classes="toolbar" Content="#" Click="OnMention" ToolTip.Tip="{l:T gitChanges.mentionAnIssueOrWorkItem}" AutomationProperties.Name="{l:T gitChanges.mentionAnIssueOrWorkItem}" />
+            </StackPanel>
+          </Border>
           <Popup x:Name="CompletionPopup" PlacementTarget="{Binding #Message}" Placement="Bottom" IsLightDismissEnabled="True">
             <Border Classes="overlay" Padding="2" MinWidth="280" MaxWidth="520">
               <ListBox x:Name="CompletionList" MaxHeight="220" Background="Transparent" AutomationProperties.Name="{l:T gitChanges.issuesAndWorkItems}">
@@ -89,11 +277,20 @@
             </Border>
           </Popup>
         </Panel>
-        <StackPanel Orientation="Horizontal" Spacing="6">
-          <Button Classes="accent" Content="{l:T gitChanges.commitStaged}" Tag="staged" Click="OnCommit" IsEnabled="{Binding HasStaged}" />
-          <Button Content="{l:T gitChanges.commitAll}" Tag="all" Click="OnCommit" />
+
+        <!-- Commit (staged changes when there are some, otherwise all), and push or sync after it. -->
+        <WrapPanel ItemSpacing="12" LineSpacing="4">
+          <SplitButton x:Name="CommitButton" Content="{Binding CommitText}" Click="OnCommit" IsEnabled="{Binding CanCommit}" ToolTip.Tip="{l:T gitChanges.ctrlEnterCommits}">
+            <SplitButton.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                <MenuItem Tag="commit" Click="OnCommitMenu" />
+                <MenuItem Tag="push" Click="OnCommitMenu" />
+                <MenuItem Tag="sync" Click="OnCommitMenu" />
+              </MenuFlyout>
+            </SplitButton.Flyout>
+          </SplitButton>
           <CheckBox Content="{l:T gitChanges.amend}" IsChecked="{Binding Amend}" />
-        </StackPanel>
+        </WrapPanel>
         <Border IsVisible="{Binding HasOperation}" Background="{DynamicResource Shell.Hover}" CornerRadius="3" Padding="6,4">
           <StackPanel Spacing="4">
             <TextBlock Text="{Binding OperationText}" TextWrapping="Wrap" />
@@ -104,28 +301,143 @@
             </StackPanel>
           </StackPanel>
         </Border>
-        <StackPanel Orientation="Horizontal" Spacing="2">
-          <Button Classes="toolbar" Content="{l:T gitChanges.stash}" Tag="git.stash" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.stashTheChanges}" />
-          <Button Classes="toolbar" Content="{l:T gitChanges.stashes}" Tag="git.stashes" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.applyPopOrDropAStash}" />
-          <Button Classes="toolbar" Content="{l:T gitChanges.history}" Tag="git.history" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.viewTheHistory}" />
-        </StackPanel>
       </StackPanel>
-      <ScrollViewer>
-        <StackPanel Margin="4,0" Spacing="2">
-          <StackPanel IsVisible="{Binding HasConflicts}">
-            <TextBlock Text="{Binding ConflictsHeader}" FontWeight="SemiBold" Margin="2,6,2,2" />
-            <ListBox x:Name="ConflictList" ItemsSource="{Binding Conflicts}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
+
+      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="4,0,4,8" Spacing="2">
+          <!-- Related Items: the issues and work items the message mentions. -->
+          <ToggleButton x:Name="RelatedToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.relatedItems}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <controls:Icon Classes="chevron" Kind="chevron-right" />
+              <TextBlock Text="{l:T gitChanges.relatedItems}" FontWeight="SemiBold" />
+            </StackPanel>
+          </ToggleButton>
+          <StackPanel IsVisible="{Binding #RelatedToggle.IsChecked}">
+            <TextBlock Classes="muted sectionEmpty" Text="{l:T gitChanges.thereAreNoItemsMentionedInThe}" IsVisible="{Binding HasNoRelatedItems}" />
+            <ItemsControl ItemsSource="{Binding RelatedItems}" Margin="24,0,4,4" IsVisible="{Binding HasRelatedItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:RelatedItem">
+                  <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
+                    <controls:Icon Kind="issue" />
+                    <TextBlock Text="{Binding Reference}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
           </StackPanel>
-          <DockPanel IsVisible="{Binding HasStaged}">
-            <Button DockPanel.Dock="Right" Classes="toolbar" Content="{l:T gitChanges.unstageAll}" Tag="unstageAll" Click="OnAll" />
-            <TextBlock Text="{Binding StagedHeader}" FontWeight="SemiBold" Margin="2,6,2,2" />
-          </DockPanel>
-          <ListBox x:Name="StagedList" ItemsSource="{Binding Staged}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" IsVisible="{Binding HasStaged}" AutomationProperties.Name="{l:T gitChanges.stagedChanges}" />
+
+          <!-- Files as a tree (repository, folders, files) or a list (Name and Path), filtered by the filter box. -->
+          <TextBox x:Name="Filter" Text="{Binding FilterText}" IsVisible="{Binding ShowFilter}" Margin="2,2,2,4" PlaceholderText="{l:T gitChanges.filterFiles}" AutomationProperties.Name="{l:T gitChanges.filterFiles}" />
+
+          <StackPanel IsVisible="{Binding HasConflicts}">
+            <ToggleButton x:Name="ConflictsToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <controls:Icon Classes="chevron" Kind="chevron-right" />
+                <TextBlock Text="{Binding ConflictsHeader}" FontWeight="SemiBold" />
+              </StackPanel>
+            </ToggleButton>
+            <StackPanel IsVisible="{Binding #ConflictsToggle.IsChecked}">
+              <TreeView x:Name="ConflictTree" Classes="changeTree" ItemsSource="{Binding ConflictsTree}" ItemTemplate="{StaticResource NodeRow}" Background="Transparent" Margin="4,0,0,0"
+                        IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
+              <ListBox x:Name="ConflictList" Classes="changeList" ItemsSource="{Binding ConflictsItems}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" Margin="18,0,0,0"
+                       IsVisible="{Binding IsListView}" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel IsVisible="{Binding HasStaged}">
+            <DockPanel>
+              <Button DockPanel.Dock="Right" Classes="toolbar" Content="−" Tag="unstageAll" Click="OnAll" ToolTip.Tip="{l:T gitChanges.unstageAll}" AutomationProperties.Name="{l:T gitChanges.unstageAll}" />
+              <ToggleButton x:Name="StagedToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.stagedChanges}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <controls:Icon Classes="chevron" Kind="chevron-right" />
+                  <TextBlock Text="{Binding StagedHeader}" FontWeight="SemiBold" />
+                </StackPanel>
+              </ToggleButton>
+            </DockPanel>
+            <StackPanel IsVisible="{Binding #StagedToggle.IsChecked}">
+              <TreeView x:Name="StagedTree" Classes="changeTree" ItemsSource="{Binding StagedTree}" ItemTemplate="{StaticResource NodeRow}" Background="Transparent" Margin="4,0,0,0"
+                        IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.stagedChanges}" />
+              <Grid ColumnDefinitions="2*,3*,76" Margin="18,0,4,0" IsVisible="{Binding IsListView}">
+              <Button Classes="columnHeader" Tag="name" Click="OnSortColumn" AutomationProperties.Name="{l:T gitChanges.sortByName}">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Text="{Binding NameSortGlyph}" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
+                  <TextBlock Text="{l:T gitChanges.name}" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+              </Button>
+              <Button Grid.Column="1" Classes="columnHeader" Tag="path" Click="OnSortColumn" AutomationProperties.Name="{l:T gitChanges.sortByPath}">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Text="{Binding PathSortGlyph}" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
+                  <TextBlock Text="{l:T gitChanges.path}" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+              </Button>
+            </Grid>
+              <ListBox x:Name="StagedList" Classes="changeList" ItemsSource="{Binding StagedItems}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" Margin="18,0,0,0"
+                       IsVisible="{Binding IsListView}" AutomationProperties.Name="{l:T gitChanges.stagedChanges}" />
+            </StackPanel>
+          </StackPanel>
+
           <DockPanel>
-            <Button DockPanel.Dock="Right" Classes="toolbar" Content="{l:T gitChanges.stageAll}" Tag="stageAll" Click="OnAll" IsVisible="{Binding HasChanges}" />
-            <TextBlock Text="{Binding ChangesHeader}" FontWeight="SemiBold" Margin="2,6,2,2" />
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+              <Button Classes="toolbar" Content="+" Tag="stageAll" Click="OnAll" IsEnabled="{Binding HasChanges}" ToolTip.Tip="{l:T gitChanges.stageAll}" AutomationProperties.Name="{l:T gitChanges.stageAll}" />
+              <Button x:Name="ViewOptionsButton" Classes="toolbar" ToolTip.Tip="{l:T gitChanges.moreActions}" AutomationProperties.Name="{l:T gitChanges.moreActions}">
+                <controls:Icon Kind="more" />
+                <Button.Flyout>
+                  <MenuFlyout Placement="BottomEdgeAlignedRight">
+                    <MenuItem Tag="openFileAsDefault" Header="{l:T gitChanges.openFileAsDefaultAction}" ToggleType="CheckBox" Click="OnViewOption" />
+                    <MenuItem Tag="switchView" Click="OnViewOption" />
+                    <MenuItem Tag="filter" Click="OnViewOption" />
+                    <Separator />
+                    <MenuItem Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
+                    <MenuItem Header="{l:T gitChanges.refresh}" Tag="git.refresh" Click="OnMenuCommand" />
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+            </StackPanel>
+            <ToggleButton x:Name="ChangesToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.changes}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <controls:Icon Classes="chevron" Kind="chevron-right" />
+                <TextBlock Text="{Binding ChangesHeader}" FontWeight="SemiBold" />
+              </StackPanel>
+            </ToggleButton>
           </DockPanel>
-          <ListBox x:Name="ChangesList" ItemsSource="{Binding Changes}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" AutomationProperties.Name="{l:T gitChanges.changes}" />
+          <StackPanel IsVisible="{Binding #ChangesToggle.IsChecked}">
+            <TextBlock Classes="muted sectionEmpty" Text="{l:T gitChanges.thereAreNoUnstagedChangesIn}" IsVisible="{Binding !HasChanges}" />
+            <StackPanel IsVisible="{Binding HasChanges}">
+              <TreeView x:Name="ChangesTree" Classes="changeTree" ItemsSource="{Binding ChangesTree}" ItemTemplate="{StaticResource NodeRow}" Background="Transparent" Margin="4,0,0,0"
+                        IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.changes}" />
+              <Grid ColumnDefinitions="2*,3*,76" Margin="18,0,4,0" IsVisible="{Binding IsListView}">
+              <Button Classes="columnHeader" Tag="name" Click="OnSortColumn" AutomationProperties.Name="{l:T gitChanges.sortByName}">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Text="{Binding NameSortGlyph}" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
+                  <TextBlock Text="{l:T gitChanges.name}" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+              </Button>
+              <Button Grid.Column="1" Classes="columnHeader" Tag="path" Click="OnSortColumn" AutomationProperties.Name="{l:T gitChanges.sortByPath}">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Right" Text="{Binding PathSortGlyph}" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
+                  <TextBlock Text="{l:T gitChanges.path}" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+              </Button>
+            </Grid>
+              <ListBox x:Name="ChangesList" Classes="changeList" ItemsSource="{Binding ChangesItems}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" Margin="18,0,0,0"
+                       IsVisible="{Binding IsListView}" AutomationProperties.Name="{l:T gitChanges.changes}" />
+            </StackPanel>
+          </StackPanel>
+
+          <!-- Stashes: double-click applies one; its context menu applies, pops or drops it. -->
+          <ToggleButton x:Name="StashesToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.stashes}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <controls:Icon Classes="chevron" Kind="chevron-right" />
+              <TextBlock Text="{Binding StashesHeader}" FontWeight="SemiBold" />
+            </StackPanel>
+          </ToggleButton>
+          <StackPanel IsVisible="{Binding #StashesToggle.IsChecked}">
+            <Button Classes="link" Content="{l:T gitChanges.dropAll}" Tag="git.dropAllStashes" Click="OnCommand" IsEnabled="{Binding HasStashes}" HorizontalAlignment="Left" Margin="24,0,0,4" />
+            <TextBlock Classes="muted sectionEmpty" Text="{l:T gitChanges.thereAreNoStashedChanges}" IsVisible="{Binding HasNoStashes}" />
+            <ListBox x:Name="StashList" ItemsSource="{Binding Stashes}" ItemTemplate="{StaticResource StashRow}" Background="Transparent" Margin="18,0,0,0"
+                     IsVisible="{Binding HasStashes}" AutomationProperties.Name="{l:T gitChanges.stashes}" />
+          </StackPanel>
         </StackPanel>
       </ScrollViewer>
     </DockPanel>

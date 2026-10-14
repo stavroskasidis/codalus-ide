@@ -140,6 +140,9 @@ public sealed partial class GitService
     public Task DropStashAsync(GitStash stash, CancellationToken cancellationToken = default) =>
         MutateAsync(["stash", "drop", stash.Name], cancellationToken);
 
+    /// <summary>Drops every stash.</summary>
+    public Task ClearStashesAsync(CancellationToken cancellationToken = default) => MutateAsync(["stash", "clear"], cancellationToken);
+
     // ------------------------------------------------------------------ commits
 
     /// <summary>Applies a commit's changes onto the current branch. Conflicts stop it (see <see cref="GitStatus.Operation"/>).</summary>

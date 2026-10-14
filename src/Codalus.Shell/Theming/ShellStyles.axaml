@@ -413,6 +413,12 @@
     <Setter Property="TextElement.FontWeight" Value="SemiBold" />
   </Style>
 
+  <!-- A disabled link is dimmed text, not a gray box. -->
+  <Style Selector="Button.link:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
+
   <!-- Floating surfaces: command palette and toasts. -->
   <Style Selector="Border.overlay">
     <Setter Property="Background" Value="{DynamicResource Shell.Overlay}" />

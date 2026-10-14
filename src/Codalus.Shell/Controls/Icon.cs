@@ -454,6 +454,8 @@ public static class IconSet
         ["trash"] = "M2.5,4 H13.5 M6,4 V2.5 H10 V4 M4,4 L4.75,14 H11.25 L12,4 M6.75,6.5 V11.5 M9.25,6.5 V11.5",
         ["layout"] = "M1.5,2.5 H14.5 V13.5 H1.5 Z M5.5,2.5 V13.5 M5.5,10 H14.5",
         ["dot"] = Circle(8, 8, 2),
+        ["more"] = Dot(3, 8) + Dot(8, 8) + Dot(13, 8),
+        ["arrow-up-down"] = "M5,13.5 V2.5 M2.5,5 L5,2.5 L7.5,5 M11,2.5 V13.5 M8.5,11 L11,13.5 L13.5,11",
         ["pin"] = "M5.5,2 H10.5 M6.5,2 V6.5 L4,9.5 H12 L9.5,6.5 V2 M8,9.5 V14.5",
 
         // Test outcomes (Test Explorer, editor margin): colored by the test-* icon classes.
