@@ -115,7 +115,8 @@ jobs:
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/master' && inputs.deploy != false
+    # inputs.deploy is null on a push or dispatch, and expressions compare null equal to false, so compare as text.
+    if: github.ref == 'refs/heads/master' && format('{0}', inputs.deploy) != 'false'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
