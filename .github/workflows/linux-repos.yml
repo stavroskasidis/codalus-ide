@@ -96,8 +96,8 @@ jobs:
       - name: Install from them (apt and dnf, signatures checked)
         shell: bash
         run: |
-          [ -d site/rpm/stable ] && bash eng/test-linux-repos.sh site stable
-          [ -d site/rpm/nightly ] && bash eng/test-linux-repos.sh site nightly
+          if [ -d site/rpm/stable ]; then bash eng/test-linux-repos.sh site stable; fi
+          if [ -d site/rpm/nightly ]; then bash eng/test-linux-repos.sh site nightly; fi
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
