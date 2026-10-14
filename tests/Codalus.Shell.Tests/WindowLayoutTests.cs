@@ -52,4 +52,30 @@ public sealed class WindowLayoutTests
         Assert.True(f.Shell.StatusBar.IsVisible);
         Assert.False(f.Shell.Window.IsFullScreen);
     }
+
+    [AvaloniaFact]
+    public async Task A_floated_tool_window_opens_in_a_shown_window_and_comes_back_after_that_window_closes()
+    {
+        await using var f = ShellFixture.Create();
+        var id = ViewModels.ErrorListViewModel.ToolWindowId;
+        var tool = f.Shell.Layout.ShowToolWindow(id, focus: false)!;
+        ShellFixture.Pump();
+
+        // Floating gives the tool window a window of its own, shown: it used to get one with no host, never shown.
+        f.Shell.Layout.Factory.FloatDockable(tool);
+        ShellFixture.Pump();
+        var floating = Assert.Single(f.Shell.Layout.Root.Windows ?? []);
+        var host = Assert.IsAssignableFrom<Avalonia.Controls.Window>(floating.Host);
+        Assert.True(host.IsVisible);
+        Assert.True(f.Shell.Layout.IsVisible(id));
+
+        // Closing that window closes the tool window; showing it again puts it back in the main window.
+        host.Close();
+        ShellFixture.Pump();
+        Assert.Empty(f.Shell.Layout.Root.Windows ?? []);
+        f.Shell.Layout.ShowToolWindow(id, focus: false);
+        ShellFixture.Pump();
+        Assert.True(f.Shell.Layout.IsVisible(id));
+        Assert.Empty(f.Shell.Layout.Root.Windows ?? []);
+    }
 }

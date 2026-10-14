@@ -99,7 +99,9 @@
     </Border>
 
     <Grid>
-      <DockControl x:Name="Dock" Layout="{Binding Layout.Root}" Factory="{Binding Layout.Factory}" />
+      <!-- InitializeFactory gives the factory this control's host window locators: without them a floated tool
+           window or document gets a window with no host, never shown. -->
+      <DockControl x:Name="Dock" Layout="{Binding Layout.Root}" Factory="{Binding Layout.Factory}" InitializeFactory="True" />
 
       <ItemsControl x:Name="Toasts"
                     ItemsSource="{Binding Notifications.Toasts}"
