@@ -1,6 +1,6 @@
 # 0009. Packaging and release
 
-- **Status:** accepted (M7, continuing autonomously toward the MVP). M31 replaces the packaging table with Velopack installers, nightly and stable releases and self-update (roadmap D16–D21); until then this ADR describes what ships.
+- **Status:** accepted (M7, continuing autonomously toward the MVP); superseded in part by [ADR 0028](0028-release-cycle-and-installers.md) since M31 (2026-10-11): the packaging table, `release.yml` and the private-repository rules below describe M7, not what ships now (Velopack installers, `pipeline.yml`, self-update; roadmap D16–D21). The crash reports and the performance gates stand.
 - **Date:** 2026-10-09
 - **Deciders:** maintainer (goal: "keep going until MVP is reached")
 

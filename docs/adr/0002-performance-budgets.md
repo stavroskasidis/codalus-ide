@@ -1,6 +1,6 @@
 # 0002. Performance budgets
 
-- **Status:** accepted (2026-10-08), amended 2026-10-10 ([see below](#amendment-2026-10-10-rider-dropped-proposed-budgets-approved)). All budgets are final. Rider is no longer a reference, so budget 4 (solution) is final as it stands, and the budgets proposed at M8–M16 are gates.
+- **Status:** accepted (2026-10-08), amended 2026-10-10 ([see below](#amendment-2026-10-10-rider-dropped-proposed-budgets-approved)). All budgets are final. Rider is no longer a reference, so budget 4 (solution) is final as it stands, and the budgets proposed at M8–M16 are gates. *Update 2026-10-14:* `benchmarks.yml` is gone; the benchmarks are `pipeline.yml`'s `benchmarks` job, run for stable releases or on a dispatch with `benchmarks` checked, with the regression gate against the last 10 runs on `master`. Hosted macOS and Linux results aren't committed yet (`benchmarks/results/` holds Windows only).
 - **Date:** 2026-10-08
 - **Deciders:** maintainer
 

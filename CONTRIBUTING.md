@@ -19,7 +19,7 @@ Thanks for your interest in Codalus IDE. The MVP (milestones M0–M7) is done, a
 4. Keep changes covered by tests: unit tests, integration tests against the `samples/` fixtures, and headless UI tests where the UI stack allows them.
 5. Never block the UI thread. All I/O and analysis is asynchronous and cancellable, and long operations report progress.
 6. No silent stubs. If you defer something, leave a `TODO(issue)` that names the tracking issue.
-7. The plugin API (`Codalus.Plugins.Abstractions`) is a public contract: changes follow ADR 0003's versioning policy and go into the changelog in `docs/plugins.md`.
+7. The plugin API (`Codalus.Plugins.Abstractions`) is a public contract: changes follow the versioning policy of ADR 0003 and ADR 0058 and go into the changelog in `docs/plugins.md`.
 
 ## Building
 

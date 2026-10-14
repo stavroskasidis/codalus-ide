@@ -347,6 +347,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 
 ## Changelog
 
+### M22d (no API version change)
+
+The Components window and plugin performance (activation time, command time and host memory per plugin, slow plugins offered to turn off; [ADR 0061](adr/0061-components-and-plugin-performance.md)) are in the shell. The API didn't change.
+
 ### M22c (no API version change)
 
 The manifest's `permissions`, and plugins as NuGet packages of type `CodalusPlugin` with a Plugin Gallery in the IDE ([Publishing](#publishing)). The API didn't change.
@@ -465,10 +469,10 @@ Additive (plugins built for 0.2.0 keep working):
 
 ### 0.2.0 (after M7): breaking
 
-The SDK is now the assembly and NuGet package **`Codalus.Plugins.Abstractions`**, with the namespace **`Codalus.Plugins`**; it was `Codalus.Plugins.Abstractions` and `Codalus.Plugins`. The `Codalus.*` package prefix on nuget.org belongs to unrelated packages, so every Codalus IDE assembly and namespace now uses `Codalus.*`. To update a plugin:
-1. Reference `Codalus.Plugins.Abstractions`.
-2. Replace `using Codalus.Plugins;` with `using Codalus.Plugins;`.
-3. Set `"engines": { "codalus": "^0.2.0" }`.
+The SDK became the assembly and NuGet package **`DaedalusStudio.Plugins.Abstractions`**, with the namespace **`DaedalusStudio.Plugins`**; it was `Daedalus.Plugins.Abstractions` and `Daedalus.Plugins`. The `Daedalus.*` package prefix on nuget.org belongs to unrelated packages, so every Daedalus Studio assembly and namespace moved to `DaedalusStudio.*` (renamed again to `Codalus.*` in [0.3.0](#030-m39)). To update a plugin then:
+1. Reference `DaedalusStudio.Plugins.Abstractions`.
+2. Replace `using Daedalus.Plugins;` with `using DaedalusStudio.Plugins;`.
+3. Set `"engines": { "daedalus": "^0.2.0" }`.
 
 Plugins built for 0.1.x are refused with a message: they reference an assembly that no longer exists. Nothing else changed: the protocol, the manifest format and the API surface are the same.
 

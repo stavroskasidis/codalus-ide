@@ -5,7 +5,7 @@
 # Usage: eng/compat-containers.sh            (Linux, with docker or podman; WSL works with rootless podman)
 #
 # Current distributions (Ubuntu 22.04 and later) have OpenSSL 3 and an ICU newer than these runtimes know. Codalus
-# Studio sets CLR_ICU_VERSION_OVERRIDE for .NET Core 2.x to 3.1 when it runs them (the test suite covers that on the
+# IDE sets CLR_ICU_VERSION_OVERRIDE for .NET Core 2.x to 3.1 when it runs them (the test suite covers that on the
 # host); OpenSSL 1.x, which .NET Core 2.x to .NET 5 need for cryptography and HTTPS, has no such switch. This script proves the
 # programs themselves on the distributions of their time, with what those distributions bring:
 #   - Ubuntu 18.04 (ICU 60, OpenSSL 1.0 and 1.1, and libunwind, which only .NET Core 2.0 doesn't bring): .NET Core 2.0 to 3.1 and ASP.NET Core 2.1 and 3.1

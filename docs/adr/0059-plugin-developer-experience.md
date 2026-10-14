@@ -10,7 +10,7 @@ With API 1.0 frozen (ADR 0058), M22 asks for the tools that make writing a plugi
 
 Constraints:
 - Plugins run out of process (ADR 0003), so a debugger has to attach to the right plugin host, and before the plugin's code runs.
-- The shell never parses SVG at run time and stays Native AOT clean (ADR 0019, D24).
+- The shell never parses SVG at run time and stays Native AOT clean (D24, M34a).
 - The documentation must not drift from the frozen API.
 
 ## Decision

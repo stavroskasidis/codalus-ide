@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **The .NET SDK**, 10.0 or newer; .NET 11 works too, release candidates included. Codalus IDE loads and builds solutions with the SDK's MSBuild, so it must be installed for any solution you open. It must also match the version a `global.json` asks for.
-  - Older SDKs (8.0, 9.0) work for solutions that pin them in `global.json`, as long as .NET 10 or newer is also installed: Codalus' helper processes run on it.
+  - Older SDKs pinned in `global.json`, down to 2.1.200, work as long as .NET 10 or newer is also installed: Codalus' helper processes run on it (see [Older .NET versions](dotnet-versions.md)).
 - **git** (2.30 or newer) on the `PATH`, for the Git features.
 - A 64-bit OS: Windows 11 (x64); macOS 15 or newer on Apple silicon (the macOS versions .NET supports); or a current Linux distribution (x64 or arm64) with X11, or Wayland through XWayland.
 

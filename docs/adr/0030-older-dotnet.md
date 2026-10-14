@@ -52,7 +52,7 @@ Before deciding anything, M33 ran each framework and each older SDK through the 
 
 **The Dependencies node** shows the implicit `Microsoft.NETCore.App` and `NETStandard.Library` packages of .NET Core 2.x and .NET Standard under Frameworks, with their version.
 
-**Keeping it checked:** `eng/get-runtimes.sh` installs the pinned runtimes and SDKs into one dotnet root (`.work/dotnet-compat`; on Apple silicon the x64 ones into `x64/`). `tests/DaedalusStudio.TargetFrameworks.Tests` points its own process at that root and runs `samples/TargetFrameworks` through the product. Without the root it skips; with `DAEDALUS_DOTNET_COMPAT` set it must be there. `eng/validate.sh` installs it, so WSL and Mac validation run the suite; hosted CI runs it only in the manual matrix (`ci.yml`'s `dispatch` jobs). `eng/compat-containers.sh` runs the programs in containers of the distributions .NET Core 2.x to .NET 5 supported, and on a current one to show what it lacks.
+**Keeping it checked:** `eng/get-runtimes.sh` installs the pinned runtimes and SDKs into one dotnet root (`.work/dotnet-compat`; on Apple silicon the x64 ones into `x64/`). `tests/DaedalusStudio.TargetFrameworks.Tests` points its own process at that root and runs `samples/TargetFrameworks` through the product. Without the root it skips; with `DAEDALUS_DOTNET_COMPAT` set it must be there. `eng/validate.sh` installs it, so WSL and Mac validation run the suite; hosted CI runs it only in the manual matrix (`compat.yml` since 2026-10-14; `ci.yml`'s `dispatch` jobs before). `eng/compat-containers.sh` runs the programs in containers of the distributions .NET Core 2.x to .NET 5 supported, and on a current one to show what it lacks.
 
 ## Consequences
 
