@@ -7,8 +7,20 @@ name: Website and Linux repositories
 # rule, 2026-10-13): release.yml calls this after each release, and a push to master that changes the website or the
 # user guide runs it; nightlies don't deploy, so the nightly channel and the site's nightly links move on with master.
 # Started on another branch (workflow_dispatch), it builds and checks the site without deploying it.
+# A release (release.yml) calls it before publishing anything, with the release's own packages from its run and
+# deploy: false: the repositories are built and installed from, and the site exported, as a gate. The release deploys
+# the Pages artifact this uploads only once every gate passed and the release is published (atomic releases).
 on:
   workflow_call:
+    inputs:
+      release:
+        description: The stable release being made (v1.2.3), whose packages are this run's packages-* artifacts
+        type: string
+        default: ""
+      deploy:
+        description: Deploy the site (false when a release deploys it itself after publishing)
+        type: boolean
+        default: true
   workflow_dispatch:
   push:
     branches: [master]
@@ -33,18 +45,39 @@ jobs:
       - uses: actions/checkout@v4
       - name: Tools
         run: sudo apt-get update && sudo apt-get install -y apt-utils createrepo-c rpm
+      - name: The release's own packages (from this run)
+        if: inputs.release != ''
+        uses: actions/download-artifact@v4
+        with:
+          pattern: packages-linux-*
+          path: downloaded
       - name: The newest stable and nightly packages
         id: releases
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ inputs.release }}
         run: |
-          stable="$(gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -rV | head -n 1 || true)"
-          nightly="$(gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- '-nightly\.' | sort -rV | head -n 1 || true)"
+          # The newest published release of a kind that has codalus packages (releases from before the rename to
+          # Codalus IDE have daedalus-studio ones, which the repositories don't serve).
+          newest() {
+            gh release list --limit 200 --json tagName -q '.[].tagName' | grep -E -- "$1" | sort -rV | while read -r tag; do
+              if gh release view "$tag" --json assets -q '.assets[].name' | grep -qE '^codalus.*\.deb$'; then echo "$tag"; break; fi
+            done
+          }
+          if [ -n "$RELEASE" ]; then
+            # A release in the making: its packages are this run's artifacts, not published yet.
+            stable="$RELEASE"
+            mkdir -p packages/stable
+            find downloaded \( -name '*.deb' -o -name '*.rpm' \) -exec cp {} packages/stable/ \;
+          else
+            stable="$(newest '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+            [ -n "$stable" ] && gh release download "$stable" -D packages/stable -p '*.deb' -p '*.rpm'
+          fi
+          nightly="$(newest '-nightly\.' || true)"
+          [ -n "$nightly" ] && gh release download "$nightly" -D packages/nightly -p '*.deb' -p '*.rpm'
           echo "stable=$stable" >> "$GITHUB_OUTPUT"
           echo "nightly=$nightly" >> "$GITHUB_OUTPUT"
-          [ -n "$stable" ] && gh release download "$stable" -D packages/stable -p '*.deb' -p '*.rpm'
-          [ -n "$nightly" ] && gh release download "$nightly" -D packages/nightly -p '*.deb' -p '*.rpm'
           mkdir -p packages && ls -R packages
       # The site's address as Pages serves it (a custom domain of the owner's, or <owner>.github.io), over HTTPS: apt
       # refuses a redirect from HTTPS to HTTP, which github.io gives when the owner has a custom domain.
@@ -63,8 +96,8 @@ jobs:
       - name: Install from them (apt and dnf, signatures checked)
         shell: bash
         run: |
-          [ -d site/rpm/stable ] && bash eng/test-linux-repos.sh site stable
-          [ -d site/rpm/nightly ] && bash eng/test-linux-repos.sh site nightly
+          if [ -d site/rpm/stable ]; then bash eng/test-linux-repos.sh site stable; fi
+          if [ -d site/rpm/nightly ]; then bash eng/test-linux-repos.sh site nightly; fi
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
@@ -82,7 +115,8 @@ jobs:
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/master'
+    # inputs.deploy is null on a push or dispatch, and expressions compare null equal to false, so compare as text.
+    if: github.ref == 'refs/heads/master' && format('{0}', inputs.deploy) != 'false'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

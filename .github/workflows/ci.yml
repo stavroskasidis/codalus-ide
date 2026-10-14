@@ -3,9 +3,12 @@ name: CI
 # The repository is public, so GitHub-hosted minutes are free: every push and pull request runs the full
 # Windows/macOS/Linux matrix, in parallel jobs (tests in three shards, and the smoke test) per OS. While the repository
 # was private, pushes ran Linux only (the matrix job below keeps that rule for a private repository).
+# On master it runs inside release.yml, as one of the gates a stable release must pass before anything is published
+# (atomic releases, the maintainer's rule, 2026-10-14), so a push to master doesn't start it again.
 on:
+  workflow_call:
   push:
-    branches: [develop, master]
+    branches: [develop]
     paths-ignore:
       - "docs/**"
       - "**/*.md"

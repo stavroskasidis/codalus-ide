@@ -253,10 +253,23 @@ public sealed class SettingsService : IDisposable
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var text = File.Exists(file) ? await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false) : string.Empty;
+            var text = File.Exists(file) ? ReadShared(file) : string.Empty;
             var updated = JsoncEditor.SetProperty(text, key, value is { } written ? Readable(written) : null);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
-            await File.WriteAllTextAsync(file, updated, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
+            // The watcher's reload (or another program, an indexer, an antivirus) may be reading the file: on Windows that
+            // is a sharing violation for the writer, which passes in moments.
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    await File.WriteAllTextAsync(file, updated, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
+                    break;
+                }
+                catch (IOException) when (attempt < 20 && OperatingSystem.IsWindows())
+                {
+                    await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
         finally
         {
@@ -269,6 +282,14 @@ public sealed class SettingsService : IDisposable
         }
 
         Reload();
+    }
+
+    /// <summary>Reads a settings file without keeping a writer out (a reload runs while a setting is being written).</summary>
+    private static string ReadShared(string file)
+    {
+        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
     }
 
     public Task SetAsync(string key, string value, SettingScope scope, CancellationToken cancellationToken) =>
@@ -364,7 +385,7 @@ public sealed class SettingsService : IDisposable
 
         try
         {
-            var text = File.ReadAllText(file);
+            var text = ReadShared(file);
             if (string.IsNullOrWhiteSpace(text))
             {
                 return values;
