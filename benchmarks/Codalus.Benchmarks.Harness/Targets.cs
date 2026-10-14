@@ -145,7 +145,8 @@ internal static class TargetCatalog
     /// <summary>Newest installed Rider. Uses the user's own configuration (a license is required).</summary>
     private static Target Rider()
     {
-        var exe = Environment.GetEnvironmentVariable("CODALUS_BENCH_RIDER") ?? (OperatingSystem.IsWindows()
+        // Not installed (no JetBrains folder, as on a runner): not available, never a crash.
+        var exe = Environment.GetEnvironmentVariable("CODALUS_BENCH_RIDER") ?? (OperatingSystem.IsWindows() && Directory.Exists(@"C:\Program Files\JetBrains")
             ? Directory.EnumerateDirectories(@"C:\Program Files\JetBrains", "JetBrains Rider *")
                 .OrderByDescending(d => d, StringComparer.OrdinalIgnoreCase)
                 .Select(d => Path.Combine(d, "bin", "rider64.exe"))

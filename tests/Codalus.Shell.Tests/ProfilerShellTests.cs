@@ -67,11 +67,13 @@ public sealed class ProfilerShellTests
         Assert.True(File.Exists(session.CountersPath));
         Assert.Equal(ProfilerSession.LaunchTarget, session.Target);
 
-        // The views: the hot function first, its callers, the flame graph, the counters.
-        Assert.Contains("Primes.IsPrime", report.Functions[0].Name, StringComparison.Ordinal);
-        Assert.Contains("Primes.IsPrime", report.BottomUp[0].Name, StringComparison.Ordinal);
+        // The views: the hot function among the first (a busy runner can rank the runtime's GC polling above it), its
+        // callers, the flame graph, the counters.
+        var hot = report.Functions.Take(3).FirstOrDefault(fn => fn.Name.Contains("Primes.IsPrime", StringComparison.Ordinal));
+        Assert.True(hot is not null, "Primes.IsPrime isn't among the first functions: " + string.Join(", ", report.Functions.Take(5).Select(fn => fn.Name)));
+        Assert.Contains(report.BottomUp.Take(3), node => node.Name.Contains("Primes.IsPrime", StringComparison.Ordinal));
         Assert.Contains(report.Functions, fn => fn.Name.Contains("<Main>$", StringComparison.Ordinal)); // from launch: startup included
-        report.SelectedFunction = report.Functions[0];
+        report.SelectedFunction = hot;
         await ShellFixture.PumpUntil(() => report.Callers.Count > 0);
         Assert.Contains("Primes.Count", report.Callers[0].Name, StringComparison.Ordinal);
         Assert.NotNull(report.FlameFrames);

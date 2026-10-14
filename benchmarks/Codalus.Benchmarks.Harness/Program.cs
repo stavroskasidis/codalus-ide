@@ -80,6 +80,11 @@ switch (command)
         }
         else
         {
+            if (Path.GetDirectoryName(Path.GetFullPath(output)) is { } folder)
+            {
+                Directory.CreateDirectory(folder);
+            }
+
             await File.WriteAllTextAsync(output, markdown);
             Console.WriteLine($"wrote {output}");
         }

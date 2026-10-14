@@ -202,6 +202,11 @@ public sealed class ChannelMultiplexer : IAsyncDisposable
         {
             error = ex is OperationCanceledException ? null : ex;
         }
+        catch (InvalidOperationException) when (_shutdown.IsCancellationRequested)
+        {
+            // Disposing completes a pipe-backed input under a pending read ("Reading is not allowed after reader was
+            // completed"): that is the shutdown, not an error.
+        }
 
         Fail(error);
     }
