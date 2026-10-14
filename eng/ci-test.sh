@@ -39,9 +39,12 @@ case "$shard" in
     without=()
     alone=()
     for class in "${dumps[@]}"; do without+=(--filter-not-class "$class"); alone+=(--filter-class "$class"); done
+    # Both run whatever the first's outcome, and the shard fails if either did.
+    status=0
     dotnet test --solution Codalus.slnx -c "$configuration" --no-build ${extra[@]+"${extra[@]}"} -- \
-      --hangdump --hangdump-timeout 25m --hangdump-type Mini --filter-not-namespace Codalus.Shell.Tests "${without[@]}" --ignore-exit-code 8
-    dotnet test --project tests/Codalus.Debugging.Tests "${common[@]}" "${alone[@]}"
+      --hangdump --hangdump-timeout 25m --hangdump-type Mini --filter-not-namespace Codalus.Shell.Tests "${without[@]}" --ignore-exit-code 8 || status=$?
+    dotnet test --project tests/Codalus.Debugging.Tests "${common[@]}" "${alone[@]}" || status=$?
+    exit "$status"
     ;;
   *)
     echo "Unknown shard: $shard" >&2
