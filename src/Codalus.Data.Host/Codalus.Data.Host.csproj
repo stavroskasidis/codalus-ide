@@ -23,6 +23,8 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <!-- Microsoft's native SNI isn't OSI-licensed: never shipped; managed SNI is switched on below (ADR 0037). -->
     <PackageReference Include="Microsoft.Data.SqlClient.SNI.runtime" ExcludeAssets="all" PrivateAssets="all" />
+    <!-- SqlClient's own (9.0.18) has known vulnerabilities; this pins a fixed one. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="MySqlConnector" />
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" />

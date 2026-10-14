@@ -47,7 +47,8 @@ Last verified: 2026-10-12 (M19a: no new shipped packages. The XAML language serv
 | SQLitePCLRaw.bundle_e_sqlite3, .core, .provider.e_sqlite3, .lib.e_sqlite3 (bundles native SQLite, public domain) | 2.1.12 | Apache-2.0 (SQLite: public domain) | data host |
 | Microsoft.Data.SqlClient, Microsoft.Data.SqlClient.Extensions.Abstractions, .Internal.Logging, Microsoft.SqlServer.Server | 7.1.1 / 1.0.0 | MIT | data host (SQL Server, managed networking) |
 | Microsoft.IdentityModel.Abstractions, .JsonWebTokens, .Logging, .Protocols, .Protocols.OpenIdConnect, .Tokens, System.IdentityModel.Tokens.Jwt (transitive via SqlClient) | 8.16.0 | MIT | data host |
-| Microsoft.Bcl.Cryptography, Microsoft.Extensions.Caching.Abstractions, .Caching.Memory, .Options, .Primitives, System.Configuration.ConfigurationManager, System.Diagnostics.EventLog, System.Security.Cryptography.Pkcs, .ProtectedData, System.Threading.RateLimiting (transitive via SqlClient) | 9.0.18 | MIT | data host |
+| Microsoft.Bcl.Cryptography, Microsoft.Extensions.Caching.Abstractions, .Caching.Memory, .Options, .Primitives, System.Configuration.ConfigurationManager, System.Diagnostics.EventLog, System.Security.Cryptography.ProtectedData, System.Threading.RateLimiting (transitive via SqlClient) | 9.0.18 | MIT | data host |
+| System.Security.Cryptography.Pkcs (SqlClient's, pinned past its vulnerable 9.0.18) | 10.0.13 | MIT | data host |
 | Microsoft.Extensions.DependencyInjection.Abstractions, .Logging.Abstractions (transitive via Npgsql) | 10.0.0 | MIT | data host |
 | Npgsql | 10.0.3 | PostgreSQL License | data host (PostgreSQL) |
 | MySqlConnector | 2.6.2 | MIT | data host (MySQL and MariaDB) |
