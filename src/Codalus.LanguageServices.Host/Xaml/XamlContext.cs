@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Codalus.LanguageServices.Host.Xaml;
 
-/// <summary>An <c>.axaml</c> file's text (the editor's while it is open), its parse, and its project's type information.</summary>
+/// <summary>An <c>.axaml</c> (Avalonia) or <c>.xaml</c> (.NET MAUI, M20d) file's text (the editor's while it is open), its parse, and its project's type information.</summary>
 internal sealed class XamlContext
 {
     private XamlContext(string path, SourceText text, Project? project, Compilation? compilation)
@@ -32,7 +32,8 @@ internal sealed class XamlContext
 
     public XamlTypeSystem? Types { get; }
 
-    public static bool IsXaml(string path) => path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase);
+    public static bool IsXaml(string path) =>
+        path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The file's context: its project's additional document (and compilation), or the open text alone.</summary>
     public static async Task<XamlContext?> CreateAsync(Solution solution, string path, SourceText? openText, CancellationToken cancellationToken)

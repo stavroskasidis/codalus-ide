@@ -923,7 +923,7 @@ public sealed partial class CodeEditorController : IDisposable
         if (capabilities.CompletionProvider is { } completion)
         {
             var isTrigger = completion.TriggerCharacters.Contains(text) || (Model.LanguageId == ShellHost.RazorLanguageId && text is "<" or "\"" or "/" or "=")
-                || (Model.LanguageId == ShellHost.AxamlLanguageId && text is "{" or "/" or "=" or "|");
+                || (Model.LanguageId is ShellHost.AxamlLanguageId or ShellHost.MauiXamlLanguageId && text is "{" or "/" or "=" or "|");
             if (_completion is null && isTrigger)
             {
                 ShowCompletion(text);

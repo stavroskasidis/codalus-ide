@@ -29,6 +29,9 @@ public sealed partial class ShellHost : IEditorServices
 
     /// <summary>Avalonia XAML (M19a, ADR 0047), served by the C# host.</summary>
     public const string AxamlLanguageId = "axaml";
+
+    /// <summary>.NET MAUI's XAML (M20d): the C# host's XAML engine, like Avalonia's.</summary>
+    public const string MauiXamlLanguageId = "mauixaml";
     private const string StatusSource = "codalus.editor";
 
     private readonly Dictionary<string, CodeDocument> _models = new(SolutionPaths.Comparer);
@@ -70,8 +73,8 @@ public sealed partial class ShellHost : IEditorServices
         registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve)
         {
             // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023), and so
-            // does Avalonia XAML, on the same projects' type information (ADR 0047).
-            Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId],
+            // does Avalonia XAML, on the same projects' type information (ADR 0047), and .NET MAUI's (M20d).
+            Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId, MauiXamlLanguageId],
         });
         registry.Register(new LanguageServiceDescriptor("markup", "JSON, XML and YAML", [], null, MarkupHostLaunch.Resolve)
         {

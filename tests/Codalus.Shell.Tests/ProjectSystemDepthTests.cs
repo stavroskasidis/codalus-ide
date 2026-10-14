@@ -219,7 +219,16 @@ public sealed class ProjectSystemDepthTests
         var (f, folder) = await OpenAsync();
         await using var _ = f;
         var core = Path.Combine(folder, "src", "Core", "Core.csproj");
-        f.Shell.Explorer.Reveal("p:" + core);
+        // Revealed again until it's selected: the explorer may still be filling in its tree.
+        await ShellFixture.PumpUntil(() =>
+        {
+            if (f.Shell.Explorer.Selected?.Node.Path != core)
+            {
+                f.Shell.Explorer.Reveal("p:" + core);
+            }
+
+            return f.Shell.Explorer.Selected?.Node.Path == core;
+        });
 
         var export = f.Shell.OpenExportTemplate()!;
         Assert.Equal(("project", "Core", "core"), (export.Kind, export.Name, export.ShortName));

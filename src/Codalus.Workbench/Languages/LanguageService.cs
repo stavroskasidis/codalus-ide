@@ -78,7 +78,13 @@ public sealed class LanguageService : IAsyncDisposable
         _clients.TryGetValue(languageId, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result?.ProcessId : null;
 
     public string? LanguageIdOf(string path) =>
-        _languages?.ForFile(path, () => LanguageRegistry.ReadFirstLine(path))?.Id ?? _registry.ForFile(path)?.LanguageId;
+        LanguageOverride?.Invoke(path) ?? _languages?.ForFile(path, () => LanguageRegistry.ReadFirstLine(path))?.Id ?? _registry.ForFile(path)?.LanguageId;
+
+    /// <summary>
+    /// A file's language when its project decides rather than its name (null: by its name), checked first: a .NET
+    /// MAUI project's <c>.xaml</c> files are MAUI XAML (M20d), other <c>.xaml</c> files XML.
+    /// </summary>
+    public Func<string, string?>? LanguageOverride { get; set; }
 
     /// <summary>A project's evaluated property and where it is set (MSBuild hover in the markup host).</summary>
     public Func<string, string, CancellationToken, Task<(string? Value, string? Origin)?>>? PropertyEvaluator { get; set; }

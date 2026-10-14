@@ -86,6 +86,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             var items = new List<ProjectItemInfo>();
             var test = TestProperties.None;
             var fingerprint = new Fingerprint(path, global, outer);
+            string? innerAssetsFile = null;
 
             if (frameworks.Length <= 1)
             {
@@ -101,6 +102,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                     try
                     {
                         fingerprint.Add(inner);
+                        innerAssetsFile ??= NullIfEmpty(inner.GetPropertyValue("ProjectAssetsFile"));
                         references.AddRange(References(inner, framework, assets));
                         imports.AddRange(inner.Imports.Select(i => i.ImportedProject.FullPath));
 
@@ -134,7 +136,9 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 IsAspireHost = string.Equals(outer.GetPropertyValue("IsAspireHost").Trim(), "true", StringComparison.OrdinalIgnoreCase),
             };
             var distinctImports = imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            var assetsFile = NullIfEmpty(outer.GetPropertyValue("ProjectAssetsFile"));
+            // Before its first restore, a multi-targeted project's outer evaluation has no ProjectAssetsFile (restore's
+            // nuget.g.props sets it there); its frameworks' evaluations have it, and without it it would never be restored.
+            var assetsFile = NullIfEmpty(outer.GetPropertyValue("ProjectAssetsFile")) ?? innerAssetsFile;
             var assetsStamp = assetsFile is not null && File.Exists(assetsFile) ? File.GetLastWriteTimeUtc(assetsFile) : DateTime.MinValue;
             return new EvaluatedProject(info, distinctImports, assetsFile)
             {

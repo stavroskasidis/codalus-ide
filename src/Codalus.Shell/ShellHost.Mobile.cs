@@ -70,12 +70,19 @@ public sealed partial class ShellHost
             return null;
         });
         Workbench.Menus.Add([new MenuItemRule(MenuLocations.MenuBar("view"), "mobile.devices", ContributionSource.Shell) { Group = "otherWindows", Order = 90 }]);
+        // A .xaml file of a project with a mobile target framework is .NET MAUI's XAML (M20d).
+        Languages.LanguageOverride = path => path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase) && InMobileProject(path) ? MauiXamlLanguageId : null;
         Toolbar.SelectDevice = id =>
         {
             _deviceId = id;
             _devicesChanged?.Invoke();
         };
     }
+
+    /// <summary>Whether <paramref name="path"/> lies in a project with an Android, iOS or Mac Catalyst framework (an app or a library).</summary>
+    private bool InMobileProject(string path) =>
+        Solutions.Projects.Values.Any(p => p.TargetFrameworks.Any(f => MobileProjects.PlatformOf(f) is not null)
+            && path.StartsWith(Path.GetDirectoryName(p.Path)! + Path.DirectorySeparatorChar, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Whether <paramref name="project"/> is an app for Android, iOS or Mac Catalyst.</summary>
     internal bool IsMobileApp(string project) => Solutions.Projects.TryGetValue(project, out var info) && MobileProjects.IsMobileApp(info);

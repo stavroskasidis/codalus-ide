@@ -270,7 +270,7 @@ internal static class XamlCompletion
         var name = attribute.Name;
         if (name is "xmlns" || name.StartsWith("xmlns:", StringComparison.Ordinal))
         {
-            items.Add(Item(XamlNames.Avalonia, CompletionItemKind.Module, whole));
+            items.Add(Item(types is { IsMaui: true, IsAvalonia: false } ? XamlNames.Maui : XamlNames.Avalonia, CompletionItemKind.Module, whole));
             items.Add(Item(XamlNames.XamlLanguage, CompletionItemKind.Module, whole));
             items.Add(Item(XamlNames.Design, CompletionItemKind.Module, whole));
             items.Add(Item(XamlNames.MarkupCompatibility, CompletionItemKind.Module, whole));
@@ -494,7 +494,7 @@ internal static class XamlCompletion
 
             switch (extension.Key)
             {
-                case "Mode" when types?.Type("Avalonia.Data.BindingMode") is { } mode:
+                case "Mode" when types is not null && (types.Type("Avalonia.Data.BindingMode") ?? types.Type("Microsoft.Maui.Controls.BindingMode")) is { } mode:
                     ValueItems(types, mode, items, argumentRange);
                     return argumentRange;
                 case "UpdateSourceTrigger" when types?.Type("Avalonia.Data.UpdateSourceTrigger") is { } trigger:

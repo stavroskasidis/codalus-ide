@@ -1,6 +1,6 @@
-# .NET MAUI: Android apps and devices
+# .NET MAUI: Android apps, devices and XAML
 
-Codalus IDE runs .NET MAUI apps on Android devices and emulators, on Windows, macOS and Linux. Debugging on a device, iOS and Mac Catalyst, and MAUI's XAML come next (the rest of M20).
+Codalus IDE runs .NET MAUI apps on Android devices and emulators, on Windows, macOS and Linux. It edits MAUI's XAML with completion and checks from your project's own types. Debugging on a device and iOS and Mac Catalyst come next (the rest of M20).
 
 ## What you need
 
@@ -35,6 +35,15 @@ Create emulators with Android Studio's Device Manager (or the SDK's `avdmanager`
 3. starts it, and shows its log (`adb logcat` for the app's process) in its Run output.
 
 **Stop** stops the app on the device. A build error stops the start, with the errors in the Error List as for any build.
+
+## XAML
+
+A `.xaml` file in a MAUI project (one with an Android, iOS or Mac Catalyst target framework) opens as **MAUI XAML**, with the same editing as Avalonia's XAML, from the types your project references:
+- completion of elements, properties, events and attached properties (`Grid.Row`), named colors, and binding modes;
+- binding paths from the page's `x:DataType` (compiled bindings);
+- errors for unknown elements and properties, hover, Go to Definition, and renaming an `x:Name`.
+
+The project must have been restored and loaded once, since the types come from its MAUI packages. Other `.xaml` files open as XML. A XAML previewer and XAML Hot Reload aren't available for MAUI.
 
 ## Debugging
 

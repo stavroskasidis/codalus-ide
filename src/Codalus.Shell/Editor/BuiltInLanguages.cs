@@ -56,6 +56,8 @@ public static class BuiltInLanguages
             L("php", "PHP", [".php"]),
             L("razor", "Razor", [".cshtml", ".razor"]),
             L("axaml", "Avalonia XAML", [".axaml"]),
+            // .NET MAUI's .xaml files (M20d): chosen for .xaml files of projects with a mobile target framework.
+            L("mauixaml", "MAUI XAML", []),
             L("http", "HTTP", [".http", ".rest"]),
             L("t4", "T4 Text Template", [".tt", ".ttinclude", ".t4"]),
             L("proto", "Protocol Buffers", [".proto"]),

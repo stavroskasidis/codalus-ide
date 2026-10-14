@@ -28,7 +28,7 @@ internal static partial class XamlNavigation
 {
     private static readonly Dictionary<string, string> s_directives = new(StringComparer.Ordinal)
     {
-        ["x:Name"] = "The element's name: a field of the code-behind class (Avalonia's name generator) and a target for `#Name` and `ElementName`.",
+        ["x:Name"] = "The element's name: a field of the code-behind class (generated from the XAML) and a target for `#Name` and `ElementName`.",
         ["Name"] = "The element's name: a field of the code-behind class and a target for `#Name` and `ElementName`.",
         ["x:Key"] = "The key of a resource, for `StaticResource` and `DynamicResource`.",
         ["x:Class"] = "The code-behind class this XAML is compiled into.",

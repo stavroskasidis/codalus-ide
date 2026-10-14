@@ -320,9 +320,9 @@ internal sealed class LanguageServer : IAsyncDisposable
     private void ExplainXaml(Xaml.XamlContext context, Solution solution)
     {
         string? reason = context.Project is null
-            ? $"isn't an additional file of a loaded project ({solution.Projects.Count()} projects, {solution.Projects.Sum(p => p.AdditionalDocuments.Count(d => d.FilePath?.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) == true))} .axaml additional files)"
-            : context.Types is { IsAvalonia: false }
-                ? $"is in {context.Project.Name}, whose compilation has no Avalonia ({context.Project.MetadataReferences.Count} references, {context.Project.MetadataReferences.Count(r => r.Display?.Contains("Avalonia", StringComparison.OrdinalIgnoreCase) == true)} of Avalonia)"
+            ? $"isn't an additional file of a loaded project ({solution.Projects.Count()} projects, {solution.Projects.Sum(p => p.AdditionalDocuments.Count(d => d.FilePath is { } f && Xaml.XamlContext.IsXaml(f)))} XAML additional files)"
+            : context.Types is { IsXamlFramework: false }
+                ? $"is in {context.Project.Name}, whose compilation has neither Avalonia nor .NET MAUI ({context.Project.MetadataReferences.Count} references, {context.Project.MetadataReferences.Count(r => r.Display?.Contains("Avalonia", StringComparison.OrdinalIgnoreCase) == true || r.Display?.Contains("Maui", StringComparison.OrdinalIgnoreCase) == true)} of them)"
                 : null;
         lock (_xamlExplained)
         {

@@ -102,4 +102,69 @@ public sealed class MobileShellTests
             }
         }
     }
+
+    /// <summary>
+    /// M20d: MainPage.xaml of samples/Maui is MAUI XAML, and completion comes from the C# host's XAML engine with MAUI's
+    /// types. Needs the MAUI workload (not on CI): runs with <c>CODALUS_TEST_MAUI=1</c>.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Maui_xaml_completes_from_the_projects_types()
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("CODALUS_TEST_MAUI") == "1", "Set CODALUS_TEST_MAUI=1 (with the MAUI workload) to open samples/Maui.");
+        await using var f = ShellFixture.Create();
+        var shell = f.Shell;
+        var folder = f.CopySample("Maui");
+        shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await shell.OpenSolutionAsync(Path.Combine(folder, "Maui.slnx"));
+        var project = Path.Combine(folder, "MauiCounter", "MauiCounter.csproj");
+        await ShellFixture.PumpUntil(() => shell.Solutions.Projects.TryGetValue(project, out var p) && p.State == "loaded", seconds: 300);
+        await ShellFixture.PumpUntil(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: Codalus.LanguageServices.Protocol.WorkspaceStates.Ready }, seconds: 300);
+
+        var page = Path.Combine(folder, "MauiCounter", "MainPage.xaml");
+        var document = await shell.OpenFileAsync(page, preview: false, null);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null);
+        Assert.Equal(ShellHost.MauiXamlLanguageId, document!.Model.LanguageId);
+
+        var model = document.Model;
+        var editor = document.Controller!;
+        var at = model.Text.Text.IndexOf("<Label", StringComparison.Ordinal);
+        model.Text.Insert(at, "<Bu />" + Environment.NewLine + "            ");
+        var asked = System.Diagnostics.Stopwatch.StartNew();
+        editor.Editor.CaretOffset = at + 3;
+        editor.ShowCompletion();
+        string Log() => string.Join('\n', shell.Workbench.Output.GetOrCreate("codalus.languages", "Language Services").GetText()
+            .Split('\n').Distinct().TakeLast(80))
+            + "\nDesign-time inputs: " + string.Join("; ", shell.Solutions.CompilerInputs.Values.Select(i =>
+                $"{Path.GetFileName(i.Path)} {i.TargetFramework} {i.State} {i.Error} ({i.Arguments.Length} arguments, {i.Arguments.Count(a => a.StartsWith("/additionalfile:", StringComparison.OrdinalIgnoreCase))} additional files)"));
+        await PumpOrExplainAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Button"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                editor.Editor.CaretOffset = at + 3;
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, 360, Log);
+        editor.CompletionWindow?.Close();
+    }
+
+    private static async Task PumpOrExplainAsync(Func<bool> condition, int seconds, Func<string> explain)
+    {
+        try
+        {
+            await ShellFixture.PumpUntil(condition, seconds);
+        }
+        catch (Exception e) when (e.Message.Contains("Timed out", StringComparison.Ordinal))
+        {
+            Assert.Fail("Timed out. The language service's log:\n" + explain());
+        }
+    }
 }
