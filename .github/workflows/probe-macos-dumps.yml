@@ -1,0 +1,38 @@
+name: Probe macOS dumps
+on:
+  push:
+    branches: [ci-probe-dumps]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Debugger
+        shell: bash
+        run: eng/get-netcoredbg.sh
+      - name: Build
+        run: dotnet build tests/Codalus.Debugging.Tests -c Release
+      - name: Developer tools access
+        run: |
+          sudo DevToolsSecurity -enable
+          sudo dseditgroup -o edit -a "$USER" -t user _developer
+          sudo security authorizationdb write system.privilege.taskport allow
+      - name: Groups
+        shell: bash
+        run: |
+          echo "runner session:"; id
+          echo "fresh login:"; sudo -E -H -u "$USER" id
+      - name: A - the runner's session
+        continue-on-error: true
+        shell: bash
+        run: dotnet test --project tests/Codalus.Debugging.Tests -c Release --no-build -- --filter-class "*CompanionTests" --filter-class "*JitDebuggingTests"
+      - name: B - a fresh login of the same user
+        continue-on-error: true
+        shell: bash
+        run: sudo -E -H -u "$USER" env "PATH=$PATH" dotnet test --project tests/Codalus.Debugging.Tests -c Release --no-build -- --filter-class "*CompanionTests" --filter-class "*JitDebuggingTests"
