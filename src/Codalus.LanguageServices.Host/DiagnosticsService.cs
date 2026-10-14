@@ -252,7 +252,7 @@ internal sealed class DiagnosticsService : IDisposable
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                _log($"Solution diagnostics failed: {ex.Message}");
+                _log($"Solution diagnostics failed: {ex}"); // with the stack: a failure here is a bug to find
             }
         }, CancellationToken.None);
     }
