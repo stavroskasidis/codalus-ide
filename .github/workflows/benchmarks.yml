@@ -61,6 +61,8 @@ jobs:
           dotnet publish src/Codalus.Shell -c Release -r "$rid" -o artifacts/shell
       - name: Run benchmarks
         shell: bash
+        # Bounded below the job's limit: a slow run still reports what it measured, and its log is kept.
+        timeout-minutes: 70
         run: |
           cmd="dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release -- run --results ci-results \
             --targets shell,vscode --scenarios cold-start,editor-100k,self-driven,binary-size --runs 3"
