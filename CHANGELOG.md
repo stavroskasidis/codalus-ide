@@ -11,8 +11,9 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 **.NET MAUI, first steps** (M20, [guide](docs/user-guide/maui.md)):
 - Android devices and emulators in the toolbar and the Devices window, and Start Without Debugging on them, with the app's log.
+- On a Mac, this Mac (Mac Catalyst) and the iOS simulators too (preview).
 - MAUI's XAML gets completion, checks, hover and navigation from your project's own types.
-- Debugging, iOS and Mac Catalyst come next.
+- Debugging on devices and physical iPhones and iPads come next.
 
 **Fixed:** a multi-targeted project that had never been restored (a new MAUI app, a fresh clone) wasn't restored when opened, so its packages' build logic was missing.
 

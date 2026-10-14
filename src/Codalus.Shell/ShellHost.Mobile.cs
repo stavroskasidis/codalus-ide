@@ -16,7 +16,8 @@ namespace Codalus.Shell;
 
 /// <summary>
 /// .NET MAUI and mobile apps (M20a, ADR 0064): the toolbar's device list for a mobile startup project, the Devices
-/// window (devices and emulators, starting an emulator), and Start Without Debugging on an Android device or emulator.
+/// window (devices, emulators and simulators, starting an emulator), and Start Without Debugging on an Android device or
+/// emulator, and on a Mac on an iOS simulator or the Mac itself (Mac Catalyst, M20c).
 /// </summary>
 public sealed partial class ShellHost
 {
@@ -26,6 +27,7 @@ public sealed partial class ShellHost
     public const string MobileDebugVariable = "CODALUS_MOBILE_DEBUG";
 
     private AndroidDevices? _android;
+    private AppleDevices? _apple;
     private IReadOnlyList<MobileDevice> _devices = [];
     private string? _deviceId;
     private string? _devicesStatus;
@@ -34,6 +36,9 @@ public sealed partial class ShellHost
 
     /// <summary>The Android SDK's tools, found once (<see cref="AndroidSdk.Locate"/>).</summary>
     internal AndroidDevices Android => _android ??= new AndroidDevices(AndroidSdk.Locate(PlatformInfo.Current, Environment.GetEnvironmentVariable), PlatformInfo.Current);
+
+    /// <summary>iOS simulators and this Mac (M20c), on macOS only.</summary>
+    internal AppleDevices Apple => _apple ??= new AppleDevices(PlatformInfo.Current);
 
     /// <summary>The known devices (after <see cref="RefreshDevicesAsync"/>).</summary>
     internal IReadOnlyList<MobileDevice> Devices => _devices;
@@ -107,10 +112,13 @@ public sealed partial class ShellHost
         _devicesChanged?.Invoke();
         try
         {
-            _devices = await Android.ListAsync(CancellationToken.None).ConfigureAwait(true);
+            var android = await Android.ListAsync(CancellationToken.None).ConfigureAwait(true);
+            var apple = await Apple.ListAsync(CancellationToken.None).ConfigureAwait(true);
+            _devices = [.. android, .. apple];
             _devicesStatus = Android.Adb is null
                 ? "The Android SDK wasn't found: install it with Android Studio or Help → Check Environment, or set ANDROID_HOME."
-                : _devices.Count == 0 ? "No devices or emulators: create an emulator with Android Studio's Device Manager, or connect a device with USB debugging on." : null;
+                    + (Apple.Available ? " iOS simulators and this Mac are listed below." : string.Empty)
+                : android.Count == 0 ? "No Android devices or emulators: create an emulator with Android Studio's Device Manager, or connect a device with USB debugging on." : null;
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
         {
@@ -144,7 +152,9 @@ public sealed partial class ShellHost
             _ = RefreshDevicesAsync();
         }
 
-        Toolbar.SetDevices([.. _devices.Select(d => new DeviceChoice(ChoiceLabel(d), d.Id))], SelectedDevice?.Id);
+        // Only the devices of the platforms the app targets.
+        var platforms = Solutions.Projects.TryGetValue(startup, out var app) ? app.TargetFrameworks.Select(MobileProjects.PlatformOf).OfType<string>().ToHashSet() : [];
+        Toolbar.SetDevices([.. _devices.Where(d => platforms.Contains(d.Platform)).Select(d => new DeviceChoice(ChoiceLabel(d), d.Id))], SelectedDevice?.Id);
     }
 
     private static string ChoiceLabel(MobileDevice device) =>
@@ -169,7 +179,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (MobileProjects.FrameworkFor(info, "android") is null)
+        if (MobileProjects.FrameworkFor(info, "android") is null && !Apple.Available)
         {
             Workbench.Notifications.Warning($"{info.Name} has no Android target framework, and its other platforms (iOS, Mac Catalyst) need a Mac.");
             return;
@@ -186,9 +196,22 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (MobileProjects.FrameworkFor(info, device.Platform) is null)
+        {
+            Workbench.Notifications.Warning($"{info.Name} doesn't target {PlatformName(device.Platform)}: choose another device in the toolbar.");
+            return;
+        }
+
+        if (debug && device.Platform != "android")
+        {
+            Workbench.Notifications.Info($"Debugging on {PlatformName(device.Platform)} isn't available yet: Start Without Debugging (Ctrl+F5) runs it.");
+            return;
+        }
+
         var channel = Workbench.Output.GetOrCreate("codalus.run." + info.Name, "Run: " + info.Name);
         channel.Clear();
         var runner = new AndroidRunner(Android, Builds, Runs, ProjectManagement, Solutions);
+        var appleRunner = new AppleRunner(Apple, Builds, Runs, ProjectManagement, Solutions);
         var task = Workbench.Progress.Begin($"Starting {info.Name} on {device.Label}", "mobile");
         try
         {
@@ -207,9 +230,14 @@ public sealed partial class ShellHost
                 Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
                 started = await runner.DebugAsync(info, device, Debugger, Log, CancellationToken.None).ConfigureAwait(true);
             }
-            else
+            else if (device.Platform == "android")
             {
                 started = await runner.RunAsync(info, device, Log, CancellationToken.None).ConfigureAwait(true) is not null;
+            }
+            else
+            {
+                // An iOS simulator or this Mac (M20c).
+                started = await appleRunner.RunAsync(info, device, Log, CancellationToken.None).ConfigureAwait(true) is not null;
             }
 
             if (!started)
@@ -229,6 +257,22 @@ public sealed partial class ShellHost
 
         _ = RefreshDevicesAsync(); // an emulator may have started
     }
+
+    private static string PlatformName(string platform) => platform switch
+    {
+        "ios" => "iOS",
+        "maccatalyst" => "Mac Catalyst",
+        _ => "Android",
+    };
+
+    private static string KindLabel(MobileDevice device) => (device.Platform, device.Kind) switch
+    {
+        ("ios", MobileDeviceKind.Emulator) => "iOS simulator",
+        ("ios", _) => "iOS device",
+        ("maccatalyst", _) => "Mac Catalyst",
+        (_, MobileDeviceKind.Emulator) => "Android emulator",
+        _ => "Android device",
+    };
 
     // ------------------------------------------------------------------ the Devices window
 
@@ -252,7 +296,7 @@ public sealed partial class ShellHost
                 Rows = [.. _devices.Select(d => new[]
                 {
                     (d.Id == SelectedDevice?.Id ? "● " : string.Empty) + d.Label,
-                    d.Kind == MobileDeviceKind.Emulator ? "Android emulator" : "Android device",
+                    KindLabel(d),
                     d.Problem ?? (d.IsRunning ? "Running" : "Not running"),
                     d.Serial ?? string.Empty,
                 })],
@@ -280,6 +324,22 @@ public sealed partial class ShellHost
                 _deviceId = device.Id;
                 UpdateToolbarDevices();
                 _devicesChanged?.Invoke();
+                if (kind != "select" && !device.IsRunning && device.Platform == "ios" && device.Avd is { } udid)
+                {
+                    // An iOS simulator boots and shows in the Simulator app (M20c).
+                    try
+                    {
+                        await Apple.BootAsync(udid, CancellationToken.None).ConfigureAwait(true);
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException or System.ComponentModel.Win32Exception)
+                    {
+                        Workbench.Notifications.Error($"{device.Label} didn't start: {ex.Message}");
+                    }
+
+                    await RefreshDevicesAsync().ConfigureAwait(true);
+                    return;
+                }
+
                 if (kind != "select" && !device.IsRunning && device.Avd is { } avd)
                 {
                     _devicesStatus = $"Starting {device.Label}…";

@@ -92,4 +92,80 @@ public sealed class MobileTests
         Assert.False(MobileProjects.IsMobileApp(Project("Library", "net10.0-android")));
         Assert.False(MobileProjects.IsMobileApp(Project("Exe", "net10.0")));
     }
+
+    private const string SimctlJson = """
+        {
+          "devices": {
+            "com.apple.CoreSimulator.SimRuntime.iOS-17-5": [
+              { "udid": "AAAA", "name": "iPhone 15", "state": "Shutdown", "isAvailable": true }
+            ],
+            "com.apple.CoreSimulator.SimRuntime.iOS-18-2": [
+              { "udid": "BBBB", "name": "iPhone 16", "state": "Shutdown", "isAvailable": true },
+              { "udid": "CCCC", "name": "iPad Air", "state": "Booted", "isAvailable": true },
+              { "udid": "DDDD", "name": "iPhone SE", "state": "Shutdown", "isAvailable": false }
+            ],
+            "com.apple.CoreSimulator.SimRuntime.watchOS-11-2": [
+              { "udid": "EEEE", "name": "Apple Watch", "state": "Shutdown", "isAvailable": true }
+            ]
+          }
+        }
+        """;
+
+    [Fact]
+    public void Simulators_come_from_simctl_booted_first_then_the_newest_runtime()
+    {
+        // M20c: only iOS simulators that are available.
+        var simulators = AppleDevices.ParseSimulators(SimctlJson);
+        Assert.Equal(["iPad Air (iOS 18.2)", "iPhone 16 (iOS 18.2)", "iPhone 15 (iOS 17.5)"], simulators.Select(s => s.Label));
+        Assert.Equal(("sim:CCCC", "CCCC", true), (simulators[0].Id, simulators[0].Serial, simulators[0].IsRunning));
+        Assert.Equal(("BBBB", false, "ios", MobileDeviceKind.Emulator), (simulators[1].Avd, simulators[1].IsRunning, simulators[1].Platform, simulators[1].Kind));
+        Assert.Empty(AppleDevices.ParseSimulators("not json"));
+        Assert.Equal(new Version(18, 2), AppleDevices.RuntimeVersion("com.apple.CoreSimulator.SimRuntime.iOS-18-2"));
+        Assert.Null(AppleDevices.RuntimeVersion("com.apple.CoreSimulator.SimRuntime.tvOS-18-2"));
+    }
+
+    [Fact]
+    public async Task This_mac_and_its_simulators_are_listed_on_macos_only()
+    {
+        var calls = new List<string>();
+        Task<(int, string)> Run(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken ct)
+        {
+            calls.Add(program + " " + string.Join(' ', arguments));
+            return Task.FromResult((0, SimctlJson));
+        }
+
+        Assert.Empty(await new AppleDevices(PlatformKind.Windows, Run).ListAsync(TestContext.Current.CancellationToken));
+        Assert.Empty(calls);
+        var devices = await new AppleDevices(PlatformKind.MacOS, Run).ListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(AppleDevices.ThisMacId, devices[0].Id);
+        Assert.Equal(("maccatalyst", MobileDeviceKind.Local, true), (devices[0].Platform, devices[0].Kind, devices[0].IsRunning));
+        Assert.Equal(4, devices.Count);
+        Assert.Equal(["xcrun simctl list devices available --json"], calls);
+        Assert.Equal(("xcrun", "simctl launch --console-pty --terminate-running-process BBBB com.x.app"),
+            (AppleDevices.LaunchCommand("BBBB", "com.x.app").FileName, string.Join(' ', AppleDevices.LaunchCommand("BBBB", "com.x.app").ArgumentList)));
+    }
+
+    [Fact]
+    public void App_bundles_and_their_executables_are_found_in_the_build_output()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "codalus-bundle-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var output = Path.Combine(root, "bin", "Debug", "net10.0-maccatalyst", "maccatalyst-arm64");
+            var macos = Path.Combine(output, "MauiCounter.app", "Contents", "MacOS");
+            Directory.CreateDirectory(macos);
+            File.WriteAllText(Path.Combine(macos, "MauiCounter"), string.Empty);
+            var bundle = Path.Combine(output, "MauiCounter.app");
+
+            Assert.Equal(bundle, AppleRunner.FindBundle(output, Path.Combine(root, "bin"), "net10.0-maccatalyst"));
+            Assert.Equal(bundle, AppleRunner.FindBundle(null, Path.Combine(root, "bin"), "net10.0-maccatalyst")); // found under bin/
+            Assert.Null(AppleRunner.FindBundle(null, Path.Combine(root, "bin"), "net10.0-ios"));
+            Assert.Equal(Path.Combine(macos, "MauiCounter"), AppleRunner.BundleExecutable(bundle));
+            Assert.StartsWith("iossimulator-", AppleRunner.SimulatorRuntime(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

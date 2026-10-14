@@ -104,6 +104,45 @@ public sealed class MobileShellTests
     }
 
     /// <summary>
+    /// M20c: on a Mac with the MAUI workloads, samples/Maui runs on this Mac (Mac Catalyst) and on an iOS simulator, and
+    /// stops. Runs with <c>CODALUS_TEST_APPLE=1</c>; <c>CODALUS_TEST_IOS_SIMULATOR</c> picks the simulator by name.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_maui_app_runs_on_this_mac_and_an_ios_simulator()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS() && Environment.GetEnvironmentVariable("CODALUS_TEST_APPLE") == "1", "Set CODALUS_TEST_APPLE=1 on a Mac with the MAUI workloads.");
+        await using var f = ShellFixture.Create();
+        var shell = f.Shell;
+        var folder = f.CopySample("Maui");
+        shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await shell.OpenSolutionAsync(Path.Combine(folder, "Maui.slnx"));
+        var project = Path.Combine(folder, "MauiCounter", "MauiCounter.csproj");
+        await ShellFixture.PumpUntil(() => shell.Solutions.Projects.TryGetValue(project, out var p) && p.State == "loaded", seconds: 300);
+        shell.SetStartupProject(project);
+        await shell.RefreshDevicesAsync();
+
+        // This Mac: the bundle's executable is the program.
+        var mac = Assert.Single(shell.Devices, d => d.Id == AppleDevices.ThisMacId);
+        shell.Toolbar.Device = shell.Toolbar.Devices.Single(d => d.Id == mac.Id);
+        await shell.StartWithoutDebuggingAsync();
+        await ShellFixture.PumpUntil(() => shell.Runs.Running.Any(r => r.Project == project), seconds: 900);
+        await Task.Delay(3000, TestContext.Current.CancellationToken);
+        Assert.Contains(shell.Runs.Running, r => r.Project == project); // still running: it started
+        shell.Runs.Running.Single(r => r.Project == project).Stop();
+        await ShellFixture.PumpUntil(() => shell.Runs.Running.All(r => r.Project != project), seconds: 60);
+
+        // An iOS simulator: booted, installed, launched attached to its console, terminated by Stop.
+        var wanted = Environment.GetEnvironmentVariable("CODALUS_TEST_IOS_SIMULATOR");
+        var simulator = shell.Devices.FirstOrDefault(d => d.Platform == "ios" && (wanted is null || d.Label.StartsWith(wanted, StringComparison.Ordinal)));
+        Assert.SkipWhen(simulator is null, "No iOS simulator.");
+        shell.Toolbar.Device = shell.Toolbar.Devices.Single(d => d.Id == simulator!.Id);
+        await shell.StartWithoutDebuggingAsync();
+        await ShellFixture.PumpUntil(() => shell.Runs.Running.Any(r => r.Project == project), seconds: 900);
+        shell.Runs.Running.Single(r => r.Project == project).Stop();
+        await ShellFixture.PumpUntil(() => shell.Runs.Running.All(r => r.Project != project), seconds: 60);
+    }
+
+    /// <summary>
     /// M20d: MainPage.xaml of samples/Maui is MAUI XAML, and completion comes from the C# host's XAML engine with MAUI's
     /// types. Needs the MAUI workload (not on CI): runs with <c>CODALUS_TEST_MAUI=1</c>.
     /// </summary>

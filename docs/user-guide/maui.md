@@ -1,6 +1,6 @@
-# .NET MAUI: Android apps, devices and XAML
+# .NET MAUI: devices, running and XAML
 
-Codalus IDE runs .NET MAUI apps on Android devices and emulators, on Windows, macOS and Linux. It edits MAUI's XAML with completion and checks from your project's own types. Debugging on a device and iOS and Mac Catalyst come next (the rest of M20).
+Codalus IDE runs .NET MAUI apps on Android devices and emulators (on Windows, macOS and Linux), and on a Mac on iOS simulators and the Mac itself (Mac Catalyst). It edits MAUI's XAML with completion and checks from your project's own types. Debugging on a device and physical iPhones and iPads come next (the rest of M20).
 
 ## What you need
 
@@ -27,12 +27,16 @@ When the startup project is a MAUI app (any app with an Android, iOS or Mac Cata
 
 Create emulators with Android Studio's Device Manager (or the SDK's `avdmanager`), then choose **Refresh**.
 
+On a Mac, the list also has **This Mac (Mac Catalyst)** and the iOS simulators Xcode has installed (`xcrun simctl`), booted ones first. Double-click a simulator to boot it in the Simulator app. iOS and Mac Catalyst need Xcode and the `maui` workload (`dotnet workload install maui`). The toolbar lists only the devices of the platforms your app targets.
+
 ## Running
 
 **Start Without Debugging** (Ctrl+F5) on a MAUI app:
 1. starts the chosen emulator, if needed;
 2. builds the app for Android only (the device's target framework) and installs it on the device;
 3. starts it, and shows its log (`adb logcat` for the app's process) in its Run output.
+
+On **This Mac**, the Mac Catalyst framework is built and the app runs as a Mac app, its output in the Run output. On an **iOS simulator**, the simulator boots if needed, the app is built for it, installed and started, and its console output is the Run output.
 
 **Stop** stops the app on the device. A build error stops the start, with the errors in the Error List as for any build.
 
