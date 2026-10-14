@@ -12,7 +12,7 @@ name: Pipeline
 # A release is atomic (the maintainer's rule, 2026-10-14): every gate runs first on the release's own commit: CI (test,
 # smoke), the packages installed and smoke-tested on every platform (packages), and for a stable release also the
 # benchmarks and the apt, dnf and zypper repositories built and installed from with the site exported (site,
-# linux-repos.yml with deploy: false). Only when all of them pass is anything published; otherwise the tag goes.
+# pages.yml with deploy: false). Only when all of them pass is anything published; otherwise the tag goes.
 # Manual dispatch runs the branch's pipeline as a dry run by default (everything built and tested, nothing published).
 # The target framework matrix (M33) is compat.yml, by hand.
 on:
@@ -380,7 +380,7 @@ jobs:
       contents: read
       pages: write
       id-token: write
-    uses: ./.github/workflows/linux-repos.yml
+    uses: ./.github/workflows/pages.yml
     with:
       release: v${{ needs.plan.outputs.version }}
       deploy: false

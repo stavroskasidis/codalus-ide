@@ -1,11 +1,13 @@
-name: Website and Linux repositories
+name: GitHub Pages
 
-# Everything GitHub Pages serves, rebuilt as one site: the apt and dnf repositories from the newest stable release and
+# Everything GitHub Pages serves, rebuilt as one site: the website and the package repositories. First the apt and dnf
+# repositories from the newest stable release and
 # the newest nightly (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret), checked by installing from
 # them with apt, dnf and zypper, signatures verified (eng/test-linux-repos.sh) (M31, D18); then the website, the Blazor
 # app in website/ exported to static files with those releases' download links. Only master deploys (the maintainer's
-# rule, 2026-10-13): each stable release does, and a push to master that changes the website or the user guide runs
-# this; nightlies don't deploy, so the nightly channel and the site's nightly links move on with master.
+# rule, 2026-10-13): each stable release does (pipeline.yml), and so does a push to master that changes only the user
+# guide, which the pipeline ignores (docs/**). A website change reaches master only in a release, which deploys it.
+# Nightlies don't deploy, so the nightly channel and the site's nightly links move on with master.
 # Started on another branch (workflow_dispatch), it builds and checks the site without deploying it.
 # A stable release (pipeline.yml) calls it before publishing anything, with the release's own packages from its run and
 # deploy: false: the repositories are built and installed from, and the site exported, as a gate. The pipeline deploys
@@ -25,9 +27,7 @@ on:
   push:
     branches: [master]
     paths:
-      - "website/**"
       - "docs/user-guide/**"
-      - ".github/workflows/linux-repos.yml"
 
 permissions:
   contents: read

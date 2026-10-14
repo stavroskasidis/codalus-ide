@@ -141,7 +141,7 @@
 </div>
 
 @code {
-    // The repositories are served next to the site (eng/linux-repos.sh, .github/workflows/linux-repos.yml).
+    // The repositories are served next to the site (eng/linux-repos.sh, .github/workflows/pages.yml).
     private string Apt => $"""
         curl -fsSL {Site.BaseUrl}codalus-packages.asc | sudo gpg --dearmor -o /usr/share/keyrings/codalus.gpg
         echo "deb [signed-by=/usr/share/keyrings/codalus.gpg] {Site.BaseUrl}apt stable main" | sudo tee /etc/apt/sources.list.d/codalus.list
