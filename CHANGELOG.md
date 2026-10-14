@@ -4,9 +4,11 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.2.1
 
-A maintenance release: the same app as 0.2.0, released again by the new release process.
+A maintenance release: two fixes in the app, and 0.2.0 released again by the new release process.
+- **Fixed:** floating a tool window or a document made it disappear until the app restarted. It now opens in a window of its own; closing that window closes it, and showing it again puts it back in the main window.
+- **Security:** the data host's `System.Security.Cryptography.Pkcs` (from the SQL Server client) is 10.0.13, past two known vulnerabilities in 9.0.18 (GHSA-846f-f764-76mx, GHSA-2fmv-rv2c-59x7).
 - **Releases are atomic.** A stable release now publishes nothing until every check has passed: the tests and the smoke tests on every OS, the benchmarks, the installers installed and smoke-tested, and the apt, dnf and zypper repositories built and installed from. Then it publishes the release page, the website with the Linux repositories, and the AUR package, in that order. For 0.2.0 the website and the Linux repositories didn't update.
-- Fixes in the tests and the tools around the release, none in the app.
+- Fixes in the tests and the tools around the release.
 
 ## 0.2.0
 
