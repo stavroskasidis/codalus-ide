@@ -1282,8 +1282,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Solutions.Projects.Count == 38 && shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState is "succeeded" or "failed",
             "the 38 projects are open and restored", 600).ConfigureAwait(true);
         Check(shell.Solutions.RestoreState == "succeeded", "the restore succeeded");
-        var lib = shell.Solutions.Projects.Values.Single(p => p.Name == "Core21.Lib");
-        Check(lib.References.Any(r => r is { Kind: Codalus.Projects.Protocol.ReferenceKinds.Framework, Name: "Microsoft.NETCore.App", Resolved: true }), "netcoreapp2.1's framework is the Microsoft.NETCore.App package");
+        // The design-time builds after the restore resolve it: wait for them rather than look once.
+        await WaitAsync(() => shell.Solutions.Projects.Values.Single(p => p.Name == "Core21.Lib").References
+            .Any(r => r is { Kind: Codalus.Projects.Protocol.ReferenceKinds.Framework, Name: "Microsoft.NETCore.App", Resolved: true }), "netcoreapp2.1's framework is the Microsoft.NETCore.App package", 120).ConfigureAwait(true);
 
         var core31 = shell.Solutions.Projects.Values.Single(p => p.Name == "Core31.App").Path;
         shell.Runs.SetStartupProject(core31);
