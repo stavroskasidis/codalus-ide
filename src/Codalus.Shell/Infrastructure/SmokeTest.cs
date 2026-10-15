@@ -1023,7 +1023,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             shell.Run("run.startWithoutDebugging");
             string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: App")?.GetText() ?? string.Empty;
-            await WaitAsync(() => Output().Contains("has exited with code 0", StringComparison.Ordinal), "App runs and exits with 0", 300).ConfigureAwait(true);
+            await WaitAsync(() => Output().Contains("has exited with code 0", StringComparison.Ordinal), () => "App runs and exits with 0; its output:\n" + Tail(Output(), 2000) + "\nThe build's:\n" + Tail(shell.Builds.Channel.GetText(), 1500), 300).ConfigureAwait(true);
             Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
         }).ConfigureAwait(true);
 
@@ -1768,7 +1768,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var window = shell.AspireWindow;
             await WaitAsync(
                 () => window.Resources.Count(r => r.Resource.Type == "Project" && r.Resource.State == "Running") == 2 && window.Resources.Any(r => r.Name == "cache"),
-                "the api and the frontend run, and the cache is listed:\n" + Tail(shell.AspireLog.GetText(), 2000),
+                () => "the api and the frontend run, and the cache is listed:\n" + Tail(shell.AspireLog.GetText(), 2000),
                 420).ConfigureAwait(true);
             await WaitAsync(() => window.HasDashboard, "the dashboard's address is known", 60).ConfigureAwait(true);
             var url = window.Resources.Single(r => r.Name == "frontend").Resource.Urls.First(u => !u.IsInternal).Url;

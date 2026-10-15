@@ -46,7 +46,7 @@ Set an Aspire **AppHost** project as the startup project, then:
 
 **View → Other Windows → Aspire Resources** (it opens on its own when an AppHost starts) lists the app's resources: projects, containers and executables, with their state and endpoints. For the selected one: its **Console** output, **Environment** and **Details** (endpoints, properties). **Start**, **Stop** and **Restart** are the resource's own commands (a container added with `WithExplicitStart()` starts from here); **Open Endpoint** opens its address. **Open Dashboard** (also on the Debug menu) opens the Aspire dashboard, already signed in; with `launchBrowser` in the AppHost's launch profile it opens when the app starts.
 
-Aspire's orchestrator and dashboard come with your AppHost's packages; Codalus IDE talks to them, and ships neither.
+Aspire's orchestrator and dashboard come with your AppHost's packages; Codalus IDE talks to them, and ships neither. An AppHost started from the IDE gives the orchestrator two minutes to reach Docker or Podman when it starts (a slow Docker Desktop otherwise fails the start); set `ASPIRE_DEPENDENCY_CHECK_TIMEOUT` (seconds) yourself to choose another limit.
 
 ## Publishing
 

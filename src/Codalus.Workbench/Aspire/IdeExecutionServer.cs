@@ -102,14 +102,30 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     /// <summary>What happened (requests, errors), for the Aspire output.</summary>
     public event Action<string>? Log;
 
-    /// <summary>The variables that point an AppHost at this server.</summary>
-    public IReadOnlyDictionary<string, string> AppHostEnvironment(bool debug) => new Dictionary<string, string>(StringComparer.Ordinal)
+    /// <summary>
+    /// The variables that point an AppHost at this server. The orchestrator's check of the container runtime gets two
+    /// minutes unless the user set its limit: Aspire's default timed out on a busy Windows machine whose Docker answered
+    /// slowly.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> AppHostEnvironment(bool debug)
     {
-        ["DEBUG_SESSION_PORT"] = "localhost:" + Port.ToString(CultureInfo.InvariantCulture),
-        ["DEBUG_SESSION_TOKEN"] = Token,
-        ["DEBUG_SESSION_RUN_MODE"] = debug ? "Debug" : "NoDebug",
-        ["DEBUG_SESSION_INFO"] = """{"protocols_supported":["2024-03-03"],"supported_launch_configurations":["project"]}""",
-    };
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["DEBUG_SESSION_PORT"] = "localhost:" + Port.ToString(CultureInfo.InvariantCulture),
+            ["DEBUG_SESSION_TOKEN"] = Token,
+            ["DEBUG_SESSION_RUN_MODE"] = debug ? "Debug" : "NoDebug",
+            ["DEBUG_SESSION_INFO"] = """{"protocols_supported":["2024-03-03"],"supported_launch_configurations":["project"]}""",
+        };
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(DependencyCheckTimeoutVariable)))
+        {
+            environment[DependencyCheckTimeoutVariable] = "120";
+        }
+
+        return environment;
+    }
+
+    /// <summary>Aspire's limit, in seconds, for the orchestrator's check of the container runtime.</summary>
+    public const string DependencyCheckTimeoutVariable = "ASPIRE_DEPENDENCY_CHECK_TIMEOUT";
 
     public void Start()
     {

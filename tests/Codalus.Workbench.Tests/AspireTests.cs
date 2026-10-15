@@ -268,9 +268,6 @@ internal static class AspireRuntime
 {
     public static async Task RequireContainerEngineAsync()
     {
-        // Aspire's orchestrator checks its container runtime within a short limit: on a loaded CI runner (Windows,
-        // three test projects at once) that check timed out. The AppHosts these tests start inherit a longer limit.
-        Environment.SetEnvironmentVariable("ASPIRE_DEPENDENCY_CHECK_TIMEOUT", "120");
         var engine = Codalus.Workbench.Containers.ContainerEngine.Resolve(Environment.GetEnvironmentVariable("CODALUS_TEST_CONTAINER_TOOL"));
         var (os, error) = await engine.ServerOsAsync(CancellationToken.None);
         if (os is null)
@@ -326,6 +323,22 @@ internal static class AspireRuntime
             {
                 return DateTime.MinValue;
             }
+        }
+    }
+}
+/// <summary>The AppHost environment's parts that need no container runtime.</summary>
+public sealed class AspireEnvironmentTests
+{
+    [Fact]
+    public async Task The_apphost_points_at_the_ide_and_gets_a_longer_orchestrator_check()
+    {
+        await using var server = new IdeExecutionServer((_, _) => throw new InvalidOperationException("No runs here."));
+        var environment = server.AppHostEnvironment(debug: true);
+        Assert.Equal("Debug", environment["DEBUG_SESSION_RUN_MODE"]);
+        Assert.Equal(server.Token, environment["DEBUG_SESSION_TOKEN"]);
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(IdeExecutionServer.DependencyCheckTimeoutVariable)))
+        {
+            Assert.Equal("120", environment[IdeExecutionServer.DependencyCheckTimeoutVariable]);
         }
     }
 }
