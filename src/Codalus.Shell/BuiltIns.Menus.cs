@@ -148,6 +148,7 @@ internal static partial class BuiltIns
             Item(EditFindMenu, "editor.action.findNext", "1-document"),
             Item(EditFindMenu, "editor.action.findPrevious", "1-document"),
             Item(EditFindMenu, "workbench.action.findInFiles", "2-files"),
+            Item(EditFindMenu, "workbench.action.replaceInFiles", "2-files"),
 
             Item(EditAdvancedMenu, "editor.action.formatDocument", "1-format"),
             Item(EditAdvancedMenu, "editor.action.formatSelection", "1-format"),

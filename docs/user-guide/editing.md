@@ -52,7 +52,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 | Call Hierarchy | `Shift+Alt+H` | Calls to and calls from a method or property, expanding recursively, in the Hierarchy window. |
 | Type Hierarchy | (Edit menu, palette) | Base and derived types, in the Hierarchy window. |
 | Go To All | `Ctrl+T`, `Ctrl+,` | Types and members; type `f ` first to search file names. |
-| Find in Files | `Ctrl+Shift+F` | Case, whole word, regex and a file filter. |
+| Find in Files, Replace in Files | `Ctrl+Shift+F`, `Ctrl+Shift+H` | The Find and Replace window, below. |
 | Navigate Back and Forward | `Ctrl+-`, `Ctrl+Shift+-` | |
 | Go to Last Edit Location | `Ctrl+Shift+Backspace` | |
 | Next and Previous Problem | `F8`, `Shift+F8` | Errors and warnings in the document, with the message in the status bar. |
@@ -62,6 +62,18 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 - **Document Outline**: the document's types and members. It follows the caret; click a symbol to go there, or type to filter.
 - **Code Definition**: the definition of the symbol at the caret, read-only, updated as the caret moves.
 - **Hierarchy**: Call Hierarchy and Type Hierarchy results.
+
+## Find and Replace in files
+
+`Ctrl+Shift+F` (Edit → Find and Replace → Find in Files) opens the **Find and Replace** window over the documents' top right, with the editor's selection to find. It isn't modal: keep editing while it's open, drag it by its title, and close it with `Esc`. `Ctrl+Shift+H` opens it on **Replace in Files**.
+
+- **Find what** and **Replace with** remember earlier searches in their drop-downs. With **Use regular expressions**, the replacement can use the match's groups (`$1`, `${name}`).
+- **Look in**: the entire solution, the current project, the current document, all open documents, or a folder (the folder button). Without a solution, the entire solution is the open documents.
+- **File types**: patterns separated by `;`. One without a path separator matches the file name (`*.cs;*.razor`); one with it matches the path below the solution (`*\bin\*`), and `!` excludes. The default, `!*\bin\*;!*\obj\*;!*\.*\*`, leaves out build output and dot folders such as `.git`.
+- **Find All** (`Enter`) lists the matches in the **Find Results** window and closes Find and Replace; **Append results** adds them under the earlier ones. **Find Next**, **Find Previous** and **Skip File** go through the matches one by one, opening each with the match selected, and leave the window open.
+- **Replace** replaces the current match and goes to the next. **Replace All** asks first, then replaces every match: open documents change in the editor, where you can undo and save, and the other files change on disk. Find Results then lists the changed lines.
+
+**Find Results** shows a line per match, grouped by file, with the matches emphasized and the file, line and column beside them. Double-click or `Enter` opens one; the arrows go to the previous and next; **Modify Find** opens Find and Replace again with the same search.
 
 ## Inline information
 

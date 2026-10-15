@@ -117,6 +117,12 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
+      <!-- Find and Replace (Ctrl+Shift+F): floats over the documents' top right and isn't modal, so the layer has no
+           background and lets clicks through. -->
+      <Panel x:Name="FindLayer" IsVisible="{Binding FindReplace.IsOpen}" ZIndex="1">
+        <views:FindReplaceView x:Name="FindReplace" DataContext="{Binding FindReplace}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,36,28,0" />
+      </Panel>
+
       <Panel x:Name="DialogLayer" Background="#60000000" IsVisible="{Binding Dialogs.IsOpen}" ZIndex="2">
         <views:DialogView DataContext="{Binding Dialogs}" HorizontalAlignment="Center" VerticalAlignment="Center" />
       </Panel>

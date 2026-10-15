@@ -54,7 +54,7 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 | Navigation | `F12`, `Ctrl+F12` | Go to definition, implementation |
 | | `Shift+F12` | Find all references |
 | | `Ctrl+T` | Go to all (types, members, files) |
-| | `Ctrl+Shift+F` | Find in files |
+| | `Ctrl+Shift+F`, `Ctrl+Shift+H` | Find in files, replace in files |
 | | `Ctrl+-`, `Ctrl+Shift+-` | Navigate back, forward |
 | Build and run | `Ctrl+Shift+B`, `F6` | Build solution |
 | | `Ctrl+Break` | Cancel the build |

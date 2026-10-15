@@ -334,6 +334,29 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.FindResults.Rows.Any(r => r.IsHeader && r.Path == Program), "the references include Program.cs", 60).ConfigureAwait(true);
         }, "language.ready").ConfigureAwait(true);
 
+        await StepAsync("editor.findInFiles", "M3", "Find and Replace: Find in Files from the floating window into Find Results", async () =>
+        {
+            await OpenAsync(Program).ConfigureAwait(true);
+            shell.Run("workbench.action.findInFiles");
+            await WaitAsync(() => shell.FindReplace.IsOpen, "Find and Replace opens", 10).ConfigureAwait(true);
+            shell.FindReplace.Query = "Greet";
+            shell.FindReplace.LookIn = ViewModels.FindScopes.EntireSolution;
+            await Task.Delay(300).ConfigureAwait(true);
+            Screenshot("smoke-test-find-and-replace.png");
+            await shell.FindReplace.FindAllAsync().ConfigureAwait(true);
+            Check(!shell.FindReplace.IsOpen, "Find All closes the window");
+            await WaitAsync(() => shell.FindResults.Rows.Any(r => !r.IsHeader && r.Path == Program && r.Highlights is { Count: > 0 }), "Find Results lists Program.cs with the match highlighted", 30).ConfigureAwait(true);
+            await shell.FindResults.GoToAsync(1).ConfigureAwait(true);
+            await WaitAsync(() => shell.ActiveEditor?.Controller?.Editor.SelectedText.Equals("Greet", StringComparison.OrdinalIgnoreCase) == true, "Next opens the first match selected", 30).ConfigureAwait(true);
+            await Task.Delay(300).ConfigureAwait(true);
+            Screenshot("smoke-test-find-results.png");
+            shell.ActiveEditor?.Controller?.Editor.TextArea.ClearSelection(); // the next steps start from a caret, not the match
+            if (shell.FindResults.ReferenceSets.FirstOrDefault() is { } references)
+            {
+                shell.FindResults.CurrentSet = references; // back to the references, as the theme screenshots (the website's) show them
+            }
+        }, "language.ready").ConfigureAwait(true);
+
         await StepAsync("editor.insights", "M12", "Inlay hints, CodeLens, Peek Definition, the Document Outline and the navigation bar", async () =>
         {
             var program = await OpenAsync(Program).ConfigureAwait(true);

@@ -212,6 +212,7 @@ public static class CommandIcons
         ["editor.action.find"] = new("search"),
         ["editor.action.replace"] = new("replace"),
         ["workbench.action.findInFiles"] = new("find-in-files"),
+        ["workbench.action.replaceInFiles"] = new("replace"),
         ["workbench.action.gotoAll"] = new("go-to", Navigate),
         ["editor.action.gotoLine"] = new("go-to-line"),
         ["editor.action.revealDefinition"] = new("definition", Navigate),

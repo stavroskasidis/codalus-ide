@@ -1,0 +1,78 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.FindReplaceView"
+             x:DataType="vm:FindReplaceViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.label">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,10,0" />
+    </Style>
+    <!-- Body-sized tab headers, like the shell's TabItems, not Fluent's 24 pt. -->
+    <Style Selector="TabStripItem">
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="8,4" />
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="MinHeight" Value="26" />
+    </Style>
+    <Style Selector="Button.findAction">
+      <Setter Property="MinWidth" Value="96" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+  </UserControl.Styles>
+  <!-- Find and Replace (Ctrl+Shift+F, Ctrl+Shift+H): a floating window over the documents, not modal; drag it by its
+       title. Find All and Replace All fill Find Results and close it. -->
+  <Border x:Name="Frame" Classes="overlay" Width="480" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{l:T findReplace.findAndReplace}">
+    <DockPanel>
+      <Grid x:Name="TitleRow" DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Background="Transparent" Cursor="SizeAll" Margin="12,6,6,0">
+        <TextBlock Text="{l:T findReplace.findAndReplace}" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Classes="toolbar" Command="{Binding CloseCommand}" ToolTip.Tip="{l:T findReplace.close}" AutomationProperties.Name="{l:T findReplace.close}" Cursor="Arrow">
+          <controls:Icon Kind="close" />
+        </Button>
+      </Grid>
+      <TabStrip DockPanel.Dock="Top" SelectedIndex="{Binding TabIndex}" Margin="6,0,6,4" AutomationProperties.Name="{l:T findReplace.mode}">
+        <TabStripItem Content="{l:T findReplace.findInFiles}" />
+        <TabStripItem Content="{l:T findReplace.replaceInFiles}" />
+      </TabStrip>
+      <StackPanel Spacing="8" Margin="14,4,14,14">
+        <ComboBox x:Name="QueryBox" IsEditable="True" Text="{Binding Query}" ItemsSource="{Binding QueryHistory}" HorizontalAlignment="Stretch"
+                  PlaceholderText="{l:T findReplace.findWhat}" AutomationProperties.Name="{l:T findReplace.findWhat}" />
+        <ComboBox x:Name="ReplaceBox" IsEditable="True" Text="{Binding ReplaceWith}" ItemsSource="{Binding ReplaceHistory}" HorizontalAlignment="Stretch" IsVisible="{Binding IsReplace}"
+                  PlaceholderText="{l:T findReplace.replaceWith}" AutomationProperties.Name="{l:T findReplace.replaceWith}" />
+        <StackPanel Spacing="2">
+          <CheckBox Content="{l:T findReplace.matchCase}" IsChecked="{Binding MatchCase}" />
+          <CheckBox Content="{l:T findReplace.matchWholeWord}" IsChecked="{Binding WholeWord}" />
+          <CheckBox Content="{l:T findReplace.useRegularExpressions}" IsChecked="{Binding UseRegex}" />
+        </StackPanel>
+        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" RowSpacing="8">
+          <TextBlock Classes="label" Text="{l:T findReplace.lookIn}" />
+          <ComboBox Grid.Column="1" IsEditable="True" Text="{Binding LookIn}" ItemsSource="{Binding LookInOptions}" HorizontalAlignment="Stretch" AutomationProperties.Name="{l:T findReplace.lookIn}" />
+          <Button Grid.Column="2" Classes="toolbar" Margin="6,0,0,0" Command="{Binding BrowseCommand}" ToolTip.Tip="{l:T findReplace.chooseAFolder}" AutomationProperties.Name="{l:T findReplace.chooseAFolder}">
+            <controls:Icon Kind="folder-open" />
+          </Button>
+          <TextBlock Grid.Row="1" Classes="label" Text="{l:T findReplace.fileTypes}" />
+          <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" IsEditable="True" Text="{Binding FileTypes}" ItemsSource="{Binding FileTypeOptions}" HorizontalAlignment="Stretch"
+                    ToolTip.Tip="{l:T findReplace.fileTypesTip}" AutomationProperties.Name="{l:T findReplace.fileTypes}" />
+        </Grid>
+        <CheckBox Content="{l:T findReplace.appendResults}" IsChecked="{Binding AppendResults}" IsVisible="{Binding IsFind}" />
+        <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" Margin="0,6,0,0" IsVisible="{Binding IsFind}">
+          <Button Classes="findAction" Content="{l:T findReplace.findPrevious}" Command="{Binding FindPreviousCommand}" />
+          <Button Classes="findAction" Content="{l:T findReplace.findNext}" Command="{Binding FindNextCommand}" />
+          <Button Classes="findAction" Content="{l:T findReplace.skipFile}" Command="{Binding SkipFileCommand}" />
+          <Button Classes="findAction accent" Content="{l:T findReplace.findAll}" Command="{Binding FindAllCommand}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" Margin="0,6,0,0" IsVisible="{Binding IsReplace}">
+          <Button Classes="findAction" Content="{l:T findReplace.findNext}" Command="{Binding FindNextCommand}" />
+          <Button Classes="findAction" Content="{l:T findReplace.replace}" Command="{Binding ReplaceCommand}" />
+          <Button Classes="findAction" Content="{l:T findReplace.skipFile}" Command="{Binding SkipFileCommand}" />
+          <Button Classes="findAction accent" Content="{l:T findReplace.replaceAll}" Command="{Binding ReplaceAllCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </DockPanel>
+  </Border>
+</UserControl>

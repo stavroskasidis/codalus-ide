@@ -183,8 +183,8 @@ public class EditorTests
 
         // Find in Files.
         f.Shell.FindInFiles();
-        f.Shell.FindResults.Query = "JsonSerializer";
-        await f.Shell.FindResults.SearchAsync();
+        f.Shell.FindReplace.Query = "JsonSerializer";
+        await f.Shell.FindReplace.FindAllAsync();
         Assert.Contains(f.Shell.FindResults.Rows, r => !r.IsHeader && r.Path == programPath);
 
         // The lightbulb: an unknown type gets "using System.Text;" after a preview.

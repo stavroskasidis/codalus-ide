@@ -78,7 +78,8 @@ internal static partial class BuiltIns
           { "key": "f8", "command": "editor.action.marker.next", "when": "editorTextFocus" },
           { "key": "shift+f8", "command": "editor.action.marker.prev", "when": "editorTextFocus" },
           { "key": "primary+shift+backspace", "command": "workbench.action.navigateToLastEditLocation" },
-          { "key": "primary+shift+f", "command": "workbench.action.findInFiles" }
+          { "key": "primary+shift+f", "command": "workbench.action.findInFiles" },
+          { "key": "primary+shift+h", "command": "workbench.action.replaceInFiles" }
         ]
         """;
 
@@ -258,6 +259,7 @@ internal static partial class BuiltIns
         Add("editor.action.formatSelection", "Format Selection", "Editor", Ui(() => shell.FormatAsync(selectionOnly: true)), Editor);
         Add("workbench.action.gotoAll", "Go To All…", "Edit", Ui(shell.GoToAllAsync));
         Add("workbench.action.findInFiles", "Find in Files", "Edit", Ui(shell.FindInFiles));
+        Add("workbench.action.replaceInFiles", "Replace in Files", "Edit", Ui(shell.ReplaceInFiles));
         Add("editor.action.changeEndOfLine", "Change Line Endings…", "Edit", Ui(shell.ChangeEndOfLineAsync), Editor);
 
         Add("file.saveAll", "Save All", "File", Ui(shell.SaveAllAsync));
