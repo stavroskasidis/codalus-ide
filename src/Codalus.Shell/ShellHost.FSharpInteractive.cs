@@ -183,7 +183,9 @@ public sealed partial class ShellHost
 
     private void Submit(string text)
     {
+        // Lines end with Enter, a carriage return, as Run Selection in the terminal sends them: ConPTY reads a line feed
+        // as Ctrl+J, which doesn't end the line.
         var session = ShowFSharpInteractive();
-        session.Write(text);
+        session.Write(text.Replace('\n', '\r'));
     }
 }

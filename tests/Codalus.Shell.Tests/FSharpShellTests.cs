@@ -16,14 +16,14 @@ public sealed class FSharpShellTests
     private static string SharedCache => Path.Combine(Path.GetTempPath(), "codalus-test-node-cache");
 
     /// <summary>Quick Info at the end of <paramref name="marker"/> in an open file, asked again until it contains <paramref name="expected"/>.</summary>
-    private static async Task<string?> QuickInfoAsync(ShellFixture f, string path, string marker, string expected)
+    private static async Task<string?> QuickInfoAsync(ShellFixture f, string path, string marker, string expected, int seconds = 120)
     {
         var document = await f.Shell.OpenFileAsync(path, preview: false, null);
         await ShellFixture.PumpUntil(() => document?.Controller is not null);
         var offset = document!.Model.Text.Text.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
         var line = document.Model.Text.GetLineByOffset(offset);
         string? info = null;
-        for (var attempt = 0; attempt < 120 && info?.Contains(expected, StringComparison.Ordinal) != true; attempt++)
+        for (var attempt = 0; attempt < seconds && info?.Contains(expected, StringComparison.Ordinal) != true; attempt++)
         {
             try
             {
@@ -117,9 +117,10 @@ public sealed class FSharpShellTests
         Assert.Contains("val describe", scriptInfo, StringComparison.Ordinal);
         Assert.Contains("Describes a list of numbers.", scriptInfo, StringComparison.Ordinal);
 
-        // A type provider: JsonProvider's provided property (once the package is restored).
+        // A type provider: JsonProvider's provided property (once the package is restored, and FsAutoComplete has
+        // reloaded the project and run the provider: minutes on a hosted macOS runner).
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects[Path.Combine(folder, "FsData", "FsData.fsproj")].Restored, seconds: 300);
-        var provided = await QuickInfoAsync(f, Path.Combine(folder, "FsData", "Weather.fs"), "sample.Days[0].Hi", "property High");
+        var provided = await QuickInfoAsync(f, Path.Combine(folder, "FsData", "Weather.fs"), "sample.Days[0].Hi", "property High", seconds: 360);
         Assert.Contains("property High: decimal", provided, StringComparison.Ordinal);
 
         // Solution Explorer: the compile order, the signature file under its implementation; Move Up and Move Down.

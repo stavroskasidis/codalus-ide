@@ -183,7 +183,11 @@ public sealed class McpBridge : IDisposable
     {
         _pipeName = pipeName;
         _handler = handler;
-        _ = Task.Run(ListenAsync);
+
+        // The first instance exists before Listen returns, so a call made right after it connects even when the
+        // thread pool is slow to start the loop.
+        var first = CreatePipe();
+        _ = Task.Run(() => ListenAsync(first));
     }
 
     /// <summary>The bridge's pipe for a user-data folder's pipe name (the single-instance pipe's, with <c>-mcp</c>).</summary>
@@ -223,14 +227,18 @@ public sealed class McpBridge : IDisposable
         }
     }
 
-    private async Task ListenAsync()
+    private NamedPipeServerStream CreatePipe() =>
+        new(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+
+    private async Task ListenAsync(NamedPipeServerStream? first)
     {
         while (!_stop.IsCancellationRequested)
         {
-            NamedPipeServerStream? pipe = null;
+            NamedPipeServerStream? pipe = first;
+            first = null;
             try
             {
-                pipe = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                pipe ??= CreatePipe();
                 await pipe.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
                 var connected = pipe;
                 pipe = null;

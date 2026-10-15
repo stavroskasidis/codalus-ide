@@ -955,22 +955,32 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private async Task RestoreAsync(string target)
     {
         await _events.RestoreStateAsync("running", null).ConfigureAwait(false);
-        // No --nologo: SDKs before 5.0 hand it to MSBuild, which rejects it (MSB1001). DOTNET_NOLOGO does the same.
-        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--verbosity", "minimal"]);
         try
         {
-            using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet restore did not start.");
-            var output = PumpAsync(process.StandardOutput);
-            var error = PumpAsync(process.StandardError);
-            await Packages.DotnetProcess.WaitOrKillAsync(process, _lifetime.Token).ConfigureAwait(false);
-            await Task.WhenAll(output, error).ConfigureAwait(false);
-            var ok = process.ExitCode == 0;
+            var code = await RunRestoreAsync(target).ConfigureAwait(false);
+            var restoredAlone = 0;
+            if (code != 0 && !ProjectPaths.Contains(target, s_pathComparer))
+            {
+                // One project that can't restore (a MAUI app without its workload, an error in its file) fails the
+                // whole solution's restore before any assets file is written: the others are restored on their own,
+                // so they still build and get their packages' completions.
+                foreach (var project in ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !AssetsWritten(p)).ToList())
+                {
+                    if (await RunRestoreAsync(project).ConfigureAwait(false) == 0)
+                    {
+                        restoredAlone++;
+                    }
+                }
+            }
+
+            var ok = code == 0;
             if (ok)
             {
                 MarkRestored();
             }
 
-            await _events.RestoreStateAsync(ok ? "succeeded" : "failed", ok ? null : $"dotnet restore exited with code {process.ExitCode}.").ConfigureAwait(false);
+            await _events.RestoreStateAsync(ok ? "succeeded" : "failed", ok ? null
+                : $"dotnet restore exited with code {code}." + (restoredAlone > 0 ? $" {restoredAlone} project(s) restored on their own." : "")).ConfigureAwait(false);
 
             // Only projects whose assets file the restore wrote are evaluated again (M34b); the watcher handles the
             // NuGet-generated imports it rewrote.
@@ -984,6 +994,22 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         {
         }
     }
+
+    /// <summary>Runs <c>dotnet restore</c> on a solution or project, its output going to the restore's output; its exit code.</summary>
+    private async Task<int> RunRestoreAsync(string target)
+    {
+        // No --nologo: SDKs before 5.0 hand it to MSBuild, which rejects it (MSB1001). DOTNET_NOLOGO does the same.
+        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--verbosity", "minimal"]);
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet restore did not start.");
+        var output = PumpAsync(process.StandardOutput);
+        var error = PumpAsync(process.StandardError);
+        await Packages.DotnetProcess.WaitOrKillAsync(process, _lifetime.Token).ConfigureAwait(false);
+        await Task.WhenAll(output, error).ConfigureAwait(false);
+        return process.ExitCode;
+    }
+
+    /// <summary>Whether the restore just run wrote the project's assets file (it has one newer than its evaluation's).</summary>
+    private bool AssetsWritten(string project) => AssetsStamp(project) != DateTime.MinValue && AssetsChangedSinceEvaluation(project);
 
     private async Task PumpAsync(StreamReader reader)
     {

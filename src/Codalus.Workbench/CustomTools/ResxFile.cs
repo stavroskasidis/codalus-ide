@@ -1,3 +1,4 @@
+using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -18,8 +19,13 @@ public sealed record ResxEntry(string Name, string? Value, string? Comment, stri
 public sealed class ResxFile
 {
     private readonly XDocument _document;
+    private readonly string _newline;
 
-    private ResxFile(XDocument document) => _document = document;
+    private ResxFile(XDocument document, string newline)
+    {
+        _document = document;
+        _newline = newline;
+    }
 
     /// <summary>Parses a resource file. Throws <see cref="XmlException"/> when it isn't one.</summary>
     public static ResxFile Parse(string text)
@@ -30,7 +36,7 @@ public sealed class ResxFile
             throw new XmlException("A .resx file's root element is <root>.");
         }
 
-        return new ResxFile(document);
+        return new ResxFile(document, text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n");
     }
 
     /// <summary>An empty resource file, as the .NET templates write one.</summary>
@@ -149,11 +155,22 @@ public sealed class ResxFile
         }
     }
 
-    /// <summary>The file's text, with its XML declaration.</summary>
+    /// <summary>The file's text, with its XML declaration, in the line endings it was read with (on every OS).</summary>
     public string Save()
     {
-        var declaration = _document.Declaration is { } d ? d + "\n" : string.Empty;
-        return declaration + _document.Root!.ToString(SaveOptions.DisableFormatting) + "\n";
+        var builder = new StringBuilder();
+        if (_document.Declaration is { } declaration)
+        {
+            builder.Append(declaration).Append(_newline);
+        }
+
+        var settings = new XmlWriterSettings { OmitXmlDeclaration = true, NewLineHandling = NewLineHandling.Replace, NewLineChars = _newline, ConformanceLevel = ConformanceLevel.Fragment };
+        using (var writer = XmlWriter.Create(builder, settings))
+        {
+            _document.Root!.WriteTo(writer);
+        }
+
+        return builder.Append(_newline).ToString();
     }
 
     /// <summary>Why a set of names can't be saved (empty or duplicate), or null.</summary>

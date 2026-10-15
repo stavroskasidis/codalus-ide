@@ -30,7 +30,7 @@ public sealed class PasteImportsTests
         await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(f.Window.Clipboard!, Code);
         controller.Editor.CaretOffset = text.Text.IndexOf("{\n}", StringComparison.Ordinal) + 2;
         controller.Editor.Focus();
-        f.Press(Key.V, RawInputModifiers.Control);
+        f.Press(Key.V, OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control);
         Assert.Contains(Code, text.Text, StringComparison.Ordinal);
 
         await ShellFixture.PumpUntil(() => text.Text.Contains("using System.Text.RegularExpressions;", StringComparison.Ordinal), seconds: 120);
@@ -48,7 +48,7 @@ public sealed class PasteImportsTests
         // Turned off, a paste is just a paste.
         await f.Shell.Workbench.Settings.SetAsync(ShellHost.PasteAddsImportsSetting, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
         controller.Editor.CaretOffset = text.Text.IndexOf(Code, StringComparison.Ordinal);
-        f.Press(Key.V, RawInputModifiers.Control);
+        f.Press(Key.V, OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control);
         await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         await ShellFixture.PumpUntil(() => true);
         Assert.DoesNotContain("using ", text.Text, StringComparison.Ordinal);

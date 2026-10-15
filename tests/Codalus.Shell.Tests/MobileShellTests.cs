@@ -38,9 +38,14 @@ public sealed class MobileShellTests
         Assert.False(f.Shell.IsMobileProject(views));
         Assert.Equal("net10.0-android", f.Shell.MobileRunFramework(info));
 
-        // The project says which workload packs are missing; it agrees with dotnet workload list.
+        // The project never calls a pack missing that dotnet workload list says is installed. (The other way round
+        // depends on the SDK install: the CI runners' SDKs report no missing packs for an Android target without the
+        // workload.)
         var installed = await f.Shell.Mobile.InstalledWorkloadsAsync("dotnet", folder, TestContext.Current.CancellationToken) ?? [];
-        Assert.Equal(installed.Contains("maui-android") || installed.Contains("maui"), info.MissingWorkloadPacks.Length == 0 || !info.MissingWorkloadPacks.Any(p => p.Contains("Android", StringComparison.OrdinalIgnoreCase)));
+        if (installed.Contains("maui-android") || installed.Contains("maui"))
+        {
+            Assert.DoesNotContain(info.MissingWorkloadPacks, p => p.Contains("Android", StringComparison.OrdinalIgnoreCase));
+        }
 
         // The startup project gets the device picker.
         f.Shell.SetStartupProject(app);
@@ -55,6 +60,22 @@ public sealed class MobileShellTests
         var page = await f.Shell.OpenFileAsync(Path.Combine(folder, "MauiViews", "Views", "TodoPage.xaml"), preview: false, null);
         await ShellFixture.PumpUntil(() => page?.Controller is not null);
         Assert.Equal(ShellHost.XamlLanguageId, page!.Model.LanguageId);
+
+        // Its binding paths complete from x:DataType (the smoke step maui.devices does the same in the shipped app).
+        var position = page.Model.PositionAt(page.Model.Text.Text.IndexOf("Text=\"{Binding NewTitle}\"", StringComparison.Ordinal) + "Text=\"{Binding ".Length);
+        var completed = false;
+        for (var attempt = 0; attempt < 60 && !completed; attempt++)
+        {
+            var client = await f.Shell.Languages.ClientAsync(ShellHost.XamlLanguageId);
+            var completion = client is null ? null : await client.CompletionAsync(page.Model.Uri, position, null, ShellFixture.RequestTimeout(60));
+            completed = completion?.Items.Any(i => i.Label == "AddCommand") == true;
+            if (!completed)
+            {
+                await Task.Delay(2000, TestContext.Current.CancellationToken);
+            }
+        }
+
+        Assert.True(completed, "The binding path completes the view model's members.");
 
         // Check Environment: the workload, the Android SDK and the JDK, each with a fix.
         var tools = await f.Shell.CheckEnvironmentAsync(offer: false);
@@ -83,9 +104,10 @@ public sealed class MobileShellTests
 
         // Stand-in tools: an SDK with adb and an emulator, one emulator running; nothing is installed or started.
         var sdk = Path.Combine(f.UserData, "android-sdk");
-        string[] files = [Path.Combine(sdk, "platform-tools", "adb"), Path.Combine(sdk, "emulator", "emulator"), Path.Combine(f.UserData, "jdk", "bin", "java"), Path.Combine(f.UserData, "jdk", "bin", "javac")];
+        var exe = OperatingSystem.IsWindows() ? ".exe" : "";
+        string[] files = [Path.Combine(sdk, "platform-tools", "adb" + exe), Path.Combine(sdk, "emulator", "emulator" + exe), Path.Combine(f.UserData, "jdk", "bin", "java" + exe), Path.Combine(f.UserData, "jdk", "bin", "javac" + exe)];
         Task<(int, string)> Run(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken ct) =>
-            Task.FromResult<(int, string)>((Path.GetFileName(program) + " " + string.Join(' ', arguments)) switch
+            Task.FromResult<(int, string)>((Path.GetFileNameWithoutExtension(program) + " " + string.Join(' ', arguments)) switch
             {
                 "adb devices -l" => (0, "List of devices attached\nemulator-5554 device model:sdk_gphone64 transport_id:1\n"),
                 "adb -s emulator-5554 emu avd name" => (0, "Pixel_8_API_35\nOK\n"),
@@ -96,7 +118,7 @@ public sealed class MobileShellTests
         f.Shell.UseMobileService(new MobileService(PlatformInfo.Current, toolchain, Run, (_, _, _) => false, f.Shell.Workbench.Settings));
         await f.Shell.RefreshDevicesAsync();
         await ShellFixture.PumpUntil(() => f.Shell.Toolbar.DeviceLabel == "Pixel 8 API 35");
-        Assert.Equal(2, f.Shell.DevicesWindow.Devices.Count);
+        Assert.Equal(2, f.Shell.DevicesWindow.Devices.Count(d => d.Device.Platform == MobilePlatform.Android)); // and This Mac on macOS
         Assert.Contains(f.Shell.DevicesWindow.Devices, d => d.IsTarget && d.Device.Id == "emulator-5554");
 
         if (info.MissingWorkloadPacks.Length > 0)

@@ -56,6 +56,19 @@ public sealed class ResxFileTests
     }
 
     [Fact]
+    public void A_file_keeps_its_line_endings_on_every_os()
+    {
+        foreach (var newline in (string[])["\n", "\r\n"])
+        {
+            var file = ResxFile.Parse(Sample.ReplaceLineEndings(newline));
+            file.Set("Title", "Codalus", "line one\nline two");
+            var text = file.Save();
+            Assert.Equal(text.ReplaceLineEndings(newline), text);
+            Assert.Contains($"<data name=\"Title\" xml:space=\"preserve\">{newline}    <value>Codalus</value>", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void An_empty_file_takes_strings_and_names_are_checked()
     {
         var file = ResxFile.Empty();
