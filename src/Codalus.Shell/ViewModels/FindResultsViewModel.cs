@@ -17,6 +17,22 @@ public sealed record FindResultRow(string Path, int Line, int Column, int Length
 
     public string? Container { get; init; }
 
+    /// <summary>The positions in <see cref="Code"/> that matched (Find in Files), drawn emphasized.</summary>
+    public IReadOnlyList<int>? Highlights { get; init; }
+
+    /// <summary>Find in Files: true once Replace changed this match.</summary>
+    public bool IsReplaced { get; init; }
+
+    /// <summary>The Code column: the line's text, with the kind of reference after it.</summary>
+    public string Code => IsHeader || Kind is null ? Text
+        : $"{Text}    [{KindTitle(Kind)}{(Container is null ? string.Empty : " in " + Container)}]";
+
+    public string FileName => IsHeader ? string.Empty : System.IO.Path.GetFileName(Path);
+
+    public string LineLabel => IsHeader ? string.Empty : Line.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    public string ColumnLabel => IsHeader ? string.Empty : (Column + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     public string Display => IsHeader ? Text
         : Kind is null ? $"{Line,6}:  {Text}"
         : $"{Line,6}:  {Text}    [{KindTitle(Kind)}{(Container is null ? string.Empty : " in " + Container)}]";
@@ -39,37 +55,38 @@ public sealed record ReferenceSet(string Title, IReadOnlyList<ReferenceItem> Ite
 }
 
 /// <summary>
-/// Find Results: Find in Files (the search bar: match case, whole word, regular expression, file filter) and the
+/// Find Results: what Find and Replace (<see cref="FindReplaceViewModel"/>) found, a row per matching line, and the
 /// results of Find All References. Searching runs on the thread pool and streams results in batches; a new search
-/// cancels the previous one. Double-click or Enter opens a match.
+/// cancels the previous one. Double-click or Enter opens a match; Next and Previous (and the window's Find Next) walk
+/// them; Modify Find shows Find and Replace again.
 /// </summary>
 public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
 {
     public const string ToolWindowId = "findResults";
     private const int MaxMatches = 10_000;
 
-    private readonly Func<IReadOnlyList<string>> _files;
+    private readonly Func<FindInFilesOptions, Task<IReadOnlyList<string>>> _files;
     private readonly Func<string, string?> _openText;
-    private readonly Func<string, Position, Task> _open;
+    private readonly Func<string, Position, int, Task> _open;
     private CancellationTokenSource? _search;
-    private string _query = string.Empty;
-    private string _include = string.Empty;
-    private bool _matchCase;
-    private bool _wholeWord;
-    private bool _useRegex;
+    private string _title = string.Empty;
     private string _summary = string.Empty;
     private bool _isSearching;
+    private FindResultRow? _selectedRow;
 
-    /// <param name="files">The files Find in Files searches (the solution's).</param>
+    /// <param name="files">The files a Find in Files search looks in (its scope, its file types applied).</param>
     /// <param name="openText">The editor's text of an open file (unsaved changes count), or null.</param>
-    /// <param name="open">Opens a file at a position.</param>
-    public FindResultsViewModel(Func<IReadOnlyList<string>> files, Func<string, string?> openText, Func<string, Position, Task> open)
+    /// <param name="open">Opens a file at a position, selecting that many characters.</param>
+    public FindResultsViewModel(Func<FindInFilesOptions, Task<IReadOnlyList<string>>> files, Func<string, string?> openText, Func<string, Position, int, Task> open)
     {
         _files = files;
         _openText = openText;
         _open = open;
-        SearchCommand = new RelayCommand(() => _ = SearchAsync());
         CancelCommand = new RelayCommand(Cancel);
+        ModifyFindCommand = new RelayCommand(() => ModifyFindRequested?.Invoke(this, EventArgs.Empty));
+        NextCommand = new RelayCommand(() => _ = GoToAsync(1));
+        PreviousCommand = new RelayCommand(() => _ = GoToAsync(-1));
+        ClearCommand = new RelayCommand(Clear);
     }
 
     public ObservableCollection<FindResultRow> Rows { get; } = [];
@@ -135,6 +152,8 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
     public async Task ShowReferencesAsync(string title, IReadOnlyList<ReferenceItem> items)
     {
         _search?.Cancel();
+        LastSearch = null;
+        Title = string.Empty;
         var set = new ReferenceSet(title, items);
         ReferenceSets.Insert(0, set);
         while (ReferenceSets.Count > MaxReferenceSets)
@@ -150,7 +169,11 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
 
     private async Task ShowSetAsync(ReferenceSet set)
     {
+        _search?.Cancel();
+        LastSearch = null;
+        Title = string.Empty;
         Rows.Clear();
+        SelectedRow = null;
         var items = set.Items.Where(i => _kindFilter switch
         {
             "Read" => i.Kind == ReferenceItemKinds.Read,
@@ -185,40 +208,39 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
         await Task.CompletedTask.ConfigureAwait(true);
     }
 
-    public RelayCommand SearchCommand { get; }
-
     public RelayCommand CancelCommand { get; }
 
-    public string Query
+    public RelayCommand ModifyFindCommand { get; }
+
+    public RelayCommand NextCommand { get; }
+
+    public RelayCommand PreviousCommand { get; }
+
+    public RelayCommand ClearCommand { get; }
+
+    /// <summary>Modify Find: Find and Replace should show again with the last search.</summary>
+    public event EventHandler? ModifyFindRequested;
+
+    /// <summary>A search or a replace started: the window should be shown.</summary>
+    public event EventHandler? ShowRequested;
+
+    /// <summary>The last Find in Files search (null after references were shown).</summary>
+    public FindInFilesOptions? LastSearch { get; private set; }
+
+    /// <summary>What was searched for: <c>Find all "x", Entire solution, "*.cs"</c>.</summary>
+    public string Title
     {
-        get => _query;
-        set => SetField(ref _query, value ?? string.Empty);
+        get => _title;
+        private set
+        {
+            if (SetField(ref _title, value))
+            {
+                OnPropertyChanged(nameof(HasTitle));
+            }
+        }
     }
 
-    /// <summary>File name patterns, separated by <c>;</c> or <c>,</c> (e.g. <c>*.cs; *.json</c>); empty: every file.</summary>
-    public string Include
-    {
-        get => _include;
-        set => SetField(ref _include, value ?? string.Empty);
-    }
-
-    public bool MatchCase
-    {
-        get => _matchCase;
-        set => SetField(ref _matchCase, value);
-    }
-
-    public bool WholeWord
-    {
-        get => _wholeWord;
-        set => SetField(ref _wholeWord, value);
-    }
-
-    public bool UseRegex
-    {
-        get => _useRegex;
-        set => SetField(ref _useRegex, value);
-    }
+    public bool HasTitle => _title.Length > 0;
 
     public string Summary
     {
@@ -232,22 +254,29 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
         private set => SetField(ref _isSearching, value);
     }
 
-    /// <summary>Raised when the search box should get focus (Ctrl+Shift+F).</summary>
-    public event EventHandler? FocusRequested;
-
-    public void RequestFocus(string? query)
+    /// <summary>The current result: the one Next, Previous and Replace start from.</summary>
+    public FindResultRow? SelectedRow
     {
-        if (!string.IsNullOrEmpty(query))
-        {
-            Query = query;
-        }
-
-        FocusRequested?.Invoke(this, EventArgs.Empty);
+        get => _selectedRow;
+        set => SetField(ref _selectedRow, value);
     }
 
     public void Cancel()
     {
         _search?.Cancel();
+    }
+
+    public void Clear()
+    {
+        _search?.Cancel();
+        _currentSet = null;
+        OnPropertyChanged(nameof(CurrentSet));
+        OnPropertyChanged(nameof(IsReferences));
+        LastSearch = null;
+        Rows.Clear();
+        SelectedRow = null;
+        Title = string.Empty;
+        Summary = string.Empty;
     }
 
     public void Dispose()
@@ -256,11 +285,81 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
         _search?.Dispose();
     }
 
-    public Task OpenAsync(FindResultRow row) => row.IsHeader ? Task.CompletedTask : _open(row.Path, new Position(row.Line - 1, row.Column));
+    public Task OpenAsync(FindResultRow row) => row.IsHeader ? Task.CompletedTask : _open(row.Path, new Position(row.Line - 1, row.Column), row.Length);
+
+    /// <summary>Goes to the next (1) or previous (-1) result after the current one, wrapping around, and opens it.</summary>
+    public Task GoToAsync(int direction)
+    {
+        var count = Rows.Count;
+        if (count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var start = _selectedRow is { } current ? Rows.IndexOf(current) : -1;
+        if (start < 0)
+        {
+            start = direction > 0 ? -1 : count;
+        }
+
+        for (var step = 1; step <= count; step++)
+        {
+            var index = (((start + direction * step) % count) + count) % count;
+            if (Rows[index] is { IsHeader: false, IsReplaced: false } row)
+            {
+                SelectedRow = row;
+                return OpenAsync(row);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Skip File: the first result in the next file after the current one's, wrapping around.</summary>
+    public Task GoToNextFileAsync()
+    {
+        var start = _selectedRow is { } current ? Rows.IndexOf(current) : -1;
+        if (start < 0)
+        {
+            return GoToAsync(1);
+        }
+
+        var path = Rows[start].Path;
+        var count = Rows.Count;
+        for (var step = 1; step < count; step++)
+        {
+            var row = Rows[(start + step) % count];
+            if (row is { IsHeader: false, IsReplaced: false } && !Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(row.Path, path))
+            {
+                SelectedRow = row;
+                return OpenAsync(row);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Replace changed <paramref name="row"/>'s match: <paramref name="next"/> takes its place and becomes current (so
+    /// Next moves on from it), and is opened when it is the line's next match.
+    /// </summary>
+    public Task ReplaceRowAsync(FindResultRow row, FindResultRow next, bool open)
+    {
+        var index = Rows.IndexOf(row);
+        if (index < 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        Rows[index] = next;
+        SelectedRow = next;
+        return open ? OpenAsync(next) : Task.CompletedTask;
+    }
 
     // ------------------------------------------------------------------ Find in Files
 
-    public async Task SearchAsync()
+    /// <summary>Find All: lists every line that matches <paramref name="options"/>, after the earlier results when <paramref name="append"/>.</summary>
+    public async Task SearchAsync(FindInFilesOptions options, bool append = false)
     {
         _search?.Cancel();
         _search?.Dispose();
@@ -268,8 +367,16 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
         _currentSet = null;
         OnPropertyChanged(nameof(CurrentSet));
         OnPropertyChanged(nameof(IsReferences));
-        Rows.Clear();
-        if (_query.Length == 0)
+        LastSearch = options;
+        if (!append)
+        {
+            Rows.Clear();
+            SelectedRow = null;
+        }
+
+        Title = options.Describe("Find all");
+        ShowRequested?.Invoke(this, EventArgs.Empty);
+        if (options.Query.Length == 0)
         {
             Summary = string.Empty;
             return;
@@ -278,13 +385,7 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
         Regex regex;
         try
         {
-            var pattern = _useRegex ? _query : Regex.Escape(_query);
-            if (_wholeWord)
-            {
-                pattern = $@"\b(?:{pattern})\b";
-            }
-
-            regex = new Regex(pattern, (_matchCase ? RegexOptions.None : RegexOptions.IgnoreCase) | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+            regex = options.CreateRegex();
         }
         catch (ArgumentException ex)
         {
@@ -292,12 +393,35 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var patterns = _include.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(Glob).ToList();
-        var files = _files().Where(f => patterns.Count == 0 || patterns.Any(p => p.IsMatch(System.IO.Path.GetFileName(f)))).ToList();
+        IsSearching = true;
+        Summary = "Searching…";
+        IReadOnlyList<string> files;
+        try
+        {
+            files = await _files(options).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            IsSearching = false;
+            Summary = ex.Message;
+            return;
+        }
+
+        if (cts.IsCancellationRequested)
+        {
+            if (_search == cts)
+            {
+                IsSearching = false;
+                Summary = "Search cancelled.";
+            }
+
+            return;
+        }
+
         var openTexts = files.Select(f => (f, _openText(f))).Where(x => x.Item2 is not null).ToDictionary(x => x.f, x => x.Item2!, Codalus.Workbench.Projects.SolutionService.PathComparer);
         IsSearching = true;
         Summary = $"Searching {files.Count} files…";
-        var matches = 0;
+        var lines = 0;
         var matchedFiles = 0;
         try
         {
@@ -327,18 +451,13 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
                     foreach (var line in text.Split('\n'))
                     {
                         lineNumber++;
-                        foreach (Match match in regex.Matches(line))
+                        if (MatchLine(file, lineNumber, line.TrimEnd('\r'), regex) is { } row)
                         {
-                            fileRows.Add(new FindResultRow(file, lineNumber, match.Index, match.Length, line.TrimEnd('\r').Trim(), false));
-                            if (++matches >= MaxMatches)
+                            fileRows.Add(row);
+                            if (++lines >= MaxMatches)
                             {
                                 break;
                             }
-                        }
-
-                        if (matches >= MaxMatches)
-                        {
-                            break;
                         }
                     }
 
@@ -349,13 +468,13 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
                         batch.AddRange(fileRows);
                     }
 
-                    if (batch.Count >= 200 || matches >= MaxMatches)
+                    if (batch.Count >= 200 || lines >= MaxMatches)
                     {
                         await PostAsync(batch, cts.Token).ConfigureAwait(false);
                         batch = [];
                     }
 
-                    if (matches >= MaxMatches)
+                    if (lines >= MaxMatches)
                     {
                         break;
                     }
@@ -363,9 +482,9 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
 
                 await PostAsync(batch, cts.Token).ConfigureAwait(false);
             }, cts.Token).ConfigureAwait(true);
-            Summary = matches == 0
-                ? $"No results for \"{_query}\" in {files.Count} files."
-                : $"{matches}{(matches >= MaxMatches ? "+" : string.Empty)} matches in {matchedFiles} files for \"{_query}\".";
+            Summary = lines == 0
+                ? $"No results. Total files searched: {files.Count}"
+                : $"Matching lines: {lines}{(lines >= MaxMatches ? "+" : string.Empty)}    Matching files: {matchedFiles}    Total files searched: {files.Count}";
         }
         catch (OperationCanceledException)
         {
@@ -375,6 +494,60 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
         {
             IsSearching = false;
         }
+    }
+
+    /// <summary>Replace All's results: the lines that changed (with their new text), under the replace's title.</summary>
+    public void ShowReplaced(FindInFilesOptions options, string replaceWith, IReadOnlyList<FindResultRow> rows, int occurrences, int files)
+    {
+        _search?.Cancel();
+        _currentSet = null;
+        OnPropertyChanged(nameof(CurrentSet));
+        OnPropertyChanged(nameof(IsReferences));
+        LastSearch = null;
+        Rows.Clear();
+        SelectedRow = null;
+        foreach (var group in rows.GroupBy(r => r.Path, Codalus.Workbench.Projects.SolutionService.PathComparer))
+        {
+            Rows.Add(Header(group.Key, group.Count()));
+            foreach (var row in group)
+            {
+                Rows.Add(row);
+            }
+        }
+
+        Title = options.Describe("Replace all") + $" with \"{replaceWith}\"";
+        ShowRequested?.Invoke(this, EventArgs.Empty);
+        Summary = $"Occurrences replaced: {occurrences}    Changed lines: {rows.Count}    Files changed: {files}";
+    }
+
+    /// <summary>A row for <paramref name="line"/> when it matches: its trimmed text with every match highlighted.</summary>
+    internal static FindResultRow? MatchLine(string path, int lineNumber, string line, Regex regex)
+    {
+        Match? first = null;
+        var highlights = new List<int>();
+        const int MaxShown = 400;
+        var indent = line.Length - line.TrimStart().Length;
+        var shown = line.Trim();
+        if (shown.Length > MaxShown)
+        {
+            shown = shown[..MaxShown] + "…";
+        }
+
+        foreach (Match match in regex.Matches(line))
+        {
+            if (match.Length == 0)
+            {
+                continue; // an empty match (^, \b…) finds nothing to show
+            }
+
+            first ??= match;
+            for (var i = Math.Max(0, match.Index - indent); i < Math.Min(match.Index - indent + match.Length, Math.Min(shown.Length, MaxShown)); i++)
+            {
+                highlights.Add(i);
+            }
+        }
+
+        return first is null ? null : new FindResultRow(path, lineNumber, first.Index, first.Length, shown, false) { Highlights = highlights };
     }
 
     /// <summary>Adds a batch of results on the UI thread (awaited, so a finished search shows all of them).</summary>
@@ -404,6 +577,9 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
     public async Task ShowLocationsAsync(string title, IReadOnlyList<Location> locations)
     {
         _search?.Cancel();
+        LastSearch = null;
+        Title = string.Empty;
+        SelectedRow = null;
         _currentSet = null;
         OnPropertyChanged(nameof(CurrentSet));
         OnPropertyChanged(nameof(IsReferences));
@@ -442,9 +618,6 @@ public sealed partial class FindResultsViewModel : ObservableObject, IDisposable
     }
 
     private static FindResultRow Header(string path, int count) => new(path, 0, 0, 0, $"{path} ({count})", true);
-
-    private static Regex Glob(string pattern) =>
-        new("^" + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal).Replace(@"\?", ".", StringComparison.Ordinal) + "$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 }
 
 /// <summary>Bindings for the Find Results view.</summary>
@@ -452,4 +625,12 @@ public static class FindResultsStyles
 {
     public static Avalonia.Data.Converters.IValueConverter Weight { get; } =
         new Avalonia.Data.Converters.FuncValueConverter<bool, Avalonia.Media.FontWeight>(header => header ? Avalonia.Media.FontWeight.SemiBold : Avalonia.Media.FontWeight.Normal);
+
+    /// <summary>A match sits under its file's header.</summary>
+    public static Avalonia.Data.Converters.IValueConverter Indent { get; } =
+        new Avalonia.Data.Converters.FuncValueConverter<bool, Avalonia.Thickness>(header => header ? default : new Avalonia.Thickness(20, 0, 0, 0));
+
+    /// <summary>A match that Replace changed is dimmed.</summary>
+    public static Avalonia.Data.Converters.IValueConverter ReplacedOpacity { get; } =
+        new Avalonia.Data.Converters.FuncValueConverter<bool, double>(replaced => replaced ? 0.5 : 1.0);
 }

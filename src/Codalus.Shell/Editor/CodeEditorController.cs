@@ -1732,11 +1732,16 @@ public sealed partial class CodeEditorController : IDisposable
     }
 
     /// <summary>Moves the caret to an LSP position and scrolls it into view, centered.</summary>
-    public void Navigate(Position position)
+    public void Navigate(Position position, int selectLength = 0)
     {
         var offset = Model.OffsetAt(position);
         Editor.TextArea.ClearSelection();
         Editor.CaretOffset = offset;
+        if (selectLength > 0)
+        {
+            Editor.Select(offset, Math.Min(selectLength, Model.Text.TextLength - offset)); // a find result: the match is selected
+        }
+
         var location = Model.Text.GetLocation(offset);
         Editor.ScrollTo(location.Line, location.Column);
         Dispatcher.UIThread.Post(() => Editor.TextArea.TextView.MakeVisible(Editor.TextArea.Caret.CalculateCaretRectangle()), DispatcherPriority.Background);

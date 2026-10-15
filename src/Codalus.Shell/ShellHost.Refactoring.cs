@@ -17,8 +17,7 @@ public sealed partial class ShellHost
 
     public FindResultsViewModel FindResults { get; private set; } = null!;
 
-    private void InitializeRefactoring() =>
-        FindResults = new FindResultsViewModel(SearchableFiles, OpenTextOf, (path, position) => OpenFileAsync(path, preview: false, position));
+    private void InitializeRefactoring() => InitializeFindInFiles();
 
     /// <summary>The active editor, its controller and its language service, or nulls with a message.</summary>
     private (CodeEditorDocument Editor, CodeEditorController Controller, LanguageHostClient Client)? ActiveLanguageEditor()
@@ -329,16 +328,7 @@ public sealed partial class ShellHost
         _ => "symbol",
     };
 
-    // ------------------------------------------------------------------ Find in Files
-
-    /// <summary>Ctrl+Shift+F: the Find Results' search box, filled with the editor's selection.</summary>
-    public void FindInFiles()
-    {
-        var selection = ActiveEditor?.Controller?.Editor.TextArea.Selection;
-        var text = selection is { IsEmpty: false, IsMultiline: false } ? selection.GetText() : null;
-        Layout.ShowToolWindow(FindResultsViewModel.ToolWindowId);
-        FindResults.RequestFocus(text);
-    }
+    // ------------------------------------------------------------------ Find in Files (ShellHost.FindInFiles.cs)
 
     /// <summary>The solution's files (project items that exist, project and solution files), or the open files.</summary>
     private IReadOnlyList<string> SearchableFiles()

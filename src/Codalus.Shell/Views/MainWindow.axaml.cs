@@ -21,6 +21,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 {
     private readonly ShellHost _shell = null!;
     private IInputElement? _focusBeforePalette;
+    private IInputElement? _focusBeforeFind;
     private bool _chordPending;
     private bool _closeConfirmed;
     private PixelPoint _normalPosition;
@@ -70,6 +71,31 @@ public sealed partial class MainWindow : Window, IShellWindow
             _focusBeforePalette = null;
         };
         shell.Layout.FocusRequested += (_, dockable) => FocusDockableSoon(dockable, attempts: 10);
+        shell.FindReplace.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(ViewModels.FindReplaceViewModel.IsOpen))
+            {
+                return;
+            }
+
+            if (shell.FindReplace.IsOpen)
+            {
+                _focusBeforeFind ??= FocusManager?.GetFocusedElement() is Visual focused && !FindReplace.IsVisualAncestorOf(focused) ? focused as IInputElement : null;
+            }
+            else
+            {
+                // Closed: the focus goes back where it was, unless something else took it meanwhile (an editor that
+                // Find Next opened).
+                var now = FocusManager?.GetFocusedElement() as Visual;
+                if (_focusBeforeFind is Visual previous && TopLevel.GetTopLevel(previous) == this
+                    && (now is null || !now.IsEffectivelyVisible || FindReplace.IsVisualAncestorOf(now)))
+                {
+                    _focusBeforeFind.Focus();
+                }
+
+                _focusBeforeFind = null;
+            }
+        };
         PositionChanged += (_, _) => RememberNormalBounds();
         Resized += (_, _) => RememberNormalBounds();
         Opened += OnOpened;
