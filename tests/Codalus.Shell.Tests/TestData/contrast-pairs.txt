@@ -103,6 +103,9 @@ Shell.Icon.Orange Shell.Panel 3
 Shell.Icon.Purple Shell.Panel 3
 Shell.Icon.Yellow Shell.Panel 3
 Shell.Icon.Folder Shell.Panel 3
+Shell.Icon.Outline Shell.Panel 3
+Shell.Icon.Outline Shell.Overlay 3
+Shell.Icon.Outline Shell.Editor.Background 3
 
 # Tabs colored by project: the stripe on an unselected tab.
 Shell.TabColor.1 Shell.Tab.Inactive 3

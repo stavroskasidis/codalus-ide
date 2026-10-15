@@ -4,13 +4,29 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Shell.Controls;
 
 /// <summary>
-/// File-type, folder, project and solution icons (D24, M34a): Material Icon Theme's colored icons for files and folders
-/// (<c>mi:</c> names, Icons/material-icons.txt), and command-family colors for projects and the solution
-/// (<c>kind@family</c>, see <see cref="Icon"/>). The Solution Explorer, document tabs, Go To and search use them.
+/// File-type, folder, project and solution icons (D24, M34a). The built-in icons are the classic ones (<c>cl:</c> names,
+/// Icons/Classic): outline pages with a colored badge, tan outline folders and project boxes, as a classic IDE draws them.
+/// Material Icon Theme's colored icons (<c>mi:</c> names, Icons/material-icons.txt) are the other built-in theme
+/// (<c>workbench.iconTheme</c> <c>material</c>). Names are worked out once, as Material's (the finer set), and the classic
+/// icons map those onto theirs. The Solution Explorer, document tabs, Go To and search use them.
 /// </summary>
 public static class FileIcons
 {
     private const string Mi = IconSet.MaterialPrefix;
+    private const string Cl = IconSet.ClassicPrefix;
+
+    /// <summary>The classic icon for each Material name; any other file is a blank page.</summary>
+    private static readonly Dictionary<string, string> s_classic = new(StringComparer.Ordinal)
+    {
+        ["csharp"] = "csharp", ["fsharp"] = "fsharp", ["razor"] = "razor", ["xaml"] = "xaml", ["xml"] = "xml", ["html"] = "html",
+        ["tune"] = "msbuild", ["json"] = "json", ["yaml"] = "yaml", ["markdown"] = "markdown",
+        ["css"] = "css", ["sass"] = "sass", ["javascript"] = "javascript", ["typescript"] = "typescript",
+        ["powershell"] = "powershell", ["console"] = "console", ["database"] = "database",
+        ["image"] = "image", ["svg"] = "image", ["http"] = "http", ["proto"] = "text", ["log"] = "text",
+        ["certificate"] = "certificate", ["license"] = "certificate", ["key"] = "key", ["lock"] = "lock",
+        ["dll"] = "binary", ["exe"] = "application", ["zip"] = "package", ["pdf"] = "pdf", ["table"] = "table", ["word"] = "word",
+        ["template"] = "template", ["settings"] = "config", ["editorconfig"] = "config", ["git"] = "git", ["docker"] = "docker",
+    };
 
     private static readonly Dictionary<string, string> s_byExtension = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -91,7 +107,10 @@ public static class FileIcons
     };
 
     /// <summary>The solution's icon (a classic IDE's purple solution glyph).</summary>
-    public const string Solution = "solution@Build";
+    public static string Solution => Material ? "solution@Build" : Cl + "solution";
+
+    /// <summary>Whether the built-in icons are Material Icon Theme's (<c>workbench.iconTheme</c> <c>material</c>) instead of the classic ones.</summary>
+    public static bool Material { get; set; }
 
     /// <summary>A plugin's file icon theme in use (API 1.0, M22a); null for the built-in icons.</summary>
     public static Theming.IconTheme? Theme { get; set; }
@@ -127,12 +146,44 @@ public static class FileIcons
             return Solution;
         }
 
-        return Mi + (icon ?? s_byExtension.GetValueOrDefault(Path.GetExtension(lower), "document"));
+        icon ??= s_byExtension.GetValueOrDefault(Path.GetExtension(lower), "document");
+        if (Material)
+        {
+            return Mi + icon;
+        }
+
+        // Settings in JSON show braces, and text files their lines, as a classic IDE's do.
+        var extension = Path.GetExtension(lower);
+        return Cl + icon switch
+        {
+            "settings" when extension == ".json" => "json",
+            "readme" or "changelog" => extension == ".md" ? "markdown" : "text",
+            "document" when extension == ".txt" => "text",
+            _ => s_classic.GetValueOrDefault(icon, "document"),
+        };
     }
 
     /// <summary>A folder's icon by its name, open or closed.</summary>
-    public static string ForFolder(string name, bool open) =>
-        Theme?.ForFolder(name, open) ?? Mi + s_byFolder.GetValueOrDefault(name, "folder") + (open ? "-open" : string.Empty);
+    public static string ForFolder(string name, bool open)
+    {
+        if (Theme?.ForFolder(name, open) is { } themed)
+        {
+            return themed;
+        }
+
+        if (Material)
+        {
+            return Mi + s_byFolder.GetValueOrDefault(name, "folder") + (open ? "-open" : string.Empty);
+        }
+
+        // A classic IDE draws Properties as a wrench and wwwroot as a globe, and every other folder plain.
+        return Cl + name.ToLowerInvariant() switch
+        {
+            "properties" => "folder-properties",
+            "wwwroot" => "folder-web",
+            _ => open ? "folder-open" : "folder",
+        };
+    }
 
     /// <summary>A project's icon from what the build host knows about it (test, web, Aspire, library, app).</summary>
     public static string ForProject(string path, ProjectInfo? info)
@@ -140,27 +191,27 @@ public static class FileIcons
         var extension = Path.GetExtension(path).ToLowerInvariant();
         if (extension == ".dcproj")
         {
-            return Mi + "docker";
+            return (Material ? Mi : Cl) + "docker";
         }
 
         if (extension == ".sqlproj")
         {
-            return Mi + "database";
+            return (Material ? Mi : Cl) + "database";
         }
 
         if (extension == ".fsproj")
         {
-            return Mi + "fsharp";
+            return Material ? Mi + "fsharp" : Cl + "project-fsharp";
         }
 
         if (info is null)
         {
-            return Mi + "csharp";
+            return Material ? Mi + "csharp" : Cl + "project-csharp";
         }
 
         if (info.IsTestProject)
         {
-            return "beaker@Test";
+            return Material ? "beaker@Test" : Cl + "project-test";
         }
 
         if (info.IsAspireHost)
@@ -171,21 +222,22 @@ public static class FileIcons
         if (info.Items.Any(i => i.Path.Contains("wwwroot", StringComparison.OrdinalIgnoreCase)
             || i.Path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || i.Path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase)))
         {
-            return "globe@Navigate";
+            return Material ? "globe@Navigate" : Cl + "project-web";
         }
 
-        return info.OutputType is "Library" or null ? Mi + "lib" : Mi + "console";
+        // A classic IDE draws applications and libraries alike.
+        return !Material ? Cl + "project-csharp" : info.OutputType is "Library" or null ? Mi + "lib" : Mi + "console";
     }
 
     /// <summary>A Solution Explorer node's icon (the workbench's generic name for anything else).</summary>
     public static string ForNode(ExplorerNode node, bool expanded, Func<string, ProjectInfo?> project) => node.Kind switch
     {
         ExplorerNodeKind.Solution => node.Icon == "folder" ? ForFolder(node.Name, expanded) : Solution,
-        ExplorerNodeKind.SolutionFolder => ForFolder(node.Name, expanded),
+        ExplorerNodeKind.SolutionFolder => ForFolder(node.Name, expanded && Material), // classic solution folders stay closed
         ExplorerNodeKind.Folder => ForFolder(node.Name, expanded),
         ExplorerNodeKind.Project => node.Path is { } path ? ForProject(path, project(path)) : node.Icon,
         ExplorerNodeKind.File or ExplorerNodeKind.SolutionItem => node.Icon == "project" && node.Path is { } projectFile ? ForProject(projectFile, project(projectFile)) : ForFile(node.Name),
-        ExplorerNodeKind.Dependencies => Mi + "folder-packages" + (expanded ? "-open" : string.Empty),
+        ExplorerNodeKind.Dependencies => Material ? Mi + "folder-packages" + (expanded ? "-open" : string.Empty) : Cl + "dependencies",
         _ => node.Icon,
     };
 }
