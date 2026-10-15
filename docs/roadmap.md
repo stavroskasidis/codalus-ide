@@ -2360,7 +2360,7 @@ The "Codalus" column uses these terms:
 | Light bulb code fixes and refactorings with preview | M3 |
 | Rename with preview | M3 |
 | Refactorings with dialogs (Change Signature, Extract Interface, Pull Members Up, generate members) | M12 |
-| Configure severity, EditorConfig UI, suppressions | M12; the EditorConfig UI and a suppression file deferred at M12b ([deferred](#deferred-work)) |
+| Configure severity, EditorConfig UI, suppressions | M12; the EditorConfig settings page since 2026-10-15; a suppression file deferred at M12b ([deferred](#deferred-work)) |
 | Full-solution analysis, Error List filters | M12; Error List grouping and the analysis-scope picker (open documents, current project, solution) since 2026-10-15 |
 | Code Metrics | M12 |
 | Syntax Visualizer, analyzer and generator authoring templates | M12 |
@@ -2538,7 +2538,7 @@ Items deferred with a `TODO(issue)` to a milestone that has since closed without
 | Item | Deferred at | Was meant for |
 |---|---|---|
 | Go To All's persistent index | [M12a](checkpoints/m12a.md), [M12b](checkpoints/m12b.md) | M12 |
-| The EditorConfig settings UI, a suppression file, spell checking | [M12b](checkpoints/m12b.md) | M12 |
+| A suppression file, spell checking (the EditorConfig settings page was built on 2026-10-15) | [M12b](checkpoints/m12b.md) | M12 |
 | Vertical tabs, persisted floating documents (`LayoutManager.cs`) | [M12b](checkpoints/m12b.md), [M3a](checkpoints/m3a.md) | M12 |
 | SVG and animated GIFs in the image viewer | [M12b](checkpoints/m12b.md) | M12 |
 | LSP features for other languages beyond M11's | [M11](checkpoints/m11.md) | M11 |
@@ -2771,3 +2771,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-15: deferred work, Class View and the Object Browser: the C# host's `codalus/browse` (a project's namespaces, types and members a level at a time, or with references its assemblies down to theirs; search) and `codalus/browse/describe` (declaration, location, summary; `ObjectBrowserFeature`), shown by `SymbolBrowserViewModel` as the Class View tool window and the Object Browser document, with the selection's declaration and summary below and Enter going to it (library code read-only, from its PDB or decompiled). Tested by `Class_view_and_the_object_browser_walk_a_projects_symbols` and `SymbolBrowserTests`.
 - 2026-10-15: deferred work, the `.resx` resource editor (`ResxEditorDocument`, on the workbench's `ResxFile`): a resource file's strings edited in a table (name, value, comment; add, remove, search), other resources read-only, saved by rewriting only what changed, then the custom tool; View Code and Open With Resource Editor switch between it and the XML. Documents that save outside the text editor share `ISavableDocument`. Tested by `ResxFileTests`, `ResxEditorTests` and the smoke test's custom tools step.
 - 2026-10-15: deferred work, XSD validation in the markup host (`XsdValidation`): XML files are validated against the local schemas their root names (`xsi:schemaLocation`, `xsi:noNamespaceSchemaLocation`) and those the `xml.schemas` setting associates by glob; schemas and their includes resolve to local files only. The markup host's options now go out as its settings too, so a changed association applies at once. Tested in `MarkupHostTests`.
+- 2026-10-15: deferred work, the EditorConfig settings page (`EditorConfigDocument`, on the workbench's `EditorConfigFile` and the markup host's key catalog, now shared as `EditorConfigCatalog`): an `.editorconfig` file's options for one section, in groups, with search; a choice edits the file's text in place and saving writes it. Also from this round's CI: the build host restores a solution's other projects on their own when one can't restore (a MAUI app without its workload), F# Interactive gets carriage returns (ConPTY), the MCP bridge listens before `Listen` returns, and `ResxFile` keeps a file's line endings on Windows. Tested by `EditorConfigFileTests`, `EditorConfigSettingsTests` and `A_project_that_cant_restore_leaves_the_others_restored`.

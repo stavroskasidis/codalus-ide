@@ -146,6 +146,7 @@ internal static partial class BuiltIns
             Item(Context, "explorer.reveal", "5-path", 2, HasPath),
             Item(Context, "workbench.openWithHexViewer", "5-path", 3, "explorerItemKind == file"),
             Item(Context, "workbench.openWithResourceEditor", "5-path", 4, "explorerItemKind == file && explorerItemName =~ /(?i)\\.resx$/"),
+            Item(Context, "workbench.editorConfigSettings", "5-path", 5, "explorerItemName == '.editorconfig'"),
         ]);
     }
 }

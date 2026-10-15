@@ -27,6 +27,7 @@ public sealed class ViewLocator : IDataTemplate
         ImageDocument document => new PaneHost(document, new ImageViewerView(document)),
         HexDocument document => new PaneHost(document, new HexViewerView(document)),
         ResxEditorDocument document => new PaneHost(document, new ResxEditorView { DataContext = document }),
+        EditorConfigDocument document => new PaneHost(document, new EditorConfigView { DataContext = document }),
         CustomEditorDocument document => new PaneHost(document, new DeclarativeViewHost(document.ViewId, document.Plugins, activate: false)),
         GitHistoryDocument document => new PaneHost(document, new GitHistoryView { DataContext = document.ViewModel }),
         DumpDocument document => new PaneHost(document, new DumpView { DataContext = document.ViewModel }),

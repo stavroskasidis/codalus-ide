@@ -248,6 +248,7 @@ internal static partial class BuiltIns
         Add("editor.action.pasteJsonAsClasses", "Paste JSON as Classes", "Editor", Ui(shell.PasteJsonAsClassesAsync), Editor);
         Add("workbench.openWithHexViewer", "Open With Hex Viewer", "File", Ui(() => shell.OpenWithHexViewer()));
         Add("workbench.openWithResourceEditor", "Open With Resource Editor", "File", Ui(() => shell.OpenWithResourceEditor()));
+        Add("workbench.editorConfigSettings", "EditorConfig Settings", "Preferences", Ui(() => shell.OpenEditorConfigSettings()));
         Add("editor.action.pasteXmlAsClasses", "Paste XML as Classes", "Editor", Ui(shell.PasteXmlAsClassesAsync), Editor);
         Add("editor.action.fontZoomIn", "Zoom In (Editor)", "Editor", OnEditor(c => c.Zoom *= 1.1), Editor);
         Add("editor.action.fontZoomOut", "Zoom Out (Editor)", "Editor", OnEditor(c => c.Zoom /= 1.1), Editor);
