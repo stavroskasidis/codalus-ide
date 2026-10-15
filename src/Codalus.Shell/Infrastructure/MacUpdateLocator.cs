@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
 using Velopack.Locators;
+using Velopack.Logging;
 
 namespace Codalus.Shell.Infrastructure;
 
@@ -11,7 +12,7 @@ namespace Codalus.Shell.Infrastructure;
 /// it in with <c>rename</c>, which can't cross volumes: with the home folder on another disk than
 /// <c>/Applications</c>, every update failed with "Cross-device link" and the old version started again, offering the
 /// same update. The user's cache folder under <c>/var/folders</c> (or the temporary folder) is on the system's data
-/// volume, as <c>/Applications</c> is.
+/// volume, as <c>/Applications</c> is; an app on another volume stages next to itself.
 /// </summary>
 [SupportedOSPlatform("macos")]
 internal sealed partial class MacUpdateLocator() : OsxVelopackLocator(null, null)
@@ -30,23 +31,37 @@ internal sealed partial class MacUpdateLocator() : OsxVelopackLocator(null, null
             return velopack;
         }
 
+        // The user's cache folder and the temporary folder are on the system's data volume, with /Applications; an app
+        // on another volume (~/Applications linked to an external disk) stages next to itself, in a hidden folder.
         var candidates = new[] { UserCacheFolder(), Path.GetTempPath() }
             .Where(c => !string.IsNullOrEmpty(c))
-            .Select(c => Path.Combine(c!, "velopack", id, "packages"));
-        if (Installation.SameVolumeFolder(bundle, velopack, candidates, Device) is not { } packages)
+            .Select(c => Path.Combine(c!, "velopack", id, "packages"))
+            .Append(Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(bundle))!, $".{id}.velopack", "packages"));
+        var packages = Installation.SameVolumeFolder(bundle, velopack, candidates, Device, Create);
+        if (packages is null)
         {
+            Log.Log(VelopackLogLevel.Warning, $"{velopack} is on another volume than {bundle}, and no folder on its volume is writable: updates can't be applied.", null);
             return velopack;
         }
 
+        if (packages != velopack)
+        {
+            Log.Log(VelopackLogLevel.Information, $"{velopack} is on another volume than {bundle}: packages go to {packages}.", null);
+        }
+
+        return packages;
+    }
+
+    private static bool Create(string folder)
+    {
         try
         {
-            Directory.CreateDirectory(packages);
-            Log.Log(Velopack.Logging.VelopackLogLevel.Information, $"{velopack} is on another volume than {bundle}: packages go to {packages}.", null);
-            return packages;
+            Directory.CreateDirectory(folder);
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return velopack;
+            return false;
         }
     }
 

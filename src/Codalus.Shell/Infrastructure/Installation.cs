@@ -38,18 +38,19 @@ internal static partial class Installation
     // ------------------------------------------------------------------ macOS: updates staged on the bundle's volume
 
     /// <summary>
-    /// Null when Velopack's <paramref name="packages"/> folder can be renamed onto <paramref name="bundle"/> (same volume,
-    /// or a volume we can't tell); otherwise the first of <paramref name="candidates"/> on the bundle's volume, if any.
+    /// The packages folder Velopack's updater can rename a new bundle out of onto <paramref name="bundle"/>: Velopack's own
+    /// <paramref name="packages"/> when it is on the bundle's volume (or we can't tell), else the first of
+    /// <paramref name="candidates"/> on that volume that <paramref name="create"/> could make; null when there is none.
     /// </summary>
-    internal static string? SameVolumeFolder(string bundle, string packages, IEnumerable<string> candidates, Func<string, long?> device)
+    internal static string? SameVolumeFolder(string bundle, string packages, IEnumerable<string> candidates, Func<string, long?> device, Func<string, bool> create)
     {
         var target = device(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(bundle)) ?? bundle);
         if (target is null || device(packages) is not { } current || current == target)
         {
-            return null;
+            return packages;
         }
 
-        return candidates.FirstOrDefault(c => device(c) == target);
+        return candidates.FirstOrDefault(c => device(c) == target && create(c));
     }
 
     // ------------------------------------------------------------------ the `codalus` command on Windows

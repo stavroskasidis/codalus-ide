@@ -36,36 +36,51 @@ public sealed class InstallationTests
 
     // ------------------------------------------------------------------ macOS: updates staged on the bundle's volume
 
+    private const string HomeCache = "/Users/me/Library/Caches/velopack/Codalus/packages";
+    private const string ExternalHomeCache = "/Volumes/M2/Users/me/Library/Caches/velopack/Codalus/packages";
+    private const string UserCache = "/var/folders/x/C/velopack/Codalus/packages";
+    private const string ExternalTemp = "/Volumes/M2/tmp/velopack/Codalus/packages";
+
     private static readonly Dictionary<string, long> s_devices = new(StringComparer.Ordinal)
     {
         ["/Applications"] = 1,
-        ["/Users/me/Library/Caches/velopack/Codalus/packages"] = 1,
-        ["/Volumes/M2/Users/me/Library/Caches/velopack/Codalus/packages"] = 2,
-        ["/var/folders/x/C/velopack/Codalus/packages"] = 1,
-        ["/Volumes/M2/tmp/velopack/Codalus/packages"] = 2,
+        [HomeCache] = 1,
+        [UserCache] = 1,
+        ["/Volumes/M2/Applications"] = 2,
+        ["/Volumes/M2/Applications/.Codalus.velopack/packages"] = 2,
+        [ExternalHomeCache] = 2,
+        [ExternalTemp] = 2,
+        ["/Volumes/Image/Library/Caches/velopack/Codalus/packages"] = 3,
     };
 
     private static long? Device(string path) => s_devices.TryGetValue(path.Replace('\\', '/'), out var device) ? device : null;
 
+    private static string? Staging(string bundle, string packages, string[] candidates, Func<string, bool>? create = null) =>
+        Installation.SameVolumeFolder(bundle, packages, candidates, Device, create ?? (_ => true));
+
     [Fact]
     public void A_home_on_the_bundles_volume_keeps_velopacks_packages_folder()
     {
-        Assert.Null(Installation.SameVolumeFolder("/Applications/Codalus IDE.app", "/Users/me/Library/Caches/velopack/Codalus/packages", ["/var/folders/x/C/velopack/Codalus/packages"], Device));
+        Assert.Equal(HomeCache, Staging("/Applications/Codalus IDE.app", HomeCache, [UserCache]));
+        Assert.Equal(ExternalHomeCache, Staging("/Unknown/Codalus IDE.app", ExternalHomeCache, [UserCache])); // a volume we can't tell
     }
 
     [Fact]
     public void A_home_on_another_disk_stages_updates_in_the_first_folder_on_the_bundles_volume()
     {
         // The Mac's home on an external disk: UpdateMac's rename onto /Applications failed with "Cross-device link".
-        Assert.Equal(
-            "/var/folders/x/C/velopack/Codalus/packages",
-            Installation.SameVolumeFolder(
-                "/Applications/Codalus IDE.app/",
-                "/Volumes/M2/Users/me/Library/Caches/velopack/Codalus/packages",
-                ["/Volumes/M2/tmp/velopack/Codalus/packages", "/var/folders/x/C/velopack/Codalus/packages"],
-                Device));
-        Assert.Null(Installation.SameVolumeFolder("/Applications/Codalus IDE.app", "/Volumes/M2/Users/me/Library/Caches/velopack/Codalus/packages", ["/Volumes/M2/tmp/velopack/Codalus/packages"], Device));
-        Assert.Null(Installation.SameVolumeFolder("/Unknown/Codalus IDE.app", "/Volumes/M2/Users/me/Library/Caches/velopack/Codalus/packages", ["/var/folders/x/C/velopack/Codalus/packages"], Device));
+        Assert.Equal(UserCache, Staging("/Applications/Codalus IDE.app/", ExternalHomeCache, [ExternalTemp, UserCache]));
+        Assert.Null(Staging("/Applications/Codalus IDE.app", ExternalHomeCache, [ExternalTemp]));
+    }
+
+    [Fact]
+    public void An_app_on_another_volume_than_the_system_stages_next_to_itself_when_it_can()
+    {
+        // ~/Applications linked to an external disk, and a home elsewhere again (eng/test-update.sh's disk image).
+        const string beside = "/Volumes/M2/Applications/.Codalus.velopack/packages";
+        string[] candidates = [UserCache, beside];
+        Assert.Equal(beside, Staging("/Volumes/M2/Applications/Codalus IDE.app", "/Volumes/Image/Library/Caches/velopack/Codalus/packages", candidates));
+        Assert.Null(Staging("/Volumes/M2/Applications/Codalus IDE.app", "/Volumes/Image/Library/Caches/velopack/Codalus/packages", candidates, create: _ => false));
     }
 
     [Fact]
