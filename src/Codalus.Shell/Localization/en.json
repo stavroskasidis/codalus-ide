@@ -360,6 +360,7 @@
   "command.editor.action.moveLinesUpAction": "Move Line Up",
   "command.editor.action.pasteFromClipboardRing": "Paste from Clipboard Ring",
   "command.editor.action.pasteJsonAsClasses": "Paste JSON as Classes",
+  "command.editor.action.pasteXmlAsClasses": "Paste XML as Classes",
   "command.editor.action.peekDefinition": "Peek Definition",
   "command.editor.action.quickFix": "Quick Actions and Refactorings…",
   "command.editor.action.referenceSearch": "Find All References",

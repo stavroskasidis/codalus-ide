@@ -132,6 +132,40 @@ public class EditingDepthTests
     }
 
     [Fact]
+    public void Xml_becomes_classes_for_the_xml_serializer()
+    {
+        var code = Infrastructure.XmlClassGenerator.Generate("""
+            <catalog xmlns="urn:books" version="2">
+              <book id="b1" available="true">
+                <title>Dune</title>
+                <price>9.99</price>
+                <published>1965-08-01</published>
+                <author>Frank Herbert</author>
+              </book>
+              <book id="b2" available="false">
+                <title>Emma</title>
+                <price>5</price>
+                <published>1815-12-23</published>
+                <author>Jane Austen</author>
+                <note lang="en">A classic.</note>
+              </book>
+            </catalog>
+            """);
+
+        Assert.StartsWith("[System.Xml.Serialization.XmlRoot(\"catalog\", Namespace = \"urn:books\")]\npublic class Catalog", code, StringComparison.Ordinal);
+        Assert.Contains("[System.Xml.Serialization.XmlAttribute(\"version\")]\n    public int Version { get; set; }", code, StringComparison.Ordinal);
+        Assert.Contains("[System.Xml.Serialization.XmlElement(\"book\")]\n    public List<Book> Books { get; set; } = [];", code, StringComparison.Ordinal); // repeated: a list
+        Assert.Contains("public class Book", code, StringComparison.Ordinal);
+        Assert.Contains("public bool Available { get; set; }", code, StringComparison.Ordinal);
+        Assert.Contains("public string Title { get; set; } = string.Empty;", code, StringComparison.Ordinal);
+        Assert.Contains("public decimal Price { get; set; }", code, StringComparison.Ordinal); // 9.99 and 5
+        Assert.Contains("public DateTime Published { get; set; }", code, StringComparison.Ordinal);
+        Assert.Contains("public Note Note { get; set; }", code, StringComparison.Ordinal); // attributes and text: a class
+        Assert.Contains("[System.Xml.Serialization.XmlText]\n    public string Value { get; set; }", code, StringComparison.Ordinal);
+        Assert.Throws<System.Xml.XmlException>(() => Infrastructure.XmlClassGenerator.Generate("<unclosed>"));
+    }
+
+    [Fact]
     public void Json_becomes_classes()
     {
         var code = Infrastructure.JsonClassGenerator.Generate("""

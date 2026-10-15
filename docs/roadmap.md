@@ -2541,7 +2541,7 @@ Items deferred with a `TODO(issue)` to a milestone that has since closed without
 | Class View and the Object Browser | [M12a](checkpoints/m12a.md) | M12 |
 | CodeLens: Git authors and test status; Go To All's persistent index | [M12a](checkpoints/m12a.md), [M12b](checkpoints/m12b.md) | M12 |
 | The Code Snippets Manager, snippet choice lists and tab order | [M12b](checkpoints/m12b.md) | M12 |
-| Paste with automatic usings, Paste XML as classes, per-language editor options | [M12b](checkpoints/m12b.md) | M12 |
+| Paste with automatic usings, per-language editor options | [M12b](checkpoints/m12b.md) | M12 |
 | The EditorConfig settings UI, a suppression file, Error List grouping and the analysis-scope picker, spell checking | [M12b](checkpoints/m12b.md) | M12 |
 | Vertical tabs, persisted floating documents (`LayoutManager.cs`) | [M12b](checkpoints/m12b.md), [M3a](checkpoints/m3a.md) | M12 |
 | The hex viewer; SVG and animated GIFs in the image viewer | [M12b](checkpoints/m12b.md) | M12 |
@@ -2763,3 +2763,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-15: deferred work, transitive packages: the build host reports each restored package's dependencies from `project.assets.json` (`ProjectInfo.Packages`), and the Dependencies node nests them under each package (cycles skipped, at most 2,000 nodes a project). Tested by `TransitivePackageTests` and on samples/FSharp's restored Expecto project.
 - 2026-10-15: deferred work, renamed and deleted files in workspace edits: `WorkspaceEdit.ResourceOperations` (rename, delete) from the C# host's renamed and removed documents (Rename File to Match Type) and from other servers' LSP file operations (now declared in the client's capabilities; a created file becomes an empty new file's edit), applied after the text edits through the build host, an open file saved and reopened. Tested by `Rename_file_to_match_its_type_is_a_rename_of_the_file` and `WorkspaceEditTests`.
 - 2026-10-15: deferred work, the Ctrl+Tab switcher: holding Ctrl, each Tab moves through the open documents in most-recently-used order and releasing Ctrl switches (`DocumentSwitcherViewModel`, Esc stays, arrows and a click work); Next/Previous Document keep the tab order on `Ctrl+Alt+PageDown`/`PageUp`. Tested by `DocumentSwitcherTests`.
+- 2026-10-15: deferred work, Edit → Paste Special → Paste XML as Classes (`XmlClassGenerator`): classes for `XmlSerializer`, with attributes, repeated elements as lists, mixed text as `[XmlText]`, namespaces, and values typed from every occurrence.

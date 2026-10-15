@@ -124,6 +124,35 @@ public sealed partial class ShellHost
         controller.Editor.TextArea.Selection.ReplaceSelectionWithText(code);
     }
 
+    /// <summary>Edit → Paste XML as Classes: C# classes for the XML on the clipboard, for <c>XmlSerializer</c>, at the caret.</summary>
+    public async Task PasteXmlAsClassesAsync()
+    {
+        if (ActiveEditor is not { Controller: { } controller } editor || editor.Model.IsReadOnly || Window?.Clipboard is not { } clipboard)
+        {
+            return;
+        }
+
+        var xml = await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard).ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(xml))
+        {
+            ShowMessage("The clipboard has no text.");
+            return;
+        }
+
+        string code;
+        try
+        {
+            code = XmlClassGenerator.Generate(xml);
+        }
+        catch (System.Xml.XmlException ex)
+        {
+            ShowMessage("The clipboard text is not valid XML: " + ex.Message);
+            return;
+        }
+
+        controller.Editor.TextArea.Selection.ReplaceSelectionWithText(code);
+    }
+
     // ------------------------------------------------------------------ saving: format on save, local history
 
     /// <summary>Ctrl+K Ctrl+E: Code Cleanup of the active C# document with the profile in <c>codeCleanup.fixes</c>.</summary>

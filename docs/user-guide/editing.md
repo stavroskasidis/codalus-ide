@@ -87,6 +87,7 @@ Language services from plugins provide the outline, navigation bar, sticky scrol
 | Expand and Shrink Selection | `Shift+Alt+=`, `Shift+Alt+-` | Word, expression, statement, block… from the language service. |
 | Paste from Clipboard Ring | `Ctrl+Shift+V` | The last 15 copies and cuts. |
 | Paste JSON as Classes | (Edit menu) | C# classes for the JSON on the clipboard. |
+| Paste XML as Classes | (Edit menu) | C# classes for the XML on the clipboard, with `XmlSerializer`'s attributes: attributes and child elements become properties (a list when an element repeats), and values get the narrowest type that fits them all. |
 | Zoom In, Out and Reset | `Ctrl+Shift+.`, `Ctrl+Shift+,`, `Ctrl+Wheel` | Per editor. |
 | XML documentation comment | type `///` | Above a member: the comment with its `param` and `returns` tags. |
 | Code Cleanup | `Ctrl+K Ctrl+E` | Removes unnecessary usings, applies the code style fixes, sorts usings and formats. Settings: **Code Cleanup → Fixes** (diagnostic ids) and **Code Cleanup → On Save**. |

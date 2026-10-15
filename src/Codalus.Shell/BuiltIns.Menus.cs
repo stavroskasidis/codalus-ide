@@ -120,6 +120,7 @@ internal static partial class BuiltIns
             Item(Edit, "editor.action.pasteFromClipboardRing", Clipboard, "Show Clipboard History"),
             Sub(Edit, EditPasteSpecialMenu, "Paste Special", Clipboard),
             Item(EditPasteSpecialMenu, "editor.action.pasteJsonAsClasses", "1-paste", "Paste JSON as Classes"),
+            Item(EditPasteSpecialMenu, "editor.action.pasteXmlAsClasses", "1-paste", "Paste XML as Classes"),
             Item(Edit, "edit.selectAll", Clipboard, keys: EditKeys("edit.selectAll", platform)),
             Sub(Edit, EditAdvancedMenu, "Advanced", "4-more"),
             Sub(Edit, EditBookmarksMenu, "Bookmarks", "4-more"),
