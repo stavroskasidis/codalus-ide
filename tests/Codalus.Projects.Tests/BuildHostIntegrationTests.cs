@@ -15,6 +15,8 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
     internal static string RepoRoot => Metadata("CodalusRepoRoot");
 
+    internal static string Configuration => Metadata("CodalusConfiguration");
+
     /// <summary>The build host the build tests use: <c>CODALUS_BUILDHOST</c> (e.g. a published one), else the built one.</summary>
     internal static string HostAssemblyPath => Environment.GetEnvironmentVariable("CODALUS_BUILDHOST") is { Length: > 0 } host ? host : HostAssembly;
 

@@ -46,7 +46,11 @@ public sealed record PackageManagerContext(
     NotificationService Notifications,
     Action<string> OpenUrl,
     Action OpenSources,
-    Action ShowRestoreOutput);
+    Action ShowRestoreOutput)
+{
+    /// <summary>Signs in to a package source by name (deferred from M9a); true when it did.</summary>
+    public Func<string, Task<bool>>? SignIn { get; init; }
+}
 
 public enum PackageTab
 {
@@ -106,6 +110,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
         OpenSourcesCommand = new RelayCommand(context.OpenSources);
         UpdateSelectedCommand = new RelayCommand(() => _ = UpdateSelectedAsync());
         ShowRestoreOutputCommand = new RelayCommand(context.ShowRestoreOutput);
+        SignInCommand = new RelayCommand(() => _ = SignInAsync());
         Sources.Add(AllSources);
 
         _onPackagesChanged = (_, _) => Ui.Post(() => _ = ReloadInstalledAsync());
@@ -150,6 +155,40 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
     public ICommand UpdateSelectedCommand { get; }
 
     public ICommand ShowRestoreOutputCommand { get; }
+
+    /// <summary>Signs in to <see cref="SignInSource"/>, then searches again.</summary>
+    public ICommand SignInCommand { get; }
+
+    private string? _signInSource;
+
+    /// <summary>The first source of the last request that refused for want of a sign-in, or null.</summary>
+    public string? SignInSource
+    {
+        get => _signInSource;
+        private set
+        {
+            if (SetField(ref _signInSource, value))
+            {
+                OnPropertyChanged(nameof(CanSignIn));
+            }
+        }
+    }
+
+    public bool CanSignIn => _signInSource is not null && _context.SignIn is not null;
+
+    private async Task SignInAsync()
+    {
+        if (_signInSource is { } source && _context.SignIn is { } signIn && await signIn(source).ConfigureAwait(true))
+        {
+            await RefreshAsync(refresh: true).ConfigureAwait(true);
+        }
+    }
+
+    private void ShowSourceErrors(PackageSourceError[] errors)
+    {
+        SourceErrors = Describe(errors);
+        SignInSource = errors.FirstOrDefault(e => PackageService.NeedsSignIn(e.Message))?.Source;
+    }
 
     /// <summary>A Browse page arrived from the host and its rows were added (benchmarks measure from here to the frame).</summary>
     public event EventHandler? PageLoaded;
@@ -508,7 +547,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
         {
             var result = await _packages.StatusAsync(queries, _includePrerelease, CancellationToken.None, refresh).ConfigureAwait(true);
             _status = result.Packages.ToDictionary(s => s.Id, StringComparer.OrdinalIgnoreCase);
-            SourceErrors = Describe(result.Errors);
+            ShowSourceErrors(result.Errors);
         }
 
         _updatesCount = InstalledGroups().Count(g => HasUpdate(g.Key, g.Value));
@@ -671,7 +710,7 @@ public sealed class PackageManagerViewModel : ObservableObject, IDisposable
         }
 
         HasMore = result.HasMore;
-        SourceErrors = Describe(result.Errors);
+        ShowSourceErrors(result.Errors);
         MarkInstalled();
         OnPropertyChanged(nameof(IsEmpty));
     }

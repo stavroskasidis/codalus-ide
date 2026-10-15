@@ -227,6 +227,8 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
             Session.NuGet.SetSources(p);
             return Task.FromResult(new EmptyResult());
         }));
+        _connection.OnRequest(PackageMethods.SignIn, json.PackageSignInParams, json.PackageSignInResult, (p, ct) => GuardNuGet(() =>
+            Session.NuGet.SignInAsync(p, message => Post(PackageMethods.SignInMessage, new PackageSignInMessage(p.Source, message), json.PackageSignInMessage), ct)));
         _connection.OnRequest(PackageMethods.Tools, json.EmptyParams, json.ToolsResult, (_, ct) => Guard(() => Session.Tools.ListAsync(ct)));
         _connection.OnRequest(PackageMethods.ToolCommand, json.ToolCommandParams, json.ToolCommandResult, async (p, ct) =>
         {

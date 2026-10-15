@@ -100,6 +100,9 @@ public sealed class SolutionService : IAsyncDisposable
     /// <summary>A solution was opened, closed (null) or its structure changed.</summary>
     public event EventHandler? SolutionChanged;
 
+    /// <summary>What a credential provider says during a package source sign-in (a device code); raised on any thread.</summary>
+    public event EventHandler<PackageSignInMessage>? PackageSignInMessage;
+
     public event EventHandler<ProjectInfo>? ProjectChanged;
 
     public event EventHandler<EvaluationProgressParams>? ProgressChanged;
@@ -270,6 +273,7 @@ public sealed class SolutionService : IAsyncDisposable
         connection.OnNotification(ItemMethods.FilesChanged, ItemJsonContext.Default.FilesChangedParams, p => FilesChanged?.Invoke(this, p.Directories));
         connection.OnNotification(EfMethods.Output, EntityFrameworkJsonContext.Default.EfOutputParams, o => EfOutput?.Invoke(this, o));
         connection.OnNotification(ScaffoldMethods.Output, WebToolsJsonContext.Default.ScaffoldOutputParams, o => ScaffoldOutput?.Invoke(this, o));
+        connection.OnNotification(PackageMethods.SignInMessage, PackageJsonContext.Default.PackageSignInMessage, m => PackageSignInMessage?.Invoke(this, m));
     }
 
     /// <summary>Runs for the first start and after every restart: (re)opens the solution with the latest settings.</summary>

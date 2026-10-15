@@ -63,6 +63,7 @@
     <Project Path="tests/Codalus.Debugging.Tests/Codalus.Debugging.Tests.csproj" />
     <Project Path="tests/Codalus.LanguageServices.Host.Tests/Codalus.LanguageServices.Host.Tests.csproj" />
     <Project Path="tests/Codalus.LspConformance.Server/Codalus.LspConformance.Server.csproj" />
+    <Project Path="tests/Codalus.NuGetCredentialProvider.Fake/Codalus.NuGetCredentialProvider.Fake.csproj" />
     <Project Path="tests/Codalus.Plugins.Tests/Codalus.Plugins.Tests.csproj" />
     <Project Path="tests/Codalus.Projects.Tests/Codalus.Projects.Tests.csproj" />
     <Project Path="tests/Codalus.Plugins.Testing.Tests/Codalus.Plugins.Testing.Tests.csproj" />

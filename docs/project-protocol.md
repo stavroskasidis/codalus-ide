@@ -102,6 +102,7 @@ NuGet package management ([ADR 0012](adr/0012-package-management.md)) uses the N
 | `packages/uninstall` | `{projects, id, restore}` | `{updatedFiles}` | Removes the project's references, as `dotnet remove package` does; a central `PackageVersion` stays. |
 | `packages/sources` | `{}` | `{sources, mappings, configFiles, globalPackagesFolder}` | Effective sources in priority order (`{name, url, enabled, isMachineWide, configFile?}`), package source mapping (`{source, patterns}`), and the config files (most specific first). |
 | `packages/setSources` | `{sources, mappings}` | `{}` | Saves the whole list. Existing sources change in the file that defines them; new sources and mappings go to the most specific config file under the solution folder (created when there is none); machine-wide files are never written. |
+| `packages/signIn` | `{source}` | `{signedIn, message}` | Signs in to an online source (by name) through NuGet's credential providers, interactively. The repository that signed in answers the session's later requests. While it runs, the host sends `packages/signInMessage` notifications `{source, message}` with what the providers log at Minimal or above, such as a device code. |
 | `tools/list` | `{}` | `{manifest?, local, global}` | The nearest `.config/dotnet-tools.json` and `dotnet tool list --global`. |
 | `tools/run` | `{action: install \| update \| uninstall \| restore \| createManifest, id?, version?, global}` | `{succeeded, output}` | Runs `dotnet tool` (or `dotnet new tool-manifest`) in the solution folder. |
 

@@ -265,6 +265,7 @@ internal static partial class BuiltIns
             Item(ProjectPackagesMenu, "solution.restore", "1-restore"),
             Item(ProjectPackagesMenu, "npm.restore", "1-restore"),
             Item(ProjectPackagesMenu, "packages.sources", "2-configure"),
+            Item(ProjectPackagesMenu, "packages.signIn", "2-configure"),
             Item(ProjectPackagesMenu, "packages.tools", "2-configure"),
             Item(Project, "containers.addDockerSupport", "4-features"),
             Item(Project, "web.manageUserSecrets", "4-features"),
