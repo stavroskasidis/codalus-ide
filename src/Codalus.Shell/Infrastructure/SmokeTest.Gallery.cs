@@ -70,6 +70,9 @@ internal sealed partial class SmokeTest
             ("project-properties", () => shell.OpenProjectProperties(shell.Solutions.Projects.Keys.FirstOrDefault()) is null ? null : shell.Layout.ActiveDocument),
             ("nuget", () => shell.OpenPackageManager(shell.Solutions.Projects.Keys.FirstOrDefault()) is null ? null : shell.Layout.ActiveDocument),
             ("configuration-manager", () => shell.OpenConfigurationManager() is null ? null : shell.Layout.ActiveDocument),
+            ("add-new-item", () => shell.OpenAddNewItem(shell.Solutions.Projects.Keys.FirstOrDefault()) is null ? null : shell.Layout.ActiveDocument), // M34's final pass
+            ("templates", () => { shell.OpenTemplateManager(); return shell.Layout.ActiveDocument; }),
+            ("environment", () => { shell.OpenCheckEnvironment(); return shell.Layout.ActiveDocument; }),
         };
         foreach (var (name, open) in documents)
         {
@@ -96,6 +99,32 @@ internal sealed partial class SmokeTest
                 GalleryShot(name, "data", theme, PaneOf(document));
             }).ConfigureAwait(true);
             shell.Layout.CloseDocument(document);
+        }
+
+        // The in-window dialog (M34's final pass): a preview of changes and a checklist, over the window.
+        var dialogs = new List<(string Name, DialogRequest Request)>
+        {
+            ("dialog-preview", new DialogRequest("Preview Changes: Rename", "2 changes in 2 files.", ["Apply", "Cancel"])
+            {
+                Details = [new DetailLine("src/Greeter.cs", "header"), new DetailLine("- public sealed class Greeter", "removed"), new DetailLine("+ public sealed class Welcomer", "added")],
+            }),
+            ("dialog-checklist", new DialogRequest("Generate Constructor", "Members to initialize:", ["OK", "Cancel"])
+            {
+                Choices = [new DialogChoice("name", "string Name", true), new DialogChoice("age", "int Age", false, "a property")],
+                Reorderable = true,
+            }),
+            ("dialog-input", new DialogRequest("Rename", "The new name of the class and its file:", ["Rename", "Cancel"]) { Input = "Gr", Validate = text => text.Length < 3 ? "The name is too short." : null }),
+        };
+        foreach (var (name, request) in dialogs)
+        {
+            var shown = shell.Dialogs.ShowAsync(request);
+            await GalleryThemesAsync(async theme =>
+            {
+                await SettleAsync().ConfigureAwait(true);
+                GalleryShot(name, "data", theme, null);
+            }).ConfigureAwait(true);
+            shell.Dialogs.Cancel();
+            await shown.ConfigureAwait(true);
         }
 
         // Error states: a compile error in the Error List, the failed build's output, a failed test's details.
