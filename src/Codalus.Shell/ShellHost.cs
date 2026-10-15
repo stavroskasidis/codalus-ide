@@ -397,6 +397,13 @@ public sealed partial class ShellHost : IAsyncDisposable
                     case { Command: "merge", Arguments: [var local, var remote, var @base, var merged] }:
                         done.TrySetResult(await MergeFilesAsync(local, remote, @base, merged).ConfigureAwait(true));
                         break;
+                    case { Command: "open", Arguments: [var openFile, ..] }:
+                        var at = request.Arguments is [_, var line, var column]
+                            && int.TryParse(line, System.Globalization.CultureInfo.InvariantCulture, out var l) && int.TryParse(column, System.Globalization.CultureInfo.InvariantCulture, out var c)
+                            ? new LanguageServices.Protocol.Position(l, c)
+                            : null;
+                        done.TrySetResult(await OpenFileAsync(openFile, at: at).ConfigureAwait(true) is not null);
+                        break;
                     case { Command: "wait", Arguments: [var file] }:
                         done.TrySetResult(await EditAndWaitAsync(file).ConfigureAwait(true));
                         break;

@@ -39,6 +39,22 @@ Every release on the [releases page](https://github.com/stavroskasidis/codalus-i
 
 From a Windows terminal, `codalus` runs the installed app and waits for it, so `git config core.editor "codalus --wait"` works. As a windowed program it prints `--version` and `--help` to the console window rather than to a pipe.
 
+### The command line
+
+| Command | What it does |
+|---|---|
+| `codalus App.slnx`, `codalus src/App.csproj`, `codalus folder` | Opens the solution, project or folder in a new window. |
+| `codalus Program.cs:12:5` | Opens the file in the running window, at line 12, column 5 (`:column` and `:line` are optional), and brings the window to the front. Without a running window it opens a new one. |
+| `codalus --new-window Program.cs` | Opens the file in a new window, even when one is running. |
+| `codalus --wait <file>` | Edits the file and exits when its tab closes (git's `core.editor`). |
+| `codalus diff <left> <right>`, `codalus merge <local> <remote> <base> <merged>` | Compares two files, or resolves a merge for `git mergetool` ([git.md](git.md)). |
+| `codalus --list-plugins` | Prints the plugins you've installed (`--show-versions`: with their versions), and exits. |
+| `codalus --install-plugin <id>[@<version>]` | Installs a plugin from the plugin galleries (the **Plugin Sources** setting, and the one that says which sources must sign their packages; see [settings.md](settings.md)), the newest version unless one is given, and exits. Repeatable. A plugin a running window has replaces it when Codalus IDE next starts. |
+| `codalus --install-plugin <file>.nupkg` | Installs a plugin package file. |
+| `codalus --help`, `codalus --version` | Prints every option, or the version. |
+
+`--user-data-dir <dir>` keeps settings, state and plugins under `<dir>`, for each of these.
+
 To build from source, see the repository's README.
 
 ## First start

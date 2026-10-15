@@ -185,6 +185,10 @@ public static class SolutionTree
     public static bool IsProjectFile(string path) =>
         System.IO.Path.GetExtension(path).ToLowerInvariant() is ".csproj" or ".fsproj" or ".vbproj";
 
+    /// <summary>A file that opens as a solution: a solution (<c>.sln</c>, <c>.slnx</c>, <c>.slnf</c>) or a project.</summary>
+    public static bool IsSolutionOrProjectFile(string path) =>
+        IsProjectFile(path) || System.IO.Path.GetExtension(path).ToLowerInvariant() is ".sln" or ".slnx" or ".slnf" or ".sqlproj" or ".dcproj";
+
     public static ExplorerNode Project(SolutionProjectInfo entry, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs = null, IReadOnlyList<DirectoryEntry>? disk = null)
     {
         var node = new ExplorerNode("p:" + entry.Path, ExplorerNodeKind.Project, entry.Name)

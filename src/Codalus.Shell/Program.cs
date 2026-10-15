@@ -31,6 +31,33 @@ internal static partial class Program
             return Infrastructure.Updates.UpdateNow(Console.Out);
         }
 
+        // codalus --list-plugins and --install-plugin: the user plugins folder, without a window.
+        if (options.ListPlugins || options.InstallPlugins.Count > 0)
+        {
+            AttachToParentConsole();
+            var paths = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
+            using var http = new HttpClient();
+            var plugins = new Codalus.Workbench.Plugins.PluginCommandLine(paths.PluginsDirectory, Codalus.Platform.PlatformInfo.Current, new Codalus.Workbench.Plugins.PluginGallery(http))
+            {
+                SettingsFile = paths.SettingsFile,
+            };
+            var exitCode = 0;
+            foreach (var plugin in options.InstallPlugins)
+            {
+                exitCode |= plugins.InstallAsync(plugin, Console.Out, CancellationToken.None).GetAwaiter().GetResult();
+            }
+
+            if (options.ListPlugins)
+            {
+                foreach (var line in plugins.List(options.ShowVersions))
+                {
+                    Console.Out.WriteLine(line);
+                }
+            }
+
+            return exitCode;
+        }
+
         // codalus mcp (M28c): an MCP server on stdio for an AI agent, relaying each call to the running IDE.
         if (options.Mcp)
         {
@@ -49,6 +76,19 @@ internal static partial class Program
         {
             var paths = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
             if (Infrastructure.SingleInstance.TrySend(Infrastructure.SingleInstance.PipeName(paths.State), new Infrastructure.InstanceRequest("diff", [diff.Left, diff.Right])))
+            {
+                return 0;
+            }
+        }
+
+        // codalus file[:line[:column]]: opens in the running window (unless --new-window), which comes to the front.
+        if (options.OpenFile is { } open && !options.NewWindow && options.Bench is null && options.ExitOn is null && options.Remote is null && options.Path is null)
+        {
+            var paths = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
+            string[] arguments = options.OpenAt is { } at
+                ? [open, at.Line.ToString(System.Globalization.CultureInfo.InvariantCulture), at.Column.ToString(System.Globalization.CultureInfo.InvariantCulture)]
+                : [open];
+            if (Infrastructure.SingleInstance.TrySend(Infrastructure.SingleInstance.PipeName(paths.State), new Infrastructure.InstanceRequest("open", arguments)))
             {
                 return 0;
             }

@@ -64,7 +64,7 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
             return;
         }
 
-        var document = await shell.OpenFileAsync(file).ConfigureAwait(true);
+        var document = await shell.OpenFileAsync(file, at: shell.Options.OpenAt is { } at ? new LanguageServices.Protocol.Position(at.Line, at.Column) : null).ConfigureAwait(true);
         if (document is null)
         {
             return;
