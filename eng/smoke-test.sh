@@ -61,6 +61,16 @@ test_app() {
     x_server=true
   fi
 
+  # A native crash on CI (a segmentation fault in the start window step, which never happened elsewhere) leaves a core
+  # in the results folder, and its threads' stacks are printed below: the runner is the only place to see it.
+  local cores=""
+  if [[ "$(uname -s)" == Linux && "${CI:-}" == true ]] && sudo -n true 2> /dev/null; then
+    cores="$(cd "$results" && pwd)/cores"
+    mkdir -p "$cores"
+    sudo -n sysctl -q -w kernel.core_pattern="$cores/core.%p" || cores=""
+    ulimit -c unlimited || true
+  fi
+
   if [[ "$(uname -s)" == Linux && ( -z "${DISPLAY:-}" || ( "$DISPLAY" == :* && "$x_server" == false ) ) ]]; then
     if ! command -v xvfb-run > /dev/null; then
       echo "error: no X server for DISPLAY='${DISPLAY:-}' ($x_socket is missing) and xvfb-run isn't installed." >&2
@@ -71,6 +81,18 @@ test_app() {
     xvfb-run -a -s "-screen 0 1920x1080x24" "${cmd[@]}" || status=$?
   else
     "${cmd[@]}" || status=$?
+  fi
+
+  if [[ -n "$cores" && "$status" -gt 128 ]] && compgen -G "$cores/core.*" > /dev/null; then
+    command -v gdb > /dev/null || sudo -n apt-get install -y -qq --no-install-recommends gdb > /dev/null 2>&1 || true
+    if command -v gdb > /dev/null; then
+      for core in "$cores"/core.*; do
+        echo "== native stacks at the crash ($core)"
+        gdb -batch -nx -ex "set pagination off" -ex "info signal SIGSEGV" -ex "thread apply all bt 40" "$exe" "$core" 2>&1 \
+          | tee "$results/crash-stacks.txt" | head -n 400
+      done
+    fi
+    rm -f "$cores"/core.* # hundreds of MB: the stacks are what the results keep
   fi
 
   cp "$userdata"/logs/smoke-test* "$results/" 2> /dev/null || true
