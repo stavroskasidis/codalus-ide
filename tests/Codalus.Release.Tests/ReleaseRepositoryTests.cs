@@ -68,9 +68,32 @@ public sealed class ReleaseRepositoryTests : IDisposable
         Assert.Null(ReleaseNotesSource.PreviousTag(_git, ReleaseKind.Stable, "HEAD", excluding: "v0.1.0"));
     }
 
-    private void Commit(string subject)
+    [Fact]
+    public void A_hotfix_copied_onto_develop_is_not_listed_again_in_the_next_release()
     {
-        File.AppendAllText(Path.Combine(_folder, "log.txt"), subject + "\n");
+        Commit("M1: shell");
+        _git.Run("tag", "v0.1.0");
+        _git.Run("branch", "master");
+        Commit("M2: editor");
+
+        // The hotfix is made on master and released, and the same change is copied onto develop with another hash.
+        _git.Run("checkout", "-q", "master");
+        Commit("Fix the crash on start", file: "fix.txt");
+        _git.Run("tag", "v0.1.1");
+        _git.Run("checkout", "-q", "develop");
+        _git.Run("cherry-pick", "master");
+        _git.Run("merge", "-q", "--no-edit", "master");
+        Commit("M3: debugger");
+
+        var notes = ReleaseNotesSource.Read(_git, ReleaseKind.Stable, "0.2.0", "o/r", "HEAD", since: null, changelogFile: null);
+
+        Assert.Equal("v0.1.1", notes.PreviousTag);
+        Assert.Equal(["M2: editor", "M3: debugger"], notes.Commits.Select(c => c.Subject));
+    }
+
+    private void Commit(string subject, string file = "log.txt")
+    {
+        File.AppendAllText(Path.Combine(_folder, file), subject + "\n");
         _git.Run("add", "-A");
         _git.Run("commit", "-q", "-m", subject);
     }

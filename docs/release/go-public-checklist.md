@@ -1,5 +1,7 @@
 # Go-public checklist
 
+> **Done: the repository went public on 2026-10-11 (D29).** Kept as the record. The workflows it names were later merged: `ci.yml`, `release.yml`, `packages.yml` and `benchmarks.yml` are now `pipeline.yml`, and `linux-repos.yml` is `pages.yml` (see CLAUDE.md, CI and releases). The open items still apply: code signing (D19), the package key's backup, and the NuGet prefix (section 5a).
+
 Prepared at M7 (2026-10-09). **Changing the repository's visibility is the maintainer's call. Nothing here was done to the GitHub settings.** Work through the list, then flip the switch.
 
 **When:** after M32's checkpoint (roadmap D29). M31 replaced the manual release with nightly releases from `develop`, stable releases from `master` and Velopack installers (ADR 0028); the sections below follow it.
@@ -57,7 +59,7 @@ The workflows build, test and publish (ADR 0028); a dispatch without the dry run
 
 ## 5a. NuGet package prefix
 
-See [nuget-prefix-reservation.md](nuget-prefix-reservation.md). Summary: `Codalus.*` is already used on nuget.org by unrelated packages. Reserve `Codalus.*` instead, and decide whether the plugin SDK ships as `Codalus.Plugins.Abstractions`.
+See [nuget-prefix-reservation.md](nuget-prefix-reservation.md). Summary: reserve `Codalus.*` (nuget.org has no `Codalus` package); the plugin SDK ships as `Codalus.Plugins.Abstractions`.
 
 ## 6. History audit (done at M7)
 

@@ -1,6 +1,8 @@
-# ADR 0054: Reconnecting a remote window
+# 0054. Reconnecting a remote window
 
-Status: accepted (M21b, 2026-10-13)
+- **Status:** accepted (M21b, 2026-10-13)
+- **Date:** 2026-10-13
+- **Deciders:** maintainer
 
 ## Context
 

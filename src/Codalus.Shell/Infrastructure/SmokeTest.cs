@@ -2555,7 +2555,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         // A known gap of one platform, skipped with its reason in the report (never passed): CODALUS_SMOKE_SKIP is
-        // "<id>[,<id>…]=<reason>", set by the packages workflow.
+        // "<id>[,<id>…]=<reason>" (no workflow sets it at the moment; it's for a platform's known gap).
         if (Environment.GetEnvironmentVariable("CODALUS_SMOKE_SKIP") is { Length: > 0 } skip && skip.Split('=', 2) is [var ids, var because]
             && ids.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(id, StringComparer.Ordinal))
         {

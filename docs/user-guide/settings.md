@@ -35,7 +35,7 @@ Settings you may want first:
 
 Tools → Color Theme (`Ctrl+K Ctrl+T`): Blue, Light, Dark, High Contrast, or Follow System (Light or Dark, as the operating system is set). Plugins can add color themes, which are listed with these.
 
-**File icon themes**: Options → Environment → Appearance → File Icon Theme (`workbench.iconTheme`) chooses the icons of files and folders in the Solution Explorer, tabs and pickers: the built-in ones, or a plugin's. Icon themes use VS Code's format. Their SVG icons are converted the first time a theme is chosen (a moment, once per theme); an SVG icon that uses more than plain shapes with fills shows the built-in icon instead.
+**File icon themes**: Options → Environment → Appearance → File Icon Theme (`workbench.iconTheme`) chooses the icons of files and folders in the Solution Explorer, tabs and pickers: the built-in classic icons (outline pages with a small colored badge, outline folders and project boxes, the default), Material Icon Theme's colored icons (`material`, also built in), or a plugin's. Icon themes use VS Code's format. Their SVG icons are converted the first time a theme is chosen (a moment, once per theme); an SVG icon that uses more than plain shapes with fills shows the built-in icon instead.
 
 **Fonts and Colors** (Tools → Fonts and Colors): change any color over the theme's:
 - **Syntax**: comments, strings, keywords, numbers, types, functions and variables, or one semantic token type.
@@ -136,7 +136,7 @@ Some tools are downloaded the first time a feature needs them: Node.js, the web 
 
 Only the chosen scheme's own keys are bound, so menus and the shortcuts list show its keys.
 
-Tools → Keyboard Shortcuts lists every command with its shortcut.
+Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 - **Change a shortcut**: select a command and press the new key combination. Conflicts are shown.
 - **Where changes go**: `keybindings.json` in the user configuration folder (also editable as JSON).
 - **Chords**: shortcuts can be two-key chords, like `Ctrl+K Ctrl+D`.
@@ -150,7 +150,7 @@ Tools → Keyboard Shortcuts lists every command with its shortcut.
 
 ## Updates and network access
 
-**Updates** (Environment → Updates; M32):
+**Updates** (Environment → Updates):
 - **Updates** (`update.mode`): installed builds (the Windows Setup.exe, the macOS .pkg, the AppImage, winget) download new releases in the background and apply them when the IDE restarts: a status bar item offers **Restart to update**, which reopens your solution. **notify** only says that a release is available; **off** stops all update traffic. Help → Check for Updates checks right away in every mode.
 - **Update Channel** (`update.channel`): stable releases or nightly builds. Empty follows the channel the build came from. Switching from nightly builds to stable releases installs the newest stable release, even when it is older, after you confirm.
 - **Other installs**: the `.deb` and `.rpm` update with the system (`apt upgrade`, `dnf upgrade`); the zip, `.app` zip and tar.gz say that a release is out and link to it. Development builds never check.

@@ -7,7 +7,7 @@
 
 Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs natively on Windows, macOS and Linux: a rich semantic editor, a real project system, and integrated build, debugging and Git.
 
-> **Status: pre-release (0.x).** The MVP (milestones M0–M7) is done, and the post-MVP milestones are under way ([roadmap](docs/roadmap.md#status)). Installers for Windows, macOS and Linux are on the [releases page](https://github.com/stavroskasidis/codalus-ide/releases): 0.1.0 is the first preview, and nightly builds follow `develop` ([installing](docs/user-guide/getting-started.md)). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
+> **Status: pre-release (0.x).** The MVP (milestones M0–M7) is done, and the post-MVP milestones are under way ([roadmap](docs/roadmap.md#status)). Installers for Windows, macOS and Linux are on the [releases page](https://github.com/stavroskasidis/codalus-ide/releases): the latest stable release is 0.2.1, and nightly builds follow `develop` ([installing](docs/user-guide/getting-started.md)). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
 
 ## Features
 
@@ -40,21 +40,28 @@ Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs nativ
 - **Terminal and C# Interactive**: an integrated terminal (your shells, splits, shell integration with clickable `file:line` links, `vim`-capable emulation) that can also run your console apps, and a C# REPL with `#r "nuget:"`, Send to Interactive and Initialize Interactive with Project.
 - **Navigation and inline information**: Peek Definition, Go to Base, Call and Type Hierarchy, Find All References with read/write classification, the Document Outline, a Code Definition window, a navigation bar and sticky scroll; inlay hints, CodeLens, an inheritance margin, bracket pair colors and an overview ruler; library code shown from its embedded source or Source Link before decompiling.
 - **Editing and analysis**: snippets (VS Code's format, Visual Studio's imported, contributed by plugins), Insert Snippet and Surround With, duplicate and move lines, Expand Selection, a clipboard ring, Paste JSON as Classes, Code Cleanup and format on save, refactorings with options (Generate Constructor, Equals and GetHashCode, Overrides, Extract Interface, Change Signature), configuring severities in `.editorconfig`, AutoRecover and local history, bookmarks, the Task List, Code Metrics, a Syntax Visualizer, Compare Files and an image viewer.
-- **A classic IDE's look and feel**: Blue, Light and Dark themes, the menu and a search box (Ctrl+Q) in the title bar, a standard toolbar with the configuration, startup project and Start, a status bar colored by state, the Solution Explorer on the right with search, an Options tree, and the classic keyboard scheme by default (VS Code's as an option).
+- **A classic IDE's look and feel**: Blue, Light, Dark and High Contrast themes, the menu and a search box (Ctrl+Q) in the title bar, a standard toolbar with the configuration, startup project and Start, a status bar colored by state, the Solution Explorer on the right with search, an Options tree, and the classic keyboard scheme by default (VS Code's, ReSharper's and Emacs's as options).
 - **Git depth**: a history graph with filters, file and line history, a 3-way merge editor, continue/skip/abort for merges, rebases, cherry-picks and reverts, interactive rebase, stash, tags, remotes, per-line staging, clone and init, and `codalus merge`/`--wait` as git's merge tool and editor; worktrees, Git LFS, solutions spanning several repositories, and a credentials prompt behind your credential helper.
 - **GitHub, Azure DevOps and GitLab**: pull requests (check out, create, review comments in the editor), CI status, issues and work items with `#` completion, and publishing a repository. Nothing is sent to a host until you sign in; tokens stay in the OS credential store.
 - **Web**: an Endpoints Explorer, `.http` files with environments and an HTTP Response window, the ASP.NET Core environment selector, the HTTPS development certificate and user secrets; Hot Reload through `dotnet watch`; Razor and Blazor editing with C# features inside `.razor` and `.cshtml`; and HTML, CSS, JavaScript and TypeScript language servers on a Node.js runtime downloaded on first use.
+- **Data**: an Entity Framework window over your `dotnet ef` (migrations, scripts, bundles, reverse engineering, the model view) and a Database Explorer for SQL Server, PostgreSQL, MySQL/MariaDB and SQLite with a query editor, plans and a SQL language service.
+- **Containers, Aspire and publishing**: a Containers window for Docker and Podman, Add Docker Support, run and debug in a container, Compose; Aspire AppHosts run and debug with their resources; publish profiles for folders, single-file, trimmed, ReadyToRun, Native AOT and container images.
+- **Profiling**: CPU usage with call trees and flame graphs, .NET Counters, memory snapshots and diffs, allocations, .NET Async, threads, exceptions and file I/O, and BenchmarkDotNet results.
+- **Avalonia**: `.axaml` editing with completion and diagnostics from your types, a XAML Previewer, and the Live Visual Tree and Live Property Explorer for running apps.
+- **Remote development**: remote windows over SSH, in WSL and in containers (Dev Containers), with the build, language services, terminals and the debugger on the far side, port forwarding and reconnecting.
+- **.NET versions**: .NET 11 projects, every target framework from .NET Core 2.0 to .NET 10, and older SDKs pinned in `global.json`.
 - **Other languages**: highlighting for about forty languages from TextMate grammars; MSBuild editing with evaluated values on hover; JSON and YAML with schemas; `.editorconfig`; a Markdown preview; and any LSP language server through a plugin, without code.
-- **Extensible**: a versioned, out-of-process plugin API ([docs/plugins.md](docs/plugins.md)).
+- **Extensible**: a versioned, out-of-process plugin API, 1.0 since 0.2.0 ([docs/plugins.md](docs/plugins.md)), a Plugin Gallery of NuGet packages, and `dotnet new codalus-plugin`.
+- **Yours**: Fonts and Colors, profiles, settings sync through a folder or a Git repository, customizable menus and toolbars, a start window, Help → Check Environment, and self-update on the stable or nightly channel.
 - **Private**: no telemetry. Crash reports are local and opt-in.
 
 ## Documentation
 
 - [Website](https://stavroskasidis.com/codalus-ide/): downloads, features and the user guide.
-- [User guide](docs/user-guide/README.md): installing, solutions, NuGet, editing, build and run, debugging, web development, testing, Git, terminal and C# Interactive, settings, troubleshooting.
+- [User guide](docs/user-guide/README.md): installing, solutions, NuGet, editing, build and run, debugging, web development, data, containers, profiling, Avalonia, remote development, testing, Git, terminal and C# Interactive, older .NET versions, settings, troubleshooting.
 - [Roadmap](docs/roadmap.md): the post-MVP milestones and the decisions behind them.
 - [Writing plugins](docs/plugins.md).
-- [Architecture decisions](docs/adr), [accessibility](docs/accessibility.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md).
+- [Architecture decisions](docs/adr), [environment variables](docs/environment-variables.md), [accessibility](docs/accessibility.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md).
 
 ## Architecture in one paragraph
 
@@ -69,15 +76,21 @@ The UI shell (`codalus`, Native AOT) is kept light and responsive. Heavy service
 | `src/Codalus.Plugins.*`, `src/Plugins/` | The plugin SDK, protocol and host process, and the built-in plugins. |
 | `src/Codalus.Projects.*` | The build host (`codalus-buildhost`): solutions, MSBuild evaluation, restore and project-file edits. |
 | `src/Codalus.Rpc`, `src/Codalus.LanguageServices.*` | JSON-RPC and process supervision; the C# language service host (`codalus-lshost`, Roslyn over LSP) and its client. |
-| `src/Codalus.Debugging` | The Debug Adapter Protocol client for netcoredbg. |
+| `src/Codalus.Debugging`, `src/Codalus.Debugging.*` | The Debug Adapter Protocol client for netcoredbg; the debug companion host (`codalus-debughost`) and the startup hook for debugging in the terminal. |
+| `src/Codalus.Data.*`, `src/Codalus.EntityFramework.Agent` | The data host (`codalus-datahost`: the Database Explorer and the SQL language server) and the EF Core model agent. |
+| `src/Codalus.Diagnostics.*` | The diagnostics host (`codalus-diaghost`) for profiling, and the benchmark events. |
+| `src/Codalus.Remote.*` | The remote server (`codalus-server`) and its protocol. |
+| `src/Codalus.Previewer.Agent` | The Avalonia previewer's and Live Visual Tree's agent. |
+| `src/Codalus.Templates` | The `dotnet new codalus-plugin` template. |
 | `src/Codalus.Markup.Host` | The markup host (`codalus-markuphost`): JSON with schemas, XML and MSBuild, YAML and `.editorconfig`. |
 | `src/Codalus.Interactive.*` | The C# Interactive host (`codalus-replhost`) and its protocol. |
 | `src/Codalus.TextTemplating.*` | The T4 host (`codalus-t4host`, Mono.TextTemplating) and its protocol. |
 | `src/Codalus.Terminal` | The terminal's VT engine (the pseudo-terminals are in `Codalus.Platform`). |
-| `eng/` | Scripts: fetching netcoredbg, building release packages (`package.sh`) and their templates. |
+| `eng/` | Scripts and tools: `codalus-release` (`Codalus.Release`), packaging (`package.sh`), the smoke, validation, WSL and update tests, the Linux repositories and the AUR, fetching netcoredbg and the icons. |
 | `tests/` | Unit, integration and headless UI tests. |
 | `benchmarks/` | The `codalus-bench` harness, the fixture generator and committed results. |
-| `samples/` | Fixture solutions and the HelloWorld sample plugin. Large fixtures are generated, not committed. |
+| `samples/` | Fixture solutions and the sample plugins (`samples/plugins/`). Large fixtures are generated, not committed. |
+| `website/` | The website (Blazor static SSR, exported for GitHub Pages), which renders the user guide. |
 | `docs/` | ADRs, protocols, the roadmap, milestone checkpoints and the user guide. |
 
 ## Building
@@ -96,7 +109,7 @@ dotnet test --solution Codalus.slnx
 dotnet run --project src/Codalus.Shell
 ```
 
-More commands, including publishing the shell and running the benchmarks, are in [CLAUDE.md](CLAUDE.md) and [benchmarks/README.md](benchmarks/README.md). `eng/package.sh <version>` builds the release package for your OS ([ADR 0009](docs/adr/0009-packaging-and-release.md)).
+More commands, including publishing the shell and running the benchmarks, are in [CLAUDE.md](CLAUDE.md) and [benchmarks/README.md](benchmarks/README.md). `eng/package.sh [version] [stable|nightly|dev]` builds your OS's installers and packages ([ADR 0028](docs/adr/0028-release-cycle-and-installers.md)).
 
 ## License
 

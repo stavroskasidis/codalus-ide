@@ -2,6 +2,13 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.3.0
+
+In progress on `develop`; nightlies show these notes.
+- **Git Changes looks like a classic IDE's**: a branch picker with Fetch, Pull, Push and Sync, the outgoing and incoming counts, and Publish branch at the top; a commit button that commits the staged changes or all of them, and can also push or sync; collapsible Related Items, Merge Conflicts, Staged Changes, Changes and Stashes sections; files as a tree or a sortable list with a filter; stashes applied, popped or dropped in the window.
+- **Releases**: one pipeline builds, tests and releases every branch. Every push to `develop` that passes it is published as a nightly, and the website deploys only once a stable release has passed every check.
+- **Documentation**: the user guide, the website's Features page and the README cover everything up to 0.2.1.
+
 ## 0.2.1
 
 A maintenance release: two fixes in the app, and 0.2.0 released again by the new release process.

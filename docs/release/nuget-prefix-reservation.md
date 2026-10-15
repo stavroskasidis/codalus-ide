@@ -1,5 +1,7 @@
 # NuGet package ID prefix reservation (draft)
 
+> **Superseded by the rename (ADR 0056, 2026-10-13).** This draft was written for `DaedalusStudio.*`. The prefix to reserve is now `Codalus.*` (nuget.org has no `Codalus` package; the plugin SDK ships as `Codalus.Plugins.Abstractions`, plugins as `CodalusPlugin` packages). The steps below still apply with the new prefix and the repository `stavroskasidis/codalus-ide`; reserving it is the maintainer's action.
+
 ## Finding
 
 On 2026-10-09, nuget.org already lists packages that use the `Daedalus.` prefix, owned by other people:

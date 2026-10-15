@@ -1,5 +1,7 @@
 # Name conflicts to check: "Daedalus Studio"
 
+> **Historical.** These conflicts led to the rename to Codalus IDE (ADR 0056, 2026-10-13); the name "Daedalus Studio" is no longer used.
+
 A first pass on 2026-10-09. It is not legal advice: before announcing, have the trademark questions checked in the jurisdictions that matter to you. In the US that is the USPTO's trademark search, classes 9 (software) and 42 (software services); also check EUIPO and UKIPO.
 
 ## Software with the same or a similar name

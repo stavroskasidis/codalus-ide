@@ -5,8 +5,10 @@ name: GitHub Pages
 # the newest nightly (eng/linux-repos.sh, signed with the PACKAGES_GPG_PRIVATE_KEY secret), checked by installing from
 # them with apt, dnf and zypper, signatures verified (eng/test-linux-repos.sh) (M31, D18); then the website, the Blazor
 # app in website/ exported to static files with those releases' download links. Only master deploys (the maintainer's
-# rule, 2026-10-13): each stable release does (pipeline.yml), and so does a push to master that changes only the user
-# guide, which the pipeline ignores (docs/**). A website change reaches master only in a release, which deploys it.
+# rule, 2026-10-13): each stable release does (pipeline.yml), and so does a push to master that changes only
+# documentation, which the pipeline ignores (docs/**, **/*.md). A push to master that changes anything else starts the
+# pipeline too, so this run leaves the site to it (scope): the release deploys the site only once every gate passed, and
+# a failed release deploys nothing (atomic releases). A website change reaches master only in a release.
 # Nightlies don't deploy, so the nightly channel and the site's nightly links move on with master.
 # Started on another branch (workflow_dispatch), it builds and checks the site without deploying it.
 # A stable release (pipeline.yml) calls it before publishing anything, with the release's own packages from its run and
@@ -39,7 +41,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # On its own push trigger: whether the push also starts pipeline.yml, which then deploys the site with its release.
+  # (Called from pipeline.yml, github.event_name is the pipeline's, so the workflow's own name tells the two apart.)
+  scope:
+    if: github.event_name == 'push' && contains(github.workflow_ref, '/.github/workflows/pages.yml@')
+    runs-on: ubuntu-latest
+    outputs:
+      docs-only: ${{ steps.changes.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: changes
+        shell: bash
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          # The pipeline's paths-ignore (docs/** and **/*.md): a push of only those starts no pipeline run.
+          if ! git cat-file -e "$BEFORE^{commit}" 2> /dev/null; then
+            echo "docs-only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          others="$(git diff --name-only "$BEFORE" "$AFTER" | grep -vE '^docs/|\.md$' || true)"
+          if [ -n "$others" ]; then
+            echo "::notice::This push also changes $(wc -l <<< "$others") other files, so pipeline.yml runs and its release deploys the site."
+            echo "docs-only=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs-only=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: scope
+    # scope is skipped when called by the pipeline or dispatched; then this always runs.
+    if: ${{ !cancelled() && (needs.scope.result == 'skipped' || needs.scope.outputs.docs-only == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,9 +133,7 @@ jobs:
         run: |
           if [ -d site/rpm/stable ]; then bash eng/test-linux-repos.sh site stable; fi
           if [ -d site/rpm/nightly ]; then bash eng/test-linux-repos.sh site nightly; fi
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup
       # The app renders every page into the same folder (it leaves the repositories alone) and fails on a broken link
       # or anchor. A relative --export path is taken from the repository root.
       - name: Export the website
@@ -116,7 +149,8 @@ jobs:
   deploy:
     needs: build
     # inputs.deploy is null on a push or dispatch, and expressions compare null equal to false, so compare as text.
-    if: github.ref == 'refs/heads/master' && format('{0}', inputs.deploy) != 'false'
+    # build skipped (the pipeline deploys) skips this too.
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.ref == 'refs/heads/master' && format('{0}', inputs.deploy) != 'false' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages

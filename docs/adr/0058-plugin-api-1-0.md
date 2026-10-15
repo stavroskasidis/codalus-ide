@@ -11,7 +11,7 @@ ADR 0003 set up the plugin API as 0.x: minor versions may break, and new APIs st
 Constraints:
 - The shell is Native AOT, and plugins run out of process (ADR 0003). Every new surface has to cross the plugin protocol as data.
 - Plugin UI is declarative (D2, and ADR 0003's promise of an ADR before richer plugin UI: this is it): the shell draws it with its own controls, so it follows the theme and stays accessible. Webviews come after 1.0, as a proposed API.
-- The shell's icons are compiled at build time and SVG is never parsed at run time (ADR 0019).
+- The shell's icons are compiled at build time and SVG is never parsed at run time (D24, M34a).
 
 ## Decision
 
