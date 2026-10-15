@@ -300,6 +300,9 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public QuickPickViewModel Palette { get; }
 
+    /// <summary>The Ctrl+Tab switcher of open documents.</summary>
+    public DocumentSwitcherViewModel Switcher { get; } = new();
+
     public DialogViewModel Dialogs { get; }
 
     public StatusBarViewModel StatusBar { get; }

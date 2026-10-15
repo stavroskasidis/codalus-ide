@@ -166,6 +166,8 @@ public sealed partial class ShellHost : IEditorServices
         Theme.Changed += (_, _) => ThemeChanged?.Invoke(this, EventArgs.Empty);
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
+        Layout.ActiveDocumentChanged += (_, _) => RememberActiveDocument();
+        Switcher.Chosen += (_, document) => Layout.OpenDocument(document, focus: true);
         _ = ConfigureLanguagesAsync();
     }
 
@@ -855,6 +857,50 @@ public sealed partial class ShellHost : IEditorServices
     }
 
     /// <summary>Ctrl+Tab: activates the next (or previous) document tab, wrapping around.</summary>
+    /// <summary>Open documents, the most recently active first (the Ctrl+Tab switcher's order).</summary>
+    private readonly List<Docking.ShellDocument> _recentDocuments = [];
+
+    private void RememberActiveDocument()
+    {
+        if (Layout.ActiveDocument is { } active)
+        {
+            _recentDocuments.Remove(active);
+            _recentDocuments.Insert(0, active);
+        }
+    }
+
+    /// <summary>The open documents, the most recently active first; documents never active follow in tab order.</summary>
+    public IReadOnlyList<Docking.ShellDocument> RecentDocuments
+    {
+        get
+        {
+            var open = Layout.Documents.ToList();
+            _recentDocuments.RemoveAll(d => !open.Contains(d));
+            return [.. _recentDocuments, .. open.Where(d => !_recentDocuments.Contains(d))];
+        }
+    }
+
+    /// <summary>
+    /// Ctrl+Tab (Ctrl+Shift+Tab back): opens the switcher on the document used before the active one, or moves its
+    /// selection while it's open. Releasing Ctrl switches (<see cref="Views.MainWindow"/>).
+    /// </summary>
+    public void SwitchDocument(int direction)
+    {
+        if (Switcher.IsOpen)
+        {
+            Switcher.Move(direction);
+            return;
+        }
+
+        var documents = RecentDocuments;
+        if (documents.Count < 2)
+        {
+            return;
+        }
+
+        Switcher.Open([.. documents.Select(d => new DocumentSwitcherItem(d, d.Title, d.FilePath is { } path ? Path.GetDirectoryName(path) : null, d.HasTabIcon ? d.TabIcon : null))], direction);
+    }
+
     public void CycleDocument(int direction)
     {
         var documents = Layout.Documents.ToList();

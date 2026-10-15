@@ -252,6 +252,7 @@ public static class CommandIcons
         ["workbench.splitEditorRight"] = new("split-right"),
         ["workbench.splitEditorDown"] = new("split-down"),
         ["workbench.nextDocument"] = new("tab"),
+        ["workbench.switchDocument"] = new("tab"),
         ["workbench.closeAllDocuments"] = new("close-all"),
         ["workbench.pinEditor"] = new("pin"),
         ["workbench.resetLayout"] = new("layout"),

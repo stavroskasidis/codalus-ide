@@ -1,0 +1,35 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.DocumentSwitcherView"
+             x:DataType="vm:DocumentSwitcherViewModel">
+  <Border Classes="overlay" Padding="6" MaxHeight="520" MinWidth="420">
+    <DockPanel>
+      <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{l:T documentSwitcher.activeFiles}" Margin="8,2,8,4" />
+      <ListBox x:Name="List"
+               Background="Transparent"
+               ItemsSource="{Binding Items}"
+               SelectedIndex="{Binding SelectedIndex}"
+               AutomationProperties.Name="{l:T documentSwitcher.activeFiles}">
+        <ListBox.Styles>
+          <Style Selector="ListBoxItem" x:DataType="vm:DocumentSwitcherItem">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
+          </Style>
+        </ListBox.Styles>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:DocumentSwitcherItem">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <controls:Icon Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Folder}" IsVisible="{Binding HasFolder}" TextTrimming="CharacterEllipsis" MaxWidth="420" VerticalAlignment="Center" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+  </Border>
+</UserControl>

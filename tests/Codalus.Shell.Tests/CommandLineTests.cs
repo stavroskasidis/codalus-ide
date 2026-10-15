@@ -123,7 +123,7 @@ public sealed class CommandLineTests : IAsyncLifetime
 
         var pipe = SingleInstance.PipeName(f.Shell.Paths.State);
         var sent = Task.Run(() => SingleInstance.TrySend(pipe, new InstanceRequest("open", [file, "2", "6"])), TestContext.Current.CancellationToken);
-        await ShellFixture.PumpUntil(() => sent.IsCompleted && f.Shell.ActiveEditor?.Model.Path == file, seconds: 30);
+        await ShellFixture.PumpUntil(() => sent.IsCompleted && f.Shell.ActiveEditor is { Controller: not null } active && active.Model.Path == file, seconds: 30);
         Assert.True(await sent);
         var editor = f.Shell.ActiveEditor!.Controller!.Editor;
         var line = editor.Document.GetLineByOffset(editor.CaretOffset);

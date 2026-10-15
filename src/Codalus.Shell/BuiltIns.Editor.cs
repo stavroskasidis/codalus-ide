@@ -37,8 +37,10 @@ internal static partial class BuiltIns
           { "key": "primary+shift+s", "command": "file.saveAll" },
           { "key": "ctrl+-", "mac": "ctrl+-", "command": "workbench.navigateBack" },
           { "key": "ctrl+shift+-", "mac": "ctrl+shift+-", "command": "workbench.navigateForward" },
-          { "key": "ctrl+tab", "command": "workbench.nextDocument", "when": "activeDocumentKind" },
-          { "key": "ctrl+shift+tab", "command": "workbench.previousDocument", "when": "activeDocumentKind" },
+          { "key": "ctrl+tab", "command": "workbench.switchDocument", "when": "activeDocumentKind" },
+          { "key": "ctrl+shift+tab", "command": "workbench.switchDocumentBack", "when": "activeDocumentKind" },
+          { "key": "ctrl+alt+pagedown", "command": "workbench.nextDocument", "when": "activeDocumentKind" },
+          { "key": "ctrl+alt+pageup", "command": "workbench.previousDocument", "when": "activeDocumentKind" },
           { "key": "primary+\\", "command": "workbench.splitEditorRight", "when": "activeDocumentKind == textFile" },
           { "key": "primary+k primary+\\", "command": "workbench.splitEditorDown", "when": "activeDocumentKind == textFile" },
           { "key": "primary+\\ primary+e", "command": "workbench.view.errorList" },
@@ -263,6 +265,8 @@ internal static partial class BuiltIns
         Add("file.saveAll", "Save All", "File", Ui(shell.SaveAllAsync));
         Add("workbench.navigateBack", "Navigate Backward", "View", Ui(shell.NavigateBackAsync));
         Add("workbench.navigateForward", "Navigate Forward", "View", Ui(shell.NavigateForwardAsync));
+        Add("workbench.switchDocument", "Switch Document", "Window", Ui(() => shell.SwitchDocument(+1)), "activeDocumentKind");
+        Add("workbench.switchDocumentBack", "Switch Document Back", "Window", Ui(() => shell.SwitchDocument(-1)), "activeDocumentKind");
         Add("workbench.nextDocument", "Next Document", "Window", Ui(() => shell.CycleDocument(+1)), "activeDocumentKind");
         Add("workbench.previousDocument", "Previous Document", "Window", Ui(() => shell.CycleDocument(-1)), "activeDocumentKind");
         Add("workbench.showOpenDocuments", "Open Documents…", "Window", Ui(shell.ShowOpenDocumentsAsync), "activeDocumentKind");

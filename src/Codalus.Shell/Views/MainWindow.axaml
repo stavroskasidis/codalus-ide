@@ -121,6 +121,10 @@
         <views:DialogView DataContext="{Binding Dialogs}" HorizontalAlignment="Center" VerticalAlignment="Center" />
       </Panel>
 
+      <Panel x:Name="SwitcherLayer" Background="Transparent" IsVisible="{Binding Switcher.IsOpen}" ZIndex="1">
+        <views:DocumentSwitcherView DataContext="{Binding Switcher}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Panel>
+
       <Panel x:Name="PaletteLayer" Background="Transparent" IsVisible="{Binding Palette.IsOpen}">
         <views:QuickPickView x:Name="Palette"
                              DataContext="{Binding Palette}"
