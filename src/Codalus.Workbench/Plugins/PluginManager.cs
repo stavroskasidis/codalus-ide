@@ -750,10 +750,9 @@ public sealed class PluginManager : IAsyncDisposable
     {
         foreach (var (scheme, entry) in _fileSystems.Where(f => which(f.Key, f.Value.PluginId)).ToList())
         {
-            if (_fileSystems.TryRemove(new KeyValuePair<string, (string, PluginFileSystem, IDisposable)>(scheme, entry)))
-            {
-                entry.Mount.Dispose();
-            }
+            // The mount goes first: once FileSystems no longer lists it, its root is the local disk again.
+            entry.Mount.Dispose();
+            _fileSystems.TryRemove(new KeyValuePair<string, (string, PluginFileSystem, IDisposable)>(scheme, entry));
         }
 
         FileSystemsChanged?.Invoke(this, EventArgs.Empty);
