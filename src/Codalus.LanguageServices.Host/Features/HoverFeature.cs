@@ -11,6 +11,7 @@ internal static class HoverFeature
     public static async Task<Hover?> HoverAsync(Document document, int position, CancellationToken cancellationToken)
     {
         if (QuickInfoService.GetService(document) is not { } service
+            || await FrameworkGuard.IsMissingAsync(document, cancellationToken).ConfigureAwait(false)
             || await service.GetQuickInfoAsync(document, position, cancellationToken).ConfigureAwait(false) is not { } info
             || info.Sections.IsEmpty)
         {

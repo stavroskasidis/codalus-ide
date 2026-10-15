@@ -62,6 +62,12 @@ internal sealed class CompletionFeature
             return new LspCompletionList(false, []);
         }
 
+        // Until a project loaded without its framework loads again with it, the list is empty and incomplete (asked again).
+        if (await FrameworkGuard.IsMissingAsync(document, cancellationToken).ConfigureAwait(false))
+        {
+            return new LspCompletionList(true, []);
+        }
+
         var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
         var trigger = context is { TriggerKind: CompletionTriggerKind.TriggerCharacter, TriggerCharacter: [var ch, ..] }
             ? CompletionTrigger.CreateInsertionTrigger(ch)
