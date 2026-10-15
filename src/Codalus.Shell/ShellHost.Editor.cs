@@ -29,6 +29,9 @@ public sealed partial class ShellHost : IEditorServices
 
     /// <summary>Avalonia XAML (M19a, ADR 0047), served by the C# host.</summary>
     public const string AxamlLanguageId = "axaml";
+
+    /// <summary><c>.xaml</c> files (.NET MAUI's, M20a): the C# host serves them with MAUI's dialect when their project references MAUI.</summary>
+    public const string XamlLanguageId = "xaml";
     private const string StatusSource = "codalus.editor";
 
     private readonly Dictionary<string, CodeDocument> _models = new(SolutionPaths.Comparer);
@@ -71,7 +74,7 @@ public sealed partial class ShellHost : IEditorServices
         {
             // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023), and so
             // does Avalonia XAML, on the same projects' type information (ADR 0047).
-            Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId],
+            Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId, XamlLanguageId],
         });
         registry.Register(new LanguageServiceDescriptor("markup", "JSON, XML and YAML", [], null, MarkupHostLaunch.Resolve)
         {
@@ -740,6 +743,7 @@ public sealed partial class ShellHost : IEditorServices
             Watches = Watch.Expressions.Count == 0 ? null : Watch.Expressions,
             DataTips = Debugger.PinnedTips.All is { Count: > 0 } tips ? [.. tips.Select(t => new Docking.SessionDataTip(t.Path, t.Line, t.Expression, t.Comment))] : null,
             LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
+            MobileDevices = Mobile.Selections.Count == 0 ? null : new Dictionary<string, string>(Mobile.Selections),
             MultipleStartupProjects = Runs.MultipleStartup ? true : null,
             StartupProjects = Runs.StartupEntries is { Count: > 0 } entries ? [.. entries.Select(e => new Docking.SessionStartupProject(e.Project, e.Action.ToString()))] : null,
         }, Docking.ShellJsonContext.Default.EditorSession);
@@ -751,6 +755,7 @@ public sealed partial class ShellHost : IEditorServices
         if (SessionFile(solutionPath) is not { } file || ReadJson(file, Docking.ShellJsonContext.Default.EditorSession) is not { } session)
         {
             Runs.Load(null, null);
+            Mobile.LoadSelections(null);
             Debugger.Breakpoints.Clear();
             Debugger.ExceptionSettings.Reset();
             Runs.EnvironmentOverride = null;
@@ -764,6 +769,7 @@ public sealed partial class ShellHost : IEditorServices
             session.LaunchProfiles,
             session.MultipleStartupProjects == true,
             [.. (session.StartupProjects ?? []).Select(p => new StartupEntry(p.Path, Enum.TryParse<StartupAction>(p.Action, out var action) ? action : StartupAction.None))]);
+        Mobile.LoadSelections(session.MobileDevices);
         Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(FromSession), (session.FunctionBreakpoints ?? []).Select(FromSession));
         Debugger.ExceptionSettings.Load(session.BreakOnOtherExceptions ?? false, session.ExceptionTypes, session.ExceptionConditions);
         Runs.EnvironmentOverride = session.AspNetEnvironment;

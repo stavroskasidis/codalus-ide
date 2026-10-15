@@ -247,6 +247,11 @@ internal static class TemplateCatalog
         ("blazor", "Blazor Web App"),
         ("grpc", "ASP.NET Core gRPC Service"),
         ("razorclasslib", "Razor Class Library"),
+        ("maui", ".NET MAUI App"), // with the MAUI workloads (M20a)
+        ("maui-blazor", ".NET MAUI Blazor Hybrid App"),
+        ("mauilib", ".NET MAUI Class Library"),
+        ("android", "Android Application"),
+        ("ios", "iOS Application"),
         ("wpf", "WPF Application"),
         ("winforms", "Windows Forms App"),
     ];

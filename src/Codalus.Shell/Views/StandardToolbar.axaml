@@ -38,6 +38,14 @@
       <Border Classes="toolbarSeparator" IsVisible="{Binding HasSolution}" />
       <ComboBox Classes="toolbar" ItemsSource="{Binding StartupProjects}" SelectedItem="{Binding StartupProject}" MinWidth="120"
                 IsVisible="{Binding HasSolution}" ToolTip.Tip="{l:T standardToolbar.startupProject}" AutomationProperties.Name="{l:T standardToolbar.startupProject}" PlaceholderText="{l:T standardToolbar.startupProject2}" />
+      <!-- A .NET MAUI startup project's device, emulator or simulator (M20a). -->
+      <Button Classes="toolbar" Command="{Binding SelectDeviceCommand}" IsVisible="{Binding HasDevice}" Tag="mobile.selectDevice"
+              ToolTip.Tip="{l:T standardToolbar.device}" AutomationProperties.Name="{l:T standardToolbar.device}">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="phone" />
+          <TextBlock Text="{Binding DeviceLabel}" VerticalAlignment="Center" MaxWidth="220" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+      </Button>
       <Button x:Name="StartButton" Classes="toolbar start" Command="{Binding StartCommand}" IsVisible="{Binding CanStart}"
               Tag="debug.start" ToolTip.Tip="{l:T standardToolbar.startDebugging}" AutomationProperties.Name="{l:T standardToolbar.startDebugging}">
         <StackPanel Orientation="Horizontal" Spacing="4">

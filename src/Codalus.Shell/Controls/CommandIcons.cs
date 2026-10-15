@@ -171,6 +171,7 @@ public static class CommandIcons
         ["color"] = Purple,
         ["extensions"] = Purple,
         ["sparkle"] = Purple,
+        ["phone"] = Green,
         ["method"] = Purple,
         ["solution"] = Purple,
         ["warning"] = Yellow,

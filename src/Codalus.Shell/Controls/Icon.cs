@@ -335,6 +335,7 @@ public static class IconSet
         ["document-text"] = "document_text_16_regular",
         ["update"] = "arrow_sync_circle_16_regular",
         ["sparkle"] = "sparkle_16_regular",
+        ["phone"] = "phone_16_regular",
     };
 
     private static readonly Dictionary<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);

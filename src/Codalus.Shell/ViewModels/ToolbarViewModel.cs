@@ -34,6 +34,7 @@ public sealed class ToolbarViewModel : ObservableObject
     private string? _platform;
     private StartupProjectChoice? _startup;
     private string _startLabel = "Start";
+    private string? _deviceLabel;
     private bool _hasSolution;
     private string? _solutionName;
     private bool _isDebugging;
@@ -235,6 +236,25 @@ public sealed class ToolbarViewModel : ObservableObject
             _updating = false;
         }
     }
+
+    /// <summary>The device a mobile startup project runs on (M20a): its name, or null when the startup project isn't one.</summary>
+    public string? DeviceLabel
+    {
+        get => _deviceLabel;
+        private set
+        {
+            if (SetField(ref _deviceLabel, value))
+            {
+                OnPropertyChanged(nameof(HasDevice));
+            }
+        }
+    }
+
+    public bool HasDevice => _deviceLabel is not null;
+
+    public ICommand SelectDeviceCommand => _command("mobile.selectDevice");
+
+    public void SetDevice(string? label) => DeviceLabel = label;
 
     public void SetDebugState(bool debugging, bool stopped, bool running)
     {

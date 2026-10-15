@@ -213,6 +213,13 @@ public sealed partial class ShellHost
 
         hotReload |= hotReloadSetting;
 
+        if (Remote is null && IsMobileProject(project))
+        {
+            // A .NET MAUI or mobile app (M20a): the platform SDK's Run target builds, deploys and starts it on its device.
+            await StartOnDeviceAsync(project, debug: false).ConfigureAwait(true);
+            return;
+        }
+
         if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })

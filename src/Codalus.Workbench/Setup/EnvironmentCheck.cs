@@ -46,7 +46,7 @@ public delegate Task<(int ExitCode, string Output)> ProcessRunner(string program
 /// </summary>
 public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?> environment, ProcessRunner? run = null, Func<string, bool>? exists = null)
 {
-    private readonly ProcessRunner _run = run ?? RunAsync;
+    private readonly ProcessRunner _run = run ?? RunProcessAsync;
     private readonly Func<string, bool> _exists = exists ?? File.Exists;
 
     /// <summary>Checks everything; <paramref name="solutionFolder"/> also checks its <c>global.json</c>.</summary>
@@ -284,7 +284,8 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         return null;
     }
 
-    private static async Task<(int ExitCode, string Output)> RunAsync(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken cancellationToken)
+    /// <summary>The default <see cref="ProcessRunner"/>: runs a program for at most 30 seconds, its output and errors together.</summary>
+    public static async Task<(int ExitCode, string Output)> RunProcessAsync(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo(program)
         {

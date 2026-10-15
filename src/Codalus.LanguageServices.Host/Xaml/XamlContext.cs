@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis.Text;
 
 namespace Codalus.LanguageServices.Host.Xaml;
 
-/// <summary>An <c>.axaml</c> file's text (the editor's while it is open), its parse, and its project's type information.</summary>
+/// <summary>A XAML file's text (the editor's while it is open), its parse, and its project's type information.</summary>
 internal sealed class XamlContext
 {
     private XamlContext(string path, SourceText text, Project? project, Compilation? compilation)
@@ -25,14 +25,15 @@ internal sealed class XamlContext
 
     public XamlDocument Document { get; }
 
-    /// <summary>The project whose additional file it is (Avalonia's targets add every <c>AvaloniaXaml</c> item), or null.</summary>
+    /// <summary>The project whose additional file it is (Avalonia's targets add every <c>AvaloniaXaml</c> item, MAUI's every <c>MauiXaml</c> item), or null.</summary>
     public Project? Project { get; }
 
     public Compilation? Compilation { get; }
 
     public XamlTypeSystem? Types { get; }
 
-    public static bool IsXaml(string path) => path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Avalonia's <c>.axaml</c> files and <c>.xaml</c> files (.NET MAUI's, M20a); a file's compilation decides its dialect.</summary>
+    public static bool IsXaml(string path) => path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The file's context: its project's additional document (and compilation), or the open text alone.</summary>
     public static async Task<XamlContext?> CreateAsync(Solution solution, string path, SourceText? openText, CancellationToken cancellationToken)
@@ -158,9 +159,17 @@ internal sealed class XamlContext
         return null;
     }
 
-    /// <summary>Whether bindings at <paramref name="element"/> compile (<c>x:CompileBindings</c>, else the project's <c>AvaloniaUseCompiledBindingsByDefault</c>).</summary>
+    /// <summary>
+    /// Whether bindings at <paramref name="element"/> compile (<c>x:CompileBindings</c>, else the project's
+    /// <c>AvaloniaUseCompiledBindingsByDefault</c>). MAUI compiles every binding under an <c>x:DataType</c>.
+    /// </summary>
     public bool CompilesBindings(XamlElement element)
     {
+        if (Types is { IsMaui: true, IsAvalonia: false })
+        {
+            return true;
+        }
+
         for (var current = element; current is not null; current = current.Parent)
         {
             if (current.Attribute("x:CompileBindings")?.Value is { } value)

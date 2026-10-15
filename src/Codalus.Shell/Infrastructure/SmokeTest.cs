@@ -1135,6 +1135,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
+        await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
 
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
@@ -1782,6 +1783,53 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.StopRunning();
             await WaitAsync(() => !shell.AspireWindow.IsRunning && shell.Runs.Running.Count == 0, "stopping the AppHost ends its projects", 60).ConfigureAwait(true);
         }
+    }
+
+    private async Task MauiStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "Maui");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "Maui"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "Maui.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the MAUI solution is open (its packages restored)", 600).ConfigureAwait(true);
+        var app = Path.Combine(target, "TodoApp", "TodoApp.csproj");
+        Check(shell.Solutions.Projects.TryGetValue(app, out var info) && info.UsesMaui, "TodoApp is a .NET MAUI project");
+        shell.SetStartupProject(app);
+        await WaitAsync(() => shell.Toolbar.HasDevice, "the toolbar shows the device picker").ConfigureAwait(true);
+
+        var path = Path.Combine(target, "MauiViews", "Views", "TodoPage.xaml");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.XamlLanguageId, "the file is XAML for the C# host: " + editor.Model.LanguageId);
+        MoveCaret(editor, "Text=\"{Binding NewTitle}\"", "Text=\"{Binding ".Length);
+        var asked = Stopwatch.StartNew();
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "AddCommand"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                MoveCaret(editor, "Text=\"{Binding NewTitle}\"", "Text=\"{Binding ".Length);
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "the binding path completes the view model's members (x:DataType)", 360).ConfigureAwait(true);
+        editor.CompletionWindow!.Close();
+
+        shell.ShowDevices();
+        await WaitAsync(() => shell.DevicesWindow.Toolchain.Length > 0, "the Devices window shows the Android toolchain").ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("maui-devices.png");
     }
 
     private async Task XamlPreviewStepAsync()

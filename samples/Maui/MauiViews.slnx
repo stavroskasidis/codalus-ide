@@ -1,0 +1,4 @@
+<Solution>
+  <!-- The library alone: it loads and its XAML is edited without the MAUI workloads (the C# host's tests). -->
+  <Project Path="MauiViews/MauiViews.csproj" />
+</Solution>

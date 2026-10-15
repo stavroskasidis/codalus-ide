@@ -19,7 +19,7 @@ public static class BuiltInLanguages
             L(LanguageRegistry.PlainText, "Plain Text", [".txt", ".log"]),
             L("csharp", "C#", [".cs", ".csx"]),
             L("msbuild", "MSBuild", [".csproj", ".fsproj", ".vbproj", ".proj", ".props", ".targets", ".projitems", ".shproj", ".esproj", ".sqlproj", ".dcproj", ".wapproj", ".tasks"]),
-            L("xml", "XML", [".xml", ".xsd", ".xsl", ".xslt", ".xaml", ".resx", ".runsettings", ".nuspec", ".config", ".slnx", ".svg", ".wsdl", ".plist", ".vsixmanifest", ".manifest", ".appxmanifest", ".dtd"]),
+            L("xml", "XML", [".xml", ".xsd", ".xsl", ".xslt", ".resx", ".runsettings", ".nuspec", ".config", ".slnx", ".svg", ".wsdl", ".plist", ".vsixmanifest", ".manifest", ".appxmanifest", ".dtd"]),
             L("json", "JSON", [".json", ".slnf", ".webmanifest", ".har", ".jsonl"], [".babelrc", ".eslintrc", "composer.lock", ".watchmanconfig"]),
             L("jsonc", "JSON with Comments", [".jsonc", ".code-workspace"], ["tsconfig.json", "jsconfig.json", ".devcontainer.json", "devcontainer.json", ".jshintrc", ".jscsrc", "launchSettings.json", "settings.json", "keybindings.json"], ["tsconfig.*.json", "jsconfig.*.json"]),
             L("yaml", "YAML", [".yml", ".yaml"], [".clang-format", ".clang-tidy"]),
@@ -56,6 +56,7 @@ public static class BuiltInLanguages
             L("php", "PHP", [".php"]),
             L("razor", "Razor", [".cshtml", ".razor"]),
             L("axaml", "Avalonia XAML", [".axaml"]),
+            L("xaml", "XAML", [".xaml"]), // .NET MAUI's (M20a), served by the C# host like Avalonia's
             L("http", "HTTP", [".http", ".rest"]),
             L("t4", "T4 Text Template", [".tt", ".ttinclude", ".t4"]),
             L("proto", "Protocol Buffers", [".proto"]),

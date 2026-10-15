@@ -84,7 +84,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.RemoteToolWindows()).Concat(BuiltIns.AiToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.RemoteToolWindows()).Concat(BuiltIns.AiToolWindows()).Concat(BuiltIns.MobileToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -134,6 +134,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeXaml();
         InitializeUpdates();
         InitializeRemote();
+        InitializeMobile();
         InitializeProgress();
         InitializePluginFiles();
         HookAuthentication();
@@ -168,6 +169,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterXamlCommands(this);
         BuiltIns.RegisterRemoteCommands(this);
         BuiltIns.RegisterAiCommands(this);
+        BuiltIns.RegisterMobileCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterPackageCommands(this);
@@ -186,6 +188,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterXamlMenus(Workbench.Menus);
         BuiltIns.RegisterRemoteMenus(Workbench.Menus);
         BuiltIns.RegisterAiMenus(Workbench.Menus);
+        BuiltIns.RegisterMobileMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
         BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
         BuiltIns.RegisterProjectSystemMenus(Workbench.Menus);
@@ -497,6 +500,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             BenchmarksViewModel.ToolWindowId => BenchmarksWindow,
             XamlPreviewViewModel.ToolWindowId => XamlPreview,
             RemotePortsViewModel.ToolWindowId => PortsWindow,
+            DevicesViewModel.ToolWindowId => DevicesWindow,
             SourceControlProvidersWindow => SourceControlProviders(),
             PluginGalleryWindow => PluginGallery(),
             ComponentsWindow => ComponentsPage(),

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Codalus.Platform;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
+using Codalus.Workbench.Mobile;
 using Codalus.Workbench.Setup;
 
 namespace Codalus.Shell;
@@ -64,7 +65,7 @@ public sealed partial class ShellHost
     {
         try
         {
-            Tools = await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true);
+            Tools = [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true), .. await MobileToolsAsync().ConfigureAwait(true)];
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {
@@ -111,8 +112,50 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>
+    /// What the solution's mobile projects need (M20a): their workloads, and the Android SDK and a JDK when one targets
+    /// Android. Nothing when the solution has no mobile project.
+    /// </summary>
+    private async Task<IReadOnlyList<ToolStatus>> MobileToolsAsync()
+    {
+        var projects = MobileProjects();
+        if (projects.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = new List<ToolStatus>();
+        var dotnet = EnvironmentCheck.FindDotnet() ?? "dotnet";
+        var installed = await Mobile.InstalledWorkloadsAsync(dotnet, Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true) ?? [];
+        var needed = projects.SelectMany(p => p.TargetFrameworks.Select(MobileTargets.PlatformOf)
+                .Where(f => MobileTargets.RunsOn(f, Workbench.Platform))
+                .Select(f => MobileTargets.Workload(f, p.UsesMaui)))
+            .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal);
+        foreach (var workload in needed)
+        {
+            var found = installed.Contains(workload, StringComparer.OrdinalIgnoreCase) || (workload.StartsWith("maui-", StringComparison.Ordinal) && installed.Contains("maui", StringComparer.OrdinalIgnoreCase));
+            rows.Add(new ToolStatus(WorkloadToolPrefix + workload, Localizer.Format("msg.setup.workload", ".NET workload {0}", workload), false, found ? ToolState.Found : ToolState.Missing,
+                Localizer.Get("msg.setup.workloadNeededFor", "Building the solution's .NET MAUI and mobile projects")));
+        }
+
+        if (projects.Any(p => MobileTargets.FrameworkFor(p, MobilePlatform.Android) is not null))
+        {
+            rows.AddRange(Mobile.Toolchain.Status(Mobile.Android()));
+        }
+
+        return rows;
+    }
+
+    private const string WorkloadToolPrefix = "workload:";
+
     /// <summary>The install plan for a tool on this machine, or null.</summary>
-    public InstallPlan? PlanFor(ToolStatus tool) => InstallPlans.For(
+    public InstallPlan? PlanFor(ToolStatus tool) => tool.Id is "android-sdk" or "jdk"
+        ? MobileProjects().Any(p => MobileTargets.FrameworkFor(p, MobilePlatform.Android) is not null)
+            ? new InstallPlan(tool.Id, InstallKind.Run, Localizer.Get("msg.setup.installAndroid", "Install the Android SDK and a JDK through the Android workload"), "dotnet build -t:InstallAndroidDependencies")
+            : null
+        : tool.Id.StartsWith(WorkloadToolPrefix, StringComparison.Ordinal)
+        ? new InstallPlan(tool.Id, InstallKind.Terminal, Localizer.Format("msg.setup.installWorkload", "Install the .NET workload {0}", tool.Id[WorkloadToolPrefix.Length..]), "dotnet workload install " + tool.Id[WorkloadToolPrefix.Length..])
+        : InstallPlans.For(
         tool,
         Workbench.Platform,
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -125,6 +168,14 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task InstallToolAsync(ToolStatus tool, Func<InstallPlan, Task<bool>>? confirm = null, ProcessRunner? run = null)
     {
+        if (tool.Id is "android-sdk" or "jdk")
+        {
+            // Through the Android workload's own target, which needs a project (M20a).
+            await InstallAndroidDependenciesAsync().ConfigureAwait(true);
+            await CheckEnvironmentAsync(offer: false).ConfigureAwait(true);
+            return;
+        }
+
         if (PlanFor(tool) is not { } plan)
         {
             Workbench.Notifications.Info(Localizer.Format("msg.setup.noPlan", "There's no way to install {0} from here on this system.", tool.Title));

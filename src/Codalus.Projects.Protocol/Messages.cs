@@ -170,6 +170,15 @@ public sealed record ProjectInfo(
     /// <summary>An Aspire AppHost (<c>IsAspireHost</c>, M17b): running it orchestrates its resources (ADR 0043).</summary>
     public bool IsAspireHost { get; init; }
 
+    /// <summary>A .NET MAUI project (<c>UseMaui</c>, M20a): its platform frameworks run on devices, emulators and simulators.</summary>
+    public bool UsesMaui { get; init; }
+
+    /// <summary>
+    /// Workload packs the project needs and the SDK doesn't have (the SDK's <c>MissingWorkloadPack</c> items, M20a), so
+    /// it can't build until <c>dotnet workload restore</c> or an install; empty when none is missing.
+    /// </summary>
+    public string[] MissingWorkloadPacks { get; init; } = [];
+
     /// <summary>A Docker Compose project (<c>.dcproj</c>, M17a): loaded from its XML, never evaluated or built (ADR 0042).</summary>
     [JsonIgnore]
     public bool IsComposeProject => Path.EndsWith(".dcproj", StringComparison.OrdinalIgnoreCase);
