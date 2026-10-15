@@ -230,10 +230,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Recent.Add(Path.Combine(samples, "BuildAndRun", "BuildAndRun.slnx"));
             shell.ShowStartWindow();
             await WaitAsync(() => shell.IsStartWindowOpen && shell.StartWindowModel is { IsEmpty: false }, "the start window opens with its recent list").ConfigureAwait(true);
-            await RenderedAsync().ConfigureAwait(true);
-            Screenshot("start-window.png", Avalonia.Controls.TopLevel.GetTopLevel(Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+            // Its own frames, not the main window's: the screenshot renders the start window once it has drawn itself.
+            var start = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
                 ? desktop.Windows.OfType<Views.StartWindow>().FirstOrDefault()
-                : null));
+                : null;
+            await RenderedAsync(start).ConfigureAwait(true);
+            Screenshot("start-window.png", start);
             shell.StartWindowModel!.ContinueCommand.Execute(null);
             await WaitAsync(() => !shell.IsStartWindowOpen, "Continue without code closes it").ConfigureAwait(true);
         }).ConfigureAwait(true);
@@ -1474,6 +1476,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             }
 
             return null;
+        }
+
+        if (_work.Length == 0)
+        {
+            return null; // no fixture folder: CODALUS_SMOKE_ONLY left out the steps that make it
         }
 
         Directory.CreateDirectory(_work);
@@ -3084,10 +3091,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private string RunOutput() =>
         shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Hello")?.GetText() ?? string.Empty;
 
-    private async Task RenderedAsync()
+    /// <summary>Two frames of <paramref name="of"/> (the main window by default) have been rendered.</summary>
+    private async Task RenderedAsync(Avalonia.Controls.TopLevel? of = null)
     {
+        var target = of ?? window;
         var rendered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        window.RequestAnimationFrame(_ => window.RequestAnimationFrame(_ => rendered.TrySetResult()));
+        target.RequestAnimationFrame(_ => target.RequestAnimationFrame(_ => rendered.TrySetResult()));
         await rendered.Task.ConfigureAwait(true);
     }
 
