@@ -116,7 +116,7 @@ public sealed partial class ShellHost
         }
 
         var edit = await client.RenameAsync(editor.Model.Uri, position, newName, CancellationToken.None).ConfigureAwait(true);
-        if (edit is null || edit.DocumentChanges.Length == 0)
+        if (edit is null || edit.DocumentChanges.Length == 0 && edit.ResourceOperations.Length == 0)
         {
             ShowMessage("Nothing to rename.");
             return;
@@ -178,7 +178,7 @@ public sealed partial class ShellHost
         if (owner != client)
         {
             // A linter's fix: its edit, then its command (whose edit the server sends back, applied as it comes).
-            if (picked.Edit is { DocumentChanges.Length: > 0 } linterEdit)
+            if (picked.Edit is { } linterEdit && (linterEdit.DocumentChanges.Length > 0 || linterEdit.ResourceOperations.Length > 0))
             {
                 await ApplyWorkspaceEditAsync(linterEdit).ConfigureAwait(true);
             }
@@ -210,7 +210,7 @@ public sealed partial class ShellHost
         }
 
         var resolved = await client.ResolveCodeActionAsync(picked, CancellationToken.None).ConfigureAwait(true);
-        if (resolved.Edit is not { DocumentChanges.Length: > 0 } edit)
+        if (resolved.Edit is not { } edit || edit.DocumentChanges.Length == 0 && edit.ResourceOperations.Length == 0)
         {
             ShowMessage("The action made no changes (it may need an editor feature Codalus doesn't have yet).");
             return;
@@ -375,7 +375,7 @@ public sealed partial class ShellHost
     private async Task<bool> PreviewAndApplyAsync(string title, WorkspaceEdit edit)
     {
         var details = await PreviewAsync(edit).ConfigureAwait(true);
-        var files = edit.DocumentChanges.Length;
+        var files = edit.DocumentChanges.Select(c => c.TextDocument.Uri).Concat(edit.ResourceOperations.Select(o => o.Uri)).Distinct(StringComparer.Ordinal).Count();
         var choice = await Dialogs.ShowAsync(new DialogRequest(title, files == 1 ? "Changes in 1 file:" : $"Changes in {files} files:", ["Apply", "Cancel"])
         {
             Details = details,
@@ -431,8 +431,88 @@ public sealed partial class ShellHost
             return false;
         }
 
-        ShowMessage(edit.DocumentChanges.Length == 1 ? "Changed 1 file." : $"Changed {edit.DocumentChanges.Length} files.");
+        // Renamed and deleted files, after the text edits (which are in their old positions).
+        foreach (var operation in edit.ResourceOperations)
+        {
+            if (DocumentUris.ToPath(operation.Uri) is not { } path)
+            {
+                continue;
+            }
+
+            try
+            {
+                await ApplyResourceOperationAsync(operation, path).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException)
+            {
+                failed.Add(Path.GetFileName(path) + ": " + ex.Message);
+            }
+        }
+
+        if (failed.Count > 0)
+        {
+            Workbench.Notifications.Warning("Some files could not be renamed or deleted: " + string.Join(", ", failed));
+            return false;
+        }
+
+        var count = edit.DocumentChanges.Length + edit.ResourceOperations.Count(o => !edit.DocumentChanges.Any(c => c.TextDocument.Uri == o.Uri));
+        ShowMessage(count == 1 ? "Changed 1 file." : $"Changed {count} files.");
         return true;
+    }
+
+    /// <summary>
+    /// Renames or deletes a file of a workspace edit through the build host, so project items, <c>DependentUpon</c> and
+    /// solution entries follow (without a solution, on disk). An open file is saved first (it holds the edit's text) and
+    /// reopened under its new name; a deleted one is closed.
+    /// </summary>
+    private async Task ApplyResourceOperationAsync(ResourceOperation operation, string path)
+    {
+        var open = Editors.FirstOrDefault(e => string.Equals(e.Model.Path, path, StringComparison.Ordinal));
+        var caret = open?.Controller?.Editor.CaretOffset;
+        if (operation.Kind == ResourceOperationKinds.Rename && operation.NewUri is { } newUri && DocumentUris.ToPath(newUri) is { } newPath)
+        {
+            if (open is not null && open.Model.IsModified)
+            {
+                await open.Model.SaveAsync(CancellationToken.None).ConfigureAwait(true);
+            }
+
+            if (open is not null)
+            {
+                Layout.CloseDocument(open);
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(newPath)!);
+            if (Solutions.IsOpen)
+            {
+                await Solutions.RenameAsync(path, newPath, CancellationToken.None).ConfigureAwait(true);
+            }
+            else
+            {
+                File.Move(path, newPath);
+            }
+
+            if (open is not null && await OpenFileAsync(newPath).ConfigureAwait(true) is { Controller: { } controller } && caret is { } offset)
+            {
+                controller.Editor.CaretOffset = Math.Min(offset, controller.Editor.Document.TextLength);
+            }
+        }
+        else if (operation.Kind == ResourceOperationKinds.Delete)
+        {
+            if (open is not null)
+            {
+                open.Model.Text.UndoStack.MarkAsOriginalFile(); // nothing to save: the file goes
+                Layout.CloseDocument(open);
+            }
+
+            if (Solutions.IsOpen)
+            {
+                await Solutions.DeleteAsync([path], CancellationToken.None).ConfigureAwait(true);
+            }
+            else if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
     }
 
     /// <summary>Lines of a preview: per file a header, then for each changed region the old lines and the new lines.</summary>
@@ -454,6 +534,16 @@ public sealed partial class ShellHost
             {
                 lines.Add(new DetailLine("…"));
                 break;
+            }
+        }
+
+        foreach (var operation in edit.ResourceOperations)
+        {
+            if (DocumentUris.ToPath(operation.Uri) is { } path)
+            {
+                lines.Add(operation.Kind == ResourceOperationKinds.Rename && operation.NewUri is { } to && DocumentUris.ToPath(to) is { } target
+                    ? new DetailLine($"{path} → renamed to {Path.GetFileName(target)}", "header")
+                    : new DetailLine($"{path} → deleted", "removed"));
             }
         }
 

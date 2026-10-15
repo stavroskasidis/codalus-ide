@@ -17,7 +17,7 @@ Codalus IDE uses Roslyn, with your projects' analyzers and source generators:
 - **Completion** (`Ctrl+Space`, and while you type). It can add the `using` an item needs.
 - **Parameter info** (`Ctrl+Shift+Space`) and **Quick Info** on hover (`Ctrl+K Ctrl+I`).
 - **Live diagnostics**: squiggles as you type, and the **Error List** (View → Error List). The Error List filters by severity, by source (Build, IntelliSense or both) and by document; double-click an entry to go to it.
-- **Quick actions** (`Ctrl+.` or the lightbulb): code fixes and refactorings, each previewed before it applies.
+- **Quick actions** (`Ctrl+.` or the lightbulb): code fixes and refactorings, each previewed before it applies. Those that rename or delete files (Rename File to Match Type, Move Type to File) do it through the project, so its items follow; an open file is saved and reopened under its new name.
 - **Rename** (`F2`): previewed across the solution.
 - **Format Document** (`Ctrl+K Ctrl+D`) and **Format Selection**, following `.editorconfig`, and formatting as you type (`;`, `}`).
 

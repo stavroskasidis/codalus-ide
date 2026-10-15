@@ -102,7 +102,7 @@ The same client talks to every language server: the C# host, the markup host and
 | Parameter labels as `[start, end]` offsets | Substrings of the signature label. |
 | `Location`, `Location[]` or `LocationLink[]` | `Location[]` (a link's target selection range). |
 | A prepare-rename range or `{defaultBehavior}` | `{range, placeholder}`, or null. |
-| `WorkspaceEdit.changes` | `documentChanges`. File operations are skipped. |
+| `WorkspaceEdit.changes` | `documentChanges`. A created file becomes an edit of a new, empty file; renamed and deleted files become `resourceOperations` `[{kind: rename \| delete, uri, newUri?}]`, which the client applies after the text edits (through the build host, so project items follow). |
 | Bare `Command`s among code actions; numeric diagnostic codes | Dropped; strings. |
 | `WorkspaceSymbol` with only a URI | A location at the start of the file. |
 | Flat `SymbolInformation[]` for `documentSymbol` (M12a) | A `DocumentSymbol` tree, each symbol a child of the innermost earlier symbol whose range contains it. |

@@ -327,7 +327,23 @@ public sealed record OptionalVersionedTextDocumentIdentifier(string Uri, int? Ve
 public sealed record TextDocumentEdit(OptionalVersionedTextDocumentIdentifier TextDocument, TextEdit[] Edits);
 
 /// <summary>Only <see cref="DocumentChanges"/> (text edits per document) is used here.</summary>
-public sealed record WorkspaceEdit(TextDocumentEdit[] DocumentChanges);
+public sealed record WorkspaceEdit(TextDocumentEdit[] DocumentChanges)
+{
+    /// <summary>
+    /// Files renamed or deleted (LSP's <c>RenameFile</c> and <c>DeleteFile</c> in <c>documentChanges</c>), applied after
+    /// the text edits, which are in the old files' positions: Roslyn's Rename File to Match Type, a removed document.
+    /// </summary>
+    public ResourceOperation[] ResourceOperations { get; init; } = [];
+}
+
+/// <summary>A file renamed (<see cref="NewUri"/>) or deleted, in a <see cref="WorkspaceEdit"/>.</summary>
+public sealed record ResourceOperation(string Kind, string Uri, string? NewUri = null);
+
+public static class ResourceOperationKinds
+{
+    public const string Rename = "rename";
+    public const string Delete = "delete";
+}
 
 // ------------------------------------------------------------------ code actions
 

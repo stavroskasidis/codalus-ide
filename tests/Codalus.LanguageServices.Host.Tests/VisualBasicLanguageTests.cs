@@ -148,6 +148,22 @@ public sealed class VisualBasicLanguageTests(VisualBasicLanguageFixture vb) : IC
     }
 
     [Fact]
+    public async Task Rename_file_to_match_its_type_is_a_rename_of_the_file()
+    {
+        await FreshAsync(Inventory);
+        await vb.EditAsync(Inventory, "Public Class Inventory", "Public Class InventoryList");
+        var at = vb.At(Inventory, "Public Class InventoryList", "Public Class Inv".Length);
+        var actions = await vb.Client.CodeActionsAsync(Uri(Inventory), new Protocol.Range(at, at), [], Ct);
+        var renameFile = Assert.Single(actions, a => a.Title.Contains("Rename file to", StringComparison.Ordinal) && a.Title.Contains("InventoryList.vb", StringComparison.Ordinal));
+        var edit = (await vb.Client.ResolveCodeActionAsync(renameFile, Ct)).Edit!;
+        var operation = Assert.Single(edit.ResourceOperations);
+        Assert.Equal(ResourceOperationKinds.Rename, operation.Kind);
+        Assert.Equal(Uri(Inventory), operation.Uri);
+        Assert.Equal(Uri(Path.Combine(Path.GetDirectoryName(Inventory)!, "InventoryList.vb")), operation.NewUri);
+        await FreshAsync(Inventory);
+    }
+
+    [Fact]
     public async Task Enter_adds_the_end_of_a_block_and_fixes_keyword_casing_and_xml_tags_close()
     {
         await FreshAsync(Inventory);

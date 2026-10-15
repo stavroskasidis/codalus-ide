@@ -136,7 +136,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
     /// <summary>What this client supports, so servers built for any LSP client send results it can use.</summary>
     private const string ClientCapabilities = """
         {
-          "workspace": { "configuration": true, "workspaceFolders": true, "symbol": {}, "workspaceEdit": { "documentChanges": true }, "applyEdit": true, "executeCommand": {} },
+          "workspace": { "configuration": true, "workspaceFolders": true, "symbol": {}, "workspaceEdit": { "documentChanges": true, "resourceOperations": ["create", "rename", "delete"] }, "applyEdit": true, "executeCommand": {} },
           "textDocument": {
             "synchronization": { "didSave": true, "dynamicRegistration": false },
             "completion": { "completionItem": { "snippetSupport": true, "documentationFormat": ["markdown", "plaintext"], "resolveSupport": { "properties": ["documentation", "detail", "textEdit", "additionalTextEdits"] }, "insertReplaceSupport": false }, "contextSupport": true },
