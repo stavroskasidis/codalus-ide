@@ -118,7 +118,21 @@ public sealed class PackageSignInTests : IAsyncLifetime
         var result = await packages.SignInAsync("private", Timeout());
         Assert.True(result.SignedIn, result.Message);
         Assert.Equal("Signed in to private.", result.Message);
-        Assert.Contains(messages, m => m.StartsWith("private: ", StringComparison.Ordinal) && m.Contains("FAKE-1234", StringComparison.Ordinal) && m.Contains("https://login.example.invalid/device", StringComparison.Ordinal));
+        // The message is a notification sent before the answer, but handled on its own: it may land just after it.
+        bool Shown()
+        {
+            lock (messages)
+            {
+                return messages.Any(m => m.StartsWith("private: ", StringComparison.Ordinal) && m.Contains("FAKE-1234", StringComparison.Ordinal) && m.Contains("https://login.example.invalid/device", StringComparison.Ordinal));
+            }
+        }
+
+        for (var waited = 0; waited < 100 && !Shown(); waited++)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(Shown(), "The device code didn't reach the shell: " + string.Join(" | ", messages));
 
         var after = await packages.SearchAsync("Contoso", prerelease: false, 0, 10, "private", Timeout());
         Assert.Empty(after.Errors);

@@ -196,12 +196,24 @@ public sealed class PluginHostIntegrationTests : IAsyncLifetime
     public async Task A_plugin_task_reports_its_progress_and_the_user_can_cancel_it()
     {
         // IWindow.WithProgressAsync (API 1.0): the task is the workbench's while it runs, and Cancel reaches the plugin.
+        // Caught (and cancelled) as the progress arrives, not by polling: the count lasts four seconds, which a busy
+        // runner's test thread can miss altogether.
+        var seen = new TaskCompletionSource<ProgressTask>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnChanged(object? sender, EventArgs e)
+        {
+            if (_workbench.Progress.Running.FirstOrDefault(t => t is { Title: "Counting", Percent: >= 10 } && t.Message!.EndsWith("of 10", StringComparison.Ordinal)) is { } counting
+                && seen.TrySetResult(counting))
+            {
+                counting.Cancel();
+            }
+        }
+
+        _workbench.Progress.Changed += OnChanged;
         var run = _workbench.Commands.ExecuteAsync("hello.count", Timeout());
-        await WaitUntilAsync(() => _workbench.Progress.Running.Any(t => t is { Title: "Counting", Percent: >= 10 } && t.Message!.EndsWith("of 10", StringComparison.Ordinal)));
-        var task = _workbench.Progress.Running.Single(t => t.Title == "Counting");
+        var task = await seen.Task.WaitAsync(Timeout());
+        _workbench.Progress.Changed -= OnChanged;
         Assert.Equal("Hello World", task.Source);
         Assert.True(task.Cancellable);
-        task.Cancel();
         Assert.StartsWith("cancelled at ", (await run)!.Value.GetString(), StringComparison.Ordinal);
         await WaitUntilAsync(() => _workbench.Progress.Running.Count == 0);
     }
