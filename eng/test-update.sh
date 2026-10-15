@@ -5,7 +5,8 @@
 #   2. installs N the way a user does (Windows: the silent Setup.exe; Linux: the AppImage; macOS: the .pkg in the
 #      user's home);
 #   3. runs N with `--update-now` on a tampered copy of the feed: it must refuse it (exit code 2);
-#   4. runs N with `--update-now` on the feed: it downloads N+1 and has it applied once it exits;
+#   4. runs N with `--update-now` on the feed: it downloads N+1 and has it applied once it exits (on macOS with the
+#      home folder on another volume than the app, a disk image, as on a Mac whose home is on an external disk);
 #   5. checks that the installed app is now N+1, then uninstalls it.
 # The app reads the feed from a folder (CODALUS_UPDATE_SOURCE) and trusts the throwaway key for that folder only
 # (CODALUS_UPDATE_TEST_KEY).
@@ -21,6 +22,7 @@ new="$base-test.2"
 fail() { echo "error: $*" >&2; exit 1; }
 native() { if command -v cygpath > /dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 
+[ "$(uname -s)" != Darwin ] || hdiutil detach -quiet -force "$work/home-volume" > /dev/null 2>&1 || true # a run that was stopped
 rm -rf "$work"
 mkdir -p "$work"
 echo "== A throwaway feed key"
@@ -50,6 +52,7 @@ for file in "$tampered"/releases.*.json; do
 done
 
 echo "== Installing $old"
+update_env=()
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*)
     root="$work/install"
@@ -64,7 +67,16 @@ case "$(uname -s)" in
     installer -pkg "$work/old/codalus-$old-$rid.pkg" -target CurrentUserHomeDirectory
     pkill -f "$bundle/Contents/MacOS/codalus" || true
     app="$bundle/Contents/MacOS/codalus"
-    uninstall() { rm -rf "$bundle"; pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i codalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true; }
+    # Velopack stages updates under ~/Library/Caches and renames them onto the bundle, which can't cross volumes.
+    hdiutil create -quiet -size 1g -type SPARSE -fs APFS -volname CodalusUpdateHome "$work/home"
+    mkdir -p "$work/home-volume"
+    hdiutil attach -quiet -nobrowse -mountpoint "$work/home-volume" "$work/home.sparseimage"
+    update_env=(HOME="$work/home-volume")
+    uninstall() {
+      rm -rf "$bundle"
+      pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i codalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true
+      hdiutil detach -quiet -force "$work/home-volume" > /dev/null 2>&1 || true
+    }
     ;;
   Linux)
     mkdir -p "$work/install"
@@ -86,7 +98,7 @@ CODALUS_UPDATE_SOURCE="$(native "$tampered")" CODALUS_UPDATE_TEST_KEY="$public_k
 [ "$(installed_version)" = "Codalus IDE $old" ] || fail "the tampered feed changed the install"
 
 echo "== Updating $old to $new"
-CODALUS_UPDATE_SOURCE="$(native "$feed")" CODALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now \
+env ${update_env[@]+"${update_env[@]}"} CODALUS_UPDATE_SOURCE="$(native "$feed")" CODALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now \
   || fail "--update-now failed (exit code $?)"
 # Velopack's updater applies the package once the app has exited.
 for _ in $(seq 90); do

@@ -19,6 +19,10 @@ internal static partial class Installation
         {
             app = WithWindowsHooks(app);
         }
+        else if (OperatingSystem.IsMacOS())
+        {
+            app = app.SetLocator(new MacUpdateLocator()); // updates staged on the bundle's volume
+        }
 
         // A downloaded update is applied when M32's update service says so, never by a `codalus merge` call.
         app.SetAutoApplyOnStartup(false).Run();
@@ -30,6 +34,23 @@ internal static partial class Installation
         app.OnAfterInstallFastCallback(_ => AddCommand())
             .OnAfterUpdateFastCallback(_ => AddCommand())
             .OnBeforeUninstallFastCallback(_ => RemoveCommand());
+
+    // ------------------------------------------------------------------ macOS: updates staged on the bundle's volume
+
+    /// <summary>
+    /// Null when Velopack's <paramref name="packages"/> folder can be renamed onto <paramref name="bundle"/> (same volume,
+    /// or a volume we can't tell); otherwise the first of <paramref name="candidates"/> on the bundle's volume, if any.
+    /// </summary>
+    internal static string? SameVolumeFolder(string bundle, string packages, IEnumerable<string> candidates, Func<string, long?> device)
+    {
+        var target = device(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(bundle)) ?? bundle);
+        if (target is null || device(packages) is not { } current || current == target)
+        {
+            return null;
+        }
+
+        return candidates.FirstOrDefault(c => device(c) == target);
+    }
 
     // ------------------------------------------------------------------ the `codalus` command on Windows
 

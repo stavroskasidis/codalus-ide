@@ -33,4 +33,50 @@ public sealed class InstallationTests
     {
         Assert.Equal("@echo off\r\n\"%~dp0..\\current\\codalus.exe\" %*\r\nexit /b %ERRORLEVEL%\r\n", Installation.CommandScript);
     }
+
+    // ------------------------------------------------------------------ macOS: updates staged on the bundle's volume
+
+    private static readonly Dictionary<string, long> s_devices = new(StringComparer.Ordinal)
+    {
+        ["/Applications"] = 1,
+        ["/Users/me/Library/Caches/velopack/Codalus/packages"] = 1,
+        ["/Volumes/M2/Users/me/Library/Caches/velopack/Codalus/packages"] = 2,
+        ["/var/folders/x/C/velopack/Codalus/packages"] = 1,
+        ["/Volumes/M2/tmp/velopack/Codalus/packages"] = 2,
+    };
+
+    private static long? Device(string path) => s_devices.TryGetValue(path.Replace('\\', '/'), out var device) ? device : null;
+
+    [Fact]
+    public void A_home_on_the_bundles_volume_keeps_velopacks_packages_folder()
+    {
+        Assert.Null(Installation.SameVolumeFolder("/Applications/Codalus IDE.app", "/Users/me/Library/Caches/velopack/Codalus/packages", ["/var/folders/x/C/velopack/Codalus/packages"], Device));
+    }
+
+    [Fact]
+    public void A_home_on_another_disk_stages_updates_in_the_first_folder_on_the_bundles_volume()
+    {
+        // The Mac's home on an external disk: UpdateMac's rename onto /Applications failed with "Cross-device link".
+        Assert.Equal(
+            "/var/folders/x/C/velopack/Codalus/packages",
+            Installation.SameVolumeFolder(
+                "/Applications/Codalus IDE.app/",
+                "/Volumes/M2/Users/me/Library/Caches/velopack/Codalus/packages",
+                ["/Volumes/M2/tmp/velopack/Codalus/packages", "/var/folders/x/C/velopack/Codalus/packages"],
+                Device));
+        Assert.Null(Installation.SameVolumeFolder("/Applications/Codalus IDE.app", "/Volumes/M2/Users/me/Library/Caches/velopack/Codalus/packages", ["/Volumes/M2/tmp/velopack/Codalus/packages"], Device));
+        Assert.Null(Installation.SameVolumeFolder("/Unknown/Codalus IDE.app", "/Volumes/M2/Users/me/Library/Caches/velopack/Codalus/packages", ["/var/folders/x/C/velopack/Codalus/packages"], Device));
+    }
+
+    [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("macos")]
+    public void A_folder_that_doesnt_exist_yet_is_on_its_nearest_existing_folders_volume()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS only");
+        var temp = Path.GetTempPath();
+
+        Assert.NotNull(MacUpdateLocator.Device(temp));
+        Assert.Equal(MacUpdateLocator.Device(temp), MacUpdateLocator.Device(Path.Combine(temp, "velopack", Guid.NewGuid().ToString("N"), "packages")));
+        Assert.Equal(MacUpdateLocator.Device("/Applications"), MacUpdateLocator.Device(temp)); // both on the system's data volume
+    }
 }
