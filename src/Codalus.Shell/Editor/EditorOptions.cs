@@ -26,6 +26,8 @@ public sealed class EditorOptions : ObservableObject
     public const string InlayParameterNamesKey = "editor.inlayHints.parameterNames";
     public const string InlayTypesKey = "editor.inlayHints.types";
     public const string CodeLensKey = "editor.codeLens";
+    public const string GitCodeLensKey = "editor.gitCodeLens";
+    public const string TestCodeLensKey = "editor.testCodeLens";
     public const string InlineDiagnosticsKey = "editor.inlineDiagnostics";
     public const string InheritanceMarginKey = "editor.inheritanceMargin";
     public const string IndentGuidesKey = "editor.guides.indentation";
@@ -123,6 +125,12 @@ public sealed class EditorOptions : ObservableObject
 
     public bool CodeLens { get; private set; }
 
+    /// <summary>CodeLens shows each member's last author and its numbers of authors and changes, from Git blame.</summary>
+    public bool GitCodeLens { get; private set; }
+
+    /// <summary>CodeLens shows each test's (and test class's) last outcome.</summary>
+    public bool TestCodeLens { get; private set; }
+
     public bool InlineDiagnostics { get; private set; }
 
     public bool InheritanceMargin { get; private set; }
@@ -146,6 +154,8 @@ public sealed class EditorOptions : ObservableObject
         InlayParameterNames = settings.GetBoolean(InlayParameterNamesKey, true);
         InlayTypes = settings.GetBoolean(InlayTypesKey, false);
         CodeLens = settings.GetBoolean(CodeLensKey, true);
+        GitCodeLens = settings.GetBoolean(GitCodeLensKey, true);
+        TestCodeLens = settings.GetBoolean(TestCodeLensKey, true);
         InlineDiagnostics = settings.GetBoolean(InlineDiagnosticsKey, false);
         InheritanceMargin = settings.GetBoolean(InheritanceMarginKey, true);
         IndentGuides = settings.GetBoolean(IndentGuidesKey, true);

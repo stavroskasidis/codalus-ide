@@ -111,6 +111,8 @@ internal static partial class BuiltIns
             Setting(EditorOptions.InlayParameterNamesKey, "true", SettingType.Boolean, "Inlay Hints: Parameter Names", "Show parameter names before literal and new arguments.", 13),
             Setting(EditorOptions.InlayTypesKey, "false", SettingType.Boolean, "Inlay Hints: Types", "Show the inferred types of var declarations and lambda parameters.", 14),
             Setting(EditorOptions.CodeLensKey, "true", SettingType.Boolean, "CodeLens", "Show reference and implementation counts at the end of declarations.", 15),
+            Setting(EditorOptions.GitCodeLensKey, "true", SettingType.Boolean, "CodeLens: Git History", "Show each member's last author and when, and its numbers of authors and changes, from Git blame (files in a repository).", 15),
+            Setting(EditorOptions.TestCodeLensKey, "true", SettingType.Boolean, "CodeLens: Test Status", "Show each test's last outcome, and how many of a test class's tests pass.", 15),
             Setting(EditorOptions.InlineDiagnosticsKey, "false", SettingType.Boolean, "Inline Diagnostics", "Show error and warning messages at the end of their line.", 16),
             Setting(EditorOptions.InheritanceMarginKey, "true", SettingType.Boolean, "Inheritance Margin", "Show glyphs for members that implement, override or are overridden, with navigation.", 17),
             Setting(EditorOptions.IndentGuidesKey, "true", SettingType.Boolean, "Indentation Guides", "Draw vertical lines at indentation levels.", 18),
