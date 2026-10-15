@@ -66,7 +66,7 @@ public sealed class DeclarativeViewHost : UserControl
 /// A file open in a plugin's custom editor (plugin API 1.0, M22a): the plugin's declarative view of it. The plugin's
 /// new text for the file makes it modified; Save writes that text.
 /// </summary>
-public sealed class CustomEditorDocument : ShellDocument
+public sealed class CustomEditorDocument : ShellDocument, ISavableDocument
 {
     public CustomEditorDocument(string path, string viewId, ContributedCustomEditor editor, PluginManager plugins)
     {

@@ -228,6 +228,13 @@ public sealed partial class ShellHost : IEditorServices
             return null;
         }
 
+        // A .resx file opens in the resource editor, unless the text editor was asked for or has it open.
+        if (initialContent is null && !textEditor && at is null && Views.ResxEditorDocument.IsResx(path) && !_models.ContainsKey(path) && File.Exists(path))
+        {
+            OpenResx(path, preview);
+            return null;
+        }
+
         // A plugin's custom editor claims the file (API 1.0), unless the text editor was asked for.
         if (initialContent is null && !textEditor && at is null && Plugins.CustomEditorFor(path) is { } custom && File.Exists(path)
             && await OpenInCustomEditorAsync(path, custom, preview).ConfigureAwait(true))
@@ -603,7 +610,7 @@ public sealed partial class ShellHost : IEditorServices
             if (choice == "Save")
             {
                 if ((document is CodeEditorDocument code && await SaveAsync(code.Model).ConfigureAwait(true))
-                    || (document is Views.CustomEditorDocument custom && await SaveCustomEditorAsync(custom).ConfigureAwait(true)))
+                    || (document is Views.ISavableDocument savable && await SaveDocumentAsync(document, savable).ConfigureAwait(true)))
                 {
                     document.CloseConfirmed();
                 }
@@ -621,9 +628,9 @@ public sealed partial class ShellHost : IEditorServices
         {
             await SaveAsync(editor.Model).ConfigureAwait(true);
         }
-        else if (Layout.ActiveDocument is Views.CustomEditorDocument custom)
+        else if (Layout.ActiveDocument is Views.ISavableDocument savable)
         {
-            await SaveCustomEditorAsync(custom).ConfigureAwait(true);
+            await SaveDocumentAsync(Layout.ActiveDocument, savable).ConfigureAwait(true);
         }
     }
 
@@ -634,9 +641,9 @@ public sealed partial class ShellHost : IEditorServices
             await SaveAsync(model).ConfigureAwait(true);
         }
 
-        foreach (var custom in Layout.Documents.OfType<Views.CustomEditorDocument>().Where(d => d.IsModified).ToList())
+        foreach (var document in Layout.Documents.Where(d => d.IsModified && d is Views.ISavableDocument).ToList())
         {
-            await SaveCustomEditorAsync(custom).ConfigureAwait(true);
+            await SaveDocumentAsync(document, (Views.ISavableDocument)document).ConfigureAwait(true);
         }
     }
 

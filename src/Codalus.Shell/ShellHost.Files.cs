@@ -72,6 +72,34 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>Opens a <c>.resx</c> file in the resource editor (deferred from M11).</summary>
+    public ResxEditorDocument OpenResx(string path, bool preview = false)
+    {
+        path = Path.GetFullPath(path);
+        if (Layout.FindDocument<ResxEditorDocument>(ResxEditorDocument.IdFor(path)) is { } open)
+        {
+            Layout.OpenDocument(open, preview, focus: !preview);
+            return open;
+        }
+
+        var document = new ResxEditorDocument(path, file => _ = OpenFileAsync(file, preview: false, at: null, initialContent: null, textEditor: true), RunCustomToolOnSave);
+        document.CloseRequested += (_, _) => _ = ConfirmCloseAsync(document);
+        Layout.OpenDocument(document, preview, focus: !preview);
+        _ = document.LoadAsync();
+        return document;
+    }
+
+    /// <summary>Open With Resource Editor: the selected or active <c>.resx</c> file.</summary>
+    public void OpenWithResourceEditor()
+    {
+        var selected = Explorer.Selected?.Node is { Kind: Codalus.Workbench.Projects.ExplorerNodeKind.File, Path: { } file } ? file : null;
+        var path = Workbench.Context.GetValue("focusedView") is "solutionExplorer" ? selected ?? Layout.ActiveDocument?.FilePath : Layout.ActiveDocument?.FilePath ?? selected;
+        if (path is not null && ResxEditorDocument.IsResx(path) && File.Exists(path))
+        {
+            OpenResx(path);
+        }
+    }
+
     /// <summary>Opens an image file in the image viewer.</summary>
     public ImageDocument OpenImage(string path, bool preview = false)
     {

@@ -81,11 +81,12 @@ public sealed partial class ShellHost
         }
     }
 
-    private async Task<bool> SaveCustomEditorAsync(CustomEditorDocument document)
+    /// <summary>Saves a custom editor's or the resource editor's document, saying so in the status bar.</summary>
+    private async Task<bool> SaveDocumentAsync(Docking.ShellDocument document, ISavableDocument savable)
     {
         try
         {
-            await document.SaveAsync().ConfigureAwait(true);
+            await savable.SaveAsync().ConfigureAwait(true);
             StatusBar.ShowMessage(Localizer.Format("msg.editor.saved", "Saved {0}", document.Title), TimeSpan.FromSeconds(3));
             return true;
         }

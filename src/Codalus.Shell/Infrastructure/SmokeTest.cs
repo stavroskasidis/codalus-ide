@@ -2366,6 +2366,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.ProjectItems.SetAsync(greetings, template, null, new Dictionary<string, string?> { [Projects.Protocol.ItemMetadataNames.Generator] = "TextTemplatingFileGenerator" }, CancellationToken.None).ConfigureAwait(true);
             var strings = await shell.RunCustomToolAsync(resx).ConfigureAwait(true);
             Check(strings?.Succeeded == true && ReadText(created[2]).Contains("internal static string SmokeGreeting", StringComparison.Ordinal), "the ResX generator writes SmokeStrings.Designer.cs");
+            var resources = shell.OpenResx(resx);
+            await resources.LoadAsync().ConfigureAwait(true);
+            Check(resources.Rows.Any(r => r is { Name: "SmokeGreeting", Value: "Hello from a resource" }), "the resource editor lists SmokeStrings.resx's strings");
+            shell.Layout.CloseDocument(resources);
             var numbers = await shell.RunCustomToolAsync(template).ConfigureAwait(true);
             Check(numbers?.Succeeded == true && ReadText(created[3]).Contains("public const int N3 = 9;", StringComparison.Ordinal),
                 "the T4 host transforms SmokeNumbers.tt: " + string.Join("; ", numbers?.Diagnostics.Select(d => d.Message) ?? ["no result"]));
