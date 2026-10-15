@@ -210,6 +210,35 @@ public static class MobileTargets
     }
 
     /// <summary>
+    /// The run's extra arguments and the Mono debugger adapter's launch arguments for debugging on
+    /// <paramref name="device"/> through local port <paramref name="port"/> (M20b, ADR 0065), or null when the platform
+    /// can't be debugged yet (an iPhone).
+    /// <list type="bullet">
+    /// <item>Android: the SDK's own debugger properties: its <c>Run</c> target forwards the port with adb and starts the
+    /// app with its agent listening there (<c>debug.mono.extra</c>); the adapter connects, retrying until it answers.</item>
+    /// <item>iOS simulators and Mac Catalyst: the app connects to the adapter, which listens
+    /// (<c>__XAMARIN_DEBUG_PORT__</c>, <c>__XAMARIN_DEBUG_HOSTS__</c>).</item>
+    /// </list>
+    /// </summary>
+    public static (IReadOnlyList<string> RunArguments, Codalus.Debugging.MonoDebugArguments Adapter)? DebugArguments(string framework, MobileDevice? device, int port, bool justMyCode = true)
+    {
+        var p = port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return PlatformOf(framework) switch
+        {
+            MobilePlatform.Android => (
+                ["-p:AndroidAttachDebugger=true", "-p:AndroidSdbTargetPort=" + p, "-p:AndroidSdbHostPort=" + p],
+                new Codalus.Debugging.MonoDebugArguments(Codalus.Debugging.MonoDebugArguments.Connect, "127.0.0.1", port, TimeoutSeconds: 900, JustMyCode: justMyCode)),
+            MobilePlatform.iOS when device is not { Kind: MobileDeviceKind.Device } => (
+                ["-p:MtouchDebug=true", $"-p:MlaunchAdditionalArguments=--argument=-monodevelop-port --argument={p} --setenv=__XAMARIN_DEBUG_PORT__={p} --setenv=__XAMARIN_DEBUG_HOSTS__=127.0.0.1"],
+                new Codalus.Debugging.MonoDebugArguments(Codalus.Debugging.MonoDebugArguments.Listen, "127.0.0.1", port, TimeoutSeconds: 900, JustMyCode: justMyCode)),
+            MobilePlatform.MacCatalyst => (
+                ["-p:_BundlerDebug=true", $"-p:OpenArguments=--env __XAMARIN_DEBUG_PORT__={p} --env __XAMARIN_DEBUG_HOSTS__=127.0.0.1"],
+                new Codalus.Debugging.MonoDebugArguments(Codalus.Debugging.MonoDebugArguments.Listen, "127.0.0.1", port, TimeoutSeconds: 900, JustMyCode: justMyCode)),
+            _ => null,
+        };
+    }
+
+    /// <summary>
     /// The arguments of <c>dotnet</c> that install the Android SDK (and a JDK when none is found) through the Android
     /// workload's own <c>InstallAndroidDependencies</c> target. Running it accepts the Android SDK's licenses, so the
     /// IDE shows them first.

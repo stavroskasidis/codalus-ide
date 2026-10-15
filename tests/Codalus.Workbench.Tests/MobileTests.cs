@@ -69,6 +69,23 @@ public sealed class MobileTests : IDisposable
     }
 
     [Fact]
+    public void Debugging_adds_the_platforms_debugger_properties_and_the_adapters_mode()
+    {
+        var emulator = new MobileDevice("emulator-5554", "Pixel 8", MobilePlatform.Android, MobileDeviceKind.Emulator, true);
+        var android = MobileTargets.DebugArguments("net10.0-android", emulator, 50123)!.Value;
+        Assert.Equal(["-p:AndroidAttachDebugger=true", "-p:AndroidSdbTargetPort=50123", "-p:AndroidSdbHostPort=50123"], android.RunArguments);
+        Assert.Equal((Codalus.Debugging.MonoDebugArguments.Connect, "127.0.0.1", 50123), (android.Adapter.Mode, android.Adapter.Address, android.Adapter.Port));
+
+        var simulator = MobileTargets.DebugArguments("net10.0-ios", new MobileDevice("8A1F", "iPhone 16", MobilePlatform.iOS, MobileDeviceKind.Simulator, true), 50124)!.Value;
+        Assert.Equal(Codalus.Debugging.MonoDebugArguments.Listen, simulator.Adapter.Mode);
+        Assert.Contains(simulator.RunArguments, a => a.Contains("__XAMARIN_DEBUG_PORT__=50124", StringComparison.Ordinal));
+        Assert.Equal(Codalus.Debugging.MonoDebugArguments.Listen, MobileTargets.DebugArguments("net10.0-maccatalyst", null, 50125)!.Value.Adapter.Mode);
+
+        // An iPhone needs mlaunch's tunnel: not yet.
+        Assert.Null(MobileTargets.DebugArguments("net10.0-ios", new MobileDevice("0000", "Phone", MobilePlatform.iOS, MobileDeviceKind.Device, true), 50126));
+    }
+
+    [Fact]
     public void Adb_emulator_simctl_and_devicectl_output_becomes_devices()
     {
         var adb = MobileDevices.ParseAdbDevices("""
@@ -257,6 +274,11 @@ public sealed class MobileTests : IDisposable
         Assert.Contains("-p:AdbTarget=-s emulator-5554", plan.ArgumentList!);
         Assert.Equal(Path.Combine(_dir, "TodoApp"), plan.WorkingDirectory);
         Assert.Equal(sdk, plan.Environment["ANDROID_HOME"]);
+
+        var debugPlan = service.DebugPlan("dotnet", project, "net10.0-android", running, "Debug", 50200)!.Value;
+        Assert.Contains("-p:AdbTarget=-s emulator-5554", debugPlan.Run.ArgumentList!);
+        Assert.Contains("-p:AndroidAttachDebugger=true", debugPlan.Run.ArgumentList!);
+        Assert.Equal(50200, debugPlan.Adapter.Port);
 
         var install = service.InstallAndroidDependenciesPlan("dotnet", project);
         Assert.Contains("-t:InstallAndroidDependencies", install.ArgumentList!);

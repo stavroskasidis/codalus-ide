@@ -357,6 +357,22 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
         };
     }
 
+    /// <summary>
+    /// The plan that builds, deploys and starts the app for debugging through local port <paramref name="port"/>, and
+    /// the Mono debugger adapter's launch arguments (M20b), or null when the device can't be debugged yet.
+    /// </summary>
+    public (LaunchPlan Run, Codalus.Debugging.MonoDebugArguments Adapter)? DebugPlan(string dotnet, ProjectInfo project, string framework, MobileDevice? device, string? configuration, int port, bool justMyCode = true)
+    {
+        if (MobileTargets.DebugArguments(framework, device, port, justMyCode) is not { } debug)
+        {
+            return null;
+        }
+
+        var run = RunPlan(dotnet, project, framework, device, configuration);
+        var arguments = run.ArgumentList!.Concat(debug.RunArguments).ToList();
+        return (run with { Arguments = string.Join(' ', arguments.Select(Quote)), ArgumentList = arguments }, debug.Adapter);
+    }
+
     /// <summary>The plan that installs the Android SDK (and a JDK when none is found) through the workload's own target.</summary>
     public LaunchPlan InstallAndroidDependenciesPlan(string dotnet, ProjectInfo project)
     {

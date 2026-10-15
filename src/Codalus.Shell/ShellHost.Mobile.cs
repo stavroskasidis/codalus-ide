@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Codalus.Projects.Protocol;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
+using Codalus.Workbench.Build;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Localization;
 using Codalus.Workbench.Mobile;
@@ -297,8 +298,8 @@ public sealed partial class ShellHost
 
         if (debug)
         {
-            // TODO(issue): M20b's Mono debugger; until then the app runs without it.
-            Workbench.Notifications.Info(Localizer.Get("msg.mobile.noDebugger", "Debugging on devices, emulators and simulators isn't available yet: the app runs without the debugger."));
+            await DebugOnDeviceAsync(project, framework, device).ConfigureAwait(true);
+            return;
         }
 
         var plan = Mobile.RunPlan(EnvironmentCheck.FindDotnet() ?? "dotnet", project, framework, device, Solutions.Solution?.Active?.Configuration);
@@ -314,6 +315,71 @@ public sealed partial class ShellHost
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             Workbench.Notifications.Error(Localizer.Format("msg.build.couldNotStart", "Could not start {0}: {1}", project.Name, ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Debugs on the device (M20b, ADR 0065): the run with the platform's debugger properties builds, deploys and starts
+    /// the app, and the Mono debugger adapter (<c>codalus-debughost --mono-dap</c>) connects to it, or waits for it to
+    /// connect, through a free local port. A run that fails before the app is up cancels the session.
+    /// </summary>
+    private async Task DebugOnDeviceAsync(ProjectInfo project, string framework, MobileDevice? device)
+    {
+        int port;
+        using (var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
+        {
+            listener.Start();
+            port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        }
+
+        var platform = MobileTargets.PlatformOf(framework);
+        if (Mobile.DebugPlan(EnvironmentCheck.FindDotnet() ?? "dotnet", project, framework, device, Solutions.Solution?.Active?.Configuration, port, Debugger.JustMyCode) is not { } plan)
+        {
+            Workbench.Notifications.Info(Localizer.Get("msg.mobile.noDeviceDebugging", "Debugging on an iPhone or iPad isn't available yet: debug in a simulator, or run on the device without debugging (Ctrl+F5)."));
+            return;
+        }
+
+        if (Codalus.Workbench.Debugging.DebugCompanion.Resolve() is not { } host)
+        {
+            Workbench.Notifications.Error(Localizer.Get("msg.mobile.noAdapter", "The Mono debugger adapter (codalus-debughost) wasn't found next to Codalus IDE."));
+            return;
+        }
+
+        var adapter = new Codalus.Debugging.DebugAdapterStartInfo(host.FileName, [.. host.Arguments, "--mono-dap"], host.WorkingDirectory);
+        var name = $"{project.Name} ({(device?.Name ?? MobileTargets.Title(platform))})";
+        RunningProgram program;
+        try
+        {
+            program = Runs.StartPlan(project.Path, project.Name, plan.Run);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.build.couldNotStart", "Could not start {0}: {1}", project.Name, ex.Message));
+            return;
+        }
+
+        program.Channel?.AppendLine(Localizer.Format("msg.mobile.debugging", "Building and deploying {0} ({1}) to {2} for debugging…", project.Name, framework, device?.Label ?? MobileTargets.Title(platform)));
+        if (program.Channel is { } channel)
+        {
+            Workbench.Output.Show(channel);
+        }
+
+        using var failed = new CancellationTokenSource();
+        _ = program.Exited.ContinueWith(t => { if (t.Result != 0) { failed.Cancel(); } }, CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+        DebugLog.Clear();
+        DebugLog.AppendLine($"> {name}: the Mono debugger, port {port.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+        try
+        {
+            await Debugger.LaunchAdapterAsync(name, adapter, System.Text.Json.JsonSerializer.SerializeToElement(plan.Adapter, Codalus.Debugging.DapJsonContext.Default.MonoDebugArguments), failed.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (failed.IsCancellationRequested)
+        {
+            Workbench.Notifications.Warning(Localizer.Format("msg.mobile.runFailed", "{0} didn't start, so debugging didn't either. Its Run output has the details.", project.Name));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or Codalus.Debugging.DapException or Codalus.Debugging.DapConnectionLostException)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.mobile.couldNotDebug", "Could not debug {0}: {1}", project.Name, ex.Message));
+            program.Stop();
         }
     }
 

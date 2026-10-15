@@ -30,12 +30,26 @@ When the startup project is a MAUI app, the toolbar shows a **device** next to i
 
 Choosing a device of another platform switches the project to that platform's framework (`net10.0-android`, `net10.0-ios`…). Each solution remembers its choices.
 
-**Start Without Debugging** (`Ctrl+F5`) and **Start** (`F5`) build, deploy and start the app on the device with the platform SDK's own run target, `dotnet build -t:Run -f <framework>`. Its output is in the Run channel of the Output window, and **Stop** ends it. Debugging on devices isn't available yet: Start runs the app without the debugger and says so.
+**Start Without Debugging** (`Ctrl+F5`) builds, deploys and starts the app on the device with the platform SDK's own run target, `dotnet build -t:Run -f <framework>`. Its output is in the Run channel of the Output window, and **Stop** ends it.
 
 A device that can't be used yet says why:
 - **unauthorized:** allow USB debugging on the phone when it asks;
 - **offline:** reconnect it, or wait for the emulator to finish starting;
 - an iPhone that isn't paired with this Mac.
+
+## Debugging on a device
+
+**Start** (`F5`) builds and deploys the app the same way, and debugs it on Android devices and emulators, iOS simulators and Mac Catalyst. The app runs on the Mono runtime there, so Codalus IDE debugs it with its own Mono debugger:
+- **Breakpoints** bind when their code loads. A line without code moves to the next line that has some.
+- **Stepping:** Step Over, Into and Out. With Just My Code on (the default), stepping into framework code steps out again.
+- **The Call Stack and Threads windows.**
+- **Locals,** with objects' fields and properties, collections and arrays.
+- **Watch and the Debug Console** take names and member paths (`item.Title`, `this.Count`, `items[0]`).
+- **Exceptions:** set in the Exception Settings, with the exception's message when it stops.
+
+**Stop** ends the app. Debugging on an iPhone or iPad isn't available yet (debug in a simulator, or run on the device with `Ctrl+F5`). Neither are conditional breakpoints, changing values, or evaluating calls and operators.
+
+.NET 11 runs MAUI apps on CoreCLR, which has no open-source debugger for mobile yet. To debug a .NET 11 MAUI app, set `<UseMonoRuntime>true</UseMonoRuntime>` in its project, as Microsoft's release notes suggest.
 
 ## The Devices window
 
@@ -62,6 +76,6 @@ With the MAUI workload installed, File → New Project lists **.NET MAUI App**, 
 
 ## Not available yet
 
-- Debugging on devices, emulators and simulators.
+- Debugging on iPhones and iPads, and debugging .NET 11 apps on CoreCLR.
 - A XAML previewer and XAML Hot Reload for MAUI: no open-source ones exist.
 - Creating virtual devices and managing SDK packages from the IDE. Use the SDK's `avdmanager` and `sdkmanager`, or Android Studio.

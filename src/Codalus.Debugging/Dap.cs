@@ -55,6 +55,26 @@ public sealed record Capabilities
     public ExceptionBreakpointsFilter[]? ExceptionBreakpointFilters { get; init; }
 }
 
+/// <summary>
+/// The Mono debugger adapter's <c>launch</c> arguments (M20b, ADR 0065): <see cref="Mode"/> <c>connect</c> attaches to
+/// a runtime whose agent listens at <see cref="Address"/>:<see cref="Port"/> (Android through adb's forward, a desktop
+/// test program), retrying until it answers or <see cref="TimeoutSeconds"/> pass; <c>listen</c> waits there for the
+/// runtime to connect (iOS simulators, Mac Catalyst).
+/// </summary>
+public sealed record MonoDebugArguments(
+    string Mode = MonoDebugArguments.Connect,
+    string Address = "127.0.0.1",
+    int Port = 10000,
+    int TimeoutSeconds = 300,
+    bool JustMyCode = true,
+    string Name = "Mono",
+    string Type = "mono",
+    string Request = "attach")
+{
+    public const string Connect = "connect";
+    public const string Listen = "listen";
+}
+
 /// <summary>netcoredbg's <c>launch</c> arguments.</summary>
 public sealed record LaunchArguments(
     string Program,
@@ -226,6 +246,7 @@ public static class DapEvents
 [JsonSerializable(typeof(Capabilities))]
 [JsonSerializable(typeof(LaunchArguments))]
 [JsonSerializable(typeof(AttachArguments))]
+[JsonSerializable(typeof(MonoDebugArguments))]
 [JsonSerializable(typeof(RunInTerminalRequestArguments))]
 [JsonSerializable(typeof(RunInTerminalResponse))]
 [JsonSerializable(typeof(BrowserLaunchArguments))]
