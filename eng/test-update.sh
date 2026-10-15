@@ -76,7 +76,7 @@ case "$(uname -s)" in
     hdiutil attach -quiet -nobrowse -mountpoint "$work/home-volume" "$work/home.sparseimage"
     app_env=(HOME="$work/home-volume")
     uninstall() {
-      rm -rf "$bundle"
+      rm -rf "$bundle" "$(dirname "$real_bundle")/.CodalusUpdateTest.velopack" # and the staging folder next to it
       pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i codalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true
       hdiutil detach -quiet -force "$work/home-volume" > /dev/null 2>&1 || true
     }
