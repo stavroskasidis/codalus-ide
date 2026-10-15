@@ -126,8 +126,8 @@ public sealed class AiCompletions(AiService ai, SettingsService settings)
             text = text[currentLine.Length..];
         }
 
-        // The model wrote the text after the caret too: cut it where the suffix's first line starts.
-        var suffixLine = suffix.Split('\n', 2)[0].Trim();
+        // The model wrote the text after the caret too: cut it where the suffix's first non-blank line starts.
+        var suffixLine = suffix.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";
         if (suffixLine.Length > 0)
         {
             var at = text.LastIndexOf(suffixLine, StringComparison.Ordinal);

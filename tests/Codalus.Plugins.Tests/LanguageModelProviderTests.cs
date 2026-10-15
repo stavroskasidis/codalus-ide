@@ -4,6 +4,7 @@ using Codalus.Plugins.LanguageModels;
 using Codalus.Plugins.OpenAI;
 using Codalus.Plugins.Proposed;
 using Codalus.Plugins.Testing;
+using Codalus.Tests;
 
 namespace Codalus.Plugins.Tests;
 

@@ -19,12 +19,20 @@ public sealed class LanguageModelPluginHostTests : IAsyncLifetime
 {
     private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(90);
     private readonly string _userData = Path.Combine(Path.GetTempPath(), "codalus-ai-" + Guid.NewGuid().ToString("N"));
-    private readonly MockHttpServer _server = MockModelServers.OpenAI("A reply streamed from the plugin host.");
+    private readonly MockHttpServer _server = MockModelServers.OpenAI(Reply);
     private readonly InMemoryCredentialStore _store = new();
     private WorkbenchServices _workbench = null!;
     private PluginManager _manager = null!;
     private LanguageModelService _models = null!;
     private AiService _ai = null!;
+
+    /// <summary>The mock's reply, by what the request asks (the system prompt of each feature).</summary>
+    private static string Reply(MockHttpRequest request) =>
+        request.Body.Contains("code completion engine", StringComparison.Ordinal) ? "```csharp\n    return a + b;\n```"
+        : request.Body.Contains("git commit messages", StringComparison.Ordinal) ? "Add the greeter\n\nIt says hello."
+        : request.Body.Contains("pull request descriptions", StringComparison.Ordinal) ? "Greet everyone\n\n- Adds the greeter."
+        : request.Body.Contains("fix a compiler", StringComparison.Ordinal) ? "```csharp\nint x = 1;\nint y = x;\n```"
+        : "A reply streamed from the plugin host.";
 
     internal static string OpenAIPluginDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.OpenAI", "bin", PluginHostIntegrationTests.Configuration, "net10.0");
 
@@ -145,5 +153,47 @@ public sealed class LanguageModelPluginHostTests : IAsyncLifetime
         Assert.True(turn.NeedsConfiguration);
         Assert.Contains("Incorrect API key", turn.Error, StringComparison.Ordinal);
         Assert.Contains("failed:", _workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Completions_commit_messages_descriptions_and_fixes_go_through_the_boundary()
+    {
+        await _workbench.Settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, Timeout());
+        await _workbench.Settings.SetAsync(AiService.ProviderSetting, "openai", SettingScope.User, Timeout());
+        await _workbench.Settings.SetAsync(AiService.ModelSetting, "gpt-test", SettingScope.User, Timeout());
+        await _store.SetAsync(SecretStorage.Service, "codalus.openai/apiKey:openai", MockModelServers.Key, Timeout());
+        var completions = new AiCompletions(_ai, _workbench.Settings);
+        var folder = Path.Combine(_userData, "repo");
+        Directory.CreateDirectory(folder);
+        var file = Path.Combine(folder, "Calc.cs");
+
+        // Completions have their own switch.
+        var request = new AiCompletionRequest(file, "csharp", "int Add(int a, int b)\n{\n    ", "\n}");
+        Assert.Null(await completions.CompleteAsync(request, Timeout()));
+        await _workbench.Settings.SetAsync(AiCompletions.EnabledSetting, true, SettingScope.User, Timeout());
+        Assert.Equal("return a + b;", await completions.CompleteAsync(request, Timeout()));
+        var count = _server.Requests.Count;
+        Assert.Null(await completions.CompleteAsync(request with { Path = Path.Combine(folder, ".env") }, Timeout()));
+        Assert.Equal(count, _server.Requests.Count);
+
+        // A commit message without the excluded file's diff.
+        var diff = "diff --git a/Calc.cs b/Calc.cs\n+class Greeter {}\ndiff --git a/secrets.json b/secrets.json\n+{\"key\": \"value\"}\n";
+        var message = await AiActions.CommitMessageAsync(_ai, diff, folder, ["Fix the build"], Timeout());
+        Assert.Equal("Add the greeter\n\nIt says hello.", message);
+        using (var body = System.Text.Json.JsonDocument.Parse(_server.Requests.Last().Body))
+        {
+            var sent = body.RootElement.GetProperty("messages")[1].GetProperty("content").GetString()!;
+            Assert.Contains("class Greeter", sent, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"key\"", sent, StringComparison.Ordinal);
+            Assert.Contains("Also changed (not shown): secrets.json", sent, StringComparison.Ordinal);
+            Assert.Contains("- Fix the build", sent, StringComparison.Ordinal);
+        }
+
+        var (title, description) = await AiActions.PullRequestAsync(_ai, ["Add the greeter"], diff, folder, Timeout());
+        Assert.Equal(("Greet everyone", "- Adds the greeter."), (title, description));
+
+        var fix = await AiActions.FixAsync(_ai, file, "csharp", "int x = 1\nint y = x;\n", 1, "CS1002", "; expected", Timeout());
+        Assert.Equal(new AiFix(1, 3, "int x = 1;\nint y = x;"), fix);
+        Assert.Contains("fix: openai/gpt-test", _workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
     }
 }

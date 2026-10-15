@@ -312,7 +312,7 @@ public sealed class InlineSuggestions : IDisposable
     private sealed class GhostElement(string text, string before, IBrush brush, double lineHeight, int tabSize) : VisualLineElement(1, 0)
     {
         public override TextRun CreateTextRun(int startVisualColumn, ITextRunConstructionContext context) =>
-            new GhostRun(text, before, brush, TextRunProperties.Typeface, TextRunProperties.FontRenderingEmSize, lineHeight, tabSize);
+            new GhostRun(text, before, brush, TextRunProperties, lineHeight, tabSize);
 
         public override int GetNextCaretPosition(int visualColumn, AvaloniaEdit.Document.LogicalDirection direction, CaretPositioningMode mode) => -1;
     }
@@ -327,8 +327,11 @@ public sealed class InlineSuggestions : IDisposable
         private readonly double _lineHeight;
         private readonly double _indent;
 
-        public GhostRun(string text, string before, IBrush brush, Typeface typeface, double size, double lineHeight, int tabSize)
+        public GhostRun(string text, string before, IBrush brush, TextRunProperties properties, double lineHeight, int tabSize)
         {
+            Properties = properties;
+            var typeface = properties.Typeface;
+            var size = properties.FontRenderingEmSize;
             _lineHeight = lineHeight;
             var tab = new string(' ', Math.Max(1, tabSize));
             var ghost = new Typeface(typeface.FontFamily, FontStyle.Italic, typeface.Weight);
@@ -336,6 +339,9 @@ public sealed class InlineSuggestions : IDisposable
             using var prefix = new TextLayout(before.Replace("\t", tab, StringComparison.Ordinal), typeface, size, brush);
             _indent = prefix.WidthIncludingTrailingWhitespace;
         }
+
+        /// <summary>The editor's properties: the line reads their baseline alignment.</summary>
+        public override TextRunProperties? Properties { get; }
 
         public override Size Size => new(_lines[0].WidthIncludingTrailingWhitespace, _lineHeight * _lines.Length);
 

@@ -1,6 +1,6 @@
 # AI assistance
 
-Codalus IDE can send questions about your code to a language model you choose: a hosted one with your own key, or one running on your machine. It's off until you turn it on, and nothing is sent anywhere until you also choose a provider. There's no telemetry: nothing is counted or sent to the Codalus project.
+Codalus IDE can send questions about your code to a language model you choose, suggest code as you type, and help where it already shows you something (a commit, an exception, a failing test): a hosted one with your own key, or one running on your machine. It's off until you turn it on, and nothing is sent anywhere until you also choose a provider. There's no telemetry: nothing is counted or sent to the Codalus project.
 
 ## Turning it on
 
@@ -38,6 +38,30 @@ Each answer shows what was sent with its question, what was left out and why, an
 
 In the editor's context menu, **AI > Explain the Selection** asks right away, and **AI > Ask AI About the Selection** opens the chat with the selection attached.
 
+## Inline suggestions
+
+With **Inline Suggestions** on (`ai.completions.enabled`, in **Tools > Options > AI**), the IDE suggests code as you type. When typing pauses at the end of a line, the suggestion shows in gray italics at the caret, every line of it.
+- `Tab` accepts it, as one step in undo.
+- `Ctrl+Right` (`Alt+Right` on macOS) accepts its next word.
+- `Esc` dismisses it, and so does moving the caret. Typing what it shows keeps the rest.
+
+It sends the text around the caret (up to 6,000 characters before it and 2,000 after) every time you pause, so it has its own switch, off by default. Files that are never sent (below) get no suggestions. **Inline Suggestions Model** (`ai.completions.model`) picks a faster model for it than the chat's, and **Inline Suggestions Delay** (`ai.completions.delayMilliseconds`, 400) how long you pause first. Suggestions never wait on typing: a new keystroke cancels the request.
+
+## Next edit suggestions
+
+With **Next Edit Suggestions** on (`ai.nextEdit.enabled`), the IDE predicts your next edit after you make one: rename a parameter, and it suggests the same rename where the parameter is used. The predicted lines show highlighted, with the new text at their end (`⇥ Print(total);`). `Tab` applies it, and the applied edit can lead to the next suggestion; `Esc` or any other edit dismisses it. It sends your last few edits and the 40 lines above and below the caret, so it has its own switch, off by default.
+
+## AI actions
+
+Where AI can help with something the IDE already shows, there's an action for it. Each one runs only when you choose it, and shows only while AI assistance is on.
+- **Git Changes: ✦** next to the message box writes the commit message for the staged changes, in the style of the repository's recent subjects. Staged files that are never sent are named, not shown.
+- **Create Pull Request: Write with AI** writes the title and description from the branch's commits and diff.
+- **The exception helper: Ask AI.** When the debugger stops on an exception, Ask AI asks AI Chat why it was thrown, with the exception, its stack, the call stack and the code around the current statement.
+- **Test Explorer: Ask AI Why It Fails** (on a failed test's context menu, or **Tools > AI**) asks AI Chat with the test's message, expected and actual values, stack, output and test file.
+- **The editor: AI > Fix with AI** fixes the error or warning at the caret: the lines around it go to the model, and the fix shows in a preview before it is applied.
+- **The editor: AI > Generate Tests with AI** asks AI Chat for tests of the selection (or the current file) with the solution's test framework (xUnit, NUnit, MSTest or TUnit); Apply on the answer's code block creates the test file.
+- **A CPU profiling report: Summarize with AI** asks AI Chat where the time goes, with the report's summary and its top 40 functions.
+
 ## What is never sent
 
 AI assistance has one gate that every request goes through:
@@ -66,6 +90,10 @@ AI assistance has one gate that every request goes through:
 | `ai.model` | empty | The model; empty is the provider's first |
 | `ai.exclude` | `[]` | `.gitignore` patterns of files never sent |
 | `ai.chat.maxContextCharacters` | `120000` | The most context sent with a question |
+| `ai.completions.enabled` | `false` | Inline suggestions |
+| `ai.completions.model` | empty | Their model; empty is the chat's |
+| `ai.completions.delayMilliseconds` | `400` | The pause before a suggestion is asked for |
+| `ai.nextEdit.enabled` | `false` | Next edit suggestions |
 | `ai.openai.endpoint` | `https://api.openai.com/v1` | The OpenAI-compatible server |
 | `ai.ollama.endpoint` | `http://localhost:11434/v1` | Ollama's address |
 | `ai.anthropic.endpoint` | `https://api.anthropic.com` | Anthropic's API, or a gateway |

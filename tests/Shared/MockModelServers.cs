@@ -12,7 +12,11 @@ internal static class MockModelServers
     public const string Key = "test-key-0123456789";
 
     /// <summary>An OpenAI-compatible server: <c>/models</c> and <c>/chat/completions</c> streaming <paramref name="reply"/> in two parts.</summary>
-    public static MockHttpServer OpenAI(string reply = "Hello from the model.", bool requireKey = true, string? toolCall = null) => new(request =>
+    public static MockHttpServer OpenAI(string reply = "Hello from the model.", bool requireKey = true, string? toolCall = null) =>
+        OpenAI(_ => reply, requireKey, toolCall);
+
+    /// <summary>An OpenAI-compatible server whose reply depends on the request (its body: the messages sent).</summary>
+    public static MockHttpServer OpenAI(Func<MockHttpRequest, string> replyFor, bool requireKey = true, string? toolCall = null) => new(request =>
     {
         if (requireKey && request.BearerToken != Key)
         {
@@ -24,6 +28,7 @@ internal static class MockModelServers
             case ("GET", "/v1/models"):
                 return MockHttpResponse.Json("""{"object":"list","data":[{"id":"text-embedding-3-small"},{"id":"gpt-test"},{"id":"gpt-mini"}]}""");
             case ("POST", "/v1/chat/completions"):
+                var reply = replyFor(request);
                 var sb = new StringBuilder();
                 var half = reply.Length / 2;
                 foreach (var part in new[] { reply[..half], reply[half..] })
