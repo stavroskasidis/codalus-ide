@@ -1138,6 +1138,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
         await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
+        await StepAsync("fsharp.interactive", "M36", "A selection in an F# script runs in F# Interactive (dotnet fsi in a terminal), which shows the values defined", FSharpInteractiveStepAsync, "projects.open").ConfigureAwait(true);
 
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
@@ -1906,7 +1907,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await shell.InstallFSharpAsync().ConfigureAwait(true);
         Check(shell.FSharp.IsInstalled, "FsAutoComplete and Fantomas are installed:\n" + Tail(shell.LanguageLog.GetText(), 2000));
         await shell.OpenSolutionAsync(Path.Combine(target, "FSharp.slnx")).ConfigureAwait(true);
-        await WaitAsync(() => shell.Solutions.Projects.Count == 3 && shell.Solutions.Progress is { Completed: true }, "the F# solution is open", 600).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 5 && shell.Solutions.Progress is { Completed: true }, "the F# solution is open", 600).ConfigureAwait(true);
 
         var library = Path.Combine(target, "FsLibrary", "FsLibrary.fsproj");
         var tree = Workbench.Projects.SolutionTree.Contents(library, shell.Solutions.Projects[library]);
@@ -1946,6 +1947,28 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Explorer.Reveal("f:" + path);
         await Task.Delay(1000).ConfigureAwait(true);
         Screenshot("fsharp.png");
+    }
+
+    private async Task FSharpInteractiveStepAsync()
+    {
+        var target = Path.Combine(_work, "FSharp");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "FSharp"), target);
+        }
+
+        var editor = await OpenAsync(Path.Combine(target, "Scripts", "Explore.fsx")).ConfigureAwait(true);
+        var start = editor.Model.Text.Text.IndexOf("let square", StringComparison.Ordinal);
+        var end = editor.Model.Text.Text.IndexOf("// [fsi-end]", StringComparison.Ordinal);
+        editor.Editor.Select(start, end - start);
+        shell.SendToFSharpInteractive();
+        var session = shell.FSharpInteractive;
+        Check(session is not null, "F# Interactive started");
+        string Screen() => string.Join('\n', Enumerable.Range(0, session!.Terminal.TotalRows).Select(i => session.Terminal.GetRow(i).GetText()));
+        await WaitAsync(() => Screen().Contains("val squares: int list = [1; 4; 9]", StringComparison.Ordinal), "F# Interactive shows val squares", 180).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("fsharp-interactive.png");
+        shell.Terminals.Close(session!);
     }
 
     private async Task XamlPreviewStepAsync()

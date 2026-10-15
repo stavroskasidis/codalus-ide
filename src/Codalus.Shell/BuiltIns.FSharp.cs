@@ -12,7 +12,9 @@ internal static partial class BuiltIns
     public const string FSharpKeybindings = """
         [
           { "key": "alt+up", "command": "fsharp.moveUp", "when": "focusedView == solutionExplorer && explorerItemOrdered" },
-          { "key": "alt+down", "command": "fsharp.moveDown", "when": "focusedView == solutionExplorer && explorerItemOrdered" }
+          { "key": "alt+down", "command": "fsharp.moveDown", "when": "focusedView == solutionExplorer && explorerItemOrdered" },
+          { "key": "primary+e primary+e", "command": "fsi.sendSelection", "when": "editorTextFocus && editorLanguageId == fsharp" },
+          { "key": "alt+'", "command": "fsi.sendLine", "when": "editorTextFocus && editorLanguageId == fsharp" }
         ]
         """;
 
@@ -26,6 +28,12 @@ internal static partial class BuiltIns
             Enum = ["ask", "install", "off"],
             EnumDescriptions = ["Ask the first time an F# file opens", "Install without asking", "Don't use them"],
         },
+        SettingDescriptor.Create("fsharp.fsiExtraParameters", "\"\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "F# Interactive Options",
+            Category = "F#",
+            Description = "More options for dotnet fsi, separated by spaces (e.g. --langversion:preview --optimize+). They apply when F# Interactive starts.",
+        },
         SettingDescriptor.Create("fsharp.completeUnopenedNamespaces", "true", SettingType.Boolean, ContributionSource.Shell) with
         {
             Title = "Complete Unopened Namespaces",
@@ -37,6 +45,18 @@ internal static partial class BuiltIns
             Title = "Linter",
             Category = "F#",
             Description = "Report FSharpLint's suggestions as you type.",
+        },
+        SettingDescriptor.Create("fsharp.analyzers", "false", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "F# Analyzers",
+            Category = "F#",
+            Description = "Run F# analyzers (FSharp.Analyzers.SDK) as you type, from the F# Analyzers Path folders. Analyzers are code, so they run only in trusted folders, like the language service.",
+        },
+        SettingDescriptor.Create("fsharp.analyzersPath", "\"packages/analyzers;analyzers\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "F# Analyzers Path",
+            Category = "F#",
+            Description = "The folders F# analyzers are loaded from, separated by semicolons, relative to the solution's folder.",
         },
         SettingDescriptor.Create("fsharp.inlayHints", "true", SettingType.Boolean, ContributionSource.Shell) with
         {
@@ -84,6 +104,39 @@ internal static partial class BuiltIns
         }, "explorerItemOrdered && solutionTrusted");
         Add("fsharp.installLanguageService", "Install the F# Language Service", shell.InstallFSharpAsync);
 
+        // F# Interactive (M36b): dotnet fsi in a terminal.
+        Add("fsi.show", "F# Interactive", () =>
+        {
+            shell.ShowFSharpInteractive();
+            return Task.CompletedTask;
+        });
+        Add("fsi.sendSelection", "Send to F# Interactive", () =>
+        {
+            shell.SendToFSharpInteractive();
+            return Task.CompletedTask;
+        }, "editorLanguageId == fsharp");
+        Add("fsi.sendLine", "Send Line to F# Interactive", () =>
+        {
+            shell.SendToFSharpInteractive(lineOnly: true);
+            return Task.CompletedTask;
+        }, "editorLanguageId == fsharp");
+        Add("fsi.sendFile", "Send File to F# Interactive", () =>
+        {
+            shell.SendFileToFSharpInteractive();
+            return Task.CompletedTask;
+        }, "editorLanguageId == fsharp");
+        Add("fsi.runScript", "Run Script", () =>
+        {
+            shell.RunFSharpScript();
+            return Task.CompletedTask;
+        }, "editorExtension == .fsx || editorExtension == .fsscript");
+        Add("fsi.sendReferences", "Send References to F# Interactive", () => shell.SendReferencesToFSharpInteractiveAsync(), "solutionTrusted");
+        Add("fsi.reset", "Reset F# Interactive", () =>
+        {
+            shell.ResetFSharpInteractive();
+            return Task.CompletedTask;
+        });
+
         // FsAutoComplete's references CodeLens runs this; the caret is already on the definition.
         Add("fsharp.showReferences", "Show References", shell.FindReferencesAsync, palette: false);
     }
@@ -101,6 +154,8 @@ internal static partial class BuiltIns
             Item(SolutionExplorerView.AddMenuLocation, "fsharp.addBelow", "2-order", 2, "explorerItemOrdered"),
             Item(Context, "fsharp.moveUp", "3-order", 1, "explorerItemOrdered"),
             Item(Context, "fsharp.moveDown", "3-order", 2, "explorerItemOrdered"),
+            Item(Context, "fsi.sendReferences", "5-path", 5, "explorerItemKind == project"),
+            Item(OtherWindowsMenu, "fsi.show", "windows", AlphabeticalOrder("F# Interactive")),
         ]);
     }
 }

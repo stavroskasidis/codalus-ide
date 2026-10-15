@@ -80,6 +80,11 @@ public sealed partial class ShellHost
                 ["references"] = new JsonObject { ["enabled"] = settings.GetBoolean("fsharp.referencesCodeLens", true) },
             },
             ["enableReferenceCodeLens"] = settings.GetBoolean("fsharp.referencesCodeLens", true),
+
+            // F# analyzers (FSharp.Analyzers.SDK, M36b): loaded from these folders, relative to the solution's.
+            ["enableAnalyzers"] = settings.GetBoolean("fsharp.analyzers", false),
+            ["analyzersPath"] = new JsonArray([.. settings.GetString("fsharp.analyzersPath", "packages/analyzers;analyzers")
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(path => (JsonNode)JsonValue.Create(path))]),
         };
     }
 

@@ -15,6 +15,35 @@ public sealed class FSharpShellTests
 {
     private static string SharedCache => Path.Combine(Path.GetTempPath(), "codalus-test-node-cache");
 
+    /// <summary>Quick Info at the end of <paramref name="marker"/> in an open file, asked again until it contains <paramref name="expected"/>.</summary>
+    private static async Task<string?> QuickInfoAsync(ShellFixture f, string path, string marker, string expected)
+    {
+        var document = await f.Shell.OpenFileAsync(path, preview: false, null);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null);
+        var offset = document!.Model.Text.Text.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+        var line = document.Model.Text.GetLineByOffset(offset);
+        string? info = null;
+        for (var attempt = 0; attempt < 120 && info?.Contains(expected, StringComparison.Ordinal) != true; attempt++)
+        {
+            try
+            {
+                var client = await f.Shell.Languages.ClientAsync(ShellHost.FSharpLanguageId);
+                info = (await client!.HoverAsync(DocumentUris.FromPath(path), new Position(line.LineNumber - 1, offset - line.Offset), TestContext.Current.CancellationToken))?.Contents.Value;
+            }
+            catch (Rpc.JsonRpcRemoteException)
+            {
+                // not checked yet
+            }
+
+            if (info?.Contains(expected, StringComparison.Ordinal) != true)
+            {
+                await Task.Delay(1000, TestContext.Current.CancellationToken);
+            }
+        }
+
+        return info;
+    }
+
     private static IReadOnlyList<string> Names(ShellFixture f, string project) =>
         [.. SolutionTree.Contents(project, f.Shell.Solutions.Projects[project]).Select(n => n.Name)];
 
@@ -36,7 +65,7 @@ public sealed class FSharpShellTests
         await f.Shell.InstallFSharpAsync();
         Assert.True(f.Shell.FSharp.IsInstalled, f.Shell.LanguageLog.GetText());
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "FSharp.slnx"));
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 3 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 240);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 5 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 240);
 
         // Program.fs: FsAutoComplete loads the solution itself; an error typed comes back, then goes.
         var path = Path.Combine(folder, "FsConsole", "Program.fs");
@@ -83,6 +112,16 @@ public sealed class FSharpShellTests
         Assert.Contains(edits, e => e.NewText.Contains("let greeter = Greeter(\"Hello\")", StringComparison.Ordinal));
         model.Text.Text = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
 
+        // A script: what it #loads is known (Helpers.fsx's describe).
+        var scriptInfo = await QuickInfoAsync(f, Path.Combine(folder, "Scripts", "Explore.fsx"), "(descr", "val describe");
+        Assert.Contains("val describe", scriptInfo, StringComparison.Ordinal);
+        Assert.Contains("Describes a list of numbers.", scriptInfo, StringComparison.Ordinal);
+
+        // A type provider: JsonProvider's provided property (once the package is restored).
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects[Path.Combine(folder, "FsData", "FsData.fsproj")].Restored, seconds: 300);
+        var provided = await QuickInfoAsync(f, Path.Combine(folder, "FsData", "Weather.fs"), "sample.Days[0].Hi", "property High");
+        Assert.Contains("property High: decimal", provided, StringComparison.Ordinal);
+
         // Solution Explorer: the compile order, the signature file under its implementation; Move Up and Move Down.
         var library = Path.Combine(folder, "FsLibrary", "FsLibrary.fsproj");
         var geometry = Path.Combine(folder, "FsLibrary", "Geometry.fs");
@@ -105,5 +144,127 @@ public sealed class FSharpShellTests
         Assert.Contains("Tailcalls", names);
         Assert.DoesNotContain("AllowUnsafeBlocks", names);
         Assert.DoesNotContain("ImplicitUsings", names);
+    }
+}
+
+/// <summary>
+/// M36b (ADR 0068): F# Interactive is <c>dotnet fsi</c> in a terminal; Send to F# Interactive writes the code with a
+/// line directive and <c>;;</c>, Send References adds a built project with <c>#r</c>, and Reset starts it again.
+/// </summary>
+public sealed class FSharpInteractiveTests
+{
+    private static string Text(Workbench.Terminal.TerminalSession session) =>
+        string.Join("\n", Enumerable.Range(0, session.Terminal.TotalRows).Select(i => session.Terminal.GetRow(i).GetText()));
+
+    /// <summary>The rows without line breaks: a long line wraps at the terminal's width wherever the path's length puts it.</summary>
+    private static bool Shows(Workbench.Terminal.TerminalSession session, string text) =>
+        string.Concat(Enumerable.Range(0, session.Terminal.TotalRows).Select(i => session.Terminal.GetRow(i).GetText().TrimEnd())).Contains(text, StringComparison.Ordinal);
+
+    [Fact]
+    public void Submissions_carry_a_line_directive_and_end_with_double_semicolons()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "Script.fsx");
+        Assert.Equal($"# 3 @\"{path}\"\nlet x = 1\nlet y = 2\n;;\n", ShellHost.FSharpSubmission("let x = 1\r\nlet y = 2\r\n", path, 3));
+        Assert.Equal("1 + 1\n;;\n", ShellHost.FSharpSubmission("1 + 1", null, 1));
+        Assert.Equal("# 1 @\"C:\\a \"\"b\"\".fsx\"\nx\n;;\n", ShellHost.FSharpSubmission("x", "C:\\a \"b\".fsx", 1));
+    }
+
+    [Fact]
+    public void References_skip_the_frameworks_reference_assemblies()
+    {
+        var arguments = new[]
+        {
+            "-o:obj/Debug/net10.0/Lib.dll",
+            "-r:/usr/share/dotnet/packs/Microsoft.NETCore.App.Ref/10.0.0/ref/net10.0/System.Runtime.dll",
+            "-r:/home/me/.nuget/packages/fsharp.core/10.0.100/lib/netstandard2.1/FSharp.Core.dll",
+            "-r:/src/CsLibrary/bin/Debug/net10.0/CsLibrary.dll",
+            "--optimize-",
+        };
+        Assert.Equal(
+            "#r @\"/home/me/.nuget/packages/fsharp.core/10.0.100/lib/netstandard2.1/FSharp.Core.dll\"\n#r @\"/src/CsLibrary/bin/Debug/net10.0/CsLibrary.dll\"\n#r @\"/src/Lib/bin/Debug/net10.0/Lib.dll\"\n;;\n",
+            ShellHost.FSharpReferences(arguments, "/src/Lib/bin/Debug/net10.0/Lib.dll"));
+    }
+
+    [AvaloniaFact]
+    public async Task Code_sent_from_an_fsharp_file_runs_in_fsharp_interactive_and_reset_starts_it_again()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = f.CopySample("FSharp");
+        var script = Path.Combine(folder, "Scripts", "Explore.fsx");
+        var document = await f.Shell.OpenFileAsync(script, preview: false, null);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null);
+        var editor = document!.Controller!.Editor;
+
+        // The selection: two definitions; F# Interactive answers with their values.
+        var start = document.Model.Text.Text.IndexOf("let square", StringComparison.Ordinal);
+        var end = document.Model.Text.Text.IndexOf("// [fsi-end]", StringComparison.Ordinal);
+        editor.Select(start, end - start);
+        f.Shell.SendToFSharpInteractive();
+        var session = f.Shell.FSharpInteractive;
+        Assert.NotNull(session);
+        Assert.Equal(ShellHost.FSharpInteractiveName, session!.Name);
+        try
+        {
+            await ShellFixture.PumpUntil(() => Shows(session, "val squares: int list = [1; 4; 9]"), seconds: 120);
+        }
+        catch (Xunit.Sdk.XunitException)
+        {
+            Assert.Fail("F# Interactive said:\n" + Text(session));
+        }
+
+        // An error names the file and line (the line directive).
+        editor.Select(0, 0);
+        document.Model.Text.Insert(0, "let broken: int = \"x\"\n");
+        editor.CaretOffset = 0;
+        f.Shell.SendToFSharpInteractive(lineOnly: true);
+        await ShellFixture.PumpUntil(() => Shows(session, "Explore.fsx(1,"), seconds: 60);
+
+        // Reset: a new session, without the old definitions.
+        var reset = f.Shell.ResetFSharpInteractive();
+        Assert.NotSame(session, reset);
+        Assert.DoesNotContain(session, f.Shell.Terminals.Sessions);
+        reset.Write("squares;;\n");
+        try
+        {
+            await ShellFixture.PumpUntil(() => Shows(reset, "error FS0039"), seconds: 120);
+        }
+        catch (Xunit.Sdk.XunitException)
+        {
+            Assert.Fail("After the reset, F# Interactive said:\n" + Text(reset));
+        }
+    }
+}
+
+/// <summary>M36b: Expecto tests (through YoloDev.Expecto.TestSdk's VSTest adapter) in the Test Explorer, on samples/FSharp.</summary>
+public sealed class FSharpTestingTests
+{
+    [AvaloniaFact]
+    public async Task Expecto_tests_run_in_the_test_explorer()
+    {
+        await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.DotNetTest"));
+        var folder = f.CopySample("FSharp");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "FSharp.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 5 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 300);
+        var tests = Path.Combine(folder, "FsTests", "FsTests.fsproj");
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects[tests].IsTestProject, seconds: 300); // after the restore: Microsoft.NET.Test.Sdk says so
+
+        // The project shows before it's built; running it builds, discovers and runs its tests.
+        await ShellFixture.PumpUntil(() => f.Shell.Tests.Read(roots => roots.Any(r => r.Label == "FsTests")), seconds: 120);
+        var project = f.Shell.Tests.Read(roots => roots.Single(r => r.Label == "FsTests"));
+        await f.Shell.RunTestsAsync(Workbench.Testing.TestRunKind.Run, [project.Key]);
+        try
+        {
+            await ShellFixture.PumpUntil(() => !f.Shell.Tests.IsRunning && f.Shell.Tests.Read(_ => project.Leaves().Count(l => l.Outcome == Workbench.Testing.TestOutcome.Passed)) == 2, seconds: 300);
+        }
+        catch (Xunit.Sdk.XunitException)
+        {
+            Assert.Fail("Tests: " + f.Shell.Tests.Read(_ => string.Join(", ", project.Leaves().Select(l => $"{l.Label}={l.Outcome}"))) + "\n" + string.Join("\n", f.Shell.Workbench.Output.Channels.Select(c => $"== {c.Name}\n{c.GetText()}")));
+        }
+
+        // Expecto's names: the test list is the class, each test a method.
+        var leaves = f.Shell.Tests.Read(_ => project.Leaves().Select(l => l.Label).ToList());
+        Assert.Contains("a rectangle's area is width times height", leaves);
+        Assert.Contains(f.Shell.Tests.Read(_ => project.SelfAndDescendants().Select(n => n.Label).ToList()), l => l == "Shapes");
     }
 }

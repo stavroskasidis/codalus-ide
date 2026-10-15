@@ -37,7 +37,7 @@ public sealed class FSharpOrderIntegrationTests : IAsyncLifetime
         _service.Log += (_, line) => System.Console.Error.WriteLine("[host] " + line);
         _items = new ProjectItemService(_service);
         await _service.OpenAsync(Path.Combine(Fixture, "FSharp.slnx"), trusted: true, restore: false, Timeout());
-        await WaitUntilAsync(() => _service.Progress is { Completed: true } && _service.Projects.Count == 3);
+        await WaitUntilAsync(() => _service.Progress is { Completed: true } && _service.Projects.Count == 5);
     }
 
     public async ValueTask DisposeAsync()

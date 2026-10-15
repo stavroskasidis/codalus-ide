@@ -54,3 +54,51 @@ A file added any other way goes last, or, in a program, before the last file, wh
 
   The Build page has **Tail calls**.
 - **New Project** lists the F# templates and asks for the language when a template comes in several.
+
+## F# Interactive
+
+F# Interactive runs F# code as you send it, in a terminal of the integrated terminal named **F# Interactive** (`dotnet fsi`). It shows the value of each definition: `val squares: int list = [1; 4; 9]`.
+
+| Command | Where | What it sends |
+|---|---|---|
+| **Send to F# Interactive** | `Ctrl+E, Ctrl+E` in an F# file; the editor's context menu | The selection, or the current line |
+| **Send Line to F# Interactive** | `Alt+'`; the editor's context menu | The current line |
+| **Send File to F# Interactive** | Command palette | A saved script with `#load`; any other file's text |
+| **Send References to F# Interactive** | A project's context menu in Solution Explorer | Builds the project, then adds it and its references with `#r`, so its types can be used |
+| **Reset F# Interactive** | Command palette | Starts it again: everything defined is gone |
+| **F# Interactive** | View → Other Windows | Shows it, starting it if needed |
+
+- **Errors** name the file and line the code came from: each submission carries a line directive.
+- **Typing** directly into the terminal also works. End a submission with `;;`.
+- **Options:** **F# Interactive Options** (`fsharp.fsiExtraParameters`) adds options to `dotnet fsi`, such as `--langversion:preview`.
+
+## Scripts
+
+`.fsx` files are checked like project files:
+- `#load "Helpers.fsx"` makes what the loaded script defines known.
+- `#r "nuget: Newtonsoft.Json, 13.0.3"` restores the package and makes its types known.
+
+**Run Script**, in the editor's context menu of a script, runs the saved script with `dotnet fsi` in a terminal of its own.
+
+## Type providers
+
+Type providers work as you type: FsAutoComplete runs the provider (once the project's packages are restored), so the types and members it provides (FSharp.Data's `JsonProvider`, for example) complete and show in Quick Info. A type provider is code that runs while you edit, which is why the F# language service runs only in trusted folders.
+
+## Analyzers
+
+F# analyzers (built with [FSharp.Analyzers.SDK](https://github.com/ionide/FSharp.Analyzers.SDK)) report their findings as you type when **F# Analyzers** (`fsharp.analyzers`) is on. They're loaded from the folders in **F# Analyzers Path** (`fsharp.analyzersPath`, relative to the solution's folder; `packages/analyzers` and `analyzers` by default). Like type providers, they run only in trusted folders.
+
+## Tests
+
+The Test Explorer runs F# tests of xUnit, NUnit, MSTest and [Expecto](https://github.com/haf/expecto). Expecto needs its test adapter in the project (`YoloDev.Expecto.TestSdk` with `Microsoft.NET.Test.Sdk`).
+- **Names:** an Expecto test list shows as a class, and each test in it as a method.
+- **When they appear:** F# tests appear after the project is built (Run All builds it). They aren't found from the source beforehand.
+
+## Debugging
+
+F# programs debug like C# ones: breakpoints in `.fs` files, stepping, the call stack, locals (an F# list shows its `head` and `tail`) and data tips.
+
+The debugger reads expressions as C#, in Watch and Immediate and in breakpoint conditions:
+- Member paths work: `shapes.Head`, `order.Customer.Name`.
+- For F#'s comparison operators, use C#'s: `==` for `=` and `!=` for `<>`. An option's `None` is `null`.
+- Members F# adds to a type by augmentation, such as a list's `Length`, aren't found. Use the type's own members, or expand the value in Locals.

@@ -925,6 +925,7 @@ public sealed partial class ShellHost : IEditorServices
         OnNavigationEditorChanged();
         TrackCopies(ActiveEditor?.Controller);
         Workbench.Context.Set("editorLanguageId", ActiveEditor?.Model.LanguageId);
+        Workbench.Context.Set("editorExtension", ActiveEditor?.Model.Path is { } activePath ? Path.GetExtension(activePath).ToLowerInvariant() : null);
         FollowXamlEditor();
         if (ActiveEditor is { Controller: { } controller } editor)
         {
