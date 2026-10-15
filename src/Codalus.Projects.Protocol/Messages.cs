@@ -179,10 +179,19 @@ public sealed record ProjectInfo(
     /// </summary>
     public string[] MissingWorkloadPacks { get; init; } = [];
 
+    /// <summary>
+    /// The restored packages of each target framework with the packages each depends on (from <c>project.assets.json</c>):
+    /// the Dependencies node shows a package's transitive packages under it. Empty before a restore.
+    /// </summary>
+    public PackageDependencyInfo[] Packages { get; init; } = [];
+
     /// <summary>A Docker Compose project (<c>.dcproj</c>, M17a): loaded from its XML, never evaluated or built (ADR 0042).</summary>
     [JsonIgnore]
     public bool IsComposeProject => Path.EndsWith(".dcproj", StringComparison.OrdinalIgnoreCase);
 }
+
+/// <summary>A restored package for a target framework, and the packages it depends on (their ids).</summary>
+public sealed record PackageDependencyInfo(string TargetFramework, string Name, string Version, string[] Dependencies);
 
 public static class TestPlatforms
 {

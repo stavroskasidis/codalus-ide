@@ -6,7 +6,7 @@ Codalus IDE opens `.sln` and `.slnx` solutions and SDK-style projects (`.csproj`
 
 The tree shows the solution, its solution folders, projects, project folders and files (nested files, like `Form.Designer.cs`, sit under their parents). Each project also has its **Dependencies**:
 - frameworks
-- packages
+- packages, each with the packages it brings in under it, and theirs under them (once the project is restored)
 - projects
 - assemblies
 - analyzers

@@ -132,3 +132,51 @@ public sealed class FSharpTests : IDisposable
         Assert.Null(tools.Launch());
     }
 }
+
+/// <summary>Deferred work (M3a): a package's transitive packages under it in the Dependencies node, from the assets file.</summary>
+public sealed class TransitivePackageTests
+{
+    private static ExplorerNode Dependencies(ProjectInfo info) =>
+        SolutionTree.Project(new SolutionProjectInfo(info.Path, info.Name, null, null), info, trusted: true).Children.Single(n => n.Kind == ExplorerNodeKind.Dependencies);
+
+    [Fact]
+    public void A_package_shows_the_packages_it_depends_on_nested_without_cycles()
+    {
+        var project = Path.Combine(Path.GetTempPath(), "P", "P.csproj");
+        var info = new ProjectInfo(project, "P", ProjectStates.Loaded, null, ["net10.0"], "Library", [],
+            [new ReferenceInfo(ReferenceKinds.Package, "Top", "1.0.0", null, "net10.0", true)], [], Restored: true)
+        {
+            Packages =
+            [
+                new PackageDependencyInfo("net10.0", "Top", "1.0.0", ["Middle", "Leaf"]),
+                new PackageDependencyInfo("net10.0", "Middle", "2.0.0", ["Leaf", "Top"]), // a cycle back to Top
+                new PackageDependencyInfo("net10.0", "Leaf", "3.0.0", []),
+            ],
+        };
+
+        var top = Dependencies(info).Children.Single(g => g.Name == "Packages").Children.Single();
+        Assert.Equal(("Top", "(1.0.0)"), (top.Name, top.Detail));
+        Assert.Equal([("Leaf", "(3.0.0)"), ("Middle", "(2.0.0)")], top.Children.Select(c => (c.Name, c.Detail)));
+        var middle = top.Children.Single(c => c.Name == "Middle");
+        Assert.Equal(["Leaf"], middle.Children.Select(c => c.Name)); // not Top again
+        Assert.Equal(top.Children.Count + 1 + 1, AllIds(top).Distinct().Count()); // unique ids: Top, Leaf, Middle, Middle's Leaf
+    }
+
+    [Fact]
+    public void A_large_graph_is_cut_at_the_limit()
+    {
+        var project = Path.Combine(Path.GetTempPath(), "P", "P.csproj");
+        // A chain of packages each depending on every later one: far more paths than the limit.
+        var names = Enumerable.Range(0, 30).Select(i => $"Pkg{i:00}").ToList();
+        var info = new ProjectInfo(project, "P", ProjectStates.Loaded, null, ["net10.0"], "Library", [],
+            [new ReferenceInfo(ReferenceKinds.Package, names[0], "1.0.0", null, "net10.0", true)], [], Restored: true)
+        {
+            Packages = [.. names.Select((n, i) => new PackageDependencyInfo("net10.0", n, "1.0.0", [.. names.Skip(i + 1)]))],
+        };
+
+        var top = Dependencies(info).Children.Single(g => g.Name == "Packages").Children.Single();
+        Assert.InRange(AllIds(top).Count() - 1, 1, SolutionTree.TransitiveLimit);
+    }
+
+    private static IEnumerable<string> AllIds(ExplorerNode node) => node.Children.SelectMany(AllIds).Prepend(node.Id);
+}

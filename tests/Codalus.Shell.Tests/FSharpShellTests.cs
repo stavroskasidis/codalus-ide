@@ -249,6 +249,13 @@ public sealed class FSharpTestingTests
         var tests = Path.Combine(folder, "FsTests", "FsTests.fsproj");
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects[tests].IsTestProject, seconds: 300); // after the restore: Microsoft.NET.Test.Sdk says so
 
+        // The restored packages' graph: Expecto's own dependencies, nested under it in the Dependencies node.
+        var info = f.Shell.Solutions.Projects[tests];
+        Assert.Contains(info.Packages, p => p.Name == "Expecto" && p.Dependencies.Contains("Mono.Cecil"));
+        var dependencies = SolutionTree.Project(new Codalus.Projects.Protocol.SolutionProjectInfo(tests, "FsTests", null, null), info, trusted: true).Children.Single(n => n.Kind == ExplorerNodeKind.Dependencies);
+        var expecto = dependencies.Children.Single(g => g.Name == "Packages").Children.Single(p => p.Name == "Expecto");
+        Assert.Contains(expecto.Children, c => c.Name == "Mono.Cecil");
+
         // The project shows before it's built; running it builds, discovers and runs its tests.
         await ShellFixture.PumpUntil(() => f.Shell.Tests.Read(roots => roots.Any(r => r.Label == "FsTests")), seconds: 120);
         var project = f.Shell.Tests.Read(roots => roots.Single(r => r.Label == "FsTests"));

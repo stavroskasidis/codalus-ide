@@ -437,9 +437,13 @@ public static class SolutionTree
 
     // ------------------------------------------------------------------ dependencies
 
+    /// <summary>The most nodes of transitive packages a project's Dependencies node holds (a package graph can be large).</summary>
+    public const int TransitiveLimit = 2000;
+
     /// <summary>
-    /// The Dependencies node. Analyzers come from the design-time build of the active target framework.
-    /// TODO(issue): transitive packages (from the assets file).
+    /// The Dependencies node. Analyzers come from the design-time build of the active target framework. A package shows
+    /// the packages it depends on under it, and theirs under them (from the assets file, <see cref="ProjectInfo.Packages"/>),
+    /// up to <see cref="TransitiveLimit"/> nodes for the project.
     /// </summary>
     private static ExplorerNode? Dependencies(string projectPath, ProjectInfo info, CompilerInputsInfo? inputs)
     {
@@ -450,6 +454,44 @@ public static class SolutionTree
 
         var id = "deps:" + projectPath;
         var analyzers = inputs is { State: CompilerInputStates.Ok } ? AnalyzerPaths(inputs.Arguments) : [];
+        var graph = info.Packages
+            .GroupBy(p => (p.TargetFramework, p.Name.ToLowerInvariant()))
+            .ToDictionary(g => g.Key, g => g.First());
+        var budget = TransitiveLimit;
+        IReadOnlyList<ExplorerNode> Transitive(string parentId, string framework, string package, PackageChain ancestors)
+        {
+            if (!graph.TryGetValue((framework, package.ToLowerInvariant()), out var node) || node.Dependencies.Length == 0)
+            {
+                return [];
+            }
+
+            var children = new List<ExplorerNode>();
+            foreach (var dependency in node.Dependencies.Order(s_names))
+            {
+                if (ancestors.Contains(dependency))
+                {
+                    continue; // a cycle
+                }
+
+                if (budget-- <= 0)
+                {
+                    break;
+                }
+
+                var version = graph.TryGetValue((framework, dependency.ToLowerInvariant()), out var resolved) ? resolved.Version : null;
+                var childId = parentId + "|" + dependency;
+                children.Add(new ExplorerNode(childId, ExplorerNodeKind.Dependency, dependency)
+                {
+                    ProjectPath = projectPath,
+                    Icon = "package",
+                    Detail = version is null ? null : $"({version})",
+                    Children = Transitive(childId, framework, dependency, ancestors.With(dependency)),
+                });
+            }
+
+            return children;
+        }
+
         IReadOnlyList<ExplorerNode> Groups(string prefix, IEnumerable<ReferenceInfo> references, bool withAnalyzers)
         {
             var list = references.ToList();
@@ -487,6 +529,7 @@ public static class SolutionTree
                         Icon = icon,
                         Detail = m.Version is null ? null : $"({m.Version})",
                         IsWarning = !m.Resolved,
+                        Children = kind == ReferenceKinds.Package ? Transitive($"{prefix}|{kind}|{m.Name}", m.TargetFramework, m.Name, PackageChain.Of(m.Name)) : [],
                     })],
                 });
             }
@@ -512,4 +555,14 @@ public static class SolutionTree
             Children = children,
         };
     }
+}
+
+/// <summary>The packages on the way to a transitive package (a cycle guard): small, so a list.</summary>
+internal readonly record struct PackageChain(IReadOnlyList<string> Items)
+{
+    public static PackageChain Of(string item) => new([item]);
+
+    public bool Contains(string item) => Items.Contains(item, StringComparer.OrdinalIgnoreCase);
+
+    public PackageChain With(string item) => new([.. Items, item]);
 }

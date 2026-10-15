@@ -138,6 +138,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 IsAspireHost = string.Equals(outer.GetPropertyValue("IsAspireHost").Trim(), "true", StringComparison.OrdinalIgnoreCase),
                 UsesMaui = string.Equals(outer.GetPropertyValue("UseMaui").Trim(), "true", StringComparison.OrdinalIgnoreCase),
                 MissingWorkloadPacks = [.. missingPacks],
+                Packages = assets is null ? [] : [.. frameworks.SelectMany(assets.Graph)],
             };
             var distinctImports = imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var assetsFile = NullIfEmpty(outer.GetPropertyValue("ProjectAssetsFile"));
