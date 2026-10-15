@@ -156,6 +156,7 @@ public static class CommandIcons
         ["breakpoint-outline"] = Red,
         ["circle"] = Red,
         ["flame"] = Orange,
+        ["class"] = Orange,
         ["tag"] = Orange,
         ["history"] = Orange,
         ["branch"] = Orange,

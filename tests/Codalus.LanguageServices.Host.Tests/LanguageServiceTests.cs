@@ -326,6 +326,46 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
         Assert.Equal(expected, Features.PasteImportsFeature.Namespace(title));
 
     [Fact]
+    public async Task Class_view_and_the_object_browser_walk_a_projects_symbols()
+    {
+        var lib = fixture.File("src", "Lib", "Lib.csproj");
+        async Task<BrowseItem[]> Browse(string? parent, bool references = false, string? query = null) =>
+            (await fixture.Client.BrowseAsync(new BrowseParams(lib, parent, references) { Query = query }, Ct)).Items;
+
+        // Class View: the project's namespaces, their types, and a type's members with signatures.
+        var roots = await Browse(null);
+        var ns = Assert.Single(roots, i => i.Kind == SymbolKind.Namespace && i.Name == "Lib");
+        var types = await Browse(ns.Id);
+        var circle = Assert.Single(types, t => t.Name == "Circle");
+        Assert.Contains(types, t => t is { Name: "IShape", Kind: SymbolKind.Interface });
+        Assert.True(circle is { Kind: SymbolKind.Class, HasChildren: true, IsSource: true });
+        var members = await Browse(circle.Id);
+        Assert.Contains(members, m => m is { Name: "Area", Kind: SymbolKind.Method, Detail: "double Area()" });
+        Assert.Contains(members, m => m is { Name: "Radius", Kind: SymbolKind.Property });
+
+        var described = await fixture.Client.DescribeAsync(lib, circle.Id, Ct);
+        Assert.NotNull(described);
+        Assert.True(described.Declaration.Contains("class Circle", StringComparison.Ordinal), described.Declaration);
+        Assert.Equal(Uri(Shapes), described.Location!.Uri);
+
+        // The Object Browser: the project's assembly first, then what it references, down to a library type.
+        var assemblies = await Browse(null, references: true);
+        Assert.Equal("Lib", assemblies[0].Name);
+        var runtime = Assert.Single(assemblies, a => a.Name == "System.Runtime");
+        var system = Assert.Single(await Browse(runtime.Id, references: true), n => n.Name == "System");
+        var stringType = Assert.Single(await Browse(system.Id, references: true), t => t.Name == "String");
+        Assert.False(stringType.IsSource);
+        Assert.Contains(await Browse(stringType.Id, references: true), m => m.Name == "IsNullOrEmpty");
+        var library = await fixture.Client.DescribeAsync(lib, stringType.Id, Ct);
+        Assert.StartsWith(DocumentUris.MetadataScheme + ":", library!.Location!.Uri, StringComparison.Ordinal);
+        Assert.Equal("Member of System", library.Container);
+
+        // Search: by name, in the project or with what it references.
+        Assert.Contains(await Browse(null, query: "Circ"), i => i.Name == "Circle");
+        Assert.Contains(await Browse(null, references: true, query: "IsNullOrWhiteSpace"), i => i is { Name: "IsNullOrWhiteSpace", Detail: "string" });
+    }
+
+    [Fact]
     public async Task Formatting_follows_the_editorconfig()
     {
         var path = fixture.File("src", "App", "Messy.cs");

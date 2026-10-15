@@ -373,6 +373,14 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<GeneratedDocumentsResult> GeneratedDocumentsAsync(string project, CancellationToken cancellationToken) =>
         Invoke(Methods.GeneratedDocuments, new GeneratedDocumentsParams(project), ProtocolJsonContext.Default.GeneratedDocumentsParams, ProtocolJsonContext.Default.GeneratedDocumentsResult, cancellationToken);
 
+    /// <summary><c>codalus/browse</c>: Class View's and the Object Browser's items, a level at a time.</summary>
+    public Task<BrowseResult> BrowseAsync(BrowseParams parameters, CancellationToken cancellationToken) =>
+        Invoke(Methods.Browse, parameters, ProtocolJsonContext.Default.BrowseParams, ProtocolJsonContext.Default.BrowseResult, cancellationToken);
+
+    /// <summary><c>codalus/browse/describe</c>: an item's declaration, location and summary (null: not found).</summary>
+    public Task<BrowseDescription?> DescribeAsync(string project, string id, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.BrowseDescribe, new BrowseDescribeParams(project, id), ProtocolJsonContext.Default.BrowseDescribeParams, ProtocolJsonContext.Default.BrowseDescription, cancellationToken);
+
     public Task<SourceGeneratedText?> SourceGeneratedTextAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.SourceGeneratedText, new SourceGeneratedTextParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.SourceGeneratedTextParams, ProtocolJsonContext.Default.SourceGeneratedText, cancellationToken);
 

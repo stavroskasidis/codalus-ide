@@ -214,6 +214,10 @@ internal sealed class LanguageServer : IAsyncDisposable
         OnDocument(Methods.SourceGeneratedText, json.SourceGeneratedTextParams, json.SourceGeneratedText, p => p.TextDocument,
             (document, _, ct) => GeneratedTextAsync(document, ct), null);
         _connection.OnRequest(Methods.GeneratedDocuments, json.GeneratedDocumentsParams, json.GeneratedDocumentsResult, (p, ct) => GeneratedDocumentsAsync(p.Project, ct));
+        _connection.OnRequest(Methods.Browse, json.BrowseParams, json.BrowseResult, async (p, ct) =>
+            ProjectOf(p.Project) is { } project ? await ObjectBrowserFeature.BrowseAsync(project, p, ct).ConfigureAwait(false) : new BrowseResult([]));
+        _connection.OnRequest(Methods.BrowseDescribe, json.BrowseDescribeParams, json.BrowseDescription, async (p, ct) =>
+            ProjectOf(p.Project) is { } project ? await ObjectBrowserFeature.DescribeAsync(project, p.Id, ct).ConfigureAwait(false) : null);
         _connection.OnRequest(Methods.TestCandidates, json.TestCandidatesParams, json.TestCandidatesResult, (p, ct) =>
             TestCandidatesFeature.FindAsync(_workspace.CurrentSolution, p.TextDocuments, ct));
         _connection.OnRequest(Methods.TypeOutline, json.TypeOutlineParams, json.TypeOutline, async (p, ct) =>
@@ -473,11 +477,17 @@ internal sealed class LanguageServer : IAsyncDisposable
         return new DocumentOptions(insertSpaces, tabSize, indentSize, newLine);
     }
 
+    /// <summary>The workspace's project of a project file (its first target framework's).</summary>
+    private Project? ProjectOf(string projectPath)
+    {
+        var full = Path.GetFullPath(projectPath);
+        return _workspace.CurrentSolution.Projects.FirstOrDefault(p => p.FilePath is { } file && Paths.Comparer.Equals(Path.GetFullPath(file), full));
+    }
+
     /// <summary>A project's source-generated files (of its first target framework's project), by generator.</summary>
     private async Task<GeneratedDocumentsResult> GeneratedDocumentsAsync(string projectPath, CancellationToken cancellationToken)
     {
-        var full = Path.GetFullPath(projectPath);
-        if (_workspace.CurrentSolution.Projects.FirstOrDefault(p => p.FilePath is { } file && Paths.Comparer.Equals(Path.GetFullPath(file), full)) is not { } project)
+        if (ProjectOf(projectPath) is not { } project)
         {
             return new GeneratedDocumentsResult([]);
         }

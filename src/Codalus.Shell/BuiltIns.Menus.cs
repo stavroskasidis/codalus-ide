@@ -192,6 +192,7 @@ internal static partial class BuiltIns
             Item(View, "workbench.showCommandPalette", "navigation"),
             Item(View, "terminal.new", "view", when: null) with { Order = 85 },
             MenuItemRule.ForSubmenu(View, OtherWindowsMenu, "Other Windows", shell) with { Group = "view", Order = 1000 },
+            new MenuItemRule(OtherWindowsMenu, "workbench.view.objectBrowser", shell) { Group = "windows", Order = AlphabeticalOrder("Object Browser") },
             Item(View, "workbench.focusNextPane", "layout"),
             Item(View, "workbench.focusPreviousPane", "layout"),
 

@@ -473,6 +473,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             FindResultsViewModel.ToolWindowId => FindResults,
             DocumentOutlineViewModel.ToolWindowId => DocumentOutline,
             HierarchyViewModel.ToolWindowId => Hierarchy,
+            SymbolBrowserViewModel.ClassViewId => ShowClassView(),
             CodeDefinitionViewModel.ToolWindowId => CodeDefinition,
             BookmarksViewModel.ToolWindowId => BookmarkList,
             TaskListViewModel.ToolWindowId => TaskList,

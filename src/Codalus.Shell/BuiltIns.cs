@@ -195,6 +195,7 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(ViewModels.ErrorListViewModel.ToolWindowId, "Error List", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "error", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(ViewModels.FindResultsViewModel.ToolWindowId, "Find Results", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
         yield return new ToolWindowDescriptor(ViewModels.DocumentOutlineViewModel.ToolWindowId, "Document Outline", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "document-text" };
+        yield return new ToolWindowDescriptor(ViewModels.SymbolBrowserViewModel.ClassViewId, "Class View", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "class" };
         yield return new ToolWindowDescriptor(ViewModels.HierarchyViewModel.ToolWindowId, "Hierarchy", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "method" };
         yield return new ToolWindowDescriptor(ViewModels.CodeDefinitionViewModel.ToolWindowId, "Code Definition", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "file-code" };
         yield return new ToolWindowDescriptor(ViewModels.BookmarksViewModel.ToolWindowId, "Bookmarks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "star" };
@@ -221,6 +222,7 @@ internal static partial class BuiltIns
         Add("workbench.openSettings", "Open Settings", "Preferences", Ui(shell.OpenSettings));
         Add("workbench.openOptions", "Options…", string.Empty, Ui(shell.OpenSettings), palette: false);
         Add("workbench.openSettingsJson", "Open User Settings (JSON)", "Preferences", Ui(shell.OpenSettingsJsonAsync));
+        Add("workbench.view.objectBrowser", "Object Browser", "View", Ui(() => shell.OpenObjectBrowser()), "solutionOpen");
         Add("workbench.action.configureLanguageBasedSettings", "Configure Language-Specific Settings…", "Preferences", Ui(() => shell.ConfigureLanguageSettingsAsync()));
         Add("workbench.openKeyboardShortcuts", "Open Keyboard Shortcuts", "Preferences", Ui(shell.OpenKeyboardShortcuts));
         Add("workbench.openFontsAndColors", "Fonts and Colors", "Preferences", Ui(shell.OpenFontsAndColors));
