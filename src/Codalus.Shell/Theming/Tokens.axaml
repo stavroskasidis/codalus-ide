@@ -45,6 +45,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#652D90" />
       <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#8A6400" />
       <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#424242" />
       <SolidColorBrush x:Key="Shell.Icon.Run" Color="#388A34" />
       <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Icon.Save" Color="#00539C" />
@@ -146,6 +147,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#B180D7" />
       <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFCC00" />
       <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#C5C5C5" />
       <SolidColorBrush x:Key="Shell.Icon.Run" Color="#89D185" />
       <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Icon.Save" Color="#75BEFF" />
@@ -363,6 +365,7 @@
       <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Run" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Icon.Save" Color="#FFFFFF" />
