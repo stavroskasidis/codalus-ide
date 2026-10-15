@@ -24,6 +24,9 @@ namespace Codalus.Shell.Editor;
 /// <summary>Caret position and selection, for the status bar.</summary>
 public sealed record CaretInfo(int Line, int Column, int SelectionLength, int Carets);
 
+/// <summary>Text pasted into an editor: where it went in the document, and the clipboard's text.</summary>
+public sealed record PastedText(int Offset, int Length, string Text);
+
 /// <summary>
 /// Everything one editor view does on top of AvaloniaEdit: options and theme, semantic highlighting of the visible
 /// range, squiggles, folding, completion, signature help, Quick Info, reference and bracket highlights, multiple
@@ -144,6 +147,7 @@ public sealed partial class CodeEditorController : IDisposable
         ApplyOptions();
         ApplyTheme();
         _services.Options.PropertyChanged += OnOptionsChanged;
+        editor.TextArea.TextPasted += OnTextPasted;
         _services.ThemeChanged += OnThemeChanged;
         _services.Diagnostics.Changed += OnDiagnosticsChanged;
         Model.ContentChanged += OnContentChanged;
@@ -1823,6 +1827,7 @@ public sealed partial class CodeEditorController : IDisposable
         _completion?.Close();
         _signature?.Close();
         _services.Options.PropertyChanged -= OnOptionsChanged;
+        Editor.TextArea.TextPasted -= OnTextPasted;
         _services.ThemeChanged -= OnThemeChanged;
         _services.Diagnostics.Changed -= OnDiagnosticsChanged;
         Model.ContentChanged -= OnContentChanged;

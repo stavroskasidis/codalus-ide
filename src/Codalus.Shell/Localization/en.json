@@ -2345,6 +2345,8 @@
   "setting.editor.navigationBar.title": "Navigation Bar",
   "setting.editor.overviewRuler.description": "Mark errors, warnings, changes, breakpoints, find results and the caret beside the scroll bar.",
   "setting.editor.overviewRuler.title": "Overview Ruler",
+  "setting.editor.pasteAddsImports.description": "Add the usings (Imports) that pasted C# or Visual Basic code needs, when the namespace is unambiguous or the one it was copied under.",
+  "setting.editor.pasteAddsImports.title": "Add Missing Usings on Paste",
   "setting.editor.renderWhitespace.description": "Show spaces and tabs.",
   "setting.editor.renderWhitespace.enum.all": "Visible",
   "setting.editor.renderWhitespace.enum.none": "Hidden",

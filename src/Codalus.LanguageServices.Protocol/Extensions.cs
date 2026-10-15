@@ -185,6 +185,13 @@ public sealed record DocCommentTemplate(TextEdit Edit, Position Caret);
 /// </summary>
 public sealed record CodeCleanupParams(TextDocumentIdentifier TextDocument, string[]? Fixes, bool? SortUsings, bool? Format);
 
+/// <summary>
+/// <c>codalus/pasteImports</c>: the usings (VB: Imports) that the code just pasted at <see cref="Range"/> needs, as a
+/// workspace edit, or null. <see cref="Namespaces"/> are the ones the code was copied under, preferred when a name has
+/// several candidates.
+/// </summary>
+public sealed record PasteImportsParams(TextDocumentIdentifier TextDocument, Range Range, string[]? Namespaces);
+
 /// <summary>A choice of a refactoring's options dialog: a member, a parameter or a flag.</summary>
 public sealed record OptionItem(string Id, string Label, bool Checked)
 {

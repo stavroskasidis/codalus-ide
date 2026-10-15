@@ -67,6 +67,7 @@ public static class Methods
     public const string SymbolInfo = "codalus/symbolInfo";
     public const string DocCommentTemplate = "codalus/docCommentTemplate";
     public const string CodeCleanup = "codalus/codeCleanup";
+    public const string PasteImports = "codalus/pasteImports";
     public const string CodeActionOptions = "codalus/codeActionOptions";
     public const string SyntaxTree = "codalus/syntaxTree";
     public const string CodeMetrics = "codalus/codeMetrics";

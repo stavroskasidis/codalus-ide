@@ -256,6 +256,11 @@ internal sealed class LanguageServer : IAsyncDisposable
             async (document, p, ct) => await EditingFeatures.SelectionRangesAsync(document, p.Positions, ct).ConfigureAwait(false), []);
         OnDocument(Methods.CodeCleanup, json.CodeCleanupParams, json.WorkspaceEdit, p => p.TextDocument,
             (document, p, ct) => _cleanup.CleanUpAsync(document, p, _workspace.Version, ct), null);
+        OnDocument(Methods.PasteImports, json.PasteImportsParams, json.WorkspaceEdit, p => p.TextDocument, async (document, p, ct) =>
+        {
+            var text = await document.GetTextAsync(ct).ConfigureAwait(false);
+            return await PasteImportsFeature.AddAsync(document, Positions.ToSpan(text, p.Range), p.Namespaces ?? [], _workspace.Version, message => Log(MessageType.Log, message), ct).ConfigureAwait(false);
+        }, null);
         OnPosition(Methods.DocCommentTemplate, json.TextDocumentPositionParams, json.DocCommentTemplate, p => (p.TextDocument, p.Position),
             async (document, _, p, ct) => await EditingFeatures.TemplateAsync(document, p.Position, ct).ConfigureAwait(false), null);
         OnPosition(Methods.ReferenceItems, json.TextDocumentPositionParams, json.ReferenceItemsResult, p => (p.TextDocument, p.Position),

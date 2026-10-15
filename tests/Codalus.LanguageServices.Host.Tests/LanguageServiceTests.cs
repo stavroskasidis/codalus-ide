@@ -276,6 +276,56 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task Pasted_code_gets_the_usings_it_needs()
+    {
+        var path = fixture.File("src", "App", "Pasted.cs");
+        await File.WriteAllTextAsync(path, "namespace App\n{\n    internal static class Pasted\n    {\n    }\n}\n\nnamespace App.One { public class Widget { } }\nnamespace App.Two { public class Widget { } }\n", Ct);
+        await fixture.OpenAsync(path);
+        try
+        {
+            // The pasted members: StringBuilder and Regex have one namespace each; Widget has two (App.One, App.Two).
+            const string Code = "        public static string Make() => new StringBuilder().Append(Regex.Escape(\"a\")).ToString();\n        public static Widget? Part;\n";
+            await fixture.EditAsync(path, "    {\n    }", "    {\n" + Code + "    }");
+            var text = fixture.Text(path).Text;
+            var start = text.IndexOf(Code, StringComparison.Ordinal);
+            var range = new Protocol.Range(LanguageFixture.PositionOf(text, start), LanguageFixture.PositionOf(text, start + Code.Length));
+
+            var edit = await fixture.Client.PasteImportsAsync(Uri(path), range, null, Ct);
+            var change = Assert.Single(edit!.DocumentChanges);
+            var result = Apply(text, change.Edits);
+            Assert.Contains("using System.Text;", result, StringComparison.Ordinal);
+            Assert.Contains("using System.Text.RegularExpressions;", result, StringComparison.Ordinal);
+            Assert.DoesNotContain("using App.One;", result, StringComparison.Ordinal); // ambiguous: left for the lightbulb
+            Assert.DoesNotContain("using App.Two;", result, StringComparison.Ordinal);
+            Assert.Contains(Code, result, StringComparison.Ordinal);
+
+            // The namespaces the code was copied under decide.
+            edit = await fixture.Client.PasteImportsAsync(Uri(path), range, ["App.Two", "System.Text"], Ct);
+            var preferred = Apply(text, Assert.Single(edit!.DocumentChanges).Edits);
+            Assert.Contains("using App.Two;", preferred, StringComparison.Ordinal);
+            Assert.DoesNotContain("using App.One;", preferred, StringComparison.Ordinal);
+
+            // Nothing missing: no edit.
+            var bound = text.IndexOf("internal static class Pasted", StringComparison.Ordinal);
+            Assert.Null(await fixture.Client.PasteImportsAsync(Uri(path), new Protocol.Range(LanguageFixture.PositionOf(text, bound), LanguageFixture.PositionOf(text, bound + 28)), null, Ct));
+        }
+        finally
+        {
+            await fixture.Languages.CloseAsync(path);
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("using System.Text;", "System.Text")]
+    [InlineData("Imports System.Text.RegularExpressions", "System.Text.RegularExpressions")]
+    [InlineData("using static System.Math;", null)]
+    [InlineData("System.Text.StringBuilder", null)]
+    [InlineData("Generate class 'Foo'", null)]
+    public void The_namespace_comes_from_the_fix_title(string title, string? expected) =>
+        Assert.Equal(expected, Features.PasteImportsFeature.Namespace(title));
+
+    [Fact]
     public async Task Formatting_follows_the_editorconfig()
     {
         var path = fixture.File("src", "App", "Messy.cs");

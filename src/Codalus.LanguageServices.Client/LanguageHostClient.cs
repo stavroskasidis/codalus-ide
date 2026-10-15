@@ -484,6 +484,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
         InvokeNullable(Methods.CodeMetrics, new CodeMetricsParams(uri is null ? null : new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.CodeMetricsParams, ProtocolJsonContext.Default.CodeMetricsResult, cancellationToken);
 
     /// <summary>Code Cleanup of a document (our C# host only): the edit, or null.</summary>
+    /// <summary><c>codalus/pasteImports</c>: the usings pasted code needs (null: none, or not a C#/VB document).</summary>
+    public Task<WorkspaceEdit?> PasteImportsAsync(string uri, Protocol.Range range, string[]? namespaces, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.PasteImports, new PasteImportsParams(new TextDocumentIdentifier(uri), range, namespaces), ProtocolJsonContext.Default.PasteImportsParams, ProtocolJsonContext.Default.WorkspaceEdit, cancellationToken);
+
     public Task<WorkspaceEdit?> CodeCleanupAsync(string uri, string[]? fixes, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.CodeCleanup, new CodeCleanupParams(new TextDocumentIdentifier(uri), fixes, null, null), ProtocolJsonContext.Default.CodeCleanupParams, ProtocolJsonContext.Default.WorkspaceEdit, cancellationToken);
 

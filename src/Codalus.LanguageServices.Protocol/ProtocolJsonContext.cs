@@ -77,6 +77,7 @@ namespace Codalus.LanguageServices.Protocol;
 [JsonSerializable(typeof(SelectionRange[]))]
 [JsonSerializable(typeof(DocCommentTemplate))]
 [JsonSerializable(typeof(CodeCleanupParams))]
+[JsonSerializable(typeof(PasteImportsParams))]
 [JsonSerializable(typeof(CodeActionOptionsParams))]
 [JsonSerializable(typeof(CodeActionOptions))]
 [JsonSerializable(typeof(SyntaxTreeParams))]

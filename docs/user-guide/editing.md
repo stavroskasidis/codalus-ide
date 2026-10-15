@@ -88,6 +88,7 @@ Language services from plugins provide the outline, navigation bar, sticky scrol
 | Move Line Up and Down | `Alt+Up`, `Alt+Down` | The selected lines. |
 | Expand and Shrink Selection | `Shift+Alt+=`, `Shift+Alt+-` | Word, expression, statement, block… from the language service. |
 | Paste from Clipboard Ring | `Ctrl+Shift+V` | The last 15 copies and cuts. |
+| Paste with automatic usings | `Ctrl+V` | C# and Visual Basic code you paste gets the `using` (`Imports`) directives it needs. A name is imported when it has one possible namespace, or when it's one of the namespaces of the file you copied it from; other names are left for the lightbulb. The status bar shows what was added, and Undo removes it. Turn it off with Text Editor → Add Missing Usings on Paste (`editor.pasteAddsImports`). |
 | Paste JSON as Classes | (Edit menu) | C# classes for the JSON on the clipboard. |
 | Paste XML as Classes | (Edit menu) | C# classes for the XML on the clipboard, with `XmlSerializer`'s attributes: attributes and child elements become properties (a list when an element repeats), and values get the narrowest type that fits them all. |
 | Zoom In, Out and Reset | `Ctrl+Shift+.`, `Ctrl+Shift+,`, `Ctrl+Wheel` | Per editor. |

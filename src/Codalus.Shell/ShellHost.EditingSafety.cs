@@ -47,17 +47,27 @@ public sealed partial class ShellHost
         if (_copyTracked is not null)
         {
             _copyTracked.Copied -= OnCopied;
+            _copyTracked.Pasted -= OnPasted;
         }
 
         _copyTracked = controller;
         if (controller is not null)
         {
             controller.Copied += OnCopied;
+            controller.Pasted += OnPasted;
         }
     }
 
+    public const string PasteAddsImportsSetting = "editor.pasteAddsImports";
+
+    /// <summary>The last copy in an editor and the namespaces in scope where it was copied (paste with automatic usings).</summary>
+    private (string Text, string[] Namespaces)? _copySource;
+
     private void OnCopied(object? sender, string text)
     {
+        _copySource = sender is CodeEditorController source && source.Model.LanguageId is CSharpLanguageId or VisualBasicLanguageId
+            ? (text, NamespacesInScope(source.Model.Text.Text))
+            : null;
         _clipboardRing.Remove(text);
         _clipboardRing.Insert(0, text);
         if (_clipboardRing.Count > ClipboardRingSize)
@@ -65,6 +75,58 @@ public sealed partial class ShellHost
             _clipboardRing.RemoveAt(_clipboardRing.Count - 1);
         }
     }
+
+    /// <summary>
+    /// Paste with automatic usings (deferred from M12b): C# and VB code pasted into an editor gets the usings (Imports)
+    /// it needs from the language service, preferring the namespaces of the file it was copied from. Undo removes them.
+    /// </summary>
+    private async void OnPasted(object? sender, PastedText pasted)
+    {
+        if (sender is not CodeEditorController { Model: { IsReadOnly: false } model } controller || model.LanguageId is not (CSharpLanguageId or VisualBasicLanguageId)
+            || !Workbench.Settings.ForLanguage(model.LanguageId).GetBoolean(PasteAddsImportsSetting, true)
+            || ((IEditorServices)this).Client(model) is not { } client)
+        {
+            return;
+        }
+
+        try
+        {
+            var document = model.Text;
+            var range = new LanguageServices.Protocol.Range(PositionAt(document, pasted.Offset), PositionAt(document, pasted.Offset + pasted.Length));
+            var preferred = _copySource is { } source && source.Text.ReplaceLineEndings() == pasted.Text.ReplaceLineEndings() ? source.Namespaces : null;
+            var version = model.Version;
+            var edit = await client.PasteImportsAsync(model.Uri, range, preferred, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(true);
+            if (edit is not { DocumentChanges.Length: > 0 } || model.Version != version || ActiveEditor?.Controller != controller)
+            {
+                return; // nothing to add, or the user typed meanwhile
+            }
+
+            var added = edit.DocumentChanges.SelectMany(c => c.Edits).Select(e => e.NewText.Trim()).Where(t => t.Length > 0).ToList();
+            if (await ApplyWorkspaceEditAsync(edit).ConfigureAwait(true))
+            {
+                StatusBar.ShowMessage(string.Join(" ", added).ReplaceLineEndings(" "), TimeSpan.FromSeconds(4));
+            }
+        }
+        catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or IOException or Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or InvalidOperationException)
+        {
+            LanguageLog.AppendLine($"[paste imports] {model.Name}: {ex.Message}");
+        }
+    }
+
+    private static LanguageServices.Protocol.Position PositionAt(AvaloniaEdit.Document.TextDocument document, int offset)
+    {
+        var location = document.GetLocation(Math.Clamp(offset, 0, document.TextLength));
+        return new LanguageServices.Protocol.Position(location.Line - 1, location.Column - 1);
+    }
+
+    /// <summary>The namespaces in scope in a C# or VB file: its usings (Imports) and the namespaces it declares.</summary>
+    internal static string[] NamespacesInScope(string text) =>
+    [
+        .. NamespaceLines().Matches(text).Select(m => m.Groups["ns"].Value).Distinct(StringComparer.Ordinal),
+    ];
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*(?:global\s+)?(?:using|Imports|namespace|Namespace)\s+(?<ns>[A-Za-z_][\w.]*)\s*(?:;|\{|$)", System.Text.RegularExpressions.RegexOptions.Multiline)]
+    private static partial System.Text.RegularExpressions.Regex NamespaceLines();
 
     /// <summary>Ctrl+Shift+V: pastes one of the last copies or cuts.</summary>
     public async Task PasteFromClipboardRingAsync()

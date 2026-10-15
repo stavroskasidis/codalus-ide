@@ -119,6 +119,7 @@ internal static partial class BuiltIns
             Setting(EditorOptions.OverviewRulerKey, "true", SettingType.Boolean, "Overview Ruler", "Mark errors, warnings, changes, breakpoints, find results and the caret beside the scroll bar.", 21),
             Setting(EditorOptions.NavigationBarKey, "true", SettingType.Boolean, "Navigation Bar", "Show the type and member drop-downs above the editor.", 22),
             Setting(ShellHost.FormatOnSaveSetting, "false", SettingType.Boolean, "Format on Save", "Format the document with its language service before saving.", 23),
+            Setting(ShellHost.PasteAddsImportsSetting, "true", SettingType.Boolean, "Add Missing Usings on Paste", "Add the usings (Imports) that pasted C# or Visual Basic code needs, when the namespace is unambiguous or the one it was copied under.", 24),
             SettingDescriptor.Create(ShellHost.CodeCleanupFixesSetting, "[]", SettingType.StringArray, shell) with
             {
                 Title = "Code Cleanup Fixes",
