@@ -645,6 +645,7 @@
   "command.workbench.openSettings": "Open Settings",
   "command.workbench.openSettingsJson": "Open User Settings (JSON)",
   "command.workbench.openSolution": "Open Solution or Project…",
+  "command.workbench.openWithHexViewer": "Open With Hex Viewer",
   "command.workbench.pinEditor": "Pin or Unpin Tab",
   "command.workbench.previousDocument": "Previous Document",
   "command.workbench.profiles.delete": "Delete Profile…",

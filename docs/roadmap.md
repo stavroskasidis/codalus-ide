@@ -2544,7 +2544,7 @@ Items deferred with a `TODO(issue)` to a milestone that has since closed without
 | Paste with automatic usings, per-language editor options | [M12b](checkpoints/m12b.md) | M12 |
 | The EditorConfig settings UI, a suppression file, Error List grouping and the analysis-scope picker, spell checking | [M12b](checkpoints/m12b.md) | M12 |
 | Vertical tabs, persisted floating documents (`LayoutManager.cs`) | [M12b](checkpoints/m12b.md), [M3a](checkpoints/m3a.md) | M12 |
-| The hex viewer; SVG and animated GIFs in the image viewer | [M12b](checkpoints/m12b.md) | M12 |
+| SVG and animated GIFs in the image viewer | [M12b](checkpoints/m12b.md) | M12 |
 | The `.resx` editor; XSD validation; LSP features for other languages beyond M11's | [M11](checkpoints/m11.md) | M11 |
 | NuGet's interactive credential prompts | [M9a](checkpoints/m9a.md), ADR 0012 | M13's sign-in |
 | The Hot Reload toolbar dropdown | [M15b](checkpoints/m15b.md) | M23 (Customize) |
@@ -2764,3 +2764,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-15: deferred work, renamed and deleted files in workspace edits: `WorkspaceEdit.ResourceOperations` (rename, delete) from the C# host's renamed and removed documents (Rename File to Match Type) and from other servers' LSP file operations (now declared in the client's capabilities; a created file becomes an empty new file's edit), applied after the text edits through the build host, an open file saved and reopened. Tested by `Rename_file_to_match_its_type_is_a_rename_of_the_file` and `WorkspaceEditTests`.
 - 2026-10-15: deferred work, the Ctrl+Tab switcher: holding Ctrl, each Tab moves through the open documents in most-recently-used order and releasing Ctrl switches (`DocumentSwitcherViewModel`, Esc stays, arrows and a click work); Next/Previous Document keep the tab order on `Ctrl+Alt+PageDown`/`PageUp`. Tested by `DocumentSwitcherTests`.
 - 2026-10-15: deferred work, Edit → Paste Special → Paste XML as Classes (`XmlClassGenerator`): classes for `XmlSerializer`, with attributes, repeated elements as lists, mixed text as `[XmlText]`, namespaces, and values typed from every occurrence.
+- 2026-10-15: deferred work, the hex viewer (`HexDocument`, `HexViewerView`): binary files (NUL bytes and no byte order mark in their first 8 KB) open in it, any file through Open With Hex Viewer, Reopen With Text Editor goes back; read-only, reading only the visible rows; a selected byte's offset and value in its bar. Tested by `HexViewerTests`.

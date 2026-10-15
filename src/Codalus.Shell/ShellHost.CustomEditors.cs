@@ -34,7 +34,7 @@ public sealed partial class ShellHost
             new CommandDescriptor(ReopenWithTextEditorCommand, "Reopen With Text Editor", ContributionSource.Shell)
             {
                 Category = "View",
-                Enablement = Codalus.Workbench.Context.WhenClause.Parse("activeDocumentKind == customEditor"),
+                Enablement = Codalus.Workbench.Context.WhenClause.Parse("activeDocumentKind == customEditor || activeDocumentKind == hex"),
             },
             async (_, _) =>
             {
@@ -45,6 +45,11 @@ public sealed partial class ShellHost
                         var path = document.Path;
                         Layout.CloseDocument(document);
                         await OpenFileAsync(path, textEditor: true).ConfigureAwait(true);
+                    }
+                    else if (Layout.ActiveDocument is Views.HexDocument hex)
+                    {
+                        Layout.CloseDocument(hex);
+                        await OpenFileAsync(hex.Path, textEditor: true).ConfigureAwait(true);
                     }
                 }).ConfigureAwait(false);
                 return null;

@@ -144,6 +144,7 @@ internal static partial class BuiltIns
             Item(Context, "explorer.collapseAll", "4-solution", 3, "explorerItemKind == solution"),
             Item(Context, "explorer.copyPath", "5-path", 1, HasPath),
             Item(Context, "explorer.reveal", "5-path", 2, HasPath),
+            Item(Context, "workbench.openWithHexViewer", "5-path", 3, "explorerItemKind == file"),
         ]);
     }
 }

@@ -46,6 +46,32 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>Opens a file in the hex viewer (read-only).</summary>
+    public HexDocument OpenHex(string path, bool preview = false)
+    {
+        path = Path.GetFullPath(path);
+        if (Layout.FindDocument<HexDocument>(HexDocument.IdFor(path)) is not { } document)
+        {
+            document = new HexDocument(path, EditorFont);
+        }
+
+        Layout.OpenDocument(document, preview, focus: !preview);
+        return document;
+    }
+
+    /// <summary>
+    /// Open With Hex Viewer: the file selected in Solution Explorer when it has the focus, else the active document's.
+    /// </summary>
+    public void OpenWithHexViewer()
+    {
+        var selected = Explorer.Selected?.Node is { Kind: Codalus.Workbench.Projects.ExplorerNodeKind.File, Path: { } file } ? file : null;
+        var path = Workbench.Context.GetValue("focusedView") is "solutionExplorer" ? selected ?? Layout.ActiveDocument?.FilePath : Layout.ActiveDocument?.FilePath ?? selected;
+        if (path is not null && File.Exists(path))
+        {
+            OpenHex(path);
+        }
+    }
+
     /// <summary>Opens an image file in the image viewer.</summary>
     public ImageDocument OpenImage(string path, bool preview = false)
     {

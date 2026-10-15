@@ -222,6 +222,7 @@ internal static partial class BuiltIns
         Add("editor.action.smartSelect.shrink", "Shrink Selection", "Editor", OnEditor(c => c.ShrinkSelection()), Editor);
         Add("editor.action.pasteFromClipboardRing", "Paste from Clipboard Ring", "Editor", Ui(shell.PasteFromClipboardRingAsync), Editor);
         Add("editor.action.pasteJsonAsClasses", "Paste JSON as Classes", "Editor", Ui(shell.PasteJsonAsClassesAsync), Editor);
+        Add("workbench.openWithHexViewer", "Open With Hex Viewer", "File", Ui(() => shell.OpenWithHexViewer()));
         Add("editor.action.pasteXmlAsClasses", "Paste XML as Classes", "Editor", Ui(shell.PasteXmlAsClassesAsync), Editor);
         Add("editor.action.fontZoomIn", "Zoom In (Editor)", "Editor", OnEditor(c => c.Zoom *= 1.1), Editor);
         Add("editor.action.fontZoomOut", "Zoom Out (Editor)", "Editor", OnEditor(c => c.Zoom /= 1.1), Editor);

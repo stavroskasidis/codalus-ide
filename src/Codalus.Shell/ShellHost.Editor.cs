@@ -197,6 +197,13 @@ public sealed partial class ShellHost : IEditorServices
             return null;
         }
 
+        // A binary file opens in the hex viewer, unless the text editor was asked for.
+        if (initialContent is null && !textEditor && !_models.ContainsKey(path) && File.Exists(path) && Views.HexDocument.LooksBinary(path))
+        {
+            OpenHex(path, preview);
+            return null;
+        }
+
         // A plugin's custom editor claims the file (API 1.0), unless the text editor was asked for.
         if (initialContent is null && !textEditor && at is null && Plugins.CustomEditorFor(path) is { } custom && File.Exists(path)
             && await OpenInCustomEditorAsync(path, custom, preview).ConfigureAwait(true))

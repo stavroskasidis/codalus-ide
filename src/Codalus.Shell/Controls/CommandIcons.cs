@@ -211,6 +211,7 @@ public static class CommandIcons
         ["editor.action.pasteFromClipboardRing"] = new("paste"),
         ["editor.action.pasteJsonAsClasses"] = new("braces"),
         ["editor.action.pasteXmlAsClasses"] = new("braces"),
+        ["workbench.openWithHexViewer"] = new("file-code"),
         ["editor.action.find"] = new("search"),
         ["editor.action.replace"] = new("replace"),
         ["workbench.action.findInFiles"] = new("find-in-files"),
