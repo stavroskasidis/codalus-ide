@@ -1,5 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
+using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 
@@ -146,21 +147,153 @@ public class FindInFilesTests
             await replacing;
             Assert.EndsWith("// amount later\n", editor.Model.Text.Text, StringComparison.Ordinal);
 
-            // Append results keeps the earlier ones.
+            // Append results keeps the earlier ones (the same file's under its one header).
             find.UseRegex = false;
             find.Query = "amount";
             await find.FindAllAsync();
-            Assert.Single(results.Rows, r => r.IsHeader);
+            Assert.Equal($"{one} (2)", Assert.Single(results.Rows, r => r.IsHeader).Code);
             find.Query = "class";
             find.AppendResults = true;
             await find.FindAllAsync();
-            Assert.Equal(2, results.Rows.Count(r => r.IsHeader));
+            Assert.Equal($"{one} (3)", Assert.Single(results.Rows, r => r.IsHeader).Code);
 
             // Escape closes the window.
             f.Shell.FindInFiles();
             await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<FindReplaceView>().Any(v => v.IsEffectivelyVisible));
             find.CloseCommand.Execute(null);
             Assert.False(find.IsOpen);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Find_results_filter_group_list_and_keep_results_like_the_classic_ide()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = Directory.CreateTempSubdirectory("codalus-find-").FullName;
+        try
+        {
+            var one = Path.Combine(folder, "a", "One.cs");
+            var two = Path.Combine(folder, "a", "Two.txt");
+            var four = Path.Combine(folder, "b", "Four.md");
+            Directory.CreateDirectory(Path.GetDirectoryName(one)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(four)!);
+            await File.WriteAllTextAsync(one, "class One { int value; }\n    // value again\n");
+            await File.WriteAllTextAsync(two, "Value\nnothing\n");
+            await File.WriteAllTextAsync(four, "A VALUE.\n");
+
+            var find = f.Shell.FindReplace;
+            var results = f.Shell.FindResults;
+            find.Query = "value";
+            find.LookIn = folder;
+            await find.FindAllAsync();
+            var page = results.CurrentPage;
+            Assert.Equal(1, page.Number);
+            Assert.Equal("Find Results 1", page.Header);
+            Assert.False(results.HasManyPages);
+            Assert.True(page.CanModifyFind);
+            Assert.Equal(FindResultsGrouping.File, page.FilesGroupBy);
+            Assert.Equal(7, page.Rows.Count); // three file headers, four matches
+
+            // Search Find Results: matches whose code or file name contain the text, under their files' headers, counted.
+            page.Filter = "AGAIN";
+            Assert.Equal([$"{one} (1)", "// value again"], page.Rows.Select(r => r.Code));
+            Assert.Contains("Shown: 1 of 4", page.Summary, StringComparison.Ordinal);
+            page.Filter = "two.txt";
+            Assert.Equal([two, two], page.Rows.Select(r => r.Path));
+            page.Filter = "zzz";
+            Assert.Empty(page.Rows);
+            page.Filter = string.Empty;
+            Assert.Equal(7, page.Rows.Count);
+            Assert.DoesNotContain("Shown:", page.Summary, StringComparison.Ordinal);
+
+            // Group by Path and file: a folder, its files, their matches, as a tree whose headers collapse.
+            page.FilesGroupBy = FindResultsGrouping.PathAndFile;
+            var a = Path.GetDirectoryName(one)!;
+            var b = Path.GetDirectoryName(four)!;
+            Assert.Equal(
+                [$"{a} (3)", "One.cs (2)", "class One { int value; }", "// value again", "Two.txt (1)", "Value", $"{b} (1)", "Four.md (1)", "A VALUE."],
+                page.Rows.Select(r => r.Code));
+            Assert.Equal([0, 1, 2, 2, 1, 2, 0, 1, 2], page.Rows.Select(r => r.Depth));
+            page.SelectedRow = page.Rows[3];
+            page.Toggle(page.Rows[0]);
+            Assert.Equal([$"{a} (3)", $"{b} (1)", "Four.md (1)", "A VALUE."], page.Rows.Select(r => r.Code));
+            Assert.False(page.Rows[0].IsExpanded);
+            Assert.Equal("chevron-right", page.Rows[0].Chevron);
+            Assert.Equal(page.Rows[0], page.SelectedRow); // the collapsed header takes the selection
+            await page.GoToAsync(1); // Next skips what is collapsed
+            Assert.Equal("A VALUE.", page.SelectedRow!.Code);
+            Assert.True(page.SetExpanded(page.Rows[0], expanded: true));
+            Assert.Equal(9, page.Rows.Count);
+            Assert.Equal("A VALUE.", page.SelectedRow!.Code); // the selection stays on its match
+
+            // Group by None: the matches alone; List View: flat with full paths, and Group by doesn't apply.
+            page.FilesGroupBy = FindResultsGrouping.None;
+            Assert.Equal(4, page.Rows.Count);
+            Assert.All(page.Rows, r => Assert.False(r.IsHeader));
+            Assert.Equal("One.cs", page.Rows[0].FileName);
+            page.IsListView = true;
+            Assert.False(page.CanGroupFiles);
+            Assert.Equal([one, one, two, four], page.Rows.Select(r => r.FileName));
+            page.IsListView = false;
+            page.FilesGroupBy = FindResultsGrouping.File;
+            Assert.Equal(7, page.Rows.Count);
+
+            // Keep Results: the next Find All opens Find Results 2 and the kept results stay; a later one reuses page 2.
+            f.Shell.Layout.ShowToolWindow(FindResultsViewModel.ToolWindowId, focus: false);
+            page.KeepResults = true;
+            find.Query = "nothing";
+            await find.FindAllAsync();
+            Assert.True(results.HasManyPages);
+            var second = results.CurrentPage;
+            Assert.Equal("Find Results 2", second.Header);
+            Assert.Equal(2, second.Rows.Count);
+            Assert.Equal(7, page.Rows.Count);
+            Assert.Same(results.Rows, second.Rows);
+            await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<FindResultsView>().Any(v => v.IsEffectivelyVisible
+                && v.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.TabStrip>().Any(t => t.IsEffectivelyVisible && t.ItemCount == 2)));
+            NavigationDepthTests.Screenshot(f, "find-results-kept");
+            find.Query = "class";
+            await find.FindAllAsync();
+            Assert.Equal(2, results.Pages.Count);
+            Assert.Same(second, results.CurrentPage);
+            Assert.StartsWith("Find all \"class\"", second.Title, StringComparison.Ordinal);
+
+            // Modify Find on a kept page shows Find and Replace with that page's search.
+            results.CurrentPage = page;
+            find.Query = "something else";
+            results.ModifyFindCommand.Execute(null);
+            Assert.True(find.IsOpen);
+            Assert.Equal("value", find.Query);
+            Assert.Equal(folder, find.LookIn);
+            find.Close();
+
+            // Closing a page leaves the others; the last one is cleared instead.
+            page.CloseCommand.Execute(null);
+            Assert.Equal([second], results.Pages);
+            Assert.Same(second, results.CurrentPage);
+            Assert.False(results.HasManyPages);
+            second.CloseCommand.Execute(null);
+            Assert.Single(results.Pages);
+            Assert.Empty(second.Rows);
+
+            // References aren't a Find in Files search: Modify Find is disabled, and Group by and List View hide.
+            var location = new Location(DocumentUris.FromPath(one), new LanguageServices.Protocol.Range(new Position(0, 16), new Position(0, 21)));
+            await results.ShowLocationsAsync("References to 'value'", [location]);
+            Assert.False(second.CanModifyFind);
+            Assert.False(results.ModifyFindCommand.CanExecute(null));
+            Assert.Equal(2, second.Rows.Count);
+            await results.ShowReferencesAsync("References to 'value'", [new ReferenceItem(location, ReferenceItemKinds.Declaration, "One", "App", "class One { int value; }")]);
+            Assert.False(second.CanModifyFind);
+            Assert.False(second.ShowsFiles);
+            find.Query = "value";
+            await find.FindAllAsync();
+            Assert.True(second.CanModifyFind);
+            Assert.True(results.ModifyFindCommand.CanExecute(null));
+            Assert.True(second.ShowsFiles);
         }
         finally
         {
