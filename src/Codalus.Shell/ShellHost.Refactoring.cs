@@ -371,7 +371,8 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ workspace edits
 
-    private async Task PreviewAndApplyAsync(string title, WorkspaceEdit edit)
+    /// <summary>Shows the edit in the preview and applies it on Apply; true when it was applied.</summary>
+    private async Task<bool> PreviewAndApplyAsync(string title, WorkspaceEdit edit)
     {
         var details = await PreviewAsync(edit).ConfigureAwait(true);
         var files = edit.DocumentChanges.Length;
@@ -379,10 +380,7 @@ public sealed partial class ShellHost
         {
             Details = details,
         }).ConfigureAwait(true);
-        if (choice.Button == "Apply")
-        {
-            await ApplyWorkspaceEditAsync(edit).ConfigureAwait(true);
-        }
+        return choice.Button == "Apply" && await ApplyWorkspaceEditAsync(edit).ConfigureAwait(true);
     }
 
     /// <summary>

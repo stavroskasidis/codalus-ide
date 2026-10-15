@@ -31,6 +31,9 @@ public interface IAiChatHost
     /// <summary>Turns AI on in the user's settings (and back on for this workspace).</summary>
     Task TurnOnAiAsync();
 
+    /// <summary>Asks in agent mode (M28c): checks trust and the model, then runs the agent's loop.</summary>
+    Task RunAgentAsync(string question, IReadOnlyList<AiContextItem> items, AiSelectionAnchor? anchor, CancellationToken cancellationToken);
+
     Task ConfigureAiProviderAsync();
 
     void ShowAiLog();
@@ -59,6 +62,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private bool _buildOutput;
     private bool _solution = true;
     private string _contextPreview = string.Empty;
+    private bool _agent;
 
     public AiChatViewModel(IAiChatHost host)
     {
@@ -124,6 +128,13 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     }
 
     public bool CanSend => !IsBusy && !IsOff && Input.Trim().Length > 0;
+
+    /// <summary>Agent mode (M28c): the model may read, search, build, propose edits and ask to run commands.</summary>
+    public bool IsAgent
+    {
+        get => _agent;
+        set => SetField(ref _agent, value);
+    }
 
     public bool IncludeSelection { get => _selection; set => SetChip(ref _selection, value); }
 
@@ -202,7 +213,14 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         Input = string.Empty;
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
-        await Chat.SendAsync(question, items, _cts.Token, anchor).ConfigureAwait(true);
+        if (IsAgent)
+        {
+            await _host.RunAgentAsync(question, items, anchor, _cts.Token).ConfigureAwait(true);
+        }
+        else
+        {
+            await Chat.SendAsync(question, items, _cts.Token, anchor).ConfigureAwait(true);
+        }
     }
 
     /// <summary>Asks <paramref name="question"/> with <paramref name="items"/> chosen by an action (not the chips), in this chat.</summary>

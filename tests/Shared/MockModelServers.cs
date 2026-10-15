@@ -7,6 +7,9 @@ namespace Codalus.Tests;
 /// Model services for the provider tests and the smoke test (ADR 0062): an OpenAI-compatible server and Anthropic's Messages API, answering
 /// streamed requests with server-sent events. They check the key and keep every request; nothing reaches a real service.
 /// </summary>
+/// <summary>A scripted reply: text, and optionally one tool call with its arguments (JSON).</summary>
+internal sealed record MockTurn(string Text, string? Tool = null, string? Arguments = null);
+
 internal static class MockModelServers
 {
     public const string Key = "test-key-0123456789";
@@ -16,7 +19,11 @@ internal static class MockModelServers
         OpenAI(_ => reply, requireKey, toolCall);
 
     /// <summary>An OpenAI-compatible server whose reply depends on the request (its body: the messages sent).</summary>
-    public static MockHttpServer OpenAI(Func<MockHttpRequest, string> replyFor, bool requireKey = true, string? toolCall = null) => new(request =>
+    public static MockHttpServer OpenAI(Func<MockHttpRequest, string> replyFor, bool requireKey = true, string? toolCall = null) =>
+        Script(request => new MockTurn(replyFor(request), toolCall, toolCall is null ? null : """{"path":"a.cs"}"""), requireKey);
+
+    /// <summary>An OpenAI-compatible server whose every turn is scripted from the request: an agent's loop.</summary>
+    public static MockHttpServer Script(Func<MockHttpRequest, MockTurn> script, bool requireKey = true) => new(request =>
     {
         if (requireKey && request.BearerToken != Key)
         {
@@ -28,7 +35,8 @@ internal static class MockModelServers
             case ("GET", "/v1/models"):
                 return MockHttpResponse.Json("""{"object":"list","data":[{"id":"text-embedding-3-small"},{"id":"gpt-test"},{"id":"gpt-mini"}]}""");
             case ("POST", "/v1/chat/completions"):
-                var reply = replyFor(request);
+                var turn = script(request);
+                var reply = turn.Text;
                 var sb = new StringBuilder();
                 var half = reply.Length / 2;
                 foreach (var part in new[] { reply[..half], reply[half..] })
@@ -36,10 +44,12 @@ internal static class MockModelServers
                     sb.Append("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"").Append(JsonEncodedText.Encode(part).ToString()).Append("\"}}]}\n\n");
                 }
 
-                if (toolCall is not null)
+                if (turn.Tool is { } tool)
                 {
-                    sb.Append("data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"").Append(toolCall).Append("\",\"arguments\":\"{\\\"pa\"}}]}}]}\n\n");
-                    sb.Append("data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"th\\\":\\\"a.cs\\\"}\"}}]}}]}\n\n");
+                    var args = turn.Arguments ?? "{}";
+                    var cut = args.Length / 2;
+                    sb.Append("data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"").Append(tool).Append("\",\"arguments\":\"").Append(JsonEncodedText.Encode(args[..cut]).ToString()).Append("\"}}]}}]}\n\n");
+                    sb.Append("data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"").Append(JsonEncodedText.Encode(args[cut..]).ToString()).Append("\"}}]}}]}\n\n");
                     sb.Append("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n");
                 }
                 else

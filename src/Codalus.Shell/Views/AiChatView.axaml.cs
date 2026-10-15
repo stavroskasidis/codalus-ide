@@ -155,6 +155,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
         private readonly AiChatTurn _turn;
         private readonly AiChatView _owner;
         private readonly ContentControl _answer = new();
+        private readonly StackPanel _steps = new() { Spacing = 2 };
         private readonly StackPanel _status = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
         private string? _rendered;
 
@@ -174,6 +175,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
                 panel.Children.Add(context);
             }
 
+            panel.Children.Add(_steps);
             panel.Children.Add(_answer);
             panel.Children.Add(_status);
             Root = panel;
@@ -183,6 +185,28 @@ public sealed partial class AiChatView : UserControl, IPaneView
 
         public void Render()
         {
+            var steps = _turn.Steps;
+            _steps.Children.Clear();
+            foreach (var step in steps)
+            {
+                var line = new TextBlock
+                {
+                    Text = "⚙ " + step.Tool + (step.Target.Length > 0 ? " " + step.Target : "") + (step.Outcome is { } outcome ? " → " + outcome : " …"),
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 11,
+                };
+                if (step.IsError)
+                {
+                    line.Bind(TextBlock.ForegroundProperty, line.GetResourceObservable("Shell.Warning"));
+                }
+                else
+                {
+                    line.Classes.Add("muted");
+                }
+
+                _steps.Children.Add(line);
+            }
+
             var answer = _turn.Answer;
             if (answer != _rendered || !_turn.IsStreaming)
             {

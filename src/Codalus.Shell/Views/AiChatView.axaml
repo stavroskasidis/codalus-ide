@@ -7,6 +7,7 @@
              x:DataType="vm:AiChatViewModel">
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
+ <ToggleButton Classes="toolbar" IsChecked="{Binding IsAgent}" IsVisible="{Binding IsOn}" Content="{l:T aiChat.agent}" ToolTip.Tip="{l:T aiChat.agentModeTheAiMayRead}" AutomationProperties.Name="{l:T aiChat.agentMode}" />
       <Button x:Name="Provider" Content="{Binding ProviderLabel}" IsVisible="{Binding IsOn}" ToolTip.Tip="{l:T aiChat.chooseTheProviderAndModel}" AutomationProperties.Name="{l:T aiChat.chooseTheProviderAndModel}" />
       <Button x:Name="Configure" Content="{l:T aiChat.configure}" IsVisible="{Binding IsOn}" ToolTip.Tip="{l:T aiChat.enterTheProviderSKeyOr}" AutomationProperties.Name="{l:T aiChat.configureTheProvider}" />
       <Button x:Name="NewChat" Content="{l:T aiChat.newChat}" IsVisible="{Binding HasTurns}" AutomationProperties.Name="{l:T aiChat.startANewChat}" />

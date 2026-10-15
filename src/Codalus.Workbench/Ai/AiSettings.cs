@@ -79,5 +79,41 @@ public static class AiSettings
             Description = "After you edit, suggest the next edit nearby (the same rename further down, a matching change): the lines show highlighted with the new text beside them, Tab applies it, Esc dismisses it. It sends your recent edits and the lines around the caret, so it has its own switch, off by default.",
             Order = 13,
         },
+        SettingDescriptor.Create("ai.agent.maxSteps", "25", SettingType.Integer, source) with
+        {
+            Title = "Agent Step Limit",
+            Category = "AI",
+            Description = "The most tool calls agent mode makes for one question before it stops and summarizes.",
+            Minimum = 1,
+            Maximum = 200,
+            Scope = SettingScope.User,
+            Order = 20,
+        },
+        SettingDescriptor.Create("ai.agent.commandTimeoutSeconds", "120", SettingType.Integer, source) with
+        {
+            Title = "Agent Command Timeout",
+            Category = "AI",
+            Description = "How long, in seconds, a command the agent runs (after you allow it) may take before it is stopped.",
+            Minimum = 5,
+            Maximum = 3600,
+            Scope = SettingScope.User,
+            Order = 21,
+        },
+        SettingDescriptor.Create(Mcp.McpServers.ServersSetting, "{}", SettingType.Object, source) with
+        {
+            Title = "MCP Servers",
+            Category = "AI",
+            Description = "MCP servers whose tools agent mode may use, each call after you allow it: { \"name\": { \"command\": \"…\", \"args\": [\"…\"], \"env\": { } } }. Read from your user settings only.",
+            Scope = SettingScope.User,
+            Order = 22,
+        },
+        SettingDescriptor.Create("ai.mcpServer.enabled", "false", SettingType.Boolean, source) with
+        {
+            Title = "MCP Server",
+            Category = "AI",
+            Description = "Let AI agents that run outside the IDE reach it through `codalus mcp` (an MCP server over stdio): the solution, the open files, the Error List and the build output; a build asks you first. For your user only; off by default.",
+            Scope = SettingScope.User,
+            Order = 23,
+        },
     ];
 }

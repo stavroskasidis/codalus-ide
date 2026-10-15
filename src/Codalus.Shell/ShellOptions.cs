@@ -11,6 +11,8 @@ public sealed record ShellOptions
                codalus merge <local> <remote> <base> <merged> [options]
                                                         Resolve a merge (git mergetool); exits when it is accepted.
                codalus --wait <file> [options]         Edit a file and exit when its tab closes (git's core.editor).
+               codalus mcp [options]                   An MCP server on stdio for AI agents, reaching the running IDE
+                                                        (turn on Tools > Options > AI > MCP Server first).
 
           --user-data-dir <dir>   Keep settings, state and plugins under <dir> instead of the OS defaults.
           --locale <name>         The display language for this run (qps-ploc: pseudo-language).
@@ -56,6 +58,9 @@ public sealed record ShellOptions
     /// <c>highlight</c>, the <c>--bench</c> scenario is <c>done</c>, or the C# <c>language</c> service is ready.
     /// </summary>
     public string? ExitOn { get; init; }
+
+    /// <summary><c>codalus mcp</c> (M28c): serve MCP on stdio, relaying to the running IDE.</summary>
+    public bool Mcp { get; init; }
 
     /// <summary><c>codalus diff left right</c>: two files to compare side by side.</summary>
     public (string Left, string Right)? Diff { get; init; }
@@ -121,6 +126,11 @@ public sealed record ShellOptions
                 errors.Add("'merge' needs four files: codalus merge <local> <remote> <base> <merged>.");
                 start = args.Count;
             }
+        }
+        else if (args.Count > 0 && args[0] == "mcp")
+        {
+            options = options with { Mcp = true };
+            start = 1;
         }
         else if (args.Count > 0 && args[0] == "diff")
         {

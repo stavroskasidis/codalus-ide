@@ -31,6 +31,19 @@ internal static partial class Program
             return Infrastructure.Updates.UpdateNow(Console.Out);
         }
 
+        // codalus mcp (M28c): an MCP server on stdio for an AI agent, relaying each call to the running IDE.
+        if (options.Mcp)
+        {
+            AttachToParentConsole();
+            var paths = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
+            var pipe = Codalus.Workbench.Ai.Mcp.McpBridge.PipeName(Infrastructure.SingleInstance.PipeName(paths.State));
+            var input = new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false));
+            var output = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false)) { AutoFlush = true };
+            var server = new Codalus.Workbench.Ai.Mcp.McpStdioServer(input, output, (tool, arguments, ct) => Codalus.Workbench.Ai.Mcp.McpBridge.CallAsync(pipe, tool, arguments, ct));
+            server.RunAsync(CancellationToken.None).GetAwaiter().GetResult();
+            return 0;
+        }
+
         // codalus diff: hand it to the running shell of this user-data folder, if there is one.
         if (options.Diff is { } diff)
         {

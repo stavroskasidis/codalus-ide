@@ -1,6 +1,6 @@
 # AI assistance
 
-Codalus IDE can send questions about your code to a language model you choose, suggest code as you type, and help where it already shows you something (a commit, an exception, a failing test): a hosted one with your own key, or one running on your machine. It's off until you turn it on, and nothing is sent anywhere until you also choose a provider. There's no telemetry: nothing is counted or sent to the Codalus project.
+Codalus IDE can send questions about your code to a language model you choose, suggest code as you type, help where it already shows you something (a commit, an exception, a failing test), and work in steps in agent mode, always asking before it changes a file or runs anything: a hosted one with your own key, or one running on your machine. It's off until you turn it on, and nothing is sent anywhere until you also choose a provider. There's no telemetry: nothing is counted or sent to the Codalus project.
 
 ## Turning it on
 
@@ -62,6 +62,48 @@ Where AI can help with something the IDE already shows, there's an action for it
 - **The editor: AI > Generate Tests with AI** asks AI Chat for tests of the selection (or the current file) with the solution's test framework (xUnit, NUnit, MSTest or TUnit); Apply on the answer's code block creates the test file.
 - **A CPU profiling report: Summarize with AI** asks AI Chat where the time goes, with the report's summary and its top 40 functions.
 
+## Agent mode
+
+Turn on **Agent** in AI Chat's toolbar to let the model work in steps: it reads and searches the workspace, looks at the Error List and the build output, builds, proposes edits and asks to run commands. Each step shows under your question as it happens (`⚙ read_file src/App/Program.cs → …`).
+
+What it can't do without you:
+- **Every change shows in the preview first.** **Apply** changes the file in the editor (unsaved, in undo), **Cancel** rejects it, and the model is told it was rejected.
+- **Every command asks first**, with the exact command line and its folder, and **Reject** is the default: pressing Enter refuses. An allowed command runs for at most 2 minutes (`ai.agent.commandTimeoutSeconds`), and its output (redacted) goes back to the model.
+- **Only inside the workspace.** Paths that leave it, links included, are refused, and so are files that are never sent (below).
+- **Only in trusted folders**, and only with a model that takes tools. A model that doesn't, which is common among small local ones, is named, so you can choose another.
+- **At most 25 steps** per question (`ai.agent.maxSteps`), and **Stop** ends it at once.
+
+The model is told that what it reads (files, command output, tool results) is data, not instructions. The approvals above hold whatever a file tells it. Each tool call is a line of the request log: the tool and its target, never the content.
+
+## MCP servers
+
+Agent mode can use the tools of MCP (Model Context Protocol) servers you configure in your user settings (`ai.mcp.servers`; a workspace's settings can't add one):
+
+```json
+"ai.mcp.servers": {
+  "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"], "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "…" } }
+}
+```
+
+Servers start the first time agent mode needs their tools and stop when the IDE closes. Their tools are offered to the model as `<server>__<tool>`. Each call asks first, showing the server, the tool and the arguments, and the results are redacted. Servers are started over stdio. Servers over HTTP, and MCP's resources and prompts, aren't supported yet.
+
+## Codalus as an MCP server
+
+AI agents that run outside the IDE (in a terminal, or another editor) can use what the IDE knows. Turn on **MCP Server** (`ai.mcpServer.enabled`) in **Tools > Options > AI**, then configure the agent with this stdio server:
+
+```json
+{ "command": "codalus", "args": ["mcp"] }
+```
+
+(add `"--user-data-dir", "<dir>"` when you run the IDE with one). The tools reach the running IDE of the same user:
+- `get_solution`: the solution and its projects, frameworks and output types;
+- `get_open_files`: the open files, the active one and its selection;
+- `get_diagnostics`: the Error List;
+- `get_build_output`;
+- `build`, which asks you in the IDE first.
+
+Excluded files are left out, and text is redacted. Each call is logged in the AI Output channel. With the setting off (the default), or the IDE closed, every call answers with what to do.
+
 ## What is never sent
 
 AI assistance has one gate that every request goes through:
@@ -94,6 +136,10 @@ AI assistance has one gate that every request goes through:
 | `ai.completions.model` | empty | Their model; empty is the chat's |
 | `ai.completions.delayMilliseconds` | `400` | The pause before a suggestion is asked for |
 | `ai.nextEdit.enabled` | `false` | Next edit suggestions |
+| `ai.agent.maxSteps` | `25` | The most tool calls agent mode makes for one question |
+| `ai.agent.commandTimeoutSeconds` | `120` | How long an allowed command may run |
+| `ai.mcp.servers` | `{}` | MCP servers whose tools agent mode may use (user settings only) |
+| `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE |
 | `ai.openai.endpoint` | `https://api.openai.com/v1` | The OpenAI-compatible server |
 | `ai.ollama.endpoint` | `http://localhost:11434/v1` | Ollama's address |
 | `ai.anthropic.endpoint` | `https://api.anthropic.com` | Anthropic's API, or a gateway |

@@ -196,4 +196,69 @@ public sealed class LanguageModelPluginHostTests : IAsyncLifetime
         Assert.Equal(new AiFix(1, 3, "int x = 1;\nint y = x;"), fix);
         Assert.Contains("fix: openai/gpt-test", _workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task Agent_mode_calls_tools_until_the_model_answers_and_logs_each_call()
+    {
+        await using var server = MockModelServers.Script(request =>
+            request.Body.Contains("\"role\":\"tool\"", StringComparison.Ordinal)
+                ? new MockTurn("Program.cs prints a greeting.")
+                : new MockTurn("Let me look.", "read_file", """{"path":"Program.cs"}"""));
+        await _workbench.Settings.SetAsync("ai.openai.endpoint", server.BaseUrl + "/v1", SettingScope.User, Timeout());
+        await _workbench.Settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, Timeout());
+        await _workbench.Settings.SetAsync(AiService.ProviderSetting, "openai", SettingScope.User, Timeout());
+        await _workbench.Settings.SetAsync(AiService.ModelSetting, "gpt-test", SettingScope.User, Timeout());
+        await _store.SetAsync(SecretStorage.Service, "codalus.openai/apiKey:openai", MockModelServers.Key, Timeout());
+        var folder = Path.Combine(_userData, "agent");
+        Directory.CreateDirectory(folder);
+        await File.WriteAllTextAsync(Path.Combine(folder, "Program.cs"), "Console.WriteLine(\"Hello\");\n", Timeout());
+
+        var chat = new AiChat(_ai);
+        var tools = new Codalus.Workbench.Ai.Agent.AgentTools(_ai, new FileHost(), folder);
+        var turn = await chat.SendAgentAsync("What does Program.cs do?", [], tools, maxSteps: 5, Timeout());
+
+        Assert.Null(turn.Error);
+        Assert.True(turn.IsAgent);
+        Assert.Equal("Let me look.\n\nProgram.cs prints a greeting.", turn.Answer);
+        var step = Assert.Single(turn.Steps);
+        Assert.Equal(("read_file", "Program.cs", "Program.cs"), (step.Tool, step.Target, step.Outcome));
+
+        // The second request carries the tool call and its result; the tools were offered.
+        using (var body = System.Text.Json.JsonDocument.Parse(server.Requests.Last(r => r.Path == "/v1/chat/completions").Body))
+        {
+            var messages = body.RootElement.GetProperty("messages");
+            var tool = messages.EnumerateArray().Last();
+            Assert.Equal(("tool", "call_1"), (tool.GetProperty("role").GetString(), tool.GetProperty("tool_call_id").GetString()));
+            Assert.Contains("Console.WriteLine", tool.GetProperty("content").GetString(), StringComparison.Ordinal);
+            Assert.Contains(body.RootElement.GetProperty("tools").EnumerateArray(), t => t.GetProperty("function").GetProperty("name").GetString() == "edit_file");
+        }
+
+        var log = _workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText();
+        Assert.Contains("tool: read_file Program.cs → Program.cs", log, StringComparison.Ordinal);
+        Assert.DoesNotContain("Console.WriteLine", log, StringComparison.Ordinal);
+
+        // The step limit: a model that keeps calling tools gets one answer without them.
+        await using var looping = MockModelServers.Script(request =>
+            request.Body.Contains("\"tools\"", StringComparison.Ordinal) ? new MockTurn("", "read_file", """{"path":"Program.cs"}""") : new MockTurn("Stopped at the limit."));
+        await _workbench.Settings.SetAsync("ai.openai.endpoint", looping.BaseUrl + "/v1", SettingScope.User, Timeout());
+        var limited = await chat.SendAgentAsync("Loop", [], tools, maxSteps: 2, Timeout());
+        Assert.Equal(2, limited.Steps.Count);
+        Assert.EndsWith("Stopped at the limit.", limited.Answer, StringComparison.Ordinal);
+    }
+
+    /// <summary>An agent host that reads from disk and allows nothing else.</summary>
+    private sealed class FileHost : Codalus.Workbench.Ai.Agent.IAgentHost
+    {
+        public async Task<string?> ReadTextAsync(string path, CancellationToken cancellationToken) => File.Exists(path) ? await File.ReadAllTextAsync(path, cancellationToken) : null;
+
+        public Task<bool> ProposeChangeAsync(string path, string? oldText, string newText, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<bool> ApproveAsync(string title, string message, IReadOnlyList<string> details, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<string> DiagnosticsAsync(string? path, CancellationToken cancellationToken) => Task.FromResult("");
+
+        public Task<string> BuildOutputAsync(CancellationToken cancellationToken) => Task.FromResult("");
+
+        public Task<string> BuildAsync(CancellationToken cancellationToken) => Task.FromResult("");
+    }
 }

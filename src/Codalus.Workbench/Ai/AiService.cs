@@ -74,7 +74,11 @@ public sealed class AiUnavailableException(string message, bool needsConfigurati
 }
 
 /// <summary>The end of a request.</summary>
-public sealed record AiReply(string Text, string FinishReason, int? InputTokens, int? OutputTokens);
+public sealed record AiReply(string Text, string FinishReason, int? InputTokens, int? OutputTokens)
+{
+    /// <summary>The tools the model called (agent mode, M28c).</summary>
+    public IReadOnlyList<ChatToolCallDto> ToolCalls { get; init; } = [];
+}
 
 /// <summary>
 /// AI assistance's data boundary (ADR 0062): the only code that sends workspace content to a language model. It checks
@@ -264,7 +268,8 @@ public sealed class AiService
         CancellationToken cancellationToken,
         int? maxOutputTokens = null,
         string? modelOverride = null,
-        bool quiet = false)
+        bool quiet = false,
+        IReadOnlyList<ChatToolDto>? tools = null)
     {
         switch (State)
         {
@@ -294,6 +299,7 @@ public sealed class AiService
         }
 
         var text = new StringBuilder();
+        var toolCalls = new List<ChatToolCallDto>();
         if (!quiet)
         {
             Interlocked.Increment(ref _busy);
@@ -309,9 +315,17 @@ public sealed class AiService
                     text.Append(chunk);
                     onText(chunk);
                 }
-            }, cancellationToken, maxOutputTokens: maxOutputTokens).ConfigureAwait(false);
+
+                if (part.ToolCall is { } call)
+                {
+                    lock (toolCalls)
+                    {
+                        toolCalls.Add(call);
+                    }
+                }
+            }, cancellationToken, tools: tools, maxOutputTokens: maxOutputTokens).ConfigureAwait(false);
             Log(string.Create(CultureInfo.InvariantCulture, $"    done: {result.FinishReason}, {result.InputTokens?.ToString(CultureInfo.InvariantCulture) ?? "?"} tokens in, {result.OutputTokens?.ToString(CultureInfo.InvariantCulture) ?? "?"} out"));
-            return new AiReply(text.ToString(), result.FinishReason, result.InputTokens, result.OutputTokens);
+            return new AiReply(text.ToString(), result.FinishReason, result.InputTokens, result.OutputTokens) { ToolCalls = toolCalls };
         }
         catch (LanguageModelRequestException ex)
         {
@@ -384,4 +398,8 @@ public sealed class AiService
             : _settings.SetAsync(EnabledSetting, (System.Text.Json.JsonElement?)null, SettingScope.Workspace, cancellationToken);
 
     private void Log(string line) => _output.GetOrCreate(OutputChannelId, "AI").AppendLine(line);
+
+    /// <summary>Logs an agent's tool call (the tool and its target, never the content).</summary>
+    public void LogToolCall(string tool, string? target, string? outcome) =>
+        Log("    tool: " + tool + (target is { Length: > 0 } ? " " + target : "") + (outcome is { Length: > 0 } ? " → " + outcome : ""));
 }
