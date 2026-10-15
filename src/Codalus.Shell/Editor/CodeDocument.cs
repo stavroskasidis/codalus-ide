@@ -61,7 +61,13 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     public bool IsReadOnly { get; }
 
     /// <summary>The language service that owns this document (<c>csharp</c>), or null.</summary>
-    public string? LanguageId { get; set; }
+    public string? LanguageId
+    {
+        get => _languageId;
+        set => SetField(ref _languageId, value);
+    }
+
+    private string? _languageId;
 
     /// <summary>Incremented once per document update; the language service sees the same numbers.</summary>
     public int Version { get; private set; } = 1;

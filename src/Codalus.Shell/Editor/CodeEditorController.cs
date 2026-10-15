@@ -280,9 +280,12 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnOptionsChanged(object? sender, PropertyChangedEventArgs e) => ApplyOptions();
 
+    /// <summary>The editor options of the document's language (its <c>"[languageId]"</c> settings over the general ones).</summary>
+    private EditorOptions Options => _services.Options.For(Model.LanguageId);
+
     private void ApplyOptions()
     {
-        var options = _services.Options;
+        var options = Options;
         var editorOptions = Editor.Options;
         editorOptions.IndentationSize = _documentOptions?.IndentSize ?? options.TabSize;
         editorOptions.ConvertTabsToSpaces = _documentOptions?.InsertSpaces ?? options.InsertSpaces;
@@ -400,6 +403,7 @@ public sealed partial class CodeEditorController : IDisposable
     {
         if (e.PropertyName == nameof(CodeDocument.LanguageId))
         {
+            ApplyOptions();
             UpdateGrammar();
             RefreshAll();
             _httpMargin.Refresh();
@@ -711,7 +715,7 @@ public sealed partial class CodeEditorController : IDisposable
         }
 
         // Typing the closing character of an auto-closed pair moves over it.
-        if (e.Text is { Length: 1 } typed && _services.Options.AutoClosingBrackets && Editor.SelectionLength == 0
+        if (e.Text is { Length: 1 } typed && Options.AutoClosingBrackets && Editor.SelectionLength == 0
             && Editor.CaretOffset < Model.Text.TextLength && Model.Text.GetCharAt(Editor.CaretOffset) == typed[0]
             && Configuration?.AutoClosingPairs.Any(p => p.Close == typed && (p.Open != p.Close || _autoClosed?.Offset == Editor.CaretOffset)) == true)
         {
@@ -730,7 +734,7 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>After an opening character of an auto-closing pair, inserts its closing one (VS Code's "languageDefined").</summary>
     private void AutoClose(string text)
     {
-        if (!_services.Options.AutoClosingBrackets || _multiCaret.ExtraCarets.Count > 0 || Configuration is not { } configuration
+        if (!Options.AutoClosingBrackets || _multiCaret.ExtraCarets.Count > 0 || Configuration is not { } configuration
             || configuration.AutoClosingPairs.FirstOrDefault(p => p.Open.Length == 1 && p.Open == text) is not { } pair)
         {
             return;
@@ -927,7 +931,7 @@ public sealed partial class CodeEditorController : IDisposable
             }
         }
 
-        if (_services.Options.FormatOnType && !Model.IsReadOnly && _multiCaret.ExtraCarets.Count == 0
+        if (Options.FormatOnType && !Model.IsReadOnly && _multiCaret.ExtraCarets.Count == 0
             && capabilities.DocumentOnTypeFormattingProvider is { } onType
             && (onType.FirstTriggerCharacter == text || onType.MoreTriggerCharacter?.Contains(text) == true))
         {

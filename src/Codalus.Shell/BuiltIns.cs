@@ -221,6 +221,7 @@ internal static partial class BuiltIns
         Add("workbench.openSettings", "Open Settings", "Preferences", Ui(shell.OpenSettings));
         Add("workbench.openOptions", "Options…", string.Empty, Ui(shell.OpenSettings), palette: false);
         Add("workbench.openSettingsJson", "Open User Settings (JSON)", "Preferences", Ui(shell.OpenSettingsJsonAsync));
+        Add("workbench.action.configureLanguageBasedSettings", "Configure Language-Specific Settings…", "Preferences", Ui(() => shell.ConfigureLanguageSettingsAsync()));
         Add("workbench.openKeyboardShortcuts", "Open Keyboard Shortcuts", "Preferences", Ui(shell.OpenKeyboardShortcuts));
         Add("workbench.openFontsAndColors", "Fonts and Colors", "Preferences", Ui(shell.OpenFontsAndColors));
         Add("workbench.customize", "Customize…", "Preferences", Ui(shell.OpenCustomize));

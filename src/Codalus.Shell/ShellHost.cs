@@ -685,6 +685,45 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public Task OpenSettingsJsonAsync() => OpenTextFileAsync(Paths.SettingsFile, "// Codalus IDE user settings. See File > Settings for every option.\n{\n}\n");
 
+    /// <summary>
+    /// Preferences → Configure Language-Specific Settings: picks a language (the active document's first), adds its
+    /// <c>"[languageId]": { }</c> block to the user settings when there is none, and opens the file there. Settings in
+    /// the block win over the general ones for that language's documents.
+    /// </summary>
+    public async Task ConfigureLanguageSettingsAsync(string? languageId = null)
+    {
+        if (languageId is null)
+        {
+            var active = ActiveEditor?.Model.LanguageId;
+            var languages = Workbench.LanguageDefinitions.Languages.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            var items = languages
+                .Select(l => new QuickPickItem(l.Name) { Tag = l.Id, Detail = Workbench.Settings.OverriddenLanguages.Contains(l.Id) ? $"{l.Id} · configured" : l.Id })
+                .ToList();
+            var index = Math.Max(0, languages.FindIndex(l => l.Id == active));
+            if (await Palette.ShowAsync(items, Localizer.Get("msg.settings.whichLanguage", "Configure the settings of which language?"), index).ConfigureAwait(true) is not { Tag: string picked })
+            {
+                return;
+            }
+
+            languageId = picked;
+        }
+
+        var key = SettingsService.LanguageKey(languageId);
+        await Workbench.Settings.AddLanguageBlockAsync(languageId, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+        // Inside the block, ready to type a setting.
+        var text = File.Exists(Paths.SettingsFile) ? await File.ReadAllTextAsync(Paths.SettingsFile).ConfigureAwait(true) : string.Empty;
+        LanguageServices.Protocol.Position? at = null;
+        if (text.IndexOf($"\"{key}\"", StringComparison.Ordinal) is var found and >= 0)
+        {
+            var offset = text.IndexOf('{', found) is var brace and >= 0 ? brace + 1 : found;
+            var line = text.AsSpan(0, offset).Count('\n');
+            at = new LanguageServices.Protocol.Position(line, offset - (text.LastIndexOf('\n', Math.Max(0, offset - 1)) + 1));
+        }
+
+        await OpenFileAsync(Paths.SettingsFile, preview: false, at, "// Codalus IDE user settings. See File > Settings for every option.\n{\n}\n").ConfigureAwait(true);
+    }
+
     public Task OpenKeybindingsJsonAsync() => OpenTextFileAsync(Paths.KeybindingsFile, KeybindingsTemplate);
 
     private const string KeybindingsTemplate = "// Codalus IDE key bindings. Entries override the defaults; \"-command\" removes a default binding.\n[\n]\n";

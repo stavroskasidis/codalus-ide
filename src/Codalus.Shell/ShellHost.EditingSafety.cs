@@ -194,7 +194,7 @@ public sealed partial class ShellHost
     /// <summary>Before a document saves: Code Cleanup (<c>codeCleanup.onSave</c>, C#) and Format Document (<c>editor.formatOnSave</c>).</summary>
     private async Task BeforeSaveAsync(CodeDocument model)
     {
-        if (Workbench.Settings.GetBoolean(CodeCleanupOnSaveSetting) && !model.IsReadOnly && model.LanguageId == CSharpLanguageId
+        if (Workbench.Settings.ForLanguage(model.LanguageId).GetBoolean(CodeCleanupOnSaveSetting) && !model.IsReadOnly && model.LanguageId == CSharpLanguageId
             && ((IEditorServices)this).Client(model) is { } cleanupClient)
         {
             try
@@ -207,7 +207,7 @@ public sealed partial class ShellHost
             }
         }
 
-        if (!Workbench.Settings.GetBoolean(FormatOnSaveSetting) || model.IsReadOnly)
+        if (!Workbench.Settings.ForLanguage(model.LanguageId).GetBoolean(FormatOnSaveSetting) || model.IsReadOnly)
         {
             return;
         }

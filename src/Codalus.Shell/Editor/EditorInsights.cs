@@ -213,7 +213,7 @@ public sealed class EditorInsights : IDisposable
 
     private CodeDocument Model => _model();
 
-    private EditorOptions Options => _services.Options;
+    private EditorOptions Options => _services.Options.For(Model.LanguageId);
 
     private IBrush Brush(string key) =>
         _editor.TryFindResource(key, _editor.ActualThemeVariant, out var resource) && resource is IBrush brush ? brush : Brushes.Gray;
