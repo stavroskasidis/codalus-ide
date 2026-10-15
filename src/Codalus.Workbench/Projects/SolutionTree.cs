@@ -17,6 +17,9 @@ public enum ExplorerNodeKind
 
     /// <summary>A type or member declared in a code file (under the file, from its language service's symbols).</summary>
     Member,
+
+    /// <summary>A file a source generator made (under its analyzer); <see cref="ExplorerNode.Path"/> is its <c>codalus-generated</c> URI.</summary>
+    GeneratedFile,
 }
 
 /// <summary>

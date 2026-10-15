@@ -9,7 +9,7 @@ The tree shows the solution, its solution folders, projects, project folders and
 - packages, each with the packages it brings in under it, and theirs under them (once the project is restored)
 - projects
 - assemblies
-- analyzers
+- analyzers, each with the files its source generators made in the project (expand it; click one to read it)
 
 | To | Do |
 |---|---|

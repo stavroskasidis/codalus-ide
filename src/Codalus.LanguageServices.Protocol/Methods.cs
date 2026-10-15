@@ -57,6 +57,7 @@ public static class Methods
     public const string ProjectsRemove = "codalus/projects/remove";
     public const string DocumentOptions = "codalus/documentOptions";
     public const string SourceGeneratedText = "codalus/sourceGeneratedText";
+    public const string GeneratedDocuments = "codalus/generatedDocuments";
     public const string MetadataText = "codalus/metadataText";
     public const string WorkspaceStatus = "codalus/workspaceStatus";
     public const string TestCandidates = "codalus/testCandidates";

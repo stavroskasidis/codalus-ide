@@ -36,6 +36,8 @@ namespace Codalus.LanguageServices.Protocol;
 [JsonSerializable(typeof(DocumentOptions))]
 [JsonSerializable(typeof(SourceGeneratedTextParams))]
 [JsonSerializable(typeof(SourceGeneratedText))]
+[JsonSerializable(typeof(GeneratedDocumentsParams))]
+[JsonSerializable(typeof(GeneratedDocumentsResult))]
 [JsonSerializable(typeof(WorkspaceStatusParams))]
 [JsonSerializable(typeof(ReferenceParams))]
 [JsonSerializable(typeof(PrepareRenameResult))]

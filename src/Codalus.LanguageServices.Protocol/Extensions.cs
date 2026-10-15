@@ -41,6 +41,18 @@ public sealed record SourceGeneratedTextParams(TextDocumentIdentifier TextDocume
 
 public sealed record SourceGeneratedText(string Text, string HintName, string GeneratorName);
 
+/// <summary><c>codalus/generatedDocuments</c>: the source-generated files of a project (by its project file).</summary>
+public sealed record GeneratedDocumentsParams(string Project);
+
+/// <summary>
+/// One generated file: its <c>codalus-generated</c> URI (its text through <c>codalus/sourceGeneratedText</c>), hint
+/// name, and the generator's assembly (its file name without the extension, as the Solution Explorer lists analyzers)
+/// and type.
+/// </summary>
+public sealed record GeneratedDocumentInfo(string Uri, string HintName, string Assembly, string Generator);
+
+public sealed record GeneratedDocumentsResult(GeneratedDocumentInfo[] Documents);
+
 /// <summary>
 /// The source of a type from a referenced assembly (URIs with the <c>codalus-metadata</c> scheme): the original source
 /// when the assembly's PDB embeds it or Source Link can fetch it, otherwise decompiled C#.

@@ -563,6 +563,10 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             _ = LoadMembersAsync(file);
         }
+        else if (expanded && IsAnalyzer(row.Node) && !_generated.ContainsKey(row.Node.ProjectPath!))
+        {
+            _ = LoadGeneratedAsync(row.Node.ProjectPath!);
+        }
 
         if (!row.HasChildren || (expanded ? !_expanded.Add(row.Id) : !_expanded.Remove(row.Id)))
         {
@@ -647,6 +651,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// </summary>
     private ExplorerNode WithMembers(ExplorerNode node)
     {
+        if (IsAnalyzer(node))
+        {
+            return WithGeneratedFiles(node);
+        }
+
         if (!ShowsMembers(node))
         {
             return node;
@@ -716,13 +725,75 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         return Nodes(symbols, fileId);
     }
 
-    /// <summary>A file changed (an edit, a save, a change on disk): its members are read again when shown.</summary>
+    /// <summary>A file changed (an edit, a save, a change on disk): its members, and generated files, are read again when shown.</summary>
     public void OnFileChanged(string path)
     {
-        if (_members.Remove(path))
+        var generated = _generated.Count > 0;
+        _generated.Clear();
+        if (_members.Remove(path) || generated)
         {
             QueueRefresh();
         }
+    }
+
+    // ------------------------------------------------------------------ generated sources under analyzers (deferred from M12a)
+
+    private readonly Dictionary<string, IReadOnlyList<LanguageServices.Protocol.GeneratedDocumentInfo>> _generated = new(SolutionService.PathComparer);
+    private readonly HashSet<string> _loadingGenerated = new(SolutionService.PathComparer);
+
+    private static bool IsAnalyzer(ExplorerNode node) =>
+        node is { Kind: ExplorerNodeKind.Dependency, ProjectPath: not null } && node.Id.Contains("|" + ReferenceKinds.Analyzer + "|", StringComparison.Ordinal);
+
+    /// <summary>An analyzer with the files its generators made in the project (once known; "Loading…" until then).</summary>
+    private ExplorerNode WithGeneratedFiles(ExplorerNode node)
+    {
+        var project = node.ProjectPath!;
+        if (!_generated.TryGetValue(project, out var documents))
+        {
+            if (_expanded.Contains(node.Id))
+            {
+                _ = LoadGeneratedAsync(project);
+            }
+
+            return node with { Children = [new ExplorerNode(node.Id + "|generated-loading", ExplorerNodeKind.Message, Localizer.Get("msg.solutionExplorer.loadingMembers", "Loading…")) { Icon = "dot", ProjectPath = project }] };
+        }
+
+        var files = documents.Where(d => string.Equals(d.Assembly, node.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        return files.Count == 0 ? node : node with
+        {
+            Children = [.. files.Select(d => new ExplorerNode($"{node.Id}|{d.Generator}|{d.HintName}", ExplorerNodeKind.GeneratedFile, d.HintName)
+            {
+                Path = d.Uri,
+                ProjectPath = project,
+                Icon = Controls.FileIcons.ForFile(d.HintName),
+                Detail = d.Generator.Split('.')[^1],
+            })],
+        };
+    }
+
+    private async Task LoadGeneratedAsync(string project)
+    {
+        if (!_loadingGenerated.Add(project))
+        {
+            return;
+        }
+
+        try
+        {
+            _generated[project] = _shell.Languages.RunningClient(ShellHost.CSharpLanguageId) is { } client
+                ? (await client.GeneratedDocumentsAsync(project, CancellationToken.None).ConfigureAwait(true)).Documents
+                : [];
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or System.Text.Json.JsonException or OperationCanceledException)
+        {
+            _generated[project] = [];
+        }
+        finally
+        {
+            _loadingGenerated.Remove(project);
+        }
+
+        QueueRefresh();
     }
 
     // ------------------------------------------------------------------ activation
@@ -738,6 +809,10 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             await _shell.OpenFileAsync(member, preview: true, new LanguageServices.Protocol.Position(at.Line, at.Character)).ConfigureAwait(true);
         }
+        else if (row.Node is { Kind: ExplorerNodeKind.GeneratedFile, Path: { } generated })
+        {
+            await _shell.OpenVirtualAsync(generated, null).ConfigureAwait(true);
+        }
     }
 
     /// <summary>Enter or double-click: files open, containers expand or collapse, project references jump to the project.</summary>
@@ -747,6 +822,9 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             case { Kind: ExplorerNodeKind.File or ExplorerNodeKind.SolutionItem, Path: { } path }:
                 await _shell.OpenFileAsync(path).ConfigureAwait(true);
+                break;
+            case { Kind: ExplorerNodeKind.GeneratedFile, Path: { } generated }:
+                await _shell.OpenVirtualAsync(generated, null).ConfigureAwait(true);
                 break;
             case { Kind: ExplorerNodeKind.Member, Path: { } member, Position: { } at }:
                 await _shell.OpenFileAsync(member, preview: false, new LanguageServices.Protocol.Position(at.Line, at.Character)).ConfigureAwait(true);

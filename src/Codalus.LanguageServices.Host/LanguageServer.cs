@@ -213,6 +213,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _connection.OnRequest(Methods.MetadataText, json.MetadataTextParams, json.MetadataText, (p, _) => Task.FromResult(MetadataFeature.Text(p.TextDocument.Uri)!));
         OnDocument(Methods.SourceGeneratedText, json.SourceGeneratedTextParams, json.SourceGeneratedText, p => p.TextDocument,
             (document, _, ct) => GeneratedTextAsync(document, ct), null);
+        _connection.OnRequest(Methods.GeneratedDocuments, json.GeneratedDocumentsParams, json.GeneratedDocumentsResult, (p, ct) => GeneratedDocumentsAsync(p.Project, ct));
         _connection.OnRequest(Methods.TestCandidates, json.TestCandidatesParams, json.TestCandidatesResult, (p, ct) =>
             TestCandidatesFeature.FindAsync(_workspace.CurrentSolution, p.TextDocuments, ct));
         _connection.OnRequest(Methods.TypeOutline, json.TypeOutlineParams, json.TypeOutline, async (p, ct) =>
@@ -470,6 +471,27 @@ internal sealed class LanguageServer : IAsyncDisposable
             _ => null,
         } : null;
         return new DocumentOptions(insertSpaces, tabSize, indentSize, newLine);
+    }
+
+    /// <summary>A project's source-generated files (of its first target framework's project), by generator.</summary>
+    private async Task<GeneratedDocumentsResult> GeneratedDocumentsAsync(string projectPath, CancellationToken cancellationToken)
+    {
+        var full = Path.GetFullPath(projectPath);
+        if (_workspace.CurrentSolution.Projects.FirstOrDefault(p => p.FilePath is { } file && Paths.Comparer.Equals(Path.GetFullPath(file), full)) is not { } project)
+        {
+            return new GeneratedDocumentsResult([]);
+        }
+
+        // The virtual path is <base>/<generator assembly>/<generator type>/<hint name>.
+        var documents = await project.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false);
+        return new GeneratedDocumentsResult([.. documents
+            .Select(d => (Document: d, Type: Path.GetDirectoryName(d.FilePath) is { } typeFolder ? typeFolder : null))
+            .Select(d => new GeneratedDocumentInfo(
+                WorkspaceManager.UriOf(d.Document),
+                d.Document.HintName,
+                d.Type is null ? string.Empty : Path.GetFileName(Path.GetDirectoryName(d.Type)) ?? string.Empty,
+                d.Type is null ? string.Empty : Path.GetFileName(d.Type)))
+            .OrderBy(d => d.Assembly, StringComparer.OrdinalIgnoreCase).ThenBy(d => d.HintName, StringComparer.OrdinalIgnoreCase)]);
     }
 
     private static async Task<SourceGeneratedText?> GeneratedTextAsync(Document document, CancellationToken cancellationToken)

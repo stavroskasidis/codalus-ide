@@ -369,6 +369,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<DocumentOptions?> DocumentOptionsAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.DocumentOptions, new DocumentOptionsParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.DocumentOptionsParams, ProtocolJsonContext.Default.DocumentOptions, cancellationToken);
 
+    /// <summary><c>codalus/generatedDocuments</c>: a project's source-generated files.</summary>
+    public Task<GeneratedDocumentsResult> GeneratedDocumentsAsync(string project, CancellationToken cancellationToken) =>
+        Invoke(Methods.GeneratedDocuments, new GeneratedDocumentsParams(project), ProtocolJsonContext.Default.GeneratedDocumentsParams, ProtocolJsonContext.Default.GeneratedDocumentsResult, cancellationToken);
+
     public Task<SourceGeneratedText?> SourceGeneratedTextAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.SourceGeneratedText, new SourceGeneratedTextParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.SourceGeneratedTextParams, ProtocolJsonContext.Default.SourceGeneratedText, cancellationToken);
 
