@@ -17,7 +17,8 @@ public sealed class FSharpTools(string cacheFolder, string dotnet, ProcessRunner
 
     public const string FantomasVersion = "7.0.3";
 
-    private readonly ProcessRunner _run = run ?? EnvironmentCheck.RunProcessAsync;
+    // dotnet tool install downloads the package: minutes on a slow connection, not the 30 seconds of a version check.
+    private readonly ProcessRunner _run = run ?? ((program, arguments, directory, ct) => EnvironmentCheck.RunProcessAsync(program, arguments, directory, TimeSpan.FromMinutes(10), ct));
     private readonly SemaphoreSlim _install = new(1, 1);
 
     /// <summary>The folder both tools install into (one subfolder per tool and version).</summary>

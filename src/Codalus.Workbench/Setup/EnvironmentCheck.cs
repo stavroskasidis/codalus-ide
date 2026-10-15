@@ -285,7 +285,11 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     }
 
     /// <summary>The default <see cref="ProcessRunner"/>: runs a program for at most 30 seconds, its output and errors together.</summary>
-    public static async Task<(int ExitCode, string Output)> RunProcessAsync(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken cancellationToken)
+    public static Task<(int ExitCode, string Output)> RunProcessAsync(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken cancellationToken) =>
+        RunProcessAsync(program, arguments, directory, TimeSpan.FromSeconds(30), cancellationToken);
+
+    /// <summary>Runs a program to its end within <paramref name="limit"/> (installs that download take minutes).</summary>
+    public static async Task<(int ExitCode, string Output)> RunProcessAsync(string program, IReadOnlyList<string> arguments, string? directory, TimeSpan limit, CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo(program)
         {
@@ -311,7 +315,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var error = process.StandardError.ReadToEndAsync(cancellationToken);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        timeout.CancelAfter(limit);
         try
         {
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
@@ -319,7 +323,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             process.Kill(entireProcessTree: true);
-            return (-1, $"{program} didn't answer within 30 seconds.");
+            return (-1, $"{program} didn't answer within {limit.TotalSeconds:0} seconds.");
         }
 
         return (process.ExitCode, await output.ConfigureAwait(false) + await error.ConfigureAwait(false));

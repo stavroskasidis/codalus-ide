@@ -224,7 +224,7 @@ public sealed class FSharpInteractiveTests
         var reset = f.Shell.ResetFSharpInteractive();
         Assert.NotSame(session, reset);
         Assert.DoesNotContain(session, f.Shell.Terminals.Sessions);
-        reset.Write("squares;;\n");
+        reset.Write("squares;;\r"); // Enter
         try
         {
             await ShellFixture.PumpUntil(() => Shows(reset, "error FS0039"), seconds: 120);
