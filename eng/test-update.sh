@@ -77,6 +77,8 @@ case "$(uname -s)" in
     app_env=(HOME="$work/home-volume")
     uninstall() {
       rm -rf "$bundle" "$(dirname "$real_bundle")/.CodalusUpdateTest.velopack" # and the staging folder next to it
+      # The app the installer starts has the real home: its Velopack log and (empty) cache folder.
+      rm -rf "$HOME/Library/Caches/velopack/CodalusUpdateTest" "$HOME/Library/Logs/velopack_CodalusUpdateTest.log"
       pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i codalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true
       hdiutil detach -quiet -force "$work/home-volume" > /dev/null 2>&1 || true
     }
