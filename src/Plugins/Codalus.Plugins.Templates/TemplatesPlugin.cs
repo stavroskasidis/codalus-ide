@@ -56,6 +56,21 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
             return null;
         }
 
+        // A template in several languages (C#, F#, VB, M35) asks which one; C# comes first.
+        var languages = template.Languages.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .OrderBy(l => l == "C#" ? 0 : 1).ToList();
+        string? language = null;
+        if (languages.Count > 1)
+        {
+            var choices = languages.Select(l => new QuickPickItem(l switch { "VB" => "Visual Basic", _ => l }) { Description = l, Tag = l }).ToList();
+            if (await Context.Window.ShowQuickPickAsync(choices, "Select the language", cancellationToken).ConfigureAwait(false) is not { Tag: string chosen })
+            {
+                return null;
+            }
+
+            language = chosen;
+        }
+
         var solution = await SolutionPathAsync(cancellationToken).ConfigureAwait(false);
         var location = solution is not null ? Path.GetDirectoryName(solution)! : await AskLocationAsync(cancellationToken).ConfigureAwait(false);
         if (location is null || await AskNameAsync("Project name", location, template.DefaultName, cancellationToken).ConfigureAwait(false) is not { } name)
@@ -63,7 +78,7 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
             return null;
         }
 
-        var (framework, canceled) = await AskFrameworkAsync(template, location, cancellationToken).ConfigureAwait(false);
+        var (framework, canceled) = await AskFrameworkAsync(template, language, location, cancellationToken).ConfigureAwait(false);
         if (canceled)
         {
             return null;
@@ -71,9 +86,9 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
 
         var directory = Path.Combine(location, name);
         var arguments = new List<string> { "new", template.ShortName, "--name", name, "--output", directory };
-        if (template.Languages.Contains(',', StringComparison.Ordinal))
+        if (language is not null)
         {
-            arguments.AddRange(["--language", "C#"]);
+            arguments.AddRange(["--language", language]);
         }
 
         if (framework is not null)
@@ -102,9 +117,10 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
     /// The template's target framework, when it offers a choice (<c>--framework</c>): the frameworks of the SDK that
     /// the location resolves to, the template's default first. Null without a choice; canceled when dismissed.
     /// </summary>
-    private async Task<(string? Framework, bool Canceled)> AskFrameworkAsync(ProjectTemplate template, string location, CancellationToken cancellationToken)
+    private async Task<(string? Framework, bool Canceled)> AskFrameworkAsync(ProjectTemplate template, string? language, string location, CancellationToken cancellationToken)
     {
-        var (exitCode, help) = await Dotnet.RunAsync(["new", template.ShortName, "--help"], cancellationToken, location, english: true).ConfigureAwait(false);
+        string[] command = language is null ? ["new", template.ShortName, "--help"] : ["new", template.ShortName, "--language", language, "--help"];
+        var (exitCode, help) = await Dotnet.RunAsync(command, cancellationToken, location, english: true).ConfigureAwait(false);
         var frameworks = exitCode == 0 ? TemplateFrameworks.Parse(help) : [];
         if (frameworks.Count < 2)
         {
@@ -258,7 +274,8 @@ internal static class TemplateCatalog
 
     public static async Task<IReadOnlyList<ProjectTemplate>> LoadAsync(IPluginLog log, CancellationToken cancellationToken)
     {
-        var (exitCode, output) = await Dotnet.RunAsync(["new", "list", "--type", "project", "--language", "C#"], cancellationToken).ConfigureAwait(false);
+        // Every language's templates (C#, F# and Visual Basic, M35); New Project asks which language a template is made in.
+        var (exitCode, output) = await Dotnet.RunAsync(["new", "list", "--type", "project"], cancellationToken).ConfigureAwait(false);
         var templates = exitCode == 0 ? Parse(output) : [];
         if (templates.Count == 0)
         {

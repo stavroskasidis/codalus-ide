@@ -32,6 +32,9 @@ public sealed partial class ShellHost : IEditorServices
 
     /// <summary><c>.xaml</c> files (.NET MAUI's, M20a): the C# host serves them with MAUI's dialect when their project references MAUI.</summary>
     public const string XamlLanguageId = "xaml";
+
+    /// <summary>Visual Basic (M35): served by the C# host, on Roslyn's VB services.</summary>
+    public const string VisualBasicLanguageId = "vb";
     private const string StatusSource = "codalus.editor";
 
     private readonly Dictionary<string, CodeDocument> _models = new(SolutionPaths.Comparer);
@@ -74,7 +77,10 @@ public sealed partial class ShellHost : IEditorServices
         {
             // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023), and so
             // does Avalonia XAML, on the same projects' type information (ADR 0047).
-            Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId, XamlLanguageId],
+            Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId, XamlLanguageId, VisualBasicLanguageId],
+
+            // Visual Basic's projects too (M35): one workspace, so C# and VB projects reference each other.
+            MoreProjectLanguages = ["VB"],
         });
         registry.Register(new LanguageServiceDescriptor("markup", "JSON, XML and YAML", [], null, MarkupHostLaunch.Resolve)
         {

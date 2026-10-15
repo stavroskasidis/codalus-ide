@@ -61,7 +61,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M42 | WCF | proposed, unscheduled (cross-platform, so it doesn't wait for D31) |
 | M43 | .NET Framework | proposed, waits for D31 and a spike on debugging the desktop CLR |
 | M44 | MAUI on Windows and WinUI 3 | proposed, waits for D31 and M20 |
-| M35 | Visual Basic | planned, always second to last |
+| M35 | Visual Basic | done (at checkpoint, [m35](checkpoints/m35.md), ADR 0066): VB in the C# host's workspace (completion, Quick Info, signature help, live diagnostics, classification with XML literals, navigation, references and rename across C# and VB, code fixes and refactorings, formatting, outline and folding), our own pretty listing (`End` constructs, keyword casing, XML end tags), VB snippets and item templates, New Project in any language, VB property pages, VB tests from source, debugging tested on netcoredbg. Gaps: VB expressions in Watch (netcoredbg reads C#), automatic line continuation, a page for project imports |
 | M36 | F# | planned, always last |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
@@ -2022,6 +2022,8 @@ These two milestones are always last (see [Status](#status)).
 
 ### M35 — Visual Basic
 
+**Status.** Done 2026-10-15 ([m35](checkpoints/m35.md), ADR 0066). Automatic line continuation and VB expressions in Watch are gaps; the debugging gap is documented in the user guide.
+
 **Goal.** Rich editing for VB projects at the same level as C#. Since the MVP, VB projects only load, build and run.
 
 **Depends on.** M3, M11 (language registry). Not much new infrastructure: Roslyn already contains VB.
@@ -2368,7 +2370,7 @@ The "Codalus" column uses these terms:
 | Visual Studio feature | Codalus |
 |---|---|
 | C# | M3 |
-| Visual Basic | M35 (load, build and run since M2) |
+| Visual Basic | M35 (done; load, build and run since M2) |
 | F# | M36 (load, build and run since M2) |
 | Razor and Blazor | M16 |
 | HTML, CSS, JavaScript and TypeScript | M16 |
@@ -2755,3 +2757,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-15: M20a at its checkpoint ([m20a](checkpoints/m20a.md), ADR 0064). It covers devices, emulators and simulators (adb, the emulator, `simctl`, `devicectl`; signing identities and provisioning profiles), the toolbar's device picker and the Devices window, and runs through `dotnet build -t:Run`. The workloads (`dotnet workload restore` in the terminal) and the Android SDK (the workload's `InstallAndroidDependencies`, after showing that it accepts the license) are installed with consent, and both show in Check Environment. MAUI XAML is served by the C# host (bindable and attached properties, `[ContentProperty]`, XAML 2009 `x:`, compiled bindings), `.xaml` is the `xaml` language, and the New Project dialog lists the MAUI templates. Validated on Linux, including a real Android build of `samples/Maui/TodoApp` with the workload and SDK installed. Emulators need KVM, which this machine lacks, so iOS, Mac Catalyst and running on an emulator remain to be checked on the Mac and on Windows. Research for M20b found that Mono stays the default runtime on mobile in .NET 10 but not in .NET 11 (CoreCLR, with no open debugger yet), so the Mono adapter covers .NET 8–10 and apps that opt back into Mono.
 - 2026-10-15: M20b at its checkpoint ([m20b](checkpoints/m20b.md), ADR 0065), so M20 is done. It adds the Mono debugger adapter: `codalus-debughost --mono-dap` speaks DAP with our own contracts, and Mono's soft debugger protocol through Mono.Debugger.Soft, vendored from mono/debugger-libs (MIT) and built without Cecil. Its sessions offer breakpoints bound on type load, stepping with Just My Code, stacks, locals, fields and properties, member-path evaluation and exceptions. F5 on Android adds the SDK's own `AndroidAttachDebugger` properties, and the adapter connects through adb's forward. On iOS simulators and Mac Catalyst it listens. It is tested against .NET 8's desktop Mono runtime with no device. Next by D13: M34 (the final polish pass).
 - 2026-10-15: M34f, M34's final pass, at its checkpoint ([m34f](checkpoints/m34f.md)). The checklist now covers the documents that work as dialogs (at 640 px) and the in-window dialog's forms (at 440 px). Accessible names are checked in every tool window, document and dialog. The Keyboard Shortcuts and Add New Item layouts cut text and are fixed, and the dialogs are in the gallery. M34 itself waits for the maintainer's approval of the gallery on three OSes and a check at display scales (D25). Next by D13: M35 (Visual Basic).
+- 2026-10-15: M35 (Visual Basic) at its checkpoint ([m35](checkpoints/m35.md), ADR 0066). The C# host serves VB in the same workspace as C# with Roslyn's VB Workspaces and Features, so mixed solutions navigate, find references and rename across both. Pretty listing (Enter adds `End If`, `Next`, `End Sub`…, fixes keyword casing; `>` closes XML literals) is ours, as on-type formatting. VB snippets, item templates and property pages (`Option Strict`, `Explicit`, `Infer`, `Compare`); New Project lists every language's templates and asks the language. VB tests are found from source; debugging a VB program is tested on netcoredbg, whose expressions are C# (documented). Validated on Linux; Windows and the Mac remain to be checked. Next by D13: M36 (F#).

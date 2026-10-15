@@ -110,6 +110,14 @@ public static class ItemTemplates
         Code("enum", "Enum", "An enumeration.", "Enum1", c => CSharp(c, $"internal enum {c.Name}\n{{\n}}\n")),
         Code("codefile", "Code File", "An empty C# file.", "CodeFile1", _ => string.Empty),
         Code("globalusings", "Global Usings", "A file of global using directives.", "GlobalUsings", _ => "global using System;\n"),
+
+        // Visual Basic (M35): in the project's root namespace, as VB's own templates write them.
+        VisualBasic("vbclass", "Class", "An empty class.", "Class1", c => $"Public Class {c.Name}\n\nEnd Class\n"),
+        VisualBasic("vbmodule", "Module", "A module: shared members without an instance.", "Module1", c => $"Public Module {c.Name}\n\nEnd Module\n"),
+        VisualBasic("vbinterface", "Interface", "An empty interface.", "IInterface1", c => $"Public Interface {c.Name}\n\nEnd Interface\n"),
+        VisualBasic("vbstructure", "Structure", "A structure.", "Structure1", c => $"Public Structure {c.Name}\n\nEnd Structure\n"),
+        VisualBasic("vbenum", "Enum", "An enumeration.", "Enum1", c => $"Public Enum {c.Name}\n\nEnd Enum\n"),
+        VisualBasic("vbcodefile", "Code File", "An empty Visual Basic file.", "CodeFile1", _ => string.Empty),
         General("text", "Text File", "An empty text file.", "TextFile1", ".txt", _ => string.Empty),
         General("json", "JSON File", "An empty JSON file.", "JsonFile1", ".json", _ => "{\n}\n", "Data"),
         General("appsettings", "App Settings File", "An appsettings.json file for configuration.", "appsettings", ".json", _ => "{\n  \"Logging\": {\n    \"LogLevel\": {\n      \"Default\": \"Information\"\n    }\n  }\n}\n", "General", metadata: new Dictionary<string, string> { ["CopyToOutputDirectory"] = "PreserveNewest" }),
@@ -127,6 +135,9 @@ public static class ItemTemplates
 
     private static ItemTemplate Code(string shortName, string name, string description, string defaultName, Func<ItemTemplateContext, string> content) =>
         new(name, shortName, "Code", description, defaultName, ".cs") { Languages = ["C#"], Content = content };
+
+    private static ItemTemplate VisualBasic(string shortName, string name, string description, string defaultName, Func<ItemTemplateContext, string> content) =>
+        new(name, shortName, "Code", description, defaultName, ".vb") { Languages = ["VB"], Content = content };
 
     private static ItemTemplate General(string shortName, string name, string description, string defaultName, string extension, Func<ItemTemplateContext, string> content, string category = "General", IReadOnlyList<string>? tags = null, string? itemType = null, IReadOnlyDictionary<string, string>? metadata = null) =>
         new(name, shortName, category, description, defaultName, extension) { Content = content, Tags = tags ?? [], ItemType = itemType, Metadata = metadata };

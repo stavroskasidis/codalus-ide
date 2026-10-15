@@ -151,4 +151,42 @@ public static class ProjectPropertyPages
         new("buildEvents", "Build Events", [], IsBuildEvents: true),
         new("debug", "Debug", [], IsLaunchProfiles: true),
     ];
+
+    private static readonly (string, string)[] s_onOff = [O("On"), O("Off")];
+
+    /// <summary>
+    /// The Visual Basic pages (M35, ADR 0066): C#'s, with VB's options in place of C#'s language settings, and without
+    /// what VB doesn't have (unsafe code, warning levels). Project-level imports are <c>Import</c> items, edited in
+    /// the project file.
+    /// </summary>
+    public static IReadOnlyList<PropertyPage> VisualBasic { get; } =
+    [
+        .. CSharp.Select(page => page with
+        {
+            Sections = [.. page.Sections.Select(section => section.Title == "Language" && page.Id == "application"
+                ? new PropertySection("Options",
+                [
+                    new("OptionExplicit", "Option Explicit", "Variables must be declared before they're used.", PropertyEditor.Choice) { Options = s_onOff },
+                    new("OptionStrict", "Option Strict", "No implicit narrowing conversions and no late binding.", PropertyEditor.Choice) { Options = s_onOff },
+                    new("OptionInfer", "Option Infer", "Local variables' types are inferred from their initializers.", PropertyEditor.Choice) { Options = s_onOff },
+                    new("OptionCompare", "Option Compare", "How strings compare: by their binary value or as text, ignoring case.", PropertyEditor.Choice) { Options = [O("Binary"), O("Text")] },
+                    new("LangVersion", "Language version", "The Visual Basic language version.", PropertyEditor.Choice) { Options = [O("default", "Default"), O("latest", "Latest"), O("16.9", "Visual Basic 16.9"), O("16", "Visual Basic 16"), O("15.5", "Visual Basic 15.5"), O("15.3", "Visual Basic 15.3"), O("15", "Visual Basic 15"), O("14", "Visual Basic 14")] },
+                ])
+                : section with
+                {
+                    Properties = [.. section.Properties
+                        .Where(p => p.Name is not ("AllowUnsafeBlocks" or "WarningLevel"))
+                        .Select(p => p.Name == "DefineConstants"
+                            ? p with { Description = "Constants for #If, separated by commas (DEBUG=-1,TRACE=-1). Keep $(DefineConstants) to add to the SDK's." }
+                            : p),
+                        .. section.Title == "General" && page.Id == "build"
+                            ? [new PropertyDefinition("RemoveIntegerChecks", "Remove integer overflow checks", "Integer arithmetic doesn't check for overflow.", PropertyEditor.Bool, PerConfiguration: true) { Options = s_bool }]
+                            : Array.Empty<PropertyDefinition>()],
+                })],
+        }),
+    ];
+
+    /// <summary>The pages for a project file: Visual Basic's for a <c>.vbproj</c>, C#'s otherwise.</summary>
+    public static IReadOnlyList<PropertyPage> For(string project) =>
+        project.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase) ? VisualBasic : CSharp;
 }

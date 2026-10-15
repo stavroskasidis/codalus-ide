@@ -64,7 +64,7 @@ public sealed class ProjectPropertiesViewModel : ObservableObject, IDisposable
         _dialogs = dialogs;
         _openFile = openFile;
         Project = project;
-        Pages = [.. (pages ?? ProjectPropertyPages.CSharp).Where(p => !p.IsBuildEvents || buildDepth is not null)];
+        Pages = [.. (pages ?? ProjectPropertyPages.For(project)).Where(p => !p.IsBuildEvents || buildDepth is not null)];
         BuildEvents = buildDepth is null ? null : new BuildEventsViewModel(buildDepth, project);
         _selectedPage = Pages[0];
         Scopes.Add(AllConfigurations);

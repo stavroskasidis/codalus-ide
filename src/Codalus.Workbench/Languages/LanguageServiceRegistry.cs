@@ -41,6 +41,15 @@ public sealed record LanguageServiceDescriptor(
     public IReadOnlyList<string> AcceptedRequests { get; init; } = [];
 
     public bool Serves(string languageId) => (Languages ?? [LanguageId]).Contains(languageId, StringComparer.Ordinal);
+
+    /// <summary>
+    /// More design-time build languages whose projects it receives, beside <see cref="ProjectLanguage"/>: the C# host
+    /// takes Visual Basic's too (M35), so references between C# and VB projects are within one workspace.
+    /// </summary>
+    public IReadOnlyList<string> MoreProjectLanguages { get; init; } = [];
+
+    /// <summary>Whether it receives the projects of design-time build language <paramref name="language"/>.</summary>
+    public bool TakesProjects(string language) => ProjectLanguage == language || MoreProjectLanguages.Contains(language, StringComparer.Ordinal);
 }
 
 /// <summary>
@@ -112,7 +121,7 @@ public sealed class LanguageServiceRegistry
     {
         lock (_gate)
         {
-            return _services.FirstOrDefault(s => s.ProjectLanguage == language);
+            return _services.FirstOrDefault(s => s.TakesProjects(language));
         }
     }
 

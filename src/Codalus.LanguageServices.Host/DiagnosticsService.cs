@@ -545,7 +545,7 @@ internal sealed class DiagnosticsService : IDisposable
     private CompilationWithAnalyzers? Analyzers(Project project, Compilation compilation, bool includeProject, bool includeIde)
     {
         var analyzers = (includeProject ? project.AnalyzerReferences.SelectMany(r => r.GetAnalyzers(project.Language)) : [])
-            .Concat(includeIde ? Features.ProviderCatalog.IdeAnalyzers : [])
+            .Concat(includeIde ? Features.ProviderCatalog.IdeAnalyzers(project.Language) : [])
             .ToImmutableArray();
         if (analyzers.IsEmpty)
         {

@@ -144,7 +144,7 @@ internal sealed class CompletionFeature
         }
 
         var additional = changes.Where(c => c != main).Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), c.NewText ?? string.Empty)).ToArray();
-        var documentation = description is null || description.TaggedParts.IsEmpty ? null : MarkupContent.Markdown(Markdown.FromDescription(description.TaggedParts));
+        var documentation = description is null || description.TaggedParts.IsEmpty ? null : MarkupContent.Markdown(Markdown.FromDescription(description.TaggedParts, Markdown.Fence(document)));
         if (cached.MapRange is { } map)
         {
             return item with
@@ -206,17 +206,20 @@ internal sealed class CompletionFeature
 [JsonSerializable(typeof(CompletionFeature.ItemData))]
 internal sealed partial class HostJsonContext : JsonSerializerContext;
 
-/// <summary>Roslyn tagged text → Markdown: the first line (the signature) as C# code, the rest as text.</summary>
+/// <summary>Roslyn tagged text → Markdown: the first line (the signature) as code of the document's language, the rest as text.</summary>
 internal static class Markdown
 {
-    public static string FromDescription(ImmutableArray<TaggedText> parts)
+    /// <summary>The Markdown fence's language for a document: <c>vb</c> for Visual Basic (M35), <c>csharp</c> otherwise.</summary>
+    public static string Fence(Microsoft.CodeAnalysis.Document document) => document.Project.Language == Microsoft.CodeAnalysis.LanguageNames.VisualBasic ? "vb" : "csharp";
+
+    public static string FromDescription(ImmutableArray<TaggedText> parts, string fence = "csharp")
     {
         var text = string.Concat(parts.Select(p => p.Text)).Replace("\r\n", "\n", StringComparison.Ordinal);
         var newline = text.IndexOf('\n', StringComparison.Ordinal);
         var signature = newline < 0 ? text : text[..newline];
         var rest = newline < 0 ? string.Empty : text[(newline + 1)..].Trim();
         var builder = new StringBuilder();
-        builder.Append("```csharp\n").Append(signature).Append("\n```");
+        builder.Append("```").Append(fence).Append('\n').Append(signature).Append("\n```");
         if (rest.Length > 0)
         {
             builder.Append("\n\n").Append(Escape(rest));
@@ -225,7 +228,7 @@ internal static class Markdown
         return builder.ToString();
     }
 
-    public static string Code(string code) => "```csharp\n" + code + "\n```";
+    public static string Code(string code, string fence = "csharp") => "```" + fence + "\n" + code + "\n```";
 
     /// <summary>Escapes the characters that would start Markdown formatting in plain documentation text.</summary>
     public static string Escape(string text)

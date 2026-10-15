@@ -1136,6 +1136,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
         await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
+        await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
 
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
@@ -1830,6 +1831,66 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.DevicesWindow.Toolchain.Length > 0, "the Devices window shows the Android toolchain").ConfigureAwait(true);
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("maui-devices.png");
+    }
+
+    private async Task VisualBasicStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "VisualBasic");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "VisualBasic"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "VisualBasic.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true }, "the Visual Basic solution is open (its packages restored)", 600).ConfigureAwait(true);
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready, Projects: 4 }, "the C# host has loaded the VB and C# projects", 300).ConfigureAwait(true);
+
+        var path = Path.Combine(target, "VbConsole", "Program.vb");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.VisualBasicLanguageId, "the file is Visual Basic: " + editor.Model.LanguageId);
+
+        // formatter. completes PriceFormatter's members: a C# class in another project.
+        var loop = editor.Model.Text.Text.IndexOf("Console.WriteLine(formatter.Format(", StringComparison.Ordinal);
+        var dot = loop + "Console.WriteLine(formatter.".Length;
+        var asked = Stopwatch.StartNew();
+        editor.Editor.CaretOffset = dot;
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Currency"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                editor.Editor.CaretOffset = dot;
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "formatter. completes the C# library's members", 300).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("visual-basic.png");
+        editor.CompletionWindow!.Close();
+
+        // Enter after an If … Then adds End If (our pretty listing, through on-type formatting).
+        var main = editor.Model.Text.Text.IndexOf("Dim inventory As New Inventory()", StringComparison.Ordinal);
+        var original = editor.Model.Text.Text;
+        try
+        {
+            editor.Model.Text.Insert(main, "If args.Length > 0 Then\n        ");
+            editor.Editor.CaretOffset = main + "If args.Length > 0 Then".Length;
+            editor.Editor.TextArea.PerformTextInput("\n");
+            await WaitAsync(() => editor.Model.Text.Text.Contains("End If", StringComparison.Ordinal), "End If follows the If block").ConfigureAwait(true);
+        }
+        finally
+        {
+            editor.Model.Text.Text = original;
+        }
     }
 
     private async Task XamlPreviewStepAsync()

@@ -268,7 +268,7 @@ internal sealed class WorkspaceManager : IDisposable
                     VersionStamp.Create(),
                     data.Name,
                     parsed.AssemblyName,
-                    LanguageNames.CSharp,
+                    ProjectLoader.RoslynLanguage(data.Language) ?? LanguageNames.CSharp,
                     filePath: data.Path,
                     outputFilePath: data.OutputPath,
                     compilationOptions: parsed.CompilationOptions,

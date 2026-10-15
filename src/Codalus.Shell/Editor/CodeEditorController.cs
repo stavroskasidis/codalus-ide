@@ -906,7 +906,9 @@ public sealed partial class CodeEditorController : IDisposable
             }
         }
 
-        if (e.Text is not { Length: 1 } text || Client is not { Capabilities: { } capabilities })
+        // Enter is "\n" whatever the document's line ends (on-type formatting's trigger, M35).
+        var typed = e.Text == "\r\n" ? "\n" : e.Text;
+        if (typed is not { Length: 1 } text || Client is not { Capabilities: { } capabilities })
         {
             return;
         }
@@ -977,7 +979,14 @@ public sealed partial class CodeEditorController : IDisposable
             var edits = await client.FormatOnTypeAsync(Model.Uri, Model.PositionAt(Editor.CaretOffset), ch, options, CancellationToken.None).ConfigureAwait(true);
             if (edits.Length > 0 && version == Model.Version && !_disposed && _completion is null)
             {
+                // Text the server adds at the caret (an XML end tag, M35) goes after it: the caret stays where the user typed.
+                var caret = Model.Text.CreateAnchor(Editor.CaretOffset);
+                caret.MovementType = AvaloniaEdit.Document.AnchorMovementType.BeforeInsertion;
                 Model.ApplyEdits(edits);
+                if (!caret.IsDeleted)
+                {
+                    Editor.CaretOffset = caret.Offset;
+                }
             }
         }
         catch (Exception ex) when (IsTransient(ex))

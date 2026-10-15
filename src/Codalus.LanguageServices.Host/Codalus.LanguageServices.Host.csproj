@@ -22,6 +22,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" />
+    <!-- Visual Basic (M35): the same Roslyn, in the same workspace. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Features" />
     <PackageReference Include="ICSharpCode.Decompiler" />
   </ItemGroup>
 

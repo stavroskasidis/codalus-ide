@@ -215,7 +215,7 @@ public sealed class LanguageService : IAsyncDisposable
 
         var client = new LanguageHostClient(descriptor.DisplayName + " language service", launch, policy: _policy)
         {
-            ProjectsProvider = () => [.. _projects.Values.Where(p => p.Language == descriptor.ProjectLanguage)],
+            ProjectsProvider = () => [.. _projects.Values.Where(p => descriptor.TakesProjects(p.Language))],
             LoadingProvider = () => descriptor.ProjectLanguage is null ? null : IsLoading,
             OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : descriptor.Serves(d.LanguageId)).Select(State)],
             InitializationOptions = descriptor.InitializationOptions,
@@ -271,9 +271,9 @@ public sealed class LanguageService : IAsyncDisposable
                 await client.ConfigureAsync(settings, _lifetime.Token).ConfigureAwait(false);
             }
 
-            if (descriptor.ProjectLanguage is { } language)
+            if (descriptor.ProjectLanguage is not null)
             {
-                var projects = _projects.Values.Where(p => p.Language == language).ToList();
+                var projects = _projects.Values.Where(p => descriptor.TakesProjects(p.Language)).ToList();
                 var loading = IsLoading;
                 if (projects.Count > 0 || loading)
                 {
@@ -554,7 +554,7 @@ public sealed class LanguageService : IAsyncDisposable
         {
             var updated = new List<ProjectData>();
             var removed = new List<string>();
-            foreach (var inputs in batch.Where(i => i.Language == descriptor.ProjectLanguage))
+            foreach (var inputs in batch.Where(i => descriptor.TakesProjects(i.Language)))
             {
                 if (inputs.State != CompilerInputStates.Ok)
                 {
