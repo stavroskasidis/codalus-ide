@@ -95,7 +95,7 @@ public sealed partial class ShellHost : IEditorServices
             PropertyEvaluator = EvaluatePropertyAsync,
             ApplyEditHandler = edit => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ApplyWorkspaceEditAsync(edit)),
         };
-        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position));
+        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position), Workbench.Settings);
     }
 
     /// <summary>The markup host's options: schema downloads (setting <c>json.schemaDownload</c>) and their cache folder.</summary>
@@ -173,14 +173,37 @@ public sealed partial class ShellHost : IEditorServices
 
     public Workbench.Output.OutputChannel LanguageLog => Workbench.Output.GetOrCreate("codalus.languages", "Language Services");
 
-    private Task ConfigureLanguagesAsync() =>
-        Languages.ConfigureAsync(JsonSerializer.SerializeToElement(
+    private string? _analysisProject;
+
+    private Task ConfigureLanguagesAsync()
+    {
+        var scope = Workbench.Settings.GetString("languageServices.analysisScope", "openDocuments");
+        _analysisProject = scope == "currentProject" ? CurrentAnalysisProject() : null;
+        return Languages.ConfigureAsync(JsonSerializer.SerializeToElement(
             new Dictionary<string, string>
             {
-                ["analysisScope"] = Workbench.Settings.GetString("languageServices.analysisScope", "openDocuments"),
+                ["analysisScope"] = scope,
+                ["analysisProject"] = _analysisProject ?? string.Empty,
                 ["sourceLink"] = Workbench.Settings.GetBoolean("navigation.sourceLink") ? "true" : "false",
             },
             Docking.ShellJsonContext.Default.DictionaryStringString));
+    }
+
+    /// <summary>The current project of the <c>currentProject</c> analysis scope: the active document's, else the startup project.</summary>
+    public string? CurrentAnalysisProject() =>
+        (Layout is null ? null : ActiveEditor?.Model.Path) is { } path && ErrorListViewModel.ProjectOf(Solutions.Projects.Values, path) is { } project
+            ? project.Path
+            : Runs.StartupProject;
+
+    /// <summary>With the <c>currentProject</c> scope, a document of another project (or a new startup project) moves the analysis there.</summary>
+    private void FollowAnalysisProject()
+    {
+        if (Workbench.Settings.GetString("languageServices.analysisScope", "openDocuments") == "currentProject"
+            && !string.Equals(CurrentAnalysisProject(), _analysisProject, StringComparison.Ordinal))
+        {
+            _ = ConfigureLanguagesAsync();
+        }
+    }
 
     // ------------------------------------------------------------------ opening
 
@@ -975,6 +998,7 @@ public sealed partial class ShellHost : IEditorServices
     private void OnActiveEditorChanged()
     {
         ErrorList.OnActiveDocumentChanged();
+        FollowAnalysisProject();
         OnNavigationEditorChanged();
         TrackCopies(ActiveEditor?.Controller);
         Workbench.Context.Set("editorLanguageId", ActiveEditor?.Model.LanguageId);

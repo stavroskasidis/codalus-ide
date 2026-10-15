@@ -289,9 +289,15 @@ internal sealed class LanguageServer : IAsyncDisposable
 
     private void ApplySettings(JsonElement settings)
     {
-        if (settings.TryGetProperty("analysisScope", out var scope) && scope.GetString() is DiagnosticsService.ScopeSolution or DiagnosticsService.ScopeOpenDocuments)
+        if (settings.TryGetProperty("analysisScope", out var scope)
+            && scope.GetString() is DiagnosticsService.ScopeSolution or DiagnosticsService.ScopeOpenDocuments or DiagnosticsService.ScopeCurrentProject)
         {
             _diagnostics.AnalysisScope = scope.GetString()!;
+        }
+
+        if (settings.TryGetProperty("analysisProject", out var project))
+        {
+            _diagnostics.AnalysisProject = project.ValueKind == JsonValueKind.String && project.GetString() is { Length: > 0 } path ? Path.GetFullPath(path) : null;
         }
 
         if (settings.TryGetProperty("sourceLink", out var sourceLink))

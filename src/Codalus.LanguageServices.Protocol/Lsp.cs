@@ -295,7 +295,10 @@ public sealed record SemanticTokens(int[] Data)
 
 // ------------------------------------------------------------------ configuration
 
-/// <summary>Codalus servers read <c>{ "analysisScope": "openDocuments" | "solution" }</c> (also accepted as initialization options).</summary>
+/// <summary>
+/// Codalus servers read <c>{ "analysisScope": "openDocuments" | "currentProject" | "solution", "analysisProject": "&lt;project file&gt;" }</c>
+/// (also accepted as initialization options).
+/// </summary>
 public sealed record DidChangeConfigurationParams(JsonElement? Settings);
 
 // ------------------------------------------------------------------ window

@@ -21,6 +21,43 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task The_current_project_scope_runs_analyzers_in_that_projects_closed_files()
+    {
+        var reporter = fixture.File("src", "App", "Reporter.cs");
+        async Task ConfigureAsync(string scope, string project) =>
+            await fixture.Languages.ConfigureAsync(System.Text.Json.JsonSerializer.SerializeToElement(
+                new Dictionary<string, string> { ["analysisScope"] = scope, ["analysisProject"] = project }));
+
+        try
+        {
+            // Another project is current: Reporter.cs (closed) has no analyzer diagnostics; App is current: it has CA2200.
+            await ConfigureAsync("currentProject", fixture.File("src", "Lib", "Lib.csproj"));
+            await Task.Delay(TimeSpan.FromSeconds(3), Ct); // a background pass
+            Assert.DoesNotContain(fixture.Languages.Diagnostics.For(reporter), d => d.Code == "CA2200");
+            await ConfigureAsync("currentProject", fixture.File("src", "App", "App.csproj"));
+            await WaitForDiagnosticsAsync(reporter, d => d.Any(x => x.Code == "CA2200"));
+        }
+        finally
+        {
+            await ConfigureAsync("openDocuments", string.Empty);
+        }
+
+        await WaitForDiagnosticsAsync(reporter, d => d.All(x => x.Code != "CA2200"));
+    }
+
+    [Fact]
+    public void A_project_is_analyzed_in_full_when_the_scope_covers_it()
+    {
+        var app = Path.Combine(Path.GetTempPath(), "App", "App.csproj");
+        var lib = Path.Combine(Path.GetTempPath(), "Lib", "Lib.csproj");
+        Assert.Equal("solution", DiagnosticsService.ScopeOf("solution", null, lib));
+        Assert.Equal("solution", DiagnosticsService.ScopeOf("currentProject", app, app));
+        Assert.Equal("openDocuments", DiagnosticsService.ScopeOf("currentProject", app, lib));
+        Assert.Equal("openDocuments", DiagnosticsService.ScopeOf("currentProject", null, app));
+        Assert.Equal("openDocuments", DiagnosticsService.ScopeOf("openDocuments", app, app));
+    }
+
+    [Fact]
     public async Task Diagnostics_include_analyzers_and_follow_edits()
     {
         var reporter = fixture.File("src", "App", "Reporter.cs");

@@ -153,9 +153,17 @@ internal static partial class BuiltIns
             {
                 Title = "Background Analysis Scope",
                 Category = "Language Services",
-                Description = "Where analyzers run in the background. Compiler errors are always reported for the whole solution.",
-                Enum = ["openDocuments", "solution"],
-                EnumDescriptions = ["Open documents", "Entire solution"],
+                Description = "Where analyzers run in the background. Compiler errors are always reported for the whole solution. The current project is the active document's, or the startup project.",
+                Enum = ["openDocuments", "currentProject", "solution"],
+                EnumDescriptions = ["Open documents", "Current project", "Entire solution"],
+            },
+            SettingDescriptor.Create("errorList.groupBy", "\"none\"", SettingType.String, shell) with
+            {
+                Title = "Group By",
+                Category = "Error List",
+                Description = "How the Error List groups its diagnostics. Groups collapse with a click.",
+                Enum = ["none", "project", "file", "severity", "code", "source"],
+                EnumDescriptions = ["No grouping", "Project", "File", "Severity", "Code", "Source (build or IntelliSense)"],
             },
         ];
     }

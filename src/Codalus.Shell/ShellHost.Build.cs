@@ -40,9 +40,21 @@ public sealed partial class ShellHost
         Builds.Started += (_, request) => Ui.Post(() => OnBuildStarted(request));
         Builds.Finished += (_, completed) => Ui.Post(() => OnBuildFinished(completed));
         Runs.RunningChanged += (_, _) => Ui.Post(UpdateRunState);
-        Runs.StartupChanged += (_, _) => Ui.Post(UpdateRunState);
-        Solutions.SolutionChanged += (_, _) => Ui.Post(UpdateRunState);
-        Solutions.ProjectChanged += (_, _) => Ui.Post(UpdateRunState);
+        Runs.StartupChanged += (_, _) => Ui.Post(() =>
+        {
+            UpdateRunState();
+            FollowAnalysisProject();
+        });
+        Solutions.SolutionChanged += (_, _) => Ui.Post(() =>
+        {
+            UpdateRunState();
+            FollowAnalysisProject();
+        });
+        Solutions.ProjectChanged += (_, _) => Ui.Post(() =>
+        {
+            UpdateRunState();
+            FollowAnalysisProject();
+        });
         UpdateRunState();
     }
 

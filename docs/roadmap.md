@@ -2361,7 +2361,7 @@ The "Codalus" column uses these terms:
 | Rename with preview | M3 |
 | Refactorings with dialogs (Change Signature, Extract Interface, Pull Members Up, generate members) | M12 |
 | Configure severity, EditorConfig UI, suppressions | M12; the EditorConfig UI and a suppression file deferred at M12b ([deferred](#deferred-work)) |
-| Full-solution analysis, Error List filters | M12; Error List grouping and the analysis-scope picker deferred at M12b ([deferred](#deferred-work)) |
+| Full-solution analysis, Error List filters | M12; Error List grouping and the analysis-scope picker (open documents, current project, solution) since 2026-10-15 |
 | Code Metrics | M12 |
 | Syntax Visualizer, analyzer and generator authoring templates | M12 |
 | Debugging analyzers and source generators | M14c (done: the `DebugRoslynComponent` profile) |
@@ -2541,7 +2541,7 @@ Items deferred with a `TODO(issue)` to a milestone that has since closed without
 | Class View and the Object Browser | [M12a](checkpoints/m12a.md) | M12 |
 | CodeLens: Git authors and test status; Go To All's persistent index | [M12a](checkpoints/m12a.md), [M12b](checkpoints/m12b.md) | M12 |
 | Paste with automatic usings, per-language editor options | [M12b](checkpoints/m12b.md) | M12 |
-| The EditorConfig settings UI, a suppression file, Error List grouping and the analysis-scope picker, spell checking | [M12b](checkpoints/m12b.md) | M12 |
+| The EditorConfig settings UI, a suppression file, spell checking | [M12b](checkpoints/m12b.md) | M12 |
 | Vertical tabs, persisted floating documents (`LayoutManager.cs`) | [M12b](checkpoints/m12b.md), [M3a](checkpoints/m3a.md) | M12 |
 | SVG and animated GIFs in the image viewer | [M12b](checkpoints/m12b.md) | M12 |
 | The `.resx` editor; XSD validation; LSP features for other languages beyond M11's | [M11](checkpoints/m11.md) | M11 |
@@ -2765,3 +2765,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-15: deferred work, Edit → Paste Special → Paste XML as Classes (`XmlClassGenerator`): classes for `XmlSerializer`, with attributes, repeated elements as lists, mixed text as `[XmlText]`, namespaces, and values typed from every occurrence.
 - 2026-10-15: deferred work, the hex viewer (`HexDocument`, `HexViewerView`): binary files (NUL bytes and no byte order mark in their first 8 KB) open in it, any file through Open With Hex Viewer, Reopen With Text Editor goes back; read-only, reading only the visible rows; a selected byte's offset and value in its bar. Tested by `HexViewerTests`.
 - 2026-10-15: deferred work, snippets: Tab visits fields by number (`$1`, `$2`…, then `$0`) rather than their place in the text (`SnippetSession`, ahead of AvaloniaEdit's handler), choice placeholders list their choices, and Tools → Code Snippets Manager (`Ctrl+K Ctrl+B`) lists every language's snippets with copy to yours, remove, open and import. Tested in `EditingDepthTests`.
+- 2026-10-15: deferred work, Error List grouping and the analysis-scope picker: Group By (project, file, severity, code or source; headers collapse; `errorList.groupBy`) and Analysis Scope in the Error List's toolbar, with a new `currentProject` value of `languageServices.analysisScope` (the active document's project or the startup project, sent to the C# host as `analysisProject`; the background pass keeps each project's results by its own scope, so switching projects analyzes only the two involved again). Tested by `ErrorListGroupingTests` and `The_current_project_scope_runs_analyzers_in_that_projects_closed_files`.
