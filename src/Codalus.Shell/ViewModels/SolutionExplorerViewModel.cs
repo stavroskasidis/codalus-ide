@@ -139,6 +139,13 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         var solutions = shell.Solutions;
         solutions.SolutionChanged += (_, _) => QueueRefresh();
         solutions.ProjectChanged += (_, _) => QueueRefresh();
+        shell.Workbench.Settings.Changed += (_, e) =>
+        {
+            if (e.Affects(ShowMembersSetting))
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
+            }
+        };
         solutions.CompilerInputsChanged += (_, _) => QueueRefresh();
         solutions.SolutionChanged += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(OnSolutionChangedForDisk);
         solutions.ProjectChanged += (_, project) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -478,6 +485,8 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             _expanded.Add(node.Id);
         }
 
+        node = WithMembers(node);
+
         rows.Add((node, depth));
         if (_expanded.Contains(node.Id))
         {
@@ -550,6 +559,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     public void SetExpanded(ExplorerRowViewModel row, bool expanded)
     {
+        if (expanded && row.Node is { Kind: ExplorerNodeKind.File, Path: { } file } && ShowsMembers(row.Node) && !_members.ContainsKey(file))
+        {
+            _ = LoadMembersAsync(file);
+        }
+
         if (!row.HasChildren || (expanded ? !_expanded.Add(row.Id) : !_expanded.Remove(row.Id)))
         {
             return;
@@ -614,6 +628,103 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         return null;
     }
 
+    // ------------------------------------------------------------------ members under files (deferred from M12a)
+
+    public const string ShowMembersSetting = "solutionExplorer.showMembers";
+
+    private readonly Dictionary<string, IReadOnlyList<ExplorerNode>> _members = new(SolutionService.PathComparer);
+    private readonly HashSet<string> _loadingMembers = new(SolutionService.PathComparer);
+
+    /// <summary>A C# or VB file in a project: it expands into its types and members.</summary>
+    private bool ShowsMembers(ExplorerNode node) =>
+        node is { Kind: ExplorerNodeKind.File, Path: { } path, ProjectPath: not null, IsExcluded: false }
+        && path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) | path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase)
+        && _shell.Workbench.Settings.GetBoolean(ShowMembersSetting, true);
+
+    /// <summary>
+    /// A code file's node with its members after its own children (files nested under it): the cached ones, else a
+    /// "loading" row that asks for them when the file is expanded.
+    /// </summary>
+    private ExplorerNode WithMembers(ExplorerNode node)
+    {
+        if (!ShowsMembers(node))
+        {
+            return node;
+        }
+
+        var path = node.Path!;
+        if (!_members.TryGetValue(path, out var members))
+        {
+            if (_expanded.Contains(node.Id))
+            {
+                _ = LoadMembersAsync(path);
+            }
+
+            members = [new ExplorerNode(node.Id + "|members-loading", ExplorerNodeKind.Message, Localizer.Get("msg.solutionExplorer.loadingMembers", "Loading…")) { Icon = "dot", ProjectPath = node.ProjectPath }];
+        }
+
+        return members.Count == 0 && node.Children.Count == 0 ? node : node with { Children = [.. node.Children, .. members] };
+    }
+
+    /// <summary>The file's symbols from its language service, as member nodes; then the tree again.</summary>
+    private async Task LoadMembersAsync(string path)
+    {
+        if (!_loadingMembers.Add(path))
+        {
+            return;
+        }
+
+        try
+        {
+            var language = path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase) ? ShellHost.VisualBasicLanguageId : ShellHost.CSharpLanguageId;
+            var client = _shell.Languages.RunningClient(language) ?? _shell.Languages.RunningClient(ShellHost.CSharpLanguageId);
+            IReadOnlyList<LanguageServices.Protocol.DocumentSymbol> symbols = client is null
+                ? []
+                : await client.DocumentSymbolsAsync(LanguageServices.Protocol.DocumentUris.FromPath(path), CancellationToken.None).ConfigureAwait(true);
+            _members[path] = MemberNodes(path, symbols);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or System.Text.Json.JsonException or OperationCanceledException)
+        {
+            _members[path] = [];
+        }
+        finally
+        {
+            _loadingMembers.Remove(path);
+        }
+
+        QueueRefresh();
+    }
+
+    /// <summary>Member nodes for a file's symbols: types and their members, namespaces left out (their types take their place).</summary>
+    internal static IReadOnlyList<ExplorerNode> MemberNodes(string path, IReadOnlyList<LanguageServices.Protocol.DocumentSymbol> symbols)
+    {
+        var fileId = "member|" + path;
+        IReadOnlyList<ExplorerNode> Nodes(IEnumerable<LanguageServices.Protocol.DocumentSymbol> level, string parent) =>
+        [
+            .. level.SelectMany(symbol => symbol.Kind is LanguageServices.Protocol.SymbolKind.Namespace or LanguageServices.Protocol.SymbolKind.Package or LanguageServices.Protocol.SymbolKind.Module
+                ? Nodes(symbol.Children ?? [], parent)
+                : [new ExplorerNode($"{parent}|{symbol.Name}@{symbol.SelectionRange.Start.Line}", ExplorerNodeKind.Member, symbol.Name)
+                {
+                    Path = path,
+                    Icon = SymbolNodeViewModel.IconFor(symbol.Kind),
+                    Detail = symbol.Detail,
+                    Position = (symbol.SelectionRange.Start.Line, symbol.SelectionRange.Start.Character),
+                    Children = Nodes(symbol.Children ?? [], $"{parent}|{symbol.Name}"),
+                }]),
+        ];
+
+        return Nodes(symbols, fileId);
+    }
+
+    /// <summary>A file changed (an edit, a save, a change on disk): its members are read again when shown.</summary>
+    public void OnFileChanged(string path)
+    {
+        if (_members.Remove(path))
+        {
+            QueueRefresh();
+        }
+    }
+
     // ------------------------------------------------------------------ activation
 
     /// <summary>A single click on a file shows it in the preview tab, keeping focus here.</summary>
@@ -622,6 +733,10 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         if (row.Node is { Kind: ExplorerNodeKind.File or ExplorerNodeKind.SolutionItem, Path: { } path } && File.Exists(path))
         {
             await _shell.OpenFileAsync(path, preview: true).ConfigureAwait(true);
+        }
+        else if (row.Node is { Kind: ExplorerNodeKind.Member, Path: { } member, Position: { } at })
+        {
+            await _shell.OpenFileAsync(member, preview: true, new LanguageServices.Protocol.Position(at.Line, at.Character)).ConfigureAwait(true);
         }
     }
 
@@ -632,6 +747,9 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             case { Kind: ExplorerNodeKind.File or ExplorerNodeKind.SolutionItem, Path: { } path }:
                 await _shell.OpenFileAsync(path).ConfigureAwait(true);
+                break;
+            case { Kind: ExplorerNodeKind.Member, Path: { } member, Position: { } at }:
+                await _shell.OpenFileAsync(member, preview: false, new LanguageServices.Protocol.Position(at.Line, at.Character)).ConfigureAwait(true);
                 break;
             case { Kind: ExplorerNodeKind.Dependency, Path: { } target } when target.EndsWith("proj", StringComparison.OrdinalIgnoreCase):
                 Reveal("p:" + target);

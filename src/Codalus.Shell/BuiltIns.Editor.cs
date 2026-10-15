@@ -160,6 +160,12 @@ internal static partial class BuiltIns
                 Enum = ["openDocuments", "currentProject", "solution"],
                 EnumDescriptions = ["Open documents", "Current project", "Entire solution"],
             },
+            SettingDescriptor.Create(ViewModels.SolutionExplorerViewModel.ShowMembersSetting, "true", SettingType.Boolean, shell) with
+            {
+                Title = "Show Members Under Files",
+                Category = "Solution Explorer",
+                Description = "C# and Visual Basic files expand into the types and members they declare; choosing one goes to it.",
+            },
             SettingDescriptor.Create("errorList.groupBy", "\"none\"", SettingType.String, shell) with
             {
                 Title = "Group By",

@@ -14,6 +14,9 @@ public enum ExplorerNodeKind
     DependencyGroup,
     Dependency,
     Message,
+
+    /// <summary>A type or member declared in a code file (under the file, from its language service's symbols).</summary>
+    Member,
 }
 
 /// <summary>
@@ -48,6 +51,9 @@ public sealed record ExplorerNode(string Id, ExplorerNodeKind Kind, string Name)
     public bool IsExcluded { get; init; }
 
     public IReadOnlyList<ExplorerNode> Children { get; init; } = [];
+
+    /// <summary>For <see cref="ExplorerNodeKind.Member"/>: where it is declared (zero-based line and character).</summary>
+    public (int Line, int Character)? Position { get; init; }
 }
 
 /// <summary>

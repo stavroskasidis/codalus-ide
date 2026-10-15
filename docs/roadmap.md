@@ -2537,7 +2537,7 @@ Items deferred with a `TODO(issue)` to a milestone that has since closed without
 
 | Item | Deferred at | Was meant for |
 |---|---|---|
-| Solution Explorer: members under files, generated sources under each analyzer | [M12a](checkpoints/m12a.md) | M12 |
+| Solution Explorer: generated sources under each analyzer | [M12a](checkpoints/m12a.md) | M12 |
 | Class View and the Object Browser | [M12a](checkpoints/m12a.md) | M12 |
 | Go To All's persistent index | [M12a](checkpoints/m12a.md), [M12b](checkpoints/m12b.md) | M12 |
 | The EditorConfig settings UI, a suppression file, spell checking | [M12b](checkpoints/m12b.md) | M12 |
@@ -2768,3 +2768,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-15: deferred work, CodeLens's Git history and test status (`LensDetails`, in `EditorInsights`): a member's last author and when, and its numbers of authors and changes, from `git blame` over its document symbol's lines (again on save, or every few seconds while edited); a test's last outcome and a test class's passing count; `editor.gitCodeLens` and `editor.testCodeLens`. Tested by `CodeLensDetailsTests` and in `TestExplorerTests`.
 - 2026-10-15: deferred work, the toolbar's Hot Reload button: a split button that starts with Hot Reload or, while a program runs with it, applies code changes; its menu has Stop Running Programs, the `run.hotReload` switch (`run.toggleHotReloadOnStart`) and the settings (`run.hotReloadSettings`). The Devices window's duplicate entry in View → Other Windows is gone. Tested in `ChromeTests` and `WebTests`.
 - 2026-10-15: deferred work, signing in to package sources: the build host's `packages/signIn` runs NuGet's credential providers interactively for one request, with a credential service of its own (NuGet sets its own only once), and keeps the repository that signed in; `packages/signInMessage` carries the providers' device codes to a notification with Copy Code and Open Browser. The package manager offers Sign In next to a feed that refused for want of one, and there is a command too. Tested by `PackageSignInTests`, against a feed that wants basic authentication and a fake credential-provider plugin (`tests/Codalus.NuGetCredentialProvider.Fake`), and by `PackageSignInShellTests`.
+- 2026-10-15: deferred work, members under files in the Solution Explorer: C# and VB files expand into their types and members (`ExplorerNodeKind.Member`, from the language service's document symbols, namespaces left out), loaded on expand, read again after an edit; choosing one opens the file there; `solutionExplorer.showMembers`. Tested by `SolutionExplorerMembersTests`.
