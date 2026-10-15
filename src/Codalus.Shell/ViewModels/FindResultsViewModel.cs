@@ -137,6 +137,8 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(Title));
                 OnPropertyChanged(nameof(Summary));
                 OnPropertyChanged(nameof(SelectedRow));
+                OnPropertyChanged(nameof(IsReferences));
+                OnPropertyChanged(nameof(IsSearching));
             }
         }
     }
@@ -1099,7 +1101,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
                 Refresh();
                 if (_filter.Length > 0)
                 {
-                    OnPropertyChanged(nameof(Summary));
+                    BaseSummary = _summary; // the shown count changed
                 }
             }
         });
