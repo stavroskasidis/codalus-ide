@@ -14,6 +14,9 @@ public static class ItemMethods
     public const string Include = "items/include";
     public const string AddExisting = "items/addExisting";
 
+    /// <summary>F# compile order (M36): moves a <c>Compile</c> item before or after another.</summary>
+    public const string Move = "items/move";
+
     public const string ListTree = "fs/listTree";
 
     /// <summary>Host → shell: folders whose set of files changed on disk (debounced).</summary>
@@ -84,6 +87,12 @@ public sealed record ItemEditResult(bool Changed, string[] UpdatedFiles);
 public sealed record ItemPathsParams(string Project, string[] Paths);
 
 /// <summary>
+/// <c>items/move</c>: moves <see cref="Path"/>'s <c>Compile</c> item before (<see cref="After"/> false) or after
+/// <see cref="Target"/>'s, in the project file (F#'s compile order, M36).
+/// </summary>
+public sealed record MoveItemParams(string Project, string Path, string Target, bool After);
+
+/// <summary>
 /// Add Existing Item: copies <see cref="Files"/> into <see cref="TargetFolder"/> (a folder of the project), or, with
 /// <see cref="AsLink"/>, adds links to them shown in that folder.
 /// </summary>
@@ -131,6 +140,7 @@ public static class SolutionFormats
 [JsonSerializable(typeof(ItemSetParams))]
 [JsonSerializable(typeof(ItemEditResult))]
 [JsonSerializable(typeof(ItemPathsParams))]
+[JsonSerializable(typeof(MoveItemParams))]
 [JsonSerializable(typeof(AddExistingItemsParams))]
 [JsonSerializable(typeof(FileOperationResult))]
 [JsonSerializable(typeof(ListTreeParams))]

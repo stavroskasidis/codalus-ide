@@ -368,6 +368,7 @@ public sealed partial class ShellHost : IEditorServices
         else
         {
             await OfferWebLanguagesAsync(languageId).ConfigureAwait(true);
+            await OfferFSharpAsync(languageId).ConfigureAwait(true);
         }
     }
 

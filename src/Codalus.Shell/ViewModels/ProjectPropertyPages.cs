@@ -186,7 +186,36 @@ public static class ProjectPropertyPages
         }),
     ];
 
-    /// <summary>The pages for a project file: Visual Basic's for a <c>.vbproj</c>, C#'s otherwise.</summary>
+    /// <summary>
+    /// The F# pages (M36, ADR 0067): C#'s, with F#'s language settings (nullness checking, the F# version, warnings to
+    /// turn on, other compiler flags) and tail calls, without unsafe code or warning levels.
+    /// </summary>
+    public static IReadOnlyList<PropertyPage> FSharp { get; } =
+    [
+        .. CSharp.Select(page => page with
+        {
+            Sections = [.. page.Sections.Select(section => section.Title == "Language" && page.Id == "application"
+                ? new PropertySection("Language",
+                [
+                    new("Nullable", "Nullable", "Nullness checking (F# 9): reports nulls where the types don't allow them.", PropertyEditor.Choice) { Options = [O("enable", "Enable"), O("disable", "Disable")] },
+                    new("LangVersion", "Language version", "The F# language version.", PropertyEditor.Choice) { Options = [O("default", "Default"), O("latest", "Latest"), O("preview", "Preview"), O("10.0", "F# 10"), O("9.0", "F# 9"), O("8.0", "F# 8"), O("7.0", "F# 7"), O("6.0", "F# 6")] },
+                    new("WarnOn", "Turn on warnings", "Warnings that are off by default to report, separated by semicolons (3390: XML documentation).", PropertyEditor.List),
+                    new("OtherFlags", "Other flags", "More options for the F# compiler (fsc), e.g. --warnon:1182."),
+                ])
+                : section with
+                {
+                    Properties = [.. section.Properties
+                        .Where(p => p.Name is not ("AllowUnsafeBlocks" or "WarningLevel")),
+                        .. section.Title == "General" && page.Id == "build"
+                            ? [new PropertyDefinition("Tailcalls", "Tail calls", "Emits tail calls, so deep recursion doesn't overflow the stack (on in Release by default).", PropertyEditor.Bool, PerConfiguration: true) { Options = s_bool }]
+                            : Array.Empty<PropertyDefinition>()],
+                })],
+        }),
+    ];
+
+    /// <summary>The pages for a project file: Visual Basic's for a <c>.vbproj</c>, F#'s for an <c>.fsproj</c>, C#'s otherwise.</summary>
     public static IReadOnlyList<PropertyPage> For(string project) =>
-        project.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase) ? VisualBasic : CSharp;
+        project.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase) ? VisualBasic
+        : project.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ? FSharp
+        : CSharp;
 }

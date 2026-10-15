@@ -118,6 +118,13 @@ public static class ItemTemplates
         VisualBasic("vbstructure", "Structure", "A structure.", "Structure1", c => $"Public Structure {c.Name}\n\nEnd Structure\n"),
         VisualBasic("vbenum", "Enum", "An enumeration.", "Enum1", c => $"Public Enum {c.Name}\n\nEnd Enum\n"),
         VisualBasic("vbcodefile", "Code File", "An empty Visual Basic file.", "CodeFile1", _ => string.Empty),
+        // F# (M36): Compile items, which F# projects list explicitly (their order is the compile order).
+        FSharp("fsmodule", "Source File", "A module in its own file.", "Module1", ".fs", c => $"module {c.Namespace}.{c.Name}\n\n"),
+        FSharp("fsclass", "Class", "A class.", "Class1", ".fs", c => $"namespace {c.Namespace}\n\ntype {c.Name}() =\n    member _.Name = \"{c.Name}\"\n"),
+        FSharp("fsinterface", "Interface", "An interface.", "IInterface1", ".fs", c => $"namespace {c.Namespace}\n\ntype {c.Name} =\n    abstract member Run: unit -> unit\n"),
+        FSharp("fsrecord", "Record", "A record type.", "Record1", ".fs", c => $"namespace {c.Namespace}\n\ntype {c.Name} = {{ Id: int; Name: string }}\n"),
+        FSharp("fssignature", "Signature File", "A signature file (.fsi): what the implementation file of the same name makes public.", "Module1", ".fsi", c => $"module {c.Namespace}.{c.Name}\n\n"),
+        new("Script File", "fsscript", "Code", "An F# script, run with dotnet fsi or sent to F# Interactive.", "Script1", ".fsx") { Languages = ["F#"], Content = _ => "printfn \"Hello from F#\"\n" },
         General("text", "Text File", "An empty text file.", "TextFile1", ".txt", _ => string.Empty),
         General("json", "JSON File", "An empty JSON file.", "JsonFile1", ".json", _ => "{\n}\n", "Data"),
         General("appsettings", "App Settings File", "An appsettings.json file for configuration.", "appsettings", ".json", _ => "{\n  \"Logging\": {\n    \"LogLevel\": {\n      \"Default\": \"Information\"\n    }\n  }\n}\n", "General", metadata: new Dictionary<string, string> { ["CopyToOutputDirectory"] = "PreserveNewest" }),
@@ -135,6 +142,9 @@ public static class ItemTemplates
 
     private static ItemTemplate Code(string shortName, string name, string description, string defaultName, Func<ItemTemplateContext, string> content) =>
         new(name, shortName, "Code", description, defaultName, ".cs") { Languages = ["C#"], Content = content };
+
+    private static ItemTemplate FSharp(string shortName, string name, string description, string defaultName, string extension, Func<ItemTemplateContext, string> content) =>
+        new(name, shortName, "Code", description, defaultName, extension) { Languages = ["F#"], Content = content, ItemType = "Compile" };
 
     private static ItemTemplate VisualBasic(string shortName, string name, string description, string defaultName, Func<ItemTemplateContext, string> content) =>
         new(name, shortName, "Code", description, defaultName, ".vb") { Languages = ["VB"], Content = content };

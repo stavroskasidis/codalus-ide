@@ -37,6 +37,12 @@ public sealed record LanguageServiceDescriptor(
     /// <summary>Settings by section and document (<c>scopeUri</c>), for servers whose settings depend on the file.</summary>
     public Func<string?, string?, System.Text.Json.JsonElement?>? ScopedConfiguration { get; init; }
 
+    /// <summary>
+    /// The server's own settings (<c>workspace/didChangeConfiguration</c>), sent instead of the shared ones: FsAutoComplete
+    /// reads an <c>FSharp</c> section (M36). Read again each time the settings are sent.
+    /// </summary>
+    public Func<System.Text.Json.JsonElement>? Settings { get; init; }
+
     /// <summary>The server's own requests the client answers with null.</summary>
     public IReadOnlyList<string> AcceptedRequests { get; init; } = [];
 

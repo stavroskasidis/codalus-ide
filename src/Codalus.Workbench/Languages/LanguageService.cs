@@ -140,16 +140,36 @@ public sealed class LanguageService : IAsyncDisposable
     /// A service that couldn't start (its launch returned null, e.g. a server not installed yet) is tried again, and the
     /// open documents of its languages are opened in it. Returns whether it runs now.
     /// </summary>
-    public async Task<bool> RetryAsync(string languageId)
+    public Task<bool> RetryAsync(string languageId) => StartAgainAsync(languageId, restart: false);
+
+    /// <summary>
+    /// Stops a running service and starts it again with the open documents: a server that loads the workspace itself
+    /// (FsAutoComplete, M36) does it again for a newly opened solution. Returns whether it runs now.
+    /// </summary>
+    public Task<bool> RestartAsync(string languageId) => StartAgainAsync(languageId, restart: true);
+
+    private async Task<bool> StartAgainAsync(string languageId, bool restart)
     {
         if (ServerOf(languageId) is not { } server)
         {
             return false;
         }
 
-        if (_clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompleted && (!lazy.Value.IsCompletedSuccessfully || lazy.Value.Result is null))
+        if (_clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompleted && (restart || !lazy.Value.IsCompletedSuccessfully || lazy.Value.Result is null)
+            && _clients.TryRemove(KeyValuePair.Create(server, lazy)))
         {
-            _clients.TryRemove(server, out _);
+            _status.TryRemove(server, out _);
+            Diagnostics.Clear(server);
+            if (lazy.Value.IsCompletedSuccessfully && lazy.Value.Result is { } running)
+            {
+                try
+                {
+                    await running.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is OperationCanceledException or IOException or JsonRpcConnectionLostException)
+                {
+                }
+            }
         }
 
         if (await ClientAsync(languageId).ConfigureAwait(false) is not { } client)
@@ -184,11 +204,11 @@ public sealed class LanguageService : IAsyncDisposable
     public async Task ConfigureAsync(JsonElement settings)
     {
         _settings = settings;
-        foreach (var lazy in _clients.Values.Where(l => l.IsValueCreated))
+        foreach (var (server, lazy) in _clients.Where(c => c.Value.IsValueCreated).ToArray())
         {
             if (await lazy.Value.ConfigureAwait(false) is { } client)
             {
-                await client.ConfigureAsync(settings, _lifetime.Token).ConfigureAwait(false);
+                await client.ConfigureAsync(_registry.Get(server)?.Settings?.Invoke() ?? settings, _lifetime.Token).ConfigureAwait(false);
             }
         }
     }
@@ -265,7 +285,7 @@ public sealed class LanguageService : IAsyncDisposable
         try
         {
             await client.StartAsync(_lifetime.Token).ConfigureAwait(false);
-            if (_settings is { } settings)
+            if ((descriptor.Settings?.Invoke() ?? _settings) is { } settings)
             {
                 stage = "sending the settings";
                 await client.ConfigureAsync(settings, _lifetime.Token).ConfigureAwait(false);

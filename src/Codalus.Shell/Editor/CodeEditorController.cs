@@ -429,7 +429,8 @@ public sealed partial class CodeEditorController : IDisposable
 
     private async Task LoadDocumentOptionsAsync()
     {
-        if (Client is not { } client)
+        // codalus/documentOptions is our hosts' extension; FsAutoComplete and the web servers don't have it.
+        if (Client is not { } client || Model.LanguageId == ShellHost.FSharpLanguageId || ShellHost.IsWebLanguage(Model.LanguageId ?? string.Empty))
         {
             return;
         }

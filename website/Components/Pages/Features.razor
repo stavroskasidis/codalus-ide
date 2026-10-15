@@ -1,7 +1,7 @@
 @page "/features"
 @inject SiteOptions Site
 
-<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, Visual Basic, profiling and more." />
+<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, Visual Basic, F#, profiling and more." />
 
 <div class="container">
     <section class="page-intro">
@@ -188,6 +188,16 @@
                 </ul>
             </div>
             <div>
+                <h3>F#</h3>
+                <ul>
+                    <li>FsAutoComplete, Ionide's language server, installed for you: completion with unopened namespaces, Quick Info, live errors and FSharpLint</li>
+                    <li>Navigation, rename, quick fixes, inlay hints and signature CodeLens</li>
+                    <li>Fantomas formatting with your .editorconfig</li>
+                    <li>Solution Explorer in compile order: Move Up, Move Down, Add Above and Add Below; signature files under their implementation</li>
+                    <li>F# item templates and project properties</li>
+                </ul>
+            </div>
+            <div>
                 <h3>And more</h3>
                 <ul>
                     <li>Remote development over SSH, in WSL and in containers; Dev Containers; reconnecting after a network drop; the Test Explorer and workspace plugins on the remote machine; tests in WSL, Docker or over SSH</li>
@@ -205,7 +215,7 @@
             </div>
         </div>
         <div class="notice" style="margin-top: 56px">
-            <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, Hot Reload while debugging, translations of the interface, and F#.</p>
+            <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, Hot Reload while debugging, translations of the interface, and F# Interactive.</p>
             <a class="link-arrow" href="@Site.Blob("docs/roadmap.md")">See the roadmap</a>
         </div>
     </section>

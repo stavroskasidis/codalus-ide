@@ -311,6 +311,9 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
             : null;
     }
 
+    /// <summary>F#'s compile order (M36): the file the new one goes after (or, with After false, before).</summary>
+    public (string Target, bool After)? Placement { get; set; }
+
     /// <summary>Creates the item and opens it. Returns the created file, or null (the error says why).</summary>
     public async Task<string?> AddAsync()
     {
@@ -346,6 +349,11 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
                     Error = $"dotnet new {template.ShortName} created no file.";
                     return null;
                 }
+            }
+
+            if (Placement is { } placement && SolutionTree.IsOrdered(Project))
+            {
+                await _shell.ProjectItems.MoveAsync(Project, created, placement.Target, placement.After, CancellationToken.None).ConfigureAwait(true);
             }
 
             Created = created;

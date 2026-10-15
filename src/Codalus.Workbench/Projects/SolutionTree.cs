@@ -243,9 +243,15 @@ public static class SolutionTree
         public Dictionary<string, FolderBuilder> Folders { get; } = new(s_names);
 
         public List<FileEntry> Files { get; } = [];
+
+        /// <summary>F# projects: the compile order of its first compiled file (<see cref="int.MaxValue"/>: none).</summary>
+        public int Order { get; set; } = int.MaxValue;
     }
 
-    private sealed record FileEntry(string Name, string FullPath, string? DependentUpon, bool Linked, bool Excluded = false);
+    private sealed record FileEntry(string Name, string FullPath, string? DependentUpon, bool Linked, bool Excluded = false, int Order = int.MaxValue);
+
+    /// <summary>Whether a project's items show in their compile order rather than by name (F#, M36).</summary>
+    public static bool IsOrdered(string projectPath) => projectPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Folders and files of a project, with nesting applied. With <paramref name="disk"/> (Show All Files), files and
@@ -256,8 +262,11 @@ public static class SolutionTree
         var projectDirectory = System.IO.Path.GetDirectoryName(projectPath)!;
         var root = new FolderBuilder(projectDirectory, string.Empty);
         var seen = new HashSet<string>(SolutionService.PathComparer);
+        var ordered = IsOrdered(projectPath);
+        var index = -1;
         foreach (var item in info.Items)
         {
+            index++;
             if (SolutionService.PathComparer.Equals(item.Path, projectPath))
             {
                 continue;
@@ -274,6 +283,8 @@ public static class SolutionTree
             var folder = root;
             var isFolderItem = item.Kind.Equals("Folder", StringComparison.OrdinalIgnoreCase);
             var folderSegments = isFolderItem ? segments.Length : segments.Length - 1;
+            // F#: compiled files keep the project's order (the compile order); folders sit where their first one does.
+            var order = ordered && item.Kind.Equals("Compile", StringComparison.OrdinalIgnoreCase) ? index : int.MaxValue;
             for (var i = 0; i < folderSegments; i++)
             {
                 if (!folder.Folders.TryGetValue(segments[i], out var child))
@@ -283,11 +294,12 @@ public static class SolutionTree
                 }
 
                 folder = child;
+                folder.Order = Math.Min(folder.Order, order);
             }
 
             if (!isFolderItem && seen.Add(item.Path))
             {
-                folder.Files.Add(new FileEntry(segments[^1], item.Path, item.DependentUpon, !inside || item.Link is not null));
+                folder.Files.Add(new FileEntry(segments[^1], item.Path, item.DependentUpon, !inside || item.Link is not null, Order: order));
             }
         }
 
@@ -322,17 +334,17 @@ public static class SolutionTree
 
     private static List<ExplorerNode> Build(FolderBuilder folder, string projectPath)
     {
-        var nodes = new List<ExplorerNode>();
+        var nodes = new List<(int Order, ExplorerNode Node)>();
         foreach (var child in folder.Folders.Values.OrderBy(f => f.Name, s_names))
         {
-            nodes.Add(new ExplorerNode("d:" + child.Path, ExplorerNodeKind.Folder, child.Name)
+            nodes.Add((child.Order, new ExplorerNode("d:" + child.Path, ExplorerNodeKind.Folder, child.Name)
             {
                 Path = child.Path,
                 ProjectPath = projectPath,
                 Icon = "folder",
                 IsExcluded = child.Excluded,
                 Children = Build(child, projectPath),
-            });
+            }));
         }
 
         // Nesting: each file finds its parent among its siblings; files without a parent are roots.
@@ -352,8 +364,11 @@ public static class SolutionTree
                     .Select(File)],
             };
 
-        nodes.AddRange(folder.Files.Where(f => parentOf[f.Name] is null).OrderBy(f => f.Name, s_names).Select(File));
-        return nodes;
+        nodes.AddRange(folder.Files.Where(f => parentOf[f.Name] is null).OrderBy(f => f.Name, s_names).Select(f => (f.Order, File(f))));
+
+        // By name, folders first; in an F# project, compiled files and the folders holding them first, in compile order.
+        // (OrderBy is stable, so the rest keep their order by name.)
+        return [.. nodes.OrderBy(n => n.Order).ThenBy(n => n.Order == int.MaxValue && n.Node.Kind != ExplorerNodeKind.Folder ? 1 : 0).Select(n => n.Node)];
     }
 
     /// <summary>
@@ -369,8 +384,14 @@ public static class SolutionTree
             return !s_names.Equals(parent, name) && siblings.Contains(parent) ? parent : null;
         }
 
-        // Added extension: strip the last extension.
+        // An F# signature file nests under its implementation (Shapes.fsi → Shapes.fs).
         var withoutLast = System.IO.Path.GetFileNameWithoutExtension(name);
+        if (System.IO.Path.GetExtension(name).Equals(".fsi", StringComparison.OrdinalIgnoreCase) && siblings.Contains(withoutLast + ".fs"))
+        {
+            return withoutLast + ".fs";
+        }
+
+        // Added extension: strip the last extension.
         if (System.IO.Path.HasExtension(withoutLast) && siblings.Contains(withoutLast))
         {
             return withoutLast;
@@ -393,7 +414,7 @@ public static class SolutionTree
 
     private static string FileIcon(string name) => System.IO.Path.GetExtension(name).ToLowerInvariant() switch
     {
-        ".cs" or ".fs" or ".vb" or ".razor" or ".xaml" or ".axaml" or ".cshtml" or ".ts" or ".js" => "file-code",
+        ".cs" or ".fs" or ".fsi" or ".fsx" or ".vb" or ".razor" or ".xaml" or ".axaml" or ".cshtml" or ".ts" or ".js" => "file-code",
         ".json" or ".xml" or ".resx" or ".config" or ".props" or ".targets" or ".yml" or ".yaml" => "file-data",
         _ => "file",
     };

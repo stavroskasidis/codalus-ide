@@ -11,7 +11,7 @@ namespace Codalus.LanguageServices.Client;
 /// given as offsets become substrings, <c>changes</c> become <c>documentChanges</c>, numeric diagnostic codes become
 /// strings, and commands among code actions are dropped. Results already in the narrowed shape pass unchanged.
 /// </summary>
-public static class LspNormalizer
+public static partial class LspNormalizer
 {
     private static readonly string[] BooleanProviders =
     [
@@ -249,14 +249,25 @@ public static class LspNormalizer
             _ => string.Empty,
         };
 
-        return node switch
+        var result = node switch
         {
             null => null,
             JsonObject markup when markup["kind"] is not null => markup,
             JsonArray parts => new JsonObject { ["kind"] = "markdown", ["value"] = string.Join("\n\n", parts.Select(Text).Where(t => t.Length > 0)) },
             _ => new JsonObject { ["kind"] = "markdown", ["value"] = Text(node) },
         };
+
+        // Links that run an editor command (FsAutoComplete's "Open the documentation") lead nowhere here.
+        if (result?["value"] is JsonValue markdown && markdown.TryGetValue<string>(out var text) && text.Contains("command:", StringComparison.Ordinal))
+        {
+            result["value"] = CommandLinks().Replace(text, string.Empty).Trim();
+        }
+
+        return result;
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex("<a\\s+href=['\"]command:[^'\"]*['\"]\\s*>.*?</a>|\\[[^\\]]*\\]\\(command:[^)]*\\)", System.Text.RegularExpressions.RegexOptions.Singleline)]
+    private static partial System.Text.RegularExpressions.Regex CommandLinks();
 
     private static JsonNode? SignatureHelp(JsonNode? node)
     {

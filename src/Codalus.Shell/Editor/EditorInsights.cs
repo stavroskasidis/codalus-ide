@@ -539,7 +539,7 @@ public sealed class EditorInsights : IDisposable
 
     private void RunLens(LensSegment lens)
     {
-        if (lens.Command is not { Arguments: [_, var at] } command || string.IsNullOrEmpty(command.CommandId))
+        if (lens.Command is not { Arguments: [_, var at, ..] } command || string.IsNullOrEmpty(command.CommandId))
         {
             return;
         }

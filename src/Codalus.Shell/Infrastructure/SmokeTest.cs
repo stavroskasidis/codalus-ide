@@ -1137,6 +1137,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
         await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
         await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
+        await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
 
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
@@ -1891,6 +1892,60 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             editor.Model.Text.Text = original;
         }
+    }
+
+    private async Task FSharpStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "FSharp");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "FSharp"), target);
+        }
+
+        await shell.InstallFSharpAsync().ConfigureAwait(true);
+        Check(shell.FSharp.IsInstalled, "FsAutoComplete and Fantomas are installed:\n" + Tail(shell.LanguageLog.GetText(), 2000));
+        await shell.OpenSolutionAsync(Path.Combine(target, "FSharp.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 3 && shell.Solutions.Progress is { Completed: true }, "the F# solution is open", 600).ConfigureAwait(true);
+
+        var library = Path.Combine(target, "FsLibrary", "FsLibrary.fsproj");
+        var tree = Workbench.Projects.SolutionTree.Contents(library, shell.Solutions.Projects[library]);
+        Check(tree.Select(n => n.Name).SequenceEqual(["Shapes.fs", "Geometry.fs"]) && tree[0].Children.Single().Name == "Shapes.fsi",
+            "Solution Explorer shows the compile order with Shapes.fsi under Shapes.fs: " + string.Join(", ", tree.Select(n => n.Name)));
+
+        // Quick Info on Shapes.area, from the file before Geometry.fs in the compile order.
+        var path = Path.Combine(target, "FsLibrary", "Geometry.fs");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.FSharpLanguageId, "the file is F#: " + editor.Model.LanguageId);
+        var uri = LanguageServices.Protocol.DocumentUris.FromPath(path);
+        var offset = editor.Model.Text.Text.IndexOf("List.sumBy area", StringComparison.Ordinal) + "List.sumBy ar".Length;
+        var line = editor.Model.Text.GetLineByOffset(offset);
+        // FsAutoComplete loads the solution's projects first: ask again until it answers.
+        var client = await shell.Languages.ClientAsync(ShellHost.FSharpLanguageId).ConfigureAwait(true);
+        Check(client is not null, "FsAutoComplete starts:\n" + Tail(shell.LanguageLog.GetText(), 2000));
+        string? info = null;
+        var asked = Stopwatch.StartNew();
+        while (info?.Contains("val area", StringComparison.Ordinal) != true && asked.Elapsed < TimeSpan.FromSeconds(300))
+        {
+            try
+            {
+                info = (await client!.HoverAsync(uri, new LanguageServices.Protocol.Position(line.LineNumber - 1, offset - line.Offset), CancellationToken.None).ConfigureAwait(true))?.Contents.Value;
+            }
+            catch (Rpc.JsonRpcRemoteException)
+            {
+                // not loaded yet
+            }
+
+            if (info?.Contains("val area", StringComparison.Ordinal) != true)
+            {
+                await Task.Delay(1000).ConfigureAwait(true);
+            }
+        }
+
+        Check(info?.Contains("val area", StringComparison.Ordinal) == true, "Quick Info on area shows its signature: " + info);
+        shell.Explorer.Reveal("f:" + path);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("fsharp.png");
     }
 
     private async Task XamlPreviewStepAsync()

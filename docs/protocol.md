@@ -98,7 +98,7 @@ The same client talks to every language server: the C# host, the markup host and
 |---|---|
 | Options objects in capabilities (`hoverProvider: {}`, `textDocumentSync: {change}`, `renameProvider: {prepareProvider}`) | Booleans and the sync kind; `prepareRenameProvider` records whether rename has a prepare step. |
 | A completion array; plain-string documentation; insert/replace edits; snippets | A list; Markdown; the replace range; plain text. |
-| Hover contents as strings, marked strings or arrays | One Markdown string. |
+| Hover contents as strings, marked strings or arrays | One Markdown string. Links that run an editor command (`command:` URIs, such as FsAutoComplete's "Open the documentation") are removed. |
 | Parameter labels as `[start, end]` offsets | Substrings of the signature label. |
 | `Location`, `Location[]` or `LocationLink[]` | `Location[]` (a link's target selection range). |
 | A prepare-rename range or `{defaultBehavior}` | `{range, placeholder}`, or null. |
@@ -108,6 +108,10 @@ The same client talks to every language server: the C# host, the markup host and
 | Flat `SymbolInformation[]` for `documentSymbol` (M12a) | A `DocumentSymbol` tree, each symbol a child of the innermost earlier symbol whose range contains it. |
 | Inlay hint label parts; a string tooltip (M12a) | One string; plain-text markup. |
 | `codeLensProvider: {}` without `resolveProvider` | `resolveProvider: false` (lenses must come with their commands). |
+
+**Semantic tokens.** A server's legend is mapped onto ours by name; types we have no name for are left uncolored. FsAutoComplete's own types are mapped too (M36): `member` as `method`, `module` as `class`, `cexpr` as `keyword`.
+
+**Server settings.** A server is sent the shell's settings with `workspace/didChangeConfiguration`, unless its descriptor has its own (`LanguageServiceDescriptor.Settings`): FsAutoComplete gets an `FSharp` section built from the `fsharp.*` settings (M36). `codalus/testCandidates`, `codalus/documentOptions` and the other `codalus/` requests aren't sent to servers that don't have them, or their failure is ignored.
 
 Servers that implement `documentSymbol`, the hierarchies, `inlayHint` and `codeLens` get the Document Outline, the navigation bar, sticky scroll, the Hierarchy window, inlay hints and CodeLens (ADR 0017). The `codalus/` extensions (classified references, Go to Base, the inheritance margin, F1 help) are C# only.
 

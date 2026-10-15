@@ -62,7 +62,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M43 | .NET Framework | proposed, waits for D31 and a spike on debugging the desktop CLR |
 | M44 | MAUI on Windows and WinUI 3 | proposed, waits for D31 and M20 |
 | M35 | Visual Basic | done (at checkpoint, [m35](checkpoints/m35.md), ADR 0066): VB in the C# host's workspace (completion, Quick Info, signature help, live diagnostics, classification with XML literals, navigation, references and rename across C# and VB, code fixes and refactorings, formatting, outline and folding), our own pretty listing (`End` constructs, keyword casing, XML end tags), VB snippets and item templates, New Project in any language, VB property pages, VB tests from source, debugging tested on netcoredbg. Gaps: VB expressions in Watch (netcoredbg reads C#), automatic line continuation, a page for project imports |
-| M36 | F# | planned, always last |
+| M36 | F# | M36a at checkpoint ([m36a](checkpoints/m36a.md), ADR 0067), 2026-10-15: FsAutoComplete (D10) and Fantomas installed with the user's `dotnet tool install` on the first F# file, trusted folders only; completion, Quick Info, diagnostics with FSharpLint, navigation, rename, fixes, inlay hints, CodeLens and formatting through the LSP bridge; the compile order in Solution Explorer (`items/move`, Move Up/Down, Add Above/Below, `.fsi` nesting), F# item templates and property pages. M36b next: F# Interactive, scripts, Expecto, type providers, analyzers |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
 
@@ -2049,6 +2049,8 @@ These two milestones are always last (see [Status](#status)).
 
 ### M36 — F#
 
+**Status.** M36a at checkpoint 2026-10-15 ([m36a](checkpoints/m36a.md), ADR 0067): the language service, formatting and the compile order. M36b: F# Interactive, scripts, Expecto, type providers and analyzers.
+
 **Goal.** First-class F# editing, scripting and project handling, on par with Ionide or Rider for everyday work.
 
 **Depends on.** M11 (LSP bridge), M10 (REPL infrastructure for F# Interactive), M8 (tests).
@@ -2371,7 +2373,7 @@ The "Codalus" column uses these terms:
 |---|---|
 | C# | M3 |
 | Visual Basic | M35 (done; load, build and run since M2) |
-| F# | M36 (load, build and run since M2) |
+| F# | M36 (M36a: editing and the compile order; load, build and run since M2) |
 | Razor and Blazor | M16 |
 | HTML, CSS, JavaScript and TypeScript | M16 |
 | SQL (T-SQL and other dialects) | M27b (done: ScriptDom for T-SQL, schema completion for every dialect, ADR 0038) |
@@ -2758,3 +2760,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-15: M20b at its checkpoint ([m20b](checkpoints/m20b.md), ADR 0065), so M20 is done. It adds the Mono debugger adapter: `codalus-debughost --mono-dap` speaks DAP with our own contracts, and Mono's soft debugger protocol through Mono.Debugger.Soft, vendored from mono/debugger-libs (MIT) and built without Cecil. Its sessions offer breakpoints bound on type load, stepping with Just My Code, stacks, locals, fields and properties, member-path evaluation and exceptions. F5 on Android adds the SDK's own `AndroidAttachDebugger` properties, and the adapter connects through adb's forward. On iOS simulators and Mac Catalyst it listens. It is tested against .NET 8's desktop Mono runtime with no device. Next by D13: M34 (the final polish pass).
 - 2026-10-15: M34f, M34's final pass, at its checkpoint ([m34f](checkpoints/m34f.md)). The checklist now covers the documents that work as dialogs (at 640 px) and the in-window dialog's forms (at 440 px). Accessible names are checked in every tool window, document and dialog. The Keyboard Shortcuts and Add New Item layouts cut text and are fixed, and the dialogs are in the gallery. M34 itself waits for the maintainer's approval of the gallery on three OSes and a check at display scales (D25). Next by D13: M35 (Visual Basic).
 - 2026-10-15: M35 (Visual Basic) at its checkpoint ([m35](checkpoints/m35.md), ADR 0066). The C# host serves VB in the same workspace as C# with Roslyn's VB Workspaces and Features, so mixed solutions navigate, find references and rename across both. Pretty listing (Enter adds `End If`, `Next`, `End Sub`…, fixes keyword casing; `>` closes XML literals) is ours, as on-type formatting. VB snippets, item templates and property pages (`Option Strict`, `Explicit`, `Infer`, `Compare`); New Project lists every language's templates and asks the language. VB tests are found from source; debugging a VB program is tested on netcoredbg, whose expressions are C# (documented). Validated on Linux; Windows and the Mac remain to be checked. Next by D13: M36 (F#).
+- 2026-10-15: M36a (F#, part one) at its checkpoint ([m36a](checkpoints/m36a.md), ADR 0067). FsAutoComplete 0.85.3 and Fantomas 7.0.3 are installed on demand with the user's `dotnet tool install --tool-path` into the cache folder. FsAutoComplete runs only in trusted folders (it loads projects with MSBuild itself) and starts again for each solution. Its settings go out as an `FSharp` section. Bridge changes for any server: hover `command:` links removed, F# token types aliased, lens arguments, per-language test candidate failures. The compile order: the build host's `items/move`, F# includes inserted in order, Solution Explorer in compile order with `.fsi` nested, Move Up/Down and Add Above/Below; F# item templates and property pages. M36 is split: M36b covers F# Interactive, scripts, Expecto, type providers and analyzers. Validated on Linux.
