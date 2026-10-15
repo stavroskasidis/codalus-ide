@@ -37,6 +37,7 @@ Every file type gets the basics, and many get more:
 - **MSBuild** (`.csproj`, `.props`, `.targets` and friends): completion of elements, properties, items, metadata and values (target frameworks, runtime identifiers, choices), and warnings for unknown values. Hovering a property shows its **evaluated value and where it is set**, when the folder is trusted.
 - **JSON**: syntax errors, and completion, hover and validation from a schema. Schemas come from `$schema`, from built-in schemas (`global.json`, `launchSettings.json`, `appsettings*.json`, `dotnet-tools.json`, `runtimeconfig.template.json`, `codalus-plugin.json`), or from the SchemaStore catalog (setting **JSON → Schema Download**, on by default; schemas are cached for a week).
 - **YAML**: syntax errors, and validation and hover from a schema.
+- **XML**: syntax errors, and validation against XSD schemas. A file names its schemas with `xsi:noNamespaceSchemaLocation` or `xsi:schemaLocation` (paths relative to the file). The setting **XML → XML Schemas** (`xml.schemas`) also associates schemas by path: `{ "**/*.config": "schemas/config.xsd" }`, with relative schema paths from the solution's folder. Only local schema files are used: nothing is downloaded.
 - **`.editorconfig`**: completion and hover for EditorConfig and .NET options, and warnings for invalid values.
 - **Markdown**: Open Preview to the Side (`Ctrl+K V`) shows a live preview that follows your edits.
 

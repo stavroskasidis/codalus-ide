@@ -86,6 +86,7 @@ public sealed partial class ShellHost : IEditorServices
         {
             Languages = MarkupHostLaunch.Languages,
             InitializationOptions = MarkupOptions(),
+            Settings = MarkupOptions,
         });
         BuiltInLanguages.Register(Workbench.LanguageDefinitions);
         TextMate = new TextMateSupport(Workbench.LanguageDefinitions) { Log = line => LanguageLog.AppendLine(line) };
@@ -99,19 +100,40 @@ public sealed partial class ShellHost : IEditorServices
         ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position), Workbench.Settings);
     }
 
-    /// <summary>The markup host's options: schema downloads (setting <c>json.schemaDownload</c>) and their cache folder.</summary>
+    /// <summary>
+    /// The markup host's options: schema downloads (setting <c>json.schemaDownload</c>), their cache folder, and the XML
+    /// schema associations (setting <c>xml.schemas</c>: a glob over file paths → an XSD, relative to the solution's folder).
+    /// </summary>
     private System.Text.Json.JsonElement MarkupOptions()
     {
+        var associations = new System.Text.Json.Nodes.JsonArray();
+        var root = Solutions?.Solution?.Path is { } solution ? Path.GetDirectoryName(solution) : null;
+        if (Workbench.Settings.GetValue(XmlSchemasSetting) is { ValueKind: System.Text.Json.JsonValueKind.Object } schemas)
+        {
+            foreach (var association in schemas.EnumerateObject().Where(a => a.Value.ValueKind == System.Text.Json.JsonValueKind.String))
+            {
+                var schema = association.Value.GetString()!;
+                associations.Add(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["pattern"] = association.Name,
+                    ["schema"] = Path.IsPathRooted(schema) || root is null ? schema : Path.GetFullPath(Path.Combine(root, schema)),
+                });
+            }
+        }
+
         var options = new System.Text.Json.Nodes.JsonObject
         {
             ["schemaDownload"] = Workbench.Settings.GetBoolean(SchemaDownloadSetting, true),
             ["schemaCache"] = Path.Combine(Paths.Cache, "schemas"),
+            ["xmlSchemas"] = associations,
         };
         using var document = System.Text.Json.JsonDocument.Parse(options.ToJsonString());
         return document.RootElement.Clone();
     }
 
     public const string SchemaDownloadSetting = "json.schemaDownload";
+
+    public const string XmlSchemasSetting = "xml.schemas";
 
     /// <summary>A project's evaluated property and where it is set, for MSBuild hover (from the build host, M9b).</summary>
     private async Task<(string? Value, string? Origin)?> EvaluatePropertyAsync(string project, string name, CancellationToken cancellationToken)

@@ -101,6 +101,12 @@ internal static partial class BuiltIns
             Setting(EditorOptions.RulersKey, "[]", SettingType.StringArray, "Rulers", "Columns at which to draw vertical rulers, e.g. 120.", 9),
             Setting(EditorOptions.HighlightCurrentLineKey, "true", SettingType.Boolean, "Highlight Current Line", "Highlight the line with the caret.", 10),
             Setting(EditorOptions.FormatOnTypeKey, "true", SettingType.Boolean, "Format on Type", "Format the statement or block after typing ; or }.", 11),
+            SettingDescriptor.Create(ShellHost.XmlSchemasSetting, "{}", SettingType.Object, ContributionSource.Shell) with
+            {
+                Title = "XML Schemas",
+                Category = "XML",
+                Description = "XSD schemas that validate XML files, by a glob over their paths: { \"**/*.config\": \"schemas/config.xsd\" }. Relative schema paths are from the solution's folder. Files can also name their schemas with xsi:schemaLocation or xsi:noNamespaceSchemaLocation. Schemas are never downloaded.",
+            },
             SettingDescriptor.Create(ShellHost.SchemaDownloadSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
             {
                 Title = "Download JSON Schemas",

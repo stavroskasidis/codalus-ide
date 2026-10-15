@@ -873,7 +873,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             UpdateToolbarHotReload();
         }
 
-        if (e.Affects("languageServices.analysisScope") || e.Affects("navigation.sourceLink"))
+        if (e.Affects("languageServices.analysisScope") || e.Affects("navigation.sourceLink") || e.Affects(XmlSchemasSetting))
         {
             _ = ConfigureLanguagesAsync();
         }

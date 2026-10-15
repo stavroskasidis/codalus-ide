@@ -49,6 +49,10 @@ public sealed partial class ShellHost
         {
             UpdateRunState();
             FollowAnalysisProject();
+            if (Workbench.Settings.IsModified(XmlSchemasSetting))
+            {
+                _ = ConfigureLanguagesAsync(); // relative XML schema paths are from the solution's folder
+            }
         });
         Solutions.ProjectChanged += (_, _) => Ui.Post(() =>
         {

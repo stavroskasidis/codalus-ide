@@ -123,7 +123,7 @@ Servers that implement `documentSymbol`, the hierarchies, `inlayHint` and `codeL
 
 `codalus-markuphost` (`src/Codalus.Markup.Host`, `CODALUS_MARKUPHOST` overrides) serves `json`, `jsonc`, `xml`, `msbuild`, `yaml` and `editorconfig`.
 - It supports completion and hover, and publishes diagnostics 250 ms after edits.
-- Initialization options: `{schemaDownload, schemaCache}`, from the setting `json.schemaDownload` and the cache folder.
+- Initialization options (and `workspace/didChangeConfiguration` settings): `{schemaDownload, schemaCache, xmlSchemas}`, from the setting `json.schemaDownload`, the cache folder, and the setting `xml.schemas` as `[{pattern, schema}]` with absolute schema paths. XML files are validated against the local XSDs their root names with `xsi:schemaLocation` or `xsi:noNamespaceSchemaLocation` and those `xmlSchemas` associates (diagnostics `xml.schema`, and `xml.schemaLoad` for a schema that can't be read).
 
 | Method | Direction | Params → result | Notes |
 |---|---|---|---|
