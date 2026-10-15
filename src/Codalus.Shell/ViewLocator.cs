@@ -72,6 +72,7 @@ public sealed class ViewLocator : IDataTemplate
         AddNewItemViewModel vm => new AddNewItemView { DataContext = vm },
         ExportTemplateViewModel vm => new ExportTemplateView { DataContext = vm },
         TemplateManagerViewModel vm => new TemplateManagerView { DataContext = vm },
+        SnippetsManagerViewModel vm => new SnippetsManagerView { DataContext = vm },
         ExternalToolsViewModel vm => new ExternalToolsView { DataContext = vm },
         BatchBuildViewModel vm => new BatchBuildView { DataContext = vm },
         BuildTimingsViewModel vm => new BuildTimingsView { DataContext = vm },

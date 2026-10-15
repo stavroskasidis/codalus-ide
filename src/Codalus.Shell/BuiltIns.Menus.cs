@@ -403,6 +403,7 @@ internal static partial class BuiltIns
             Item(ToolsDataMenu, "data.addConnection", "1-data"),
             Item(ToolsDataMenu, "data.newQuery", "1-data"),
             Item(Tools, "tools.templates", "2-templates"),
+            Item(Tools, "snippets.manager", "2-templates"),
             Item(Tools, "tools.externalTools", "3-external-config"),
             Item(Tools, "workbench.openPluginsFolder", "plugins") with { Order = 100 },
             Item(Tools, "workbench.selectTheme", "z-preferences"),

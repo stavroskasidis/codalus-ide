@@ -186,6 +186,82 @@ public class EditingDepthTests
     }
 
     [AvaloniaFact]
+    public async Task The_snippets_manager_lists_each_languages_snippets_and_copies_and_removes_yours()
+    {
+        await using var f = ShellFixture.Create();
+        var manager = f.Shell.OpenSnippetsManager();
+        await manager.LoadAsync();
+        Assert.Contains("csharp", manager.Languages);
+        Assert.Contains("vb", manager.Languages);
+        Assert.Equal("csharp", manager.Language);
+        var prop = Assert.Single(manager.Snippets, s => s.Name == "prop");
+        Assert.Equal("Built in", prop.Source);
+
+        // Search filters by name, prefix and description; another language lists its own.
+        manager.Search = "propfull";
+        Assert.Equal(["propfull"], manager.Snippets.Select(s => s.Name));
+        manager.Search = string.Empty;
+        manager.Language = "vb";
+        Assert.Contains(manager.Snippets, s => s.Name == "foreach");
+        manager.Language = "csharp";
+
+        // Copy a built-in snippet to yours: yours replaces it; remove yours: the built-in one is back.
+        manager.Selected = manager.Snippets.Single(s => s.Name == "prop");
+        manager.CopyToUser();
+        ShellFixture.Pump();
+        var yours = Assert.Single(manager.Snippets, s => s.Name == "prop");
+        Assert.True(yours.IsUser);
+        Assert.Equal("Yours", yours.Source);
+        manager.Selected = yours;
+        var removing = manager.RemoveAsync();
+        ShellFixture.Pump();
+        f.Shell.Dialogs.Accept();
+        await removing;
+        ShellFixture.Pump();
+        Assert.False(Assert.Single(manager.Snippets, s => s.Name == "prop").IsUser);
+    }
+
+    [AvaloniaFact]
+    public async Task Snippet_fields_follow_their_numbers_and_offer_their_choices()
+    {
+        await using var f = ShellFixture.Create();
+        var path = Path.Combine(Path.GetTempPath(), "codalus-snippet-" + Guid.NewGuid().ToString("N") + ".txt");
+        await File.WriteAllTextAsync(path, string.Empty, TestContext.Current.CancellationToken);
+        try
+        {
+            var editor = await OpenAsync(f, path);
+            editor.Editor.TextArea.Focus();
+
+            // $2 comes first in the text, but Tab follows the numbers: $1 (a choice), then $2, then $0.
+            editor.InsertSnippet("${2:second} ${1|alpha,beta,gamma|} $0!", surround: false);
+            ShellFixture.Pump();
+            var session = Editor.SnippetEngine.SessionOf(editor.Editor.TextArea);
+            Assert.NotNull(session);
+            Assert.Equal([1, 2], session!.Order);
+            Assert.Equal(1, session.Current);
+            Assert.Equal(["alpha", "beta", "gamma"], session.Choices);
+
+            // Picking beta from the list replaces the field.
+            f.Press(Key.Down);
+            f.Press(Key.Enter);
+            Assert.Equal("second beta !", editor.Model.Text.Text);
+            Assert.True(session.IsActive);
+
+            f.Press(Key.Tab);
+            Assert.Equal(2, session.Current);
+            f.Type("two");
+            f.Press(Key.Tab); // past the last field: done, at $0
+            Assert.False(session.IsActive);
+            Assert.Equal("two beta !", editor.Model.Text.Text);
+            Assert.Equal("two beta ".Length, editor.Editor.CaretOffset);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Snippets_insert_with_fields_surround_selections_and_come_from_completion_and_imports()
     {
         await using var f = ShellFixture.Create();

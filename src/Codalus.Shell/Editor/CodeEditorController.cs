@@ -1317,6 +1317,12 @@ public sealed partial class CodeEditorController : IDisposable
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         TrackCopy(e);
+        if (SnippetEngine.HandleKey(Editor.TextArea, e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (_inline.HandleKey(e) || _nextEdit.HandleKey(e))
         {
             e.Handled = true;

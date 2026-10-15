@@ -34,6 +34,7 @@ internal static partial class BuiltIns
           { "key": "ctrl+alt+down", "linux": "shift+alt+down", "command": "editor.action.insertCursorBelow", "when": "editorTextFocus" },
           { "key": "shift+alt+.", "command": "editor.action.addSelectionToNextFindMatch", "when": "editorTextFocus" },
           { "key": "shift+alt+;", "command": "editor.action.selectHighlights", "when": "editorTextFocus" },
+          { "key": "primary+k primary+b", "command": "snippets.manager" },
           { "key": "primary+shift+s", "command": "file.saveAll" },
           { "key": "ctrl+-", "mac": "ctrl+-", "command": "workbench.navigateBack" },
           { "key": "ctrl+shift+-", "mac": "ctrl+shift+-", "command": "workbench.navigateForward" },
@@ -229,7 +230,8 @@ internal static partial class BuiltIns
         Add("editor.action.fontZoomReset", "Reset Zoom (Editor)", "Editor", OnEditor(c => c.Zoom = 1), Editor);
         Add("workbench.action.localHistory", "Show Local History", "File", Ui(shell.ShowLocalHistoryAsync), Editor);
         Add("editor.action.surroundWithSnippet", "Surround With", "Snippets", Ui(shell.SurroundWithAsync), Editor);
-        Add("workbench.action.openSnippets", "Configure User Snippets", "Snippets", Ui(shell.OpenUserSnippetsAsync));
+        Add("workbench.action.openSnippets", "Configure User Snippets", "Snippets", Ui(() => shell.OpenUserSnippetsAsync()));
+        Add("snippets.manager", "Code Snippets Manager…", "Snippets", Ui(() => shell.OpenSnippetsManager()));
         Add("snippets.importVisualStudio", "Import Snippets (.snippet)…", "Snippets", Ui(shell.ImportVisualStudioSnippetsAsync));
         Add("editor.action.peekDefinition", "Peek Definition", "Editor", Ui(shell.PeekDefinitionAsync), Editor);
         Add("editor.action.showCallHierarchy", "Show Call Hierarchy", "Editor", Ui(shell.ShowCallHierarchyAsync), Editor);

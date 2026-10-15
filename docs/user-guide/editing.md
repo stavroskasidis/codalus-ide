@@ -96,9 +96,10 @@ Language services from plugins provide the outline, navigation bar, sticky scrol
 
 ## Snippets
 
-- Type a snippet's prefix (`prop`, `ctor`, `for`, `try`…) and pick it in completion, or use **Insert Snippet** (`Ctrl+K Ctrl+X`). `Tab` moves between the placeholders; linked placeholders change together.
+- Type a snippet's prefix (`prop`, `ctor`, `for`, `try`…) and pick it in completion, or use **Insert Snippet** (`Ctrl+K Ctrl+X`). `Tab` moves between the placeholders in the order of their numbers (`$1`, `$2`…, then `$0`, where the snippet ends), whatever their place in the text; `Shift+Tab` goes back, and linked placeholders change together. A placeholder with choices (`${1|public,private|}`) lists them when you reach it: pick one, or type.
 - **Surround With** (`Ctrl+K Ctrl+S`, or `Ctrl+K Ctrl+Shift+S` in either keyboard scheme) wraps the selection (`if`, `try`, `#region`, `using`…).
 - **Configure User Snippets** opens your snippets for the current language, in VS Code's JSON format. Yours replace built-in snippets with the same name.
+- **Tools → Code Snippets Manager…** (`Ctrl+K Ctrl+B`) lists every language's snippets, built in, from plugins and yours, with their prefixes and bodies. **Copy to Your Snippets** makes a snippet yours to change, **Remove** deletes one of yours, and **Open Your Snippets** and **Import .snippet Files…** are there too.
 - **Import Snippets (.snippet)…** converts Visual Studio `.snippet` files into your snippets.
 - Plugins can contribute snippets ([plugins.md](../plugins.md#snippets)).
 
