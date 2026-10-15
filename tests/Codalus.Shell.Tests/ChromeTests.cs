@@ -38,6 +38,19 @@ public class ChromeTests
         f.Shell.Toolbar.Configuration = "Release";
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Solution?.Active is { Configuration: "Release", Platform: "Any CPU" });
 
+        // The Hot Reload button (a .NET 6+ startup project): Start with Hot Reload, and its menu's switch is the setting.
+        await ShellFixture.PumpUntil(() => f.Shell.Toolbar.CanHotReload);
+        Assert.False(f.Shell.Toolbar.IsHotReloadRunning);
+        var hotReload = f.Window.GetVisualDescendants().OfType<SplitButton>().Single(b => Equals(b.Tag, "run.startWithHotReload"));
+        Assert.Equal("Hot Reload", Avalonia.Automation.AutomationProperties.GetName(hotReload));
+        Assert.True(hotReload.IsEffectivelyVisible);
+        Assert.Equal(["Start with Hot Reload", "Apply Code Changes", "Stop Running Programs", "Hot Reload on Start Without Debugging", "Settings"],
+            ((MenuFlyout)hotReload.Flyout!).Items.OfType<MenuItem>().Select(i => (string)i.Header!));
+        f.Shell.Toolbar.ToggleHotReloadOnStartCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.Toolbar.HotReloadOnStart && f.Shell.Workbench.Settings.GetBoolean(ShellHost.HotReloadSetting));
+        f.Shell.Toolbar.ToggleHotReloadOnStartCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !f.Shell.Toolbar.HotReloadOnStart);
+
         // The debug toolbar while debugging, with Continue and the steps when stopped.
         f.Shell.Toolbar.SetDebugState(debugging: true, stopped: true, running: false);
         Assert.True(f.Shell.Toolbar is { IsStopped: true, CanBreak: false, CanStop: true, CanStart: false });

@@ -214,6 +214,7 @@ public sealed class ToolbarViewModel : ObservableObject
             Platform = active?.Platform;
             HasSolution = pairs is not null;
             OnPropertyChanged(nameof(CanStart));
+            OnPropertyChanged(nameof(CanHotReload));
         }
         finally
         {
@@ -266,6 +267,45 @@ public sealed class ToolbarViewModel : ObservableObject
         OnPropertyChanged(nameof(CanStart));
         OnPropertyChanged(nameof(StartCommand));
         OnPropertyChanged(nameof(StopCommand));
+        OnPropertyChanged(nameof(CanHotReload));
+    }
+
+    // ------------------------------------------------------------------ Hot Reload (deferred from M15b)
+
+    private bool _hotReloadSupported;
+    private bool _hotReloadRunning;
+    private bool _hotReloadOnStart;
+
+    /// <summary>The Hot Reload button: Apply Code Changes while a program runs with Hot Reload, else Start with Hot Reload.</summary>
+    public ICommand HotReloadCommand => _command(_hotReloadRunning ? "run.applyCodeChanges" : "run.startWithHotReload");
+
+    public ICommand StartWithHotReloadCommand => _command("run.startWithHotReload");
+
+    public ICommand ApplyCodeChangesCommand => _command("run.applyCodeChanges");
+
+    public ICommand StopRunningCommand => _command("run.stop");
+
+    public ICommand ToggleHotReloadOnStartCommand => _command("run.toggleHotReloadOnStart");
+
+    public ICommand HotReloadSettingsCommand => _command("run.hotReloadSettings");
+
+    /// <summary>The startup project supports Hot Reload (.NET 6 or later), or a program runs with it.</summary>
+    public bool CanHotReload => (_hasSolution && _hotReloadSupported && !_isDebugging) || _hotReloadRunning;
+
+    /// <summary>A program runs under Hot Reload: the button applies code changes.</summary>
+    public bool IsHotReloadRunning => _hotReloadRunning;
+
+    /// <summary>The <c>run.hotReload</c> setting: Start Without Debugging runs with Hot Reload.</summary>
+    public bool HotReloadOnStart => _hotReloadOnStart;
+
+    /// <summary>The Hot Reload button's state.</summary>
+    public void SetHotReload(bool supported, bool running, bool onStart)
+    {
+        (_hotReloadSupported, _hotReloadRunning, _hotReloadOnStart) = (supported, running, onStart);
+        OnPropertyChanged(nameof(CanHotReload));
+        OnPropertyChanged(nameof(IsHotReloadRunning));
+        OnPropertyChanged(nameof(HotReloadOnStart));
+        OnPropertyChanged(nameof(HotReloadCommand));
     }
 
     private void Select(string configuration, string? platform)

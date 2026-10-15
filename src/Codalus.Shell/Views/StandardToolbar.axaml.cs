@@ -15,6 +15,7 @@ public sealed partial class StandardToolbar : UserControl
     public StandardToolbar()
     {
         InitializeComponent();
+        HotReload.Content = CommandIcons.Create("run.startWithHotReload");
         _builtIn = [.. Panel.Children];
         DataContextChanged += (_, _) =>
         {
@@ -45,7 +46,7 @@ public sealed partial class StandardToolbar : UserControl
         Panel.Children.Clear();
         foreach (var control in _builtIn)
         {
-            if (control is not Button { Tag: string command } || !removed.Contains(command))
+            if (control is not (Button or SplitButton) || control.Tag is not string command || !removed.Contains(command))
             {
                 Panel.Children.Add(control);
             }
@@ -94,7 +95,7 @@ public sealed partial class StandardToolbar : UserControl
             return;
         }
 
-        foreach (var button in this.GetLogicalDescendants().OfType<Button>())
+        foreach (var button in this.GetLogicalDescendants().OfType<ContentControl>().Where(c => c is Button or SplitButton))
         {
             if (button.Tag is string command && AutomationProperties.GetName(button) is { Length: > 0 } name)
             {

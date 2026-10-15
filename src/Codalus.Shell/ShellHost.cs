@@ -867,6 +867,11 @@ public sealed partial class ShellHost : IAsyncDisposable
             ApplyKeyboardScheme();
         }
 
+        if (e.Affects(HotReloadSetting))
+        {
+            UpdateToolbarHotReload();
+        }
+
         if (e.Affects("languageServices.analysisScope") || e.Affects("navigation.sourceLink"))
         {
             _ = ConfigureLanguagesAsync();

@@ -43,7 +43,6 @@ internal static partial class BuiltIns
         [
             new MenuItemRule(DebugTargetsMenu, "mobile.selectDevice", shell) { Group = "3-mobile", Order = 1, When = WhenClause.Parse("mobileStartup") },
             new MenuItemRule(DebugTargetsMenu, "mobile.installAndroidSdk", shell) { Group = "3-mobile", Order = 2, When = WhenClause.Parse("mobileProjects") },
-            new MenuItemRule(OtherWindowsMenu, "mobile.showDevices", shell) { Group = "windows", Order = AlphabeticalOrder("Devices") },
         ]);
     }
 }

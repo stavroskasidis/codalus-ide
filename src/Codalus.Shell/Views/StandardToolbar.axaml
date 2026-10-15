@@ -57,6 +57,20 @@
               Tag="run.startWithoutDebugging" ToolTip.Tip="{l:T standardToolbar.startWithoutDebugging}" AutomationProperties.Name="{l:T standardToolbar.startWithoutDebugging}">
         <controls:Icon Kind="play-outline" Classes="start" />
       </Button>
+      <!-- Hot Reload (deferred from M15b): start with it, or apply code changes; the rest in its menu. -->
+      <SplitButton x:Name="HotReload" Classes="toolbar" Command="{Binding HotReloadCommand}" IsVisible="{Binding CanHotReload}"
+                   Tag="run.startWithHotReload" ToolTip.Tip="{l:T standardToolbar.hotReload}" AutomationProperties.Name="{l:T standardToolbar.hotReload}">
+        <SplitButton.Flyout>
+          <MenuFlyout Placement="BottomEdgeAlignedLeft">
+            <MenuItem Header="{l:T standardToolbar.startWithHotReload}" Command="{Binding StartWithHotReloadCommand}" IsVisible="{Binding !IsHotReloadRunning}" />
+            <MenuItem Header="{l:T standardToolbar.applyCodeChanges}" Command="{Binding ApplyCodeChangesCommand}" IsVisible="{Binding IsHotReloadRunning}" />
+            <MenuItem Header="{l:T standardToolbar.stopRunning}" Command="{Binding StopRunningCommand}" IsVisible="{Binding IsHotReloadRunning}" />
+            <Separator />
+            <MenuItem Header="{l:T standardToolbar.hotReloadOnStart}" ToggleType="CheckBox" IsChecked="{Binding HotReloadOnStart, Mode=OneWay}" Command="{Binding ToggleHotReloadOnStartCommand}" />
+            <MenuItem Header="{l:T standardToolbar.hotReloadSettings}" Command="{Binding HotReloadSettingsCommand}" />
+          </MenuFlyout>
+        </SplitButton.Flyout>
+      </SplitButton>
       <!-- While debugging: the debug toolbar. -->
       <Button Classes="toolbar" Command="{Binding StartCommand}" IsVisible="{Binding IsStopped}" Tag="debug.start" ToolTip.Tip="{l:T standardToolbar.continue}" AutomationProperties.Name="{l:T standardToolbar.continue}">
         <StackPanel Orientation="Horizontal" Spacing="4">

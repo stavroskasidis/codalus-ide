@@ -378,6 +378,7 @@ public sealed partial class ShellHost
         var startup = Runs.StartupProject;
         Workbench.Context.Set("hasStartupProject", startup is not null);
         Workbench.Context.Set("hotReloadSupported", HotReloadUnsupportedReason(startup) is null);
+        UpdateToolbarHotReload();
         Toolbar?.SetDebugState(Debugger?.State is { } debug && debug != Codalus.Workbench.Debugging.DebugState.Idle, Debugger?.State == Codalus.Workbench.Debugging.DebugState.Stopped, running.Count > 0);
         UpdateToolbarStartup();
         Explorer.SetStartupProject(startup);
