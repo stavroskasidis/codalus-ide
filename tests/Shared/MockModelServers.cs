@@ -1,11 +1,10 @@
 using System.Text;
 using System.Text.Json;
-using Codalus.Tests;
 
-namespace Codalus.Plugins.Tests;
+namespace Codalus.Tests;
 
 /// <summary>
-/// Model services for the provider tests (ADR 0062): an OpenAI-compatible server and Anthropic's Messages API, answering
+/// Model services for the provider tests and the smoke test (ADR 0062): an OpenAI-compatible server and Anthropic's Messages API, answering
 /// streamed requests with server-sent events. They check the key and keep every request; nothing reaches a real service.
 /// </summary>
 internal static class MockModelServers
@@ -29,7 +28,7 @@ internal static class MockModelServers
                 var half = reply.Length / 2;
                 foreach (var part in new[] { reply[..half], reply[half..] })
                 {
-                    sb.Append("data: ").Append(JsonSerializer.Serialize(new { choices = new[] { new { index = 0, delta = new { content = part } } } })).Append("\n\n");
+                    sb.Append("data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"").Append(JsonEncodedText.Encode(part).ToString()).Append("\"}}]}\n\n");
                 }
 
                 if (toolCall is not null)
@@ -76,7 +75,7 @@ internal static class MockModelServers
                 var half = reply.Length / 2;
                 foreach (var part in new[] { reply[..half], reply[half..] })
                 {
-                    Event("content_block_delta", JsonSerializer.Serialize(new { type = "content_block_delta", index = 0, delta = new { type = "text_delta", text = part } }));
+                    Event("content_block_delta", "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"" + JsonEncodedText.Encode(part).ToString() + "\"}}");
                 }
 
                 Event("ping", """{"type":"ping"}""");

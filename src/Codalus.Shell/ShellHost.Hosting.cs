@@ -571,7 +571,10 @@ public sealed partial class ShellHost : IHostingActions
             Layout.CloseDocument(old);
         }
 
-        var viewModel = new CreatePullRequestViewModel(match.Provider.Label, $"{match.Repository.Owner}/{match.Repository.Name}", branch, targets, defaultBranch, CreatePullRequestAsync);
+        var viewModel = new CreatePullRequestViewModel(match.Provider.Label, $"{match.Repository.Owner}/{match.Repository.Name}", branch, targets, defaultBranch, CreatePullRequestAsync)
+        {
+            WriteWithAi = form => WritePullRequestWithAiAsync(form, remote),
+        };
         var document = new CreatePullRequestDocument(viewModel);
         Layout.OpenDocument(document, focus: true);
         return document;

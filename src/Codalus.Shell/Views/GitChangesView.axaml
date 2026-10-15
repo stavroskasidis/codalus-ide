@@ -257,6 +257,7 @@
                    PlaceholderText="{l:T gitChanges.enterAMessageRequired}" AutomationProperties.Name="{l:T gitChanges.commitMessage}" />
           <Border VerticalAlignment="Bottom" Margin="1,0,1,1" Height="28" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Shell.Border}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,4,0">
+              <Button Classes="toolbar" Content="✦" Tag="ai.generateCommitMessage" Click="OnCommand" IsVisible="{Binding IsEnabled, Source={x:Static l:AiUi.Current}}" ToolTip.Tip="{l:T gitChanges.writeTheMessageWithAi}" AutomationProperties.Name="{l:T gitChanges.writeTheMessageWithAi}" />
               <Button Classes="toolbar" Content="#" Click="OnMention" ToolTip.Tip="{l:T gitChanges.mentionAnIssueOrWorkItem}" AutomationProperties.Name="{l:T gitChanges.mentionAnIssueOrWorkItem}" />
             </StackPanel>
           </Border>

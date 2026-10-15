@@ -719,6 +719,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
 
+        await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
+
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
         {
@@ -2404,6 +2406,59 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// to the OS credential store under this profile's own service; the pull request checked out with its review comment
     /// in the editor and its checks; <c>#</c> completion; askpass for an HTTPS remote; a worktree; then sign-out.
     /// </summary>
+    /// <summary>
+    /// AI assistance (M28a, ADR 0062) against <see cref="Tests.MockModelServers"/>: the OpenAI-compatible plugin stays
+    /// unloaded while AI is off, then a question about a selection streams into AI Chat and its code is applied.
+    /// </summary>
+    private async Task AiChatStepAsync()
+    {
+        const string Reply = "This adds two numbers. A shorter version:\n\n```csharp\nstatic int Add(int a, int b) => a + b;\n```\n\nThe expression body returns the same value.";
+        await using var server = Tests.MockModelServers.OpenAI(Reply);
+        var settings = shell.Workbench.Settings;
+        Check(shell.Ai.State == Workbench.Ai.AiState.Off, "AI assistance is off by default");
+        Check(shell.Plugins.Plugins.Any(p => p.Id == "codalus.openai" && p.State == PluginState.Ready), "the OpenAI-compatible plugin is installed and not loaded");
+        try
+        {
+            await settings.SetAsync("ai.openai.endpoint", server.BaseUrl + "/v1", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, "openai", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.ModelSetting, "gpt-test", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await shell.Secrets.StoreAsync("codalus.openai", "apiKey:openai", Tests.MockModelServers.Key, CancellationToken.None).ConfigureAwait(true);
+
+            var path = Path.Combine(_work, "Calculator.cs");
+            await File.WriteAllTextAsync(path, "namespace Samples;\n\npublic static class Calculator\n{\n    static int Add(int a, int b)\n    {\n        return a + b;\n    }\n}\n").ConfigureAwait(true);
+            var editor = await OpenAsync(path).ConfigureAwait(true);
+            var method = "    static int Add(int a, int b)\n    {\n        return a + b;\n    }\n";
+            editor.Editor.Select(editor.Model.Text.Text.IndexOf(method, StringComparison.Ordinal), method.Length);
+
+            shell.ShowAiChat();
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(), "AI Chat opens").ConfigureAwait(true);
+            shell.AiChat.Input = "What does this do? Can it be shorter?";
+            await shell.AiChat.SendAsync().ConfigureAwait(true);
+            var turns = shell.AiChat.Chat.Turns;
+            var turn = turns.Count > 0 ? turns[^1] : throw new SmokeFailure("The question wasn't asked.");
+            await WaitAsync(() => !turn.IsStreaming, "the answer streams in", 60).ConfigureAwait(true);
+            Check(turn.Error is null && turn.Answer == Reply, $"the answer arrived ({turn.Error ?? turn.Answer})");
+            Check(AiChatViewModel.ContextSummary(turn).Contains("Calculator.cs", StringComparison.Ordinal), "the selection went with the question");
+            await WaitAsync(() => window.GetVisualDescendants().OfType<Button>().Any(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Apply the code after a preview"), "the code block offers Apply").ConfigureAwait(true);
+            Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.ai"), "the status bar shows AI is on");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("ai-chat.png");
+
+            var applying = shell.AiChat.ApplyAsync(turn, Workbench.Ai.AiCodeBlocks.Parse(turn.Answer)[0]);
+            await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.HasDetails, "the preview shows the change").ConfigureAwait(true);
+            shell.Dialogs.Accept();
+            await applying.ConfigureAwait(true);
+            Check(editor.Model.Text.Text.Contains("    static int Add(int a, int b) => a + b;\n}", StringComparison.Ordinal), "Apply replaced the selection");
+            Check(!shell.Workbench.Output.GetOrCreate(Workbench.Ai.AiService.OutputChannelId).GetText().Contains("return a + b", StringComparison.Ordinal), "the request log has no content");
+        }
+        finally
+        {
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
     private async Task HostingStepAsync()
     {
         await using var github = new Tests.MockGitHub("codalus-samples", "BuildAndRun");

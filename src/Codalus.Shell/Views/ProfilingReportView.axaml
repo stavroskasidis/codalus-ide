@@ -46,7 +46,8 @@
             </ComboBox.ItemTemplate>
           </ComboBox>
           <CheckBox Content="{l:T profilingReport.includeNativeCodeAndWaiting}" IsChecked="{Binding IncludeExternal}" Margin="0,0,12,0" ToolTip.Tip="{l:T profilingReport.eventpipeSamplesEveryManagedThreadSamples}" />
-          <CheckBox Content="{l:T profilingReport.showHotLinesInTheEditor}" IsChecked="{Binding ShowHotLines}" />
+          <CheckBox Content="{l:T profilingReport.showHotLinesInTheEditor}" IsChecked="{Binding ShowHotLines}" Margin="0,0,12,0" />
+          <Button Content="{l:T profilingReport.summarizeWithAi}" Command="{Binding SummarizeWithAiCommand}" IsVisible="{Binding IsEnabled, Source={x:Static l:AiUi.Current}}" AutomationProperties.Name="{l:T profilingReport.summarizeTheProfileInAiChat}" />
         </WrapPanel>
         <TextBlock Classes="muted" Text="{Binding Status}" AutomationProperties.LiveSetting="Polite" />
       </StackPanel>

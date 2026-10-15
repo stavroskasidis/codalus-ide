@@ -119,6 +119,22 @@ Since API 0.2.6 (protocol 0.2), [ADR 0031](adr/0031-git-hosting-and-repository-f
 
 A `pullRequest` is `{number, title, author, sourceBranch, targetBranch, webUrl, reference, isDraft, state, createdAt?, updatedAt?, sourceCommit?, sourceRepository?, sourceCloneUrl?, reviewers}`; `sourceRepository` is set for a fork's pull request. Thread paths are relative to the repository, with forward slashes; lines are one-based in the pull request's version of the file.
 
+### Language model providers
+
+Proposed (M28a), [ADR 0062](adr/0062-ai-provider-api-and-data-boundaries.md); messages in `LanguageModelMessages.cs`. A provider is declared in the manifest (`contributes.languageModelProviders: [{id, label, description?, local?}]`) and registered when its plugin activates (`onLanguageModelProvider:<id>`, implicit), which the shell does only once the user has chosen it. Every shell → host request names the provider; `$/cancelRequest` cancels any of them (Stop in AI Chat).
+
+| Method | Direction | Kind | Params → Result |
+|---|---|---|---|
+| `languageModels/registerProvider` | host → shell | notification | `{pluginId, providerId}` |
+| `languageModels/unregisterProvider` | host → shell | notification | `{pluginId, providerId}` |
+| `languageModels/models` | shell → host | request | `{providerId}` → `{models: [{id, name, contextWindow?, maxOutputTokens?, supportsTools}]}` |
+| `languageModels/status` | shell → host | request | `{providerId}` → `{isReady, message?}` without a network call (a key is stored, the endpoint is set) |
+| `languageModels/configure` | shell → host | request | `{providerId}` → `{isReady, message?}` after the provider asked the user for what it needs (its own input boxes) |
+| `languageModels/chat` | shell → host | request | `{providerId, requestId, modelId, messages, tools?, maxOutputTokens?, stop?, options?}` → `{finishReason: stop\|length\|toolCalls\|refused, inputTokens?, outputTokens?, partCount}` |
+| `languageModels/chatPart` | host → shell | notification | `{requestId, text?, toolCall?: {id, name, arguments}}` while the chat runs |
+
+A message is `{role: system\|user\|assistant\|tool, content, toolCalls?: [{id, name, arguments}], toolCallId?, isError}`; a tool is `{name, description, parameters}` with a JSON schema; `arguments` is a JSON object as text. The host posts every `chatPart` before it answers `chat`, but the shell may handle the answer first, so it waits until it has `partCount` parts. Errors: `-33020` no such provider, `-33021` the service failed (the message says why), `-33022` the provider needs configuring (a missing or refused key).
+
 ## API 1.0 (M22a)
 
 Progress, declarative views and custom editors ([plugins.md](plugins.md#progress)):

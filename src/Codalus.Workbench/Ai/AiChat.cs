@@ -26,6 +26,9 @@ public sealed class AiChatTurn
     /// <summary>The selection the question was about (Apply replaces it), when one went with it.</summary>
     public AiContextItem? Selection { get; }
 
+    /// <summary>The caller's own data (the shell keeps where the selection was).</summary>
+    public object? Tag { get; init; }
+
     /// <summary>The answer so far.</summary>
     public string Answer
     {
@@ -99,12 +102,12 @@ public sealed class AiChat(AiService ai)
     public event EventHandler? Cleared;
 
     /// <summary>Asks <paramref name="question"/> with <paramref name="items"/> (before the boundary) and streams the answer.</summary>
-    public async Task<AiChatTurn> SendAsync(string question, IEnumerable<AiContextItem> items, CancellationToken cancellationToken)
+    public async Task<AiChatTurn> SendAsync(string question, IEnumerable<AiContextItem> items, CancellationToken cancellationToken, object? tag = null)
     {
         var list = items.ToList();
-        var context = Ai.Prepare(list);
+        var context = await Ai.PrepareAsync(list, cancellationToken).ConfigureAwait(false);
         var selection = context.Included.FirstOrDefault(i => i.Kind == AiContextKind.Selection);
-        var turn = new AiChatTurn(question, context, selection) { IsStreaming = true };
+        var turn = new AiChatTurn(question, context, selection) { IsStreaming = true, Tag = tag };
         var userMessage = new ChatMessageDto("user", AiService.ComposeUserMessage(question, context), null, null, false);
         List<ChatMessageDto> messages;
         lock (_gate)
@@ -254,10 +257,27 @@ public static partial class AiCodeBlocks
         return a.Length > 0 && (b.Equals(a, StringComparison.OrdinalIgnoreCase) || b.EndsWith("/" + a, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// <paramref name="code"/> indented like <paramref name="replaced"/> when it has no indentation of its own (models
+    /// write a method at column 0; the selection was inside a class).
+    /// </summary>
+    public static string IndentLike(string code, string replaced)
+    {
+        var codeLines = code.Split('\n');
+        if (codeLines.Where(l => l.Trim().Length > 0).Any(l => l[0] is ' ' or '\t'))
+        {
+            return code;
+        }
+
+        var first = replaced.Split('\n').FirstOrDefault(l => l.Trim().Length > 0) ?? "";
+        var indent = first[..(first.Length - first.TrimStart(' ', '\t').Length)];
+        return indent.Length == 0 ? code : string.Join('\n', codeLines.Select(l => l.Trim().Length > 0 ? indent + l : l));
+    }
+
     private static string FirstLines(string text) =>
         string.Join('\n', text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).Take(2));
 
-    [GeneratedRegex(@"^\s{0,3}(?<fence>`{3,}|~{3,})(?<info>[^`]*)$")]
+    [GeneratedRegex(@"^\s*(?<fence>`{3,}|~{3,})(?<info>[^`]*)$")]
     private static partial Regex Fence();
 
     [GeneratedRegex(@"(?:^|\s)(?:path|file)=(?<path>""[^""]+""|\S+)")]

@@ -73,6 +73,8 @@ public sealed partial class CodeEditorController : IDisposable
     private CancellationTokenSource? _signatureCts;
     private CancellationTokenSource? _hoverCts;
     private CompletionWindow? _completion;
+    private readonly InlineSuggestions _inline;
+    private readonly NextEditSuggestions _nextEdit;
     private OverloadInsightWindow? _signature;
     private Point _hoverPoint;
     private DocumentOptions? _documentOptions;
@@ -134,6 +136,8 @@ public sealed partial class CodeEditorController : IDisposable
         _folding = FoldingManager.Install(editor.TextArea);
         _search = SearchPanel.Install(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
+        _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush);
+        _nextEdit = new NextEditSuggestions(editor, () => Model, () => services.AiNextEdit, () => _completion is not null || _inline.IsVisible, () => ResourceBrush("Shell.Info"));
         _hoverTimer = new DispatcherTimer { Interval = s_hoverDelay };
         _hoverTimer.Tick += OnHoverTimer;
 
@@ -196,6 +200,17 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>Inlay hints, CodeLens, the inheritance margin, guides and bracket colors (M12a).</summary>
     public EditorInsights Insights => _insights;
+
+    /// <summary>AI inline suggestions (M28b).</summary>
+    public InlineSuggestions InlineSuggestions => _inline;
+
+    /// <summary>AI next-edit suggestions (M28b).</summary>
+    public NextEditSuggestions NextEditSuggestions => _nextEdit;
+
+    private Avalonia.Media.IBrush InlineSuggestionBrush() => ResourceBrush("Shell.Editor.InlayHint.Foreground");
+
+    private Avalonia.Media.IBrush ResourceBrush(string key) =>
+        Editor.TryFindResource(key, Editor.ActualThemeVariant, out var value) && value is Avalonia.Media.IBrush brush ? brush : Avalonia.Media.Brushes.Gray;
 
     private void OnContextRequested(object? sender, ContextRequestedEventArgs e)
     {
@@ -1292,6 +1307,12 @@ public sealed partial class CodeEditorController : IDisposable
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         TrackCopy(e);
+        if (_inline.HandleKey(e) || _nextEdit.HandleKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape)
         {
             if (_hoverPopup.IsOpen)
@@ -1755,6 +1776,8 @@ public sealed partial class CodeEditorController : IDisposable
         _disposed = true;
         _textMate?.Dispose();
         _insights.Dispose();
+        _inline.Dispose();
+        _nextEdit.Dispose();
         _gitTimer.Stop();
         _gitCts?.Cancel();
         _gitCts?.Dispose();

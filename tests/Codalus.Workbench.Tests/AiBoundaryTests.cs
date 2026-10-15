@@ -73,8 +73,9 @@ public sealed class AiBoundaryTests : IDisposable
     }
 
     [Fact]
-    public void Exclusions_read_gitignore_files_codalusignore_the_setting_and_secret_names()
+    public async Task Exclusions_read_gitignore_files_codalusignore_the_setting_and_secret_names()
     {
+        var ct = TestContext.Current.CancellationToken;
         Directory.CreateDirectory(Path.Combine(_root, ".git", "info"));
         File.WriteAllText(Path.Combine(_root, ".git", "info", "exclude"), "local-only.txt\n");
         Write(".gitignore", "*.user\nartifacts/\n");
@@ -84,22 +85,22 @@ public sealed class AiBoundaryTests : IDisposable
         var exclusions = new AiExclusions(() => exclude);
         var solution = Path.Combine(_root, "src");
 
-        Assert.Null(exclusions.ExclusionReason(Write("src/App/Program.cs"), solution));
-        Assert.Equal(".gitignore", exclusions.ExclusionReason(Write("src/App/App.csproj.user"), solution));
-        Assert.Null(exclusions.ExclusionReason(Write("src/App/important.user"), solution));
-        Assert.Equal(".gitignore", exclusions.ExclusionReason(Write("artifacts/log.txt"), _root));
-        Assert.Equal(".codalusignore", exclusions.ExclusionReason(Write("src/App/Secrets/Keys.cs"), solution));
-        Assert.Equal(".git/info/exclude", exclusions.ExclusionReason(Write("src/local-only.txt"), solution));
-        Assert.Equal("ai.exclude", exclusions.ExclusionReason(Write("src/App/Db.private.cs"), solution));
-        Assert.Equal("holds secrets", exclusions.ExclusionReason(Write("src/App/.env.local"), solution));
-        Assert.Equal("holds secrets", exclusions.ExclusionReason(Write("src/App/secrets.json"), solution));
-        Assert.Equal("holds secrets", exclusions.ExclusionReason(Write("certs/dev.pfx"), solution));
+        Assert.Null(await exclusions.ExclusionReasonAsync(Write("src/App/Program.cs"), solution, ct));
+        Assert.Equal(".gitignore", await exclusions.ExclusionReasonAsync(Write("src/App/App.csproj.user"), solution, ct));
+        Assert.Null(await exclusions.ExclusionReasonAsync(Write("src/App/important.user"), solution, ct));
+        Assert.Equal(".gitignore", await exclusions.ExclusionReasonAsync(Write("artifacts/log.txt"), _root, ct));
+        Assert.Equal(".codalusignore", await exclusions.ExclusionReasonAsync(Write("src/App/Secrets/Keys.cs"), solution, ct));
+        Assert.Equal(".git/info/exclude", await exclusions.ExclusionReasonAsync(Write("src/local-only.txt"), solution, ct));
+        Assert.Equal("ai.exclude", await exclusions.ExclusionReasonAsync(Write("src/App/Db.private.cs"), solution, ct));
+        Assert.Equal("holds secrets", await exclusions.ExclusionReasonAsync(Write("src/App/.env.local"), solution, ct));
+        Assert.Equal("holds secrets", await exclusions.ExclusionReasonAsync(Write("src/App/secrets.json"), solution, ct));
+        Assert.Equal("holds secrets", await exclusions.ExclusionReasonAsync(Write("certs/dev.pfx"), solution, ct));
 
         // An ignore file is read again when it changes.
         var program = Path.Combine(_root, "src", "App", "Program.cs");
         File.WriteAllText(Path.Combine(_root, "src", "App", ".codalusignore"), "Secrets/\nProgram.cs\n");
         File.SetLastWriteTimeUtc(Path.Combine(_root, "src", "App", ".codalusignore"), DateTime.UtcNow.AddMinutes(1));
-        Assert.Equal(".codalusignore", exclusions.ExclusionReason(program, solution));
+        Assert.Equal(".codalusignore", await exclusions.ExclusionReasonAsync(program, solution, ct));
     }
 
     [Fact]
@@ -137,8 +138,9 @@ public sealed class AiBoundaryTests : IDisposable
     }
 
     [Fact]
-    public void Prepare_drops_excluded_files_redacts_cuts_and_respects_restricted_mode()
+    public async Task Prepare_drops_excluded_files_redacts_cuts_and_respects_restricted_mode()
     {
+        var ct = TestContext.Current.CancellationToken;
         using var workbench = new WorkbenchServices(AppPaths.Resolve(PlatformInfo.Current, _ => null, Path.Combine(_root, "user")), PlatformInfo.Current, watchFiles: false);
         workbench.Settings.Register(AiSettings.Descriptors(ContributionSource.Shell));
         var trusted = true;
@@ -152,7 +154,7 @@ public sealed class AiBoundaryTests : IDisposable
             new AiContextItem(AiContextKind.Diagnostics, "1 error", "Program.cs(1,1): error CS0001"),
         };
 
-        var prepared = ai.Prepare(items);
+        var prepared = await ai.PrepareAsync(items, ct);
         Assert.Equal(["Program.cs", "Big.cs", "1 error"], prepared.Included.Select(i => i.Label));
         Assert.Equal(".gitignore", Assert.Single(prepared.Excluded).Reason);
         Assert.Equal(1, prepared.Redactions);
@@ -165,7 +167,7 @@ public sealed class AiBoundaryTests : IDisposable
         Assert.EndsWith("Why?", message, StringComparison.Ordinal);
 
         trusted = false;
-        var restricted = ai.Prepare(items);
+        var restricted = await ai.PrepareAsync(items, ct);
         Assert.Equal(["1 error"], restricted.Included.Select(i => i.Label));
         Assert.All(restricted.Excluded, e => Assert.Equal("restricted mode", e.Reason));
     }
@@ -232,6 +234,8 @@ public sealed class AiBoundaryTests : IDisposable
         var whole = new AiCodeBlock("csharp", null, "using System;\nnamespace A;\nclass B { }\n");
         Assert.Equal(AiApplyKind.ReplaceFile, AiCodeBlocks.Plan(whole, "using System;\nnamespace A;\nclass C { }\n", file, hasSelection: false));
         Assert.False(AiCodeBlocks.NamesFile("Other.cs", file));
+        Assert.Equal("    int A() => 1;\n\n    int B() => 2;\n", AiCodeBlocks.IndentLike("int A() => 1;\n\nint B() => 2;\n", "    int A()\n    {\n    }\n"));
+        Assert.Equal("  x();\n", AiCodeBlocks.IndentLike("  x();\n", "        y();\n"));
         Assert.True(AiCodeBlocks.NamesFile("./App/Program.cs", file));
     }
 }

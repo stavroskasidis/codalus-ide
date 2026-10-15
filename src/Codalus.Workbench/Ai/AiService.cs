@@ -15,6 +15,18 @@ public enum AiContextKind
     Diagnostics,
     BuildOutput,
     Solution,
+
+    /// <summary>The debugger's exception, call stack or locals (M28b).</summary>
+    Debugger,
+
+    /// <summary>A test's result: its message, stack and output (M28b).</summary>
+    TestResult,
+
+    /// <summary>A Git diff or log (M28b).</summary>
+    Changes,
+
+    /// <summary>A profiling report's summary (M28b).</summary>
+    Profile,
 }
 
 /// <summary>A piece of context the user can see and turn off before it is sent.</summary>
@@ -87,6 +99,7 @@ public sealed class AiService
     private readonly Func<string?> _workspaceRoot;
     private readonly Func<bool> _workspaceTrusted;
     private int _busy;
+    private (string Provider, string Model)? _firstModel;
 
     /// <param name="workspaceRoot">The open solution's or folder's directory, or null.</param>
     /// <param name="workspaceTrusted">Whether that folder is trusted (restricted mode sends none of its files).</param>
@@ -102,6 +115,7 @@ public sealed class AiService
         {
             if (e.Affects("ai"))
             {
+                _firstModel = null;
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         };
@@ -149,7 +163,7 @@ public sealed class AiService
     /// Applies the boundary to <paramref name="items"/>: drops files that are excluded (or every file of an untrusted
     /// workspace), redacts secrets, and cuts what goes over the budget.
     /// </summary>
-    public AiPreparedContext Prepare(IEnumerable<AiContextItem> items)
+    public async Task<AiPreparedContext> PrepareAsync(IEnumerable<AiContextItem> items, CancellationToken cancellationToken)
     {
         var included = new List<AiContextItem>();
         var excluded = new List<AiExcludedItem>();
@@ -159,13 +173,13 @@ public sealed class AiService
         var trusted = IsWorkspaceTrusted;
         foreach (var item in items)
         {
-            if (!trusted && item.Kind != AiContextKind.Diagnostics && item.Kind != AiContextKind.BuildOutput)
+            if (!trusted && item.Kind is not (AiContextKind.Diagnostics or AiContextKind.BuildOutput or AiContextKind.Debugger or AiContextKind.TestResult or AiContextKind.Profile))
             {
                 excluded.Add(new AiExcludedItem(item, "restricted mode"));
                 continue;
             }
 
-            if (item.Path is { } path && Exclusions.ExclusionReason(path, root) is { } reason)
+            if (item.Path is { } path && await Exclusions.ExclusionReasonAsync(path, root, cancellationToken).ConfigureAwait(false) is { } reason)
             {
                 excluded.Add(new AiExcludedItem(item, reason));
                 continue;
@@ -231,6 +245,10 @@ public sealed class AiService
         AiContextKind.OpenFile => "Open file: " + item.Label,
         AiContextKind.Diagnostics => "Errors and warnings: " + item.Label,
         AiContextKind.BuildOutput => "Build output: " + item.Label,
+        AiContextKind.Debugger => "Debugger: " + item.Label,
+        AiContextKind.TestResult => "Test result: " + item.Label,
+        AiContextKind.Changes => "Changes: " + item.Label,
+        AiContextKind.Profile => "Profile: " + item.Label,
         _ => "Solution: " + item.Label,
     };
 
@@ -244,7 +262,9 @@ public sealed class AiService
         AiPreparedContext context,
         Action<string> onText,
         CancellationToken cancellationToken,
-        int? maxOutputTokens = null)
+        int? maxOutputTokens = null,
+        string? modelOverride = null,
+        bool quiet = false)
     {
         switch (State)
         {
@@ -255,7 +275,7 @@ public sealed class AiService
         }
 
         var providerId = ProviderId!;
-        var modelId = ModelId ?? await FirstModelAsync(providerId, cancellationToken).ConfigureAwait(false);
+        var modelId = modelOverride is { Length: > 0 } ? modelOverride : ModelId ?? await FirstModelAsync(providerId, cancellationToken).ConfigureAwait(false);
         var size = messages.Sum(m => m.Content.Length);
         Log(string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {feature}: {providerId}/{modelId}, {messages.Count} messages, {size:N0} characters"));
         foreach (var item in context.Included)
@@ -274,8 +294,12 @@ public sealed class AiService
         }
 
         var text = new StringBuilder();
-        Interlocked.Increment(ref _busy);
-        BusyChanged?.Invoke(this, EventArgs.Empty);
+        if (!quiet)
+        {
+            Interlocked.Increment(ref _busy);
+            BusyChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         try
         {
             var result = await Models.ChatAsync(providerId, modelId, messages, part =>
@@ -301,18 +325,51 @@ public sealed class AiService
         }
         finally
         {
-            Interlocked.Decrement(ref _busy);
-            BusyChanged?.Invoke(this, EventArgs.Empty);
+            if (!quiet)
+            {
+                Interlocked.Decrement(ref _busy);
+                BusyChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 
-    /// <summary>The provider's first model (when <c>ai.model</c> is empty).</summary>
+    /// <summary>
+    /// One question with its context, answered without streaming to the user (a commit message, a fix): the context goes
+    /// through the boundary, and the reply comes back whole.
+    /// </summary>
+    public async Task<(AiReply Reply, AiPreparedContext Context)> AskAsync(
+        string feature,
+        string systemPrompt,
+        string question,
+        IEnumerable<AiContextItem> items,
+        CancellationToken cancellationToken,
+        int? maxOutputTokens = null)
+    {
+        var context = await PrepareAsync(items, cancellationToken).ConfigureAwait(false);
+        var reply = await ChatAsync(
+            feature,
+            [new ChatMessageDto("system", systemPrompt, null, null, false), new ChatMessageDto("user", ComposeUserMessage(question, context), null, null, false)],
+            context,
+            _ => { },
+            cancellationToken,
+            maxOutputTokens).ConfigureAwait(false);
+        return (reply, context);
+    }
+
+    /// <summary>The provider's first model (when <c>ai.model</c> is empty), asked once per provider until the settings change.</summary>
     public async Task<string> FirstModelAsync(string providerId, CancellationToken cancellationToken)
     {
+        if (_firstModel is { } cached && cached.Provider == providerId)
+        {
+            return cached.Model;
+        }
+
         try
         {
             var models = await Models.GetModelsAsync(providerId, cancellationToken).ConfigureAwait(false);
-            return models.Count > 0 ? models[0].Id : throw new AiUnavailableException("The provider offers no models.", needsConfiguration: true);
+            var first = models.Count > 0 ? models[0].Id : throw new AiUnavailableException("The provider offers no models.", needsConfiguration: true);
+            _firstModel = (providerId, first);
+            return first;
         }
         catch (LanguageModelRequestException ex)
         {

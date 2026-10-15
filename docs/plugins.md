@@ -296,7 +296,25 @@ A plugin can sign users in to a service for itself and for other plugins (`contr
 
 ## Proposed APIs
 
-Proposed APIs are not covered by the versioning policy: they may change in any release, and are proved by built-in plugins before they become stable. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. 1.0 has none: they all became members of `IPluginContext`. Webviews are expected to start here.
+Proposed APIs are not covered by the versioning policy: they may change in any release, and are proved by built-in plugins before they become stable. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. 1.0 had none: they all became members of `IPluginContext`. Webviews are expected to start here.
+
+### Language model providers (proposed)
+
+`context.Proposed().LanguageModels.RegisterProvider(provider)` offers chat models to AI assistance ([ADR 0062](adr/0062-ai-provider-api-and-data-boundaries.md)). Declare the provider in the manifest, so the IDE lists it before your plugin runs:
+
+```json
+"contributes": {
+  "languageModelProviders": [ { "id": "acme", "label": "Acme AI", "description": "Acme's hosted models.", "local": false } ]
+}
+```
+
+Your plugin activates only when the user picks the provider (`onLanguageModelProvider:acme`, implicit). Derive from `LanguageModelProvider`:
+- `GetModelsAsync`: the models you offer (`LanguageModelInfo`: id, name, context window, whether it takes tools).
+- `ChatAsync(request, progress, cancellationToken)`: send `request.Messages` (a `ChatMessage` is a role, text, and tool calls or a tool result), report each piece of text and each complete tool call with `progress.Report(new ChatResponsePart(text))`, and return how the reply ended (`ChatResult`). Stop when the token is cancelled.
+- `GetStatusAsync` and `ConfigureAsync`: whether you're ready (a key, an endpoint), and asking the user for what's missing with `Window.ShowInputBoxAsync`. Keep keys in `Secrets`.
+- Throw `LanguageModelException` with a message the user can act on; set `NeedsConfiguration` when the key is missing or refused.
+
+The IDE decides what is sent: your provider never reads the workspace. The built-in providers (`src/Plugins/Codalus.Plugins.OpenAI`, `Codalus.Plugins.Anthropic`) are examples.
 
 ## Testing plugins
 
@@ -346,6 +364,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### M28a (proposed API)
+
+Added, as a proposed API: `IProposedApi.LanguageModels`, `LanguageModelProvider` and the chat types, and `contributes.languageModelProviders` with the activation event `onLanguageModelProvider:<id>` ([Language model providers](#language-model-providers-proposed)). The stable API didn't change.
 
 ### M22d (no API version change)
 

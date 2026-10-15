@@ -113,6 +113,7 @@ public sealed class ViewLocator : IDataTemplate
         EndpointsExplorerViewModel vm => new EndpointsExplorerView { DataContext = vm },
         TaskRunnerViewModel vm => new TaskRunnerView { DataContext = vm },
         ContainersViewModel vm => new ContainersView { DataContext = vm },
+        AiChatViewModel vm => new AiChatView { DataContext = vm },
         AspireViewModel vm => new AspireView { DataContext = vm },
         DiagnosticToolsViewModel vm => new DiagnosticToolsView { DataContext = vm },
         CountersViewModel vm => new CountersView { DataContext = vm },

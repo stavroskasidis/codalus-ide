@@ -1,11 +1,14 @@
 using System.Collections.Concurrent;
+using System.Text;
+using Codalus.Workbench.FileSystem;
 
 namespace Codalus.Workbench.Ai;
 
 /// <summary>
 /// Which files may go to a language model (ADR 0062): none that <c>.gitignore</c> (the repository's, nested ones and
 /// <c>.git/info/exclude</c>) or a <c>.codalusignore</c> excludes, none that the <c>ai.exclude</c> globs name, and none that
-/// hold secrets by name. Ignore files are read again when they change.
+/// hold secrets by name. Ignore files are read again when they change, through <see cref="FileSystems"/>, so a remote
+/// window's are read on its machine.
 /// </summary>
 public sealed class AiExclusions
 {
@@ -17,6 +20,7 @@ public sealed class AiExclusions
     ];
 
     private static readonly IgnoreRules s_secretRules = IgnoreRules.Parse(SecretFiles);
+    private static readonly string[] s_ignoreFiles = [".gitignore", ".codalusignore"];
 
     private readonly ConcurrentDictionary<string, (DateTime Stamp, IgnoreRules Rules)> _files = new(StringComparer.Ordinal);
     private readonly Func<IReadOnlyList<string>> _excludeSetting;
@@ -28,7 +32,7 @@ public sealed class AiExclusions
     /// Why <paramref name="path"/> must not be sent, or null when it may be. <paramref name="workspaceRoot"/> is the
     /// solution's or folder's directory; a file outside it is checked only by name.
     /// </summary>
-    public string? ExclusionReason(string path, string? workspaceRoot)
+    public async Task<string?> ExclusionReasonAsync(string path, string? workspaceRoot, CancellationToken cancellationToken)
     {
         var fullPath = Path.GetFullPath(path);
         var name = Path.GetFileName(fullPath);
@@ -56,11 +60,11 @@ public sealed class AiExclusions
         }
 
         // Ignore files from the repository's root (or the workspace's, outside a repository) down to the file's folder.
-        var top = RepositoryRoot(root) ?? root;
+        var top = await RepositoryRootAsync(root, cancellationToken).ConfigureAwait(false) ?? root;
         var relative = Relative(top, fullPath)!;
         var parts = relative.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var sources = new List<(string Base, IgnoreRules Rules, string Kind)>();
-        var exclude = Rules(Path.Combine(top, ".git", "info", "exclude"));
+        var exclude = await RulesAsync(Path.Combine(top, ".git", "info", "exclude"), cancellationToken).ConfigureAwait(false);
         if (!exclude.IsEmpty)
         {
             sources.Add(("", exclude, ".git/info/exclude"));
@@ -70,9 +74,9 @@ public sealed class AiExclusions
         for (var i = 0; i < parts.Length; i++)
         {
             var baseRelative = string.Join('/', parts, 0, i);
-            foreach (var file in (ReadOnlySpan<string>)[".gitignore", ".codalusignore"])
+            foreach (var file in s_ignoreFiles)
             {
-                var rules = Rules(Path.Combine(folder, file));
+                var rules = await RulesAsync(Path.Combine(folder, file), cancellationToken).ConfigureAwait(false);
                 if (!rules.IsEmpty)
                 {
                     sources.Add((baseRelative, rules, file));
@@ -117,27 +121,29 @@ public sealed class AiExclusions
         return null;
     }
 
-    public bool IsExcluded(string path, string? workspaceRoot) => ExclusionReason(path, workspaceRoot) is not null;
+    public async Task<bool> IsExcludedAsync(string path, string? workspaceRoot, CancellationToken cancellationToken) =>
+        await ExclusionReasonAsync(path, workspaceRoot, cancellationToken).ConfigureAwait(false) is not null;
 
-    private IgnoreRules Rules(string file)
+    private async Task<IgnoreRules> RulesAsync(string file, CancellationToken cancellationToken)
     {
-        DateTime stamp;
+        var fileSystem = FileSystems.For(file);
+        FileEntryInfo info;
         try
         {
-            if (!File.Exists(file))
-            {
-                _files.TryRemove(file, out _);
-                return IgnoreRules.Empty;
-            }
-
-            stamp = File.GetLastWriteTimeUtc(file);
+            info = await fileSystem.StatAsync(file, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return IgnoreRules.Empty;
         }
 
-        if (_files.TryGetValue(file, out var cached) && cached.Stamp == stamp)
+        if (!info.Exists || info.IsDirectory)
+        {
+            _files.TryRemove(file, out _);
+            return IgnoreRules.Empty;
+        }
+
+        if (_files.TryGetValue(file, out var cached) && cached.Stamp == info.ModifiedUtc)
         {
             return cached.Rules;
         }
@@ -145,25 +151,32 @@ public sealed class AiExclusions
         IgnoreRules rules;
         try
         {
-            rules = IgnoreRules.Parse(File.ReadAllText(file));
+            rules = IgnoreRules.Parse(Encoding.UTF8.GetString(await fileSystem.ReadAllBytesAsync(file, cancellationToken).ConfigureAwait(false)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             rules = IgnoreRules.Empty;
         }
 
-        _files[file] = (stamp, rules);
+        _files[file] = (info.ModifiedUtc, rules);
         return rules;
     }
 
-    private static string? RepositoryRoot(string folder)
+    private static async Task<string?> RepositoryRootAsync(string folder, CancellationToken cancellationToken)
     {
-        for (var dir = new DirectoryInfo(folder); dir is not null; dir = dir.Parent)
+        for (var dir = folder; !string.IsNullOrEmpty(dir); dir = Path.GetDirectoryName(dir))
         {
-            var git = Path.Combine(dir.FullName, ".git");
-            if (Directory.Exists(git) || File.Exists(git))
+            var git = Path.Combine(dir, ".git");
+            try
             {
-                return dir.FullName.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if ((await FileSystems.For(git).StatAsync(git, cancellationToken).ConfigureAwait(false)).Exists)
+                {
+                    return dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
             }
         }
 

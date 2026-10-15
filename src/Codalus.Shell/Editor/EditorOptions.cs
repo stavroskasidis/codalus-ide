@@ -131,6 +131,20 @@ public sealed record EmbeddedRequest(LanguageHostClient Client, string Uri);
 /// <summary>What an editor view needs from the shell.</summary>
 public interface IEditorServices
 {
+    /// <summary>AI inline suggestions (M28b), or null where there are none.</summary>
+    Codalus.Workbench.Ai.AiCompletions? AiCompletions => null;
+
+    /// <summary>AI next-edit suggestions (M28b), or null where there are none.</summary>
+    Codalus.Workbench.Ai.AiNextEdit? AiNextEdit => null;
+
+    /// <summary>AI assistance is on: the exception helper offers Ask AI (M28b).</summary>
+    bool CanAskAi => false;
+
+    /// <summary>Asks AI Chat about the exception the debugger stopped on (its description with the stack).</summary>
+    void AskAiAboutException(string description)
+    {
+    }
+
     EditorOptions Options { get; }
 
     EditorTheme Theme { get; }

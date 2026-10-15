@@ -19,9 +19,16 @@ public static partial class MarkdownRenderer
 {
     private static readonly FontFamily s_monospace = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace");
 
-    public static Control Render(string markdown, Action<string> openLink)
+    public static Control Render(string markdown, Action<string> openLink) => Render(markdown, openLink, null, new Thickness(12));
+
+    /// <summary>
+    /// Renders with <paramref name="codeBlockFooter"/> under each fenced code block (its index, from 0, in the order of
+    /// <c>AiCodeBlocks.Parse</c>), e.g. the AI Chat's Copy, Insert and Apply buttons.
+    /// </summary>
+    public static Control Render(string markdown, Action<string> openLink, Func<int, Control?>? codeBlockFooter, Thickness margin)
     {
-        var panel = new StackPanel { Spacing = 8, Margin = new Thickness(12) };
+        var panel = new StackPanel { Spacing = 8, Margin = margin };
+        var blockIndex = 0;
         var lines = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         var paragraph = new List<string>();
 
@@ -37,16 +44,23 @@ public static partial class MarkdownRenderer
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i].Trim();
-            if (line.StartsWith("```", StringComparison.Ordinal))
+            if (Fence().Match(line) is { Success: true } fence)
             {
                 FlushParagraph();
+                var marker = fence.Groups[1].Value;
                 var code = new List<string>();
-                while (++i < lines.Length && !lines[i].Trim().StartsWith("```", StringComparison.Ordinal))
+                while (++i < lines.Length && !(lines[i].Trim().StartsWith(marker, StringComparison.Ordinal) && lines[i].Trim().Trim(marker[0]).Length == 0))
                 {
                     code.Add(lines[i]);
                 }
 
                 panel.Children.Add(CodeBlock(string.Join('\n', code)));
+                if (codeBlockFooter?.Invoke(blockIndex) is { } footer)
+                {
+                    panel.Children.Add(footer);
+                }
+
+                blockIndex++;
             }
             else if (line.Length == 0)
             {
@@ -210,6 +224,9 @@ public static partial class MarkdownRenderer
         button.Click += (_, _) => openLink(target);
         return new InlineUIContainer(button);
     }
+
+    [GeneratedRegex(@"^(`{3,}|~{3,})[^`]*$")]
+    private static partial Regex Fence();
 
     [GeneratedRegex(@"^(#{1,6})\s+(.*)$")]
     private static partial Regex Heading();

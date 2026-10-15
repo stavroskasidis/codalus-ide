@@ -113,8 +113,21 @@ The plugin API, version 1.0.0: every public type and member of `Codalus.Plugins.
 
 ## Codalus.Plugins.Proposed
 
+- [`ChatFinishReason`](#chatfinishreason)
+- [`ChatMessage`](#chatmessage)
+- [`ChatRequest`](#chatrequest)
+- [`ChatResponsePart`](#chatresponsepart)
+- [`ChatResult`](#chatresult)
+- [`ChatRole`](#chatrole)
+- [`ChatTool`](#chattool)
+- [`ChatToolCall`](#chattoolcall)
+- [`ILanguageModels`](#ilanguagemodels)
 - [`IProposedApi`](#iproposedapi)
 - [`IProposedApiProvider`](#iproposedapiprovider)
+- [`LanguageModelException`](#languagemodelexception)
+- [`LanguageModelInfo`](#languagemodelinfo)
+- [`LanguageModelProvider`](#languagemodelprovider)
+- [`LanguageModelStatus`](#languagemodelstatus)
 - [`ProposedApiExtensions`](#proposedapiextensions)
 
 ### `AuthenticationSession`
@@ -1609,11 +1622,133 @@ The open solution. `WorkspaceSolution.SdkPath` is the .NET SDK folder MSBuild us
 | `string? SdkPath { get; init; }` | The .NET SDK folder MSBuild uses. |
 | `bool Trusted { get; init; }` | Whether the user trusts its folder (only then are projects evaluated). |
 
+### `ChatFinishReason`
+
+`enum Codalus.Plugins.Proposed.ChatFinishReason`
+
+How a reply ended.
+
+| Member | Description |
+|---|---|
+| `Length = 1` | It reached `ChatRequest.MaxOutputTokens` or its own limit. |
+| `Refused = 3` | The service declined to answer. |
+| `Stop = 0` | The model finished. |
+| `ToolCalls = 2` | It called tools and waits for their results. |
+
+### `ChatMessage`
+
+`record Codalus.Plugins.Proposed.ChatMessage`
+
+A message of the conversation.
+
+| Member | Description |
+|---|---|
+| `ChatMessage(ChatRole Role, string Content)` | A message of the conversation. |
+| `string Content { get; init; }` | Its text. |
+| `bool IsError { get; init; }` | For a `ChatRole.Tool` message: the tool failed, and the content says why. |
+| `ChatRole Role { get; init; }` | Who wrote it. |
+| `string? ToolCallId { get; init; }` | For a `ChatRole.Tool` message: the call it answers. |
+| `IReadOnlyList<ChatToolCall>? ToolCalls { get; init; }` | The tool calls an assistant message made. |
+
+### `ChatRequest`
+
+`record Codalus.Plugins.Proposed.ChatRequest`
+
+What to send.
+
+| Member | Description |
+|---|---|
+| `ChatRequest(string ModelId, IReadOnlyList<ChatMessage> Messages)` | What to send. |
+| `int? MaxOutputTokens { get; init; }` | The most tokens to write; the provider's default when null. |
+| `IReadOnlyList<ChatMessage> Messages { get; init; }` | The conversation, the system message first when there is one. |
+| `string ModelId { get; init; }` | One of `LanguageModelProvider.GetModelsAsync`'s ids. |
+| `IReadOnlyDictionary<string, string>? Options { get; init; }` | Provider-specific settings (e.g. `effort`), ignored by providers that don't know them. |
+| `IReadOnlyList<string>? Stop { get; init; }` | Stop writing at any of these. |
+| `IReadOnlyList<ChatTool>? Tools { get; init; }` | Tools the model may call; none when null. |
+
+### `ChatResponsePart`
+
+`record Codalus.Plugins.Proposed.ChatResponsePart`
+
+A part of a streamed reply: text, or a complete tool call.
+
+| Member | Description |
+|---|---|
+| `ChatResponsePart(string? Text)` | A part of a streamed reply: text, or a complete tool call. |
+| `string? Text { get; init; }` | Text to append; null for a tool call. |
+| `ChatToolCall? ToolCall { get; init; }` | A complete tool call. |
+
+### `ChatResult`
+
+`record Codalus.Plugins.Proposed.ChatResult`
+
+The end of a reply.
+
+| Member | Description |
+|---|---|
+| `ChatResult(ChatFinishReason FinishReason)` | The end of a reply. |
+| `ChatFinishReason FinishReason { get; init; }` | How it ended. |
+| `int? InputTokens { get; init; }` | Tokens read, when the service says. |
+| `int? OutputTokens { get; init; }` | Tokens written, when the service says. |
+
+### `ChatRole`
+
+`enum Codalus.Plugins.Proposed.ChatRole`
+
+Who wrote a message.
+
+| Member | Description |
+|---|---|
+| `Assistant = 2` | The model. |
+| `System = 0` | Instructions from the IDE. |
+| `Tool = 3` | The result of a tool call (`ChatMessage.ToolCallId`). |
+| `User = 1` | The user, and the context the IDE attached for them. |
+
+### `ChatTool`
+
+`record Codalus.Plugins.Proposed.ChatTool`
+
+A tool the model may call.
+
+| Member | Description |
+|---|---|
+| `ChatTool(string Name, string Description, JsonElement Parameters)` | A tool the model may call. |
+| `string Description { get; init; }` | What it does and when to use it. |
+| `string Name { get; init; }` | Its name (letters, digits, `_` and `-`). |
+| `JsonElement Parameters { get; init; }` | A JSON schema of its arguments (an object schema). |
+
+### `ChatToolCall`
+
+`record Codalus.Plugins.Proposed.ChatToolCall`
+
+A call of a tool.
+
+| Member | Description |
+|---|---|
+| `ChatToolCall(string Id, string Name, string Arguments)` | A call of a tool. |
+| `string Arguments { get; init; }` | Its arguments, a JSON object as text. |
+| `string Id { get; init; }` | The provider's id of the call, sent back in `ChatMessage.ToolCallId`. |
+| `string Name { get; init; }` | The tool. |
+
+### `ILanguageModels`
+
+`interface Codalus.Plugins.Proposed.ILanguageModels`
+
+Language model providers (proposed, M28a, ADR 0062): chat models from any vendor, local or remote, behind one interface. A provider is declared in the manifest (`contributes.languageModelProviders`) and registered when its plugin activates (`onLanguageModelProvider:<id>`, implicit), which happens only when the user picks it. The shell decides what is sent (the data boundary); the provider only talks to its service.
+
+| Member | Description |
+|---|---|
+| `IDisposable RegisterProvider(LanguageModelProvider provider)` | Registers the provider whose `LanguageModelProvider.Id` the manifest declares. Dispose to unregister. |
+
 ### `IProposedApi`
 
 `interface Codalus.Plugins.Proposed.IProposedApi`
 
 Proposed APIs (ADR 0003): not yet covered by the versioning policy and free to change in any release. A plugin must set `"enableProposedApi": true`; third-party plugins also need a development build (`--enable-proposed-api`). Built-in plugins may use them in every build (ADR 0010). API 1.0 promoted every proposal that built-in plugins had proved (tests, workspace, build, debug, terminals, hosting, secrets and visualizers) to `IPluginContext`. New proposals start here.
+
+| Member | Description |
+|---|---|
+| `ILanguageModels LanguageModels { get; }` | Language model providers for AI assistance (M28a, ADR 0062). |
 
 ### `IProposedApiProvider`
 
@@ -1624,6 +1759,60 @@ Implemented by plugin contexts that can offer proposed APIs.
 | Member | Description |
 |---|---|
 | `IProposedApi? Proposed { get; }` | The proposed APIs, or null when the plugin did not enable them. |
+
+### `LanguageModelException`
+
+`sealed class Codalus.Plugins.Proposed.LanguageModelException` : Exception
+
+A provider's service failed: it can't be reached, refused the key, or answered with an error.
+
+| Member | Description |
+|---|---|
+| `LanguageModelException()` | Creates the exception. |
+| `LanguageModelException(string message)` | Creates the exception with the message the user sees. |
+| `LanguageModelException(string message, Exception innerException)` | Creates the exception with the message the user sees and its cause. |
+| `bool NeedsConfiguration { get; init; }` | The key is missing or was refused: the user must configure the provider again. |
+
+### `LanguageModelInfo`
+
+`record Codalus.Plugins.Proposed.LanguageModelInfo`
+
+A model a provider offers.
+
+| Member | Description |
+|---|---|
+| `LanguageModelInfo(string Id, string Name)` | A model a provider offers. |
+| `int? ContextWindow { get; init; }` | How many tokens of input it takes, when known. |
+| `string Id { get; init; }` | The id sent back in `ChatRequest.ModelId`. |
+| `int? MaxOutputTokens { get; init; }` | How many tokens it writes at most, when known. |
+| `string Name { get; init; }` | The name the user sees. |
+| `bool SupportsTools { get; init; }` | Whether it takes `ChatRequest.Tools`. |
+
+### `LanguageModelProvider`
+
+`abstract class Codalus.Plugins.Proposed.LanguageModelProvider`
+
+A source of chat models. Calls come on any thread and are cancelled when the user stops a request. Keep keys in `IPluginContext.Secrets`.
+
+| Member | Description |
+|---|---|
+| `string Id { get; }` | The id in the manifest, e.g. `openai`. |
+| `Task<ChatResult> ChatAsync(ChatRequest request, IProgress<ChatResponsePart> progress, CancellationToken cancellationToken)` | Sends `request` and reports the reply's parts as they arrive: text, and complete tool calls. Returns how the reply ended. |
+| `Task<LanguageModelStatus> ConfigureAsync(CancellationToken cancellationToken)` | Asks the user for what the provider needs (a key, an endpoint) with the plugin's own prompts, and stores it. |
+| `Task<IReadOnlyList<LanguageModelInfo>> GetModelsAsync(CancellationToken cancellationToken)` | The models it offers now. Throw `LanguageModelException` when the service can't be reached. |
+| `Task<LanguageModelStatus> GetStatusAsync(CancellationToken cancellationToken)` | Whether the provider can serve requests now (a key is stored, the endpoint is set). No network call needed. |
+
+### `LanguageModelStatus`
+
+`record Codalus.Plugins.Proposed.LanguageModelStatus`
+
+Whether a provider is ready.
+
+| Member | Description |
+|---|---|
+| `LanguageModelStatus(bool IsReady, string? Message = null)` | Whether a provider is ready. |
+| `bool IsReady { get; init; }` | It can serve requests. |
+| `string? Message { get; init; }` | What is missing, or where it sends requests (e.g. "Key stored", "http://localhost:11434"). |
 
 ### `ProposedApiExtensions`
 

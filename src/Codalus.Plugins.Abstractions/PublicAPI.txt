@@ -499,9 +499,118 @@ class Codalus.Plugins.ProjectOutput
   TargetFramework { get; init; } : System.String
   TargetPath { get; init; } : System.String
   ToString() -> System.String
+enum Codalus.Plugins.Proposed.ChatFinishReason
+  Length = 1
+  Refused = 3
+  Stop = 0
+  ToolCalls = 2
+class Codalus.Plugins.Proposed.ChatMessage
+  .ctor(Codalus.Plugins.Proposed.ChatRole Role, System.String Content)
+  Content { get; init; } : System.String
+  Deconstruct(ref Codalus.Plugins.Proposed.ChatRole Role, ref System.String Content) -> System.Void
+  Equals(Codalus.Plugins.Proposed.ChatMessage other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsError { get; init; } : System.Boolean
+  Role { get; init; } : Codalus.Plugins.Proposed.ChatRole
+  ToString() -> System.String
+  ToolCallId { get; init; } : System.String
+  ToolCalls { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.ChatToolCall>
+class Codalus.Plugins.Proposed.ChatRequest
+  .ctor(System.String ModelId, System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.ChatMessage> Messages)
+  Deconstruct(ref System.String ModelId, ref System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.ChatMessage> Messages) -> System.Void
+  Equals(Codalus.Plugins.Proposed.ChatRequest other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  MaxOutputTokens { get; init; } : System.Nullable<System.Int32>
+  Messages { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.ChatMessage>
+  ModelId { get; init; } : System.String
+  Options { get; init; } : System.Collections.Generic.IReadOnlyDictionary<System.String, System.String>
+  Stop { get; init; } : System.Collections.Generic.IReadOnlyList<System.String>
+  ToString() -> System.String
+  Tools { get; init; } : System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.ChatTool>
+class Codalus.Plugins.Proposed.ChatResponsePart
+  .ctor(System.String Text)
+  Deconstruct(ref System.String Text) -> System.Void
+  Equals(Codalus.Plugins.Proposed.ChatResponsePart other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Text { get; init; } : System.String
+  ToString() -> System.String
+  ToolCall { get; init; } : Codalus.Plugins.Proposed.ChatToolCall
+class Codalus.Plugins.Proposed.ChatResult
+  .ctor(Codalus.Plugins.Proposed.ChatFinishReason FinishReason)
+  Deconstruct(ref Codalus.Plugins.Proposed.ChatFinishReason FinishReason) -> System.Void
+  Equals(Codalus.Plugins.Proposed.ChatResult other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  FinishReason { get; init; } : Codalus.Plugins.Proposed.ChatFinishReason
+  GetHashCode() -> System.Int32
+  InputTokens { get; init; } : System.Nullable<System.Int32>
+  OutputTokens { get; init; } : System.Nullable<System.Int32>
+  ToString() -> System.String
+enum Codalus.Plugins.Proposed.ChatRole
+  Assistant = 2
+  System = 0
+  Tool = 3
+  User = 1
+class Codalus.Plugins.Proposed.ChatTool
+  .ctor(System.String Name, System.String Description, System.Text.Json.JsonElement Parameters)
+  Deconstruct(ref System.String Name, ref System.String Description, ref System.Text.Json.JsonElement Parameters) -> System.Void
+  Description { get; init; } : System.String
+  Equals(Codalus.Plugins.Proposed.ChatTool other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Name { get; init; } : System.String
+  Parameters { get; init; } : System.Text.Json.JsonElement
+  ToString() -> System.String
+class Codalus.Plugins.Proposed.ChatToolCall
+  .ctor(System.String Id, System.String Name, System.String Arguments)
+  Arguments { get; init; } : System.String
+  Deconstruct(ref System.String Id, ref System.String Name, ref System.String Arguments) -> System.Void
+  Equals(Codalus.Plugins.Proposed.ChatToolCall other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  Name { get; init; } : System.String
+  ToString() -> System.String
+interface Codalus.Plugins.Proposed.ILanguageModels
+  RegisterProvider(Codalus.Plugins.Proposed.LanguageModelProvider provider) -> System.IDisposable
 interface Codalus.Plugins.Proposed.IProposedApi
+  LanguageModels { get; } : Codalus.Plugins.Proposed.ILanguageModels
 interface Codalus.Plugins.Proposed.IProposedApiProvider
   Proposed { get; } : Codalus.Plugins.Proposed.IProposedApi
+class Codalus.Plugins.Proposed.LanguageModelException
+  .ctor()
+  .ctor(System.String message)
+  .ctor(System.String message, System.Exception innerException)
+  NeedsConfiguration { get; init; } : System.Boolean
+class Codalus.Plugins.Proposed.LanguageModelInfo
+  .ctor(System.String Id, System.String Name)
+  ContextWindow { get; init; } : System.Nullable<System.Int32>
+  Deconstruct(ref System.String Id, ref System.String Name) -> System.Void
+  Equals(Codalus.Plugins.Proposed.LanguageModelInfo other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  Id { get; init; } : System.String
+  MaxOutputTokens { get; init; } : System.Nullable<System.Int32>
+  Name { get; init; } : System.String
+  SupportsTools { get; init; } : System.Boolean
+  ToString() -> System.String
+class Codalus.Plugins.Proposed.LanguageModelProvider
+  ChatAsync(Codalus.Plugins.Proposed.ChatRequest request, System.IProgress<Codalus.Plugins.Proposed.ChatResponsePart> progress, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.Proposed.ChatResult>
+  ConfigureAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.Proposed.LanguageModelStatus>
+  GetModelsAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Codalus.Plugins.Proposed.LanguageModelInfo>>
+  GetStatusAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.Proposed.LanguageModelStatus>
+  Id { get; } : System.String
+class Codalus.Plugins.Proposed.LanguageModelStatus
+  .ctor(System.Boolean IsReady, System.String Message = null)
+  Deconstruct(ref System.Boolean IsReady, ref System.String Message) -> System.Void
+  Equals(Codalus.Plugins.Proposed.LanguageModelStatus other) -> System.Boolean
+  Equals(System.Object obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsReady { get; init; } : System.Boolean
+  Message { get; init; } : System.String
+  ToString() -> System.String
 static class Codalus.Plugins.Proposed.ProposedApiExtensions
   Proposed(Codalus.Plugins.IPluginContext context) -> Codalus.Plugins.Proposed.IProposedApi
 class Codalus.Plugins.PublishedRepository

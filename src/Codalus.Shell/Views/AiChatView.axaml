@@ -1,0 +1,42 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.AiChatView"
+             x:DataType="vm:AiChatViewModel">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button x:Name="Provider" Content="{Binding ProviderLabel}" IsVisible="{Binding IsOn}" ToolTip.Tip="{l:T aiChat.chooseTheProviderAndModel}" AutomationProperties.Name="{l:T aiChat.chooseTheProviderAndModel}" />
+      <Button x:Name="Configure" Content="{l:T aiChat.configure}" IsVisible="{Binding IsOn}" ToolTip.Tip="{l:T aiChat.enterTheProviderSKeyOr}" AutomationProperties.Name="{l:T aiChat.configureTheProvider}" />
+      <Button x:Name="NewChat" Content="{l:T aiChat.newChat}" IsVisible="{Binding HasTurns}" AutomationProperties.Name="{l:T aiChat.startANewChat}" />
+      <Button x:Name="StopButton" Content="{l:T aiChat.stop}" IsVisible="{Binding IsBusy}" AutomationProperties.Name="{l:T aiChat.stopTheAnswer}" />
+      <Button x:Name="Log" Content="{l:T aiChat.requestLog}" ToolTip.Tip="{l:T aiChat.whatWasSentAndWhenIn}" AutomationProperties.Name="{l:T aiChat.showTheRequestLog}" />
+    </controls:ToolbarPanel>
+    <StackPanel DockPanel.Dock="Top" Margin="12" Spacing="8" IsVisible="{Binding IsOff}">
+      <TextBlock Text="{Binding OffMessage}" TextWrapping="Wrap" />
+      <Button x:Name="TurnOn" Content="{l:T aiChat.turnOnAiAssistance}" AutomationProperties.Name="{l:T aiChat.turnOnAiAssistance}" HorizontalAlignment="Left" />
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom" Margin="8" Spacing="6" IsVisible="{Binding IsOn}">
+      <WrapPanel>
+        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeSelection}" Content="{l:T aiChat.selection}" AutomationProperties.Name="{l:T aiChat.sendTheSelection}" />
+        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeCurrentFile}" Content="{l:T aiChat.currentFile}" AutomationProperties.Name="{l:T aiChat.sendTheCurrentFile}" />
+        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeOpenFiles}" Content="{l:T aiChat.openFiles}" AutomationProperties.Name="{l:T aiChat.sendTheOtherOpenFiles}" />
+        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeErrors}" Content="{l:T aiChat.errors}" AutomationProperties.Name="{l:T aiChat.sendTheErrorsAndWarnings}" />
+        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeBuildOutput}" Content="{l:T aiChat.buildOutput}" AutomationProperties.Name="{l:T aiChat.sendTheLastBuildSOutput}" />
+        <ToggleButton Classes="toolbar" Margin="0,0,4,4" IsChecked="{Binding IncludeSolution}" Content="{l:T aiChat.solution}" AutomationProperties.Name="{l:T aiChat.sendTheSolutionSProjects}" />
+      </WrapPanel>
+      <TextBlock Classes="muted" Text="{Binding ContextPreview}" TextWrapping="Wrap" />
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBox x:Name="InputBox" Text="{Binding Input}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160" PlaceholderText="{l:T aiChat.askAboutYourCodeEnterSends}" AutomationProperties.Name="{l:T aiChat.question}" />
+        <Button Grid.Column="1" x:Name="Send" Margin="6,0,0,0" VerticalAlignment="Bottom" Content="{l:T aiChat.send}" IsEnabled="{Binding CanSend}" AutomationProperties.Name="{l:T aiChat.sendTheQuestion}" />
+      </Grid>
+    </StackPanel>
+    <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="8" Spacing="12">
+        <TextBlock Classes="muted" TextWrapping="Wrap" Margin="4" IsVisible="{Binding !HasTurns}" Text="{l:T aiChat.askAQuestionAboutYourSolution}" />
+        <StackPanel x:Name="TurnsPanel" Spacing="12" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

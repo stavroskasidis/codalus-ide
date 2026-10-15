@@ -106,7 +106,21 @@ internal static class ExceptionHelper
         };
         var dismiss = new Button { Content = "Close" };
         dismiss.Click += (_, _) => close();
-        panel.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { viewDetails, copy, dismiss } });
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { viewDetails, copy, dismiss } };
+        if (services.CanAskAi)
+        {
+            // M28b: the exception, its stack and the frame's code go to AI Chat.
+            var ask = new Button { Content = "Ask AI" };
+            AutomationPropertiesName(ask, "Ask AI why this exception was thrown");
+            ask.Click += (_, _) =>
+            {
+                close();
+                services.AskAiAboutException(Describe(type, message, details));
+            };
+            buttons.Children.Insert(2, ask);
+        }
+
+        panel.Children.Add(buttons);
 
         var border = new Border { Classes = { "editorHover", "exceptionHelper" }, Child = panel, Padding = new Thickness(10) };
         AutomationPropertiesName(border, "Exception helper: " + type);

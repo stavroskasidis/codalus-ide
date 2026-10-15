@@ -47,5 +47,37 @@ public static class AiSettings
             Scope = SettingScope.User,
             Order = 5,
         },
+        SettingDescriptor.Create(AiCompletions.EnabledSetting, "false", SettingType.Boolean, source) with
+        {
+            Title = "Inline Suggestions",
+            Category = "AI",
+            Description = "Suggest code as you type, shown in gray at the caret: Tab accepts, Ctrl+Right accepts a word, Esc dismisses. It sends the text around the caret to the provider as you type, so it has its own switch, off by default.",
+            Order = 10,
+        },
+        SettingDescriptor.Create(AiCompletions.ModelSetting, "\"\"", SettingType.String, source) with
+        {
+            Title = "Inline Suggestions Model",
+            Category = "AI",
+            Description = "The provider's model for inline suggestions, when it should be a faster one than the chat's. Empty: the chat's model.",
+            Scope = SettingScope.User,
+            Order = 11,
+        },
+        SettingDescriptor.Create(AiCompletions.DelaySetting, "400", SettingType.Integer, source) with
+        {
+            Title = "Inline Suggestions Delay",
+            Category = "AI",
+            Description = "How long typing pauses, in milliseconds, before a suggestion is asked for.",
+            Minimum = 100,
+            Maximum = 5000,
+            Scope = SettingScope.User,
+            Order = 12,
+        },
+        SettingDescriptor.Create(AiNextEdit.EnabledSetting, "false", SettingType.Boolean, source) with
+        {
+            Title = "Next Edit Suggestions",
+            Category = "AI",
+            Description = "After you edit, suggest the next edit nearby (the same rename further down, a matching change): the lines show highlighted with the new text beside them, Tab applies it, Esc dismisses it. It sends your recent edits and the lines around the caret, so it has its own switch, off by default.",
+            Order = 13,
+        },
     ];
 }

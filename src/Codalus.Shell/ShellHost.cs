@@ -84,7 +84,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.RemoteToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.RemoteToolWindows()).Concat(BuiltIns.AiToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -143,6 +143,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializePluginBisect();
         InitializePluginPerformance();
         InitializeComponentsPage();
+        InitializeAi();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -165,6 +166,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterProfilingCommands(this);
         BuiltIns.RegisterXamlCommands(this);
         BuiltIns.RegisterRemoteCommands(this);
+        BuiltIns.RegisterAiCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterPackageCommands(this);
@@ -182,6 +184,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterProfilingMenus(Workbench.Menus);
         BuiltIns.RegisterXamlMenus(Workbench.Menus);
         BuiltIns.RegisterRemoteMenus(Workbench.Menus);
+        BuiltIns.RegisterAiMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
         BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
         BuiltIns.RegisterProjectSystemMenus(Workbench.Menus);
@@ -486,6 +489,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             DatabaseExplorerViewModel.ToolWindowId => OpenDatabaseExplorer(),
             QueryResultsViewModel.ToolWindowId => QueryResults,
             ContainersViewModel.ToolWindowId => ContainersWindow,
+            AiChatViewModel.ToolWindowId => AiChat,
             AspireViewModel.ToolWindowId => AspireWindow,
             DiagnosticToolsViewModel.ToolWindowId => DiagnosticTools,
             CountersViewModel.ToolWindowId => CountersWindow,

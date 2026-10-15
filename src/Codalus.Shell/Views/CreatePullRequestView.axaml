@@ -20,6 +20,7 @@
       <CheckBox Content="{l:T createPullRequest.createAsADraft}" IsChecked="{Binding IsDraft}" />
       <StackPanel Orientation="Horizontal" Spacing="8">
         <Button Classes="accent" Content="{l:T createPullRequest.createPullRequest}" Command="{Binding CreateCommand}" IsEnabled="{Binding !IsBusy}" />
+        <Button Content="{l:T createPullRequest.writeWithAi}" Command="{Binding WriteWithAiCommand}" IsEnabled="{Binding !IsBusy}" IsVisible="{Binding IsEnabled, Source={x:Static l:AiUi.Current}}" AutomationProperties.Name="{l:T createPullRequest.writeTheTitleAndDescriptionWithAi}" />
         <TextBlock Text="{l:T createPullRequest.pushingTheBranchAndCreatingThe}" Classes="muted" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
       </StackPanel>
       <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
