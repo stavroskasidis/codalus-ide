@@ -367,7 +367,17 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         StopAll();
-        await _lifetime.CancelAsync().ConfigureAwait(false);
+
+        // Bounded, like the loop below: cancelling runs the notification sockets' pending reads' callbacks, which an
+        // HttpListener WebSocket on Windows can block in (a test's disposal hung there for minutes).
+        try
+        {
+            await _lifetime.CancelAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+        }
+
         try
         {
             _listener.Stop();
@@ -387,6 +397,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         }
         foreach (var socket in _sockets.Keys)
         {
+            socket.Abort(); // no closing handshake to wait for
             socket.Dispose();
         }
 
