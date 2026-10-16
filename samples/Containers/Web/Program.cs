@@ -1,6 +1,8 @@
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
+// wwwroot: in a fast-mode container, a static web asset served from the project folder mounted there.
+app.UseStaticFiles();
 app.MapGet("/", () => Greeting.For(Environment.MachineName));
 
 app.Run();

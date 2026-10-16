@@ -14,8 +14,41 @@ public sealed class ShellDockFactory : Factory
     }
 }
 
+/// <summary>
+/// What a tab shows, for tool windows and documents alike. Either can be dragged into the other kind of group, or into
+/// a floating window, and every tab strip's header template and tab style is typed to this, never to one kind: a header
+/// template that didn't match its dockable made Avalonia look further up for one, and the view locator, which matches
+/// every dockable, put the whole view in the tab (a tool window docked among the documents).
+/// </summary>
+public interface IShellTab
+{
+    string Title { get; }
+
+    /// <summary>The tab's icon (<c>kind</c> or <c>kind@Family</c>), or null for none.</summary>
+    string? TabIcon { get; }
+
+    bool HasTabIcon { get; }
+
+    /// <summary>The tab's tooltip: a document's file, a tool window's title; null for none.</summary>
+    string? TabToolTip { get; }
+
+    /// <summary>The title's style: italic for a preview tab.</summary>
+    Avalonia.Media.FontStyle TitleFontStyle { get; }
+
+    /// <summary>A preview tab (documents only).</summary>
+    bool IsPreview { get; }
+
+    /// <summary>A pinned tab (documents only).</summary>
+    bool IsPinned { get; }
+
+    /// <summary>The stripe along the tab's bottom edge (a document colored by project), or null.</summary>
+    Avalonia.Media.IBrush? TabAccent { get; }
+
+    Avalonia.Thickness TabAccentThickness { get; }
+}
+
 /// <summary>A tool window in the dock layout. Its view is chosen by the type of <see cref="Content"/>.</summary>
-public sealed class ToolWindowDockable : Tool
+public sealed class ToolWindowDockable : Tool, IShellTab
 {
     public ToolWindowDockable(ToolWindowDescriptor descriptor, object? content)
     {
@@ -41,10 +74,23 @@ public sealed class ToolWindowDockable : Tool
         : null;
 
     public bool HasTabIcon => TabIcon is not null;
+
+    public string? TabToolTip => Title;
+
+    // A tool window docked among the documents: a plain tab, never a preview, pinned or colored one.
+    public Avalonia.Media.FontStyle TitleFontStyle => Avalonia.Media.FontStyle.Normal;
+
+    public bool IsPreview => false;
+
+    public bool IsPinned => false;
+
+    public Avalonia.Media.IBrush? TabAccent => null;
+
+    public Avalonia.Thickness TabAccentThickness => default;
 }
 
 /// <summary>A document tab (Settings, Keyboard Shortcuts, a text file…).</summary>
-public abstract class ShellDocument : Document
+public abstract class ShellDocument : Document, IShellTab
 {
     private bool _closeConfirmed;
     private bool _isPreview;
@@ -104,6 +150,8 @@ public abstract class ShellDocument : Document
 
     /// <summary>The file the document shows, for its project's color (null for pages).</summary>
     public virtual string? FilePath => null;
+
+    public string? TabToolTip => FilePath;
 
     /// <summary>Whether closing must ask to save first (by default: when modified).</summary>
     protected virtual bool NeedsSaveOnClose => IsModified;

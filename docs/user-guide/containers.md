@@ -17,7 +17,7 @@ Right-click a project → **Add Docker Support** (also on the Project menu). It 
 
 Choose the **Container (Dockerfile)** launch profile (the toolbar's profile box or Project Properties), then press `Ctrl+F5` or `F5`.
 
-- **Fast mode** (the default, the **Containers → Fast Mode** setting): only the Dockerfile's `base` stage is built. Your Debug build's output is mounted into the container at `/app`, so rebuilding needs no image build. `Ctrl+F5` starts the app in the container, with its output in the Output window's **Run** channel. `F5` copies the Linux debugger into the container and starts the app under it: breakpoints, stepping and every debugger window work as for a local program.
+- **Fast mode** (the default, the **Containers → Fast Mode** setting): only the Dockerfile's `base` stage is built. Your Debug build's output is mounted into the container at `/app`, so rebuilding needs no image build; its static web assets (`wwwroot`, Razor class libraries' files) are mounted read-only too. `Ctrl+F5` starts the app in the container, with its output in the Output window's **Run** channel. `F5` copies the Linux debugger into the container and starts the app under it: breakpoints, stepping and every debugger window work as for a local program.
 - With fast mode off, the whole Dockerfile is built and the image's entry point runs; `F5` attaches to the app once it has started.
 - The container's ports are published on `127.0.0.1`: the profile's `httpPort` and `sslPort`, else free ports. With `launchBrowser`, the browser opens on `launchUrl` (`{Scheme}://{ServiceHost}:{ServicePort}` is filled in).
 - Stopping the program, or the debug session, removes the container. Image builds go to the **Container Tools** output.
@@ -62,6 +62,5 @@ Right-click a project → **Publish…** (also on the Build menu) opens its Publ
 
 - Linux containers only.
 - HTTPS inside the container (the development certificate) isn't set up; use HTTP ports.
-- In fast mode, static files of the project folder (`wwwroot`) aren't mounted.
 - Aspire: the AppHost's orchestrator needs Docker or Podman running, even when no container is started (without one, a project that waits for another with `WaitFor` never starts); only project resources are started by the IDE (containers and executables by Aspire's orchestrator); a debug session holds the AppHost and up to seven projects; in a debug session a project's output goes to the Debug Console, not to the dashboard.
 - Cloud publish targets (Azure, AWS, Google Cloud) aren't built in.

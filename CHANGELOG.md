@@ -10,6 +10,10 @@ In progress on `develop`; nightlies show these notes.
 - **A solution's state lives next to it**, like Visual Studio's `.vs`: `.codalus/state/<solution file name>/` keeps the open documents, breakpoints, Watch, startup projects, bookmarks and unloaded projects, and now also the configuration and platform, the Solution Explorer's expansion, the Error List's filters and the Test Explorer's grouping. The folder ignores itself in Git. Sessions, bookmarks and unloaded projects from earlier versions move there the first time you open the solution. A folder that can't be written keeps the state in your user data instead.
 - **Releases**: one pipeline builds, tests and releases every branch. Every push to `develop` that passes it is published as a nightly, and the website deploys only once a stable release has passed every check.
 - **Documentation**: the user guide, the website's Features page and the README cover everything up to 0.2.1.
+- **Fixed:** after dragging the bottom tool windows into a group of their own, tool windows such as the Plugin Gallery, Coverage Results and Code Metrics Results opened in a new group stacked above them. A tool window now opens as a tab where it was last closed, or in the group of its usual place.
+- **Fixed:** a tool window dragged among the documents showed its whole content in its tab. It now has a document tab with its title and icon.
+- **Fixed:** the toolbar's Hot Reload button and its arrow were a gray block; they're flat like the buttons beside them.
+- **Fixed:** the lines sticky scroll pins at the top of the editor were plain text in one color. They're drawn as in the editor, with its colors, indentation and line numbers.
 - **Fixed:** opening the first tool window on the left (such as the Start page) could leave the documents area under a third of the window, with the right pane taking over half.
 - **Fixed:** on a Mac whose home folder is on another disk than the app, **Restart to update** started the old version again and offered the same update. The update is now prepared on the app's own disk. A 0.2.1 install on such a Mac can't update past the bug itself: install this release's `.pkg` once.
 

@@ -96,7 +96,7 @@ Settings under **Text Editor** turn each of these on or off.
   - Turn these off with Text Editor → CodeLens: Git History (`editor.gitCodeLens`) and CodeLens: Test Status (`editor.testCodeLens`).
 - **Inheritance margin**: arrows in the margin of members and types that implement, override or are overridden. Click an arrow to see and open the related symbols.
 - **Navigation bar**: above the editor, the document's types and the members of the type at the caret.
-- **Sticky scroll**: the lines of the enclosing namespace, type and member stay at the top while you scroll. Click one to go there.
+- **Sticky scroll**: the lines of the enclosing namespace, type and member stay at the top while you scroll, drawn as in the editor (colors, indentation, line numbers). Click one to go there.
 - **Indentation guides** and **bracket pair colors**: matching brackets share a color by nesting depth.
 - **Overview ruler**: beside the scroll bar, marks for errors, warnings, Git changes, breakpoints, find results and the caret. Click to scroll there. The square at the top is the document's health (red: errors, yellow: warnings, green: none); click it for the next problem.
 - **Inline diagnostics** (off by default): error and warning messages at the end of their lines.

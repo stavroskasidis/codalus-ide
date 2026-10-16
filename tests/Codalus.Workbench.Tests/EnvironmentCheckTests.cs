@@ -89,8 +89,8 @@ public sealed class EnvironmentCheckTests : IDisposable
     public async Task Sdks_without_the_hosts_dotnet_are_a_mismatch_that_installs_the_hosts_channel(string runtime, bool enough)
     {
         // M30b: the hosts target the IDE's .NET (here a release candidate) and roll forward, so an older .NET alone
-        // can't start them, whatever SDKs it has.
-        var bin = Path.Combine(_dir, "bin");
+        // can't start them, whatever SDKs it has. A Linux PATH on every OS: Windows' D:\… would split at its colon.
+        const string bin = "/x/bin";
         var check = new EnvironmentCheck(PlatformKind.Linux, Env(("PATH", bin), ("HOME", "/home/u")), (_, arguments, _, _) => Task.FromResult(string.Join(' ', arguments) switch
         {
             "--list-sdks" => (0, $"10.0.401 [/x/sdk]\n"),

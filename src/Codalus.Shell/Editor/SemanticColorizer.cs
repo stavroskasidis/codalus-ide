@@ -13,6 +13,7 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
 {
     private Dictionary<int, LineToken[]> _lines = [];
     private (int Start, int End) _covered = (0, 0);
+    private HashSet<int> _pinned = [];
 
     public EditorTheme Theme { get; set; } = EditorTheme.Dark;
 
@@ -27,8 +28,39 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
             ? token.Type
             : -1;
 
-    /// <summary>Replaces the token window with LSP-encoded <paramref name="data"/> covering lines [start, end).</summary>
+    /// <summary>
+    /// Replaces the token window with LSP-encoded <paramref name="data"/> covering lines [start, end). The tokens of
+    /// pinned lines outside it are kept.
+    /// </summary>
     public void Apply(int start, int end, int[] data)
+    {
+        var lines = Parse(data);
+        foreach (var line in _pinned)
+        {
+            if ((line < start || line >= end) && _lines.TryGetValue(line, out var tokens))
+            {
+                lines[line] = tokens;
+            }
+        }
+
+        _lines = lines;
+        _covered = (start, end);
+    }
+
+    /// <summary>
+    /// The zero-based lines sticky scroll pins above the text, whose tokens outlive the window around the viewport
+    /// (a namespace or class header can be far above it).
+    /// </summary>
+    public void Pin(IEnumerable<int> lines) => _pinned = [.. lines];
+
+    /// <summary>True if the zero-based line has tokens, or lies in the window (where a line can have none).</summary>
+    public bool Knows(int line) => _lines.ContainsKey(line) || (line >= _covered.Start && line < _covered.End);
+
+    /// <summary>Adds the tokens of one zero-based <paramref name="line"/> from LSP-encoded <paramref name="data"/> (a range request for it).</summary>
+    public void ApplyLine(int line, int[] data) =>
+        _lines[line] = Parse(data).TryGetValue(line, out var tokens) ? tokens : [];
+
+    private static Dictionary<int, LineToken[]> Parse(int[] data)
     {
         var lines = new Dictionary<int, List<LineToken>>();
         int line = 0, character = 0;
@@ -44,8 +76,7 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
             list.Add(new LineToken(character, data[i + 2], data[i + 3]));
         }
 
-        _lines = lines.ToDictionary(kv => kv.Key, kv => kv.Value.ToArray());
-        _covered = (start, end);
+        return lines.ToDictionary(kv => kv.Key, kv => kv.Value.ToArray());
     }
 
     public void Clear()

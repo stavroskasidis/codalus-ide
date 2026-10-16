@@ -1113,7 +1113,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
 
         // M17a: containers (ADR 0042), where an engine runs Linux containers (GitHub's Linux runner; Podman here).
-        const string containerTitle = "A web app runs in a container through its \"Container (Dockerfile)\" profile (fast mode), answers, and the Containers window shows it";
+        const string containerTitle = "A web app runs in a container through its \"Container (Dockerfile)\" profile (fast mode), answers, serves its wwwroot, and the Containers window shows it";
         var engine = shell.ContainerEngine;
         var (engineOs, engineError) = await engine.ServerOsAsync(CancellationToken.None).ConfigureAwait(true);
         if (engineOs != "linux" && !(Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux()))
@@ -1800,8 +1800,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// </summary>
     /// <summary>
     /// Containers (M17a): samples/Containers' web app with its container profile: Ctrl+F5 builds the Dockerfile's base
-    /// stage, mounts the build output and starts the app through exec; it answers on its published port; the Containers
-    /// window lists the container with its environment; stopping the program removes the container.
+    /// stage, mounts the build output and the static web assets, and starts the app through exec; it answers on its
+    /// published port and serves wwwroot; the Containers window lists the container with its environment; stopping the
+    /// program removes the container.
     /// </summary>
     private async Task ContainerRunStepAsync()
     {
@@ -1825,6 +1826,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
             var answer = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/")).ConfigureAwait(true);
             Check(answer.StartsWith("Hello from ", StringComparison.Ordinal), "the app answers: " + answer);
+            var asset = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/hello.txt")).ConfigureAwait(true);
+            Check(asset.Trim() == "Hello from wwwroot", "the app serves wwwroot, a static web asset of the project folder: " + asset);
 
             await shell.ShowContainersAsync().ConfigureAwait(true);
             var row = shell.ContainersWindow.Containers.FirstOrDefault(c => c.Name == name);

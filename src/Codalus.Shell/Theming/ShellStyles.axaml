@@ -18,11 +18,16 @@
     <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
   </Style>
 
-  <!-- Dock tab headers show the dockable title; preview tabs in italics, pinned tabs with a pin (M34d). -->
+  <!--
+    Dock tab headers show the dockable title; preview tabs in italics, pinned tabs with a pin (M34d). The header
+    templates and tab styles are typed to IShellTab, which documents and tool windows both are, since either can be
+    dragged into the other kind of group or a floating window: a template typed to one kind didn't match the other, and
+    Avalonia's search for another found the view locator, which put the whole view in the tab.
+  -->
   <Style Selector="DocumentControl">
     <Setter Property="HeaderTemplate">
-      <DataTemplate DataType="docking:ShellDocument">
-        <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding FilePath}">
+      <DataTemplate DataType="docking:IShellTab">
+        <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding TabToolTip}">
           <controls:Icon Kind="{Binding TabIcon}" IsVisible="{Binding HasTabIcon}" Width="14" Height="14" VerticalAlignment="Center" />
           <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
           <controls:Icon Kind="pin" IsVisible="{Binding IsPinned}" Width="12" Height="12" VerticalAlignment="Center" AutomationProperties.Name="{l:T shellStyles.pinned}" />
@@ -36,7 +41,7 @@
   -->
   <Style Selector="ToolControl">
     <Setter Property="HeaderTemplate">
-      <DataTemplate DataType="docking:ToolWindowDockable">
+      <DataTemplate DataType="docking:IShellTab">
         <StackPanel Orientation="Horizontal" ToolTip.Tip="{Binding Title}">
           <controls:Icon Classes="tabIcon" Kind="{Binding TabIcon}" Width="14" Height="14" VerticalAlignment="Center"
                          IsVisible="{Binding $parent[ToolTabStripItem].(controls:FittingTabPanel.IconOnly)}" />
@@ -66,7 +71,7 @@
     A tab colored by project has a stripe along its bottom edge. Styles outrank the control theme in any state, so
     every state is restated here, in order.
   -->
-  <Style Selector="DocumentTabStripItem" x:DataType="docking:ShellDocument">
+  <Style Selector="DocumentTabStripItem" x:DataType="docking:IShellTab">
     <Setter Property="Background" Value="{DynamicResource Shell.Tab.Inactive}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Inactive.Foreground}" />
     <Setter Property="(controls:DocumentTab.IsPreview)" Value="{Binding IsPreview}" />
@@ -202,6 +207,53 @@
     <Setter Property="MinWidth" Value="{DynamicResource Shell.Size.ToolbarButton}" />
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
+  </Style>
+  <!--
+    A split button in a toolbar (the Hot Reload button and its menu's arrow) is flat like the buttons beside it: Fluent's
+    is a gray block. Its two parts are Buttons in its template that Fluent styles itself, so every state is restated on
+    their presenters: transparent, the hover color and border under the pointer or pressed or while the menu is open,
+    and transparent again when disabled. The tokens differ per theme, High Contrast included.
+  -->
+  <Style Selector="SplitButton.toolbar">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="{DynamicResource Shell.Padding.ToolbarButton}" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button#PART_PrimaryButton">
+    <Setter Property="MinWidth" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button#PART_SecondaryButton">
+    <Setter Property="MinWidth" Value="14" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="SplitButton.toolbar:pointerover /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar:flyout-open /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar:pointerover /template/ Border#SeparatorBorder, SplitButton.toolbar:flyout-open /template/ Border#SeparatorBorder">
+    <Setter Property="Background" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
   <Style Selector="ToolTip">
     <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
