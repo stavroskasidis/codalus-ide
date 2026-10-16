@@ -907,7 +907,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         WriteJson(Paths.LayoutFile, Layout.Capture(placement), ShellJsonContext.Default.LayoutSnapshot);
         WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds }, ShellJsonContext.Default.ShellState);
-        SaveEditorSession();
+        SaveEditorSession(); // next to the solution, written in the background (flushed in DisposeAsync)
     }
 
     private T? ReadJson<T>(string path, JsonTypeInfo<T> info)
@@ -943,6 +943,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
+        await FlushSolutionStateAsync().ConfigureAwait(false);
         if (SelfUpdate is not null)
         {
             await SelfUpdate.DisposeAsync().ConfigureAwait(false);

@@ -748,10 +748,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
 
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
-        await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
+        await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source; the solution closed for it keeps its session in .codalus/state", async () =>
         {
             var solution = PrepareTestingFixture();
+            var previousState = shell.SolutionStateDirectory;
             await shell.OpenSolutionAsync(solution).ConfigureAwait(true);
+            if (previousState is not null)
+            {
+                // ADR 0070: closing a solution writes its session next to it, git-ignored by the state folder's own .gitignore.
+                await shell.SolutionState.FlushAsync().ConfigureAwait(true);
+                Check(File.Exists(Path.Combine(previousState, "session.json")), $"the closed solution's session is in {previousState}");
+                Check(File.Exists(Path.Combine(Path.GetDirectoryName(previousState)!, ".gitignore")), "the state folder ignores itself in Git");
+            }
+
             shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId);
             await WaitAsync(() => TestClass("XunitV2Tests") is not null && TestClass("XunitV3Tests") is not null, "both test projects' CalculatorTests are listed", 300).ConfigureAwait(true);
             await WaitAsync(() => shell.TestExplorer.Rows.Any(r => r.Label == "XunitV3Tests"), "the Test Explorer shows them").ConfigureAwait(true);

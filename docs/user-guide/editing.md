@@ -146,7 +146,7 @@ The light bulb also offers, for each diagnostic, **Suppress with #pragma** and *
 
 ## Bookmarks and the Task List
 
-- **Bookmarks**: `Ctrl+K Ctrl+K` toggles one on the caret's line; `Ctrl+K Ctrl+N` and `Ctrl+K Ctrl+P` go to the next and previous; `Ctrl+K Ctrl+L` clears them. The Bookmarks window (View menu) lists them with their folder; `F2` names one and `Delete` removes it.
+- **Bookmarks**: `Ctrl+K Ctrl+K` toggles one on the caret's line; `Ctrl+K Ctrl+N` and `Ctrl+K Ctrl+P` go to the next and previous; `Ctrl+K Ctrl+L` clears them. The Bookmarks window (View menu) lists them with their folder; `F2` names one and `Delete` removes it. Bookmarks belong to the open solution and come back with it (in `.codalus/state/`, see [What a solution reopens with](solutions.md#what-a-solution-reopens-with)); bookmarks in files opened without a solution are kept in your user data.
 - **Task List** (View menu): the `TODO`, `HACK` and `UNDONE` comments in the solution's files, unsaved edits included. **Refresh** scans again; type to filter. The tokens are a setting (**Task List → Tokens**).
 
 ## Analysis

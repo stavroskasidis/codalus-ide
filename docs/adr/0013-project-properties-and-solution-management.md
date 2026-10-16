@@ -1,6 +1,6 @@
 # 0013. Project property pages and solution management
 
-- **Status:** accepted (M9 plan, 2026-10-09; the maintainer's standing go-ahead for M9–M16)
+- **Status:** accepted (M9 plan, 2026-10-09; the maintainer's standing go-ahead for M9–M16), amended 2026-10-16 (ADR 0070: the unloaded projects moved to `.codalus/state/<solution file name>/solution.json`)
 - **Date:** 2026-10-09
 - **Deciders:** maintainer
 
@@ -44,5 +44,5 @@ Constraints: MSBuild only runs in the build host (ADR 0004); the shell is Native
 
 - New pages and languages only add schema entries. Provenance comes from MSBuild itself, so `Directory.Build.props` hierarchies show correctly, though deep import chains show only the last definition.
 - Property writes never touch imports or SDK files; overriding an imported value is always explicit in the project file.
-- `.daedalus/solution.json` is per user and git-ignored, like the rest of `.daedalus/` state (F7).
+- `.daedalus/solution.json` is per user and git-ignored, like the rest of `.daedalus/` state (F7). Since ADR 0070 it is `.codalus/state/<solution file name>/solution.json`, in a folder that ignores itself in Git; the old file is moved there on open.
 - `TODO(issue)`: properties that aren't in the schema are reachable only by editing the project file (M26 adds a generic Properties window).

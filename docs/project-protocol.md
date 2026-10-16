@@ -123,7 +123,7 @@ Property pages, references, configurations, dependencies, load/unload, solution 
 | `solution/addConfiguration`, `solution/removeConfiguration` | `{dimension (buildType \| platform), name, copyFrom?}` | `{}` | A new one copies `copyFrom`'s project mappings. A solution keeps at least one of each. |
 | `solution/dependencies` | `{}` | `{projects: [{project, dependsOn}]}` | Explicit build dependencies of the solution file. |
 | `solution/setDependencies` | `{project, dependsOn}` | `{}` | |
-| `project/unload`, `project/reload` | `{path}` | `{}` | An unloaded project is reported with state `unloaded` and isn't evaluated, design-time built or built (solution builds use a generated `.codalus/build.slnf`). Kept in `.codalus/solution.json`. |
+| `project/unload`, `project/reload` | `{path}` | `{}` | An unloaded project is reported with state `unloaded` and isn't evaluated, design-time built or built (solution builds use a generated `.codalus/build.slnf`). Kept per user in `.codalus/state/<solution file name>/solution.json` (ADR 0070; an old `.codalus/solution.json` is moved there on open). |
 | `solution/saveFilter` | `{path, projects?}` | `{}` | Writes a `.slnf` (default: the loaded projects). |
 | `sdk/info` | `{}` | `{resolvedSdk?, resolvedVersion?, globalJson?, requestedVersion?, rollForward?, sdks: [{version, path}], workloads: [{id, version, source}], error?}` | `dotnet --list-sdks`, `dotnet workload list`, the `global.json` in effect and the SDK this host runs. |
 | `sdk/setGlobalJson` | `{version?, rollForward?}` | `{}` | Writes `sdk.version`/`sdk.rollForward` of the `global.json` in effect (or one next to the solution); `version` null removes the pin. The shell reopens the solution so a new host picks the SDK. |
