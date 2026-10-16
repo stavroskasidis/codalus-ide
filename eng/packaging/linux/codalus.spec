@@ -16,12 +16,12 @@ AutoReqProv:    no
 Requires:       git
 Requires:       libicu
 Requires:       fontconfig
-Recommends:     dotnet-sdk-10.0
+Recommends:     dotnet-sdk-11.0
 
 %description
 Codalus IDE is an MIT-licensed .NET IDE with solutions, C# language
 services, build and run, debugging on netcoredbg, and Git. It needs the
-.NET SDK to open and build solutions.
+.NET SDK to open and build solutions, and .NET 11 or later for its hosts.
 
 %install
 mkdir -p %{buildroot}/opt %{buildroot}%{_bindir} %{buildroot}%{_datadir}/applications %{buildroot}%{_datadir}/icons/hicolor/256x256/apps

@@ -20,7 +20,7 @@ public sealed class MarkupHostTests : IAsyncLifetime
     private static string Metadata(string key) =>
         typeof(MarkupHostTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
 
-    private static string HostPath => Path.Combine(Metadata("CodalusRepoRoot"), "src", "Codalus.Markup.Host", "bin", Metadata("CodalusConfiguration"), "net10.0", "codalus-markuphost.dll");
+    private static string HostPath => Path.Combine(Metadata("CodalusRepoRoot"), "src", "Codalus.Markup.Host", "bin", Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-markuphost.dll");
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token).Token;
@@ -41,7 +41,7 @@ public sealed class MarkupHostTests : IAsyncLifetime
         _servers.Register(new LanguageServiceDescriptor("markup", "Markup", [], null, () => ProcessLaunchInfo.FromPath(HostPath))
         {
             Languages = MarkupHostLaunch.Languages,
-            InitializationOptions = System.Text.Json.JsonDocument.Parse("""{ "schemaDownload": false }""").RootElement.Clone(),
+            InitializationOptions = System.Text.Json.JsonElement.Parse("""{ "schemaDownload": false }"""),
         });
         _service = new LanguageService(_servers, _solutions, languages: _languages)
         {
@@ -228,7 +228,7 @@ public sealed class MarkupHostTests : IAsyncLifetime
 
         // The xml.schemas association: a file that names no schema is validated by its path.
         var (catalog, _, client) = await OpenAsync(Path.Combine("data", "catalog.book"), "<book><title>B</title></book>");
-        await client.ConfigureAsync(System.Text.Json.JsonDocument.Parse($$"""{ "xmlSchemas": [ { "pattern": "**/*.book", "schema": {{System.Text.Json.JsonSerializer.Serialize(Path.Combine(_root, "book.xsd"))}} } ] }""").RootElement, ct);
+        await client.ConfigureAsync(System.Text.Json.JsonElement.Parse($$"""{ "xmlSchemas": [ { "pattern": "**/*.book", "schema": {{System.Text.Json.JsonSerializer.Serialize(Path.Combine(_root, "book.xsd"))}} } ] }"""), ct);
         diagnostics = await DiagnosticsAsync(catalog, d => d.Any(x => x.Code == "xml.schema"), ct);
         Assert.Contains(diagnostics, d => d.Message.Contains("pages", StringComparison.Ordinal) || d.Message.Contains("isbn", StringComparison.Ordinal));
     }

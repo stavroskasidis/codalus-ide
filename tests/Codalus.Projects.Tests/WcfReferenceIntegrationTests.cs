@@ -20,7 +20,7 @@ public sealed class WcfReferenceIntegrationTests : IAsyncLifetime
     private readonly OutputService _output = new();
     private SolutionService _solutions = null!;
 
-    internal static string FakeSvcutil => Path.Combine(BuildHostIntegrationTests.RepoRoot, "tests", "Codalus.Svcutil.Fake", "bin", BuildHostIntegrationTests.Configuration, "net10.0", "codalus-fake-svcutil.dll");
+    internal static string FakeSvcutil => Path.Combine(BuildHostIntegrationTests.RepoRoot, "tests", "Codalus.Svcutil.Fake", "bin", BuildHostIntegrationTests.Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-fake-svcutil.dll");
 
     private string Fixture => Path.Combine(_root, "Wcf");
 

@@ -9,7 +9,7 @@ namespace Codalus.Shell.Tests;
 /// <summary>Fonts and Colors (M23a): the user's colors over a theme, in VS Code's settings shape.</summary>
 public sealed class ColorCustomizationTests
 {
-    private static JsonElement Json(string text) => JsonDocument.Parse(text).RootElement.Clone();
+    private static JsonElement Json(string text) => JsonElement.Parse(text);
 
     [Theory]
     [InlineData("#abc", 0xFFAABBCCu)]

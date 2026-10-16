@@ -186,7 +186,8 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
 
             shell.Tests.Changed += OnChanged;
             var run = shell.RunTestsAsync(Workbench.Testing.TestRunKind.Run, [target.Key]);
-            if (await Task.WhenAny(first.Task, Task.Delay(TimeSpan.FromMinutes(5))).ConfigureAwait(true) == first.Task)
+            await ((Task)first.Task).WaitAsync(TimeSpan.FromMinutes(5)).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            if (first.Task.IsCompleted)
             {
                 BenchEvents.Emit(BenchEventNames.TestFirstResult, "elapsed_us", (long)Stopwatch.GetElapsedTime(requested).TotalMicroseconds);
             }
@@ -240,7 +241,8 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
             var requested = Stopwatch.GetTimestamp();
             vm.Search = query;
             _ = vm.SearchNowAsync();
-            if (await Task.WhenAny(loaded.Task, Task.Delay(TimeSpan.FromSeconds(60))).ConfigureAwait(true) == loaded.Task)
+            await ((Task)loaded.Task).WaitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            if (loaded.Task.IsCompleted)
             {
                 var arrived = loaded.Task.Result;
                 await RenderedAsync(window).ConfigureAwait(true);
@@ -291,7 +293,8 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
             shell.Solutions.CompilerInputsChanged += OnInputs;
             var started = Stopwatch.GetTimestamp();
             details.InstallCommand.Execute(null);
-            if (await Task.WhenAny(done.Task, Task.Delay(TimeSpan.FromMinutes(5))).ConfigureAwait(true) == done.Task)
+            await ((Task)done.Task).WaitAsync(TimeSpan.FromMinutes(5)).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            if (done.Task.IsCompleted)
             {
                 BenchEvents.Emit(
                     BenchEventNames.PackageInstall,
@@ -581,7 +584,8 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
             session.Terminal.Changed += OnChanged;
             var t0 = Stopwatch.GetTimestamp();
             session.Write("x");
-            if (await Task.WhenAny(echoed.Task, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(true) == echoed.Task)
+            await ((Task)echoed.Task).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            if (echoed.Task.IsCompleted)
             {
                 await RenderedAsync(window).ConfigureAwait(true);
                 BenchEvents.Emit(BenchEventNames.TerminalEcho, "latency_us", (long)Stopwatch.GetElapsedTime(t0).TotalMicroseconds);

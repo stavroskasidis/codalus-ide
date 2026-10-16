@@ -104,7 +104,7 @@ Packages are managed in the [NuGet Package Manager](packages.md).
 
 ## .NET SDKs
 
-A solution loads and builds with the same SDK as `dotnet build` in its folder: the one its `global.json` asks for, or else the newest one installed, previews included. A .NET 11 solution gets the .NET 11 SDK, while Codalus itself runs on .NET 10.
+A solution loads and builds with the same SDK as `dotnet build` in its folder: the one its `global.json` asks for, or else the newest one installed, previews included. Codalus itself runs on .NET 11, and loads older SDKs (a `global.json` that pins 10.0.401, say) on it. A preview SDK of a newer .NET (12) gets that .NET's runtime.
 
 **.NET SDKs…** (Project menu) shows:
 - the SDK the solution builds with, and the `global.json` that chose it;
@@ -116,9 +116,9 @@ SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own p
 
 **Use This SDK** pins the selected SDK in `global.json` (with the roll-forward policy you choose) and reloads the solution with it. **Remove Pin** takes the version out again.
 
-**Known gaps with .NET 11** (until Codalus moves to .NET 11 itself, when .NET 11 is released):
-- **Razor:** the .NET 11 SDK's Razor generator needs a newer C# compiler than Codalus has. Codalus uses the Razor generator of the .NET 10 SDK instead, also for `net11.0` projects, so keep the .NET 10 SDK installed. The Output window (Language Services) says which one is used.
-- **C# 15:** new C# 15 syntax shows errors in the editor, although it builds.
+**.NET 11 and C# 15:** the C# language service uses the .NET 11 SDK's compiler, so C# 15 (unions, collection expression arguments, labeled `break` and `continue`) shows no false errors, and the .NET 11 SDK's Razor generator runs in the editor.
+
+**Generators built for a newer compiler:** when a newer SDK's analyzers or source generators (the Razor generator of a .NET 12 preview, say) need a newer C# compiler than Codalus has, Codalus loads the same ones from the newest other installed SDK that it can load, and the Output window (Language Services) says so.
 
 ## New projects and solutions
 

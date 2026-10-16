@@ -117,7 +117,7 @@ internal static class DiagnosticsPort
     {
         var self = Environment.ProcessId;
         var processes = new List<DotnetProcess>();
-        foreach (var id in DiagnosticsClient.GetPublishedProcesses().Distinct())
+        foreach (var id in PublishedProcesses())
         {
             if (id == self || id == parent)
             {
@@ -144,6 +144,52 @@ internal static class DiagnosticsPort
         return [.. processes.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Id)];
     }
 
+    /// <summary>
+    /// The ids of the processes with a diagnostics port. The client library's list reads every process's
+    /// <c>/proc/&lt;pid&gt;/environ</c> on Linux and throws when one exits during the scan (or can't be read, as in a
+    /// sandbox), which a busy machine makes common: it's asked again, and then the ports are listed directly.
+    /// </summary>
+    internal static IReadOnlyList<int> PublishedProcesses()
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                return [.. DiagnosticsClient.GetPublishedProcesses().Distinct()];
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A process ended while the client read it: ask again.
+            }
+        }
+
+        return ListedPorts(OperatingSystem.IsWindows() ? @"\\.\pipe\" : Path.GetTempPath());
+    }
+
+    /// <summary>The process ids of the diagnostics ports in <paramref name="folder"/>: <c>dotnet-diagnostic-{pid}</c> pipes, <c>dotnet-diagnostic-{pid}-{key}-socket</c> sockets.</summary>
+    internal static IReadOnlyList<int> ListedPorts(string folder)
+    {
+        const string Prefix = "dotnet-diagnostic-";
+        var ids = new SortedSet<int>();
+        try
+        {
+            foreach (var path in Directory.EnumerateFiles(folder, Prefix + "*"))
+            {
+                var name = Path.GetFileName(path.AsSpan())[Prefix.Length..];
+                var end = name.IndexOf('-');
+                if (int.TryParse(end < 0 ? name : name[..end], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) && id > 0)
+                {
+                    ids.Add(id);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // No folder to list: no processes.
+        }
+
+        return [.. ids];
+    }
 
     private static string? CommandLine(int id)
     {

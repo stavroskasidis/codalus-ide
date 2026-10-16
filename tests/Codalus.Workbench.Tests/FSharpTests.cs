@@ -112,6 +112,13 @@ public sealed class FSharpTests : IDisposable
         Assert.EndsWith("fsautocomplete.dll", Assert.Single(launch.Arguments), StringComparison.Ordinal);
         Assert.EndsWith(Path.PathSeparator + tools.FantomasFolder, launch.Environment!["PATH"], StringComparison.Ordinal); // a local or global Fantomas comes first
         Assert.Equal(Path.Combine(_root, "sdk"), launch.Environment["DOTNET_ROOT"]);
+        Assert.False(launch.Environment.ContainsKey("DOTNET_ROLL_FORWARD")); // no SDK newer than its net10.0 build
+        Assert.Equal(10, FSharpTools.ToolMajor(Assert.Single(launch.Arguments)));
+
+        // With a newer .NET's SDK (M30b: .NET 11's release candidate), FsAutoComplete rolls forward to its runtime.
+        Directory.CreateDirectory(Path.Combine(_root, "sdk", "sdk", "11.0.100-rc.2.26504.105"));
+        var rolled = tools.Launch()!.Environment!;
+        Assert.Equal(("LatestMajor", "1"), (rolled["DOTNET_ROLL_FORWARD"], rolled["DOTNET_ROLL_FORWARD_TO_PRERELEASE"]));
 
         // Installed once.
         await tools.EnsureAsync(null, TestContext.Current.CancellationToken);

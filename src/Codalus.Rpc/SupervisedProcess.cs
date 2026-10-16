@@ -257,7 +257,8 @@ public sealed class SupervisedProcess : IAsyncDisposable
 
         if (process is not null)
         {
-            if (await Task.WhenAny(process.Exited, Task.Delay(2000)).ConfigureAwait(false) != process.Exited)
+            await ((Task)process.Exited).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            if (!process.Exited.IsCompleted)
             {
                 process.Kill();
             }

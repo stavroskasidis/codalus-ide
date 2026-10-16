@@ -67,11 +67,14 @@ public sealed class ProfilerShellTests
         Assert.True(File.Exists(session.CountersPath));
         Assert.Equal(ProfilerSession.LaunchTarget, session.Target);
 
-        // The views: the hot function among the first (a busy runner can rank the runtime's GC polling above it), its
-        // callers, the flame graph, the counters.
-        var hot = report.Functions.Take(3).FirstOrDefault(fn => fn.Name.Contains("Primes.IsPrime", StringComparison.Ordinal));
-        Assert.True(hot is not null, "Primes.IsPrime isn't among the first functions: " + string.Join(", ", report.Functions.Take(5).Select(fn => fn.Name)));
-        Assert.Contains(report.BottomUp.Take(3), node => node.Name.Contains("Primes.IsPrime", StringComparison.Ordinal));
+        // The views: the hot function first among the app's own (on a loaded runner the samples land on the runtime's
+        // safe points, so Stopwatch, Sleep and wait frames of the other threads can rank above it overall), its callers,
+        // the flame graph, the counters.
+        static bool Own(string name) => name.StartsWith("CpuBound.", StringComparison.Ordinal);
+        var hot = report.Functions.FirstOrDefault(fn => Own(fn.Name));
+        Assert.True(hot is not null && hot.Name.Contains("Primes.IsPrime", StringComparison.Ordinal),
+            "Primes.IsPrime isn't the app's hottest function: " + string.Join(", ", report.Functions.Take(8).Select(fn => fn.Name)));
+        Assert.Contains("Primes.IsPrime", report.BottomUp.FirstOrDefault(node => Own(node.Name))?.Name ?? "(none)", StringComparison.Ordinal);
         Assert.Contains(report.Functions, fn => fn.Name.Contains("<Main>$", StringComparison.Ordinal)); // from launch: startup included
         report.SelectedFunction = hot;
         await ShellFixture.PumpUntil(() => report.Callers.Count > 0);

@@ -21,7 +21,7 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
 {
     private const int MaxChildren = 100;
     private static readonly StringComparer s_paths = OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
-    private static readonly JsonElement s_empty = JsonDocument.Parse("{}").RootElement.Clone();
+    private static readonly JsonElement s_empty = JsonElement.Parse("{}");
 
     private readonly object _gate = new();
     private readonly Dictionary<string, List<BreakpointState>> _breakpoints = new(s_paths);

@@ -22,7 +22,7 @@ public sealed class LspBridgeTests : IAsyncLifetime
     private static string Metadata(string key) =>
         typeof(LspBridgeTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
 
-    private static string ServerPath => Path.Combine(Metadata("CodalusRepoRoot"), "tests", "Codalus.LspConformance.Server", "bin", Metadata("CodalusConfiguration"), "net10.0", "codalus-lsp-conformance.dll");
+    private static string ServerPath => Path.Combine(Metadata("CodalusRepoRoot"), "tests", "Codalus.LspConformance.Server", "bin", Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-lsp-conformance.dll");
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token).Token;
@@ -39,7 +39,7 @@ public sealed class LspBridgeTests : IAsyncLifetime
         });
         _service = new LanguageService(_servers, _solutions, languages: _languages)
         {
-            SettingsProvider = section => section == "conformance" ? JsonDocument.Parse("""{ "mode": "strict" }""").RootElement.Clone() : null,
+            SettingsProvider = section => section == "conformance" ? JsonElement.Parse("""{ "mode": "strict" }""") : null,
         };
         return ValueTask.CompletedTask;
     }
@@ -144,6 +144,6 @@ public sealed class LspBridgeTests : IAsyncLifetime
         // A full-sync server gets the whole text on edits: fixing the line clears the diagnostic.
         text = "alpha = 1\nbroken = 2\n";
         await _service.ChangeAsync(path, 2, [new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(1, 6), new Position(1, 6)), " = 2")]);
-        await WaitUntil(() => !_service.Diagnostics.For(path).Any(), ct);
+        await WaitUntil(() => _service.Diagnostics.For(path).Count == 0, ct);
     }
 }

@@ -86,7 +86,7 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
         }
     }
 
-    private string HelloOutput => Path.Combine(Fixture, "src", "Hello", "bin", "Debug", "net10.0");
+    private string HelloOutput => Path.Combine(Fixture, "src", "Hello", "bin", "Debug", "net11.0");
 
     [Fact]
     public async Task Building_the_solution_restores_compiles_and_reports_errors_in_the_error_list()
@@ -151,7 +151,7 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
 
         var (info, profiles, error) = await runs.GetProfilesAsync(HelloProject, Timeout());
         Assert.Null(error);
-        Assert.Equal("net10.0", info.TargetFramework);
+        Assert.Equal("net11.0", info.TargetFramework);
         Assert.NotNull(info.RunCommand);
         Assert.Equal(["Hello", "Fails", "IIS Express"], profiles.Select(p => p.Name));
 

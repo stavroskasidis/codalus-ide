@@ -150,7 +150,7 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
     {
         Assert.SkipWhen(RemoteFixture.WslDistribution is null, "No WSL distribution with .NET (Windows; CODALUS_TEST_WSL).");
         var distribution = RemoteFixture.WslDistribution!;
-        var info = new Codalus.Projects.Protocol.RunInfo(Path.Combine(debuggee.Folder, "Debuggee.csproj"), "net10.0", "Exe", debuggee.Dll, null, null, null, null);
+        var info = new Codalus.Projects.Protocol.RunInfo(Path.Combine(debuggee.Folder, "Debuggee.csproj"), "net11.0", "Exe", debuggee.Dll, null, null, null, null);
         var profile = new LaunchProfile("WSL", LaunchProfile.Wsl, CommandLineArgs: "--depth", DistributionName: distribution, EnvironmentVariables: new Dictionary<string, string> { ["GREETING"] = "from WSL" });
         var plan = LaunchPlanner.Plan(info, profile);
         Assert.Equal("wsl.exe", plan.FileName);
@@ -211,7 +211,7 @@ public sealed class RemoteTests(DebuggeeFixture debuggee) : IClassFixture<Debugg
         [
             .. tool.Skip(1), "run", "-d", "--rm", "--name", name,
             "-v", dotnetRoot + ":/dotnet:ro", "-v", app + ":/app:ro", "-e", "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1",
-            RemoteFixture.Image, "/dotnet/dotnet", "/app/bin/Debug/net10.0/Debuggee.dll", "--wait-for", "/tmp/go",
+            RemoteFixture.Image, "/dotnet/dotnet", "/app/bin/Debug/net11.0/Debuggee.dll", "--wait-for", "/tmp/go",
         ], 120);
         Assert.True(run.Code == 0, run.Output);
         var target = new ContainerTarget(name, tool) { Home = TestHome };

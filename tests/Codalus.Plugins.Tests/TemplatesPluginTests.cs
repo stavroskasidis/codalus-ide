@@ -109,7 +109,7 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
     private WorkbenchServices _workbench = null!;
     private PluginManager _manager = null!;
 
-    private static string TemplatesDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.Templates", "bin", PluginHostIntegrationTests.Configuration, "net10.0");
+    private static string TemplatesDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.Templates", "bin", PluginHostIntegrationTests.Configuration, Codalus.Tests.RepoBuild.TargetFramework);
 
     public ValueTask InitializeAsync()
     {

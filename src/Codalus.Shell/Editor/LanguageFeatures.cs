@@ -147,19 +147,27 @@ public static partial class LanguageFeatures
                 startRegex = endRegex = NeverMatches();
             }
 
-            for (var number = 1; number <= lineCount; number++)
+            try
             {
-                var line = document.GetLineByNumber(number);
-                var text = document.GetText(line);
-                if (startRegex.IsMatch(text))
+                for (var number = 1; number <= lineCount; number++)
                 {
-                    stack.Push(line);
+                    var line = document.GetLineByNumber(number);
+                    var text = document.GetText(line);
+                    if (startRegex.IsMatch(text))
+                    {
+                        stack.Push(line);
+                    }
+                    else if (endRegex.IsMatch(text) && stack.Count > 0)
+                    {
+                        var open = stack.Pop();
+                        foldings.Add(new NewFolding(open.EndOffset, line.EndOffset) { Name = document.GetText(open).Trim() });
+                    }
                 }
-                else if (endRegex.IsMatch(text) && stack.Count > 0)
-                {
-                    var open = stack.Pop();
-                    foldings.Add(new NewFolding(open.EndOffset, line.EndOffset) { Name = document.GetText(open).Trim() });
-                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // A marker pattern over its budget (or a thread paused mid-match on a busy machine): the regions found
+                // so far stay, and the indentation blocks below still fold.
             }
         }
 

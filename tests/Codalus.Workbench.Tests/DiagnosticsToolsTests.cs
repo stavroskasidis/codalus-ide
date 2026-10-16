@@ -393,7 +393,10 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
         // samples at all (the Windows runner), which still compares.
         Assert.True(result.BaselineTotal > 0, $"the CpuBound baseline has samples ({result.BaselineTotal}, AsyncHeavy {result.Total})");
         var isPrime = result.Functions.First(f => f.Name.Contains("Primes.IsPrime", StringComparison.Ordinal));
-        Assert.True(isPrime.BaselineSelf > 0.2, $"{isPrime.BaselineSelf:P0}");
+        // The baseline's hottest among CpuBound's own functions (a loaded runner can rank runtime frames above it).
+        var own = result.Functions.Where(f => f.Module == "CpuBound").ToList();
+        Assert.True(isPrime.BaselineSelf > 0 && own.All(f => f.BaselineSelf <= isPrime.BaselineSelf),
+            string.Join(", ", own.OrderByDescending(f => f.BaselineSelf).Take(5).Select(f => $"{f.Name} {f.BaselineSelf:P0}")));
         Assert.Equal(0, isPrime.Self);
         Assert.True(isPrime.Delta < 0);
         Assert.True(result.Functions.Zip(result.Functions.Skip(1)).All(p => Math.Abs(p.First.Delta) >= Math.Abs(p.Second.Delta)), "the largest changes first");

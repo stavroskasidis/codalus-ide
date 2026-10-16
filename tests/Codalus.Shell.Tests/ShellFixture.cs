@@ -24,18 +24,18 @@ internal sealed class ShellFixture : IAsyncDisposable
     {
         UserData = userData;
         Environment.SetEnvironmentVariable("HISTFILE", "/dev/null"); // the tests' terminals keep no history in the real home
-        Environment.SetEnvironmentVariable("CODALUS_PLUGINHOST", Path.Combine(RepoRoot, "src", "Codalus.Plugins.Host", "bin", Configuration, "net10.0", "codalus-pluginhost.dll"));
-        Environment.SetEnvironmentVariable("CODALUS_BUILDHOST", Path.Combine(RepoRoot, "src", "Codalus.Projects.Host", "bin", Configuration, "net10.0", "codalus-buildhost.dll"));
-        Environment.SetEnvironmentVariable("CODALUS_LSHOST", Path.Combine(RepoRoot, "src", "Codalus.LanguageServices.Host", "bin", Configuration, "net10.0", "codalus-lshost.dll"));
-        Environment.SetEnvironmentVariable("CODALUS_MARKUPHOST", Path.Combine(RepoRoot, "src", "Codalus.Markup.Host", "bin", Configuration, "net10.0", "codalus-markuphost.dll"));
-        Environment.SetEnvironmentVariable("CODALUS_REPLHOST", Path.Combine(RepoRoot, "src", "Codalus.Interactive.Host", "bin", Configuration, "net10.0", "codalus-replhost.dll"));
-        Environment.SetEnvironmentVariable("CODALUS_DATAHOST", Path.Combine(RepoRoot, "src", "Codalus.Data.Host", "bin", Configuration, "net10.0", "codalus-datahost.dll"));
-        Environment.SetEnvironmentVariable("CODALUS_T4HOST", Path.Combine(RepoRoot, "src", "Codalus.TextTemplating.Host", "bin", Configuration, "net10.0", "codalus-t4host.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_PLUGINHOST", Path.Combine(RepoRoot, "src", "Codalus.Plugins.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-pluginhost.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_BUILDHOST", Path.Combine(RepoRoot, "src", "Codalus.Projects.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-buildhost.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_LSHOST", Path.Combine(RepoRoot, "src", "Codalus.LanguageServices.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-lshost.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_MARKUPHOST", Path.Combine(RepoRoot, "src", "Codalus.Markup.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-markuphost.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_REPLHOST", Path.Combine(RepoRoot, "src", "Codalus.Interactive.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-replhost.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_DATAHOST", Path.Combine(RepoRoot, "src", "Codalus.Data.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-datahost.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_T4HOST", Path.Combine(RepoRoot, "src", "Codalus.TextTemplating.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-t4host.dll"));
         Environment.SetEnvironmentVariable("CODALUS_TRASH_DIR", Path.Combine(userData, "trash"));
-        Environment.SetEnvironmentVariable("CODALUS_STARTUP_HOOK", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, "net10.0", "Codalus.Debugging.StartupHook.dll"));
-        Environment.SetEnvironmentVariable("CODALUS_DEBUGHOST", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, "net10.0", "codalus-debughost.dll"));
-        Environment.SetEnvironmentVariable("CODALUS_DIAGHOST", Path.Combine(RepoRoot, "src", "Codalus.Diagnostics.Host", "bin", Configuration, "net10.0", "codalus-diaghost.dll"));
-        Environment.SetEnvironmentVariable("CODALUS_PREVIEWER_AGENT", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, "net10.0", "Codalus.Previewer.Agent.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_STARTUP_HOOK", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "Codalus.Debugging.StartupHook.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_DEBUGHOST", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-debughost.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_DIAGHOST", Path.Combine(RepoRoot, "src", "Codalus.Diagnostics.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-diaghost.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_PREVIEWER_AGENT", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "Codalus.Previewer.Agent.dll"));
 
         // Hosting tokens stay in this process: the tests never touch the OS credential store (M13b).
         Environment.SetEnvironmentVariable(Codalus.Platform.Credentials.CredentialStore.EnvironmentVariable, "memory");
@@ -70,7 +70,7 @@ internal sealed class ShellFixture : IAsyncDisposable
     internal static string RepoRoot => Metadata("CodalusRepoRoot");
 
     /// <summary>A built-in plugin's build output (a folder with its manifest).</summary>
-    public static string PluginBin(string project) => Path.Combine(RepoRoot, "src", "Plugins", project, "bin", Configuration, "net10.0");
+    public static string PluginBin(string project) => Path.Combine(RepoRoot, "src", "Plugins", project, "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework);
 
     internal static string Configuration => Metadata("CodalusConfiguration");
 

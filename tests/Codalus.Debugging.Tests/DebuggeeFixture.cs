@@ -12,7 +12,7 @@ public sealed class DebuggeeFixture : IAsyncLifetime
 
     public string Folder => Path.Combine(_root, "Debugging", "Debuggee");
 
-    public string Dll => Path.Combine(Folder, "bin", "Debug", "net10.0", "Debuggee.dll");
+    public string Dll => Path.Combine(Folder, "bin", "Debug", "net11.0", "Debuggee.dll");
 
     public string Program => Path.Combine(Folder, "Program.cs");
 

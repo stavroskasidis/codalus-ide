@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -363,9 +364,10 @@ public sealed class LanguageRegistry
 
     private static bool Glob(string pattern, string name)
     {
-        // *, ? and literal text; a pattern with a path separator matches the file name only by its last segment.
+        // *, ? and literal text; a pattern with a path separator matches the file name only by its last segment. No
+        // regular expression: its 100 ms match timeout could throw RegexMatchTimeoutException (a TimeoutException) out
+        // of opening a file (ShellHost.Track) when a busy machine paused the thread mid-match.
         var last = pattern.Replace('\\', '/').Split('/')[^1];
-        var regex = "^" + Regex.Escape(last).Replace("\\*", ".*", StringComparison.Ordinal).Replace("\\?", ".", StringComparison.Ordinal) + "$";
-        return Regex.IsMatch(name, regex, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100));
+        return FileSystemName.MatchesSimpleExpression(last, name, ignoreCase: true);
     }
 }

@@ -2,14 +2,15 @@
 
 ## Prerequisites
 
-- **The .NET SDK**, 10.0 or newer; .NET 11 works too, release candidates included. Codalus IDE loads and builds solutions with the SDK's MSBuild, so it must be installed for any solution you open. It must also match the version a `global.json` asks for.
-  - Older SDKs pinned in `global.json`, down to 2.1.200, work as long as .NET 10 or newer is also installed: Codalus' helper processes run on it (see [Older .NET versions](dotnet-versions.md)).
+- **The .NET 11 SDK** (release candidate 2 or later until .NET 11 is released in November 2026). Codalus IDE runs its helper processes on .NET 11 or newer, and loads and builds solutions with the SDK's MSBuild, so an SDK must be installed for any solution you open. It must also match the version a `global.json` asks for.
+  - Other SDKs work next to it: .NET 10's, and older ones pinned in `global.json` down to 2.1.200 (see [Older .NET versions](dotnet-versions.md)). On their own, without .NET 11 or newer, they can't start Codalus' helper processes.
+  - Projects need the runtimes they target to run and debug, as with `dotnet run`: install .NET 10's runtime (or SDK) for `net10.0` projects.
 - **git** (2.30 or newer) on the `PATH`, for the Git features.
 - A 64-bit OS: Windows 11 (x64); macOS 15 or newer on Apple silicon (the macOS versions .NET supports); or a current Linux distribution (x64 or arm64) with X11, or Wayland through XWayland.
 
 The debugger (netcoredbg) is included in the packages.
 
-**Missing something?** When Codalus IDE starts without the .NET SDK or git, it offers to install them. When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
+**Missing something?** When Codalus IDE starts without the .NET SDK or git, it offers to install them, and the same when only SDKs older than .NET 11 are installed (it installs the .NET 11 SDK). When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
 - **What's found**: Help → Check Environment lists every tool it uses, with its version, its path and what needs it: the .NET SDK, git and Git LFS, Docker or Podman, and WSL on Windows.
 - **How it installs**:
   - Windows: winget, or the download page when winget isn't there.

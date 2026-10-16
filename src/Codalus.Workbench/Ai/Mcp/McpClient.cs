@@ -147,7 +147,7 @@ public sealed class McpClient : IAsyncDisposable
                     if (tool.TryGetProperty("name", out var name) && name.GetString() is { Length: > 0 } toolName)
                     {
                         var description = tool.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
-                        var schema = tool.TryGetProperty("inputSchema", out var s) ? s.Clone() : JsonDocument.Parse("""{"type":"object"}""").RootElement.Clone();
+                        var schema = tool.TryGetProperty("inputSchema", out var s) ? s.Clone() : JsonElement.Parse("""{"type":"object"}""");
                         tools.Add(new McpTool(toolName, description, schema));
                     }
                 }
@@ -166,7 +166,7 @@ public sealed class McpClient : IAsyncDisposable
         {
             w.WriteString("name", tool);
             w.WritePropertyName("arguments");
-            (arguments.ValueKind == JsonValueKind.Object ? arguments : JsonDocument.Parse("{}").RootElement).WriteTo(w);
+            (arguments.ValueKind == JsonValueKind.Object ? arguments : JsonElement.Parse("{}")).WriteTo(w);
         }, cancellationToken).ConfigureAwait(false);
         var text = new StringBuilder();
         if (result.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)

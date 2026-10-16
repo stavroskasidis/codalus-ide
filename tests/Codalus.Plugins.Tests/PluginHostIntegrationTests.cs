@@ -24,7 +24,7 @@ public sealed class PluginHostIntegrationTests : IAsyncLifetime
 
     internal static string Configuration => Metadata("CodalusConfiguration");
 
-    internal static string HostAssembly => Path.Combine(RepoRoot, "src", "Codalus.Plugins.Host", "bin", Configuration, "net10.0", "codalus-pluginhost.dll");
+    internal static string HostAssembly => Path.Combine(RepoRoot, "src", "Codalus.Plugins.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-pluginhost.dll");
 
     internal static string HelloWorldDir => Path.Combine(RepoRoot, "samples", "plugins", "HelloWorld", "bin", Configuration, "net10.0");
 

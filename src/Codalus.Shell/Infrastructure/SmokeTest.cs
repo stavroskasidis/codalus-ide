@@ -374,7 +374,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => greeter.Insights.EndOfLineText(classLine)?.Contains("reference", StringComparison.Ordinal) == true, "CodeLens counts Greeter's references", 60).ConfigureAwait(true);
             await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 30).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
-            await WaitAsync(() => shell.DocumentOutline.Roots.Any(), "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
+            await WaitAsync(() => shell.DocumentOutline.Roots.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
             shell.Layout.CloseToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId);
         }, "language.ready").ConfigureAwait(true);
 
@@ -1519,7 +1519,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// <summary>Remote attach (M14c): the Debuggee waits on the target, the debugger attaches there, stops, and detaches.</summary>
     private async Task DebugRemoteStepAsync(RemoteTarget target)
     {
-        var dll = Path.Combine(Sessions, "Debuggee", "bin", "Debug", "net10.0", "Debuggee.dll");
+        var dll = Path.Combine(Sessions, "Debuggee", "bin", "Debug", "net11.0", "Debuggee.dll");
         Check(File.Exists(dll), "the Debuggee was built by debug.compound");
         var signal = "/tmp/codalus-smoke-" + Guid.NewGuid().ToString("N")[..8];
         Process program;
@@ -2159,8 +2159,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => Report() is { IsLoading: false, Total: > 0 } r && (r.HotFiles.Count > 0 || r.HasError), "the report shows the trace with its source lines", 300).ConfigureAwait(true);
         var report = Report()!;
         Check(!report.HasError, "the trace was read: " + report.Error);
-        // A busy machine (a CI runner) can put the runtime's GC polling above it: the hot function is among the first.
-        Check(report.Functions.Take(3).Any(f => f.Name.Contains("Primes.IsPrime", StringComparison.Ordinal)), "the hot function is among the first: " + string.Join(", ", report.Functions.Take(3).Select(f => f.Name)));
+        // The hot function is the app's hottest: on a busy machine (a CI runner) the samples land on the runtime's safe
+        // points, so Stopwatch, Sleep and wait frames of the other threads can rank above it overall.
+        var hottest = report.Functions.FirstOrDefault(f => f.Name.StartsWith("CpuBound.", StringComparison.Ordinal));
+        Check(hottest?.Name.Contains("Primes.IsPrime", StringComparison.Ordinal) == true, "the hot function is the app's hottest: " + string.Join(", ", report.Functions.Take(8).Select(f => f.Name)));
         Check(report.CounterSummaries.Count > 0, "the counters were recorded");
         Console.Out.WriteLine($"  {report.Summary}");
 
@@ -2921,15 +2923,21 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Console.Out.WriteLine($"[{_clock.Elapsed:mm\\:ss}] {milestone} {id}: {title}");
         Console.Out.Flush();
         var start = Stopwatch.GetTimestamp();
+        Task? running = null;
         try
         {
             // A step that hangs (a request without a timeout) fails on its own instead of using up the run.
-            await body().WaitAsync(s_stepLimit).ConfigureAwait(true);
+            running = body();
+            await running.WaitAsync(s_stepLimit).ConfigureAwait(true);
             Report(id, milestone, title, "passed", Stopwatch.GetElapsedTime(start).TotalSeconds, null);
         }
         catch (Exception ex)
         {
-            var error = ex is SmokeFailure ? ex.Message : ex is TimeoutException ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes." : ex.ToString();
+            // Only the step limit is reported as such: a TimeoutException from the step itself (a timed wait in the
+            // code it drives) is reported with its stack, like any other exception.
+            var error = ex is SmokeFailure ? ex.Message
+                : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes."
+                : ex.ToString();
             Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, error);
             Screenshot($"smoke-test-{id}.png");
             if (!_logsShown)
@@ -3246,7 +3254,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // macOS can stop drawing a window it considers hidden (behind others, App Nap): the screenshot renders it
         // itself, so a few seconds without frames go on rather than wait forever.
-        if (await Task.WhenAny(rendered.Task, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(true) != rendered.Task)
+        await rendered.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        if (!rendered.Task.IsCompleted)
         {
             shell.Workbench.Log.AppendLine("[smoke] No frame in 5 s: going on without one.");
         }

@@ -211,7 +211,7 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
         _ = Task.Run(async () =>
         {
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-            await Task.WhenAny(stdout, Task.Delay(2000)).ConfigureAwait(false);
+            await ((Task)stdout).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             int? code;
             try
             {

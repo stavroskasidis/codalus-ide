@@ -24,7 +24,7 @@ public sealed class RemoteServerTests
     private static string Configuration => typeof(RemoteServerTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusConfiguration").Value!;
 
     /// <summary>The framework-dependent server build (the stand-ins run it with dotnet).</summary>
-    internal static string ServerDll => Path.Combine(RepoRoot, "src", "Codalus.Remote.Server", "bin", Configuration, "net10.0", "codalus-server.dll");
+    internal static string ServerDll => Path.Combine(RepoRoot, "src", "Codalus.Remote.Server", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-server.dll");
 
     internal static string ServerVersion => FileVersionInfo.GetVersionInfo(ServerDll).ProductVersion!.Split('+')[0];
 

@@ -226,7 +226,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
             session.Connection.Start();
             await session.Connection.RequestAsync("initialize", InitializeArguments(), Json.InitializeArguments, Json.Capabilities).ConfigureAwait(false);
             var started = session.Connection.RequestAsync(arguments.Request, arguments.Configuration, Json.JsonElement);
-            await Task.WhenAny(session.Initialized.Task, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
+            await ((Task)session.Initialized.Task).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             lock (_gate)
             {
                 _children.Add(session);

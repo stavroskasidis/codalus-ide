@@ -117,7 +117,8 @@ public sealed class RemotePseudoTerminal : PseudoTerminal
 
         // The output ended: the program exited (the server sends its code first; a server that didn't, an older one or
         // a lost link, gets a few seconds).
-        var code = await Task.WhenAny(process.Exited, Task.Delay(TimeSpan.FromSeconds(10))).ConfigureAwait(false) == process.Exited ? process.Exited.Result : null;
+        await ((Task)process.Exited).WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        var code = process.Exited.IsCompletedSuccessfully ? process.Exited.Result : null;
         RaiseExited(code ?? -1);
     }
 

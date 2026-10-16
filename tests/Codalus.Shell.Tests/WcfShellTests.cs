@@ -14,7 +14,7 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class WcfShellTests
 {
-    private static string FakeSvcutil => Path.Combine(ShellFixture.RepoRoot, "tests", "Codalus.Svcutil.Fake", "bin", ShellFixture.Configuration, "net10.0", "codalus-fake-svcutil.dll");
+    private static string FakeSvcutil => Path.Combine(ShellFixture.RepoRoot, "tests", "Codalus.Svcutil.Fake", "bin", ShellFixture.Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-fake-svcutil.dll");
 
     private static string Recorded(string name) => Path.Combine(ShellFixture.RepoRoot, "tests", "Codalus.Workbench.Tests", "TestData", "Wcf", name);
 

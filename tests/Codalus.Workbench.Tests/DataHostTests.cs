@@ -21,7 +21,7 @@ public sealed class DataHostTests : IAsyncLifetime
     internal static string Metadata(string key) =>
         typeof(DataHostTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
 
-    internal static string HostPath => Path.Combine(Metadata("CodalusRepoRoot"), "src", "Codalus.Data.Host", "bin", Metadata("CodalusConfiguration"), "net10.0", "codalus-datahost.dll");
+    internal static string HostPath => Path.Combine(Metadata("CodalusRepoRoot"), "src", "Codalus.Data.Host", "bin", Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-datahost.dll");
 
     private string Inventory => Path.Combine(_root, "inventory.db");
 
