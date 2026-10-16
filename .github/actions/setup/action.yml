@@ -4,7 +4,8 @@ description: >-
   developer tools access and a display on Linux. Every workflow's jobs set up through it, so each pin lives here once.
 inputs:
   extra-sdks:
-    description: Also .NET 9 (samples/Testing targets net9.0;net10.0) and the .NET 11 SDK (samples/Net11, M30)
+    description: >-
+      Also the .NET 10 SDK, for the fixtures that still target net10.0 and the net10.0 half of samples/Testing (M30b)
     default: "false"
   nuget-cache:
     description: Cache ~/.nuget/packages (only jobs that restore the solution, so a small job doesn't save a thin cache)
@@ -21,18 +22,19 @@ inputs:
 runs:
   using: composite
   steps:
+    # The SDK of global.json, spelled out: setup-dotnet reads global.json's "latestFeature" as the channel's newest
+    # release, which .NET 11 doesn't have before GA (M30b). Keep it in step with global.json and samples/Net11/global.json
+    # (docs/release/dotnet-upgrade.md). TODO(issue): back to global-json-file on the .NET 11 GA SDK.
     - if: inputs.extra-sdks != 'true'
       uses: actions/setup-dotnet@v4
       with:
-        global-json-file: global.json
+        dotnet-version: 11.0.100-rc.2.26504.105
     - if: inputs.extra-sdks == 'true'
       uses: actions/setup-dotnet@v4
       with:
-        global-json-file: global.json
-        # Keep the .NET 11 SDK in step with samples/Net11/global.json (docs/release/dotnet-upgrade.md).
         dotnet-version: |
-          9.0.x
-          11.0.100-rc.1.26425.128
+          10.0.x
+          11.0.100-rc.2.26504.105
     - if: inputs.nuget-cache == 'true'
       uses: actions/cache@v4
       with:

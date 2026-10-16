@@ -4,10 +4,10 @@ Section: devel
 Priority: optional
 Architecture: {{ARCH}}
 Depends: git, libicu-dev | libicu74 | libicu72 | libicu70, libfontconfig1
-Recommends: dotnet-sdk-10.0
+Recommends: dotnet-sdk-11.0
 Maintainer: Codalus IDE contributors <https://github.com/stavroskasidis/codalus-ide>
 Homepage: https://github.com/stavroskasidis/codalus-ide
 Description: Cross-platform, open-source IDE for .NET
  Codalus IDE is an MIT-licensed .NET IDE with solutions, C# language
  services, build and run, debugging on netcoredbg, and Git. It needs the
- .NET SDK to open and build solutions.
+ .NET SDK to open and build solutions, and .NET 11 or later for its hosts.

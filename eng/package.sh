@@ -77,6 +77,9 @@ if [ ! -x "$vpk_dir/vpk" ] && [ ! -f "$vpk_dir/vpk.exe" ]; then
   dotnet tool install vpk --version "$vpk_version" --tool-path "$vpk_dir" > /dev/null
 fi
 vpk="$vpk_dir/vpk"
+# vpk is a .NET 10 tool without a roll-forward policy: it runs on the .NET 11 of global.json's SDK (M30b), the only
+# runtime that packaging jobs install.
+export DOTNET_ROLL_FORWARD=Major
 if [ -n "${CODALUS_PREVIOUS_RELEASE:-}" ] && [ -d "$CODALUS_PREVIOUS_RELEASE" ]; then
   echo "== Previous release of $channel (for a delta package)"
   cp "$CODALUS_PREVIOUS_RELEASE"/* "$feed/" 2> /dev/null || true
