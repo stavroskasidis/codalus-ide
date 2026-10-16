@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Set up Codalus IDE: appearance</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+.wc{width:46px;height:36px;border:0;background:transparent;color:inherit;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.wc:hover{background:#C42B1C;color:#FFFFFF}
+.seg{border:0;font:inherit;height:32px;padding:0 14px;border-radius:6px;cursor:pointer}
+.fam{display:flex;flex-direction:column;gap:10px;text-align:left;font:inherit;color:inherit;padding:10px;border-radius:10px;cursor:pointer}
+.ghost{border:0;background:transparent;font:inherit;color:inherit;height:36px;padding:0 14px;border-radius:6px;cursor:pointer}
+.ghost:hover,.seg:hover{filter:brightness(.96)}
+</style>
+</helmet>
+<div style="min-height: 800px; display: flex; flex-direction: column; background: {{w.surface}}; color: {{w.fg}}; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px">
+
+<header style="display: flex; align-items: center; gap: 10px; min-height: 36px; padding-left: 14px; border-bottom: 1px solid {{w.border}}">
+  <svg width="18" height="18" viewBox="0 0 256 256" role="img" aria-label="Codalus IDE"><defs><linearGradient id="setup-violet" gradientUnits="userSpaceOnUse" x1="0" y1="38" x2="0" y2="218"><stop offset="0" stop-color="#A47BFF"></stop><stop offset="1" stop-color="#5B2EC7"></stop></linearGradient><linearGradient id="setup-ember" gradientUnits="userSpaceOnUse" x1="0" y1="38" x2="0" y2="218"><stop offset="0" stop-color="#FFC24A"></stop><stop offset="1" stop-color="#F0662A"></stop></linearGradient></defs><polygon fill="{{logo.a}}" points="20,218 124,38 124,92 58,208"></polygon><polygon fill="{{logo.a}}" fill-opacity="{{logo.o1}}" points="74,204 124,117.4 124,161.4 104,196"></polygon><polygon fill="{{logo.b}}" fill-opacity="{{logo.o2}}" points="236,218 132,38 132,92 198,208"></polygon><polygon fill="{{logo.b}}" fill-opacity="{{logo.o3}}" points="182,204 132,117.4 132,161.4 152,196"></polygon></svg>
+  <span style="font-weight: 500">Set up Codalus IDE</span>
+  <span style="flex: 1"></span>
+  <button class="wc" aria-label="Close"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" stroke="currentColor"><path d="m0 0 10 10M10 0 0 10"></path></svg></button>
+</header>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0">
+  <nav aria-label="Setup steps" style="flex: 1 1 220px; max-width: 260px; padding: 28px 20px; background: {{w.chrome}}; border-right: 1px solid {{w.border}}">
+    <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+      <sc-for list="{{steps}}" as="step" hint-placeholder-count="4">
+        <li aria-current="{{step.current}}" style="display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 10px; border-radius: 8px; background: {{step.bg}}; color: {{step.fg}}; font-weight: {{step.weight}}">
+          <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; background: {{step.dotBg}}; color: {{step.dotFg}}; border: 1px solid {{step.dotEdge}}">{{step.n}}</span>
+          {{step.label}}
+        </li>
+      </sc-for>
+    </ol>
+    <p style="margin: 24px 4px 0; color: {{w.muted}}; font-size: 12px; line-height: 1.5">Runs once, the first time Codalus IDE opens. Help → Set Up Codalus IDE runs it again.</p>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; padding: 28px 36px 20px">
+    <h1 style="margin: 0 0 6px; font-size: 22px; font-weight: 600; color: {{w.fg}}">Choose how Codalus IDE looks</h1>
+    <p style="margin: 0 0 22px; color: {{w.muted}}; max-width: 640px; line-height: 1.5">Pick a theme and a mode. The window changes as you choose. You can switch later in Tools → Options → Environment → Theme.</p>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 8px">
+      <span id="mode-label" style="font-weight: 600">Mode</span>
+      <div role="group" aria-labelledby="mode-label" style="display: inline-flex; gap: 2px; padding: 3px; border-radius: 8px; background: {{w.chrome}}; border: 1px solid {{w.border}}">
+        <sc-for list="{{modes}}" as="m" hint-placeholder-count="4">
+          <button class="seg" aria-pressed="{{m.on}}" onClick="{{m.pick}}" style="background: {{m.bg}}; color: {{m.fg}}; font-weight: {{m.weight}}">{{m.label}}</button>
+        </sc-for>
+      </div>
+    </div>
+    <p style="margin: 0 0 18px; min-height: 18px; color: {{w.muted}}; font-size: 12px">{{modeNote}}</p>
+
+    <div role="group" aria-label="Theme" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px">
+      <sc-for list="{{families}}" as="f" hint-placeholder-count="4">
+        <button class="fam" aria-pressed="{{f.on}}" onClick="{{f.pick}}" style="background: {{w.card}}; border: 1px solid {{f.edge}}; box-shadow: {{f.ring}}">
+          <span aria-hidden="true" style="display: flex; flex-direction: column; width: 100%; height: 132px; border-radius: 6px; overflow: hidden; background: {{f.p.chrome}}; outline: 1px solid {{f.p.border}}">
+            <span style="display: block; height: 12px; flex: none; background: {{f.p.title}}"></span>
+            <span style="flex: 1; display: flex; flex-direction: {{f.dir}}; gap: {{f.gap}}; padding: {{f.gap}}; min-height: 0">
+              <span style="display: block; width: {{f.rail}}; flex: none; background: {{f.p.panel}}; border-right: 1px solid {{f.p.border}}"></span>
+              <span style="display: flex; flex-direction: column; width: 26%; flex: none; background: {{f.p.panel}}; border-radius: {{f.radius}}; overflow: hidden; outline: 1px solid {{f.edge2}}">
+                <span style="display: block; height: 7px; background: {{f.caption}}"></span>
+                <span style="display: block; height: 4px; width: 70%; margin: 6px 6px 0; background: {{f.p.muted}}; opacity: .5; border-radius: 2px"></span>
+                <span style="display: block; height: 6px; margin: 5px 4px 0; background: {{f.p.sel}}; border-radius: 2px"></span>
+                <span style="display: block; height: 4px; width: 60%; margin: 5px 6px 0; background: {{f.p.muted}}; opacity: .5; border-radius: 2px"></span>
+                <span style="display: block; height: 4px; width: 50%; margin: 5px 6px 0; background: {{f.p.muted}}; opacity: .5; border-radius: 2px"></span>
+              </span>
+              <span style="flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 8px; background: {{f.p.editor}}; border-radius: {{f.radius}}; outline: 1px solid {{f.edge2}}">
+                <sc-for list="{{f.code}}" as="row" hint-placeholder-count="5">
+                  <span style="display: flex; gap: 4px; padding-left: {{row.indent}}">
+                    <sc-for list="{{row.bars}}" as="bar" hint-placeholder-count="3"><span style="display: block; height: 4px; width: {{bar.w}}; background: {{bar.c}}; border-radius: 2px"></span></sc-for>
+                  </span>
+                </sc-for>
+              </span>
+            </span>
+            <span style="display: block; height: 6px; flex: none; background: {{f.p.status}}"></span>
+          </span>
+          <span style="display: flex; align-items: center; gap: 8px; width: 100%">
+            <span style="font-weight: 600; font-size: 14px">{{f.name}}</span>
+            <span style="flex: 1"></span>
+            <sc-if value="{{f.on}}" hint-placeholder-val="{{false}}"><svg width="18" height="18" viewBox="0 0 18 18" role="img" aria-label="Selected"><circle cx="9" cy="9" r="8" fill="{{w.accent}}"></circle><path d="m5.5 9.2 2.3 2.3 4.7-4.9" fill="none" stroke="{{w.accentFg}}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if>
+          </span>
+          <span style="color: {{w.muted}}; line-height: 1.45; font-size: 12px">{{f.desc}}</span>
+        </button>
+      </sc-for>
+    </div>
+
+    <span style="flex: 1; min-height: 20px"></span>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 16px; border-top: 1px solid {{w.border}}">
+      <button class="ghost" style="color: {{w.link}}">Skip setup</button>
+      <span style="flex: 1"></span>
+      <button class="ghost" disabled="disabled" style="border: 1px solid {{w.border}}; opacity: .6">Back</button>
+      <button class="ghost" style="background: {{w.accent}}; color: {{w.accentFg}}; font-weight: 600">Next: Keyboard</button>
+    </div>
+  </main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"family":{"editor":"enum","default":"Harbor","options":["Harbor","Graphite","Daylight","Ember"]},"mode":{"editor":"enum","default":"Match system","options":["Light","Dark","High contrast","Match system"]},"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  palettes() {
+    const hc = (accent, kw, st) => ({
+      chrome: '#000000', title: '#000000', panel: '#000000', editor: '#000000', surface: '#000000', card: '#000000',
+      accent, accentFg: '#000000', border: '#FFFFFF', sel: accent, selFg: '#000000', fg: '#FFFFFF', muted: '#D6D6D6', link: accent,
+      kw, ty: '#4FF0CF', st, fn: '#FFE66D', code: '#FFFFFF', cm: '#9FE870', status: accent
+    });
+    return {
+      Harbor: {
+        'Light': { chrome: '#D5DDEF', title: '#1B2645', panel: '#F4F6FC', editor: '#FFFFFF', surface: '#F4F6FC', card: '#FFFFFF', accent: '#2B59C3', accentFg: '#FFFFFF', border: '#BCC7E0', sel: '#CCD9F6', selFg: '#0E1735', fg: '#1B2645', muted: '#4E5873', link: '#1D49B0', kw: '#1D3FBF', ty: '#0F7068', st: '#A3361A', fn: '#74460A', code: '#1B1F2A', cm: '#3D6B2C', status: '#2B59C3' },
+        'Dark': { chrome: '#121827', title: '#0B101C', panel: '#19202F', editor: '#141A28', surface: '#19202F', card: '#141A28', accent: '#6E98FF', accentFg: '#0A1124', border: '#2A3553', sel: '#263C6E', selFg: '#F1F4FB', fg: '#D9DFEE', muted: '#9AA5C2', link: '#8DB4FF', kw: '#82A9FF', ty: '#6FD1C4', st: '#F29E7E', fn: '#F0C97A', code: '#D9DFEE', cm: '#84A676', status: '#2F5FD0' },
+        'High contrast': hc('#6CD2FF', '#7CC7FF', '#FFA680')
+      },
+      Graphite: {
+        'Light': { chrome: '#E9EAED', title: '#E9EAED', panel: '#F7F7F8', editor: '#FFFFFF', surface: '#F7F7F8', card: '#FFFFFF', accent: '#0F7C72', accentFg: '#FFFFFF', border: '#D3D6DB', sel: '#CDEDE8', selFg: '#062E2A', fg: '#1F2226', muted: '#555A63', link: '#0B5CAD', kw: '#2347C5', ty: '#0A7360', st: '#B23A1E', fn: '#7A5300', code: '#1F2226', cm: '#5D6B5A', status: '#0F766E' },
+        'Dark': { chrome: '#141518', title: '#141518', panel: '#1F2125', editor: '#1A1B1F', surface: '#1F2125', card: '#1A1B1F', accent: '#2BB3A3', accentFg: '#0B1F1C', border: '#2A2D34', sel: '#1F3B38', selFg: '#E8F4F2', fg: '#D5D8DE', muted: '#9A9FAA', link: '#7CC4FF', kw: '#93A9FF', ty: '#7FD8AE', st: '#F2A27E', fn: '#F0CF85', code: '#D5D8DE', cm: '#808D9A', status: '#0F766E' },
+        'High contrast': hc('#3FF2D2', '#A9BCFF', '#FFA680')
+      },
+      Daylight: {
+        'Light': { chrome: '#F3F3F6', title: '#F3F3F6', panel: '#FFFFFF', editor: '#FFFFFF', surface: '#FFFFFF', card: '#FBFBFC', accent: '#6B3FC4', accentFg: '#FFFFFF', border: '#E0E0E6', sel: '#EEE8FA', selFg: '#2A1660', fg: '#1F1F24', muted: '#5C5C66', link: '#5A2FB0', kw: '#0B4FB8', ty: '#00796B', st: '#B3261E', fn: '#845300', code: '#1F1F24', cm: '#56703F', status: '#6B3FC4' },
+        'Dark': { chrome: '#1C1B22', title: '#1C1B22', panel: '#222029', editor: '#222029', surface: '#222029', card: '#1F1D26', accent: '#A98BFF', accentFg: '#160A33', border: '#34313F', sel: '#3A2E5E', selFg: '#F1EBFF', fg: '#E4E2EC', muted: '#A7A3B8', link: '#C4AEFF', kw: '#8FB3FF', ty: '#6FD6C0', st: '#F49A8C', fn: '#F0CC85', code: '#E4E2EC', cm: '#8FA67E', status: '#5B3DB8' },
+        'High contrast': hc('#D2B3FF', '#7CC7FF', '#FFA680')
+      },
+      Ember: {
+        'Light': { chrome: '#EDE8E3', title: '#EDE8E3', panel: '#FBF9F7', editor: '#FFFFFF', surface: '#FBF9F7', card: '#FFFFFF', accent: '#B85A12', accentFg: '#FFFFFF', border: '#DDD5CD', sel: '#F8E1CB', selFg: '#4A2508', fg: '#2A211B', muted: '#6B5E53', link: '#A04E10', kw: '#A34A0B', ty: '#1F6E63', st: '#44701A', fn: '#7A5A00', code: '#2A211B', cm: '#76695E', status: '#EDE8E3' },
+        'Dark': { chrome: '#0F0E0D', title: '#0F0E0D', panel: '#1A1816', editor: '#171513', surface: '#1A1816', card: '#171513', accent: '#E08A3C', accentFg: '#1A0F05', border: '#2B2724', sel: '#3A2A1C', selFg: '#F7E7D6', fg: '#E6DFD8', muted: '#A39A90', link: '#F2B27A', kw: '#F0A36B', ty: '#9DD3C8', st: '#B9D98A', fn: '#E8D29A', code: '#E6DFD8', cm: '#938980', status: '#0F0E0D' },
+        'High contrast': hc('#FFB547', '#FFB86B', '#B8F07A')
+      }
+    };
+  }
+  renderVals() {
+    const all = this.palettes();
+    const names = ['Harbor', 'Graphite', 'Daylight', 'Ember'];
+    const family = names.includes(this.state.family) ? this.state.family : (names.includes(this.props.family) ? this.props.family : 'Harbor');
+    const mode = this.state.mode ?? this.props.mode ?? 'Match system';
+    const variant = mode === 'Match system' ? 'Light' : (all[family][mode] ? mode : 'Light');
+    const w = all[family][variant];
+    const hc = variant === 'High contrast';
+    const shape = {
+      Harbor: { dir: 'row-reverse', gap: '3px', radius: '0', rail: '0', desc: 'The classic docked layout: a colored title bar, tool window captions and tab groups, closest to the IDE you know.' },
+      Graphite: { dir: 'row-reverse', gap: '1px', radius: '0', rail: '0', desc: 'Compact and dense: hairline dividers instead of gaps, flat tabs and more room for code and output.' },
+      Daylight: { dir: 'row', gap: '0', radius: '0', rail: '6px', desc: 'Flat and airy: a rail of tool windows, grouped toolbars and soft rounded tabs.' },
+      Ember: { dir: 'row', gap: '4px', radius: '4px', rail: '0', desc: 'Floating panels with rounded corners, and the run controls in the title bar.' }
+    };
+    const families = names.map((name) => {
+      const p = all[name][variant];
+      const on = name === family;
+      return {
+        name,
+        on,
+        p,
+        dir: shape[name].dir,
+        gap: shape[name].gap,
+        radius: shape[name].radius,
+        rail: shape[name].rail,
+        desc: shape[name].desc,
+        caption: name === 'Harbor' ? p.accent : p.panel,
+        edge: on ? w.accent : w.border,
+        edge2: hc ? '#FFFFFF' : 'transparent',
+        ring: on ? '0 0 0 2px ' + w.accent : 'none',
+        code: [
+          { indent: '0', bars: [{ w: '18px', c: p.kw }, { w: '34px', c: p.ty }, { w: '22px', c: p.code }] },
+          { indent: '8px', bars: [{ w: '40px', c: p.cm }] },
+          { indent: '8px', bars: [{ w: '14px', c: p.kw }, { w: '26px', c: p.ty }, { w: '30px', c: p.fn }] },
+          { indent: '16px', bars: [{ w: '20px', c: p.code }, { w: '44px', c: p.st }] },
+          { indent: '16px', bars: [{ w: '16px', c: p.kw }, { w: '24px', c: p.fn }, { w: '12px', c: p.code }] },
+          { indent: '8px', bars: [{ w: '6px', c: p.code }] }
+        ],
+        pick: () => this.setState({ family: name })
+      };
+    });
+    const modes = ['Light', 'Dark', 'High contrast', 'Match system'].map((label) => ({
+      label,
+      on: label === mode,
+      bg: label === mode ? w.accent : 'transparent',
+      fg: label === mode ? w.accentFg : w.fg,
+      weight: label === mode ? '600' : '400',
+      pick: () => this.setState({ mode: label })
+    }));
+    const steps = ['Appearance', 'Keyboard', 'Your settings', 'Tools'].map((label, i) => ({
+      n: i + 1,
+      label,
+      current: i === 0 ? 'step' : 'false',
+      bg: i === 0 ? w.sel : 'transparent',
+      fg: i === 0 ? w.selFg : w.fg,
+      weight: i === 0 ? '600' : '400',
+      dotBg: i === 0 ? w.accent : 'transparent',
+      dotFg: i === 0 ? w.accentFg : w.muted,
+      dotEdge: i === 0 ? w.accent : w.border
+    }));
+    return {
+      w,
+      families,
+      modes,
+      steps,
+      modeNote: mode === 'Match system' ? 'Follows your system: light now, dark or high contrast when your system switches.' : '',
+      logo: hc ? { a: '#FFFFFF', b: '#FFFFFF', o1: 0.82, o2: 0.6, o3: 0.49 } : { a: 'url(#setup-violet)', b: 'url(#setup-ember)', o1: 0.82, o2: 1, o3: 0.82 }
+    };
+  }
+}
+</script>
+</body>
+</html>

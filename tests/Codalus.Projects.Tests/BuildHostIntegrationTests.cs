@@ -490,6 +490,25 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
             Assert.Equal(["succeeded"], restoreStates);
         }
 
+        // The watcher evaluates Core alone (a file added to its folder, as NuGet's outputs after a restore): the
+        // projects that reference it build again with it, since their keys hold Core's fingerprint, and the next open
+        // finds all three in the cache.
+        lock (log)
+        {
+            log.Clear();
+        }
+
+        File.WriteAllText(Path.Combine(Fixture, "src", "Core", "Notes.txt"), "Not compiled.");
+        await WaitUntilAsync(() =>
+        {
+            lock (log)
+            {
+                return log.Any(l => l.Contains("Core.csproj: inputs changed", StringComparison.Ordinal)) && _service.DesignTimeProgress is { Completed: true };
+            }
+        }, TimeSpan.FromMinutes(2));
+        var watched = await OpenAsync();
+        Assert.True(watched.Contains("Design-time build cache: 3 hit(s), 0 miss(es).", StringComparison.Ordinal), $"Watched:{Environment.NewLine}{watched}");
+
         // A new source file in Core (a glob, no project file change): Core builds again, and so do the projects that
         // reference it; asking for design-time builds bypasses the cache.
         File.WriteAllText(Path.Combine(Fixture, "src", "Core", "Added.cs"), "namespace Core; public static class Added { }");
