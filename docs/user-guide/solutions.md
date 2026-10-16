@@ -39,7 +39,7 @@ Like Visual Studio's `.vs` folder, Codalus IDE keeps your own state for a soluti
 
 `.codalus/state/` holds its own `.gitignore` (`*`), so Git never shows it, even if your repository's `.gitignore` doesn't mention it. On Windows the `state` folder is hidden. Delete it to start the solution afresh. The shared files in `.codalus/` (`settings.json`, `tasks.json`, `launch.json`, `playlists/`) stay where they are, for you to commit.
 
-Opening a solution writes nothing. The state is saved when you close the solution or the IDE, and bookmarks are saved when you change them. If the solution's folder can't be written (a read-only checkout or share), the state goes to the `solution-state` folder of your user data instead, and moves back next to the solution once the folder can be written. Remote windows don't keep this state yet.
+Opening a solution writes nothing there, except to move in the state an earlier version kept elsewhere. The state is saved when you close the solution or the IDE, and bookmarks are saved when you change them. If the solution's folder can't be written (a read-only checkout or share), the state goes to the `solution-state` folder of your user data instead, and moves back next to the solution once the folder can be written. Remote windows don't keep this state yet.
 
 ## The Properties window
 

@@ -942,8 +942,8 @@ public sealed partial class ShellHost : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         var openSolution = Solutions.Solution?.Path;
-        await FlushSolutionStateAsync().ConfigureAwait(false);
         ApplyUpdateOnExit();
+        await FlushSolutionStateAsync().ConfigureAwait(false);
         if (SelfUpdate is not null)
         {
             await SelfUpdate.DisposeAsync().ConfigureAwait(false);
