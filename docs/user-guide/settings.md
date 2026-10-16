@@ -7,6 +7,7 @@
 - **Toolbar**: back and forward, open, save and save all, undo and redo, the solution configuration and platform, the startup project, and Start (`F5`) and Start Without Debugging (`Ctrl+F5`). While debugging it shows Continue, Break All, Stop, Restart and the step commands.
 - **Status bar**: purple without a solution, blue with one, orange while debugging. The right side shows the caret's line and column, indentation, line endings, encoding, language, Git branch and notifications.
 - **Layout**: the Solution Explorer is on the right, the Error List and Output at the bottom. Window → Reset Layout brings this layout back.
+  - Drag a tab to move a tool window to another group, a window's edge, a floating window or among the documents, where it gets a document tab. A tool window you open goes back where you last closed it, or opens as a tab in the group for its usual place (most at the bottom, with the Output), wherever you moved that group.
 
 ## Settings
 
