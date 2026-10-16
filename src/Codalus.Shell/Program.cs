@@ -17,6 +17,17 @@ internal static partial class Program
 
         BenchEvents.Emit(BenchEventNames.MainEntered);
         Infrastructure.Installation.Run();
+
+        // Avalonia makes a synthetic bold or italic typeface (one a system font lacks, common on Linux) from the font's
+        // bytes, read with SKStream.Read, which doesn't keep its stream alive: a background collection running alongside
+        // the read (started by the large buffer it allocates) can finalize the stream and free the memory Skia copies
+        // from. That was the start window's segmentation fault on Linux CI. A blocking collection finishes before the
+        // read starts. TODO(issue): remove once Avalonia's SkiaTypeface.TryGetStream disposes the stream it opens.
+        if (OperatingSystem.IsLinux())
+        {
+            System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.Batch;
+        }
+
         var options = ShellOptions.Parse(args);
         if (options.ShowVersion || options.ShowHelp)
         {
