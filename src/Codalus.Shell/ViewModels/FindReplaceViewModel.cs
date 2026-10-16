@@ -168,7 +168,7 @@ public sealed class FindReplaceViewModel : ObservableObject
         ReplaceAllCommand = new RelayCommand(() => _ = ReplaceAllAsync());
         BrowseCommand = new RelayCommand(() => _ = BrowseAsync());
         CloseCommand = new RelayCommand(Close);
-        results.ModifyFindRequested += (_, _) => Open(null, IsReplace);
+        results.ModifyFindRequested += (_, page) => ModifyFind(page);
     }
 
     public FindResultsViewModel Results { get; }
@@ -328,6 +328,34 @@ public sealed class FindReplaceViewModel : ObservableObject
     }
 
     public void Close() => IsOpen = false;
+
+    /// <summary>Modify Find: shows the window with the search behind a Find Results page (on Replace for a Replace All's).</summary>
+    public void ModifyFind(FindResultsPage page)
+    {
+        if (page.Options is not { } options)
+        {
+            Open(null, IsReplace);
+            return;
+        }
+
+        Query = options.Query;
+        MatchCase = options.MatchCase;
+        WholeWord = options.WholeWord;
+        UseRegex = options.UseRegex;
+        if (!LookInOptions.Contains(options.LookIn, StringComparer.Ordinal))
+        {
+            LookInOptions.Add(options.LookIn);
+        }
+
+        LookIn = options.LookIn;
+        FileTypes = options.FileTypes;
+        if (page.ReplaceWith is { } replaceWith)
+        {
+            ReplaceWith = replaceWith;
+        }
+
+        Open(null, page.ReplaceWith is not null);
+    }
 
     /// <summary>Find All: lists every match in Find Results and closes the window.</summary>
     public async Task FindAllAsync()

@@ -129,7 +129,7 @@ public sealed partial class ShellHost
             next = next.NextMatch();
         }
 
-        if (next.Success && FindResultsViewModel.MatchLine(row.Path, row.Line, after, regex) is { } rest)
+        if (next.Success && FindResultsPage.MatchLine(row.Path, row.Line, after, regex) is { } rest)
         {
             return rest with { Column = next.Index, Length = next.Length };
         }
@@ -200,7 +200,7 @@ public sealed partial class ShellHost
 
                     occurrences += count;
                     edits.Add(new TextEdit(new LanguageServices.Protocol.Range(new Position(i, 0), new Position(i, line.Length)), replaced));
-                    if (FindResultsViewModel.MatchLine(file, i + 1, line, regex) is { } before)
+                    if (FindResultsPage.MatchLine(file, i + 1, line, regex) is { } before)
                     {
                         rows.Add(new FindResultRow(file, i + 1, before.Column, before.Length, replaced.Trim(), false));
                     }
