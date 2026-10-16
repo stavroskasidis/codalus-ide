@@ -38,6 +38,18 @@ public class TemplateCatalogTests
 
     [Fact]
     public void Garbage_parses_to_nothing() => Assert.Empty(TemplateCatalog.Parse("dotnet: command failed"));
+
+    [Fact]
+    public void Template_packs_that_are_not_installed_are_offered()
+    {
+        var templates = TemplateCatalog.Parse(Output);
+        Assert.Equal(["Avalonia.Templates", "CoreWCF.Templates"], TemplatePacks.Missing(templates).Select(p => p.Package));
+
+        var withCoreWcf = TemplateCatalog.Parse(Output.Replace("Console App         console ", "CoreWCF Service     corewcf ", StringComparison.Ordinal));
+        Assert.Equal(["Avalonia.Templates"], TemplatePacks.Missing(withCoreWcf).Select(p => p.Package));
+        var coreWcf = withCoreWcf.Single(t => t.ShortName == "corewcf");
+        Assert.Equal(("CoreWCF Service", "CoreWCFService1"), (coreWcf.Name, coreWcf.DefaultName));
+    }
 }
 
 public class TemplateFrameworksTests
