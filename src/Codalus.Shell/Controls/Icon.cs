@@ -317,6 +317,7 @@ public static class IconSet
         ["container"] = "cube_16_regular",
         ["publish"] = "cloud_arrow_up_16_regular",
         ["build"] = "toolbox_16_regular",
+        ["toolbox"] = "toolbox_16_regular",
         ["cancel"] = "dismiss_circle_16_regular",
         ["layers"] = "stack_16_regular",
         ["timer"] = "timer_16_regular",

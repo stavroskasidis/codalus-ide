@@ -14,6 +14,32 @@ public enum PropertyRowKind
     ReadOnly,
     Text,
     Choice,
+
+    /// <summary>Flags of an enum (a Windows Forms control's Anchor): a toggle per flag (M41a).</summary>
+    Flags,
+
+    /// <summary>A color as text (<c>Red</c>, <c>255, 128, 0</c>) with a swatch (M41a).</summary>
+    Color,
+}
+
+/// <summary>A flag of a <see cref="PropertyRowKind.Flags"/> row.</summary>
+public sealed class FlagOptionViewModel(string name, bool isChecked, Action changed) : ObservableObject
+{
+    private bool _isChecked = isChecked;
+
+    public string Name { get; } = name;
+
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set
+        {
+            if (SetField(ref _isChecked, value))
+            {
+                changed();
+            }
+        }
+    }
 }
 
 /// <summary>One row of the Properties window: a name, a value and how it is edited.</summary>
@@ -37,6 +63,51 @@ public sealed class PropertyRowViewModel : ObservableObject
         {
             Options.Add(new PropertyOption(value, value.Length == 0 ? "(none)" : value));
         }
+
+        if (Kind == PropertyRowKind.Flags)
+        {
+            var set = value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Flags = [.. Options.Select(o => new FlagOptionViewModel(o.Value, set.Contains(o.Value), CommitFlags))];
+        }
+    }
+
+    /// <summary>The toggles of a <see cref="PropertyRowKind.Flags"/> row.</summary>
+    public IReadOnlyList<FlagOptionViewModel> Flags { get; } = [];
+
+    public bool IsFlags => Kind == PropertyRowKind.Flags;
+
+    public bool IsColor => Kind == PropertyRowKind.Color;
+
+    /// <summary>A text box edits the value (text and color rows).</summary>
+    public bool IsTextEditor => Kind is PropertyRowKind.Text or PropertyRowKind.Color;
+
+    /// <summary>A color row's swatch, when its text names or spells a color.</summary>
+    public Avalonia.Media.IBrush? Swatch => Kind == PropertyRowKind.Color && ParseColor(_value) is { } color ? new Avalonia.Media.SolidColorBrush(color) : null;
+
+    /// <summary>A command next to the value (the Events view's Go to or create the handler), or null.</summary>
+    public ICommand? Action { get; init; }
+
+    public string ActionTitle { get; init; } = string.Empty;
+
+    public bool HasAction => Action is not null;
+
+    private void CommitFlags()
+    {
+        var text = string.Join(", ", Flags.Where(f => f.IsChecked).Select(f => f.Name));
+        _ = _commit?.Invoke(text.Length == 0 ? "None" : text);
+    }
+
+    /// <summary><c>Red</c>, <c>#FF8000</c>, <c>255, 128, 0</c> or <c>128, 255, 128, 0</c>, as a color; null otherwise (a system color's name).</summary>
+    internal static Avalonia.Media.Color? ParseColor(string text)
+    {
+        var parts = text.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length is 3 or 4 && parts.All(p => byte.TryParse(p, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _)))
+        {
+            var bytes = parts.Select(p => byte.Parse(p, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            return bytes.Length == 3 ? Avalonia.Media.Color.FromRgb(bytes[0], bytes[1], bytes[2]) : Avalonia.Media.Color.FromArgb(bytes[0], bytes[1], bytes[2], bytes[3]);
+        }
+
+        return text.Length > 0 && Avalonia.Media.Color.TryParse(text, out var named) ? named : null;
     }
 
     public string Name { get; }
@@ -88,6 +159,29 @@ public sealed class PropertyRowViewModel : ObservableObject
 
 public sealed record PropertyCategoryViewModel(string Title, IReadOnlyList<PropertyRowViewModel> Rows);
 
+/// <summary>A row a designer gives the Properties window, with its category.</summary>
+public sealed record DesignerPropertyRow(string Category, PropertyRowViewModel Row);
+
+/// <summary>
+/// A designer's selection for the Properties window (M41a): while it's the shell's <see cref="ShellHost.PropertySource"/>,
+/// the window shows its properties (by category or alphabetically) or its events instead of the Solution Explorer's.
+/// </summary>
+public interface IDesignerPropertySource
+{
+    /// <summary>What is shown: "button1 System.Windows.Forms.Button".</summary>
+    string PropertiesTitle { get; }
+
+    /// <summary>Whether the selection has an Events view (one component).</summary>
+    bool HasEvents { get; }
+
+    Task<IReadOnlyList<DesignerPropertyRow>> PropertyRowsAsync(CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DesignerPropertyRow>> EventRowsAsync(CancellationToken cancellationToken);
+
+    /// <summary>The selection or its values changed.</summary>
+    event EventHandler? PropertiesChanged;
+}
+
 /// <summary>A command shown under the grid (Project Properties, Configuration Manager, Include In Project…).</summary>
 public sealed record PropertyLinkViewModel(string Title, ICommand Command);
 
@@ -118,6 +212,9 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
     private PropertyRowViewModel? _selectedRow;
     private ExplorerNode? _node;
     private bool _refreshQueued;
+    private IDesignerPropertySource? _source;
+    private bool _showEvents;
+    private bool _alphabetical;
 
     public PropertiesWindowViewModel(ShellHost shell)
     {
@@ -132,7 +229,74 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
             }
         };
         AddMetadataCommand = new RelayCommand(() => _ = AddMetadataAsync(), () => CanAddMetadata);
+        shell.PropertySourceChanged += (_, _) => FollowSource();
+        CategorizedCommand = new RelayCommand(() => Alphabetical = false);
+        AlphabeticalCommand = new RelayCommand(() => Alphabetical = true);
+        PropertiesCommand = new RelayCommand(() => ShowEvents = false);
+        EventsCommand = new RelayCommand(() => ShowEvents = true);
     }
+
+    public ICommand CategorizedCommand { get; }
+
+    public ICommand AlphabeticalCommand { get; }
+
+    public ICommand PropertiesCommand { get; }
+
+    public ICommand EventsCommand { get; }
+
+    /// <summary>A designer's selection is shown (M41a): the Categorized, Alphabetical, Properties and Events buttons show.</summary>
+    public bool HasDesignerSource => _source is not null;
+
+    /// <summary>The designer's events rather than its properties.</summary>
+    public bool ShowEvents
+    {
+        get => _showEvents;
+        set
+        {
+            if (SetField(ref _showEvents, value))
+            {
+                QueueRefresh();
+            }
+        }
+    }
+
+    /// <summary>The designer's properties sorted by name rather than by category.</summary>
+    public bool Alphabetical
+    {
+        get => _alphabetical;
+        set
+        {
+            if (SetField(ref _alphabetical, value))
+            {
+                QueueRefresh();
+            }
+        }
+    }
+
+    private void FollowSource()
+    {
+        if (ReferenceEquals(_source, _shell.PropertySource))
+        {
+            QueueRefresh();
+            return;
+        }
+
+        if (_source is not null)
+        {
+            _source.PropertiesChanged -= OnSourceChanged;
+        }
+
+        _source = _shell.PropertySource;
+        if (_source is not null)
+        {
+            _source.PropertiesChanged += OnSourceChanged;
+        }
+
+        OnPropertyChanged(nameof(HasDesignerSource));
+        QueueRefresh();
+    }
+
+    private void OnSourceChanged(object? sender, EventArgs e) => QueueRefresh();
 
     public ObservableCollection<PropertyCategoryViewModel> Categories { get; } = [];
 
@@ -191,6 +355,12 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
     {
         if (e.PropertyName == nameof(SolutionExplorerViewModel.Selected))
         {
+            // A selection in the Solution Explorer takes the window back from a designer (not the explorer following the active document).
+            if (_source is not null && _shell.Workbench.Context.GetValue("focusedView") is "solutionExplorer")
+            {
+                _shell.PropertySource = null;
+            }
+
             QueueRefresh();
         }
     }
@@ -217,6 +387,12 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         _load.Dispose();
         _load = new CancellationTokenSource();
         var token = _load.Token;
+        if (_source is { } source)
+        {
+            await ShowSourceAsync(source, token).ConfigureAwait(true);
+            return;
+        }
+
         _node = _shell.Explorer.Selected?.Node;
         ((RelayCommand)AddMetadataCommand).RaiseCanExecuteChanged();
         if (_node is not { } node)
@@ -243,6 +419,45 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
             if (!token.IsCancellationRequested)
             {
                 Show(node.Name, [], [], ex.Message);
+            }
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                IsLoading = false;
+            }
+        }
+    }
+
+    /// <summary>A designer's selection: its properties by category or name, or its events (M41a).</summary>
+    private async Task ShowSourceAsync(IDesignerPropertySource source, CancellationToken token)
+    {
+        IsLoading = true;
+        try
+        {
+            var events = _showEvents && source.HasEvents;
+            var rows = events ? await source.EventRowsAsync(token).ConfigureAwait(true) : await source.PropertyRowsAsync(token).ConfigureAwait(true);
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            List<PropertyCategoryViewModel> categories = _alphabetical
+                ? [new PropertyCategoryViewModel(events ? Localizer.Get("msg.propertiesWindowViewModel.events", "Events") : Localizer.Get("msg.propertiesWindowViewModel.properties", "Properties"),
+                    [.. rows.Select(r => r.Row).OrderBy(r => r.Name.TrimStart('('), StringComparer.OrdinalIgnoreCase)])]
+                : [.. rows.GroupBy(r => r.Category.Length == 0 ? "Misc" : r.Category).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => new PropertyCategoryViewModel(g.Key, [.. g.Select(r => r.Row).OrderBy(r => r.Name.TrimStart('('), StringComparer.OrdinalIgnoreCase)]))];
+            Show(source.PropertiesTitle, categories, [], rows.Count == 0 ? Localizer.Get("msg.propertiesWindowViewModel.noSelection", "Select a component in the designer.") : null);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex) when (ex is Codalus.Workbench.Previewer.PreviewerException or Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or InvalidOperationException)
+        {
+            if (!token.IsCancellationRequested)
+            {
+                Show(source.PropertiesTitle, [], [], ex.Message);
             }
         }
         finally
