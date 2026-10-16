@@ -51,19 +51,23 @@ internal sealed class EfTool(string dotnet, Func<EfOutputParams, Task> output)
         all.AddRange(arguments);
         all.Add("--prefix-output");
         var psi = DotnetProcess.StartInfo(dotnet, workingDirectory, all);
+        DotnetProcess.NoLingeringBuildProcesses(psi); // dotnet ef builds the project first (without --no-build)
         psi.StandardOutputEncoding = Encoding.UTF8;
         psi.StandardErrorEncoding = Encoding.UTF8;
         await output(new EfOutputParams("info", "> dotnet " + string.Join(' ', Redact(all)))).ConfigureAwait(false);
 
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
+        using var process = DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
         var data = new StringBuilder();
         var errors = new List<string>();
         var text = new StringBuilder();
         var stdout = PumpAsync(process.StandardOutput, data, errors, text);
         var stderr = PumpAsync(process.StandardError, data, errors, text);
         await DotnetProcess.WaitOrKillAsync(process, cancellationToken).ConfigureAwait(false);
-        await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
-        return new EfRun(process.ExitCode, data.ToString(), errors, text.ToString());
+        await DotnetProcess.DrainAsync(stdout, stderr).ConfigureAwait(false);
+        lock (text)
+        {
+            return new EfRun(process.ExitCode, data.ToString(), [.. errors], text.ToString());
+        }
     }
 
     /// <summary>
@@ -80,6 +84,18 @@ internal sealed class EfTool(string dotnet, Func<EfOutputParams, Task> output)
     }
 
     private async Task PumpAsync(StreamReader reader, StringBuilder data, List<string> errors, StringBuilder text)
+    {
+        try
+        {
+            await PumpLinesAsync(reader, data, errors, text).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // Closed after the process exited, while a build it ran still held the pipe (DotnetProcess.DrainAsync).
+        }
+    }
+
+    private async Task PumpLinesAsync(StreamReader reader, StringBuilder data, List<string> errors, StringBuilder text)
     {
         while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
         {
@@ -127,7 +143,7 @@ internal sealed class EfTool(string dotnet, Func<EfOutputParams, Task> output)
     public async Task<(string? Version, string Output)> VersionAsync(string directory, CancellationToken cancellationToken)
     {
         var psi = DotnetProcess.StartInfo(dotnet, directory, ["ef", "--version"]);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
+        using var process = DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
         var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
         await DotnetProcess.WaitOrKillAsync(process, cancellationToken).ConfigureAwait(false);

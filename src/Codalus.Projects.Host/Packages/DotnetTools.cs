@@ -103,7 +103,7 @@ internal sealed class DotnetTools(string dotnet, string directory)
     private async Task<(bool Succeeded, string Output)> RunAsync(IEnumerable<string> args, CancellationToken cancellationToken)
     {
         var psi = DotnetProcess.StartInfo(dotnet, directory, args);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
+        using var process = DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
         var output = new StringBuilder();
         var stdout = Copy(process.StandardOutput, output);
         var stderr = Copy(process.StandardError, output);
@@ -138,6 +138,7 @@ internal static class DotnetProcess
     {
         var psi = new ProcessStartInfo(dotnet)
         {
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -202,6 +203,44 @@ internal static class DotnetProcess
         }
 
         return newest;
+    }
+
+    /// <summary>
+    /// Starts a <c>dotnet</c> child with an empty input. Inheriting the build host's would hand it the shell's requests
+    /// (this host's JSON-RPC input): one that read it would take them, and one that waited on it (a prompt) would never
+    /// end. It gets end of file instead.
+    /// </summary>
+    public static Process? Start(ProcessStartInfo psi)
+    {
+        var process = Process.Start(psi);
+        if (process is not null && psi.RedirectStandardInput)
+        {
+            process.StandardInput.Close();
+        }
+
+        return process;
+    }
+
+    /// <summary>
+    /// Waits for the output of a process that has exited. A build it ran can leave processes behind (an MSBuild node, the
+    /// compiler server) that inherited its pipes and keep them open for minutes: what arrived within a few seconds of
+    /// the exit is all of it, and the readers are left to end when those processes do.
+    /// </summary>
+    public static async Task DrainAsync(params Task[] readers)
+    {
+        var all = Task.WhenAll(readers);
+        if (await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false) == all)
+        {
+            await all.ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The variables of a <c>dotnet</c> child that builds: nothing it starts outlives it holding its pipes.</summary>
+    public static void NoLingeringBuildProcesses(ProcessStartInfo psi)
+    {
+        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        psi.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+        psi.Environment["UseSharedCompilation"] = "false";
     }
 
     /// <summary>

@@ -1000,7 +1000,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     {
         // No --nologo: SDKs before 5.0 hand it to MSBuild, which rejects it (MSB1001). DOTNET_NOLOGO does the same.
         var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--verbosity", "minimal"]);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet restore did not start.");
+        using var process = Packages.DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet restore did not start.");
         var output = PumpAsync(process.StandardOutput);
         var error = PumpAsync(process.StandardError);
         await Packages.DotnetProcess.WaitOrKillAsync(process, _lifetime.Token).ConfigureAwait(false);

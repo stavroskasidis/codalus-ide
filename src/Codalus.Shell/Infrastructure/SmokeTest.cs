@@ -1605,6 +1605,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(File.Exists(Path.Combine(samples, "Data", "Data.slnx")), $"the samples folder {samples} has Data");
         var target = Path.Combine(_work, "Data");
         Copy(Path.Combine(samples, "Data"), target);
+        shell.Trust.Trust(target); // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=data.efMigrations skips it
         await shell.OpenSolutionAsync(Path.Combine(target, "Data.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Data solution is open", 300).ConfigureAwait(true);
         var restore = await shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None).ConfigureAwait(true);

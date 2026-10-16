@@ -433,7 +433,7 @@ internal sealed partial class SolutionSession
     {
         var psi = DotnetProcess.StartInfo(_dotnet, directory, args);
         psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
+        using var process = DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
         var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
