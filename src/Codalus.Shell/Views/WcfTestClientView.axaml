@@ -71,7 +71,7 @@
                 <ItemsControl x:Name="FieldList" ItemsSource="{Binding Rows}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:SoapFieldRow">
-                      <Grid ColumnDefinitions="200,140,*,Auto,64" Margin="0,2">
+                      <Grid ColumnDefinitions="150,100,*,Auto,56" Margin="0,2">
                         <TextBlock Text="{Binding Name}" Margin="{Binding Indent}" VerticalAlignment="Center" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Column="1" Text="{Binding Type}" Classes="muted" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Type}" />
                         <TextBox Grid.Column="2" Text="{Binding Value}" IsVisible="{Binding IsText}" IsEnabled="{Binding !IsNil}" PlaceholderText="{Binding Placeholder}" AutomationProperties.Name="{Binding Name}" />

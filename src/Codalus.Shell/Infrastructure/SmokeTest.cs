@@ -1100,6 +1100,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
 
         await StepAsync("web.scaffolding", "M15", "Add New Scaffolded Item runs dotnet-aspnet-codegenerator (an API controller over a DbContext); a gRPC service reference generates its client at build time", ScaffoldingStepAsync).ConfigureAwait(true);
+        await StepAsync("wcf.testClient", "M42", "samples/Wcf's CoreWCF service runs; the WCF Test Client finds its metadata and calls operations over BasicHttpBinding and WSHttpBinding", WcfStepAsync).ConfigureAwait(true);
         await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
 
         // M17a: containers (ADR 0042), where an engine runs Linux containers (GitHub's Linux runner; Podman here).
@@ -1723,6 +1724,66 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Layout.CloseDocument(document);
         }
     }
+    /// <summary>
+    /// WCF (M42, ADR 0069): samples/Wcf's CoreWCF service started with Run; the WCF Test Client finds its metadata from
+    /// the running program, reads it, and calls Add over BasicHttpBinding (SOAP 1.1) and Greet, with a data contract,
+    /// over WSHttpBinding (SOAP 1.2 with WS-Addressing). The screenshot is the website's.
+    /// </summary>
+    private async Task WcfStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "Wcf", "Wcf.slnx")), $"the samples folder {samples} has Wcf");
+        var target = Path.Combine(Work, "Wcf");
+        Copy(Path.Combine(samples, "Wcf"), target);
+        shell.Trust.Trust(target); // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=wcf.testClient skips it
+        await shell.OpenSolutionAsync(Path.Combine(target, "Wcf.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Wcf solution is open", 300).ConfigureAwait(true);
+        var service = Path.Combine(target, "CalculatorService", "CalculatorService.csproj");
+        shell.SetStartupProject(service);
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        try
+        {
+            // The program's channel stays after it exits, so a service that stops at start says why.
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: CalculatorService")?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("Now listening on", StringComparison.Ordinal) || (Output().Length > 0 && shell.Runs.Running.Count == 0), "the CoreWCF service starts", 420).ConfigureAwait(true);
+            Check(Output().Contains("Now listening on", StringComparison.Ordinal), "the CoreWCF service listens:\n" + Tail(Output(), 2000) + "\nThe build output:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+
+            var client = shell.OpenWcfTestClient();
+            string? Result() => client.ResponseTree.Count > 0 && client.ResponseTree[0].Children.Count > 0 ? client.ResponseTree[0].Children[0].Label : null;
+            var found = await shell.DiscoverWcfServicesAsync().ConfigureAwait(true);
+            Check(found.Count > 0 && found[0].MetadataUrl.EndsWith("/CalculatorService.svc?wsdl", StringComparison.Ordinal), "the running service's metadata is found: " + string.Join(", ", found.Select(d => d.MetadataUrl)) + "\n" + Tail(Output(), 1000));
+            client.Address = found[0].MetadataUrl;
+            await client.LoadAsync().ConfigureAwait(true);
+            Check(client.Error is null && client.Endpoints.Count == 2, "the metadata is read: " + client.Error);
+
+            client.Select("Add", Workbench.Wcf.SoapVersion.Soap11);
+            client.Row("a")!.Value = "2";
+            client.Row("b")!.Value = "3.5";
+            await client.SendAsync().ConfigureAwait(true);
+            Check(client.Error is null && Result() == "AddResult = 5.5", "Add answers over BasicHttpBinding: " + (client.Error ?? client.ResponseText));
+
+            client.Select("Greet", Workbench.Wcf.SoapVersion.Soap12);
+            client.Row("person.Name")!.Value = "Ada";
+            client.Row("person.Age")!.Value = "36";
+            client.Row("person.Mood")!.Value = "Happy";
+            client.Row("person.Tags.string")!.AddCommand.Execute(null);
+            client.Rows[^1].Value = "math";
+            await client.SendAsync().ConfigureAwait(true);
+            Check(client.Error is null && Result() == "GreetResult = Hello Ada, 36 and happy (math)!", "Greet answers over WSHttpBinding: " + (client.Error ?? client.ResponseText));
+            await WaitAsync(() => window.GetVisualDescendants().OfType<WcfTestClientView>().Any(), "the WCF Test Client renders").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-wcf-test-client.png");
+        }
+        finally
+        {
+            shell.StopRunning();
+            foreach (var document in shell.Layout.Documents.OfType<SolutionManagementDocument>().ToList())
+            {
+                shell.Layout.CloseDocument(document);
+            }
+        }
+    }
+
     /// <summary>
     /// The database explorer (M27b, ADR 0037 and 0038) on a copy of samples/Data's inventory database: a connection
     /// added in the form, the tree, a table's data edited and committed, a query editor with schema completion,
