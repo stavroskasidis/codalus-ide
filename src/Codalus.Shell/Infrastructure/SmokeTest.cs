@@ -2860,15 +2860,21 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Console.Out.WriteLine($"[{_clock.Elapsed:mm\\:ss}] {milestone} {id}: {title}");
         Console.Out.Flush();
         var start = Stopwatch.GetTimestamp();
+        Task? running = null;
         try
         {
             // A step that hangs (a request without a timeout) fails on its own instead of using up the run.
-            await body().WaitAsync(s_stepLimit).ConfigureAwait(true);
+            running = body();
+            await running.WaitAsync(s_stepLimit).ConfigureAwait(true);
             Report(id, milestone, title, "passed", Stopwatch.GetElapsedTime(start).TotalSeconds, null);
         }
         catch (Exception ex)
         {
-            var error = ex is SmokeFailure ? ex.Message : ex is TimeoutException ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes." : ex.ToString();
+            // Only the step limit is reported as such: a TimeoutException from the step itself (a timed wait in the
+            // code it drives) is reported with its stack, like any other exception.
+            var error = ex is SmokeFailure ? ex.Message
+                : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes."
+                : ex.ToString();
             Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, error);
             Screenshot($"smoke-test-{id}.png");
             if (!_logsShown)
