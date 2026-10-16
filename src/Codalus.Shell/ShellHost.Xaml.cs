@@ -9,10 +9,11 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Shell;
 
 /// <summary>
-/// Avalonia XAML (M19a, ADR 0047 and 0048): the XAML Previewer tool window, which follows the active <c>.axaml</c>
-/// editor while it is open (the editor's text, 150 ms after the last edit), rebuilds when the code changes, selects in
-/// the XAML what is clicked in the preview and outlines in the preview the element at the caret; and the XAML
-/// compiler's errors of the last build as squiggles in their files.
+/// Avalonia XAML (M19a, ADR 0047 and 0048) and WPF XAML (M40b, ADR 0072): the XAML Previewer tool window, which follows
+/// the active <c>.axaml</c> or <c>.xaml</c> editor while it is open (the editor's text, 150 ms after the last edit),
+/// rebuilds when the code changes, selects in the XAML what is clicked in the preview and outlines in the preview the
+/// element at the caret; and the XAML compiler's errors of the last build as squiggles in their files. The previewer
+/// service picks the designer host by the file's dialect; WPF's runs on Windows only (D31).
 /// </summary>
 public sealed partial class ShellHost
 {
@@ -95,7 +96,7 @@ public sealed partial class ShellHost
             {
                 _previewed.ContentChanged -= OnPreviewedChanged;
                 _previewed = null;
-                XamlPreview.Clear("Open an .axaml file to preview it.");
+                XamlPreview.Clear(XamlPreviewViewModel.NothingPreviewed);
             }
 
             _ = Previewer.InvalidateAsync();
@@ -116,14 +117,14 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ the tool window
 
-    /// <summary>Opens the XAML Previewer next to the editor and previews the active <c>.axaml</c> file.</summary>
+    /// <summary>Opens the XAML Previewer next to the editor and previews the active <c>.axaml</c> or <c>.xaml</c> file.</summary>
     public void ShowXamlPreview()
     {
         Layout.ShowToolWindow(XamlPreviewViewModel.ToolWindowId, focus: false);
         FollowXamlEditor(force: true);
     }
 
-    /// <summary>While the previewer is open, it shows the active XAML editor's file.</summary>
+    /// <summary>While the previewer is open, it shows the active XAML editor's file (Avalonia's or WPF's).</summary>
     private void FollowXamlEditor(bool force = false)
     {
         if (Layout is null || !Layout.IsVisible(XamlPreviewViewModel.ToolWindowId))
@@ -131,7 +132,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (ActiveEditor is not { Model: { LanguageId: AxamlLanguageId } model } || (model == _previewed && !force))
+        if (ActiveEditor is not { Model: { LanguageId: AxamlLanguageId or XamlLanguageId } model } || (model == _previewed && !force))
         {
             return;
         }
@@ -201,6 +202,7 @@ public sealed partial class ShellHost
             }
 
             _previewTarget ??= await Previewer.ResolveAsync(model.Path, CancellationToken.None).ConfigureAwait(true);
+            XamlPreview.SupportsThemes = _previewTarget.Dialect == PreviewDialect.Avalonia;
             var text = model.Text.Text;
             var result = await Previewer.ShowAsync(_previewTarget, text, CancellationToken.None).ConfigureAwait(true);
             if (model != _previewed)
@@ -236,7 +238,7 @@ public sealed partial class ShellHost
         }
 
         var folders = target.Projects.Select(p => Path.GetDirectoryName(p)! + Path.DirectorySeparatorChar);
-        if ((path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase))
+        if ((path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
             && folders.Any(f => path.StartsWith(f, StringComparison.OrdinalIgnoreCase)))
         {
             PreviewerLog.AppendLine($"{Path.GetFileName(path)} changed: rebuilding for the preview.");
@@ -258,7 +260,7 @@ public sealed partial class ShellHost
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            tree = Languages.RunningClient(AxamlLanguageId) is { } client ? await client.XamlLogicalTreeAsync(model.Uri, timeout.Token).ConfigureAwait(true) : null;
+            tree = Languages.RunningClient(model.LanguageId ?? AxamlLanguageId) is { } client ? await client.XamlLogicalTreeAsync(model.Uri, timeout.Token).ConfigureAwait(true) : null;
         }
         catch (OperationCanceledException)
         {
