@@ -166,7 +166,13 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
             // macOS core dumps don't record the process id.
             Assert.Equal(OperatingSystem.IsMacOS() ? null : process.Id, summary.ProcessId);
             Assert.StartsWith(".NET 11.", summary.Runtime, StringComparison.Ordinal);
-            var main = Assert.Single(summary.Threads, t => t.Frames.Any(f => f.Method.Contains("<Main>$", StringComparison.Ordinal)));
+            // On Linux x64 the main thread is Thread.Sleep's wait (.NET 11's managed WaitSubsystem), <Main>$ and
+            // Environment.CallEntryPoint; every thread's frames are in the message for when another platform differs.
+            var mains = summary.Threads.Where(t => t.Frames.Any(f => f.Method.Contains("<Main>$", StringComparison.Ordinal))).ToList();
+            Assert.True(
+                mains.Count == 1,
+                $"{mains.Count} threads run <Main>$; the dump's threads: {string.Join(" || ", summary.Threads.Select(t => $"#{t.ManagedId} (OS {t.OsId}): {string.Join(" | ", t.Frames.Select(f => f.Method))}"))}");
+            var main = mains[0];
             var frame = main.Frames.First(f => f.Method.Contains("<Main>$", StringComparison.Ordinal));
             Assert.True(
                 (Path.GetFileName(frame.File), frame.Line) == ("Program.cs", DebuggeeFixture.Line(debuggee.Program, "wait")),
