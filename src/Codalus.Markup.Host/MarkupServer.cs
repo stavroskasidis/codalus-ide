@@ -90,12 +90,30 @@ internal sealed class MarkupServer
         _connection.OnRequest(Methods.Hover, (raw, ct) => HoverAsync(raw, ct));
     }
 
-    /// <summary>Options: <c>{ "schemaDownload": bool, "schemaCache": path }</c> (initialization options or settings).</summary>
+    /// <summary>
+    /// Options: <c>{ "schemaDownload": bool, "schemaCache": path, "xmlSchemas": [{ "pattern": glob, "schema": path }] }</c>
+    /// (initialization options or settings). New XML schema associations validate the open XML documents again.
+    /// </summary>
     private void Configure(JsonElement? options)
     {
         if (options is not { ValueKind: JsonValueKind.Object } o)
         {
             return;
+        }
+
+        if (o.TryGetProperty("xmlSchemas", out var xmlSchemas) && xmlSchemas.ValueKind == JsonValueKind.Array)
+        {
+            _xml.Schemas.Associations =
+            [
+                .. xmlSchemas.EnumerateArray()
+                    .Where(a => a.ValueKind == JsonValueKind.Object && a.TryGetProperty("pattern", out var p) && p.ValueKind == JsonValueKind.String
+                                && a.TryGetProperty("schema", out var s) && s.ValueKind == JsonValueKind.String)
+                    .Select(a => (a.GetProperty("pattern").GetString()!, a.GetProperty("schema").GetString()!)),
+            ];
+            foreach (var document in _documents.All.Where(d => d.LanguageId == "xml"))
+            {
+                Schedule(document, TimeSpan.Zero);
+            }
         }
 
         var download = o.TryGetProperty("schemaDownload", out var d) ? d.ValueKind == JsonValueKind.True : _schemas.AllowDownloads;

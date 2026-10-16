@@ -13,6 +13,10 @@
     <ProjectReference Include="..\Codalus.Debugging\Codalus.Debugging.csproj" />
     <ProjectReference Include="..\Codalus.Plugins.Protocol\Codalus.Plugins.Protocol.csproj" />
     <ProjectReference Include="..\Codalus.Projects.Protocol\Codalus.Projects.Protocol.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The .editorconfig keys the markup host completes, for the EditorConfig settings page. -->
+    <Compile Include="..\Codalus.Markup.Host\EditorConfig\EditorConfigCatalog.cs" Link="Settings\EditorConfigCatalog.cs" />
     <ProjectReference Include="..\Codalus.Data.Protocol\Codalus.Data.Protocol.csproj" />
     <ProjectReference Include="..\Codalus.Diagnostics.Protocol\Codalus.Diagnostics.Protocol.csproj" />
     <ProjectReference Include="..\Codalus.LanguageServices.Client\Codalus.LanguageServices.Client.csproj" />

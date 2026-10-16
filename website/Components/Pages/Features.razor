@@ -1,7 +1,7 @@
 @page "/features"
 @inject SiteOptions Site
 
-<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, profiling and more." />
+<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, Visual Basic, F#, profiling and more." />
 
 <div class="container">
     <section class="page-intro">
@@ -57,9 +57,11 @@
                 <ul>
                     <li>Tabs with preview and split views, multiple carets, folding and a minimap</li>
                     <li>Semantic highlighting, completion, signature help and Quick Info</li>
-                    <li>Live diagnostics and an Error List</li>
+                    <li>Live diagnostics and an Error List, grouped by project, file, severity or code, with background analysis of open documents, the current project or the solution</li>
                     <li>Rename, code fixes and refactorings, all with previews</li>
                     <li>Snippets, Code Cleanup, format on save and local history</li>
+                    <li>Pasted code brings its usings along; editor settings per language, and an EditorConfig settings page</li>
+                    <li>CodeLens with references, Git history and test status</li>
                 </ul>
             </div>
             <div>
@@ -67,7 +69,8 @@
                 <ul>
                     <li>Go to Definition and Implementation, into decompiled code</li>
                     <li>Find All References with read/write classification</li>
-                    <li>Peek Definition, Call and Type Hierarchy, Go To All</li>
+                    <li>Peek Definition, Call and Type Hierarchy, Go To All, Class View and the Object Browser</li>
+                    <li>Find and Replace in Files: a floating window, results with every match highlighted, filtered, grouped and kept</li>
                     <li>Inlay hints, CodeLens, an inheritance margin and sticky scroll</li>
                     <li>Library code from Source Link before decompiling</li>
                 </ul>
@@ -79,7 +82,9 @@
                     <li>Property pages that show where each value comes from</li>
                     <li>Launch profiles, Configuration Manager and Reference Manager</li>
                     <li>Browse, update and consolidate packages; Central Package Management</li>
+                    <li>The Properties window, Show All Files, Add New Item, templates and External Tools</li>
                     <li>Folder mode for a folder without a solution</li>
+                    <li>.NET 11 projects with C# 15, every framework from .NET Core 2.0 to .NET 10, and older SDKs in global.json</li>
                     <li>A start window with your recent solutions, pinned and searchable</li>
                     <li>Check Environment: a missing .NET SDK or git offered to install</li>
                 </ul>
@@ -89,6 +94,7 @@
                 <ul>
                     <li>Build, Rebuild and Clean on MSBuild, cancellable</li>
                     <li>A fast up-to-date check, binary logs and build timings</li>
+                    <li>Batch Build, build events, and custom tools for ResX and T4, with a resource editor for .resx files</li>
                     <li>Run with Ctrl+F5, and multiple startup projects</li>
                     <li>A Test Explorer for xUnit, NUnit, MSTest and TUnit</li>
                     <li>Code coverage with Coverlet</li>
@@ -101,6 +107,8 @@
                     <li>Conditions, hit counts, logpoints and dependent breakpoints</li>
                     <li>Text, JSON, XML and HTML visualizers, and [DebuggerDisplay]</li>
                     <li>Pinned data tips, PerfTips and Run to Click</li>
+                    <li>Dumps, Parallel Stacks and Parallel Watch, and Just-In-Time crash dumps</li>
+                    <li>Attach over SSH, in containers and in WSL; console apps in the integrated terminal</li>
                     <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
                 </ul>
             </div>
@@ -122,6 +130,7 @@
                     <li>HTML, CSS, JavaScript and TypeScript language servers</li>
                     <li>ESLint, Prettier, npm scripts and the Task Runner Explorer</li>
                     <li>Hot Reload through dotnet watch</li>
+                    <li>Scaffolding, OpenAPI and gRPC service references, the dev certificate and user secrets</li>
                 </ul>
             </div>
             <div>
@@ -129,7 +138,8 @@
                 <ul>
                     <li>EF Core migrations, model views and reverse engineering</li>
                     <li>A Database Explorer for SQL Server, PostgreSQL, MySQL and SQLite</li>
-                    <li>Run and debug in containers with docker or podman</li>
+                    <li>A query editor with plans and history, a SQL language service and .sqlproj builds</li>
+                    <li>Run and debug in containers with docker or podman; Add Docker Support; Compose up, down and debug</li>
                     <li>Aspire AppHosts and their resources</li>
                     <li>Publish profiles, including container images</li>
                 </ul>
@@ -145,10 +155,59 @@
                 </ul>
             </div>
             <div>
+                <h3>AI assistance, your way</h3>
+                <ul>
+                    <li>Off until you turn it on, with no telemetry; nothing is sent until you choose a provider</li>
+                    <li>OpenAI-compatible servers, Ollama on your machine, Anthropic, or a provider plugin; your key in the OS credential store</li>
+                    <li>AI Chat with the context you choose: the selection, files, errors, build output and the solution's projects</li>
+                    <li>Code from answers applied over the selection or the file after a preview</li>
+                    <li>Inline suggestions and next edit suggestions, each with its own switch</li>
+                    <li>Commit messages, pull request descriptions, Ask AI on an exception or a failing test, Fix with AI, tests for the selection, and profile summaries</li>
+                    <li>Agent mode: it reads, searches, builds, edits and runs commands, every change in a preview and every command after you allow it</li>
+                    <li>MCP: your MCP servers' tools in agent mode, and <code>codalus mcp</code> for agents outside the IDE</li>
+                    <li>Files .gitignore or a .codalusignore excludes, and secrets, are never sent; a request log of what was</li>
+                </ul>
+            </div>
+            <div>
+                <h3>.NET MAUI</h3>
+                <ul>
+                    <li>Android devices and emulators on Windows, Linux and macOS; iOS simulators, iPhones and Mac Catalyst on macOS</li>
+                    <li>A device picker on the toolbar and a Devices window: start emulators, boot simulators, choose where the app runs</li>
+                    <li>Build, deploy and run with the platform SDK's own run target</li>
+                    <li>Debug on Android devices and emulators, iOS simulators and Mac Catalyst with our own Mono debugger: breakpoints, stepping, locals, watch and exceptions</li>
+                    <li>MAUI XAML: completion, compiled binding paths from x:DataType, live errors, hover and Go to Definition</li>
+                    <li>The MAUI workloads, the Android SDK and a JDK installed when you agree, and listed in Check Environment</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Visual Basic</h3>
+                <ul>
+                    <li>Completion, Quick Info, signature help and live errors, from the same language service as C#</li>
+                    <li>C# and VB projects in one solution: Go to Definition, Find All References and rename across both</li>
+                    <li>End If, Next and End Sub added as you press Enter, keyword casing fixed, XML literals' end tags closed</li>
+                    <li>Quick fixes and refactorings, formatting, the outline, folding and snippets</li>
+                    <li>New Project in Visual Basic, VB item templates, and Option Strict, Explicit, Infer and Compare on the project's properties</li>
+                    <li>VB tests in the Test Explorer, and debugging with breakpoints, stepping and locals</li>
+                </ul>
+            </div>
+            <div>
+                <h3>F#</h3>
+                <ul>
+                    <li>FsAutoComplete, Ionide's language server, installed for you: completion with unopened namespaces, Quick Info, live errors and FSharpLint</li>
+                    <li>Navigation, rename, quick fixes, inlay hints and signature CodeLens</li>
+                    <li>Fantomas formatting with your .editorconfig</li>
+                    <li>Solution Explorer in compile order: Move Up, Move Down, Add Above and Add Below; signature files under their implementation</li>
+                    <li>F# Interactive in the terminal: send a selection, a line, a file or a project's references; reset</li>
+                    <li>Scripts with #load and #r "nuget:", type providers, F# analyzers</li>
+                    <li>Expecto, xUnit and NUnit tests in the Test Explorer; debugging F#</li>
+                    <li>F# item templates and project properties</li>
+                </ul>
+            </div>
+            <div>
                 <h3>And more</h3>
                 <ul>
                     <li>Remote development over SSH, in WSL and in containers; Dev Containers; reconnecting after a network drop; the Test Explorer and workspace plugins on the remote machine; tests in WSL, Docker or over SSH</li>
-                    <li>Profiling: counters, CPU traces and flame graphs</li>
+                    <li>Profiling: counters, CPU traces and flame graphs, memory snapshots and diffs, allocations, .NET Async, threads, exceptions, file I/O and BenchmarkDotNet</li>
                     <li>Avalonia XAML editing, a live previewer and the Live Visual Tree</li>
                     <li>An integrated terminal and C# Interactive</li>
                     <li>About forty languages highlighted; JSON and YAML schemas</li>
@@ -162,7 +221,7 @@
             </div>
         </div>
         <div class="notice" style="margin-top: 56px">
-            <p><strong>Not there yet:</strong> Dev Container features and Compose, Hot Reload while debugging, .NET MAUI, translations of the interface, Visual Basic and F#.</p>
+            <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, Hot Reload while debugging, and translations of the interface.</p>
             <a class="link-arrow" href="@Site.Blob("docs/roadmap.md")">See the roadmap</a>
         </div>
     </section>
@@ -176,6 +235,9 @@
         new("editor", "Editor", "editor-dark.png",
             "The editor with inlay hints, Find Results for references to Greet, and the Solution Explorer",
             "Roslyn-powered C# with inlay hints, the minimap, Find All References and the Solution Explorer."),
+        new("find", "Find in Files", "find-in-files.png",
+            "The Find and Replace window floating over the editor, with Find Results below",
+            "Find and Replace in Files from a floating window: scopes, file types and regular expressions, with every match listed in Find Results, which filters, groups by path or file and keeps earlier results on their own pages."),
         new("debugging", "Debugging", "debugging.png",
             "Paused at a breakpoint with a PerfTip, and the Exception Settings window",
             "Paused on a line with a PerfTip, and the Exception Settings window, with every debug tool window a tab away."),

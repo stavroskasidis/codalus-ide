@@ -15,18 +15,18 @@ namespace Codalus.LanguageServices.Host.Features;
 internal static class TestCandidatesFeature
 {
     // xUnit (Fact, Theory and their *Fact/*Theory variants), NUnit, MSTest (and *TestMethod), TUnit.
-    private static readonly HashSet<string> s_methodAttributes = new(StringComparer.Ordinal)
+    internal static readonly HashSet<string> s_methodAttributes = new(StringComparer.Ordinal)
     {
         "Test", "TestCase", "TestCaseSource", "Theory", "Fact", "TestMethod", "DataTestMethod",
     };
 
-    private static readonly HashSet<string> s_parameterizedAttributes = new(StringComparer.Ordinal)
+    internal static readonly HashSet<string> s_parameterizedAttributes = new(StringComparer.Ordinal)
     {
         "Theory", "TestCase", "TestCaseSource", "DataTestMethod", "DataRow", "DynamicData", "InlineData", "MemberData", "ClassData",
         "Arguments", "MethodDataSource", "ClassDataSource", "Values", "Range", "Random", "ValueSource",
     };
 
-    private static readonly HashSet<string> s_classAttributes = new(StringComparer.Ordinal) { "TestFixture", "TestClass" };
+    internal static readonly HashSet<string> s_classAttributes = new(StringComparer.Ordinal) { "TestFixture", "TestClass" };
 
     public static async Task<TestCandidatesResult> FindAsync(Solution solution, IReadOnlyList<TextDocumentIdentifier> documents, CancellationToken cancellationToken)
     {
@@ -49,7 +49,39 @@ internal static class TestCandidatesFeature
 
         var root = await tree.GetRootAsync(cancellationToken).ConfigureAwait(false);
         var sourceText = await tree.GetTextAsync(cancellationToken).ConfigureAwait(false);
+        if (root is Microsoft.CodeAnalysis.VisualBasic.Syntax.CompilationUnitSyntax)
+        {
+            // Visual Basic (M35): every type is in the project's root namespace too.
+            var rootNamespace = DocumentUris.ToPath(uri) is { } path && solution.GetDocumentIdsWithFilePath(path).FirstOrDefault() is { } id
+                && solution.GetProject(id.ProjectId)?.CompilationOptions is Microsoft.CodeAnalysis.VisualBasic.VisualBasicCompilationOptions options
+                ? options.RootNamespace
+                : null;
+            return VisualBasicTestCandidates.Find(root, sourceText, rootNamespace);
+        }
+
         return Find(root, sourceText);
+    }
+
+    /// <summary>The name of a test attribute among <paramref name="names"/> (simple names without <c>Attribute</c>), as <see cref="TestAttribute"/> reads them.</summary>
+    internal static string? TestAttributeOf(IEnumerable<string> names)
+    {
+        foreach (var name in names)
+        {
+            if (s_methodAttributes.Contains(name))
+            {
+                return name;
+            }
+
+            foreach (var suffix in new[] { "Fact", "Theory", "TestMethod" })
+            {
+                if (name.EndsWith(suffix, StringComparison.Ordinal))
+                {
+                    return suffix;
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The candidates in a parsed file, in document order.</summary>

@@ -479,6 +479,18 @@ internal sealed class PluginHostServer : IAsyncDisposable
     internal void Log(string? pluginId, string level, string message) =>
         Post(PluginMethods.Log, new LogParams(pluginId, level, message), PluginJsonContext.Default.LogParams);
 
+    /// <summary>Completes once everything queued before it has been written (a handler's notifications before its response).</summary>
+    internal async Task FlushAsync(CancellationToken cancellationToken)
+    {
+        var flushed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _outgoing.Writer.TryWrite(() =>
+        {
+            flushed.TrySetResult();
+            return Task.CompletedTask;
+        });
+        await flushed.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Sends a request after everything queued before it has been written.</summary>
     internal async Task<TResult> RequestAsync<TParams, TResult>(
         string method, TParams parameters,

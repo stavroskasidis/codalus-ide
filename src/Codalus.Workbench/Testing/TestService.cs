@@ -53,6 +53,7 @@ public sealed class TestService : ITestSink, IDisposable
     private (TestRunKind Kind, IReadOnlyList<string>? Include)? _last;
     private int _pendingNotify;
     private int _activeRequests;
+    private volatile bool _disposed;
 
     public TestService() => _notifyTimer = new Timer(_ => RaiseChanged());
 
@@ -432,7 +433,7 @@ public sealed class TestService : ITestSink, IDisposable
         }
 
         // A plugin that never ends its run (it crashed) is not waited for forever.
-        await Task.WhenAny(ended, Task.Delay(TimeSpan.FromSeconds(30))).ConfigureAwait(false);
+        await ((Task)ended).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         lock (_gate)
         {
             _runEnded.Remove(runId);
@@ -649,19 +650,34 @@ public sealed class TestService : ITestSink, IDisposable
 
     private void ScheduleChanged()
     {
-        if (Interlocked.Exchange(ref _pendingNotify, 1) == 0)
+        if (!_disposed && Interlocked.Exchange(ref _pendingNotify, 1) == 0)
         {
-            _notifyTimer.Change(NotifyInterval, Timeout.InfiniteTimeSpan);
+            try
+            {
+                _notifyTimer.Change(NotifyInterval, Timeout.InfiniteTimeSpan);
+            }
+            catch (ObjectDisposedException)
+            {
+                // disposed meanwhile: nobody listens any more
+            }
         }
     }
 
     private void RaiseChanged()
     {
         Interlocked.Exchange(ref _pendingNotify, 0);
-        Changed?.Invoke(this, EventArgs.Empty);
+        if (!_disposed)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
     }
 
-    public void Dispose() => _notifyTimer.Dispose();
+    /// <summary>Stops the coalesced notifications: a pending one would reach editors that outlived the window.</summary>
+    public void Dispose()
+    {
+        _disposed = true;
+        _notifyTimer.Dispose();
+    }
 
     internal static string Format(TimeSpan duration) =>
         duration.TotalSeconds >= 1

@@ -13,7 +13,7 @@ The M7 accessibility pass (2026-10-09) covered keyboard access, screen-reader na
 - **Git**: staging and diffs work without the mouse: the Changes lists, Enter for the diff, and Stage Hunk at the caret.
 - **Names**: list items, tree items, toolbar buttons, status bar items and tool windows have automation names. Rows describe their state: an Error List row reads "error CS0103: … line 5"; Changes rows say "staged" or "untracked"; breakpoint rows say "disabled"; variable rows read "name = value (type)".
 - **Contrast**:
-  - Light, Dark and High Contrast themes; the High Contrast theme follows the OS preference when the theme setting is Follow System.
+  - Blue, Light, Dark and High Contrast themes; the High Contrast theme follows the OS preference when the theme setting is Follow System.
   - Keyboard focus keeps the theme's visible focus indicator.
 - **Not color alone**:
   - Diagnostics carry an icon and severity text.
@@ -24,7 +24,7 @@ The M7 accessibility pass (2026-10-09) covered keyboard access, screen-reader na
 
 ## Known gaps (`TODO(issue)`)
 
-- **Blame annotations and gutter change markers** are drawn in editor margins and aren't exposed to screen readers. The same information is available through the Changes window and the diff document; a "line history" command that reads the blame of the current line would close the gap.
+- **Blame annotations and gutter change markers** are drawn in editor margins and aren't exposed to screen readers. The same information is available through the Changes window and the diff document; file and line history (Git depth) show the same history as a list, but a command that reads the blame of the current line aloud would close the gap.
 - **The breakpoint margin** is mouse-only. `F9`, `Ctrl+F9` and the Breakpoints window cover the same actions from the keyboard.
 - **The minimap** is mouse-only by design. It is decorative for keyboard users, who scroll with the editor.
 - **Screen-reader testing**: the pass checked automation names and keyboard paths in headless tests and by inspection. Testing with NVDA, VoiceOver and Orca by people who use them daily is still to come; issues are welcome.

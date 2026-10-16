@@ -21,6 +21,43 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task The_current_project_scope_runs_analyzers_in_that_projects_closed_files()
+    {
+        var reporter = fixture.File("src", "App", "Reporter.cs");
+        async Task ConfigureAsync(string scope, string project) =>
+            await fixture.Languages.ConfigureAsync(System.Text.Json.JsonSerializer.SerializeToElement(
+                new Dictionary<string, string> { ["analysisScope"] = scope, ["analysisProject"] = project }));
+
+        try
+        {
+            // Another project is current: Reporter.cs (closed) has no analyzer diagnostics; App is current: it has CA2200.
+            await ConfigureAsync("currentProject", fixture.File("src", "Lib", "Lib.csproj"));
+            await Task.Delay(TimeSpan.FromSeconds(3), Ct); // a background pass
+            Assert.DoesNotContain(fixture.Languages.Diagnostics.For(reporter), d => d.Code == "CA2200");
+            await ConfigureAsync("currentProject", fixture.File("src", "App", "App.csproj"));
+            await WaitForDiagnosticsAsync(reporter, d => d.Any(x => x.Code == "CA2200"));
+        }
+        finally
+        {
+            await ConfigureAsync("openDocuments", string.Empty);
+        }
+
+        await WaitForDiagnosticsAsync(reporter, d => d.All(x => x.Code != "CA2200"));
+    }
+
+    [Fact]
+    public void A_project_is_analyzed_in_full_when_the_scope_covers_it()
+    {
+        var app = Path.Combine(Path.GetTempPath(), "App", "App.csproj");
+        var lib = Path.Combine(Path.GetTempPath(), "Lib", "Lib.csproj");
+        Assert.Equal("solution", DiagnosticsService.ScopeOf("solution", null, lib));
+        Assert.Equal("solution", DiagnosticsService.ScopeOf("currentProject", app, app));
+        Assert.Equal("openDocuments", DiagnosticsService.ScopeOf("currentProject", app, lib));
+        Assert.Equal("openDocuments", DiagnosticsService.ScopeOf("currentProject", null, app));
+        Assert.Equal("openDocuments", DiagnosticsService.ScopeOf("openDocuments", app, app));
+    }
+
+    [Fact]
     public async Task Diagnostics_include_analyzers_and_follow_edits()
     {
         var reporter = fixture.File("src", "App", "Reporter.cs");
@@ -37,6 +74,26 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
         await fixture.EditAsync(reporter, "int broken = \"text\"; ", string.Empty);
         await WaitForDiagnosticsAsync(reporter, d => d.All(x => x.Code != "CS0029"));
         await fixture.Languages.CloseAsync(reporter);
+    }
+
+    [Fact]
+    public async Task CSharp_15_features_show_no_false_errors()
+    {
+        // M30b: the host's Roslyn is the .NET 11 SDK's compiler, so unions, collection expression arguments and labeled
+        // break/continue (CSharp15.cs, net11.0) parse and bind as they build.
+        var path = fixture.File("src", "App", "CSharp15.cs");
+        await fixture.OpenAsync(path);
+
+        // A pass over the file with an error in it, then without: what's left is what the file itself has.
+        await fixture.EditAsync(path, "return set.Count;", "int broken = \"text\"; return set.Count;");
+        await WaitForDiagnosticsAsync(path, d => d.Any(x => x.Code == "CS0029"));
+        await fixture.EditAsync(path, "int broken = \"text\"; ", string.Empty);
+        var diagnostics = await WaitForDiagnosticsAsync(path, d => d.All(x => x.Code != "CS0029"));
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        var hover = await fixture.Client.HoverAsync(Uri(path), fixture.At(path, "Describe(Pet pet)", "Describe(".Length), Ct);
+        Assert.Contains("Pet", hover?.Contents.Value, StringComparison.Ordinal);
+        await fixture.Languages.CloseAsync(path);
     }
 
     [Fact]
@@ -236,6 +293,96 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
         var refactorings = await fixture.Client.CodeActionsAsync(Uri(path), new Protocol.Range(name, name), [], Ct);
         Assert.True(refactorings.Any(a => a.Kind == CodeActionKind.Refactor), string.Join(", ", refactorings.Select(a => a.Title)));
         await fixture.Languages.CloseAsync(path);
+    }
+
+    [Fact]
+    public async Task Pasted_code_gets_the_usings_it_needs()
+    {
+        var path = fixture.File("src", "App", "Pasted.cs");
+        await File.WriteAllTextAsync(path, "namespace App\n{\n    internal static class Pasted\n    {\n    }\n}\n\nnamespace App.One { public class Widget { } }\nnamespace App.Two { public class Widget { } }\n", Ct);
+        await fixture.OpenAsync(path);
+        try
+        {
+            // The pasted members: StringBuilder and Regex have one namespace each; Widget has two (App.One, App.Two).
+            const string Code = "        public static string Make() => new StringBuilder().Append(Regex.Escape(\"a\")).ToString();\n        public static Widget? Part;\n";
+            await fixture.EditAsync(path, "    {\n    }", "    {\n" + Code + "    }");
+            var text = fixture.Text(path).Text;
+            var start = text.IndexOf(Code, StringComparison.Ordinal);
+            var range = new Protocol.Range(LanguageFixture.PositionOf(text, start), LanguageFixture.PositionOf(text, start + Code.Length));
+
+            var edit = await fixture.Client.PasteImportsAsync(Uri(path), range, null, Ct);
+            var change = Assert.Single(edit!.DocumentChanges);
+            var result = Apply(text, change.Edits);
+            Assert.Contains("using System.Text;", result, StringComparison.Ordinal);
+            Assert.Contains("using System.Text.RegularExpressions;", result, StringComparison.Ordinal);
+            Assert.DoesNotContain("using App.One;", result, StringComparison.Ordinal); // ambiguous: left for the lightbulb
+            Assert.DoesNotContain("using App.Two;", result, StringComparison.Ordinal);
+            Assert.Contains(Code, result, StringComparison.Ordinal);
+
+            // The namespaces the code was copied under decide.
+            edit = await fixture.Client.PasteImportsAsync(Uri(path), range, ["App.Two", "System.Text"], Ct);
+            var preferred = Apply(text, Assert.Single(edit!.DocumentChanges).Edits);
+            Assert.Contains("using App.Two;", preferred, StringComparison.Ordinal);
+            Assert.DoesNotContain("using App.One;", preferred, StringComparison.Ordinal);
+
+            // Nothing missing: no edit.
+            var bound = text.IndexOf("internal static class Pasted", StringComparison.Ordinal);
+            Assert.Null(await fixture.Client.PasteImportsAsync(Uri(path), new Protocol.Range(LanguageFixture.PositionOf(text, bound), LanguageFixture.PositionOf(text, bound + 28)), null, Ct));
+        }
+        finally
+        {
+            await fixture.Languages.CloseAsync(path);
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("using System.Text;", "System.Text")]
+    [InlineData("Imports System.Text.RegularExpressions", "System.Text.RegularExpressions")]
+    [InlineData("using static System.Math;", null)]
+    [InlineData("System.Text.StringBuilder", null)]
+    [InlineData("Generate class 'Foo'", null)]
+    public void The_namespace_comes_from_the_fix_title(string title, string? expected) =>
+        Assert.Equal(expected, Features.PasteImportsFeature.Namespace(title));
+
+    [Fact]
+    public async Task Class_view_and_the_object_browser_walk_a_projects_symbols()
+    {
+        var lib = fixture.File("src", "Lib", "Lib.csproj");
+        async Task<BrowseItem[]> Browse(string? parent, bool references = false, string? query = null) =>
+            (await fixture.Client.BrowseAsync(new BrowseParams(lib, parent, references) { Query = query }, Ct)).Items;
+
+        // Class View: the project's namespaces, their types, and a type's members with signatures.
+        var roots = await Browse(null);
+        var ns = Assert.Single(roots, i => i.Kind == SymbolKind.Namespace && i.Name == "Lib");
+        var types = await Browse(ns.Id);
+        var circle = Assert.Single(types, t => t.Name == "Circle");
+        Assert.Contains(types, t => t is { Name: "IShape", Kind: SymbolKind.Interface });
+        Assert.True(circle is { Kind: SymbolKind.Class, HasChildren: true, IsSource: true });
+        var members = await Browse(circle.Id);
+        Assert.Contains(members, m => m is { Name: "Area", Kind: SymbolKind.Method, Detail: "double Area()" });
+        Assert.Contains(members, m => m is { Name: "Radius", Kind: SymbolKind.Property });
+
+        var described = await fixture.Client.DescribeAsync(lib, circle.Id, Ct);
+        Assert.NotNull(described);
+        Assert.True(described.Declaration.Contains("class Circle", StringComparison.Ordinal), described.Declaration);
+        Assert.Equal(Uri(Shapes), described.Location!.Uri);
+
+        // The Object Browser: the project's assembly first, then what it references, down to a library type.
+        var assemblies = await Browse(null, references: true);
+        Assert.Equal("Lib", assemblies[0].Name);
+        var runtime = Assert.Single(assemblies, a => a.Name == "System.Runtime");
+        var system = Assert.Single(await Browse(runtime.Id, references: true), n => n.Name == "System");
+        var stringType = Assert.Single(await Browse(system.Id, references: true), t => t.Name == "String");
+        Assert.False(stringType.IsSource);
+        Assert.Contains(await Browse(stringType.Id, references: true), m => m.Name == "IsNullOrEmpty");
+        var library = await fixture.Client.DescribeAsync(lib, stringType.Id, Ct);
+        Assert.StartsWith(DocumentUris.MetadataScheme + ":", library!.Location!.Uri, StringComparison.Ordinal);
+        Assert.Equal("Member of System", library.Container);
+
+        // Search: by name, in the project or with what it references.
+        Assert.Contains(await Browse(null, query: "Circ"), i => i.Name == "Circle");
+        Assert.Contains(await Browse(null, references: true, query: "IsNullOrWhiteSpace"), i => i is { Name: "IsNullOrWhiteSpace", Detail: "string" });
     }
 
     [Fact]

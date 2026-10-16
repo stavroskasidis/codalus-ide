@@ -20,7 +20,7 @@ public sealed class MarkupHostTests : IAsyncLifetime
     private static string Metadata(string key) =>
         typeof(MarkupHostTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
 
-    private static string HostPath => Path.Combine(Metadata("CodalusRepoRoot"), "src", "Codalus.Markup.Host", "bin", Metadata("CodalusConfiguration"), "net10.0", "codalus-markuphost.dll");
+    private static string HostPath => Path.Combine(Metadata("CodalusRepoRoot"), "src", "Codalus.Markup.Host", "bin", Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-markuphost.dll");
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token).Token;
@@ -31,7 +31,7 @@ public sealed class MarkupHostTests : IAsyncLifetime
         Directory.CreateDirectory(_root);
         foreach (var (id, extensions, names) in new (string, string[], string[])[]
         {
-            ("json", [".json"], []), ("jsonc", [".jsonc"], ["launchSettings.json"]), ("xml", [".xml"], []), ("msbuild", [".csproj", ".props"], []),
+            ("json", [".json"], []), ("jsonc", [".jsonc"], ["launchSettings.json"]), ("xml", [".xml", ".book"], []), ("msbuild", [".csproj", ".props"], []),
             ("yaml", [".yml", ".yaml"], []), ("editorconfig", [], [".editorconfig"]),
         })
         {
@@ -41,7 +41,7 @@ public sealed class MarkupHostTests : IAsyncLifetime
         _servers.Register(new LanguageServiceDescriptor("markup", "Markup", [], null, () => ProcessLaunchInfo.FromPath(HostPath))
         {
             Languages = MarkupHostLaunch.Languages,
-            InitializationOptions = System.Text.Json.JsonDocument.Parse("""{ "schemaDownload": false }""").RootElement.Clone(),
+            InitializationOptions = System.Text.Json.JsonElement.Parse("""{ "schemaDownload": false }"""),
         });
         _service = new LanguageService(_servers, _solutions, languages: _languages)
         {
@@ -185,6 +185,52 @@ public sealed class MarkupHostTests : IAsyncLifetime
         Assert.Contains(keys.Items, i => i.Label == "csharp_style_namespace_declarations");
         var hover = await client.HoverAsync(uri, new Position(0, 1), ct);
         Assert.Contains("Stop looking", hover!.Contents.Value, StringComparison.Ordinal);
+    }
+
+    private const string BookSchema = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+          <xs:element name="book">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="title" type="xs:string" />
+                <xs:element name="pages" type="xs:positiveInteger" />
+              </xs:sequence>
+              <xs:attribute name="isbn" type="xs:string" use="required" />
+            </xs:complexType>
+          </xs:element>
+        </xs:schema>
+        """;
+
+    [Fact]
+    public async Task Xml_files_are_validated_against_local_schemas_they_name_or_settings_associate()
+    {
+        var ct = Timeout();
+        await File.WriteAllTextAsync(Path.Combine(_root, "book.xsd"), BookSchema, ct);
+
+        // xsi:noNamespaceSchemaLocation, relative to the file: a missing attribute and a bad value are reported.
+        var (book, _, _) = await OpenAsync("book.xml", """
+            <book xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="book.xsd">
+              <title>Codalus</title>
+              <pages>many</pages>
+            </book>
+            """);
+        var diagnostics = await DiagnosticsAsync(book, d => d.Count(x => x.Code == "xml.schema") >= 2, ct);
+        Assert.Contains(diagnostics, d => d.Code == "xml.schema" && d.Message.Contains("isbn", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, d => d.Code == "xml.schema" && d.Range.Start.Line == 2 && d.Message.Contains("pages", StringComparison.Ordinal));
+
+        // A valid file has none; a schema on the web is never fetched (so nothing is checked).
+        var (valid, _, _) = await OpenAsync("valid.xml", "<book xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"book.xsd\" isbn=\"1\"><title>A</title><pages>3</pages></book>");
+        var (remote, _, _) = await OpenAsync("remote.xml", "<book xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:noNamespaceSchemaLocation=\"https://example.invalid/book.xsd\"><nonsense /></book>");
+        await Task.Delay(1500, ct);
+        Assert.DoesNotContain(_service.Diagnostics.For(valid), d => d.Code == "xml.schema");
+        Assert.DoesNotContain(_service.Diagnostics.For(remote), d => d.Code is "xml.schema" or "xml.schemaLoad");
+
+        // The xml.schemas association: a file that names no schema is validated by its path.
+        var (catalog, _, client) = await OpenAsync(Path.Combine("data", "catalog.book"), "<book><title>B</title></book>");
+        await client.ConfigureAsync(System.Text.Json.JsonElement.Parse($$"""{ "xmlSchemas": [ { "pattern": "**/*.book", "schema": {{System.Text.Json.JsonSerializer.Serialize(Path.Combine(_root, "book.xsd"))}} } ] }"""), ct);
+        diagnostics = await DiagnosticsAsync(catalog, d => d.Any(x => x.Code == "xml.schema"), ct);
+        Assert.Contains(diagnostics, d => d.Message.Contains("pages", StringComparison.Ordinal) || d.Message.Contains("isbn", StringComparison.Ordinal));
     }
 
     [Fact]

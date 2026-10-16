@@ -26,11 +26,12 @@ public sealed class EnvironmentCheckTests : IDisposable
 
         var linux = InstallPlans.For(dotnet, PlatformKind.Linux, "/home/u", hasWinget: false, "ubuntu debian")!;
         Assert.Equal(InstallKind.Run, linux.Kind);
-        Assert.Contains("dotnet-install.sh | bash -s -- --channel 10.0 --install-dir \"/home/u/.dotnet\"", linux.Command, StringComparison.Ordinal);
+        // The channel of the .NET the IDE runs on (11.0 since M30b).
+        Assert.Contains($"dotnet-install.sh | bash -s -- --channel {InstallPlans.HostChannel} --install-dir \"/home/u/.dotnet\"", linux.Command, StringComparison.Ordinal);
         Assert.Equal("/home/u/.dotnet", linux.AddsToPath);
 
         var windows = InstallPlans.For(dotnet, PlatformKind.Windows, @"C:\Users\u", hasWinget: true, null)!;
-        Assert.Equal("winget install --id Microsoft.DotNet.SDK.10 --exact --source winget --accept-package-agreements --accept-source-agreements", windows.Command);
+        Assert.Equal($"winget install --id {InstallPlans.WingetSdk(InstallPlans.HostChannel, EnvironmentCheck.DefaultHostsRuntime())} --exact --source winget --accept-package-agreements --accept-source-agreements", windows.Command);
         Assert.Equal(InstallKind.OpenPage, InstallPlans.For(dotnet, PlatformKind.Windows, @"C:\Users\u", hasWinget: false, null)!.Kind);
 
         var git = tools.Single(t => t.Id == "git");
@@ -76,6 +77,52 @@ public sealed class EnvironmentCheckTests : IDisposable
         Assert.Contains("dotnet --version in app", calls);
         Assert.Contains("--version 9.0.100", InstallPlans.For(sdk, PlatformKind.Linux, _dir, false, "fedora")!.Command, StringComparison.Ordinal);
         Assert.Contains("Microsoft.DotNet.SDK.9 ", InstallPlans.For(sdk, PlatformKind.Windows, _dir, true, null)!.Command, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("10.0.12", false)]
+    [InlineData("11.0.0-rc.1.26425.128", false)]
+    [InlineData("11.0.0-rc.2.26504.105", true)]
+    [InlineData("11.0.0", true)]
+    [InlineData("11.0.3", true)]
+    [InlineData("12.0.0-preview.1.27101.1", true)]
+    public async Task Sdks_without_the_hosts_dotnet_are_a_mismatch_that_installs_the_hosts_channel(string runtime, bool enough)
+    {
+        // M30b: the hosts target the IDE's .NET (here a release candidate) and roll forward, so an older .NET alone
+        // can't start them, whatever SDKs it has.
+        var bin = Path.Combine(_dir, "bin");
+        var check = new EnvironmentCheck(PlatformKind.Linux, Env(("PATH", bin), ("HOME", "/home/u")), (_, arguments, _, _) => Task.FromResult(string.Join(' ', arguments) switch
+        {
+            "--list-sdks" => (0, $"10.0.401 [/x/sdk]\n"),
+            "--list-runtimes" => (0, $"Microsoft.AspNetCore.App 10.0.12 [/x/shared/Microsoft.AspNetCore.App]\nMicrosoft.NETCore.App 10.0.12 [/x/shared/Microsoft.NETCore.App]\nMicrosoft.NETCore.App {runtime} [/x/shared/Microsoft.NETCore.App]\n"),
+            _ => (1, string.Empty),
+        }), path => path == Path.Combine(bin, "dotnet"))
+        {
+            HostsRuntime = "11.0.0-rc.2.26504.105",
+        };
+
+        var sdk = (await check.CheckAsync(null, TestContext.Current.CancellationToken)).Single(t => t.Id == "dotnet");
+        Assert.Equal(enough ? ToolState.Found : ToolState.Mismatch, sdk.State);
+        if (!enough)
+        {
+            Assert.Equal("11.0", sdk.WantedChannel);
+            Assert.Contains(".NET 11.0.0-rc.2.26504.105 or later", sdk.Detail, StringComparison.Ordinal);
+            Assert.Contains("--channel 11.0 ", InstallPlans.For(sdk, PlatformKind.Linux, "/home/u", false, "ubuntu debian")!.Command, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Versions_order_as_the_host_rolls_forward_and_winget_has_a_release_candidate_as_the_preview_sdk()
+    {
+        Assert.True(EnvironmentCheck.CompareVersions("11.0.0-rc.1.26425.128", "11.0.0-rc.2.26504.105") < 0);
+        Assert.True(EnvironmentCheck.CompareVersions("11.0.0-preview.7.26381.103", "11.0.0-rc.1.26425.128") < 0);
+        Assert.True(EnvironmentCheck.CompareVersions("11.0.0", "11.0.0-rc.2.26504.105") > 0);
+        Assert.True(EnvironmentCheck.CompareVersions("10.0.13", "11.0.0-rc.2.26504.105") < 0);
+        Assert.Equal(0, EnvironmentCheck.CompareVersions("11.0.0-rc.2.26504.105", "11.0.0-rc.2.26504.105"));
+
+        Assert.Equal("Microsoft.DotNet.SDK.10", InstallPlans.WingetSdk("10.0", "11.0.0-rc.2.26504.105"));
+        Assert.Equal($"Microsoft.DotNet.SDK.{Environment.Version.Major}", InstallPlans.WingetSdk(InstallPlans.HostChannel, $"{Environment.Version.Major}.0.0"));
+        Assert.Equal("Microsoft.DotNet.SDK.Preview", InstallPlans.WingetSdk(InstallPlans.HostChannel, $"{Environment.Version.Major}.0.0-rc.2.26504.105"));
     }
 
     [Theory]

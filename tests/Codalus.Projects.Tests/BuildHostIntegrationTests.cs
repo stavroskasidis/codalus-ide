@@ -15,10 +15,12 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
     internal static string RepoRoot => Metadata("CodalusRepoRoot");
 
+    internal static string Configuration => Metadata("CodalusConfiguration");
+
     /// <summary>The build host the build tests use: <c>CODALUS_BUILDHOST</c> (e.g. a published one), else the built one.</summary>
     internal static string HostAssemblyPath => Environment.GetEnvironmentVariable("CODALUS_BUILDHOST") is { Length: > 0 } host ? host : HostAssembly;
 
-    private static string HostAssembly => Path.Combine(RepoRoot, "src", "Codalus.Projects.Host", "bin", Metadata("CodalusConfiguration"), "net10.0", "codalus-buildhost.dll");
+    private static string HostAssembly => Path.Combine(RepoRoot, "src", "Codalus.Projects.Host", "bin", Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-buildhost.dll");
 
     private static string Metadata(string key) =>
         typeof(BuildHostIntegrationTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
@@ -348,6 +350,43 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         await WaitForProjectAsync(AppProject, p => p.Restored && p.References.Any(r => r is { Name: "Microsoft.Build.Locator", Resolved: true }));
     }
 
+    [Fact]
+    public async Task A_project_that_cant_restore_leaves_the_others_restored()
+    {
+        // As a MAUI app without its workload does: an error while the restore reads it, which fails the whole
+        // solution's restore before any assets file is written.
+        var bad = Path.Combine(Fixture, "src", "Bad", "Bad.csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(bad)!);
+        File.WriteAllText(bad, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <Target Name="NeedsAWorkload" BeforeTargets="_GenerateRestoreProjectSpec"><Error Text="This project needs a workload." /></Target>
+            </Project>
+            """);
+        var broken = Path.Combine(Fixture, "Broken.slnx");
+        File.WriteAllText(broken, """
+            <Solution>
+              <Project Path="src/App/App.csproj" />
+              <Project Path="src/Bad/Bad.csproj" />
+            </Solution>
+            """);
+        var states = new List<string>();
+        _service.RestoreStateChanged += (_, e) =>
+        {
+            lock (states)
+            {
+                states.Add(e.Message is null ? e.State : $"{e.State}: {e.Message}");
+            }
+        };
+
+        await _service.OpenAsync(broken, trusted: true, restore: true, Timeout());
+
+        await WaitUntilAsync(() => { lock (states) { return states.Any(s => s.StartsWith("failed", StringComparison.Ordinal)); } }, TimeSpan.FromMinutes(4));
+        Assert.Contains(states, s => s.Contains("1 project(s) restored on their own", StringComparison.Ordinal));
+        await WaitForProjectAsync(AppProject, p => p.Restored && p.References.Any(r => r is { Name: "Microsoft.Build.Locator", Resolved: true }));
+        Assert.False(Project(bad).Restored);
+    }
+
     // ------------------------------------------------------------------ design-time builds
 
     [Fact]
@@ -450,6 +489,25 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         {
             Assert.Equal(["succeeded"], restoreStates);
         }
+
+        // The watcher evaluates Core alone (a file added to its folder, as NuGet's outputs after a restore): the
+        // projects that reference it build again with it, since their keys hold Core's fingerprint, and the next open
+        // finds all three in the cache.
+        lock (log)
+        {
+            log.Clear();
+        }
+
+        File.WriteAllText(Path.Combine(Fixture, "src", "Core", "Notes.txt"), "Not compiled.");
+        await WaitUntilAsync(() =>
+        {
+            lock (log)
+            {
+                return log.Any(l => l.Contains("Core.csproj: inputs changed", StringComparison.Ordinal)) && _service.DesignTimeProgress is { Completed: true };
+            }
+        }, TimeSpan.FromMinutes(2));
+        var watched = await OpenAsync();
+        Assert.True(watched.Contains("Design-time build cache: 3 hit(s), 0 miss(es).", StringComparison.Ordinal), $"Watched:{Environment.NewLine}{watched}");
 
         // A new source file in Core (a glob, no project file change): Core builds again, and so do the projects that
         // reference it; asking for design-time builds bypasses the cache.

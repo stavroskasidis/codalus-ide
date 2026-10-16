@@ -21,7 +21,7 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
 
     internal static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { TypeInfoResolver = new DefaultJsonTypeInfoResolver() };
 
-    private static JsonTypeInfo<JsonElement> ElementInfo => (JsonTypeInfo<JsonElement>)JsonOptions.GetTypeInfo(typeof(JsonElement));
+    private static JsonTypeInfo<JsonElement> ElementInfo => JsonOptions.GetTypeInfo<JsonElement>();
 
     public async Task<IReadOnlyList<RunnerTest>> DiscoverAsync(TestTarget target, RunOptions options, CancellationToken cancellationToken)
     {
@@ -420,7 +420,8 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
 
             if (_process is { } process)
             {
-                if (await Task.WhenAny(_exited.Task, Task.Delay(s_killAfter)).ConfigureAwait(false) != _exited.Task)
+                await _exited.Task.WaitAsync(s_killAfter).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                if (!_exited.Task.IsCompleted)
                 {
                     try
                     {
@@ -437,7 +438,8 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
 
             if (Debug is { } debug && !debug.Ended.IsCompleted)
             {
-                if (await Task.WhenAny(debug.Ended, Task.Delay(s_killAfter)).ConfigureAwait(false) != debug.Ended)
+                await ((Task)debug.Ended).WaitAsync(s_killAfter).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                if (!debug.Ended.IsCompleted)
                 {
                     await debug.StopAsync().ConfigureAwait(false);
                 }

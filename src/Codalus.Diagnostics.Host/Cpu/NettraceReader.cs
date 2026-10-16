@@ -90,6 +90,7 @@ internal sealed class NettraceReader : IDisposable
         private readonly NettraceReader _reader;
         private readonly int[] _stacks;
         private readonly int[] _methods;
+        private readonly sbyte[] _suspension;
         private readonly Dictionary<string, int> _unknown = new(StringComparer.Ordinal);
         private readonly Dictionary<(int Parent, string Name), int> _pseudo = [];
         private readonly List<CallStackIndex> _pending = [];
@@ -102,6 +103,7 @@ internal sealed class NettraceReader : IDisposable
             Array.Fill(_stacks, -1);
             _methods = new int[Math.Max(1, reader._log.CodeAddresses.Methods.Count)];
             Array.Fill(_methods, -1);
+            _suspension = new sbyte[_methods.Length];
         }
 
         public CpuProfile Profile { get; }
@@ -151,11 +153,36 @@ internal sealed class NettraceReader : IDisposable
             for (var i = _pending.Count - 1; i >= 0; i--)
             {
                 var address = callStacks.CodeAddressIndex(_pending[i]);
-                parent = Profile.AddStack(parent, FunctionOf(address), (long)address);
+                if (parent < 0 || !IsSuspensionPoint(address))
+                {
+                    parent = Profile.AddStack(parent, FunctionOf(address), (long)address);
+                }
+
                 _stacks[(int)_pending[i]] = parent;
             }
 
             return parent;
+        }
+
+        /// <summary>
+        /// A frame the runtime adds where a thread stops for a suspension (the sampler's own, a GC's): its samples are
+        /// the calling code's time, at the call's line, so it's folded into its caller.
+        /// </summary>
+        private bool IsSuspensionPoint(CodeAddressIndex address)
+        {
+            var method = _reader._log.CodeAddresses.MethodIndex(address);
+            if (method == MethodIndex.Invalid)
+            {
+                return false;
+            }
+
+            ref var known = ref _suspension[(int)method];
+            if (known == 0)
+            {
+                known = IsSuspensionMethod(_reader._log.CodeAddresses.Methods.FullMethodName(method)) ? (sbyte)1 : (sbyte)-1;
+            }
+
+            return known > 0;
         }
 
         /// <summary>A pseudo frame (an allocated type, an exception's type) on top of a stack; it has no source line.</summary>
@@ -427,6 +454,16 @@ internal sealed class NettraceReader : IDisposable
         IConvertible convertible when value is not bool => convertible.ToDouble(CultureInfo.InvariantCulture),
         _ => null,
     };
+
+    /// <summary>
+    /// The runtime's GC poll (<c>Thread.PollGC</c> and its worker), which the JIT puts after a call that skips the GC
+    /// transition (<c>Stopwatch</c>'s clock read, for one): the sampler suspends every thread for each sample, and a
+    /// thread it couldn't interrupt where it ran stops at such a poll, so without folding the poll took the samples
+    /// (seen on Windows runners, where it was the hottest function of CpuBound).
+    /// </summary>
+    internal static bool IsSuspensionMethod(string name) =>
+        name.StartsWith("System.Threading.Thread.PollGC", StringComparison.Ordinal)
+        || name.StartsWith("System.Threading.Thread.<PollGC>", StringComparison.Ordinal);
 
     private static string? ModuleName(TraceModuleFile? module) =>
         module is null ? null : Path.GetFileNameWithoutExtension(module.FilePath is { Length: > 0 } path ? path : module.Name);

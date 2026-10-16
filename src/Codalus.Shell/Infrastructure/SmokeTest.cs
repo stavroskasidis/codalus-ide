@@ -43,7 +43,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private readonly List<StepResult> _results = [];
     private readonly Stopwatch _clock = Stopwatch.StartNew();
-    private string _work = string.Empty;
+    private string _workRoot = string.Empty;
     private string _folder = string.Empty;
     private string _testing = string.Empty;
 
@@ -99,7 +99,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// <summary>Closes the solution (its hosts and programs hold the folder) and deletes the fixture, retrying briefly.</summary>
     private async Task DeleteFixtureAsync()
     {
-        if (_work.Length == 0 || !Directory.Exists(_work))
+        if (_workRoot.Length == 0 || !Directory.Exists(_workRoot))
         {
             return;
         }
@@ -114,16 +114,16 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Workbench.Log.AppendLine($"[smoke] Could not close the solution: {ex.Message}");
         }
 
-        for (var attempt = 0; attempt < 20 && Directory.Exists(_work); attempt++)
+        for (var attempt = 0; attempt < 20 && Directory.Exists(_workRoot); attempt++)
         {
             try
             {
-                foreach (var file in Directory.EnumerateFiles(_work, "*", SearchOption.AllDirectories))
+                foreach (var file in Directory.EnumerateFiles(_workRoot, "*", SearchOption.AllDirectories))
                 {
                     File.SetAttributes(file, FileAttributes.Normal); // git writes its object files read-only
                 }
 
-                Directory.Delete(_work, recursive: true);
+                Directory.Delete(_workRoot, recursive: true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -230,10 +230,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Recent.Add(Path.Combine(samples, "BuildAndRun", "BuildAndRun.slnx"));
             shell.ShowStartWindow();
             await WaitAsync(() => shell.IsStartWindowOpen && shell.StartWindowModel is { IsEmpty: false }, "the start window opens with its recent list").ConfigureAwait(true);
-            await RenderedAsync().ConfigureAwait(true);
-            Screenshot("start-window.png", Avalonia.Controls.TopLevel.GetTopLevel(Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+            // Its own frames, not the main window's: the screenshot renders the start window once it has drawn itself.
+            var start = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
                 ? desktop.Windows.OfType<Views.StartWindow>().FirstOrDefault()
-                : null));
+                : null;
+            await RenderedAsync(start).ConfigureAwait(true);
+            Screenshot("start-window.png", start);
             shell.StartWindowModel!.ContinueCommand.Execute(null);
             await WaitAsync(() => !shell.IsStartWindowOpen, "Continue without code closes it").ConfigureAwait(true);
         }).ConfigureAwait(true);
@@ -269,7 +271,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>
         {
             PrepareFixture();
-            shell.Trust.Trust(_work);
+            shell.Trust.Trust(Work);
             await shell.OpenSolutionAsync(Path.Combine(_folder, "BuildAndRun.slnx")).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "both projects are evaluated", 240).ConfigureAwait(true);
             Check(shell.Runs.StartupProject?.EndsWith("Hello.csproj", StringComparison.Ordinal) == true, $"Hello is the startup project (got {shell.Runs.StartupProject})");
@@ -334,6 +336,29 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.FindResults.Rows.Any(r => r.IsHeader && r.Path == Program), "the references include Program.cs", 60).ConfigureAwait(true);
         }, "language.ready").ConfigureAwait(true);
 
+        await StepAsync("editor.findInFiles", "M3", "Find and Replace: Find in Files from the floating window into Find Results", async () =>
+        {
+            await OpenAsync(Program).ConfigureAwait(true);
+            shell.Run("workbench.action.findInFiles");
+            await WaitAsync(() => shell.FindReplace.IsOpen, "Find and Replace opens", 10).ConfigureAwait(true);
+            shell.FindReplace.Query = "Greet";
+            shell.FindReplace.LookIn = ViewModels.FindScopes.EntireSolution;
+            await Task.Delay(300).ConfigureAwait(true);
+            Screenshot("smoke-test-find-and-replace.png");
+            await shell.FindReplace.FindAllAsync().ConfigureAwait(true);
+            Check(!shell.FindReplace.IsOpen, "Find All closes the window");
+            await WaitAsync(() => shell.FindResults.Rows.Any(r => !r.IsHeader && r.Path == Program && r.Highlights is { Count: > 0 }), "Find Results lists Program.cs with the match highlighted", 30).ConfigureAwait(true);
+            await shell.FindResults.GoToAsync(1).ConfigureAwait(true);
+            await WaitAsync(() => shell.ActiveEditor?.Controller?.Editor.SelectedText.Equals("Greet", StringComparison.OrdinalIgnoreCase) == true, "Next opens the first match selected", 30).ConfigureAwait(true);
+            await Task.Delay(300).ConfigureAwait(true);
+            Screenshot("smoke-test-find-results.png");
+            shell.ActiveEditor?.Controller?.Editor.TextArea.ClearSelection(); // the next steps start from a caret, not the match
+            if (shell.FindResults.ReferenceSets.FirstOrDefault() is { } references)
+            {
+                shell.FindResults.CurrentSet = references; // back to the references, as the theme screenshots (the website's) show them
+            }
+        }, "language.ready").ConfigureAwait(true);
+
         await StepAsync("editor.insights", "M12", "Inlay hints, CodeLens, Peek Definition, the Document Outline and the navigation bar", async () =>
         {
             var program = await OpenAsync(Program).ConfigureAwait(true);
@@ -349,7 +374,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => greeter.Insights.EndOfLineText(classLine)?.Contains("reference", StringComparison.Ordinal) == true, "CodeLens counts Greeter's references", 60).ConfigureAwait(true);
             await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 30).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
-            await WaitAsync(() => shell.DocumentOutline.Roots.Any(), "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
+            await WaitAsync(() => shell.DocumentOutline.Roots.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
             shell.Layout.CloseToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId);
         }, "language.ready").ConfigureAwait(true);
 
@@ -452,7 +477,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 Screenshot("smoke-test-progress.png");
             }
 
-            await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 420).ConfigureAwait(true);
+            await WaitAsync(() => BuildDone(before), "the build finishes", 420).ConfigureAwait(true);
             Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             await WaitAsync(() => !shell.StatusBar.HasProgress, "the status bar is ready again", 30).ConfigureAwait(true);
             Check(!shell.ErrorList.Rows.Any(r => r.Source == ErrorListViewModel.BuildSource && r.Code.StartsWith("CS", StringComparison.Ordinal)), "the Error List has no build errors");
@@ -557,9 +582,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == cwdLine, $"Run to Cursor stops at line {cwdLine}", 60).ConfigureAwait(true);
             Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
 
+            // The stop refreshes the window too: a refresh that starts later wins, and the earlier one leaves the rows to it.
             shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
             await shell.ThreadList.RefreshAsync().ConfigureAwait(true);
-            Check(shell.ThreadList.Rows.Any(r => r.IsCurrent), "the Threads window marks the current thread");
+            await WaitAsync(() => shell.ThreadList.Rows.Any(r => r.IsCurrent), "the Threads window marks the current thread", 30).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(ModulesViewModel.ToolWindowId);
             await WaitAsync(() => shell.ModuleList.Rows.Any(r => r.Name == "Hello.dll"), "the Modules window lists Hello.dll").ConfigureAwait(true);
             shell.Run("debug.exceptionSettings");
@@ -719,6 +745,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
 
+        await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
+
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
         {
@@ -800,7 +828,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var configurations = shell.OpenConfigurationManager() ?? throw new SmokeFailure("The Configuration Manager did not open.");
             await WaitAsync(() => configurations.Rows.Count == 4, "it lists the four projects").ConfigureAwait(true);
 
-            var multi = Path.Combine(_work, "Packages", "src", "Multi", "Multi.csproj");
+            var multi = Path.Combine(Work, "Packages", "src", "Multi", "Multi.csproj");
             await shell.UnloadProjectAsync(multi).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.TryGetValue(multi, out var p) && p.State == Projects.Protocol.ProjectStates.Unloaded, "Multi is unloaded").ConfigureAwait(true);
             await shell.ReloadProjectAsync(multi).ConfigureAwait(true);
@@ -879,7 +907,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M11: languages and TextMate grammars (ADR 0016).
         await StepAsync("languages.grammars", "M11", "JSON and MSBuild files are colored by their TextMate grammars", async () =>
         {
-            var json = Path.Combine(_work, "smoke-settings.json");
+            var json = Path.Combine(Work, "smoke-settings.json");
             await File.WriteAllTextAsync(json, "{\n  \"Logging\": { \"Level\": 3, \"On\": true }\n}\n").ConfigureAwait(true);
             var editor = await OpenAsync(json).ConfigureAwait(true);
             Check(editor.Model.LanguageId == "json" && editor.GrammarScope == "source.json", $"the file is JSON with its grammar (got {editor.Model.LanguageId}, {editor.GrammarScope})");
@@ -921,8 +949,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("web.hotReload", "M15", "Hot Reload applies a saved edit to the running web app (dotnet watch)", async () =>
         {
             await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-            var programFile = Path.Combine(_work, "Web", "WebApi", "Program.cs");
-            var urls = (await shell.Runs.PlanAsync(Path.Combine(_work, "Web", "WebApi", "WebApi.csproj"), CancellationToken.None).ConfigureAwait(true)).Plan.Environment["ASPNETCORE_URLS"];
+            var programFile = Path.Combine(Work, "Web", "WebApi", "Program.cs");
+            var urls = (await shell.Runs.PlanAsync(Path.Combine(Work, "Web", "WebApi", "WebApi.csproj"), CancellationToken.None).ConfigureAwait(true)).Plan.Environment["ASPNETCORE_URLS"];
             await shell.StartWithHotReloadAsync().ConfigureAwait(true);
             await WaitAsync(() => shell.HotReloadProgram is not null, "the app runs under dotnet watch", 240).ConfigureAwait(true);
             var program = shell.HotReloadProgram!;
@@ -965,7 +993,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.OpenSolutionAsync(solution).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Blazor solution is open", 300).ConfigureAwait(true);
             await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready, Projects: 1 }, "the C# service loads the Blazor project", 300).ConfigureAwait(true);
-            var counter = Path.Combine(_work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
+            var counter = Path.Combine(Work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
             var editor = await OpenAsync(counter).ConfigureAwait(true);
             Check(editor.Model.LanguageId == ShellHost.RazorLanguageId, "Counter.razor is a Razor file");
             var client = shell.Languages.RunningClient(ShellHost.CSharpLanguageId)!;
@@ -1007,7 +1035,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
             Check(File.Exists(Path.Combine(samples, "Net11", "Net11.slnx")), $"the samples folder {samples} has Net11");
-            var target = Path.Combine(_work, "Net11");
+            var target = Path.Combine(Work, "Net11");
             Copy(Path.Combine(samples, "Net11"), target);
             await shell.OpenSolutionAsync(Path.Combine(target, "Net11.slnx")).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.Count == 5 && shell.Solutions.Progress is { Completed: true }, "the .NET 11 solution is open", 300).ConfigureAwait(true);
@@ -1017,11 +1045,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Runs.SetStartupProject(Path.Combine(target, "src", "App", "App.csproj"));
             var before = shell.Builds.LastBuild;
             shell.Run("build.buildSolution");
-            await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 420).ConfigureAwait(true);
+            await WaitAsync(() => BuildDone(before), "the build finishes", 420).ConfigureAwait(true);
             Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             shell.Run("run.startWithoutDebugging");
             string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: App")?.GetText() ?? string.Empty;
-            await WaitAsync(() => Output().Contains("has exited with code 0", StringComparison.Ordinal), "App runs and exits with 0", 300).ConfigureAwait(true);
+            await WaitAsync(() => Output().Contains("has exited with code 0", StringComparison.Ordinal), () => "App runs and exits with 0; its output:\n" + Tail(Output(), 2000) + "\nThe build's:\n" + Tail(shell.Builds.Channel.GetText(), 1500), 300).ConfigureAwait(true);
             Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
         }).ConfigureAwait(true);
 
@@ -1047,7 +1075,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
             var source = Path.Combine(samples, "ProjectSystem", "FolderOnly");
             Check(Directory.Exists(source), $"the samples folder {samples} has ProjectSystem/FolderOnly");
-            var parent = Path.Combine(_work, "FolderMode");
+            var parent = Path.Combine(Work, "FolderMode");
             Directory.CreateDirectory(parent);
             File.Copy(Path.Combine(samples, "ProjectSystem", "Directory.Build.props"), Path.Combine(parent, "Directory.Build.props"), overwrite: true);
             var folder = Path.Combine(parent, "FolderOnly");
@@ -1103,7 +1131,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("publish.folder", "M17", "The Publish page saves a folder profile and publishes a single-file app for this machine's runtime", async () =>
         {
             await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-            var target = Path.Combine(_work, "Containers");
+            var target = Path.Combine(Work, "Containers");
             if (!Directory.Exists(target))
             {
                 Copy(Path.Combine(samples, "Containers"), target);
@@ -1133,6 +1161,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
+        await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
+        await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
+        await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
+        await StepAsync("fsharp.interactive", "M36", "A selection in an F# script runs in F# Interactive (dotnet fsi in a terminal), which shows the values defined", FSharpInteractiveStepAsync, "projects.open").ConfigureAwait(true);
 
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
@@ -1190,7 +1222,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.CloseSolutionAsync().ConfigureAwait(true);
         }
 
-        var folder = Path.Combine(_work, "RemoteBuildAndRun");
+        var folder = Path.Combine(Work, "RemoteBuildAndRun");
         Copy(Path.Combine(samples, "BuildAndRun"), folder);
         string RemoteLog() => Tail(shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Remote")?.GetText() ?? string.Empty, 3000);
         var spec = Workbench.Remote.RemoteTargetSpec.Parse("local")!;
@@ -1226,7 +1258,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             var before = shell.Builds.LastBuild;
             shell.Run("build.buildSolution");
-            await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build on the server finishes", 420).ConfigureAwait(true);
+            await WaitAsync(() => BuildDone(before), "the build on the server finishes", 420).ConfigureAwait(true);
             Check(shell.Builds.LastBuild!.Result.Succeeded, "the build on the server succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
 
             var sessions = shell.Terminals.Sessions.Count;
@@ -1276,7 +1308,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
         var source = Path.Combine(samples, "TargetFrameworks");
         Check(File.Exists(Path.Combine(source, "TargetFrameworks.sln")), $"the samples folder {samples} has TargetFrameworks");
-        var target = Path.Combine(_work, "TargetFrameworks");
+        var target = Path.Combine(Work, "TargetFrameworks");
         Copy(source, target);
         await shell.OpenSolutionAsync(Path.Combine(target, "TargetFrameworks.sln")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 38 && shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState is "succeeded" or "failed",
@@ -1293,7 +1325,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         var before = shell.Builds.LastBuild;
         shell.Run("build.buildSolution");
-        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 600).ConfigureAwait(true);
+        await WaitAsync(() => BuildDone(before), "the build finishes", 600).ConfigureAwait(true);
         Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
 
         var apps = new List<string> { "Net100.App" };
@@ -1307,12 +1339,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Runs.SetStartupProject(shell.Solutions.Projects.Values.Single(p => p.Name == name).Path);
             shell.Run("run.startWithoutDebugging");
             string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: " + name)?.GetText() ?? string.Empty;
-            await WaitAsync(() => Output().Contains("has exited with code", StringComparison.Ordinal), $"{name} runs and exits", 300).ConfigureAwait(true);
+            await WaitAsync(() => Output().Contains("has exited with code", StringComparison.Ordinal), () => $"{name} runs and exits (its output:\n{Tail(Output(), 1000)})", 300).ConfigureAwait(true);
             Check(Output().Contains("has exited with code 0", StringComparison.Ordinal) && Output().Contains("Hello, ", StringComparison.Ordinal), $"{name} ran:\n" + Tail(Output(), 1000));
         }
 
         Console.Out.WriteLine($"  ran: {string.Join(", ", apps)}" + (apps.Count == 1 ? " (no .NET Core 2.1 runtime here)" : string.Empty));
     }
+
+    /// <summary>
+    /// A build after <paramref name="before"/> finished, and the shell knows it: the service records the build before the
+    /// UI clears <c>buildRunning</c>, and until then the commands that start a build or a run are disabled.
+    /// </summary>
+    private bool BuildDone(Workbench.Build.BuildCompleted? before) =>
+        shell.Builds.LastBuild is { } build && build != before && shell.Workbench.Context.GetValue("buildRunning") is not true;
 
     /// <summary>Whether <c>dotnet --list-runtimes</c> lists a Microsoft.NETCore.App version starting with <paramref name="prefix"/>.</summary>
     private static bool HasRuntime(string prefix)
@@ -1332,7 +1371,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     // ------------------------------------------------------------------ M14c: debugger sessions
 
-    private string Sessions => Path.Combine(_work, "Debugging");
+    private string Sessions => Path.Combine(Work, "Debugging");
 
     private string SessionSource(string project, string file) => Path.Combine(Sessions, project, file);
 
@@ -1470,8 +1509,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return null;
         }
 
-        Directory.CreateDirectory(_work);
-        var ssh = Path.Combine(_work, "stand-in-ssh");
+        var ssh = Path.Combine(Work, "stand-in-ssh");
         await File.WriteAllTextAsync(ssh, "#!/bin/sh\n# A stand-in for ssh: skip the options and the destination, run the command here.\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -T) shift ;;\n    -o|-p|-i|-l) shift 2 ;;\n    *) break ;;\n  esac\ndone\nshift\nexec sh -c \"$*\"\n").ConfigureAwait(true);
         File.SetUnixFileMode(ssh, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return new SshTarget("stand-in.invalid", "smoke", null, ssh) { Home = home };
@@ -1480,7 +1518,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// <summary>Remote attach (M14c): the Debuggee waits on the target, the debugger attaches there, stops, and detaches.</summary>
     private async Task DebugRemoteStepAsync(RemoteTarget target)
     {
-        var dll = Path.Combine(Sessions, "Debuggee", "bin", "Debug", "net10.0", "Debuggee.dll");
+        var dll = Path.Combine(Sessions, "Debuggee", "bin", "Debug", "net11.0", "Debuggee.dll");
         Check(File.Exists(dll), "the Debuggee was built by debug.compound");
         var signal = "/tmp/codalus-smoke-" + Guid.NewGuid().ToString("N")[..8];
         Process program;
@@ -1559,8 +1597,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "Data", "Data.slnx")), $"the samples folder {samples} has Data");
-        var target = Path.Combine(_work, "Data");
+        var target = Path.Combine(Work, "Data");
         Copy(Path.Combine(samples, "Data"), target);
+        shell.Trust.Trust(target); // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=data.efMigrations skips it
         await shell.OpenSolutionAsync(Path.Combine(target, "Data.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Data solution is open", 300).ConfigureAwait(true);
         var restore = await shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None).ConfigureAwait(true);
@@ -1621,7 +1660,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "Scaffolding", "Scaffolding.slnx")), $"the samples folder {samples} has Scaffolding");
-        var target = Path.Combine(_work, "Scaffolding");
+        var target = Path.Combine(Work, "Scaffolding");
         Copy(Path.Combine(samples, "Scaffolding"), target);
         string Log() => Tail(shell.Scaffolding.Channel.GetText(), 2500);
 
@@ -1697,7 +1736,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task ContainerRunStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Containers");
+        var target = Path.Combine(Work, "Containers");
         Copy(Path.Combine(samples, "Containers"), target);
         await shell.OpenSolutionAsync(Path.Combine(target, "Containers.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the containers solution is open", 300).ConfigureAwait(true);
@@ -1745,7 +1784,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task AspireRunStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Containers");
+        var target = Path.Combine(Work, "Containers");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Containers"), target);
@@ -1762,7 +1801,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var window = shell.AspireWindow;
             await WaitAsync(
                 () => window.Resources.Count(r => r.Resource.Type == "Project" && r.Resource.State == "Running") == 2 && window.Resources.Any(r => r.Name == "cache"),
-                "the api and the frontend run, and the cache is listed:\n" + Tail(shell.AspireLog.GetText(), 2000),
+                () => "the api and the frontend run, and the cache is listed:\n" + Tail(shell.AspireLog.GetText(), 2000),
                 420).ConfigureAwait(true);
             await WaitAsync(() => window.HasDashboard, "the dashboard's address is known", 60).ConfigureAwait(true);
             var url = window.Resources.Single(r => r.Name == "frontend").Resource.Urls.First(u => !u.IsInternal).Url;
@@ -1782,10 +1821,198 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
     }
 
+    private async Task MauiStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "Maui");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "Maui"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "Maui.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the MAUI solution is open (its packages restored)", 600).ConfigureAwait(true);
+        var app = Path.Combine(target, "TodoApp", "TodoApp.csproj");
+        Check(shell.Solutions.Projects.TryGetValue(app, out var info) && info.UsesMaui, "TodoApp is a .NET MAUI project");
+        shell.SetStartupProject(app);
+        await WaitAsync(() => shell.Toolbar.HasDevice, "the toolbar shows the device picker").ConfigureAwait(true);
+
+        var path = Path.Combine(target, "MauiViews", "Views", "TodoPage.xaml");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.XamlLanguageId, "the file is XAML for the C# host: " + editor.Model.LanguageId);
+        MoveCaret(editor, "Text=\"{Binding NewTitle}\"", "Text=\"{Binding ".Length);
+        var asked = Stopwatch.StartNew();
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "AddCommand"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                MoveCaret(editor, "Text=\"{Binding NewTitle}\"", "Text=\"{Binding ".Length);
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "the binding path completes the view model's members (x:DataType)", 360).ConfigureAwait(true);
+        editor.CompletionWindow!.Close();
+
+        shell.ShowDevices();
+        await WaitAsync(() => shell.DevicesWindow.Toolchain.Length > 0, "the Devices window shows the Android toolchain").ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("maui-devices.png");
+    }
+
+    private async Task VisualBasicStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "VisualBasic");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "VisualBasic"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "VisualBasic.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true }, "the Visual Basic solution is open (its packages restored)", 600).ConfigureAwait(true);
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready, Projects: 4 }, "the C# host has loaded the VB and C# projects", 300).ConfigureAwait(true);
+
+        var path = Path.Combine(target, "VbConsole", "Program.vb");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.VisualBasicLanguageId, "the file is Visual Basic: " + editor.Model.LanguageId);
+
+        // formatter. completes PriceFormatter's members: a C# class in another project.
+        var loop = editor.Model.Text.Text.IndexOf("Console.WriteLine(formatter.Format(", StringComparison.Ordinal);
+        var dot = loop + "Console.WriteLine(formatter.".Length;
+        var asked = Stopwatch.StartNew();
+        editor.Editor.CaretOffset = dot;
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Currency"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                editor.Editor.CaretOffset = dot;
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "formatter. completes the C# library's members", 300).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("visual-basic.png");
+        editor.CompletionWindow!.Close();
+
+        // Enter after an If … Then adds End If (our pretty listing, through on-type formatting).
+        var main = editor.Model.Text.Text.IndexOf("Dim inventory As New Inventory()", StringComparison.Ordinal);
+        var original = editor.Model.Text.Text;
+        try
+        {
+            editor.Model.Text.Insert(main, "If args.Length > 0 Then\n        ");
+            editor.Editor.CaretOffset = main + "If args.Length > 0 Then".Length;
+            editor.Editor.TextArea.PerformTextInput("\n");
+            await WaitAsync(() => editor.Model.Text.Text.Contains("End If", StringComparison.Ordinal), "End If follows the If block").ConfigureAwait(true);
+        }
+        finally
+        {
+            editor.Model.Text.Text = original;
+        }
+    }
+
+    private async Task FSharpStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "FSharp");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "FSharp"), target);
+        }
+
+        await shell.InstallFSharpAsync().ConfigureAwait(true);
+        Check(shell.FSharp.IsInstalled, "FsAutoComplete and Fantomas are installed:\n" + Tail(shell.LanguageLog.GetText(), 2000));
+        await shell.OpenSolutionAsync(Path.Combine(target, "FSharp.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 5 && shell.Solutions.Progress is { Completed: true }, "the F# solution is open", 600).ConfigureAwait(true);
+
+        var library = Path.Combine(target, "FsLibrary", "FsLibrary.fsproj");
+        var tree = Workbench.Projects.SolutionTree.Contents(library, shell.Solutions.Projects[library]);
+        Check(tree.Select(n => n.Name).SequenceEqual(["Shapes.fs", "Geometry.fs"]) && tree[0].Children.Single().Name == "Shapes.fsi",
+            "Solution Explorer shows the compile order with Shapes.fsi under Shapes.fs: " + string.Join(", ", tree.Select(n => n.Name)));
+
+        // Quick Info on Shapes.area, from the file before Geometry.fs in the compile order.
+        var path = Path.Combine(target, "FsLibrary", "Geometry.fs");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.FSharpLanguageId, "the file is F#: " + editor.Model.LanguageId);
+        var uri = LanguageServices.Protocol.DocumentUris.FromPath(path);
+        var offset = editor.Model.Text.Text.IndexOf("List.sumBy area", StringComparison.Ordinal) + "List.sumBy ar".Length;
+        var line = editor.Model.Text.GetLineByOffset(offset);
+        // FsAutoComplete loads the solution's projects first: ask again until it answers.
+        var client = await shell.Languages.ClientAsync(ShellHost.FSharpLanguageId).ConfigureAwait(true);
+        Check(client is not null, "FsAutoComplete starts:\n" + Tail(shell.LanguageLog.GetText(), 2000));
+        string? info = null;
+        var asked = Stopwatch.StartNew();
+        while (info?.Contains("val area", StringComparison.Ordinal) != true && asked.Elapsed < TimeSpan.FromSeconds(300))
+        {
+            try
+            {
+                client = await shell.Languages.ClientAsync(ShellHost.FSharpLanguageId).ConfigureAwait(true) ?? client;
+                info = (await client!.HoverAsync(uri, new LanguageServices.Protocol.Position(line.LineNumber - 1, offset - line.Offset), CancellationToken.None).ConfigureAwait(true))?.Contents.Value;
+            }
+            catch (Rpc.JsonRpcRemoteException)
+            {
+                // not loaded yet
+            }
+            catch (Exception ex) when (ex is Rpc.JsonRpcConnectionLostException or ObjectDisposedException)
+            {
+                // FsAutoComplete starts again once a project it loaded is restored
+            }
+
+            if (info?.Contains("val area", StringComparison.Ordinal) != true)
+            {
+                await Task.Delay(1000).ConfigureAwait(true);
+            }
+        }
+
+        Check(info?.Contains("val area", StringComparison.Ordinal) == true, "Quick Info on area shows its signature: " + info);
+        shell.Explorer.Reveal("f:" + path);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("fsharp.png");
+    }
+
+    private async Task FSharpInteractiveStepAsync()
+    {
+        var target = Path.Combine(Work, "FSharp");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "FSharp"), target);
+        }
+
+        var editor = await OpenAsync(Path.Combine(target, "Scripts", "Explore.fsx")).ConfigureAwait(true);
+        var start = editor.Model.Text.Text.IndexOf("let square", StringComparison.Ordinal);
+        var end = editor.Model.Text.Text.IndexOf("// [fsi-end]", StringComparison.Ordinal);
+        editor.Editor.Select(start, end - start);
+        shell.SendToFSharpInteractive();
+        var session = shell.FSharpInteractive;
+        Check(session is not null, "F# Interactive started");
+        string Screen() => string.Join('\n', Enumerable.Range(0, session!.Terminal.TotalRows).Select(i => session.Terminal.GetRow(i).GetText()));
+        await WaitAsync(() => Screen().Contains("val squares: int list = [1; 4; 9]", StringComparison.Ordinal), "F# Interactive shows val squares", 180).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("fsharp-interactive.png");
+        shell.Terminals.Close(session!);
+    }
+
     private async Task XamlPreviewStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Avalonia");
+        var target = Path.Combine(Work, "Avalonia");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Avalonia"), target);
@@ -1853,7 +2080,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task ProfilerStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Diagnostics");
+        var target = Path.Combine(Work, "Diagnostics");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Diagnostics"), target);
@@ -1871,8 +2098,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => Report() is { IsLoading: false, Total: > 0 } r && (r.HotFiles.Count > 0 || r.HasError), "the report shows the trace with its source lines", 300).ConfigureAwait(true);
         var report = Report()!;
         Check(!report.HasError, "the trace was read: " + report.Error);
-        // A busy machine (a CI runner) can put the runtime's GC polling above it: the hot function is among the first.
-        Check(report.Functions.Take(3).Any(f => f.Name.Contains("Primes.IsPrime", StringComparison.Ordinal)), "the hot function is among the first: " + string.Join(", ", report.Functions.Take(3).Select(f => f.Name)));
+        // The hot function is the app's hottest: on a busy machine (a CI runner) the samples land on the runtime's safe
+        // points, so Stopwatch, Sleep and wait frames of the other threads can rank above it overall.
+        var hottest = report.Functions.FirstOrDefault(f => f.Name.StartsWith("CpuBound.", StringComparison.Ordinal));
+        Check(hottest?.Name.Contains("Primes.IsPrime", StringComparison.Ordinal) == true, "the hot function is the app's hottest: " + string.Join(", ", report.Functions.Take(8).Select(f => f.Name)));
         Check(report.CounterSummaries.Count > 0, "the counters were recorded");
         Console.Out.WriteLine($"  {report.Summary}");
 
@@ -1902,7 +2131,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task<string> DiagnosticsStartupAsync(string project, string arguments)
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && shell.ActiveProfiling is null && !shell.Builds.IsBuilding, $"the previous run, collection and build have stopped (collecting: {shell.ActiveProfiling?.Target}, building: {shell.Builds.IsBuilding})", 120).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Diagnostics");
+        var target = Path.Combine(Work, "Diagnostics");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Diagnostics"), target);
@@ -2033,7 +2262,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private async Task DataExplorerStepAsync()
     {
-        var database = Path.Combine(_work, "smoke-inventory.db");
+        var database = Path.Combine(Work, "smoke-inventory.db");
         File.Copy(Path.Combine(samples, "Data", "Inventory", "inventory.db"), database, overwrite: true);
         shell.ShowDatabaseExplorer();
         var form = shell.OpenConnectionForm().ViewModel;
@@ -2101,7 +2330,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// </summary>
     private async Task RazorHtmlStepAsync()
     {
-        var counter = Path.Combine(_work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
+        var counter = Path.Combine(Work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
         var editor = await OpenAsync(counter).ConfigureAwait(true);
         var heading = editor.Model.Text.Text.IndexOf("<h1>Counter</h1>", StringComparison.Ordinal) + "<h1>Counter</h1>".Length;
         editor.Model.Text.Insert(heading, "\n<blockq");
@@ -2125,7 +2354,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => !shell.Builds.IsBuilding && shell.Runs.Running.Count == 0, "the previous build and run have finished", 120).ConfigureAwait(true);
         var before = shell.Builds.LastBuild;
         shell.Run("build.buildSolution");
-        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 300).ConfigureAwait(true);
+        await WaitAsync(() => BuildDone(before), "the build finishes", 300).ConfigureAwait(true);
         Check(shell.Builds.LastBuild!.Result is { Succeeded: true, UpToDate: true }, "Build Solution right after a build is up to date:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
 
         // A binary log, read by the build host and browsed in the viewer.
@@ -2177,6 +2406,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.ProjectItems.SetAsync(greetings, template, null, new Dictionary<string, string?> { [Projects.Protocol.ItemMetadataNames.Generator] = "TextTemplatingFileGenerator" }, CancellationToken.None).ConfigureAwait(true);
             var strings = await shell.RunCustomToolAsync(resx).ConfigureAwait(true);
             Check(strings?.Succeeded == true && ReadText(created[2]).Contains("internal static string SmokeGreeting", StringComparison.Ordinal), "the ResX generator writes SmokeStrings.Designer.cs");
+            var resources = shell.OpenResx(resx);
+            await resources.LoadAsync().ConfigureAwait(true);
+            Check(resources.Rows.Any(r => r is { Name: "SmokeGreeting", Value: "Hello from a resource" }), "the resource editor lists SmokeStrings.resx's strings");
+            shell.Layout.CloseDocument(resources);
             var numbers = await shell.RunCustomToolAsync(template).ConfigureAwait(true);
             Check(numbers?.Succeeded == true && ReadText(created[3]).Contains("public const int N3 = 9;", StringComparison.Ordinal),
                 "the T4 host transforms SmokeNumbers.tt: " + string.Join("; ", numbers?.Diagnostics.Select(d => d.Message) ?? ["no result"]));
@@ -2202,7 +2435,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "WebScripts", "WebScripts.slnx")), $"the samples folder {samples} has WebScripts");
-        var target = Path.Combine(_work, "WebScripts");
+        var target = Path.Combine(Work, "WebScripts");
         Copy(Path.Combine(samples, "WebScripts"), target);
         await shell.OpenSolutionAsync(Path.Combine(target, "WebScripts.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the WebScripts solution is open", 300).ConfigureAwait(true);
@@ -2219,7 +2452,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         var before = shell.Builds.LastBuild;
         shell.Run("build.buildSolution");
-        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 300).ConfigureAwait(true);
+        await WaitAsync(() => BuildDone(before), "the build finishes", 300).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(project, "stamp.txt")), "the Before Build script ran: " + Tail(shell.NpmLog.GetText(), 1500));
     }
 
@@ -2230,7 +2463,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task EslintStepAsync()
     {
         Check(File.Exists(Path.Combine(samples, "WebLint", "package-lock.json")), $"the samples folder {samples} has WebLint");
-        var target = Path.Combine(_work, "WebLint");
+        var target = Path.Combine(Work, "WebLint");
         Copy(Path.Combine(samples, "WebLint"), target);
         var npm = Workbench.Node.Npm.UserNpm() ?? Workbench.Node.Npm.BuiltIn(shell.Node);
         var log = new System.Text.StringBuilder();
@@ -2253,7 +2486,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous session has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "BlazorHosted", "BlazorHosted.slnx")), $"the samples folder {samples} has BlazorHosted");
-        var target = Path.Combine(_work, "BlazorHosted");
+        var target = Path.Combine(Work, "BlazorHosted");
         Copy(Path.Combine(samples, "BlazorHosted"), target);
         using (var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
         {
@@ -2270,6 +2503,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
         var line = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [initialized]", StringComparison.Ordinal)) + 1;
         shell.Debugger.Breakpoints.Toggle(counter, line);
+        // The page's ticks: WebAssembly breakpoints can bind after the page's OnInitialized has run.
+        shell.Debugger.Breakpoints.Toggle(counter, Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [tick]", StringComparison.Ordinal)) + 1);
         string Thread() => shell.Debugger.Threads.FirstOrDefault(t => t.Id == shell.Debugger.CurrentStop?.ThreadId)?.Name ?? string.Empty;
         shell.Run("debug.start");
         try
@@ -2300,7 +2535,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "BlazorWasm", "BlazorWasm.slnx")), $"the samples folder {samples} has BlazorWasm");
-        var target = Path.Combine(_work, "BlazorWasm");
+        var target = Path.Combine(Work, "BlazorWasm");
         Copy(Path.Combine(samples, "BlazorWasm"), target);
         using (var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
         {
@@ -2316,16 +2551,34 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var counter = Path.Combine(target, "BlazorWasm", "Pages", "Counter.razor");
         var line = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [initialized]", StringComparison.Ordinal)) + 1;
         shell.Debugger.Breakpoints.Toggle(counter, line);
+        // The page's ticks: WebAssembly breakpoints can bind after the page's OnInitialized has run.
+        shell.Debugger.Breakpoints.Toggle(counter, Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [tick]", StringComparison.Ordinal)) + 1);
         var buildBefore = shell.Builds.LastBuild;
         bool BuildFailed() => shell.Builds.LastBuild is { Result.Succeeded: false } build && build != buildBefore;
         shell.Run("debug.start");
         try
         {
             // The first session downloads vscode-js-debug (and Node.js, if M16b's step didn't). A failed build ends the wait.
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), () => "the browser session stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
+            // The dev server's debugging proxy can stall on a loaded runner before the page's .NET runtime is reported
+            // (no Mono.runtimeReady, none of the app's sources: the page runs, no breakpoint binds; seen once on the
+            // linux-arm64 installed app). A user starts debugging again; so does this step, once, and that session must stop.
+            try
+            {
+                await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), "the browser session stops at the breakpoint", 300).ConfigureAwait(true);
+            }
+            catch (SmokeFailure) when (!BuildFailed())
+            {
+                shell.Workbench.Log.AppendLine("[smoke] blazor.wasmDebug: the page didn't stop in 300 s; debugging starts again. Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000));
+                await shell.Debugger.StopAsync().ConfigureAwait(true);
+                await WaitAsync(() => shell.Runs.Running.Count == 0 && shell.Debugger.State == DebugState.Idle, "the first session and its dev server stop", 60).ConfigureAwait(true);
+                shell.Run("debug.start");
+                await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), () => "the browser session stops at the breakpoint, on the second start (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 300).ConfigureAwait(true);
+            }
+
             Check(!BuildFailed(), "the build before debugging succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the call stack", 60).ConfigureAwait(true);
-            Check(shell.CallStack.Frames[0].Name.Contains("Counter.OnInitialized", StringComparison.Ordinal), "the top frame is Counter.OnInitialized, in the browser: " + shell.CallStack.Frames[0].Name);
+            Check(shell.CallStack.Frames[0].Name is var top && (top.Contains("Counter.OnInitialized", StringComparison.Ordinal) || top.Contains("Counter.Tick", StringComparison.Ordinal)),
+                "the top frame is Counter.OnInitialized or Counter.Tick, in the browser: " + shell.CallStack.Frames[0].Name);
             Screenshot("smoke-test-blazor-wasm-debug.png");
         }
         finally
@@ -2347,7 +2600,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await shell.InstallWebLanguagesAsync().ConfigureAwait(true);
         Check(shell.WebServers.IsInstalled, "Node.js and the web language servers are installed: " + Tail(shell.LanguageLog.GetText(), 1500));
-        var folder = Path.Combine(_work, "site");
+        var folder = Path.Combine(Work, "site");
         Directory.CreateDirectory(folder);
         var script = Path.Combine(folder, "app.ts");
         await File.WriteAllTextAsync(script, "const count: number = \"three\";\nconsole.log(count);\n").ConfigureAwait(true);
@@ -2368,7 +2621,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private (string Solution, string Port) PrepareBlazorFixture()
     {
         Check(File.Exists(Path.Combine(samples, "Blazor", "Blazor.slnx")), $"the samples folder {samples} has Blazor");
-        var target = Path.Combine(_work, "Blazor");
+        var target = Path.Combine(Work, "Blazor");
         Copy(Path.Combine(samples, "Blazor"), target);
         using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         socket.Start();
@@ -2383,7 +2636,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private (string Solution, string Http) PrepareWebFixture()
     {
         Check(File.Exists(Path.Combine(samples, "Web", "Web.slnx")), $"the samples folder {samples} has Web");
-        var target = Path.Combine(_work, "Web");
+        var target = Path.Combine(Work, "Web");
         Copy(Path.Combine(samples, "Web"), target);
         using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         socket.Start();
@@ -2404,10 +2657,67 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// to the OS credential store under this profile's own service; the pull request checked out with its review comment
     /// in the editor and its checks; <c>#</c> completion; askpass for an HTTPS remote; a worktree; then sign-out.
     /// </summary>
+    /// <summary>
+    /// AI assistance (M28a, ADR 0062) against <see cref="Tests.MockModelServers"/>: the OpenAI-compatible plugin stays
+    /// unloaded while AI is off, then a question about a selection streams into AI Chat and its code is applied.
+    /// </summary>
+    private async Task AiChatStepAsync()
+    {
+        const string Reply = "This adds two numbers. A shorter version:\n\n```csharp\nstatic int Add(int a, int b) => a + b;\n```\n\nThe expression body returns the same value.";
+        await using var server = Tests.MockModelServers.OpenAI(Reply);
+        var settings = shell.Workbench.Settings;
+        Check(shell.Ai.State == Workbench.Ai.AiState.Off, "AI assistance is off by default");
+        Check(shell.Plugins.Plugins.Any(p => p.Id == "codalus.openai" && p.State == PluginState.Ready), "the OpenAI-compatible plugin is installed and not loaded");
+        try
+        {
+            await settings.SetAsync("ai.openai.endpoint", server.BaseUrl + "/v1", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, "openai", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.ModelSetting, "gpt-test", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await shell.Secrets.StoreAsync("codalus.openai", "apiKey:openai", Tests.MockModelServers.Key, CancellationToken.None).ConfigureAwait(true);
+
+            var path = Path.Combine(Work, "Calculator.cs");
+            await File.WriteAllTextAsync(path, "namespace Samples;\n\npublic static class Calculator\n{\n    static int Add(int a, int b)\n    {\n        return a + b;\n    }\n}\n").ConfigureAwait(true);
+            var editor = await OpenAsync(path).ConfigureAwait(true);
+            var method = "    static int Add(int a, int b)\n    {\n        return a + b;\n    }\n";
+            editor.Editor.Select(editor.Model.Text.Text.IndexOf(method, StringComparison.Ordinal), method.Length);
+
+            shell.ShowAiChat();
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(), "AI Chat opens").ConfigureAwait(true);
+            shell.AiChat.Input = "What does this do? Can it be shorter?";
+            await shell.AiChat.SendAsync().ConfigureAwait(true);
+            var turns = shell.AiChat.Chat.Turns;
+            var turn = turns.Count > 0 ? turns[^1] : throw new SmokeFailure("The question wasn't asked.");
+            await WaitAsync(() => !turn.IsStreaming, "the answer streams in", 60).ConfigureAwait(true);
+            Check(turn.Error is null && turn.Answer == Reply, $"the answer arrived ({turn.Error ?? turn.Answer})");
+            Check(AiChatViewModel.ContextSummary(turn).Contains("Calculator.cs", StringComparison.Ordinal), "the selection went with the question");
+            await WaitAsync(() => window.GetVisualDescendants().OfType<Button>().Any(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Apply the code after a preview"), "the code block offers Apply").ConfigureAwait(true);
+            Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.ai"), "the status bar shows AI is on");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("ai-chat.png");
+
+            var applying = shell.AiChat.ApplyAsync(turn, Workbench.Ai.AiCodeBlocks.Parse(turn.Answer)[0]);
+            await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.HasDetails, "the preview shows the change").ConfigureAwait(true);
+            shell.Dialogs.Accept();
+            await applying.ConfigureAwait(true);
+            Check(editor.Model.Text.Text.Contains("    static int Add(int a, int b) => a + b;\n}", StringComparison.Ordinal), "Apply replaced the selection");
+            Check(!shell.Workbench.Output.GetOrCreate(Workbench.Ai.AiService.OutputChannelId).GetText().Contains("return a + b", StringComparison.Ordinal), "the request log has no content");
+        }
+        finally
+        {
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+            // The key goes too, like the hosting step's token: on macOS a key left in the Keychain makes the next run
+            // (another build, so another code signature) ask the user for access, which an unattended run can't answer.
+            await shell.Secrets.DeleteAsync("codalus.openai", "apiKey:openai", CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
     private async Task HostingStepAsync()
     {
         await using var github = new Tests.MockGitHub("codalus-samples", "BuildAndRun");
-        var bare = Path.Combine(_work, "BuildAndRun.git");
+        var bare = Path.Combine(Work, "BuildAndRun.git");
         Directory.CreateDirectory(bare);
         GitIn(bare, "init", "-q", "--bare", "-b", Branch);
         Git("remote", "add", "origin", github.RemoteUrl);
@@ -2473,7 +2783,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await AskpassCheckAsync(bare).ConfigureAwait(true);
 
         // A worktree, listed in the Worktrees window, then removed.
-        var worktree = Path.Combine(_work, "BuildAndRun-worktree");
+        var worktree = Path.Combine(Work, "BuildAndRun-worktree");
         await shell.Git.AddWorktreeAsync(worktree, "smoke/worktree", null).ConfigureAwait(true);
         shell.Layout.ShowToolWindow(WorktreesViewModel.ToolWindowId);
         await shell.Worktrees.ReloadAsync().ConfigureAwait(true);
@@ -2532,7 +2842,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         // A known gap of one platform, skipped with its reason in the report (never passed): CODALUS_SMOKE_SKIP is
-        // "<id>[,<id>…]=<reason>", set by the packages workflow.
+        // "<id>[,<id>…]=<reason>" (no workflow sets it at the moment; it's for a platform's known gap).
         if (Environment.GetEnvironmentVariable("CODALUS_SMOKE_SKIP") is { Length: > 0 } skip && skip.Split('=', 2) is [var ids, var because]
             && ids.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(id, StringComparer.Ordinal))
         {
@@ -2552,15 +2862,21 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Console.Out.WriteLine($"[{_clock.Elapsed:mm\\:ss}] {milestone} {id}: {title}");
         Console.Out.Flush();
         var start = Stopwatch.GetTimestamp();
+        Task? running = null;
         try
         {
             // A step that hangs (a request without a timeout) fails on its own instead of using up the run.
-            await body().WaitAsync(s_stepLimit).ConfigureAwait(true);
+            running = body();
+            await running.WaitAsync(s_stepLimit).ConfigureAwait(true);
             Report(id, milestone, title, "passed", Stopwatch.GetElapsedTime(start).TotalSeconds, null);
         }
         catch (Exception ex)
         {
-            var error = ex is SmokeFailure ? ex.Message : ex is TimeoutException ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes." : ex.ToString();
+            // Only the step limit is reported as such: a TimeoutException from the step itself (a timed wait in the
+            // code it drives) is reported with its stack, like any other exception.
+            var error = ex is SmokeFailure ? ex.Message
+                : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {s_stepLimit.TotalMinutes:0} minutes."
+                : ex.ToString();
             Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, error);
             Screenshot($"smoke-test-{id}.png");
             if (!_logsShown)
@@ -2581,6 +2897,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
                 PrintHostDiagnostics();
                 Console.Out.Flush();
+            }
+
+            // A failed step leaves no debug session behind: the next one would find it instead of starting its own.
+            if (shell.Debugger.IsActive)
+            {
+                try
+                {
+                    await shell.Debugger.StopAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+                }
+                catch (Exception stop)
+                {
+                    Console.Out.WriteLine($"  (the debug session didn't stop: {stop.Message})");
+                }
             }
         }
         finally
@@ -2628,7 +2957,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         Console.Out.WriteLine("  --- Processes (by CPU) ---");
-        Console.Out.WriteLine(string.Join('\n', Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu").Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
+        Console.Out.WriteLine(string.Join('\n', (OperatingSystem.IsMacOS() ? Run("ps", "-axro", "pid,ppid,etime,pcpu,rss,command") : Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu")).Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
         var tool = new[] { Environment.GetEnvironmentVariable("HOME") is { } home ? Path.Combine(home, ".dotnet", "tools", "dotnet-stack") : null }
             .OfType<string>().FirstOrDefault(File.Exists);
         if (tool is not null && shell.Languages.HostProcessId(ShellHost.CSharpLanguageId) is { } pid)
@@ -2709,15 +3038,32 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     // ------------------------------------------------------------------ fixture and editor helpers
 
+    /// <summary>
+    /// The temporary folder every step copies its fixtures into, made on first use with the samples' build files (so a
+    /// fixture never inherits the repository's), whichever steps CODALUS_SMOKE_ONLY keeps.
+    /// </summary>
+    private string Work
+    {
+        get
+        {
+            if (_workRoot.Length == 0)
+            {
+                var folder = Path.Combine(RealPath.Resolve(Path.GetTempPath()), "codalus-smoke-" + Guid.NewGuid().ToString("N")[..8]);
+                Directory.CreateDirectory(folder);
+                File.Copy(Path.Combine(samples, "Directory.Build.props"), Path.Combine(folder, "Directory.Build.props"));
+                File.Copy(Path.Combine(samples, "Directory.Packages.props"), Path.Combine(folder, "Directory.Packages.props"));
+                _workRoot = folder;
+            }
+
+            return _workRoot;
+        }
+    }
+
     /// <summary>Copies samples/BuildAndRun (standalone, as under samples/) to a temporary folder and makes it a git repository.</summary>
     private void PrepareFixture()
     {
         Check(File.Exists(Path.Combine(samples, "BuildAndRun", "BuildAndRun.slnx")), $"the samples folder {samples} has BuildAndRun");
-        _work = Path.Combine(RealPath.Resolve(Path.GetTempPath()), "codalus-smoke-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_work);
-        File.Copy(Path.Combine(samples, "Directory.Build.props"), Path.Combine(_work, "Directory.Build.props"));
-        File.Copy(Path.Combine(samples, "Directory.Packages.props"), Path.Combine(_work, "Directory.Packages.props"));
-        _folder = Path.Combine(_work, "BuildAndRun");
+        _folder = Path.Combine(Work, "BuildAndRun");
         Copy(Path.Combine(samples, "BuildAndRun"), _folder);
         File.WriteAllText(Path.Combine(_folder, ".gitignore"), "bin/\nobj/\n");
 
@@ -2734,13 +3080,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// Copies samples/Testing next to BuildAndRun and returns a solution with the code under test and the two xUnit
     /// projects (one per test platform), so the step builds three projects rather than eight.
     /// </summary>
-    private string PlainProject => Path.Combine(_work, "Packages", "src", "Plain", "Plain.csproj");
+    private string PlainProject => Path.Combine(Work, "Packages", "src", "Plain", "Plain.csproj");
 
     private string PreparePackagesFixture()
     {
         Check(File.Exists(Path.Combine(samples, "Packages", "Packages.slnx")), $"the samples folder {samples} has Packages");
-        Copy(Path.Combine(samples, "Packages"), Path.Combine(_work, "Packages"));
-        return Path.Combine(_work, "Packages", "Packages.slnx");
+        Copy(Path.Combine(samples, "Packages"), Path.Combine(Work, "Packages"));
+        return Path.Combine(Work, "Packages", "Packages.slnx");
     }
 
     /// <summary>A file's text, or empty while another process writes it.</summary>
@@ -2759,7 +3105,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private string PrepareTestingFixture()
     {
         Check(File.Exists(Path.Combine(samples, "Testing", "Testing.slnx")), $"the samples folder {samples} has Testing");
-        _testing = Path.Combine(_work, "Testing");
+        _testing = Path.Combine(Work, "Testing");
         Copy(Path.Combine(samples, "Testing"), _testing);
         var solution = Path.Combine(_testing, "Smoke.slnx");
         File.WriteAllText(solution, """
@@ -2838,11 +3184,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private string RunOutput() =>
         shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Hello")?.GetText() ?? string.Empty;
 
-    private async Task RenderedAsync()
+    /// <summary>Two frames of <paramref name="of"/> (the main window by default) have been rendered.</summary>
+    private async Task RenderedAsync(Avalonia.Controls.TopLevel? of = null)
     {
+        var target = of ?? window;
         var rendered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        window.RequestAnimationFrame(_ => window.RequestAnimationFrame(_ => rendered.TrySetResult()));
-        await rendered.Task.ConfigureAwait(true);
+        target.RequestAnimationFrame(_ => target.RequestAnimationFrame(_ => rendered.TrySetResult()));
+
+        // macOS can stop drawing a window it considers hidden (behind others, App Nap): the screenshot renders it
+        // itself, so a few seconds without frames go on rather than wait forever.
+        await rendered.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        if (!rendered.Task.IsCompleted)
+        {
+            shell.Workbench.Log.AppendLine("[smoke] No frame in 5 s: going on without one.");
+        }
     }
 
     // ------------------------------------------------------------------ report

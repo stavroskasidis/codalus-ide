@@ -9,6 +9,9 @@ EditingDepthTests
 EditorTests
 EntityFrameworkShellTests
 EnvironmentShellTests
+FSharpInteractiveTests
+FSharpShellTests
+FSharpTestingTests
 GitDepthShellTests
 GitShellTests
 InstallationTests

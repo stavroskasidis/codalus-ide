@@ -2,14 +2,15 @@
 
 ## Prerequisites
 
-- **The .NET SDK**, 10.0 or newer; .NET 11 works too, release candidates included. Codalus IDE loads and builds solutions with the SDK's MSBuild, so it must be installed for any solution you open. It must also match the version a `global.json` asks for.
-  - Older SDKs (8.0, 9.0) work for solutions that pin them in `global.json`, as long as .NET 10 or newer is also installed: Codalus' helper processes run on it.
+- **The .NET 11 SDK** (release candidate 2 or later until .NET 11 is released in November 2026). Codalus IDE runs its helper processes on .NET 11 or newer, and loads and builds solutions with the SDK's MSBuild, so an SDK must be installed for any solution you open. It must also match the version a `global.json` asks for.
+  - Other SDKs work next to it: .NET 10's, and older ones pinned in `global.json` down to 2.1.200 (see [Older .NET versions](dotnet-versions.md)). On their own, without .NET 11 or newer, they can't start Codalus' helper processes.
+  - Projects need the runtimes they target to run and debug, as with `dotnet run`: install .NET 10's runtime (or SDK) for `net10.0` projects.
 - **git** (2.30 or newer) on the `PATH`, for the Git features.
 - A 64-bit OS: Windows 11 (x64); macOS 15 or newer on Apple silicon (the macOS versions .NET supports); or a current Linux distribution (x64 or arm64) with X11, or Wayland through XWayland.
 
 The debugger (netcoredbg) is included in the packages.
 
-**Missing something?** When Codalus IDE starts without the .NET SDK or git, it offers to install them. When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
+**Missing something?** When Codalus IDE starts without the .NET SDK or git, it offers to install them, and the same when only SDKs older than .NET 11 are installed (it installs the .NET 11 SDK). When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
 - **What's found**: Help → Check Environment lists every tool it uses, with its version, its path and what needs it: the .NET SDK, git and Git LFS, Docker or Podman, and WSL on Windows.
 - **How it installs**:
   - Windows: winget, or the download page when winget isn't there.
@@ -19,13 +20,13 @@ The debugger (netcoredbg) is included in the packages.
 
 ## Installing
 
-Every release on the [releases page](https://github.com/stavroskasidis/codalus-ide/releases) has installers for each platform, and `SHA256SUMS.txt` to check them against. Stable releases come from `master`; nightly builds (`0.2.0-nightly.20261011.1`) come from `develop` every night it changed, and are marked as prereleases.
+Every release on the [releases page](https://github.com/stavroskasidis/codalus-ide/releases) has installers for each platform, and `SHA256SUMS.txt` to check them against. Stable releases come from `master`; nightly builds (`0.2.0-nightly.20261011.1`) come from each change to `develop` that passes the tests on every platform, and are marked as prereleases.
 
 | OS | Download | How |
 |---|---|---|
 | Windows | `codalus-<version>-win-x64-setup.exe` | Run it. It installs for you alone (no administrator rights) into `%LocalAppData%\Codalus`, adds Codalus IDE to the Start menu and `codalus` to your `PATH`, and updates itself. Uninstall it from Settings → Apps. Or: `winget install Codalus.Codalus`, once the package is published. |
 | Windows | `codalus-<version>-win-x64.zip` | A portable build: unzip anywhere and run `codalus.exe`. It doesn't update itself. |
-| macOS | `codalus-<version>-osx-arm64.pkg` | Open it and choose to install for you (`~/Applications`) or for every user (`/Applications`). The app updates itself. |
+| macOS | `codalus-<version>-osx-arm64.pkg` | Open it and choose to install for you (`~/Applications`) or for every user (`/Applications`). The app belongs to you either way, and updates itself. |
 | macOS | `codalus-<version>-osx-arm64.app.zip` | The app on its own: unzip it and move it where you like. |
 | Linux | `.AppImage` | `chmod +x` the file and run it. It updates itself. |
 | Linux | `.deb` and `.rpm` | Install from our apt or dnf repository, so that they update with the system (the instructions are on the [download page](https://stavroskasidis.com/codalus-ide/download/#linux)), or install the file: `sudo apt install ./codalus-<version>-linux-x64.deb`, `sudo dnf install ./codalus-<version>-linux-x64.rpm`. |
@@ -38,6 +39,22 @@ Every release on the [releases page](https://github.com/stavroskasidis/codalus-i
 - **macOS** (Gatekeeper, "Apple could not verify…"): close the message, open System Settings → Privacy & Security, and choose **Open Anyway** next to the installer or the app, then open it again. (Since macOS 15, right-click → Open no longer skips the check.)
 
 From a Windows terminal, `codalus` runs the installed app and waits for it, so `git config core.editor "codalus --wait"` works. As a windowed program it prints `--version` and `--help` to the console window rather than to a pipe.
+
+### The command line
+
+| Command | What it does |
+|---|---|
+| `codalus App.slnx`, `codalus src/App.csproj`, `codalus folder` | Opens the solution, project or folder in a new window. |
+| `codalus Program.cs:12:5` | Opens the file in the running window, at line 12, column 5 (`:column` and `:line` are optional), and brings the window to the front. Without a running window it opens a new one. |
+| `codalus --new-window Program.cs` | Opens the file in a new window, even when one is running. |
+| `codalus --wait <file>` | Edits the file and exits when its tab closes (git's `core.editor`). |
+| `codalus diff <left> <right>`, `codalus merge <local> <remote> <base> <merged>` | Compares two files, or resolves a merge for `git mergetool` ([git.md](git.md)). |
+| `codalus --list-plugins` | Prints the plugins you've installed (`--show-versions`: with their versions), and exits. |
+| `codalus --install-plugin <id>[@<version>]` | Installs a plugin from the plugin galleries (the **Plugin Sources** setting, and the one that says which sources must sign their packages; see [settings.md](settings.md)), the newest version unless one is given, and exits. Repeatable. A plugin a running window has replaces it when Codalus IDE next starts. |
+| `codalus --install-plugin <file>.nupkg` | Installs a plugin package file. |
+| `codalus --help`, `codalus --version` | Prints every option, or the version. |
+
+`--user-data-dir <dir>` keeps settings, state and plugins under `<dir>`, for each of these.
 
 To build from source, see the repository's README.
 

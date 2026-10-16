@@ -53,6 +53,15 @@ public sealed class SnippetRegistry
         }
     }
 
+    /// <summary>The languages that have snippets (<c>*</c>: snippets for every language), sorted.</summary>
+    public IReadOnlyList<string> Languages()
+    {
+        lock (_gate)
+        {
+            return [.. _bySource.Values.SelectMany(s => s).Select(s => s.Language).Distinct(StringComparer.Ordinal).Order(StringComparer.OrdinalIgnoreCase)];
+        }
+    }
+
     /// <summary>A language's snippets (and those for every language, <c>*</c>), the user's replacing others with the same name.</summary>
     public IReadOnlyList<Snippet> For(string? languageId)
     {

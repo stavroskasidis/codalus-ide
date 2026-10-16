@@ -1,0 +1,47 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:Codalus.Shell.Views"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.EditorConfigView"
+             x:DataType="views:EditorConfigDocument">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <TextBlock Text="{l:T editorConfig.section}" VerticalAlignment="Center" Margin="4,0" />
+      <ComboBox ItemsSource="{Binding Sections}" SelectedItem="{Binding Section}" MinWidth="120" AutomationProperties.Name="{l:T editorConfig.section}" />
+      <TextBox Text="{Binding Filter}" PlaceholderText="{l:T editorConfig.search}" MinWidth="180" AutomationProperties.Name="{l:T editorConfig.search}" />
+      <Button Classes="toolbar" Command="{Binding ViewCodeCommand}" ToolTip.Tip="{l:T editorConfig.viewCode}" AutomationProperties.Name="{l:T editorConfig.viewCode}">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="file-code" />
+          <TextBlock Text="{l:T editorConfig.viewCode}" VerticalAlignment="Center" />
+        </StackPanel>
+      </Button>
+    </controls:ToolbarPanel>
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T editorConfig.options}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="views:EditorConfigOptionRow">
+          <Setter Property="Padding" Value="8,3" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="views:EditorConfigOptionRow">
+          <Grid ColumnDefinitions="*,220">
+            <StackPanel Spacing="1">
+              <TextBlock Text="{Binding Description}" TextWrapping="Wrap" FontWeight="SemiBold" Classes.muted="{Binding !IsSet}" />
+              <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}">
+                <Run Text="{Binding Key}" />
+                <Run Text=" · " />
+                <Run Text="{Binding Group}" />
+              </TextBlock>
+            </StackPanel>
+            <ComboBox Grid.Column="1" ItemsSource="{Binding Choices}" SelectedItem="{Binding Choice}" IsVisible="{Binding HasChoices}" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                      AutomationProperties.Name="{Binding Key}" />
+            <TextBox Grid.Column="1" Text="{Binding Value}" IsVisible="{Binding IsFreeText}" PlaceholderText="{l:T editorConfig.notSet}" VerticalAlignment="Center"
+                     AutomationProperties.Name="{Binding Key}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

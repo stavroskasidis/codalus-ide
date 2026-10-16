@@ -15,6 +15,33 @@ public sealed partial class CodeEditorController
     /// <summary>Raised with the text the user copies or cuts in this editor (the clipboard ring).</summary>
     public event EventHandler<string>? Copied;
 
+    /// <summary>Raised after text is pasted into this editor, with where it went (paste with automatic usings).</summary>
+    public event EventHandler<PastedText>? Pasted;
+
+    /// <summary>After a paste, once the text is in: where it went (the caret is at its end).</summary>
+    private void OnTextPasted(object? sender, AvaloniaEdit.Editing.TextEventArgs e)
+    {
+        var text = e.Text;
+        if (string.IsNullOrEmpty(text) || Pasted is null)
+        {
+            return;
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var end = Editor.CaretOffset;
+            var document = Model.Text;
+            foreach (var candidate in new[] { text, text.ReplaceLineEndings("\n"), text.ReplaceLineEndings("\r\n") }.Distinct(StringComparer.Ordinal))
+            {
+                if (candidate.Length <= end && document.GetText(end - candidate.Length, candidate.Length) == candidate)
+                {
+                    Pasted?.Invoke(this, new PastedText(end - candidate.Length, candidate.Length, text));
+                    return;
+                }
+            }
+        });
+    }
+
     /// <summary>Ctrl+D: duplicates the selection, or the caret's line(s), below.</summary>
     public void DuplicateLines()
     {

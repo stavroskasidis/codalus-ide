@@ -2,7 +2,7 @@
 
 This is the plan for everything after the MVP, M0–M7. The MVP's milestones came from the original project brief, `ide-prompt.md`, which was removed after M7. It turns the mission's one-line post-MVP list into milestones that future sessions can plan and build one at a time. It also covers the rest of the Visual Studio feature set that the mission's "parity is reachable" goal implies. The [Visual Studio parity matrix](#visual-studio-parity-matrix) maps every VS feature area to the milestone that delivers it, or records it as a gap or a non-goal. It is the checklist that keeps this plan complete.
 
-- **Status:** written 2026-10-08 while M1 was in progress, and checked against Visual Studio 2026 on 2026-10-09. The MVP (M0–M7) is done; M8 was built on 2026-10-09 (checkpoints [M8a](checkpoints/m8a.md) and [M8b](checkpoints/m8b.md)), and M9 the same day ([M9a](checkpoints/m9a.md), [M9b](checkpoints/m9b.md)). On 2026-10-09 the maintainer gave a standing go-ahead for M9 through M16, built in order with each milestone validated on Windows, Linux and macOS. On 2026-10-10 the maintainer added a platform and release phase (M30–M33), placed next, after M16b and before M16c. The same day they added UI polish (M34) as the last milestone before Visual Basic and F#, which were renumbered M35 and M36 so that they stay last.
+- **Status:** written 2026-10-08 while M1 was in progress, and checked against Visual Studio 2026 on 2026-10-09. The MVP (M0–M7) is done; M8 was built on 2026-10-09 (checkpoints [M8a](checkpoints/m8a.md) and [M8b](checkpoints/m8b.md)), and M9 the same day ([M9a](checkpoints/m9a.md), [M9b](checkpoints/m9b.md)). On 2026-10-09 the maintainer gave a standing go-ahead for M9 through M16, built in order with each milestone validated on Windows, Linux and macOS. On 2026-10-10 the maintainer added a platform and release phase (M30–M33), placed next, after M16b and before M16c. The same day they added UI polish (M34) as the last milestone before Visual Basic and F#, which were renumbered M35 and M36 so that they stay last. The repository went public on 2026-10-11 (D29). By 2026-10-14 phases 1–9 were built except M28 and M30b (M28 followed on 2026-10-15), M34a–e were pulled forward, M37–M39 were added and built, and 0.1.0, 0.2.0 and 0.2.1 were released; the [status table](#status) is the current state.
 - **Authority:** the original project brief's fixed decisions and non-goals still apply. The brief (`ide-prompt.md`) was removed after M7. Its non-goals are restated under [Out of scope](#out-of-scope), and its decisions live on in the ADRs. ADRs win over this document once they are accepted.
 - **Licences:** the licences given below are what we believe them to be when this was written. Check each one again before adopting it, and record it in `THIRD-PARTY-NOTICES.md`. If a licence is ambiguous, stop and ask the maintainer.
 
@@ -27,42 +27,44 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 |---|---|---|
 | M0 | Scaffold and UI stack spike | done (ADR 0001, 0002) |
 | M1 | Shell and plugin foundation | done |
-| M2–M7 | MVP (the original project brief) | done (checkpoints in `docs/checkpoints/`; M7 is the MVP) |
-| M8 | Testing: Test Explorer and code coverage | at checkpoint: M8a (Test Explorer) and M8b (coverage), ADR 0010 and 0011 |
-| M9 | Packages and project management | at checkpoint: M9a (NuGet), M9b (properties and solution management), ADR 0012 and 0013 |
-| M10 | Integrated terminal and interactive windows | at checkpoint: terminal and C# Interactive, ADR 0014 and 0015 |
-| M11 | Language platform: LSP bridge, grammars, file-type editing | at checkpoint: language registry, TextMate grammars, LSP bridge, markup host, ADR 0016 |
-| M12 | Editor and code-navigation depth | at checkpoint: M12a (navigation and inline information, ADR 0017) and M12b (editing, refactoring UI and analysis, ADR 0018) |
-| M13 | Git depth and hosting integration | done (M13a and M13b at checkpoint): history, merge editor, operations (ADR 0020); GitHub, Azure DevOps and GitLab plugins (sign-in through the OS credential store, pull requests, review comments, CI status, work items, publishing), askpass, worktrees, Git LFS, several repositories (ADR 0031) |
+| M2–M7 | MVP (the original project brief) | done (checkpoints for M3–M7 in `docs/checkpoints/`; M7 is the MVP) |
+| M8 | Testing: Test Explorer and code coverage | done (M8a and M8b at checkpoint): Test Explorer ([m8a](checkpoints/m8a.md)) and coverage ([m8b](checkpoints/m8b.md)), ADR 0010 and 0011 |
+| M9 | Packages and project management | done (M9a and M9b at checkpoint): NuGet ([m9a](checkpoints/m9a.md)), properties and solution management ([m9b](checkpoints/m9b.md)), ADR 0012 and 0013 |
+| M10 | Integrated terminal and interactive windows | done (at checkpoint, [m10](checkpoints/m10.md)): terminal and C# Interactive, ADR 0014 and 0015 |
+| M11 | Language platform: LSP bridge, grammars, file-type editing | done (at checkpoint, [m11](checkpoints/m11.md)): language registry, TextMate grammars, LSP bridge, markup host, ADR 0016 |
+| M12 | Editor and code-navigation depth | done (M12a and M12b at checkpoint): M12a ([m12a](checkpoints/m12a.md), navigation and inline information, ADR 0017) and M12b ([m12b](checkpoints/m12b.md), editing, refactoring UI and analysis, ADR 0018) |
+| M13 | Git depth and hosting integration | done (M13a and M13b at checkpoint, [m13a](checkpoints/m13a.md), [m13b](checkpoints/m13b.md)): history, merge editor, operations (ADR 0020); GitHub, Azure DevOps and GitLab plugins (sign-in through the OS credential store, pull requests, review comments, CI status, work items, publishing), askpass, worktrees, Git LFS, several repositories (ADR 0031) |
 | M14 | Debugger depth | done (M14a–M14c at checkpoint). M14a: exception settings, Run to Cursor, breakpoint depth, QuickWatch, visualizers, Threads and Modules, PerfTips, ADR 0021; M14b ([m14b](checkpoints/m14b.md), ADR 0032): the debug companion host, `[DebuggerDisplay]`, grid, image and plugin visualizers, pinned data tips, Parallel Stacks and Watch, Processes and Debug Location, breakpoint filters, exception module conditions, dumps; M14c ([m14c](checkpoints/m14c.md), ADR 0039 and 0040): multiple startup projects in one session, debugging in the integrated terminal (Detach All for launched programs), attach over SSH, in containers and in WSL, the WSL launch profile, Roslyn components, Just-In-Time crash dumps, the Hot Reload-while-debugging research |
-| M15 | ASP.NET Core and Hot Reload | M15a, M15b and M15c at checkpoint (done): Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch` (ADR 0022); scaffolding through the user's `dotnet-aspnet-codegenerator` and the SDK's item templates, OpenAPI and gRPC service references (ADR 0041) |
-| M16 | Razor, Blazor and web front-end | done (M16a–M16d at checkpoint): Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023); HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); Blazor WebAssembly debugging in the browser through vscode-js-debug (ADR 0026); compound server-and-page debugging, Debug a Web Page, HTML and CSS inside Razor, scoped CSS, npm scripts in the Task Runner Explorer, ESLint and Prettier (ADR 0027) |
+| M15 | ASP.NET Core and Hot Reload | done (M15a–M15c at checkpoint, [m15a](checkpoints/m15a.md), [m15b](checkpoints/m15b.md), [m15c](checkpoints/m15c.md)): Endpoints Explorer, `.http` files, environment selector, development certificate, user secrets, Hot Reload through `dotnet watch` (ADR 0022); scaffolding through the user's `dotnet-aspnet-codegenerator` and the SDK's item templates, OpenAPI and gRPC service references (ADR 0041) |
+| M16 | Razor, Blazor and web front-end | done (M16a–M16d at checkpoint, [m16a](checkpoints/m16a.md)–[m16d](checkpoints/m16d.md)): Razor editing through the Razor source generator, Blazor run and Hot Reload (ADR 0023); HTML, CSS and JavaScript/TypeScript language servers on an on-demand Node.js (ADR 0024); Blazor WebAssembly debugging in the browser through vscode-js-debug (ADR 0026); compound server-and-page debugging, Debug a Web Page, HTML and CSS inside Razor, scoped CSS, npm scripts in the Task Runner Explorer, ESLint and Prettier (ADR 0027) |
 | M17 | Containers, Aspire and publishing | done (M17a–M17c at checkpoint): M17a ([m17a](checkpoints/m17a.md), ADR 0042): the Containers window, Add Docker Support, run and debug in a container (fast mode), compose up, down and debug, `.dcproj` as a solution item, the compose schema, Docker and Podman; M17b ([m17b](checkpoints/m17b.md), ADR 0043): Aspire AppHosts run and debug their projects through the IDE execution protocol, the Aspire window from the resource service, the dashboard; M17c ([m17c](checkpoints/m17c.md), ADR 0042): publish profiles and the Publish page, folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT and container publishing |
-| M18 | Profiling and diagnostics tools | M18a at checkpoint ([m18a](checkpoints/m18a.md), ADR 0044 and 0045): the supervised, lazy `codalus-diaghost` (EventPipe through Microsoft.Diagnostics.NETCore.Client, traces through TraceEvent), the Performance Profiler with saved sessions, CPU Usage (call tree, bottom-up, functions with caller/callee, flame graph, time and thread filters, hot lines in the editor), .NET Counters (EventCounters and meters, CSV and JSON export), the Diagnostic Tools window; M18b at checkpoint ([m18b](checkpoints/m18b.md), ADR 0046): memory snapshots and diffs, allocations, .NET Async, threads and contention, exceptions, file I/O, the events viewer and exports, activity views, BenchmarkDotNet; M18 is complete |
-| M19 | Avalonia XAML editing and live previewer | M19a at checkpoint ([m19a](checkpoints/m19a.md), ADR 0047 and 0048): `.axaml` editing in the C# host on Roslyn's type information (completion, compiled binding paths, live diagnostics and the XAML compiler's errors from builds, hover, definition, `x:Name` rename, formatting), the XAML Previewer on Avalonia's designer host and remote protocol (debounced edits, design-time data, zoom, scale, theme variants, selection both ways through a startup-hook agent, rebuilds on code changes); M19b at checkpoint ([m19b](checkpoints/m19b.md), ADR 0052): the Live Visual Tree and Live Property Explorer for running Avalonia apps (the previewer's agent in a live mode: trees, properties with their sources, editing, highlight, pick, Go to XAML), the Avalonia templates in New Project |
-| M20 | .NET MAUI | planned (D6: go, for Android, iOS and Mac Catalyst), after M28 and before M34 |
-| M21 | Remote development | M21a at checkpoint ([m21a](checkpoints/m21a.md), ADR 0050 and 0051): `codalus-server` (self-contained per platform, version-locked, copied and checked into `~/.codalus-server/<version>/`), multiplexed channels with flow control over one stdio stream, remote windows over SSH (the system OpenSSH, keys and agents only) and WSL with the build, C# and markup hosts, terminals, netcoredbg and a file-system provider on the server, path mapping, port forwarding with detection, the Ports window and the remote status; M21b at checkpoint ([m21b](checkpoints/m21b.md), ADR 0053, 0054, 0055, 0057): containers and Dev Containers as remote windows, reconnecting after a network drop (a server that outlives its link), remote test environments (`testenvironments.json`) and plugin placement (`runsOn`); M21 is done |
-| M22 | Plugin platform 1.0 and marketplace | M22a at checkpoint ([m22a](checkpoints/m22a.md), ADR 0058): plugin API 1.0 frozen (the proved proposed APIs on `IPluginContext`, `PublicAPI.txt`, `CODALUS0001`), progress and running tasks in the status bar, color and file icon themes in VS Code's formats, debug adapter contributions, declarative views and custom editors, file system, authentication and source control providers; M22b at checkpoint ([m22b](checkpoints/m22b.md), ADR 0059): `Codalus.Plugins.Testing`, `dotnet new codalus-plugin`, Run and Debug Plugin in Development Instance, the generated API reference, SVG icons in icon themes; M22c at checkpoint ([m22c](checkpoints/m22c.md), ADR 0060): plugins as NuGet packages (`CodalusPlugin`), the Plugin Gallery (search, install with permissions and signatures shown, updates, uninstall), per-workspace turning off, Bisect Plugins; M22d at checkpoint ([m22d](checkpoints/m22d.md), ADR 0061): the Components window (on-demand components with version, size and licence; download, remove; offline layouts), plugin performance attribution (activation, commands, host memory; slow plugins offered to turn off); M22 is complete |
-| M23 | Personalization, settings sync and localization | M23a at checkpoint ([m23a](checkpoints/m23a.md)): Fonts and Colors over the theme (VS Code's two color settings), the ReSharper and Emacs keyboard schemes, importers for VS Code and `.vssettings`, Export and Import Settings, named window layouts, full screen and distraction-free mode, onboarding on the Start page with tips; M23b at checkpoint ([m23b](checkpoints/m23b.md)): profiles, settings sync with a folder or a Git repository, Tools → Customize for menus and toolbars, turning plugins off and File → Restart, the localization foundation (catalogues, the display language, pseudo-languages and right to left, plugin manifest placeholders, the test that stops new hard-coded strings); M23c at checkpoint ([m23c](checkpoints/m23c.md)): every view's text and the messages built in code in the catalogues, plugins' own text through `context.Localize` (API 0.2.9); Weblate waits for the maintainer's account |
-| M26 | Build and project-system depth | At checkpoint: M26a ([m26a](checkpoints/m26a.md), ADR 0033): the Properties window, Show All Files, Include and Exclude, links and moves between projects, Add New Item, Export Template, the template manager, folder mode with tasks and launch configurations, External Tools; M26b ([m26b](checkpoints/m26b.md), ADR 0034, 0035): build settings, the fast up-to-date check, Batch Build, Build Timings with the critical path, binary logs and their viewer, build events, custom tools (ResX, T4 in its own host, plugins) |
+| M18 | Profiling and diagnostics tools | done (M18a and M18b at checkpoint). M18a ([m18a](checkpoints/m18a.md), ADR 0044 and 0045): the supervised, lazy `codalus-diaghost` (EventPipe through Microsoft.Diagnostics.NETCore.Client, traces through TraceEvent), the Performance Profiler with saved sessions, CPU Usage (call tree, bottom-up, functions with caller/callee, flame graph, time and thread filters, hot lines in the editor), .NET Counters (EventCounters and meters, CSV and JSON export), the Diagnostic Tools window; M18b ([m18b](checkpoints/m18b.md), ADR 0046): memory snapshots and diffs, allocations, .NET Async, threads and contention, exceptions, file I/O, the events viewer and exports, activity views, BenchmarkDotNet |
+| M19 | Avalonia XAML editing and live previewer | done (M19a and M19b at checkpoint). M19a ([m19a](checkpoints/m19a.md), ADR 0047 and 0048): `.axaml` editing in the C# host on Roslyn's type information (completion, compiled binding paths, live diagnostics and the XAML compiler's errors from builds, hover, definition, `x:Name` rename, formatting), the XAML Previewer on Avalonia's designer host and remote protocol (debounced edits, design-time data, zoom, scale, theme variants, selection both ways through a startup-hook agent, rebuilds on code changes); M19b ([m19b](checkpoints/m19b.md), ADR 0052): the Live Visual Tree and Live Property Explorer for running Avalonia apps (the previewer's agent in a live mode: trees, properties with their sources, editing, highlight, pick, Go to XAML), the Avalonia templates in New Project |
+| M20 | .NET MAUI | done (at checkpoints [m20a](checkpoints/m20a.md) and [m20b](checkpoints/m20b.md); D6: Android, iOS and Mac Catalyst). M20a (ADR 0064): devices, emulators and simulators, the device picker and the Devices window, runs through the platform SDK's `Run` target, the workloads and the Android SDK installed with consent, MAUI XAML in the C# host, the MAUI templates. M20b (ADR 0065): the Mono debugger adapter (`codalus-debughost --mono-dap`, on a vendored Mono.Debugger.Soft) for F5 on Android, iOS simulators and Mac Catalyst. Gaps: iPhone debugging, CoreCLR on mobile (.NET 11), C# Hot Reload on devices (M30b), a XAML previewer and XAML Hot Reload |
+| M21 | Remote development | done (M21a and M21b at checkpoint). M21a ([m21a](checkpoints/m21a.md), ADR 0050 and 0051): `codalus-server` (self-contained per platform, version-locked, copied and checked into `~/.codalus-server/<version>/`), multiplexed channels with flow control over one stdio stream, remote windows over SSH (the system OpenSSH, keys and agents only) and WSL with the build, C# and markup hosts, terminals, netcoredbg and a file-system provider on the server, path mapping, port forwarding with detection, the Ports window and the remote status; M21b ([m21b](checkpoints/m21b.md), ADR 0053, 0054, 0055, 0057): containers and Dev Containers as remote windows, reconnecting after a network drop (a server that outlives its link), remote test environments (`testenvironments.json`) and plugin placement (`runsOn`); M21b needs checking on the Mac (no result recorded) |
+| M22 | Plugin platform 1.0 and marketplace | done (M22a–M22d at checkpoint). M22a ([m22a](checkpoints/m22a.md), ADR 0058): plugin API 1.0 frozen (the proved proposed APIs on `IPluginContext`, `PublicAPI.txt`, `CODALUS0001`), progress and running tasks in the status bar, color and file icon themes in VS Code's formats, debug adapter contributions, declarative views and custom editors, file system, authentication and source control providers; M22b ([m22b](checkpoints/m22b.md), ADR 0059): `Codalus.Plugins.Testing`, `dotnet new codalus-plugin`, Run and Debug Plugin in Development Instance, the generated API reference, SVG icons in icon themes; M22c ([m22c](checkpoints/m22c.md), ADR 0060): plugins as NuGet packages (`CodalusPlugin`), the Plugin Gallery (search, install with permissions and signatures shown, updates, uninstall), per-workspace turning off, Bisect Plugins; M22d ([m22d](checkpoints/m22d.md), ADR 0061): the Components window (on-demand components with version, size and licence; download, remove; offline layouts), plugin performance attribution (activation, commands, host memory; slow plugins offered to turn off) |
+| M23 | Personalization, settings sync and localization | done (M23a–M23c at checkpoint) except hosted Weblate. M23a ([m23a](checkpoints/m23a.md)): Fonts and Colors over the theme (VS Code's two color settings), the ReSharper and Emacs keyboard schemes, importers for VS Code and `.vssettings`, Export and Import Settings, named window layouts, full screen and distraction-free mode, onboarding on the Start page with tips; M23b ([m23b](checkpoints/m23b.md)): profiles, settings sync with a folder or a Git repository, Tools → Customize for menus and toolbars, turning plugins off and File → Restart, the localization foundation (catalogues, the display language, pseudo-languages and right to left, plugin manifest placeholders, the test that stops new hard-coded strings); M23c ([m23c](checkpoints/m23c.md)): every view's text and the messages built in code in the catalogues, plugins' own text through `context.Localize` (API 0.2.9); Weblate waits for the maintainer's account |
+| M26 | Build and project-system depth | done (M26a and M26b at checkpoint). M26a ([m26a](checkpoints/m26a.md), ADR 0033): the Properties window, Show All Files, Include and Exclude, links and moves between projects, Add New Item, Export Template, the template manager, folder mode with tasks and launch configurations, External Tools; M26b ([m26b](checkpoints/m26b.md), ADR 0034, 0035): build settings, the fast up-to-date check, Batch Build, Build Timings with the critical path, binary logs and their viewer, build events, custom tools (ResX, T4 in its own host, plugins) |
 | M27 | Data and Entity Framework Core tooling | done (M27a and M27b at checkpoint): the Entity Framework window over the user's dotnet-ef (migrations with their SQL shown first, scripts, bundles, compiled models, reverse engineering, the model view; [m27a](checkpoints/m27a.md), ADR 0036); the Database Explorer in `codalus-datahost` (SQL Server, PostgreSQL, MySQL/MariaDB, SQLite), table data with explicit commit, CSV/JSON export and import, the query editor with results, messages, cancel, history and plans, the SQL language service (ScriptDom), `.sqlproj` loading and builds ([m27b](checkpoints/m27b.md), ADRs 0037 and 0038); schema compare and publish are a gap (D15: DacFx is proprietary) |
-| M28 | AI assistance | planned (D7: opt-in, with any provider) |
-| M29 | Visual Studio look and feel | at checkpoint: title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
-| M30 | .NET 11 and following .NET releases | M30a at checkpoint: .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b (Codalus itself on .NET 11, Roslyn 5.11) at .NET 11 GA, expected in November 2026 |
-| M31 | Automated release cycle and installers | at checkpoint ([m31](checkpoints/m31.md), ADR 0028): `develop`/`master`, `VERSION` and `codalus-release`, Velopack installers on every platform, `.deb`/`.rpm`, signed apt and dnf repositories, `nightly.yml`/`release.yml`; M31b at checkpoint ([m31b](checkpoints/m31b.md)): the first published releases, pulled forward by the maintainer on 2026-10-13: nightlies from `develop`, 0.1.0 from `master`, Linux ARM64 packages, the apt and dnf repositories on Pages; unsigned until certificates (D19) |
-| M32 | Self-update | at checkpoint ([m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
-| M33 | Older .NET: .NET Core 2.0 to .NET 10 | at checkpoint: every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; the Mac run is pending |
-| M34 | UI polish | M34a at checkpoint ([m34a](checkpoints/m34a.md)), pulled forward by the maintainer on 2026-10-12: Fluent UI System Icons compiled at build time (D24) with command-family colors, every menu a tree like a classic IDE's, output windows that follow new output, the minimap docked at the editor's edge, completion keys per OS (the editor's key bindings now match a focused editor), then Material Icon Theme's file, folder and project icons, a flat navigation bar and themed outlining markers; M34b at checkpoint ([m34b](checkpoints/m34b.md)), pulled forward the same day: batched project loading in the language host, no false errors while loading, a parallel background pass, parallel design-time builds and their persisted cache, restore on open only when needed; M34d at checkpoint ([m34d](checkpoints/m34d.md)), 2026-10-13: spacing, size and type tokens, document tabs and captions in every state (selected without the focus, pinned, preview on the right, colored by project), toolbars that overflow instead of wrapping, High Contrast's black menus, the gallery in the smoke test, clipped-text and WCAG AA contrast tests, the UI guide; M34c at checkpoint ([m34c](checkpoints/m34c.md)), 2026-10-13: the language host keeps diagnostics and reference assemblies between sessions, open documents compile against unchanged projects' assemblies, and CS4014 the build wouldn't report is left out (ADR 0049); the rest of M34 stays the last milestone before Visual Basic and F# |
-| M39 | Rename to Codalus IDE | done in the repository (the name chosen 2026-10-13, ADR 0056; validated on Windows, WSL, the Mac and CI; the repository renamed to `stavroskasidis/codalus-ide`): the clean rename of everything from Daedalus Studio (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs) with `eng/rename.py`, with no compatibility (no users yet); the new mark (violet and ember wings). Reserving the NuGet prefix and the AUR package wait for the maintainer |
-| M37 | Environment setup | at checkpoint ([m37](checkpoints/m37.md)): a missing or mismatched .NET SDK (a solution's `global.json`), git, Git LFS, Docker, Podman and WSL found, Help → Check Environment, installs with the user's consent (winget, `dotnet-install` into `~/.dotnet`, `xcode-select`, the distribution's packages in the terminal); MAUI's workloads come with M20 |
-| M38 | Start window | at checkpoint ([m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
-| M40 | WinForms and WPF projects, WPF XAML and previewer | proposed ([Windows desktop](#proposed-phase-windows-desktop)), waits for D31 |
-| M41 | Windows Forms designer | proposed, waits for D31 |
-| M42 | WCF | proposed, unscheduled (cross-platform, so it doesn't wait for D31) |
-| M43 | .NET Framework | proposed, waits for D31 and a spike on debugging the desktop CLR |
-| M44 | MAUI on Windows and WinUI 3 | proposed, waits for D31 and M20 |
-| M35 | Visual Basic | planned, always second to last |
-| M36 | F# | planned, always last |
+| M28 | AI assistance | M28a at checkpoint ([m28a](checkpoints/m28a.md), ADR 0062), 2026-10-15: the language model provider API (proposed), the OpenAI-compatible (with Ollama) and Anthropic provider plugins, the data boundary (off by default, a workspace can only turn it off, ignored files and secrets never sent, the request log), AI Chat with the context the user chooses and code applied after a preview; validated on Linux only, so it needs checking on Windows and the Mac. M28b at checkpoint ([m28b](checkpoints/m28b.md)), 2026-10-15: inline suggestions and next edit suggestions (each with its own switch, off by default), and AI actions (commit messages, pull request descriptions, Ask AI in the exception helper and for a failing test, Fix with AI, Generate Tests, profile summaries); also Linux only. M28c at checkpoint ([m28c](checkpoints/m28c.md), ADR 0063), 2026-10-15: agent mode (workspace-confined tools, every change in the preview, every command and MCP tool after an approval whose default is Reject, trusted folders only, a step limit), the MCP client for user-configured servers, and `codalus mcp` exposing the IDE's context to external agents; Linux only. M28 is done |
+| M29 | Visual Studio look and feel | done (at checkpoint, [m29](checkpoints/m29.md)): title row and search, standard toolbar, themes, keyboard schemes, Solution Explorer, Options tree, ADR 0019 |
+| M30 | .NET 11 and following .NET releases | M30a at checkpoint ([m30a](checkpoints/m30a.md)): .NET 11 projects on the release candidate, the hosts on any SDK (ADR 0025); M30b at checkpoint ([m30b](checkpoints/m30b.md)), 2026-10-16, moved forward by the maintainer onto the .NET 11 release candidate: Codalus on .NET 11 RC2 (`allowPrerelease`), Native AOT on 11 with no new warnings, Roslyn 5.12 (the RC2 SDK's compiler) with C# 15 and the .NET 11 SDK's Razor generator, the hosts still rolling forward (ADR 0025 amended), the .NET 11 SDK as the prerequisite, `net11.0` in the regular fixtures; validated on Linux only (Windows and macOS by CI). Finished on the GA SDK in November 2026 (`TODO(issue)`) |
+| M31 | Automated release cycle and installers | done (M31 and M31b at checkpoint). M31 ([m31](checkpoints/m31.md), ADR 0028): `develop`/`master`, `VERSION` and `codalus-release`, Velopack installers on every platform, `.deb`/`.rpm`, signed apt and dnf repositories, the release workflows (since 2026-10-14 the one `pipeline.yml`, with `pages.yml`); M31b ([m31b](checkpoints/m31b.md)): the first published releases, pulled forward by the maintainer on 2026-10-13: nightlies from `develop`, 0.1.0 from `master`, Linux ARM64 packages, the apt and dnf repositories on Pages; unsigned until certificates (D19) |
+| M32 | Self-update | done (at checkpoint, [m32](checkpoints/m32.md), ADR 0029): Velopack updates from signed feeds (ECDSA P-256), stable and nightly channels, Restart to update, What's New, notifications for the other installs |
+| M33 | Older .NET: .NET Core 2.0 to .NET 10 | done (at checkpoint, [m33](checkpoints/m33.md)): every target framework from .NET Core 2.0 to .NET 10 with the current SDK, older SDKs in `global.json` down to 2.1.200, the support table in the user guide, ADR 0030; validated on Windows, WSL and the Mac |
+| M34 | UI polish | M34a at checkpoint ([m34a](checkpoints/m34a.md)), pulled forward by the maintainer on 2026-10-12: Fluent UI System Icons compiled at build time (D24) with command-family colors, every menu a tree like a classic IDE's, output windows that follow new output, the minimap docked at the editor's edge, completion keys per OS (the editor's key bindings now match a focused editor), then Material Icon Theme's file, folder and project icons, a flat navigation bar and themed outlining markers; M34b at checkpoint ([m34b](checkpoints/m34b.md)), pulled forward the same day: batched project loading in the language host, no false errors while loading, a parallel background pass, parallel design-time builds and their persisted cache, restore on open only when needed; M34d at checkpoint ([m34d](checkpoints/m34d.md)), 2026-10-13: spacing, size and type tokens, document tabs and captions in every state (selected without the focus, pinned, preview on the right, colored by project), toolbars that overflow instead of wrapping, High Contrast's black menus, the gallery in the smoke test, clipped-text and WCAG AA contrast tests, the UI guide (needs checking on the Mac: no result recorded); M34e at checkpoint ([m34e](checkpoints/m34e.md)), 2026-10-13: document tabs that fit their group, Window → Open Documents…, our own tab context menu, toolbar overflow in the remaining windows, the Error List's project names; M34c at checkpoint ([m34c](checkpoints/m34c.md)), 2026-10-13: the language host keeps diagnostics and reference assemblies between sessions, open documents compile against unchanged projects' assemblies, and CS4014 the build wouldn't report is left out (ADR 0049; needs checking on the Mac: no result recorded); M34f, the final pass, at its checkpoint ([m34f](checkpoints/m34f.md)), 2026-10-15: the checklist on the documents that work as dialogs and the in-window dialog's forms at their minimum sizes, accessible names in every tool window, document and dialog (two layouts fixed), and the dialogs in the gallery; M34 closes when the maintainer approves the gallery on three OSes and the display scales are checked (D25) |
+| M39 | Rename to Codalus IDE | done (no checkpoint of its own; ADR 0056 is the record; the name chosen 2026-10-13; validated on Windows, WSL, the Mac and CI; the repository renamed to `stavroskasidis/codalus-ide`): the clean rename of everything from Daedalus Studio (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs) with `eng/rename.py`, with no compatibility (no users yet); the new mark (violet and ember wings). Reserving the NuGet prefix (`docs/release/nuget-prefix-reservation.md`) and the AUR package (the pipeline's `aur` job, skipped until the `AUR_SSH_PRIVATE_KEY` secret exists) wait for the maintainer |
+| M37 | Environment setup | done (at checkpoint, [m37](checkpoints/m37.md)): a missing or mismatched .NET SDK (a solution's `global.json`), git, Git LFS, Docker, Podman and WSL found, Help → Check Environment, installs with the user's consent (winget, `dotnet-install` into `~/.dotnet`, `xcode-select`, the distribution's packages in the terminal); MAUI's workloads come with M20 |
+| M38 | Start window | done (at checkpoint, [m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
+| M40 | WinForms and WPF projects, WPF XAML and previewer | scheduled ([Windows desktop](#proposed-phase-windows-desktop), D31: Windows only), after M42 |
+| M41 | Windows Forms designer | scheduled (Windows only), after M40 |
+| M42 | WCF | scheduled, after M30b (cross-platform) |
+| M43 | .NET Framework | scheduled (Windows only), last of the phase, after M44; M43b (the desktop-CLR debugger) included |
+| M44 | MAUI on Windows and WinUI 3 | scheduled (Windows only), after M41 |
+| M45 | Theme families | planned (2026-10-16; D32 decided), after M43: Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, from the [designs](design/shell-themes.md) |
+| M46 | First-run setup | planned (2026-10-16), after M45: a setup at the first start, with appearance (the theme families), keyboard, settings import and a tools check, before the start window |
+| M35 | Visual Basic | done (at checkpoint, [m35](checkpoints/m35.md), ADR 0066): VB in the C# host's workspace (completion, Quick Info, signature help, live diagnostics, classification with XML literals, navigation, references and rename across C# and VB, code fixes and refactorings, formatting, outline and folding), our own pretty listing (`End` constructs, keyword casing, XML end tags), VB snippets and item templates, New Project in any language, VB property pages, VB tests from source, debugging tested on netcoredbg. Gaps: VB expressions in Watch (netcoredbg reads C#), automatic line continuation, a page for project imports |
+| M36 | F# | done (at checkpoints [m36a](checkpoints/m36a.md) and [m36b](checkpoints/m36b.md), ADR 0067 and 0068), 2026-10-15. M36a: FsAutoComplete (D10) and Fantomas installed with the user's `dotnet tool install` on the first F# file, trusted folders only; completion, Quick Info, diagnostics with FSharpLint, navigation, rename, fixes, inlay hints, CodeLens and formatting through the LSP bridge; the compile order in Solution Explorer (`items/move`, Move Up/Down, Add Above/Below, `.fsi` nesting), F# item templates and property pages. M36b: F# Interactive as `dotnet fsi` in a terminal (send a selection, line, file or project references; reset; run script), scripts with `#load` and `#r "nuget:"`, type providers, F# analyzers, Expecto in the Test Explorer, debugging F# tested. Gaps: F# tests from source, F# expressions in Watch, F# → C# references before a build, remote windows |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
 
@@ -79,7 +81,7 @@ This plan assumed that M7 would end with what the original project brief describ
 - **Debugging**: a DAP client plus netcoredbg, with the M5 feature list and a documented list of known gaps.
 - **Git**: the M6 feature set, using LibGit2Sharp or the git CLI as decided in the M6 ADR.
 - **Plugins**: plugin API 0.x (ADR 0003): out-of-process hosts, declarative contributions, tree and Markdown views. The rich-UI ADR (webview or remote UI) is due by M6.
-- **Release**: installers for three OSes, local opt-in crash reporting, performance gates in CI, a public repository. M7 delivered packages rather than setup installers (installers are M31), and the repository stayed private (it goes public after M32, D29).
+- **Release**: installers for three OSes, local opt-in crash reporting, performance gates in CI, a public repository. M7 delivered packages rather than setup installers (installers are M31), and the repository stayed private until after M32 (D29); it went public on 2026-10-11.
 
 ## Principles for post-MVP work
 
@@ -141,8 +143,8 @@ All seven are settled:
 | 8. Remote | M21 | SSH, WSL, Dev Containers. |
 | 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
 | 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
-| Proposed: Windows desktop | M40–M44 | WinForms, WPF, WCF, .NET Framework and MAUI's Windows target, on Windows and from the other OSes through a Windows machine. Waits for D31; M42 (WCF) doesn't. |
-| 11. Polish | M34, M39, M37, M38 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38). |
+| Windows desktop | M42, M40, M41, M44, M43 | WinForms, WPF, WCF, .NET Framework and MAUI's Windows target, on Windows (D31, 2026-10-16); the other OSes are decided later. |
+| 11. Polish | M34, M39, M37, M38, M45, M46 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38); four theme families (M45) and a first-run setup that offers them (M46). |
 | 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
 Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. After M30a, the maintainer moved M16c ahead of the rest of phase 4 (M31–M33).
@@ -150,7 +152,7 @@ Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. 
 **Why this order.**
 - Tests, NuGet and a terminal are what stop people from using the IDE every day.
 - The language platform (M11) comes early, because it proves the "pluggable language services" requirement and every later language and file type builds on it.
-- Platform and release (phase 4) comes next, by the maintainer's choice:
+- Platform and release (phase 4) came next, by the maintainer's choice:
   - .NET 11 (M30) goes first, so that Codalus is ready when .NET 11 is released.
   - Automated releases (M31) and self-update (M32) come before the repository goes public, so that the first public users get installers and updates.
   - The older-.NET validation (M33) builds on M30's hosts, which must start with any SDK.
@@ -158,7 +160,7 @@ Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. 
 - AI assistance (M28) is a headline Visual Studio 2026 feature. D7 settles it as opt-in, with any provider. It goes after the plugin API freeze (M22), because it should be built on public provider APIs.
 - .NET MAUI (M20) comes after everything except polish, VB and F#, by the maintainer's choice (D6). It builds on the XAML engine (M19), and the polish pass then covers its panels too.
 - Remote development comes late because it touches every host. F1 and F2 make sure it doesn't need a rewrite.
-- UI polish (M34) comes after every other milestone except VB and F#, so that one pass covers all the UI, MAUI's included. Until then, each milestone reviews its own panels against M34's checklist.
+- UI polish (M34) comes after every other milestone except VB and F#, so that one pass covers all the UI, MAUI's included. Until then, each milestone reviews its own panels against M34's checklist. The maintainer pulled M34a–e forward on 2026-10-12 and 2026-10-13; only M34's final pass stays last.
 - VB and F# come last, after everything else, and stay last when milestones are added. Solutions with VB and F# projects already load, build and run from the MVP, and the C# depth, web and tooling work serves more users first. M11 keeps them cheap whenever they are picked up.
 
 ### Dependency graph
@@ -198,6 +200,8 @@ graph LR
   M20 --> M43 & M44
   M21 -.-> M40 & M41 & M43 & M44
   M8 & M11 & M14 --> M22
+  M29 & M34 --> M45
+  M45 & M37 & M38 --> M46
 ```
 
 A dashed edge means "better with", not "blocked by".
@@ -508,7 +512,7 @@ Build-level and file-level project features (the Properties window, Show All Fil
 
 **Goal.** Close the gap between the MVP editor and Visual Studio or Rider for daily C# work. This milestone is large. **Plan it as M12a** (navigation and inline information) **and M12b** (editing, refactoring UI and analysis).
 
-**Status.** M12a built ([m12a.md](checkpoints/m12a.md), [ADR 0017](adr/0017-navigation-and-inline-information.md)). Deviations: CodeLens shows at the end of the declaration's line (AvaloniaEdit has no variable line heights). Deferred, each with a `TODO(issue)` in the checkpoint: members and generated sources in Solution Explorer, Class View and the Object Browser, symbol servers, Git and test CodeLens, and the persistent Go To All index.
+**Status.** M12a built ([m12a.md](checkpoints/m12a.md), [ADR 0017](adr/0017-navigation-and-inline-information.md)). Deviations: CodeLens shows at the end of the declaration's line (AvaloniaEdit has no variable line heights). Deferred, each with a `TODO(issue)` in the checkpoint: members and generated sources in Solution Explorer, Class View and the Object Browser, symbol servers, Git and test CodeLens, and the persistent Go To All index. M12b built ([m12b.md](checkpoints/m12b.md), [ADR 0018](adr/0018-editing-refactoring-ui-and-analysis.md)), with its own deferred list in the checkpoint.
 
 **Depends on.** M3, M8 (test CodeLens), M6 (Git CodeLens), F1 (decompiled and Source Link documents).
 
@@ -846,7 +850,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Split (ADR 0025, [checkpoint](checkpoints/m30a.md)).**
 - **M30a** (done, on the first release candidate): the hosts on any SDK, and .NET 11 projects while Codalus still runs on .NET 10.
-- **M30b** (at GA): Codalus on .NET 11, and Roslyn 5.11 in the language host and C# Interactive, which brings C# 15 and the .NET 11 SDK's Razor generator. Also the `net11.0` targets in the regular fixtures.
+- **M30b** (at checkpoint on the second release candidate, [checkpoint](checkpoints/m30b.md); finished on the GA SDK): Codalus on .NET 11, and the .NET 11 SDK's Roslyn (5.12 at RC2) in the language host and C# Interactive, which brings C# 15 and the .NET 11 SDK's Razor generator. Also the `net11.0` targets in the regular fixtures.
 
 **Depends on.** Nothing new, but it touches every host.
 
@@ -910,7 +914,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Scope.**
 - **Branches** (D21):
-  - `develop` is the default branch. Day-to-day commits land there directly, the way they land on `master` today. Every push runs the Linux CI.
+  - `develop` is the default branch. Day-to-day commits land there directly. Every push runs the CI on Windows, macOS and Linux (`pipeline.yml`).
   - `master` only receives merges from `develop` (each one is a stable release) and hotfixes. After a hotfix release, the workflow merges `master` back into `develop`.
   - `CLAUDE.md`, `CONTRIBUTING.md` and the go-public checklist change from committing to `master` to committing to `develop`. The `validate` scratch branch stays.
 - **Versioning** (D21):
@@ -922,18 +926,15 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - Versions stay 0.x until the maintainer says otherwise, even after the repository goes public (D14).
 - **Builds** (D27): Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. The Linux ARM64 packages use GitHub's ARM64 Linux runners.
 - **Workflows:**
-  - **Nightlies** run once a night from `develop` if `develop` changed since the last nightly, and on manual dispatch (`release.yml` with kind `nightly`; a workflow of its own, `nightly.yml`, until 2026-10-13).
+  - **Nightlies**: every push to `develop` whose run passes is published as a nightly (`pipeline.yml`, since 2026-10-14; before that `release.yml` with kind `nightly`, and `nightly.yml` until 2026-10-13). There is no schedule.
     - It builds the installers on three OSes and smoke-tests the installed packages.
     - It publishes a GitHub prerelease, `v0.2.0-nightly.20261011.1`, with the commits since the previous nightly as its notes.
     - Only the last 14 nightlies are kept.
-  - **`release.yml`** runs on every push to `master`.
+  - **Stable releases**: `pipeline.yml` runs on every push to `master` (`release.yml` until 2026-10-14).
     - It runs the same build and smoke test.
     - It publishes a GitHub release `v0.2.0` with release notes, the update feed (M32), the apt and dnf repositories, and the winget manifests.
   - **Release notes** are generated from the commits since the previous stable tag. They are grouped by milestone (commit subjects name the milestone) and link to the checkpoint summaries. If `CHANGELOG.md` has a hand-written section, it goes first.
-  - **While the repository is private** (D20):
-    - Both workflows run on manual dispatch only, as the benchmarks do.
-    - The nightly schedule and the push trigger switch on by themselves once the repository is public, where Actions minutes are free.
-    - Anonymous users can't download a private repository's releases, so until then the releases are for the maintainer.
+  - **While the repository was private** (D20, until 2026-10-11) the workflows ran on manual dispatch only; since it went public every push to `develop` or `master` runs them.
 - **Installers** (D17, D18):
   - **Windows:**
     - a Velopack `Setup.exe`: per-user, no administrator rights, a Start menu entry, an uninstall entry, and the `codalus` command on the `PATH`
@@ -971,7 +972,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - a silent `Setup.exe` on Windows
   - `installer -pkg` on macOS
   - the AppImage on Linux, plus the `.deb` and `.rpm` in containers
-- A dry-run mode of both workflows builds and verifies without publishing, so the workflows themselves can be tested.
+- A dry-run mode (`pipeline.yml`'s `dry_run` dispatch input) builds and verifies without publishing, so the workflow itself can be tested.
 - The version stamping, the tag check and the version bump are scripts with unit tests.
 
 **Exit criteria.** One nightly release from `develop` and one stable release from `master` are published by the workflows. Both install and pass the smoke test on Windows, macOS and Linux.
@@ -1006,7 +1007,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - `update.channel`
   - Turning updates off stops all update traffic. The update check is listed with the other network calls (Security track).
 - **Feed verification:**
-  - The release manifest is signed with the project key (ed25519). The public key is built into the app.
+  - The release manifest is signed with the project key (ECDSA P-256 as built, since .NET 10 has no Ed25519; ADR 0029). The public key is built into the app.
   - The updater refuses a manifest whose signature doesn't verify, and a package whose hash doesn't match the manifest.
   - The ADR confirms that a custom Velopack update source is the place for this check.
 - **Other kinds of install:**
@@ -1047,7 +1048,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 - The same works for a stable install updating to the next stable release.
 - While the repository is private, the feed is read with a token (D20).
 
-**Then: going public** (D29). After M32's checkpoint, work through the go-public checklist. The maintainer changes the visibility. That switches on the automatic releases (D20) and hosted Weblate (D11), and starts the review of code signing (D19).
+**Then: going public** (D29, done 2026-10-11). After M32's checkpoint, work through the go-public checklist. The maintainer changes the visibility. That switches on the automatic releases (D20) and hosted Weblate (D11), and starts the review of code signing (D19).
 
 ### M33 — Older .NET: .NET Core 2.0 to .NET 10
 
@@ -1118,7 +1119,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Goal.** A productive ASP.NET Core loop: run, browse, call endpoints, change code, and see the change without a restart.
 
-**Split (ADR 0022).** **M15a** (done): the Endpoints Explorer (`codalus/aspnet/endpoints`), `.http` files with environments, request variables and an HTTP Response window, the environment selector, the HTTPS development certificate and user secrets. **M15b**: Hot Reload through `dotnet watch` (Roslyn's hot-reload packages aren't on nuget.org), with browser refresh. **M15c** (done, [ADR 0041](adr/0041-scaffolding-and-service-references.md)): Add New Scaffolded Item, with the Entity Framework and Identity scaffolders run by the user's `dotnet-aspnet-codegenerator` (the ADR's pick over `dotnet scaffold`) as a child of the build host, empty items from the SDK's item templates, and a form generated from each scaffolder's parameters with M27's DbContext discovery; service references as `OpenApiReference` (NSwag, the ADR's pick over Kiota) and `Protobuf` (`Grpc.Tools`) items, from a file or a URL, with Refresh.
+**Split (ADR 0022).** **M15a** (done): the Endpoints Explorer (`codalus/aspnet/endpoints`), `.http` files with environments, request variables and an HTTP Response window, the environment selector, the HTTPS development certificate and user secrets. **M15b** (done, [checkpoint](checkpoints/m15b.md)): Hot Reload through `dotnet watch` (Roslyn's hot-reload packages aren't on nuget.org), with browser refresh. **M15c** (done, [ADR 0041](adr/0041-scaffolding-and-service-references.md)): Add New Scaffolded Item, with the Entity Framework and Identity scaffolders run by the user's `dotnet-aspnet-codegenerator` (the ADR's pick over `dotnet scaffold`) as a child of the build host, empty items from the SDK's item templates, and a form generated from each scaffolder's parameters with M27's DbContext discovery; service references as `OpenApiReference` (NSwag, the ADR's pick over Kiota) and `Protobuf` (`Grpc.Tools`) items, from a file or a URL, with Refresh.
 
 **Depends on.** M4, M5, M14 (only for the Hot-Reload-while-debugging result), M11 (JSON schemas).
 
@@ -1233,9 +1234,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Goal.** Replace what Visual Studio's Server Explorer, SQL Server Object Explorer, SQL editor and EF Core integration give a .NET developer, for the databases .NET developers actually use.
 
-**Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038): the database explorer in `codalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
-
-**Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038): the database explorer in `codalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
+**Split (rule 5).** **M27a** (EF Core, [ADR 0036](adr/0036-ef-core-integration.md), [checkpoint](checkpoints/m27a.md)): DbContext discovery, migrations, scripts, bundles, reverse engineering, the model view and compiled models, all through the user's `dotnet-ef` run by the build host. **M27b** (ADRs 0037 and 0038, [checkpoint](checkpoints/m27b.md)): the database explorer in `codalus-datahost`, the data grid, the query editor and plans, the SQL language service and SQL database projects.
 
 **Depends on.** M11 (language registry, LSP bridge), M15 (scaffolding uses DbContext discovery). M13's credential store (in `Codalus.Platform`) holds connection secrets.
 
@@ -1316,7 +1315,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **ADRs.** "Publishing and container tooling". "Aspire integration".
 
-**Split (rule 5, 2026-10-11).** **M17a** (containers, [ADR 0042](adr/0042-container-tooling-and-publishing.md), [checkpoint](checkpoints/m17a.md)): Dockerfile and compose editing, Add Docker Support, run and debug in a container, compose files and `.dcproj`, the Containers window, Docker and Podman. **M17b** (Aspire, ADR 0043): AppHost run, the resource tree, the dashboard, the IDE execution protocol, compound debugging. **M17c** (publishing, ADR 0042): publish profiles and their UI, folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT and container publishing.
+**Split (rule 5, 2026-10-11).** **M17a** (containers, [ADR 0042](adr/0042-container-tooling-and-publishing.md), [checkpoint](checkpoints/m17a.md)): Dockerfile and compose editing, Add Docker Support, run and debug in a container, compose files and `.dcproj`, the Containers window, Docker and Podman. **M17b** (Aspire, ADR 0043, [checkpoint](checkpoints/m17b.md)): AppHost run, the resource tree, the dashboard, the IDE execution protocol, compound debugging. **M17c** (publishing, ADR 0042, [checkpoint](checkpoints/m17c.md)): publish profiles and their UI, folder, self-contained, single-file, trimmed, ReadyToRun, Native AOT and container publishing.
 
 **Fixtures.** `samples/Containers/`: a web app with a Dockerfile, a compose app, and an Aspire AppHost with two projects plus a Redis container.
 
@@ -1531,7 +1530,7 @@ MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
 
 ### M23 — Personalization, settings sync and localization
 
-**Split.** M23a: Fonts and Colors, keymap presets, the importers, import and export, window layouts and onboarding ([checkpoint](checkpoints/m23a.md)). M23b: profiles, settings sync, customizing menus and toolbars, and the localization foundation ([checkpoint](checkpoints/m23b.md)). M23c: the rest of the UI's strings into the catalogues (the views' baseline and the messages built in code), a translation call in the plugin API for plugins' runtime text, and hosted Weblate (D11).
+**Split.** M23a: Fonts and Colors, keymap presets, the importers, import and export, window layouts and onboarding ([checkpoint](checkpoints/m23a.md)). M23b: profiles, settings sync, customizing menus and toolbars, and the localization foundation ([checkpoint](checkpoints/m23b.md)). M23c: the rest of the UI's strings into the catalogues (the views' baseline and the messages built in code), a translation call in the plugin API for plugins' runtime text ([checkpoint](checkpoints/m23c.md)), and hosted Weblate (D11), which waits for the maintainer's account.
 
 **Scope.**
 - **Profiles:** named sets of settings, key bindings, layout and enabled plugins. Switch profiles, export and import them.
@@ -1633,6 +1632,8 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 
 ## Proposed phase: Windows desktop
 
+**Decision (D31, 2026-10-16).** The maintainer moved the whole phase into scope as Windows-only features, in the order M42, M40, M41, M44, M43 (with M43b). Below, "on Linux and macOS" and "the Windows target" describe a later step that is decided separately; until then those parts are gaps, and the Windows remote target isn't a prerequisite.
+
 **Status.** Proposed on 2026-10-13, from the maintainer's question: how far could the Windows-specific technologies left out of scope be supported, on Windows and from the other OSes, through emulation, Mono or a Windows machine? Nothing here is scheduled. WinForms, WPF, WinUI, non-SDK-style projects and .NET Framework run and debug are non-goals ([Out of scope](#out-of-scope)), and moving them into scope is D31. M42 (WCF) uses nothing Windows-only, so it can be scheduled without D31. Sizes are in sub-milestones the size of M19a, estimated before any spike.
 
 **Why.** A large share of the .NET code in companies is WinForms, WPF and .NET Framework. The people who maintain it are among the users most likely to want an IDE other than Visual Studio, including on a Mac or a Linux machine.
@@ -1660,9 +1661,9 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 - Windows paths under the local root: drive letters, case-insensitive matching and `\` separators (`RemotePathMap`).
 - A `win-x64` bundle in `$(CodalusServerRids)`, and terminals on ConPTY with pwsh or cmd (Windows ships its own OpenSSH server).
 - The previewer and designer hosts placed on the server, with their frames on a channel, and the remote-aware previewer that M21a listed as missing.
-- About 1–1.5, inside M21b or split out of it.
+- About 1–1.5. M21b closed without it (the `TODO(issue)` from M21a stands), so it becomes a milestone part of its own once D31 is decided.
 
-**Order (recommended).** M42 at any time, since it is small and cross-platform. Then, once D31 is decided: the Windows target in M21b, M40, M41, M44 after M20, and M43 last, after a spike on its debugger. The phase should come before M34's last pass, so that polish covers the designers.
+**Order (recommended).** M42 at any time, since it is small and cross-platform. Then, once D31 is decided: the Windows remote target, M40, M41, M44 after M20, and M43 last, after a spike on its debugger. The phase should come before M34's last pass, so that polish covers the designers.
 
 ### M40 — WinForms and WPF projects, WPF XAML and previewer
 
@@ -1821,7 +1822,7 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 
 ### M34 — UI polish
 
-**Goal.** Go through every panel, window, dialog and feature, and bring each one to the same finished standard. The standard is a written checklist, and the maintainer approves the result from a screenshot gallery (D25). M34 comes last before Visual Basic and F#, so it covers the UI of every earlier milestone.
+**Goal.** Go through every panel, window, dialog and feature, and bring each one to the same finished standard. The standard is a written checklist, and the maintainer approves the result from a screenshot gallery (D25). M34 comes last before Visual Basic and F#, so it covers the UI of every earlier milestone. Rounds M34a–e were pulled forward (2026-10-12 and 2026-10-13); the final pass stays last.
 
 **Depends on.**
 - M29 (the look and feel)
@@ -1920,6 +1921,14 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 
 **Status.** At checkpoint: [m34c](checkpoints/m34c.md).
 
+#### M34g — Polish pass over the Windows desktop UI (scheduled 2026-10-16)
+
+**Why.** D31 brought the WPF previewer, the Live Visual Tree for WPF, the Windows Forms designer and its Toolbox, the WCF test client and the .NET Framework tooling after M34f's pass. The maintainer asked for one more pass over that new UI before the gallery goes to them for M34's approval.
+
+**Scope.** M34d–f's checklist (`docs/ui-guidelines.md`) on every view added by M40–M44: tokens, states, overflow, minimum sizes, accessible names, contrast, icons in the palette, translations; the new views in the gallery and the smoke test; the gallery refreshed on three OSes for the maintainer.
+
+**Status.** Scheduled, after M46, so the pass also covers the theme families and the first-run setup.
+
 ### M39 — Rename to Codalus IDE
 
 **Why.** The maintainer decided on 2026-10-13 that the project will be renamed, and chose **Codalus IDE** the same day ("Treat the Codalus IDE as the final name", then "Do the rename as soon as possible"). The candidates were:
@@ -1928,9 +1937,9 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 - **Akmonide**, Akmon and IDE in one word, also written **Akmon-ide** (`Akmonide`, `akmonide`).
 - **Einion**, Welsh for anvil (`Einion`, `einion`).
 
-Nothing is renamed until the name is final. There are no users yet, so the rename is a clean break: no compatibility with the old names, no migration of settings or data, no bridge release. It lands in the next minor release after the name is chosen.
+Nothing was renamed until the name was final (Codalus, chosen 2026-10-13). There were no users yet, so the rename is a clean break: no compatibility with the old names, no migration of settings or data, no bridge release. It lands in the next minor release after the name is chosen.
 
-The table and the steps below use Codalus as the example; `<name>` stands for the final name.
+The table and the steps below were written before the name was chosen; `<name>` stands for Codalus.
 
 **Names.**
 
@@ -1963,7 +1972,7 @@ The table and the steps below use Codalus as the example; `<name>` stands for th
 6. **Validation**: the full suite on Windows, Linux (WSL) and macOS, the smoke test on each, the packages built and installed (`eng/smoke-test.sh --packages`), the apt and dnf repositories tested (`eng/test-linux-repos.sh`), and the AUR package (`eng/test-aur.sh`).
 7. **Outside the repository**, in order, after the rename is merged (the maintainer's, or with the maintainer's go-ahead):
    - rename the GitHub repository (GitHub redirects the old URLs, but not Pages);
-   - the Pages site moves to `/codalus-ide/` (`linux-repos.yml` reads its address from `configure-pages`);
+   - the Pages site moves to `/codalus-ide/` (`pages.yml`, then `linux-repos.yml`, reads its address from `configure-pages`);
    - re-point the local clones and the Mac's (`git remote set-url`);
    - reserve the `Codalus` prefix on nuget.org;
    - register `codalus-bin` on the AUR when `AUR_SSH_PRIVATE_KEY` exists;
@@ -1972,7 +1981,7 @@ The table and the steps below use Codalus as the example; `<name>` stands for th
 
 **Decided** (2026-10-13), to apply to the final name: the repository is `<name>-ide`, the CLI is `<name>`, and the logo gets a new mark too. Mark proposals (SVG, light and dark, at 16 to 256 px) come first, and the maintainer picks one before step 2; the first set, made for Codalus, waits for the name.
 
-**Status.** In progress: the mechanical rename (`eng/rename.py`), the plugin API 0.3.0 and the manual steps are on `develop`; the mark was chosen on 2026-10-13 (round 7's F4: the two-feather wings in violet and ember) and `eng/logo.py` writes its files; the GitHub repository's rename follows the merge (approved by the maintainer).
+**Status.** Done, released in 0.2.0: the mechanical rename (`eng/rename.py`), the plugin API 0.3.0 and the manual steps; the mark was chosen on 2026-10-13 (round 7's F4: the two-feather wings in violet and ember) and `eng/logo.py` writes its files; the GitHub repository is `stavroskasidis/codalus-ide` and Pages serves `/codalus-ide/`. Still open (step 7): reserving the `Codalus` prefix on nuget.org and the first AUR push, both the maintainer's.
 
 ### M37 — Environment setup
 
@@ -2019,6 +2028,120 @@ The table and the steps below use Codalus as the example; `<name>` stands for th
 
 **Status.** At checkpoint: [m38](checkpoints/m38.md).
 
+### M45 — Theme families
+
+**Why.** On 2026-10-16 the maintainer asked for a look "close to Visual Studio style but original too". From the proposed directions they chose all four: Harbor, Graphite, Daylight and Ember. Each one is to become a real theme in Light, Dark and High contrast, and users choose between them. Today's themes (Blue, Light, Dark, High Contrast, M29) copy Visual Studio's palettes closely. The designs, with every color, are in [`design/shell-themes.md`](design/shell-themes.md). Its mockups (`design/shell-themes/*.dc.html`) open in a browser.
+
+**Depends on.**
+- M29: themes as tokens.
+- M34d: the size tokens, the gallery and the contrast tests.
+- M22a: contributed color themes.
+- M23a: Fonts and Colors over the theme.
+
+**Decisions.**
+- D32 (decided 2026-10-16, as recommended):
+  - the names are Harbor, Graphite, Daylight and Ember;
+  - new installs default to Harbor with Follow System;
+  - today's four themes stay, as a Classic family;
+  - `workbench.colorTheme` takes `<family>` (follows the system) or `<family>.<light|dark|highContrast>`, and today's values read as Classic.
+- An ADR before code on how a family's shapes become tokens and style classes, so that views don't change.
+
+**Scope.**
+- **Twelve themes:** Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast. Each is a theme variant in `Theming/Tokens.axaml` with every token from the design's tables. New tokens from the design:
+  - `Shell.Selection.Foreground` and `Shell.Input`;
+  - the editor's current line, breakpoint line, current-statement line and breakpoint glyph.
+- **Shapes:** each family's shape tokens and classes in `ShellStyles.axaml` and Dock's templates (the design's [Shapes](design/shell-themes.md#shapes) table):
+  - the gutter between docked windows, and panel corners;
+  - document tab and tool window caption styles;
+  - toolbar groups;
+  - Ember's run controls in the title bar, Daylight's tool window rail;
+  - the status bar's style.
+
+  Views don't change. Each shape must work at every size `PolishTests` walks.
+- **Editor colors:** for each family and variant, the C# classification colors, the terminal's palette and the inline markers (breakpoint, current statement, current line). Fonts and Colors (M23a) still overrides them.
+- **Choosing a theme:**
+  - The setting takes a family and a mode (Light, Dark, High contrast, Follow System), as D32 decided: `harbor` follows the system and picks the variant within the family, and `harbor.dark` doesn't follow it. Today's values (`blue`, `light`, `dark`, `highContrast`, `followSystem`) read as Classic, so a saved setting keeps its look.
+  - Tools → Options → Environment gets a family picker with pictures and a mode.
+  - Color Theme (the quick pick) lists all twelve.
+  - Switching stays live and previews before it saves (`ThemeService.Preview`).
+  - The resolved family becomes a `themeFamily` context key for plugins' `when` clauses (noted in `docs/plugins.md`).
+- **Today's themes:** kept as the Classic family (D32): Blue, Light, Dark and High Contrast. A new install that skips the setup gets Harbor with Follow System.
+- **Plugins:** a contributed color theme still applies over its `uiTheme` base, on Classic's variant for that base, as it does today.
+- **Docs and site:**
+  - the user guide's settings page on appearance;
+  - [`ui-guidelines.md`](ui-guidelines.md): the checklist's theme line covers every family;
+  - the Features page with a screenshot of each family;
+  - fresh smoke-test screenshots.
+
+**Tests.**
+- **Contrast:** `contrast-pairs.txt` gains every pair in the design's tables, and `PolishTests` checks them in all twelve themes: 4.5:1 for text in Light and Dark, 7:1 in High contrast, 3:1 for graphics.
+- **Clipped text:** the walk runs in every family, because the shapes change sizes.
+- **Headless:**
+  - switching family and mode live;
+  - Follow System within a family;
+  - a saved setting from before M45 (D32's mapping);
+  - a contributed theme over a family;
+  - the `themeFamily` context key.
+- **The gallery:** the smoke test's gallery (`shell.gallery`) photographs every surface in every family and variant. The maintainer approves it against the design's pictures.
+
+**Budgets.** Startup and the theme switch must not regress. Report what the twelve variants add to the shell's size.
+
+**Exit criteria.** All twelve themes match their designs in the gallery on Windows, Linux and macOS, every contrast pair passes, and the maintainer has approved the gallery.
+
+### M46 — First-run setup
+
+**Why.** On 2026-10-16 the maintainer asked for a theme chooser in a setup wizard the first time the IDE opens. No milestone recorded such a wizard:
+- M23a's onboarding is the Get Started list at the top of the Start page (the Welcome plugin).
+- M37 offers installs from notifications and Help → Check Environment.
+- M38's start window left Get Started on the Start page (a `TODO(issue)` in [m38](checkpoints/m38.md)).
+
+**Depends on.**
+- M45: the theme families.
+- M23a: Get Started, the importers and the keyboard schemes. M23b: settings sync.
+- M37: the environment checks and consented installs.
+- M38: the start window, which opens after the setup.
+
+**Decisions.** D32 (decided 2026-10-16): Harbor with Match system is preselected. Its own ADR only if the setup's state needs a new store.
+
+**Scope.**
+- **When it runs:** the first time the IDE starts for a user data folder, before the start window. A `workbench.setupCompleted` setting records that it ran.
+- **When it doesn't run:**
+  - command-line invocations that open something specific (a path, diff, merge, `--wait`);
+  - the smoke test, benchmarks and screenshots;
+  - a profile that arrived with settings sync.
+
+  A command-line switch skips it for automation, and any new environment variable gets a row in [`environment-variables.md`](environment-variables.md). Help → Set Up Codalus IDE runs it again.
+- **The window:** its own window, which repaints in the chosen theme as the user chooses. It works from the keyboard, has accessible names, and its text is in the catalogue.
+- **Steps:**
+  1. **Appearance** ([design](design/shell-themes.md#the-first-run-setup-appearance), `design/shell-themes/Setup.dc.html`):
+     - the four families as cards with a picture of each;
+     - a mode picker: Light, Dark, High contrast, or Match system (the default);
+     - a live preview of the setup window and of the IDE behind it.
+  2. **Keyboard:** the keyboard scheme: Visual Studio's (the default), VS Code's, ReSharper's or Emacs.
+  3. **Your settings:** import from VS Code or a `.vssettings` file (M23a), or turn on settings sync from a folder or a Git repository (M23b).
+  4. **Tools:** M37's environment check. The .NET SDK and git are found or offered, with exactly what would run, and nothing installs without the user's yes.
+
+  Done opens the start window. Skip setup keeps the defaults (Harbor, Match system) and records that setup ran.
+- **Get Started:** the Start page's Get Started list (M23a) folds into the setup. Help → Get Started opens the setup, which closes M38's Get Started gap. Tips stay on the Start page.
+- **AI:** stays off, and the setup doesn't ask about it (ADR 0062).
+- **Docs and site:**
+  - `docs/user-guide/getting-started.md`;
+  - the Features page;
+  - a screenshot of the appearance step from the smoke test.
+
+**Tests.**
+- **Headless:**
+  - a new user data folder shows the setup once;
+  - Skip;
+  - each step writes its setting;
+  - the live theme preview;
+  - Done opens the start window;
+  - the setup doesn't show in the automation modes or after a sync.
+- **The smoke test:** a step, `shell.setup`, runs it in the shipped app and saves the website's screenshot.
+- **Translations:** the window's text is in the catalogue.
+
+**Exit criteria.** On Windows, Linux and macOS, a new user data folder goes through the setup to the start window with the chosen theme, keyboard scheme and imported settings applied.
+
 ---
 
 ## Phase 12: Visual Basic and F#
@@ -2026,6 +2149,8 @@ The table and the steps below use Codalus as the example; `<name>` stands for th
 These two milestones are always last (see [Status](#status)).
 
 ### M35 — Visual Basic
+
+**Status.** Done 2026-10-15 ([m35](checkpoints/m35.md), ADR 0066). Automatic line continuation and VB expressions in Watch are gaps; the debugging gap is documented in the user guide.
 
 **Goal.** Rich editing for VB projects at the same level as C#. Since the MVP, VB projects only load, build and run.
 
@@ -2051,6 +2176,8 @@ These two milestones are always last (see [Status](#status)).
 **Budgets.** The same as C# (budget 2, plus the M3 language budgets).
 
 ### M36 — F#
+
+**Status.** Done 2026-10-15: M36a ([m36a](checkpoints/m36a.md), ADR 0067), the language service, formatting and the compile order; M36b ([m36b](checkpoints/m36b.md), ADR 0068), F# Interactive, scripts, type providers, analyzers, Expecto and debugging.
 
 **Goal.** First-class F# editing, scripting and project handling, on par with Ionide or Rider for everyday work.
 
@@ -2109,14 +2236,14 @@ New APIs start in `Codalus.Plugins.Proposed` and are promoted in M22.
 | M10 | Terminals (create, send text, read output events), task-style "run command in terminal" |
 | M11 | `contributes.languages`, `grammars`, `languageConfigurations`, `languageServers`; JSON schema associations |
 | M12 | Snippet contributions, CodeLens providers (through LSP), code-action options dialogs (schema) |
-| M13 | Hosting providers and secrets (`IHosting`, `ISecrets`, `contributes.hostingProviders`, M13b, ADR 0031). Still to come: the SCM provider API (Git built-in on it) and general authentication providers |
+| M13 | Hosting providers and secrets (`IHosting`, `ISecrets`, `contributes.hostingProviders`, M13b, ADR 0031). The SCM provider API and general authentication providers followed in M22a (`IPluginContext.SourceControl`, `.Authentication`) |
 | M14 | Debugger visualizers, DAP adapter contributions |
 | M15–M17 | Launch configuration providers, a port-forwarding API |
 | M21 | `runsOn` placement, a file-system provider API |
 | M22 | Freeze 1.0, declarative views (D2), permissions manifest, custom editors, themes and icon themes. Webviews come after 1.0. |
 | M26 | Custom tool (single-file generator) contributions (M26b), Properties window property providers and external-tool macros (M26a; API 0.2.8) |
-| M27 | Database connection providers (more engines as plugins): deferred to M22 (`TODO(issue)` in the M27b checkpoint); the four engines are built in |
-| M28 | AI model providers, AI context providers, MCP server contributions (all proposed, after 1.0) |
+| M27 | Database connection providers (more engines as plugins): deferred to M22 (`TODO(issue)` in the M27b checkpoint), which closed without them ([deferred](#deferred-work)); the four engines are built in |
+| M28 | AI model providers (proposed since M28a: `LanguageModels`, `contributes.languageModelProviders`); AI context providers and MCP server contributions remain candidates (M28c configures MCP servers in user settings) |
 
 ### Performance
 
@@ -2231,12 +2358,13 @@ The "Codalus" column uses these terms:
 
 | Visual Studio feature | Codalus |
 |---|---|
-| Start window, recent solutions, clone or open | M1 (Welcome plugin); clone M6/M13 |
+| Start window, recent solutions, clone or open | M1 (Welcome plugin), M38 (done: the start window); clone M6/M13 |
 | Docking, floating windows, layout persistence | M1; documents floating on other monitors M12; named layouts M23 |
 | Commands, key bindings, keyboard mapping schemes | M1; keymap presets and importers M23 |
 | Feature search (Ctrl+Q), command palette | M1 |
 | Tools > Options with search | M1 |
-| Themes (light, dark, high contrast) | M1; theme contributions M22 |
+| Themes (light, dark, high contrast) | M1; theme contributions M22; four theme families, each light, dark and high contrast, M45 |
+| First launch: choose the color theme and development settings | M46 (the first-run setup: theme, keyboard scheme, settings import, tools check); no account sign-in |
 | Fonts and Colors per element | M23 |
 | Customize menus, toolbars and context menus | M23 |
 | Import and Export Settings, settings sync | M23 |
@@ -2260,7 +2388,7 @@ The "Codalus" column uses these terms:
 | Open `.sln`, `.slnx` and SDK-style projects | M2 |
 | Solution folders, nested projects, Dependencies node, file nesting | M2 |
 | Solution Explorer search, sync with active document, "scope to this" | M2 (verify at M7, otherwise M26) |
-| File members in Solution Explorer | M12 |
+| File members in Solution Explorer | M12: deferred at M12a ([deferred](#deferred-work)) |
 | Show All Files, include and exclude from project | M26a |
 | Add, rename, delete and move with project file updates; file watching | M2 |
 | Drag and drop between projects, linked files | M26a |
@@ -2313,12 +2441,12 @@ The "Codalus" column uses these terms:
 | Visual Studio feature | Codalus |
 |---|---|
 | Tabs, preview tab, split views, multi-caret, folding, minimap, find and replace | M3 |
-| Pinned and vertical tabs, tab colouring, Ctrl+Tab window switcher | M12 |
+| Pinned and vertical tabs, tab colouring, Ctrl+Tab window switcher | M34d (done: pinned tabs, tabs colored by project); vertical tabs and the Ctrl+Tab switcher deferred at M12b (`TODO(issue)`) |
 | Semantic highlighting, completion, signature help, Quick Info | M3 |
 | IntelliCode (AI-ranked completion, whole-line completion) | Trap; an open equivalent is M28 |
-| Code snippets, Surround With, Code Snippets Manager | M12 |
+| Code snippets, Surround With, Code Snippets Manager | M12 (done); the Code Snippets Manager deferred at M12b ([deferred](#deferred-work)) |
 | Code Cleanup profiles, format on save | M12 |
-| Clipboard ring, Paste JSON/XML as classes, smart paste | M12 |
+| Clipboard ring, Paste JSON/XML as classes, smart paste | M12; Paste XML as classes and paste with usings deferred at M12b ([deferred](#deferred-work)) |
 | Expand and shrink selection, duplicate and move line, box selection | M12 (box selection M3 if done there) |
 | Inheritance margin, CodeLens, inlay hints, sticky scroll, structure guides | M12 |
 | Scroll bar map mode and annotations | M12 |
@@ -2332,8 +2460,8 @@ The "Codalus" column uses these terms:
 | Markdown editing and preview | M11 |
 | JSON, XML, YAML and `.editorconfig` editing with schemas | M11 |
 | MSBuild project file IntelliSense | M11 |
-| `.resx` resource editor | M11 |
-| Image viewer, hex viewer | M12 |
+| `.resx` resource editor | M11: deferred at M11 ([deferred](#deferred-work)); the strongly typed class came with M26b's custom tools |
+| Image viewer, hex viewer | M12 (image viewer done); the hex viewer deferred at M12b ([deferred](#deferred-work)) |
 | Image editor (pixel editing of icons and bitmaps) | Candidate |
 | File compare | M6 (diff viewer); arbitrary files M12 |
 
@@ -2347,8 +2475,8 @@ The "Codalus" column uses these terms:
 | Call Hierarchy, Type Hierarchy | M12 |
 | Navigation bar, breadcrumbs, Document Outline | M12 |
 | Code Definition window | M12 |
-| Class View, Object Browser | M12 |
-| Navigate to decompiled sources, Source Link, symbol servers | M12 |
+| Class View, Object Browser | M12: deferred at M12a ([deferred](#deferred-work)) |
+| Navigate to decompiled sources, Source Link, symbol servers | M12 (decompiled sources and Source Link done); symbol servers are a gap (M12a, M14b) |
 | Find in Files, Replace in Files | M3 |
 | Bookmarks, Task List | M12 |
 | Navigate backward and forward, last edit location | M3; last edit location M12 |
@@ -2361,8 +2489,8 @@ The "Codalus" column uses these terms:
 | Light bulb code fixes and refactorings with preview | M3 |
 | Rename with preview | M3 |
 | Refactorings with dialogs (Change Signature, Extract Interface, Pull Members Up, generate members) | M12 |
-| Configure severity, EditorConfig UI, suppressions | M12 |
-| Full-solution analysis, Error List filters | M12 |
+| Configure severity, EditorConfig UI, suppressions | M12; the EditorConfig settings page since 2026-10-15; a suppression file deferred at M12b ([deferred](#deferred-work)) |
+| Full-solution analysis, Error List filters | M12; Error List grouping and the analysis-scope picker (open documents, current project, solution) since 2026-10-15 |
 | Code Metrics | M12 |
 | Syntax Visualizer, analyzer and generator authoring templates | M12 |
 | Debugging analyzers and source generators | M14c (done: the `DebugRoslynComponent` profile) |
@@ -2373,13 +2501,13 @@ The "Codalus" column uses these terms:
 | Visual Studio feature | Codalus |
 |---|---|
 | C# | M3 |
-| Visual Basic | M35 (load, build and run since M2) |
-| F# | M36 (load, build and run since M2) |
+| Visual Basic | M35 (done; load, build and run since M2) |
+| F# | M36 (done; load, build and run since M2) |
 | Razor and Blazor | M16 |
 | HTML, CSS, JavaScript and TypeScript | M16 |
 | SQL (T-SQL and other dialects) | M27b (done: ScriptDom for T-SQL, schema completion for every dialect, ADR 0038) |
 | XAML: Avalonia | M19 |
-| XAML: .NET MAUI | M20 |
+| XAML: .NET MAUI | M20 (M20a done: the M19 engine with MAUI's dialect, ADR 0064) |
 | MSBuild, JSON, XML, YAML | M11 |
 | T4 | M26b |
 | C# Interactive | M10 |
@@ -2412,7 +2540,7 @@ The "Codalus" column uses these terms:
 | IntelliTrace, time-travel debugging, Snapshot Debugger | Gap / Trap |
 | Debugging tests | M8 (done) |
 | Blazor WebAssembly and JavaScript debugging | M16 |
-| Android and iOS debugging | M20 |
+| Android and iOS debugging | M20 (M20b done: the Mono debugger adapter, ADR 0065; iPhones and CoreCLR on mobile are gaps) |
 | Graphics (DirectX) debugging, GPU usage | Non-goal |
 
 ### Testing
@@ -2440,7 +2568,7 @@ The "Codalus" column uses these terms:
 | Database and HTTP activity | M18 |
 | Instrumentation profiling | Candidate (D30) |
 | GPU usage, Application Timeline (WPF/UWP) | Non-goal |
-| AI insights in the profiler | M28 |
+| AI insights in the profiler | M28b: Summarize with AI on a CPU report |
 
 ### Packages and tools
 
@@ -2488,7 +2616,7 @@ The "Codalus" column uses these terms:
 | WinForms, WPF, UWP and WinUI designers | Non-goal; proposed for M40 (WPF previewer) and M41 (WinForms designer, D31); UWP and WinUI designers stay non-goals |
 | XAML editing, previewer, Live Visual Tree and Live Property Explorer (Avalonia) | M19 |
 | XAML Hot Reload (Avalonia) | Candidate |
-| .NET MAUI XAML, Hot Reload, Live Preview, Android and iOS deployment | M20. The previewer and XAML Hot Reload are gaps. |
+| .NET MAUI XAML, Hot Reload, Live Preview, Android and iOS deployment | M20 (M20a done: XAML editing, devices, deployment and runs). The previewer and XAML Hot Reload are gaps. |
 | Accessibility Checker for UI apps | Candidate |
 
 ### Version control
@@ -2504,14 +2632,14 @@ The "Codalus" column uses these terms:
 | Line staging | M13 |
 | Worktrees, submodules, LFS, commit signing | M13 (worktrees and LFS: M13b) |
 | GitHub and Azure DevOps pull requests and work items | M13b: GitHub, Azure DevOps and GitLab (D8): pull requests, review comments, CI status, work items, publishing; other hosts as plugins on the proposed hosting API |
-| AI commit messages and pull request descriptions | M28 |
+| AI commit messages and pull request descriptions | M28b |
 | Team Foundation Version Control | Not planned (plugins through the SCM API) |
 
 ### Collaboration and AI
 
 | Visual Studio feature | Codalus |
 |---|---|
-| GitHub Copilot: completions, next-edit suggestions, chat, agent mode, MCP | M28, with an open design (D7) |
+| GitHub Copilot: completions, next-edit suggestions, chat, agent mode, MCP | M28, with an open design (D7): chat with any provider (M28a); inline and next edit suggestions (M28b); agent mode, an MCP client and an MCP server (M28c) |
 | Live Share | Trap; an open alternative is a candidate |
 
 ### Extensibility
@@ -2531,6 +2659,26 @@ The "Codalus" column uses these terms:
 | WSL, SSH and container targets | M21 |
 | Dev Containers | M21 |
 | GitHub Codespaces, Microsoft Dev Box | Not planned (hosted services). A plugin could connect to them over SSH. |
+
+## Deferred work
+
+Items deferred with a `TODO(issue)` to a milestone that has since closed without them, or to no milestone. The repository has no issue tracker in use yet, so this list is where they live until they are scheduled, built or declared a gap. Each checkpoint's own deferred list stays the detailed record; this table only collects the ones with no live home (reviewed 2026-10-14).
+
+| Item | Deferred at | Was meant for |
+|---|---|---|
+| Go To All's persistent index | [M12a](checkpoints/m12a.md), [M12b](checkpoints/m12b.md) | M12 |
+| A suppression file, spell checking (the EditorConfig settings page was built on 2026-10-15) | [M12b](checkpoints/m12b.md) | M12 |
+| Vertical tabs, persisted floating documents (`LayoutManager.cs`) | [M12b](checkpoints/m12b.md), [M3a](checkpoints/m3a.md) | M12 |
+| SVG and animated GIFs in the image viewer | [M12b](checkpoints/m12b.md) | M12 |
+| LSP features for other languages beyond M11's | [M11](checkpoints/m11.md) | M11 |
+| Database connection providers as plugins | [M27b](checkpoints/m27b.md), ADR 0037 | M22 |
+| Windows machines as SSH targets | [M21a](checkpoints/m21a.md), ADR 0050 | M21b; now the [Windows desktop](#proposed-phase-windows-desktop) prerequisite |
+| What doesn't work in remote windows yet (M21a's list, including recent lists, workspace settings and Git in `ShellHost.Solutions.cs`, Hot Reload in `ShellHost.Build.cs`, remote profiling, the Live Visual Tree) | [M21a](checkpoints/m21a.md), [M18a](checkpoints/m18a.md), [M19b](checkpoints/m19b.md) | M21 |
+| The integrated-terminal debug console on macOS (`ShellHost.DebugSessions.cs`) | [M14c](checkpoints/m14c.md), source | none |
+| Reporting netcoredbg's 0xC0000354 exit upstream (`DebugService.cs`) | source only | none |
+| Launch configuration providers and a port-forwarding API in the plugin API | [Plugin API evolution](#plugin-api-evolution) | M15–M17, then M22 |
+| Attaching to an x64 process on Apple silicon: pick the debugger by the process's architecture | [M33](checkpoints/m33.md), the user guide | none |
+| DCO sign-off: the maintainer's commits carry none and no check enforces it (`CONTRIBUTING.md`) | the 2026-10-14 review | none |
 
 ## Unscheduled candidates
 
@@ -2569,11 +2717,11 @@ Restated from the original project brief, plus what follows from it for the area
 
 ## Decision register
 
-These are the maintainer decisions this plan depends on. Update the status column at each checkpoint. As of 2026-10-10 every decision here is closed; D31 is open (2026-10-13). New questions get the next free number.
+These are the maintainer decisions this plan depends on. Update the status column at each checkpoint. As of 2026-10-16 every decision here is closed (D31 was decided that day). Last reviewed 2026-10-16. New questions get the next free number.
 
 | ID | Question | Needed by | Recommendation | Status |
 |---|---|---|---|---|
-| D1 | Switch document identity to URIs and add a VFS (F1, F2)? | M7 checkpoint | Yes, before going public and before API 1.0 | decided 2026-10-10: the contracts already use URIs (`file:`, `codalus-generated:`, `codalus-metadata:`). The file-system provider (F2) comes with M21, and its plugin API with M22. Settled as recommended, without a separate question. |
+| D1 | Switch document identity to URIs and add a VFS (F1, F2)? | M7 checkpoint | Yes, before going public and before API 1.0 | decided 2026-10-10: the contracts already use URIs (`file:`, `codalus-generated:`, `codalus-metadata:`). The file-system provider (F2) comes with M21, and its plugin API with M22. Settled as recommended, without a separate question. Built: M21a's file-system provider, M22a's `IPluginContext.FileSystems`. |
 | D2 | Rich plugin UI: webview, remote UI, or both (F3)? | M6 (ADR 0003) | Per the M6 ADR | decided 2026-10-10: declarative views first. Plugins describe forms, lists, trees, tables and toolbars as data, and the shell renders them with its own controls, so they are themed, accessible and AOT-clean. They are a proposed API before M22 and frozen in 1.0. Webviews follow as a proposed API after 1.0, for UI that needs full freedom. |
 | D3 | Node.js policy (F4) | M16 (M11 if a Node LSP is wanted earlier) | Pinned, verified, on-demand download | decided (ADR 0024): Node.js 24.21.0 from nodejs.org, SHA-256 pinned; servers from a shipped lockfile with `npm ci`; the user's consent on first use |
 | D4 | Workspace trust and restricted mode (F6) | M7 checkpoint | Yes, with the public release | decided (ADR 0004, built in M2): a trust prompt per folder, and restricted mode for untrusted folders, showing the structure only. Every later feature that runs workspace code checks trust (Security track). |
@@ -2583,7 +2731,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D8 | Hosting integrations (GitHub, GitLab, Azure DevOps) built in? | M13 | A built-in plugin, inactive until sign-in | decided 2026-10-10: built-in plugins for GitHub, Azure DevOps and GitLab, inactive until sign-in. Other hosts, such as Bitbucket, come as third-party plugins through the SCM and authentication APIs. |
 | D9 | Spell-check dictionaries and their licences | M12b | Only MIT/BSD-compatible dictionaries, or user-supplied ones | decided 2026-10-10: the en-US dictionary from SCOWL (permissive licence) is bundled. Other languages download on demand, each showing its licence first. |
 | D10 | F# host: FsAutoComplete or our own FCS host | M36 | FsAutoComplete through the LSP bridge | decided 2026-10-10: FsAutoComplete through the LSP bridge. |
-| D11 | Translation platform for localization | M23 | Decide at M23 | decided 2026-10-10: hosted Weblate (free for open-source projects), once the repository is public. |
+| D11 | Translation platform for localization | M23 | Decide at M23 | decided 2026-10-10: hosted Weblate (free for open-source projects), once the repository is public. Not set up yet (M23c): it waits for the maintainer's account. |
 | D12 | Licence of Aspire's orchestrator (DCP), and the IDE's relationship to it | M17 | Integrate through the IDE execution protocol only, never redistribute | decided 2026-10-10: as recommended, without a separate question. Checked in M17b (ADR 0043): the orchestration package declares MIT with licence acceptance and carries Microsoft's EULA for the DCP binaries; we never ship, download or start it (the user's AppHost does). |
 | D13 | Phase order | Each phase start | As listed in this document | decided 2026-10-10. Phase 4 (M30–M33) comes next. Then M16c, and the rest in the phase table's order. Amended the same day: M16c comes right after M30a, before M31–M33. The list ends with M28, then M20 (MAUI), M34 (polish), and VB and F# (M35, M36), which always stay last. |
 | D14 | Product 1.0 criteria (as opposed to preview releases) | After Phase 2 | Phases 1–2 complete, and plugin API 1.0 frozen early (pulled ahead of the marketplace work) | decided 2026-10-10: there are no criteria. Releases stay 0.x, even after the repository goes public, until the maintainer says otherwise. Plugin API 1.0 (M22) is separate from the product's version. |
@@ -2592,7 +2740,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D17 | Installer technology | M31 | Velopack (MIT): installers, delta updates and channels from one tool | decided 2026-10-10: Velopack. A per-user `Setup.exe` on Windows, a `.pkg` on macOS and an AppImage on Linux. The Windows zip and the macOS `.app` zip stay. |
 | D18 | Linux formats | M31 | An AppImage, plus `.deb` and `.rpm` from our own repositories | decided 2026-10-10: a self-updating AppImage; `.deb` and `.rpm` from apt and dnf repositories on GitHub Pages, which update with the system; and the `.tar.gz`. No Flatpak for now. |
 | D19 | Code signing of the installers | M31 | Sign on both OSes (an Apple Developer ID, and SignPath Foundation or Azure Trusted Signing) | decided 2026-10-10: unsigned for now. Checksums and a signed update feed. Revisit when the repository goes public. |
-| D20 | Releases while the repository is private | M31 | Build everything now, and switch it on when the repository goes public | decided 2026-10-10: as recommended. Manual dispatch while private; the nightly schedule and the release on push to `master` switch on automatically once public. |
+| D20 | Releases while the repository is private | M31 | Build everything now, and switch it on when the repository goes public | decided 2026-10-10: as recommended. Manual dispatch while private; the nightly schedule and the release on push to `master` switch on automatically once public. Superseded 2026-10-14: there is no schedule; `pipeline.yml` publishes a nightly for every push to `develop` that passes (the maintainer's rule). |
 | D21 | Branches and versioning | M31 | `develop` for daily work and nightlies, `master` for stable releases; the version in a file, bumped after each release | decided 2026-10-10: as recommended. The version is in the `VERSION` file; the next minor version is committed to `develop` automatically after each stable release; nightlies are `X.Y.Z-nightly.YYYYMMDD.N`. |
 | D22 | Which .NET Codalus itself runs on | M30 | Support .NET 11 projects, and keep Codalus on .NET 10 LTS until .NET 12 | decided 2026-10-10: Codalus follows the newest .NET and moves to each major version when it ships, starting with .NET 11. |
 | D23 | How far to validate older versions of .NET | M33 | Every target framework from 2.0 to 10.0 with the current SDK; older SDKs pinned by `global.json` only opened and built | decided 2026-10-10: as recommended. Built in M33 (ADR 0030): the floor is the .NET SDK 2.1.200. |
@@ -2601,9 +2749,10 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D26 | Supported OS versions | M30 | Windows 10 22H2 and Windows 11; macOS and Linux as the .NET that Codalus runs on supports | decided 2026-10-10: Windows 11 only. That changed the same day from "Windows 10 22H2 and 11", because .NET 10 supports Windows 10 only in its LTSC and IoT editions. macOS and Linux follow what the .NET that Codalus runs on supports: macOS 15 or newer today, which `Info.plist` requires. |
 | D27 | Which builds ship: architectures and Wayland | M31 | Add Linux ARM64. Windows ARM64 waits for a netcoredbg build | decided 2026-10-10: Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. There are no Windows ARM64 or Intel Mac builds for now. Linux runs on X11 and on Wayland through XWayland, and moves to Avalonia's native Wayland backend once it is stable (the Wayland part settled without a separate question). |
 | D28 | Approving the proposed budgets, and the Rider comparison of ADR 0002 | Now | Approve them, and the maintainer measures Rider once | decided 2026-10-10: the budgets proposed at M8–M16 are approved as gates, and budget 4 is final as it stands. Rider is no longer a reference. Where a milestone says "compare with Rider", it sets an absolute target instead. |
-| D29 | When the repository goes public | M32 | After M32 | decided 2026-10-10: after M32's checkpoint, through the go-public checklist. Changing the visibility stays the maintainer's action. |
+| D29 | When the repository goes public | M32 | After M32 | decided 2026-10-10: after M32's checkpoint, through the go-public checklist. Changing the visibility stays the maintainer's action. Done 2026-10-11. |
 | D30 | The unscheduled candidates | After M36 | Review them after the last milestone | decided 2026-10-10: as recommended. Managed settings for organizations (from M23) and the instrumentation profiler (from M18) join the candidates. |
-| D31 | Windows desktop: move WinForms, WPF, MAUI's Windows target and .NET Framework from the non-goals into scope ([proposed phase](#proposed-phase-windows-desktop))? | Before any of M40, M41, M43, M44 | Yes for M40, M41 and M44, with the other OSes served through a Windows machine as a remote target; M43 only after a spike shows a desktop-CLR port of netcoredbg works, and Build Tools only after a licence check. M42 (WCF) needs no decision. | open (2026-10-13) |
+| D31 | Windows desktop: move WinForms, WPF, MAUI's Windows target and .NET Framework from the non-goals into scope ([proposed phase](#proposed-phase-windows-desktop))? | Before any of M40, M41, M43, M44 | Yes for M40, M41 and M44, with the other OSes served through a Windows machine as a remote target; M43 only after a spike shows a desktop-CLR port of netcoredbg works, and Build Tools only after a licence check. M42 (WCF) needs no decision. | decided 2026-10-16: all of M40–M44 move into scope as **Windows-only features**: they are built, run, debugged and validated on Windows only. Whether and how Linux and macOS get them (editing and building locally, or a Windows machine as a remote target) is decided later, so the Windows remote target isn't a prerequisite. M43 includes its debugger (M43b). Order: M30b, M42, M40, M41, M44, M43, then M45 and M46, then a polish pass over the new UI (M34g). |
+| D32 | Theme families ([M45](#m45--theme-families), [design](design/shell-themes.md)): their names, the default for new installs, what happens to today's Blue, Light, Dark and High Contrast, and the setting's shape | M45 | Harbor, Graphite, Daylight and Ember as designed; Harbor with Follow System for new installs (offered by M46's setup); today's four themes kept as a Classic family, so a saved setting keeps its look; `workbench.colorTheme` takes `<family>` (follows the system) or `<family>.<light\|dark\|highContrast>`, with today's values read as Classic | decided 2026-10-16: as recommended |
 
 ## Change log
 
@@ -2719,3 +2868,58 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-13: M34c (performance pass, round 2) at its checkpoint ([m34c](checkpoints/m34c.md), ADR 0049). The language host keeps each project's diagnostics and reference assembly between sessions under a key of its inputs, so a warm open of the 96-project web solution compiles nothing and is ready in about 7 s (53–58 s before); the open documents compile against unchanged projects' assemblies (first diagnostics after about 12 s, 35–38 s before); the three CS4014 errors were the workspace's compilation references, not the compiler's version, and are left out where the build doesn't report them.
 - 2026-10-13: M34d (UI polish, round 2) at its checkpoint ([m34d](checkpoints/m34d.md)). Spacing, size and type tokens next to the colors, applied through classes; document tabs and captions in every state (the selected tab of a pane without the focus readable in Light and High Contrast, Blue's dark inactive tabs, pinned tabs, the preview tab on the right, tabs colored by project, inactive captions); High Contrast's black menus, drop-downs, buttons and combo boxes; tool window toolbars that overflow into a menu instead of wrapping (`ToolbarPanel`), and tables that scroll sideways in narrow panes; the gallery in the smoke test (every tool window, the main documents and the window, empty, with data and in an error state, in four themes); `PolishTests` for WCAG AA contrast of every token pair and text cut off at 280 px; the UI guide, [`ui-guidelines.md`](ui-guidelines.md).
 - 2026-10-13: a proposed phase, [Windows desktop](#proposed-phase-windows-desktop) (M40–M44), from the maintainer's question on supporting the Windows-specific technologies left out of scope: WinForms and WPF projects, WPF XAML and a previewer (M40), a Windows Forms designer (M41), WCF (M42), .NET Framework (M43), and MAUI's Windows target with WinUI 3 (M44). Editing and builds work on every OS; running, debugging and design surfaces need Windows, which the other OSes reach through a Windows machine as a remote target (M21b). Mono and Wine are fallbacks only. Unscheduled: D31 (open) decides the scope change, except for M42, which is cross-platform. The numbers are the next free ones, as for M37–M39.
+- 2026-10-14: change-log catch-up from the repository review (entries not recorded at the time; the checkpoints are the detailed record):
+  - **Going public:** the repository went public on 2026-10-11 (D29), which switched the releases on (D20).
+  - **Built:** M18b (2026-10-12), M19a (2026-10-12), M19b (2026-10-13), M21a (2026-10-12), M21b (2026-10-13), M22a–M22d (2026-10-13), M23a–M23c (2026-10-13), M31b (2026-10-13), M34e (2026-10-13), M37 and M38 (added and built 2026-10-13), and M39, the rename to Codalus IDE (2026-10-13, ADR 0056). Each has its checkpoint in `docs/checkpoints/`, except M39.
+  - **Releases:** 0.1.0 (2026-10-13), 0.2.0 (2026-10-14, the first under the new name) and the hotfix 0.2.1 (2026-10-14); `VERSION` is 0.3.0 on `develop`.
+  - **Workflows:** `nightly.yml` was folded into `release.yml` (2026-10-13); on 2026-10-14 `ci.yml`, `release.yml`, `packages.yml` and `benchmarks.yml` became the one `pipeline.yml` (CI, then the branch's release, atomic) with the older-.NET matrix in `compat.yml`, and `linux-repos.yml` became `pages.yml`. Every push to `develop` that passes is a nightly; there is no schedule (D20 superseded).
+  - **Review:** the status table uses one form ("done (… at checkpoint)"); a [Deferred work](#deferred-work) table collects the `TODO(issue)` items whose milestone closed without them.
+- 2026-10-15: M28a (AI assistance, part one) at its checkpoint ([m28a](checkpoints/m28a.md), ADR 0062). M28 is split in three: M28a the provider API, the data boundary and chat; M28b inline completions, next-edit suggestions and the AI actions on existing surfaces; M28c agent mode and MCP, with its own ADR on the agent's safety model. Built: `LanguageModels` as a proposed plugin API with streamed replies and tool calls; the built-in `codalus.openai` (OpenAI-compatible endpoints and Ollama) and `codalus.anthropic` plugins, activated only when chosen, with keys in the OS credential store; `AiService`, the one gate every request goes through (off by default, a workspace's settings can only turn it off, `.gitignore`, `.codalusignore`, `ai.exclude` and secret file names exclude files, secrets in text are redacted, every request logged without its content); AI Chat with the context chips, streamed Markdown answers and Apply through the refactoring preview; the `ai.chat` smoke step. Validated on Linux; Windows and the Mac remain to be checked.
+- 2026-10-15: M28b at its checkpoint ([m28b](checkpoints/m28b.md)): inline suggestions (ghost text at the caret, every line of it; Tab, Ctrl+Right, Esc; `ai.completions.enabled`) and next edit suggestions (`ai.nextEdit.enabled`), each off by default and through the same boundary; AI actions on existing surfaces, each on request: commit messages, pull request descriptions, Ask AI in the exception helper, Ask AI Why It Fails in the Test Explorer, Fix with AI and Generate Tests with AI in the editor, Summarize with AI on a CPU report. Validated on Linux.
+- 2026-10-15: M28c at its checkpoint ([m28c](checkpoints/m28c.md), ADR 0063), so M28 is done: agent mode in AI Chat (reading tools confined to the workspace and the boundary, edits through the preview, commands and MCP tools after an approval with Reject as the default, trusted folders only, `ai.agent.maxSteps`), the MCP client (`ai.mcp.servers`, user settings only, stdio) and the MCP server (`codalus mcp`, relaying over a current-user pipe opened only with `ai.mcpServer.enabled`). Validated on Linux; Windows and the Mac remain to be checked for M28a–c. Next by D13: M20 (.NET MAUI).
+- 2026-10-15: M20a at its checkpoint ([m20a](checkpoints/m20a.md), ADR 0064). It covers devices, emulators and simulators (adb, the emulator, `simctl`, `devicectl`; signing identities and provisioning profiles), the toolbar's device picker and the Devices window, and runs through `dotnet build -t:Run`. The workloads (`dotnet workload restore` in the terminal) and the Android SDK (the workload's `InstallAndroidDependencies`, after showing that it accepts the license) are installed with consent, and both show in Check Environment. MAUI XAML is served by the C# host (bindable and attached properties, `[ContentProperty]`, XAML 2009 `x:`, compiled bindings), `.xaml` is the `xaml` language, and the New Project dialog lists the MAUI templates. Validated on Linux, including a real Android build of `samples/Maui/TodoApp` with the workload and SDK installed. Emulators need KVM, which this machine lacks, so iOS, Mac Catalyst and running on an emulator remain to be checked on the Mac and on Windows. Research for M20b found that Mono stays the default runtime on mobile in .NET 10 but not in .NET 11 (CoreCLR, with no open debugger yet), so the Mono adapter covers .NET 8–10 and apps that opt back into Mono.
+- 2026-10-15: M20b at its checkpoint ([m20b](checkpoints/m20b.md), ADR 0065), so M20 is done. It adds the Mono debugger adapter: `codalus-debughost --mono-dap` speaks DAP with our own contracts, and Mono's soft debugger protocol through Mono.Debugger.Soft, vendored from mono/debugger-libs (MIT) and built without Cecil. Its sessions offer breakpoints bound on type load, stepping with Just My Code, stacks, locals, fields and properties, member-path evaluation and exceptions. F5 on Android adds the SDK's own `AndroidAttachDebugger` properties, and the adapter connects through adb's forward. On iOS simulators and Mac Catalyst it listens. It is tested against .NET 8's desktop Mono runtime with no device. Next by D13: M34 (the final polish pass).
+- 2026-10-15: M34f, M34's final pass, at its checkpoint ([m34f](checkpoints/m34f.md)). The checklist now covers the documents that work as dialogs (at 640 px) and the in-window dialog's forms (at 440 px). Accessible names are checked in every tool window, document and dialog. The Keyboard Shortcuts and Add New Item layouts cut text and are fixed, and the dialogs are in the gallery. M34 itself waits for the maintainer's approval of the gallery on three OSes and a check at display scales (D25). Next by D13: M35 (Visual Basic).
+- 2026-10-15: M35 (Visual Basic) at its checkpoint ([m35](checkpoints/m35.md), ADR 0066). The C# host serves VB in the same workspace as C# with Roslyn's VB Workspaces and Features, so mixed solutions navigate, find references and rename across both. Pretty listing (Enter adds `End If`, `Next`, `End Sub`…, fixes keyword casing; `>` closes XML literals) is ours, as on-type formatting. VB snippets, item templates and property pages (`Option Strict`, `Explicit`, `Infer`, `Compare`); New Project lists every language's templates and asks the language. VB tests are found from source; debugging a VB program is tested on netcoredbg, whose expressions are C# (documented). Validated on Linux; Windows and the Mac remain to be checked. Next by D13: M36 (F#).
+- 2026-10-15: M36a (F#, part one) at its checkpoint ([m36a](checkpoints/m36a.md), ADR 0067). FsAutoComplete 0.85.3 and Fantomas 7.0.3 are installed on demand with the user's `dotnet tool install --tool-path` into the cache folder. FsAutoComplete runs only in trusted folders (it loads projects with MSBuild itself) and starts again for each solution. Its settings go out as an `FSharp` section. Bridge changes for any server: hover `command:` links removed, F# token types aliased, lens arguments, per-language test candidate failures. The compile order: the build host's `items/move`, F# includes inserted in order, Solution Explorer in compile order with `.fsi` nested, Move Up/Down and Add Above/Below; F# item templates and property pages. M36 is split: M36b covers F# Interactive, scripts, Expecto, type providers and analyzers. Validated on Linux.
+- 2026-10-15: M36b at its checkpoint ([m36b](checkpoints/m36b.md), ADR 0068), so M36 is done, and with it every milestone through M39 on the roadmap. F# Interactive is `dotnet fsi --readline-` in a terminal of the integrated terminal: Send to F# Interactive (`Ctrl+E, Ctrl+E` in F# files) with line directives, Send Line (`Alt+'`), Send File, Send References (builds, then `#r`), Reset, Run Script. Scripts, type providers and F# analyzers (`fsharp.analyzers`) come from FsAutoComplete, in trusted folders. Expecto runs through YoloDev.Expecto.TestSdk in the Test Explorer, and debugging F# is tested on netcoredbg (C# expressions, documented). Validated on Linux; Windows and the Mac remain to be checked for M28, M20, M34f, M35 and M36. What remains is maintainer decisions (D31 and the Windows desktop phase M40–M44, D25's gallery approval for M34, translations' hosting) and the [deferred work](#deferred-work).
+- 2026-10-15: deferred work, the release track's command line: `codalus file[:line[:column]]` opens a file in the running window (solutions and folders still open a new one), `--new-window` opens it in a new window, `--list-plugins [--show-versions]` prints the installed plugins, and `--install-plugin <id[@version]|file.nupkg>` installs one without a window, with the Plugin Gallery's sources and signature rules (`PluginCommandLine`). Tested by `CommandLineTests` against the mock NuGet feed; documented in the getting started guide.
+- 2026-10-15: deferred work, transitive packages: the build host reports each restored package's dependencies from `project.assets.json` (`ProjectInfo.Packages`), and the Dependencies node nests them under each package (cycles skipped, at most 2,000 nodes a project). Tested by `TransitivePackageTests` and on samples/FSharp's restored Expecto project.
+- 2026-10-15: deferred work, renamed and deleted files in workspace edits: `WorkspaceEdit.ResourceOperations` (rename, delete) from the C# host's renamed and removed documents (Rename File to Match Type) and from other servers' LSP file operations (now declared in the client's capabilities; a created file becomes an empty new file's edit), applied after the text edits through the build host, an open file saved and reopened. Tested by `Rename_file_to_match_its_type_is_a_rename_of_the_file` and `WorkspaceEditTests`.
+- 2026-10-15: deferred work, the Ctrl+Tab switcher: holding Ctrl, each Tab moves through the open documents in most-recently-used order and releasing Ctrl switches (`DocumentSwitcherViewModel`, Esc stays, arrows and a click work); Next/Previous Document keep the tab order on `Ctrl+Alt+PageDown`/`PageUp`. Tested by `DocumentSwitcherTests`.
+- 2026-10-15: deferred work, Edit → Paste Special → Paste XML as Classes (`XmlClassGenerator`): classes for `XmlSerializer`, with attributes, repeated elements as lists, mixed text as `[XmlText]`, namespaces, and values typed from every occurrence.
+- 2026-10-15: deferred work, the hex viewer (`HexDocument`, `HexViewerView`): binary files (NUL bytes and no byte order mark in their first 8 KB) open in it, any file through Open With Hex Viewer, Reopen With Text Editor goes back; read-only, reading only the visible rows; a selected byte's offset and value in its bar. Tested by `HexViewerTests`.
+- 2026-10-15: deferred work, snippets: Tab visits fields by number (`$1`, `$2`…, then `$0`) rather than their place in the text (`SnippetSession`, ahead of AvaloniaEdit's handler), choice placeholders list their choices, and Tools → Code Snippets Manager (`Ctrl+K Ctrl+B`) lists every language's snippets with copy to yours, remove, open and import. Tested in `EditingDepthTests`.
+- 2026-10-15: deferred work, Error List grouping and the analysis-scope picker: Group By (project, file, severity, code or source; headers collapse; `errorList.groupBy`) and Analysis Scope in the Error List's toolbar, with a new `currentProject` value of `languageServices.analysisScope` (the active document's project or the startup project, sent to the C# host as `analysisProject`; the background pass keeps each project's results by its own scope, so switching projects analyzes only the two involved again). Tested by `ErrorListGroupingTests` and `The_current_project_scope_runs_analyzers_in_that_projects_closed_files`.
+- 2026-10-15: deferred work, per-language editor options: VS Code's `"[languageId]"` blocks (several ids as `"[csharp][vb]"`) in either settings file win over the general values for that language's documents (`SettingsService.ForLanguage`, `EditorOptions.For`), for the `editor.*` settings, Format on Save and Code Cleanup on Save; Configure Language-Specific Settings… adds a block and opens the file there; Import Settings from VS Code brings the blocks' settings over. Tested by `Language_blocks_win_over_general_values_for_their_languages`, `LanguageSettingsTests` and `VsCodeImportTests`.
+- 2026-10-15: deferred work, paste with automatic usings: pasted C# and VB code gets the usings (Imports) it needs through Roslyn's Add Import fix in the new `codalus/pasteImports` request (`PasteImportsFeature`): a name with one candidate namespace, or one of the namespaces of the file it was copied from; one undoable edit, `editor.pasteAddsImports` to turn it off. Tested by `Pasted_code_gets_the_usings_it_needs` and `PasteImportsTests`.
+- 2026-10-15: deferred work, CodeLens's Git history and test status (`LensDetails`, in `EditorInsights`): a member's last author and when, and its numbers of authors and changes, from `git blame` over its document symbol's lines (again on save, or every few seconds while edited); a test's last outcome and a test class's passing count; `editor.gitCodeLens` and `editor.testCodeLens`. Tested by `CodeLensDetailsTests` and in `TestExplorerTests`.
+- 2026-10-15: deferred work, the toolbar's Hot Reload button: a split button that starts with Hot Reload or, while a program runs with it, applies code changes; its menu has Stop Running Programs, the `run.hotReload` switch (`run.toggleHotReloadOnStart`) and the settings (`run.hotReloadSettings`). The Devices window's duplicate entry in View → Other Windows is gone. Tested in `ChromeTests` and `WebTests`.
+- 2026-10-15: deferred work, signing in to package sources: the build host's `packages/signIn` runs NuGet's credential providers interactively for one request, with a credential service of its own (NuGet sets its own only once), and keeps the repository that signed in; `packages/signInMessage` carries the providers' device codes to a notification with Copy Code and Open Browser. The package manager offers Sign In next to a feed that refused for want of one, and there is a command too. Tested by `PackageSignInTests`, against a feed that wants basic authentication and a fake credential-provider plugin (`tests/Codalus.NuGetCredentialProvider.Fake`), and by `PackageSignInShellTests`.
+- 2026-10-15: deferred work, members under files in the Solution Explorer: C# and VB files expand into their types and members (`ExplorerNodeKind.Member`, from the language service's document symbols, namespaces left out), loaded on expand, read again after an edit; choosing one opens the file there; `solutionExplorer.showMembers`. Tested by `SolutionExplorerMembersTests`.
+- 2026-10-15: deferred work, generated sources under each analyzer: Dependencies → Analyzers → an analyzer expands into the files its generators made in the project (`codalus/generatedDocuments`, `ExplorerNodeKind.GeneratedFile`), opened read-only like Go to Definition's. Tested in `SolutionExplorerMembersTests`.
+- 2026-10-15: deferred work, Class View and the Object Browser: the C# host's `codalus/browse` (a project's namespaces, types and members a level at a time, or with references its assemblies down to theirs; search) and `codalus/browse/describe` (declaration, location, summary; `ObjectBrowserFeature`), shown by `SymbolBrowserViewModel` as the Class View tool window and the Object Browser document, with the selection's declaration and summary below and Enter going to it (library code read-only, from its PDB or decompiled). Tested by `Class_view_and_the_object_browser_walk_a_projects_symbols` and `SymbolBrowserTests`.
+- 2026-10-15: deferred work, the `.resx` resource editor (`ResxEditorDocument`, on the workbench's `ResxFile`): a resource file's strings edited in a table (name, value, comment; add, remove, search), other resources read-only, saved by rewriting only what changed, then the custom tool; View Code and Open With Resource Editor switch between it and the XML. Documents that save outside the text editor share `ISavableDocument`. Tested by `ResxFileTests`, `ResxEditorTests` and the smoke test's custom tools step.
+- 2026-10-15: deferred work, XSD validation in the markup host (`XsdValidation`): XML files are validated against the local schemas their root names (`xsi:schemaLocation`, `xsi:noNamespaceSchemaLocation`) and those the `xml.schemas` setting associates by glob; schemas and their includes resolve to local files only. The markup host's options now go out as its settings too, so a changed association applies at once. Tested in `MarkupHostTests`.
+- 2026-10-15: deferred work, the EditorConfig settings page (`EditorConfigDocument`, on the workbench's `EditorConfigFile` and the markup host's key catalog, now shared as `EditorConfigCatalog`): an `.editorconfig` file's options for one section, in groups, with search; a choice edits the file's text in place and saving writes it. Also from this round's CI: the build host restores a solution's other projects on their own when one can't restore (a MAUI app without its workload), F# Interactive gets carriage returns (ConPTY), the MCP bridge listens before `Listen` returns, `ResxFile` keeps a file's line endings on Windows, F# tool installs get ten minutes, completion and Quick Info answer nothing for a project loaded without its framework (a design-time build before the restore brought the reference pack: Roslyn disabled its providers for the session after they threw; `FrameworkGuard`, tested by `RestoreRaceTests`), the design-time cache checks vbc's comma-separated reference lists file by file, the Windows test shard runs two test projects at a time, and an AppHost started by the IDE gives Aspire's orchestrator two minutes to check its container runtime (`ASPIRE_DEPENDENCY_CHECK_TIMEOUT`, unless set). Tested by `EditorConfigFileTests`, `EditorConfigSettingsTests` and `A_project_that_cant_restore_leaves_the_others_restored`.
+- 2026-10-16: from the first nightly run of this round: FsAutoComplete starts again when F# projects it loaded before their restore are restored (its watcher can miss the `obj` folder a restore creates, which left a type provider without its package for the session); the settings test waits for the row's refresh, which is posted to the UI; the smoke test keeps vscode-js-debug's logs when it fails (`<results>/js-debug`), after the page breakpoint of `blazor.compoundDebug` didn't stop once on the Linux arm64 runner (not reproduced; passed on the run before). Markup options no longer use `JsonArray.Add<T>` (an AOT warning).
+- 2026-10-16: the Linux smoke test's start-window crash, caught by the crash stacks: Avalonia makes a synthetic bold or italic typeface from the font's bytes, read with SkiaSharp's `SKStream.Read`, which doesn't keep its stream alive, and `SkiaTypeface.TryGetStream` never disposes it (Avalonia 12.1.4 and SkiaSharp 3.119.4 alike); a background collection, started by the large buffer the read allocates, finalized the stream mid-copy. The shell uses blocking collections on Linux (`GCLatencyMode.Batch`), where system fonts lack weights we ask for; to remove when Avalonia disposes the stream. The next edit suggestion test lets the edit's pause make the request instead of racing it with one of its own.
+- 2026-10-16: the shell disposes the Test Explorer's service with the window: its coalesced change notification could fire after a window closed and reach an editor's test CodeLens, whose redraw then ran off the UI thread and ended the test process on Linux (`A_disposed_service_raises_no_more_changes`). The smoke test's `debug.depth` waits for the Threads window's current thread (the stop's own refresh supersedes the step's), and a failed step stops the debug session it leaves, so the next step starts its own.
+- 2026-10-16: macOS validation of 58f9de1 on Apple silicon (macOS 27.0.1): 1416 of 1446 tests passed (29 skipped), and the smoke test passed 75 steps without `data.efMigrations`. Its findings: the smoke test's wait for a window's frames had no bound, and macOS stops drawing a window it considers hidden, so `data.efMigrations` (the Update Database screenshot) and a `CODALUS_SMOKE_ONLY` run (the start window) waited forever; it now goes on after 5 s. And the inline suggestion test ran in a C# file, where "ret" opens the completion list when the C# host answers in time, and inline suggestions wait while it's open; it uses a text file.
+- 2026-10-16: a remote terminal's exit code: the server closed the output before sending the code, from a thread-pool task, and the client waited 2 s for it once its reading ended, so a busy machine reported -1 for a program that exited 0 (`A_terminal_runs_in_a_pseudo_terminal_on_the_server` on Windows CI). The server sends the code first, and the client waits up to 10 s for a server that doesn't.
+- 2026-10-16: the smoke test's `ai.chat` step deletes the API key it stores, as the hosting step signs out: on a Mac, a key left in the Keychain made the next local run (another build, another code signature) wait on macOS's access prompt.
+- 2026-10-16: every project file the build host writes goes through `ProjectXml.SaveFile`, which retries a Windows sharing violation for a few seconds (it was a second before, and service references, item edits and build events wrote without it): saving a service reference right after one added a package failed while the restore held `Client.csproj` (`Scaffolding_and_service_references` on Windows CI).
+- 2026-10-16: a faster pipeline: the self-update test is its own job (`update`), beside `packages` instead of after it (it builds its own test installers), which takes the release's longest job from about 45 to about 30 minutes; the F# shell tests run in the second Shell shard, the lighter one (Windows' first shard took 17 minutes of tests against the second's 8).
+- 2026-10-16: the build host's `dotnet` children (`dotnet ef`, restore, tools, templates, the scaffolder) get an empty input instead of inheriting the host's, which is the shell's JSON-RPC requests: one that read it would take them, one that waited on it would never end. `dotnet ef` builds without leaving MSBuild nodes, the MSBuild server or the compiler server behind, and its output is read for at most a few seconds after it exits (a leftover process holding the pipe can't hold the request). From the Mac validation, where `data.efMigrations` stopped after `dotnet ef migrations script` with nothing left running; the smoke step also trusts its own folder, so `CODALUS_SMOKE_ONLY=data.efMigrations` runs it alone.
+- 2026-10-16: the smoke test makes its fixture folder (with the samples' build files) on first use, so steps kept by `CODALUS_SMOKE_ONLY` without `projects.open` no longer copy their fixtures into the current folder, where they inherited the repository's `Directory.Packages.props` (NU1008); its failure diagnostics list processes with BSD `ps` options on macOS.
+- 2026-10-16: CPU traces fold the runtime's GC poll (`Thread.PollGC` and its worker) into the calling function: the sampler suspends every thread for each sample, and a loop stopped at its GC poll had its samples counted against the poll, which became the hottest function of a CPU-bound loop on the Windows runners (`DiagnosticsHostTests`, `Two_traces_compare_by_function`).
+- 2026-10-16: the remote window test's run in a terminal checks the launch profile's lines on Windows, not the program's first line: the stand-in server's ConPTY repaints from the cursor's home, and on a busy runner its repaint landed one line up, over that line (the screen started at `args:`). TODO(issue): find whether a remote terminal's size change in flight (the view's resize reaches the server's ConPTY after its first frame) causes it, and size the server's terminal before it starts if so.
+- 2026-10-16: the smoke step `blazor.wasmDebug` starts debugging again once when the first session's page never stops: on the linux-arm64 installed app the dev server's debugging proxy stalled before reporting the page's .NET runtime (js-debug's log: no `Mono.runtimeReady`, none of the app's sources, the page ran), and no breakpoint bound for 10 minutes; the second session must stop. A page reload in the same session doesn't recover it (tried: the proxy reported the runtime after the reload but not the sources). TODO(issue): find why the proxy stalls (BrowserDebugHost on a loaded runner) and recover in the session itself.
+- 2026-10-16: CpuBound's batches count the primes below a million (0.1 to 0.2 s) instead of below 20,000 (0.7 ms on a Windows runner). On some Windows runners the sampler's interruption of a running thread comes late, and the thread stops at its next safe point, which in CpuBound was the GC poll after `Stopwatch`'s clock read at each batch's end: `Stopwatch.get_Elapsed` held 71% of the samples, `Primes.Count` 5%, and the profiler test and smoke step `profiler.cpu` failed (another runner of the same image showed nearly every sample in `Primes.IsPrime`). The poll was never in IsPrime's loop: folding `Thread.PollGC` into its caller (above) had moved those samples to `Stopwatch` rather than to the loop. With long batches a late stop still lands in the loop.
+- 2026-10-16: four theme families designed at the maintainer's request ("close to Visual Studio style but original too"): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with the mockups, previews and every color in [`design/shell-themes.md`](design/shell-themes.md). The maintainer wants all four as real themes. New milestones in Phase 11: M45 (theme families) and M46 (a first-run setup with the theme chooser; no milestone recorded a setup wizard: M23a's onboarding is the Start page's Get Started list). New decision D32 (names, default, today's themes, the setting). The parity matrix gains the first-launch row.
+- 2026-10-16: D32 decided as recommended: the families are Harbor, Graphite, Daylight and Ember; new installs default to Harbor with Follow System; Blue, Light, Dark and High Contrast stay as the Classic family; `workbench.colorTheme` takes `<family>` or `<family>.<light|dark|highContrast>`, with today's values read as Classic. M45 no longer waits on a decision.
+- 2026-10-16: a tool window pane that the layout adds beside a container without a proportion (the default layout's center, before the dock panel first arranges it) keeps the documents' share: the left pane at 0.22 scaled the right pane to all of the rest (0.78) and gave the center 0.39 on top, and the panel normalized the 1.39 to a right pane twice the documents' width. On the macOS runner's 1024-pixel window the terminal under the documents was then 14 columns wide, and the smoke steps `fsharp.interactive` (`val squares: int list = [1; 4; 9]` wrapped) and `remote.session` (`Hello from Hel` / `lo`) failed in run 38916412546; whether the panel had arranged the center before the Start page opened varied between runs.
+- 2026-10-16: language detection matches file-name patterns without a regular expression, and when-clause `=~` and folding-marker patterns treat a match over its time budget as no match: their RegexMatchTimeoutException is a TimeoutException, thrown out of opening a file or evaluating a clause when a loaded machine paused the thread mid-match (100 and 50 ms budgets). The smoke test reported any TimeoutException as its 12-minute step limit; it now reports one from the step's own code with its stack. The installed-app smoke step `testing.run` on linux-x64 failed after 10.7 s with "didn't finish within 12 minutes" (run 38916412546, the runner at full CPU from packaging), its stack hidden that way; the file-name pattern match on opening `CalculatorTests.cs` (which never opened) is the only TimeoutException source found on that path.
+- 2026-10-16: the maintainer's decisions for the rest of the plan. D31 is decided: M40–M44 move into scope as Windows-only features (the other OSes later), M43 with its debugger. M30b moves forward onto the .NET 11 release candidate. The order is M30b, M42, M40, M41, M44, M43, then M34g, a polish pass over the new designers and previewers; each milestone ends with a nightly and a stable release. The unscheduled candidates (D30) stay for the maintainer's review after that.
+- 2026-10-16: M45 and M46 join the order after M43 and before M34g (the maintainer's choice), so the last polish pass covers the theme families and the first-run setup too: M30b, M42, M40, M41, M44, M43, M45, M46, M34g.
+- 2026-10-16: M30b at checkpoint ([m30b](checkpoints/m30b.md)), on the .NET 11 SDK's second release candidate: Codalus targets `net11.0` (the plugin API stays on `net10.0`), Roslyn 5.12.0-1.26504.105 (the RC2 SDK's compiler, from the public `dotnet-tools` feed until GA) brings C# 15 and the .NET 11 SDK's Razor generator, whose separate declaration documents the Razor mapping now covers. The hosts still roll forward (ADR 0025 amended), so the .NET 11 SDK is the prerequisite: Check Environment, the packages and the website say so. The SDK's optimized Native AOT publish dropped Avalonia's compiled XAML (`UseOptimizedPublish=false`). Validated on Linux; Windows and macOS by CI. Gaps: the GA swap, netcoredbg's missing frame modules on .NET 11 (exception module conditions), and the target framework matrix's run on 11.

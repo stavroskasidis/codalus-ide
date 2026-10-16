@@ -222,6 +222,13 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (Remote is null && IsMobileProject(project))
+        {
+            // A .NET MAUI or mobile app (M20a): it runs on its device; the Mono debugger comes later (TODO(issue): M20b).
+            await StartOnDeviceAsync(project, debug: true).ConfigureAwait(true);
+            return;
+        }
+
         if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })

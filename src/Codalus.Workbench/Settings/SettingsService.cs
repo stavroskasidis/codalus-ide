@@ -39,6 +39,9 @@ public sealed class SettingsService : IDisposable
     private Dictionary<string, JsonElement> _user = new(StringComparer.Ordinal);
     private Dictionary<string, JsonElement> _workspace = new(StringComparer.Ordinal);
     private Dictionary<string, JsonElement> _effective = new(StringComparer.Ordinal);
+
+    /// <summary>Per language id: the valid values of its <c>"[id]": { … }</c> blocks, the workspace's over the user's.</summary>
+    private Dictionary<string, Dictionary<string, JsonElement>> _languages = new(StringComparer.Ordinal);
     private IReadOnlyList<string> _diagnostics = [];
 
     public SettingsService(string userFile, string? workspaceFile = null, bool watch = false)
@@ -175,6 +178,46 @@ public sealed class SettingsService : IDisposable
         }
     }
 
+    /// <summary>
+    /// The settings as seen from documents of <paramref name="languageId"/>: a value in a <c>"[languageId]"</c> block of
+    /// either file (VS Code's language-specific settings, e.g. <c>"[csharp]": { "editor.tabSize": 2 }</c>) wins over the
+    /// general value, in any layer. A null or empty id reads the general values.
+    /// </summary>
+    public LanguageSettings ForLanguage(string? languageId) => new(this, languageId);
+
+    /// <summary>The language ids that have a <c>"[id]"</c> block in either file.</summary>
+    public IReadOnlyCollection<string> OverriddenLanguages
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _languages.Keys];
+            }
+        }
+    }
+
+    /// <summary>The value for documents of <paramref name="languageId"/>: its language-specific value, else the effective one.</summary>
+    public JsonElement GetValue(string key, string? languageId)
+    {
+        lock (_gate)
+        {
+            return languageId is { Length: > 0 } && _languages.TryGetValue(languageId, out var values) && values.TryGetValue(key, out var value)
+                ? value
+                : _effective.TryGetValue(key, out var general) ? general : default;
+        }
+    }
+
+    /// <summary>The value one layer's <c>"[languageId]"</c> block sets, if any.</summary>
+    public JsonElement? GetLanguageLayerValue(string key, string languageId, SettingScope scope)
+    {
+        lock (_gate)
+        {
+            var layer = scope == SettingScope.User ? _user : _workspace;
+            return LanguageBlocks(layer).TryGetValue(languageId, out var block) && block.TryGetValue(key, out var value) ? value : null;
+        }
+    }
+
     public bool IsModified(string key) => GetLayerValue(key, SettingScope.User) is not null || GetLayerValue(key, SettingScope.Workspace) is not null;
 
     public string GetString(string key, string fallback = "") =>
@@ -242,13 +285,18 @@ public sealed class SettingsService : IDisposable
     /// Writes <paramref name="key"/> in the given layer (null removes it, i.e. resets to the inherited value).
     /// Throws <see cref="ArgumentException"/> if the value is invalid for the schema.
     /// </summary>
-    public async Task SetAsync(string key, JsonElement? value, SettingScope scope, CancellationToken cancellationToken)
+    public Task SetAsync(string key, JsonElement? value, SettingScope scope, CancellationToken cancellationToken)
     {
         if (Find(key) is { } descriptor && value is { } v && descriptor.Validate(v) is { } error)
         {
             throw new ArgumentException($"{key}: {error}", nameof(value));
         }
 
+        return SetRawAsync(key, value, scope, cancellationToken);
+    }
+
+    private async Task SetRawAsync(string key, JsonElement? value, SettingScope scope, CancellationToken cancellationToken)
+    {
         var file = scope == SettingScope.User ? UserFile : WorkspaceFile ?? throw new InvalidOperationException("No workspace is open.");
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -282,6 +330,108 @@ public sealed class SettingsService : IDisposable
         }
 
         Reload();
+    }
+
+    /// <summary>
+    /// Writes <paramref name="key"/> in the <c>"[languageId]"</c> block of a layer (null removes it, and an empty block
+    /// with it). Throws <see cref="ArgumentException"/> if the value is invalid for the schema.
+    /// </summary>
+    public Task SetAsync(string key, JsonElement? value, SettingScope scope, string languageId, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(languageId);
+        if (Find(key) is { } descriptor && value is { } v && descriptor.Validate(v) is { } error)
+        {
+            throw new ArgumentException($"{key}: {error}", nameof(value));
+        }
+
+        var block = new System.Text.Json.Nodes.JsonObject();
+        if (GetLayerValue(LanguageKey(languageId), scope) is { ValueKind: JsonValueKind.Object } existing)
+        {
+            foreach (var property in existing.EnumerateObject())
+            {
+                block[property.Name] = System.Text.Json.Nodes.JsonNode.Parse(property.Value.GetRawText());
+            }
+        }
+
+        if (value is { } written)
+        {
+            block[key] = System.Text.Json.Nodes.JsonNode.Parse(written.GetRawText());
+        }
+        else
+        {
+            block.Remove(key);
+        }
+
+        JsonElement? updated = null;
+        if (block.Count > 0)
+        {
+            using var document = JsonDocument.Parse(block.ToJsonString());
+            updated = document.RootElement.Clone();
+        }
+
+        return SetRawAsync(LanguageKey(languageId), updated, scope, cancellationToken);
+    }
+
+    /// <summary>Adds an empty <c>"[languageId]": { }</c> block to a layer, unless a block for the language is there.</summary>
+    public Task AddLanguageBlockAsync(string languageId, SettingScope scope, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(languageId);
+        lock (_gate)
+        {
+            if ((scope == SettingScope.User ? _user : _workspace).Keys.Any(k => LanguageIds(k)?.Contains(languageId, StringComparer.Ordinal) == true))
+            {
+                return Task.CompletedTask;
+            }
+        }
+
+        using var empty = JsonDocument.Parse("{}");
+        return SetRawAsync(LanguageKey(languageId), empty.RootElement.Clone(), scope, cancellationToken);
+    }
+
+    /// <summary>The key of a language's block: <c>[csharp]</c>.</summary>
+    public static string LanguageKey(string languageId) => $"[{languageId}]";
+
+    /// <summary>
+    /// The language ids of a <c>"[…]"</c> key: <c>[csharp]</c>, or several as in VS Code, <c>[csharp][vb]</c>; null for
+    /// other keys.
+    /// </summary>
+    public static IReadOnlyList<string>? LanguageIds(string key)
+    {
+        if (key.Length < 3 || key[0] != '[' || key[^1] != ']')
+        {
+            return null;
+        }
+
+        var ids = key[1..^1].Split("][", StringSplitOptions.TrimEntries);
+        return ids.All(id => id.Length > 0 && !id.Contains('[', StringComparison.Ordinal) && !id.Contains(']', StringComparison.Ordinal)) ? ids : null;
+    }
+
+    /// <summary>A layer's language blocks, by language id (a later block for the same language adds to an earlier one).</summary>
+    private static Dictionary<string, Dictionary<string, JsonElement>> LanguageBlocks(Dictionary<string, JsonElement> layer)
+    {
+        var blocks = new Dictionary<string, Dictionary<string, JsonElement>>(StringComparer.Ordinal);
+        foreach (var (key, value) in layer)
+        {
+            if (value.ValueKind != JsonValueKind.Object || LanguageIds(key) is not { } ids)
+            {
+                continue;
+            }
+
+            foreach (var id in ids)
+            {
+                if (!blocks.TryGetValue(id, out var block))
+                {
+                    blocks[id] = block = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+                }
+
+                foreach (var property in value.EnumerateObject())
+                {
+                    block[property.Name] = property.Value;
+                }
+            }
+        }
+
+        return blocks;
     }
 
     /// <summary>Reads a settings file without keeping a writer out (a reload runs while a setting is being written).</summary>
@@ -362,10 +512,56 @@ public sealed class SettingsService : IDisposable
                 }
             }
 
+            // Language blocks: valid values of registered settings, the workspace's over the user's.
+            var languages = new Dictionary<string, Dictionary<string, JsonElement>>(StringComparer.Ordinal);
+            foreach (var (layer, name) in new[] { (_user, "user"), (_workspace, "workspace") })
+            {
+                foreach (var (language, block) in LanguageBlocks(layer))
+                {
+                    foreach (var (key, value) in block)
+                    {
+                        if (!_descriptors.TryGetValue(key, out var descriptor))
+                        {
+                            continue;
+                        }
+
+                        if (layer == _workspace && descriptor.Scope == SettingScope.User)
+                        {
+                            diagnostics.Add($"{LanguageKey(language)} {key}: can only be set in user settings.");
+                        }
+                        else if (descriptor.Validate(value) is { } error)
+                        {
+                            diagnostics.Add($"{LanguageKey(language)} {key} ({name} settings): {error} Using the general value.");
+                        }
+                        else
+                        {
+                            if (!languages.TryGetValue(language, out var values))
+                            {
+                                languages[language] = values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+                            }
+
+                            values[key] = value;
+                        }
+                    }
+                }
+            }
+
             changed = [.. effective.Keys.Where(k => !_effective.TryGetValue(k, out var old) || old.GetRawText() != effective[k].GetRawText())];
             changed.UnionWith(_effective.Keys.Where(k => !effective.ContainsKey(k)));
             registered = [.. changed.Where(k => !_effective.ContainsKey(k))];
+            foreach (var language in languages.Keys.Union(_languages.Keys))
+            {
+                var before = _languages.GetValueOrDefault(language) ?? [];
+                var after = languages.GetValueOrDefault(language) ?? [];
+                foreach (var key in before.Keys.Union(after.Keys).Where(k => !(before.TryGetValue(k, out var b) && after.TryGetValue(k, out var a) && b.GetRawText() == a.GetRawText())))
+                {
+                    changed.Add(key); // a language's value of the setting changed
+                    changed.Add(LanguageKey(language));
+                }
+            }
+
             _effective = effective;
+            _languages = languages;
             _diagnostics = diagnostics;
         }
 
@@ -430,3 +626,23 @@ public sealed class SettingsService : IDisposable
 [System.Text.Json.Serialization.JsonSerializable(typeof(JsonElement))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, string>))]
 internal sealed partial class SettingsJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
+
+/// <summary>The settings as documents of one language see them (<see cref="SettingsService.ForLanguage"/>).</summary>
+public readonly struct LanguageSettings(SettingsService settings, string? languageId)
+{
+    public string? LanguageId => languageId;
+
+    public JsonElement GetValue(string key) => settings.GetValue(key, languageId);
+
+    public string GetString(string key, string fallback = "") =>
+        GetValue(key) is { ValueKind: JsonValueKind.String } v ? v.GetString()! : fallback;
+
+    public bool GetBoolean(string key, bool fallback = false) =>
+        GetValue(key) is { ValueKind: JsonValueKind.True or JsonValueKind.False } v ? v.GetBoolean() : fallback;
+
+    public int GetInt32(string key, int fallback = 0) =>
+        GetValue(key) is { ValueKind: JsonValueKind.Number } v && v.TryGetInt32(out var i) ? i : fallback;
+
+    public IReadOnlyList<string> GetStrings(string key) =>
+        GetValue(key) is { ValueKind: JsonValueKind.Array } v ? [.. v.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!)] : [];
+}

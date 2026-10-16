@@ -1,0 +1,7 @@
+root = true
+
+# Fantomas reads these (https://fsprojects.github.io/fantomas/docs/end-users/Configuration.html).
+[*.{fs,fsi,fsx}]
+indent_size = 4
+max_line_length = 120
+fsharp_multiline_bracket_style = aligned

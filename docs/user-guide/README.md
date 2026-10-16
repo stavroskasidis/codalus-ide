@@ -15,24 +15,29 @@ Codalus IDE is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linu
 11. [Terminal and C# Interactive](terminal.md)
 12. [The window, settings, themes and keyboard shortcuts](settings.md)
 13. [Troubleshooting, logs and crash reports](troubleshooting.md)
-14. [Older .NET versions: .NET Core 2.0 to .NET 9, and older SDKs in global.json](dotnet-versions.md)
+14. [Older .NET versions: .NET Core 2.0 to .NET 10, and older SDKs in global.json](dotnet-versions.md)
 15. [Containers, Aspire and publishing](containers.md)
 16. [Profiling and diagnostics: the Performance Profiler, Diagnostic Tools and .NET Counters](profiling.md)
 17. [Keyboard shortcuts on each operating system: completion keys, and the shortcuts Windows, Linux and macOS keep](keyboard.md)
 18. [Avalonia: XAML editing, the XAML Previewer, the Live Visual Tree and Live Property Explorer, new Avalonia projects](avalonia.md)
 19. [Remote development: SSH, WSL, containers and Dev Containers](remote.md)
-20. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
+20. [AI assistance: AI Chat with the provider you choose, inline and next edit suggestions, AI actions, agent mode, MCP, and what is never sent](ai.md)
+21. [.NET MAUI: devices, emulators and simulators, running and debugging on Android and iOS, the workloads and the Android SDK, MAUI XAML](maui.md)
+22. [Visual Basic: editing, mixed C# and VB solutions, what the editor adds as you type, project options, tests and debugging](visual-basic.md)
+23. [F#: editing with FsAutoComplete and Fantomas, the compile order, F# Interactive, scripts, type providers, analyzers, Expecto tests and debugging](fsharp.md)
+24. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md), with the [API reference](plugin-api.md).
 
 ## Keyboard shortcuts at a glance
 
-`Ctrl` means `Cmd` on macOS, except where [keyboard.md](keyboard.md) says (completion is the Control key, `⌃Space`). These are the default keyboard scheme's; the VS Code scheme differs where [settings.md](settings.md#keyboard-shortcuts) says. Every command is also in the search box (`Ctrl+Q`) and the command palette (`Ctrl+Shift+P`), and every shortcut can be changed (Tools → Keyboard Shortcuts).
+`Ctrl` means `Cmd` on macOS, except where [keyboard.md](keyboard.md) says (completion is the Control key, `⌃Space`). These are the default keyboard scheme's; the VS Code scheme differs where [settings.md](settings.md#keyboard-shortcuts) says. Every command is also in the search box (`Ctrl+Q`) and the command palette (`Ctrl+Shift+P`), and every shortcut can be changed (Tools → Open Keyboard Shortcuts). A few shortcuts differ on Linux and macOS, where the OS keeps the classic one ([keyboard.md](keyboard.md)).
 
 | Area | Shortcut | Command |
 |---|---|---|
 | General | `Ctrl+Q` | Search commands, settings, files and code |
 | | `Ctrl+Shift+P` | Command palette |
+| | `Ctrl+Alt+I` | AI Chat |
 | | `Ctrl+,` | Go to all |
 | | `Alt+F6`, `Alt+Shift+F6` | Move focus between panes |
 | | `Ctrl+Alt+L`, `Ctrl+;` | Solution Explorer, search it |
@@ -54,7 +59,7 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 | Navigation | `F12`, `Ctrl+F12` | Go to definition, implementation |
 | | `Shift+F12` | Find all references |
 | | `Ctrl+T` | Go to all (types, members, files) |
-| | `Ctrl+Shift+F` | Find in files |
+| | `Ctrl+Shift+F`, `Ctrl+Shift+H` | Find in files, replace in files |
 | | `Ctrl+-`, `Ctrl+Shift+-` | Navigate back, forward |
 | Build and run | `Ctrl+Shift+B`, `F6` | Build solution |
 | | `Ctrl+Break` | Cancel the build |
@@ -86,4 +91,4 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 | | `Ctrl+E Ctrl+E` | Send selection to C# Interactive |
 | Git | `Ctrl+0 Ctrl+G` | Git Changes |
 | | `Ctrl+0 Ctrl+H` | History |
-| | `Ctrl+Alt+B` | Toggle blame |
+| | `Ctrl+Alt+B` (in the editor) | Toggle blame |

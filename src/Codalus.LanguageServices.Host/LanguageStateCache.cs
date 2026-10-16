@@ -110,8 +110,10 @@ internal static class LanguageStateCache
             File.Move(temporary, path, overwrite: true);
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
         {
+            // Files, or Roslyn's emitter on a compilation it can't write (a NullReferenceException in its metadata
+            // writer for a project whose packages aren't restored): the cache is only an optimization.
             TryDelete(temporary);
             TryDelete(temporaryDocumentation);
             return false;

@@ -9,7 +9,8 @@ namespace Codalus.Shell;
 
 /// <summary>
 /// File icon themes from plugins (plugin API 1.0, M22a): <c>workbench.iconTheme</c> picks one, or the built-in icons
-/// (<c>default</c>). The Solution Explorer, tabs and pickers take their file and folder icons from it.
+/// (<c>default</c>, the classic ones; <c>material</c>, Material Icon Theme's). The Solution Explorer, tabs and pickers take
+/// their file and folder icons from it.
 /// </summary>
 public sealed partial class ShellHost
 {
@@ -24,8 +25,8 @@ public sealed partial class ShellHost
             Title = "File Icon Theme",
             Category = "Appearance",
             Description = "The icons of files and folders. Plugins can add icon themes.",
-            Enum = ["default", .. themes.Select(t => t.Id)],
-            EnumDescriptions = ["Built in", .. themes.Select(t => t.Label)],
+            Enum = ["default", "material", .. themes.Select(t => t.Id)],
+            EnumDescriptions = ["Built in (classic)", "Material Icon Theme (built in)", .. themes.Select(t => t.Label)],
             Scope = SettingScope.User,
             Order = 2,
         }]);
@@ -90,6 +91,7 @@ public sealed partial class ShellHost
 
         var id = Workbench.Settings.GetString(IconThemeSetting, "default");
         Controls.FileIcons.Theme = null;
+        Controls.FileIcons.Material = id == "material";
         if (Plugins.IconThemes.FirstOrDefault(t => t.Id == id) is { File: { } file } theme)
         {
             try

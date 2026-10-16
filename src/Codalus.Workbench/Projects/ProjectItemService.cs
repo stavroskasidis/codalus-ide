@@ -27,6 +27,10 @@ public sealed class ProjectItemService(SolutionService solutions)
     public Task<ItemEditResult> IncludeAsync(string project, IReadOnlyList<string> paths, CancellationToken cancellationToken) =>
         EditAsync(ItemMethods.Include, new ItemPathsParams(project, [.. paths]), Json.ItemPathsParams, cancellationToken);
 
+    /// <summary>F#'s compile order (M36): moves the file's <c>Compile</c> item before or after <paramref name="target"/>'s.</summary>
+    public Task<ItemEditResult> MoveAsync(string project, string path, string target, bool after, CancellationToken cancellationToken) =>
+        EditAsync(ItemMethods.Move, new MoveItemParams(project, path, target, after), Json.MoveItemParams, cancellationToken);
+
     /// <summary>Copies files into a folder of the project (or links them with <paramref name="asLink"/>).</summary>
     public async Task<FileOperationResult> AddExistingAsync(string project, string folder, IReadOnlyList<string> files, bool asLink, CancellationToken cancellationToken)
     {

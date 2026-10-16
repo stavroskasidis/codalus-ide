@@ -20,7 +20,7 @@ public sealed class InteractiveTests : IAsyncLifetime
     internal static string HostPath =>
         Environment.GetEnvironmentVariable(InteractiveHostLaunch.EnvironmentVariable) is { Length: > 0 } host
             ? host
-            : Path.Combine(RepoRoot, "src", "Codalus.Interactive.Host", "bin", Metadata("CodalusConfiguration"), "net10.0", "codalus-replhost.dll");
+            : Path.Combine(RepoRoot, "src", "Codalus.Interactive.Host", "bin", Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-replhost.dll");
 
     private static string Metadata(string key) =>
         typeof(InteractiveTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;

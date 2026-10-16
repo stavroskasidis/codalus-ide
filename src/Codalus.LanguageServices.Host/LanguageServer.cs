@@ -160,7 +160,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             (xaml, offset, _, ct) => Xaml.XamlNavigation.HoverAsync(xaml, offset, ct), Semantics.Analysis);
         OnPosition(Methods.SignatureHelp, json.SignatureHelpParams, json.SignatureHelp, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => SignatureHelpFeature.SignatureHelpAsync(document, offset, ct), null,
-            (mapping, offset, _, ct) => mapping.ToGenerated(offset) is { } generated ? SignatureHelpFeature.SignatureHelpAsync(mapping.Generated, generated, ct) : Task.FromResult<SignatureHelp?>(null),
+            (mapping, offset, _, ct) => mapping.ToGenerated(offset) is { } generated ? SignatureHelpFeature.SignatureHelpAsync(generated.Document, generated.Offset, ct) : Task.FromResult<SignatureHelp?>(null),
             semantics: Semantics.Analysis);
         OnPosition(Methods.Definition, json.TextDocumentPositionParams, json.LocationArray, p => (p.TextDocument, p.Position),
             async (document, offset, _, ct) => await NavigationFeature.DefinitionAsync(document, offset, ct).ConfigureAwait(false), [],
@@ -183,7 +183,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         OnPosition(Methods.References, json.ReferenceParams, json.LocationArray, p => (p.TextDocument, p.Position),
             async (document, offset, p, ct) => await ReferencesFeature.ReferencesAsync(document, offset, p.Context.IncludeDeclaration, ct).ConfigureAwait(false), [],
             async (mapping, offset, p, ct) => mapping.ToGenerated(offset) is { } generated
-                ? await ReferencesFeature.ReferencesAsync(mapping.Generated, generated, p.Context.IncludeDeclaration, ct).ConfigureAwait(false)
+                ? await ReferencesFeature.ReferencesAsync(generated.Document, generated.Offset, p.Context.IncludeDeclaration, ct).ConfigureAwait(false)
                 : []);
         OnPosition(Methods.PrepareRename, json.TextDocumentPositionParams, json.PrepareRenameResult, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => RenameFeature.PrepareAsync(document, offset, ct), null,
@@ -213,6 +213,11 @@ internal sealed class LanguageServer : IAsyncDisposable
         _connection.OnRequest(Methods.MetadataText, json.MetadataTextParams, json.MetadataText, (p, _) => Task.FromResult(MetadataFeature.Text(p.TextDocument.Uri)!));
         OnDocument(Methods.SourceGeneratedText, json.SourceGeneratedTextParams, json.SourceGeneratedText, p => p.TextDocument,
             (document, _, ct) => GeneratedTextAsync(document, ct), null);
+        _connection.OnRequest(Methods.GeneratedDocuments, json.GeneratedDocumentsParams, json.GeneratedDocumentsResult, (p, ct) => GeneratedDocumentsAsync(p.Project, ct));
+        _connection.OnRequest(Methods.Browse, json.BrowseParams, json.BrowseResult, async (p, ct) =>
+            ProjectOf(p.Project) is { } project ? await ObjectBrowserFeature.BrowseAsync(project, p, ct).ConfigureAwait(false) : new BrowseResult([]));
+        _connection.OnRequest(Methods.BrowseDescribe, json.BrowseDescribeParams, json.BrowseDescription, async (p, ct) =>
+            ProjectOf(p.Project) is { } project ? await ObjectBrowserFeature.DescribeAsync(project, p.Id, ct).ConfigureAwait(false) : null);
         _connection.OnRequest(Methods.TestCandidates, json.TestCandidatesParams, json.TestCandidatesResult, (p, ct) =>
             TestCandidatesFeature.FindAsync(_workspace.CurrentSolution, p.TextDocuments, ct));
         _connection.OnRequest(Methods.TypeOutline, json.TypeOutlineParams, json.TypeOutline, async (p, ct) =>
@@ -256,6 +261,11 @@ internal sealed class LanguageServer : IAsyncDisposable
             async (document, p, ct) => await EditingFeatures.SelectionRangesAsync(document, p.Positions, ct).ConfigureAwait(false), []);
         OnDocument(Methods.CodeCleanup, json.CodeCleanupParams, json.WorkspaceEdit, p => p.TextDocument,
             (document, p, ct) => _cleanup.CleanUpAsync(document, p, _workspace.Version, ct), null);
+        OnDocument(Methods.PasteImports, json.PasteImportsParams, json.WorkspaceEdit, p => p.TextDocument, async (document, p, ct) =>
+        {
+            var text = await document.GetTextAsync(ct).ConfigureAwait(false);
+            return await PasteImportsFeature.AddAsync(document, Positions.ToSpan(text, p.Range), p.Namespaces ?? [], _workspace.Version, message => Log(MessageType.Log, message), ct).ConfigureAwait(false);
+        }, null);
         OnPosition(Methods.DocCommentTemplate, json.TextDocumentPositionParams, json.DocCommentTemplate, p => (p.TextDocument, p.Position),
             async (document, _, p, ct) => await EditingFeatures.TemplateAsync(document, p.Position, ct).ConfigureAwait(false), null);
         OnPosition(Methods.ReferenceItems, json.TextDocumentPositionParams, json.ReferenceItemsResult, p => (p.TextDocument, p.Position),
@@ -289,9 +299,15 @@ internal sealed class LanguageServer : IAsyncDisposable
 
     private void ApplySettings(JsonElement settings)
     {
-        if (settings.TryGetProperty("analysisScope", out var scope) && scope.GetString() is DiagnosticsService.ScopeSolution or DiagnosticsService.ScopeOpenDocuments)
+        if (settings.TryGetProperty("analysisScope", out var scope)
+            && scope.GetString() is DiagnosticsService.ScopeSolution or DiagnosticsService.ScopeOpenDocuments or DiagnosticsService.ScopeCurrentProject)
         {
             _diagnostics.AnalysisScope = scope.GetString()!;
+        }
+
+        if (settings.TryGetProperty("analysisProject", out var project))
+        {
+            _diagnostics.AnalysisProject = project.ValueKind == JsonValueKind.String && project.GetString() is { Length: > 0 } path ? Path.GetFullPath(path) : null;
         }
 
         if (settings.TryGetProperty("sourceLink", out var sourceLink))
@@ -316,13 +332,13 @@ internal sealed class LanguageServer : IAsyncDisposable
 
     private readonly HashSet<string> _xamlExplained = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Says once per file and state why a XAML file has no type information (not an additional file of a project, or no Avalonia in its references).</summary>
+    /// <summary>Says once per file and state why a XAML file has no type information (not an additional file of a project, or neither Avalonia nor MAUI in its references).</summary>
     private void ExplainXaml(Xaml.XamlContext context, Solution solution)
     {
         string? reason = context.Project is null
-            ? $"isn't an additional file of a loaded project ({solution.Projects.Count()} projects, {solution.Projects.Sum(p => p.AdditionalDocuments.Count(d => d.FilePath?.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) == true))} .axaml additional files)"
-            : context.Types is { IsAvalonia: false }
-                ? $"is in {context.Project.Name}, whose compilation has no Avalonia ({context.Project.MetadataReferences.Count} references, {context.Project.MetadataReferences.Count(r => r.Display?.Contains("Avalonia", StringComparison.OrdinalIgnoreCase) == true)} of Avalonia)"
+            ? $"isn't an additional file of a loaded project ({solution.Projects.Count()} projects, {solution.Projects.Sum(p => p.AdditionalDocuments.Count(d => d.FilePath is { } f && Xaml.XamlContext.IsXaml(f)))} XAML additional files)"
+            : context.Types is { HasDialect: false }
+                ? $"is in {context.Project.Name}, whose compilation has neither Avalonia nor .NET MAUI ({context.Project.MetadataReferences.Count} references, {context.Project.MetadataReferences.Count(r => r.Display?.Contains("Avalonia", StringComparison.OrdinalIgnoreCase) == true || r.Display?.Contains("Maui", StringComparison.OrdinalIgnoreCase) == true)} of either)"
                 : null;
         lock (_xamlExplained)
         {
@@ -459,6 +475,33 @@ internal sealed class LanguageServer : IAsyncDisposable
             _ => null,
         } : null;
         return new DocumentOptions(insertSpaces, tabSize, indentSize, newLine);
+    }
+
+    /// <summary>The workspace's project of a project file (its first target framework's).</summary>
+    private Project? ProjectOf(string projectPath)
+    {
+        var full = Path.GetFullPath(projectPath);
+        return _workspace.CurrentSolution.Projects.FirstOrDefault(p => p.FilePath is { } file && Paths.Comparer.Equals(Path.GetFullPath(file), full));
+    }
+
+    /// <summary>A project's source-generated files (of its first target framework's project), by generator.</summary>
+    private async Task<GeneratedDocumentsResult> GeneratedDocumentsAsync(string projectPath, CancellationToken cancellationToken)
+    {
+        if (ProjectOf(projectPath) is not { } project)
+        {
+            return new GeneratedDocumentsResult([]);
+        }
+
+        // The virtual path is <base>/<generator assembly>/<generator type>/<hint name>.
+        var documents = await project.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false);
+        return new GeneratedDocumentsResult([.. documents
+            .Select(d => (Document: d, Type: Path.GetDirectoryName(d.FilePath) is { } typeFolder ? typeFolder : null))
+            .Select(d => new GeneratedDocumentInfo(
+                WorkspaceManager.UriOf(d.Document),
+                d.Document.HintName,
+                d.Type is null ? string.Empty : Path.GetFileName(Path.GetDirectoryName(d.Type)) ?? string.Empty,
+                d.Type is null ? string.Empty : Path.GetFileName(d.Type)))
+            .OrderBy(d => d.Assembly, StringComparer.OrdinalIgnoreCase).ThenBy(d => d.HintName, StringComparer.OrdinalIgnoreCase)]);
     }
 
     private static async Task<SourceGeneratedText?> GeneratedTextAsync(Document document, CancellationToken cancellationToken)

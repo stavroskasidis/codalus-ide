@@ -6,10 +6,10 @@ Codalus IDE opens `.sln` and `.slnx` solutions and SDK-style projects (`.csproj`
 
 The tree shows the solution, its solution folders, projects, project folders and files (nested files, like `Form.Designer.cs`, sit under their parents). Each project also has its **Dependencies**:
 - frameworks
-- packages
+- packages, each with the packages it brings in under it, and theirs under them (once the project is restored)
 - projects
 - assemblies
-- analyzers
+- analyzers, each with the files its source generators made in the project (expand it; click one to read it)
 
 | To | Do |
 |---|---|
@@ -20,6 +20,7 @@ The tree shows the solution, its solution folders, projects, project folders and
 | Delete | Press `Delete`. Files go to the OS trash. |
 | Move or copy | Cut, Copy and Paste, or drag and drop. Moving a file into another project takes its Build Action and metadata along; dragging a linked file moves its link (Ctrl copies). Files dropped from the file manager are copied in. |
 | Add files | **Add New Item** (`Ctrl+Shift+A`), **Add Existing Item** (`Shift+Alt+A`), or **Add Existing Item As Link**. |
+| See what a code file declares | Expand a C# or Visual Basic file: its types, and under each type its members, come from the language service and follow your edits. Click one to go to it. Turn this off with Solution Explorer → Show Members Under Files (`solutionExplorer.showMembers`). |
 | See files that aren't in the project | **Show All Files** on the Solution Explorer's toolbar: files on disk outside the project show dimmed. |
 | Take a file out of the project, or put it back | **Exclude From Project** and **Include In Project** in the context menu. |
 | See and change a file's Build Action, Copy to Output Directory or Custom Tool | **Properties** (`F4`). |
@@ -103,7 +104,7 @@ Packages are managed in the [NuGet Package Manager](packages.md).
 
 ## .NET SDKs
 
-A solution loads and builds with the same SDK as `dotnet build` in its folder: the one its `global.json` asks for, or else the newest one installed, previews included. A .NET 11 solution gets the .NET 11 SDK, while Codalus itself runs on .NET 10.
+A solution loads and builds with the same SDK as `dotnet build` in its folder: the one its `global.json` asks for, or else the newest one installed, previews included. Codalus itself runs on .NET 11, and loads older SDKs (a `global.json` that pins 10.0.401, say) on it. A preview SDK of a newer .NET (12) gets that .NET's runtime.
 
 **.NET SDKs…** (Project menu) shows:
 - the SDK the solution builds with, and the `global.json` that chose it;
@@ -115,9 +116,9 @@ SDKs from 2.1.200 to 5.0, pinned in global.json, build in the build host's own p
 
 **Use This SDK** pins the selected SDK in `global.json` (with the roll-forward policy you choose) and reloads the solution with it. **Remove Pin** takes the version out again.
 
-**Known gaps with .NET 11** (until Codalus moves to .NET 11 itself, when .NET 11 is released):
-- **Razor:** the .NET 11 SDK's Razor generator needs a newer C# compiler than Codalus has. Codalus uses the Razor generator of the .NET 10 SDK instead, also for `net11.0` projects, so keep the .NET 10 SDK installed. The Output window (Language Services) says which one is used.
-- **C# 15:** new C# 15 syntax shows errors in the editor, although it builds.
+**.NET 11 and C# 15:** the C# language service uses the .NET 11 SDK's compiler, so C# 15 (unions, collection expression arguments, labeled `break` and `continue`) shows no false errors, and the .NET 11 SDK's Razor generator runs in the editor.
+
+**Generators built for a newer compiler:** when a newer SDK's analyzers or source generators (the Razor generator of a .NET 12 preview, say) need a newer C# compiler than Codalus has, Codalus loads the same ones from the newest other installed SDK that it can load, and the Output window (Language Services) says so.
 
 ## New projects and solutions
 

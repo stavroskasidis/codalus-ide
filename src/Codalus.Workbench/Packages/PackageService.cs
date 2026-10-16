@@ -80,6 +80,34 @@ public sealed class PackageService
         return result.UpdatedFiles;
     }
 
+    /// <summary>
+    /// Signs in to a source through NuGet's credential providers, interactively (<see cref="SignInMessage"/> carries what
+    /// they say, such as a device code). Waits up to 10 minutes for the user to finish in the browser.
+    /// </summary>
+    public async Task<PackageSignInResult> SignInAsync(string source, CancellationToken cancellationToken)
+    {
+        var result = await _solutions.RequestAsync(PackageMethods.SignIn, new PackageSignInParams(source), Json.PackageSignInParams, Json.PackageSignInResult, cancellationToken, TimeSpan.FromMinutes(10)).ConfigureAwait(false);
+        if (result.SignedIn)
+        {
+            SourcesChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        return result;
+    }
+
+    /// <summary>A credential provider's message during <see cref="SignInAsync"/>. Raised on any thread.</summary>
+    public event EventHandler<PackageSignInMessage>? SignInMessage
+    {
+        add => _solutions.PackageSignInMessage += value;
+        remove => _solutions.PackageSignInMessage -= value;
+    }
+
+    /// <summary>Whether a source's error means it needs a sign-in (401, 403, or a provider asking for one).</summary>
+    public static bool NeedsSignIn(string message) =>
+        message.Contains("401", StringComparison.Ordinal) || message.Contains("403", StringComparison.Ordinal)
+        || message.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase) || message.Contains("Forbidden", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("--interactive", StringComparison.Ordinal);
+
     public Task<PackageSourcesResult> SourcesAsync(CancellationToken cancellationToken) =>
         _solutions.RequestAsync(PackageMethods.Sources, new EmptyParams(), Json.EmptyParams, Json.PackageSourcesResult, cancellationToken);
 

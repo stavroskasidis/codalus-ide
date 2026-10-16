@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The app's pages, view models and a control, in a plain net10.0 library: MAUI's packages have net10.0 assets, so it
+       builds (and its XAML is edited) without the MAUI workloads. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <MauiXamlInflator>SourceGen</MauiXamlInflator>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
+    <Using Include="Microsoft.Maui.Controls" />
+  </ItemGroup>
+</Project>

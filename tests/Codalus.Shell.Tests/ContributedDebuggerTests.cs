@@ -11,7 +11,7 @@ public sealed class ContributedDebuggerTests
 {
     private static string ScriptedServer => Path.Combine(ShellFixture.RepoRoot, "tests", "Codalus.LspConformance.Server", "bin",
         typeof(ContributedDebuggerTests).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
-            .Cast<System.Reflection.AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusConfiguration").Value!, "net10.0", "codalus-lsp-conformance.dll");
+            .Cast<System.Reflection.AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusConfiguration").Value!, Codalus.Tests.RepoBuild.TargetFramework, "codalus-lsp-conformance.dll");
 
     [AvaloniaFact]
     public async Task A_launch_configuration_of_a_plugins_type_runs_under_its_adapter()

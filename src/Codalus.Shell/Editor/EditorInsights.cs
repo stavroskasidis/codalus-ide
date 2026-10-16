@@ -41,6 +41,16 @@ public sealed class EditorInsights : IDisposable
     private Dictionary<int, string> _diagnosticsByLine = [];
     private (int First, int Last) _hintRange = (-1, -1);
     private int _lensVersion = -1;
+
+    // Our own CodeLens entries (deferred from M12a): Git history from blame and test outcomes, by one-based line.
+    private IReadOnlyList<Codalus.Workbench.Git.BlameRange> _blame = [];
+    private int _blameVersion = -1;
+    private long _blameAt;
+    private CancellationTokenSource? _blameCts;
+    private Dictionary<int, string> _gitLenses = [];
+    private Dictionary<int, string> _testLenses = [];
+    private bool _testLensesQueued;
+    private static readonly TimeSpan s_blameInterval = TimeSpan.FromSeconds(3);
     private CancellationTokenSource? _hintCts;
     private CancellationTokenSource? _lensCts;
     private bool _disposed;
@@ -85,8 +95,131 @@ public sealed class EditorInsights : IDisposable
         services.ThemeChanged += OnThemeChanged;
         _reviews = new TextSegmentCollection<ReviewSegment>(document);
         services.ReviewThreadsChanged += OnReviewThreadsChanged;
+        services.Tests.Changed += OnTestsChanged;
+        SymbolsChanged += (_, _) => UpdateGitLenses();
         ApplyOptions();
         LoadReviewThreads();
+        UpdateTestLenses();
+    }
+
+    // ------------------------------------------------------------------ Git and test CodeLens (deferred from M12a)
+
+    /// <summary>Our CodeLens entries at a one-based line: Git history and the test outcome (tests).</summary>
+    internal IReadOnlyList<string> ExtraLenses(int line)
+    {
+        var parts = new List<string>();
+        if (Options.CodeLens && Options.TestCodeLens && _testLenses.TryGetValue(line, out var test))
+        {
+            parts.Add(test);
+        }
+
+        if (Options.CodeLens && Options.GitCodeLens && _gitLenses.TryGetValue(line, out var git))
+        {
+            parts.Add(git);
+        }
+
+        return parts;
+    }
+
+    private void OnTestsChanged(object? sender, EventArgs e)
+    {
+        if (_testLensesQueued)
+        {
+            return;
+        }
+
+        _testLensesQueued = true;
+        Ui.Post(() =>
+        {
+            _testLensesQueued = false;
+            if (!_disposed)
+            {
+                UpdateTestLenses();
+            }
+        });
+    }
+
+    /// <summary>The test outcomes by the line their test (or class) starts on; the innermost wins a line.</summary>
+    private void UpdateTestLenses()
+    {
+        var lenses = new Dictionary<int, string>();
+        if (Options.CodeLens && Options.TestCodeLens)
+        {
+            foreach (var node in _services.Tests.InDocument(DocumentUris.FromPath(Model.Path)).OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
+            {
+                if (LensDetails.Tests(node) is { } text)
+                {
+                    lenses.TryAdd(node.Range!.StartLine + 1, text);
+                }
+            }
+        }
+
+        if (!lenses.OrderBy(p => p.Key).SequenceEqual(_testLenses.OrderBy(p => p.Key)))
+        {
+            _testLenses = lenses;
+            _editor.TextArea.TextView.Redraw();
+            Updated?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Blames the document again when it changed: at once when it's saved, else at most every few seconds (with its
+    /// unsaved text). Files outside a repository have no Git lenses.
+    /// </summary>
+    private async Task RefreshBlameAsync()
+    {
+        var model = Model;
+        if (!Options.CodeLens || !Options.GitCodeLens || _blameVersion == model.Version || _services.Git.RepositoryFor(model.Path) is null
+            || model.IsModified && System.Diagnostics.Stopwatch.GetElapsedTime(_blameAt) < s_blameInterval)
+        {
+            return;
+        }
+
+        var token = Restart(ref _blameCts).Token;
+        var version = model.Version;
+        _blameAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            var blame = await _services.Git.BlameInRepositoryAsync(model.Path, model.IsModified ? model.Text.Text : null, token).ConfigureAwait(true);
+            if (token.IsCancellationRequested || _disposed || model.Version != version)
+            {
+                return;
+            }
+
+            _blame = blame;
+            _blameVersion = version;
+            UpdateGitLenses();
+        }
+        catch (Exception ex) when (ex is Codalus.Workbench.Git.GitException or OperationCanceledException or IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            _blame = [];
+        }
+    }
+
+    /// <summary>The history of each member with a CodeLens: its lines are its document symbol's range.</summary>
+    private void UpdateGitLenses()
+    {
+        var lenses = new Dictionary<int, string>();
+        if (Options.CodeLens && Options.GitCodeLens && _blame.Count > 0)
+        {
+            var symbols = Flatten(Symbols).ToList();
+            var now = DateTimeOffset.Now;
+            foreach (var line in _lenses.Select(l => _editor.Document.GetLineByOffset(l.StartOffset).LineNumber).Distinct())
+            {
+                var symbol = symbols.Where(s => s.SelectionRange.Start.Line == line - 1).MinBy(s => s.Range.End.Line - s.Range.Start.Line);
+                if (symbol is not null && LensDetails.Git(_blame, symbol.Range.Start.Line + 1, symbol.Range.End.Line + 1, now) is { } text)
+                {
+                    lenses[line] = text;
+                }
+            }
+        }
+
+        _gitLenses = lenses;
+        _editor.TextArea.TextView.Redraw();
+        Updated?.Invoke(this, EventArgs.Empty);
+
+        static IEnumerable<DocumentSymbol> Flatten(IEnumerable<DocumentSymbol> level) =>
+            level.SelectMany(s => Flatten(s.Children ?? []).Prepend(s));
     }
 
     // ------------------------------------------------------------------ review comments (M13b)
@@ -213,7 +346,7 @@ public sealed class EditorInsights : IDisposable
 
     private CodeDocument Model => _model();
 
-    private EditorOptions Options => _services.Options;
+    private EditorOptions Options => _services.Options.For(Model.LanguageId);
 
     private IBrush Brush(string key) =>
         _editor.TryFindResource(key, _editor.ActualThemeVariant, out var resource) && resource is IBrush brush ? brush : Brushes.Gray;
@@ -228,6 +361,7 @@ public sealed class EditorInsights : IDisposable
 
     private void ApplyOptions()
     {
+        UpdateTestLenses();
         _guides.Enabled = Options.IndentGuides;
         _brackets.Enabled = Options.BracketPairColorization;
         Margin.IsVisible = Options.InheritanceMargin;
@@ -447,6 +581,8 @@ public sealed class EditorInsights : IDisposable
                 _lenses.Disconnect(_editor.Document);
                 _lenses = collection;
                 _lensVersion = version;
+                UpdateGitLenses();
+                _ = RefreshBlameAsync();
             }
 
             if (!options.ResolveProvider)
@@ -539,7 +675,7 @@ public sealed class EditorInsights : IDisposable
 
     private void RunLens(LensSegment lens)
     {
-        if (lens.Command is not { Arguments: [_, var at] } command || string.IsNullOrEmpty(command.CommandId))
+        if (lens.Command is not { Arguments: [_, var at, ..] } command || string.IsNullOrEmpty(command.CommandId))
         {
             return;
         }
@@ -602,7 +738,7 @@ public sealed class EditorInsights : IDisposable
         _hintTimer.Stop();
         _lensTimer.Stop();
         _symbolTimer.Stop();
-        foreach (var cts in new[] { _hintCts, _lensCts, _symbolCts })
+        foreach (var cts in new[] { _hintCts, _lensCts, _symbolCts, _blameCts })
         {
             cts?.Cancel();
             cts?.Dispose();
@@ -621,6 +757,7 @@ public sealed class EditorInsights : IDisposable
         _services.Options.PropertyChanged -= OnOptionsChanged;
         _services.ThemeChanged -= OnThemeChanged;
         _services.ReviewThreadsChanged -= OnReviewThreadsChanged;
+        _services.Tests.Changed -= OnTestsChanged;
     }
 
     // ------------------------------------------------------------------ segments
@@ -679,10 +816,11 @@ public sealed class EditorInsights : IDisposable
             if (owner.Options.CodeLens)
             {
                 var lenses = owner._lenses.FindOverlappingSegments(line.Offset, line.Length).Where(l => l.Title is not null && l.Title != "-").ToList();
-                if (lenses.Count > 0)
+                var titles = lenses.Select(l => l.Title!).Concat(owner.ExtraLenses(line.LineNumber)).ToList();
+                if (titles.Count > 0)
                 {
-                    first = lenses[0];
-                    parts.Add(string.Join("  |  ", lenses.Select(l => l.Title)));
+                    first = lenses.FirstOrDefault();
+                    parts.Add(string.Join("  |  ", titles));
                 }
             }
 

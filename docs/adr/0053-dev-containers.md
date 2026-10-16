@@ -1,6 +1,8 @@
-# ADR 0053: Dev Containers and remote windows in containers
+# 0053. Dev Containers and remote windows in containers
 
-Status: accepted (M21b, 2026-10-13)
+- **Status:** accepted (M21b, 2026-10-13)
+- **Date:** 2026-10-13
+- **Deciders:** maintainer
 
 ## Context
 

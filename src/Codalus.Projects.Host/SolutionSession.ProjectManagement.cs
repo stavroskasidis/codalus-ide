@@ -543,7 +543,7 @@ internal sealed partial class SolutionSession
         try
         {
             var psi = DotnetProcess.StartInfo(_dotnet, SolutionDirectory, args);
-            using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
+            using var process = DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
             var output = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var error = process.StandardError.ReadToEndAsync(cancellationToken);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);

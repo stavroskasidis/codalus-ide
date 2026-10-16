@@ -1,4 +1,5 @@
 using Codalus.Shell.Views;
+using Codalus.Workbench.Localization;
 using Dock.Model.Core;
 
 namespace Codalus.Shell;
@@ -43,6 +44,89 @@ public sealed partial class ShellHost
         foreach (var document in tabs.Skip(index + 1).OfType<Docking.ShellDocument>().ToList())
         {
             Layout.CloseDocument(document);
+        }
+    }
+
+    /// <summary>Opens a file in the hex viewer (read-only).</summary>
+    public HexDocument OpenHex(string path, bool preview = false)
+    {
+        path = Path.GetFullPath(path);
+        if (Layout.FindDocument<HexDocument>(HexDocument.IdFor(path)) is not { } document)
+        {
+            document = new HexDocument(path, EditorFont);
+        }
+
+        Layout.OpenDocument(document, preview, focus: !preview);
+        return document;
+    }
+
+    /// <summary>
+    /// Open With Hex Viewer: the file selected in Solution Explorer when it has the focus, else the active document's.
+    /// </summary>
+    public void OpenWithHexViewer()
+    {
+        var selected = Explorer.Selected?.Node is { Kind: Codalus.Workbench.Projects.ExplorerNodeKind.File, Path: { } file } ? file : null;
+        var path = Workbench.Context.GetValue("focusedView") is "solutionExplorer" ? selected ?? Layout.ActiveDocument?.FilePath : Layout.ActiveDocument?.FilePath ?? selected;
+        if (path is not null && File.Exists(path))
+        {
+            OpenHex(path);
+        }
+    }
+
+    /// <summary>Opens a <c>.resx</c> file in the resource editor (deferred from M11).</summary>
+    public ResxEditorDocument OpenResx(string path, bool preview = false)
+    {
+        path = Path.GetFullPath(path);
+        if (Layout.FindDocument<ResxEditorDocument>(ResxEditorDocument.IdFor(path)) is { } open)
+        {
+            Layout.OpenDocument(open, preview, focus: !preview);
+            return open;
+        }
+
+        var document = new ResxEditorDocument(path, file => _ = OpenFileAsync(file, preview: false, at: null, initialContent: null, textEditor: true), RunCustomToolOnSave);
+        document.CloseRequested += (_, _) => _ = ConfirmCloseAsync(document);
+        Layout.OpenDocument(document, preview, focus: !preview);
+        _ = document.LoadAsync();
+        return document;
+    }
+
+    /// <summary>
+    /// EditorConfig Settings (deferred from M12b): the selected or active <c>.editorconfig</c> file, else the solution
+    /// folder's (created when it is saved).
+    /// </summary>
+    public EditorConfigDocument? OpenEditorConfigSettings(string? path = null)
+    {
+        var selected = Explorer.Selected?.Node is { Kind: Codalus.Workbench.Projects.ExplorerNodeKind.File or Codalus.Workbench.Projects.ExplorerNodeKind.SolutionItem, Path: { } file } ? file : null;
+        path ??= new[] { Layout.ActiveDocument?.FilePath, selected }.FirstOrDefault(p => p is not null && Path.GetFileName(p) == ".editorconfig")
+            ?? (Solutions.Solution?.Path is { } solution ? Path.Combine(Path.GetDirectoryName(solution)!, ".editorconfig") : null);
+        if (path is null)
+        {
+            StatusBar.ShowMessage(Localizer.Get("msg.editorConfig.openASolution", "Open a solution or an .editorconfig file first."), TimeSpan.FromSeconds(4));
+            return null;
+        }
+
+        path = Path.GetFullPath(path);
+        if (Layout.FindDocument<EditorConfigDocument>(EditorConfigDocument.IdFor(path)) is { } open)
+        {
+            Layout.OpenDocument(open, focus: true);
+            return open;
+        }
+
+        var document = new EditorConfigDocument(path, file => _ = OpenFileAsync(file));
+        document.CloseRequested += (_, _) => _ = ConfirmCloseAsync(document);
+        Layout.OpenDocument(document, focus: true);
+        _ = document.LoadAsync();
+        return document;
+    }
+
+    /// <summary>Open With Resource Editor: the selected or active <c>.resx</c> file.</summary>
+    public void OpenWithResourceEditor()
+    {
+        var selected = Explorer.Selected?.Node is { Kind: Codalus.Workbench.Projects.ExplorerNodeKind.File, Path: { } file } ? file : null;
+        var path = Workbench.Context.GetValue("focusedView") is "solutionExplorer" ? selected ?? Layout.ActiveDocument?.FilePath : Layout.ActiveDocument?.FilePath ?? selected;
+        if (path is not null && ResxEditorDocument.IsResx(path) && File.Exists(path))
+        {
+            OpenResx(path);
         }
     }
 

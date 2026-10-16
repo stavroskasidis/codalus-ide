@@ -385,7 +385,7 @@ internal sealed class XamlDocument
         {
             if (current.Attribute(name) is { Value: { } value })
             {
-                return value;
+                return XamlNames.Normalize(value);
             }
         }
 
@@ -407,7 +407,7 @@ internal sealed class XamlDocument
             {
                 if (attribute.Name.StartsWith("xmlns:", StringComparison.Ordinal) && attribute.Value is { } value)
                 {
-                    result.TryAdd(attribute.Name[6..], value);
+                    result.TryAdd(attribute.Name[6..], XamlNames.Normalize(value));
                 }
             }
         }
@@ -424,4 +424,13 @@ internal static class XamlNames
     public const string Design = "http://schemas.microsoft.com/expression/blend/2008";
     public const string MarkupCompatibility = "http://schemas.openxmlformats.org/markup-compatibility/2006";
     public const string Xml = "http://www.w3.org/XML/1998/namespace";
+
+    /// <summary>.NET MAUI's default namespace (M20a).</summary>
+    public const string Maui = "http://schemas.microsoft.com/dotnet/2021/maui";
+
+    /// <summary>The XAML 2009 language namespace, which MAUI uses for <c>x:</c>; read as <see cref="XamlLanguage"/>.</summary>
+    public const string XamlLanguage2009 = "http://schemas.microsoft.com/winfx/2009/xaml";
+
+    /// <summary>A namespace as the engine compares it: XAML 2009's <c>x:</c> is XAML 2006's.</summary>
+    public static string Normalize(string xmlns) => xmlns == XamlLanguage2009 ? XamlLanguage : xmlns;
 }

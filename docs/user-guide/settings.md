@@ -18,6 +18,17 @@ Tools → Options… lists every setting in a tree of groups (Environment, Text 
   - Linux: `~/.config/codalus`
 - **Solution settings** live in `.codalus/settings.json` next to the solution and override the user settings for that solution.
 - **Editing the JSON**: open it with "Open User Settings (JSON)" in the command palette.
+- **Settings for one language**: as in VS Code, a `"[languageId]"` block in either file sets values for that language's documents only, and wins over the general value in any file:
+
+  ```jsonc
+  {
+    "editor.tabSize": 4,
+    "[markdown]": { "editor.wordWrap": true, "editor.tabSize": 2 },
+    "[csharp][vb]": { "editor.formatOnSave": true }
+  }
+  ```
+
+  "Configure Language-Specific Settings…" in the command palette picks a language (the active document's first), adds its block to your settings and opens the file there. The `editor.*` settings, Format on Save and Code Cleanup on Save follow the block; an `.editorconfig` file still overrides the tab size and indentation.
 
 Settings you may want first:
 
@@ -25,7 +36,7 @@ Settings you may want first:
 |---|---|
 | Text Editor → Font Family, Font Size, Word Wrap, Minimap, Rulers, Render Whitespace | The editor's look. |
 | Text Editor → Format on Type | Formats statements and blocks as you type `;` and `}`. |
-| Language Services → Analysis Scope | `openDocuments` (default) or `solution` (also runs analyzers on closed files). |
+| Language Services → Analysis Scope | `openDocuments` (default), `currentProject` or `solution` (also runs analyzers on closed files). Also in the Error List's toolbar. |
 | Projects → Restore on Open | Restore packages when a trusted solution opens. |
 | Build and Run → Save All Before Build, Run Console Apps in an External Console | |
 | Debugging → Just My Code | Step and break only in your own code. |
@@ -35,7 +46,7 @@ Settings you may want first:
 
 Tools → Color Theme (`Ctrl+K Ctrl+T`): Blue, Light, Dark, High Contrast, or Follow System (Light or Dark, as the operating system is set). Plugins can add color themes, which are listed with these.
 
-**File icon themes**: Options → Environment → Appearance → File Icon Theme (`workbench.iconTheme`) chooses the icons of files and folders in the Solution Explorer, tabs and pickers: the built-in ones, or a plugin's. Icon themes use VS Code's format. Their SVG icons are converted the first time a theme is chosen (a moment, once per theme); an SVG icon that uses more than plain shapes with fills shows the built-in icon instead.
+**File icon themes**: Options → Environment → Appearance → File Icon Theme (`workbench.iconTheme`) chooses the icons of files and folders in the Solution Explorer, tabs and pickers: the built-in classic icons (outline pages with a small colored badge, outline folders and project boxes, the default), Material Icon Theme's colored icons (`material`, also built in), or a plugin's. Icon themes use VS Code's format. Their SVG icons are converted the first time a theme is chosen (a moment, once per theme); an SVG icon that uses more than plain shapes with fills shows the built-in icon instead.
 
 **Fonts and Colors** (Tools → Fonts and Colors): change any color over the theme's:
 - **Syntax**: comments, strings, keywords, numbers, types, functions and variables, or one semantic token type.
@@ -50,7 +61,7 @@ Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme**
 ## Moving your settings
 
 - **From VS Code** (Tools → Import Settings from VS Code): its user `settings.json` and `keybindings.json` (VS Code, Insiders or VSCodium; the first one found).
-  - Settings that are also ours come over with their values, including the two color settings. Its built-in themes become ours.
+  - Settings that are also ours come over with their values, including the two color settings and the ones in language blocks (`"[markdown]": { … }`). Its built-in themes become ours.
   - Key bindings whose commands exist here come over too.
   - You confirm first. The Codalus IDE log (Help → Show Logs) lists each skipped setting and why.
 - **From a classic IDE** (Tools → Import a .vssettings File): a file exported with that IDE's Import and Export Settings.
@@ -122,7 +133,7 @@ The Plugins window lists the installed plugins. **Turn Off** keeps a plugin from
 
 ## Components
 
-Some tools are downloaded the first time a feature needs them: Node.js, the web language servers, the browser debugger, netcoredbg for remote machines, and converted icon themes. **Tools → Components…** lists them with their version, size and licence. **Download Now** gets one ahead of time, and **Remove** frees its space; it comes back when a feature needs it.
+Some tools are downloaded the first time a feature needs them: Node.js, the web language servers, the F# language service (FsAutoComplete and Fantomas), the browser debugger, netcoredbg for remote machines, and converted icon themes. **Tools → Components…** lists them with their version, size and licence. **Download Now** gets one ahead of time, and **Remove** frees its space; it comes back when a feature needs it.
 
 **Offline layout**: on a machine with internet access, **Export Offline Layout…** copies the downloaded components to a folder. On a machine without it, **Import Offline Layout…** copies them in, so no feature tries to download anything. The .NET SDK has its own offline installer, and the layout doesn't include it.
 
@@ -136,7 +147,7 @@ Some tools are downloaded the first time a feature needs them: Node.js, the web 
 
 Only the chosen scheme's own keys are bound, so menus and the shortcuts list show its keys.
 
-Tools → Keyboard Shortcuts lists every command with its shortcut.
+Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 - **Change a shortcut**: select a command and press the new key combination. Conflicts are shown.
 - **Where changes go**: `keybindings.json` in the user configuration folder (also editable as JSON).
 - **Chords**: shortcuts can be two-key chords, like `Ctrl+K Ctrl+D`.
@@ -150,8 +161,8 @@ Tools → Keyboard Shortcuts lists every command with its shortcut.
 
 ## Updates and network access
 
-**Updates** (Environment → Updates; M32):
-- **Updates** (`update.mode`): installed builds (the Windows Setup.exe, the macOS .pkg, the AppImage, winget) download new releases in the background and apply them when the IDE restarts: a status bar item offers **Restart to update**, which reopens your solution. **notify** only says that a release is available; **off** stops all update traffic. Help → Check for Updates checks right away in every mode.
+**Updates** (Environment → Updates):
+- **Updates** (`update.mode`): installed builds (the Windows Setup.exe, the macOS .pkg, the AppImage, winget) download new releases in the background and apply them when the IDE restarts: a status bar item offers **Restart to update**, which reopens your solution (on macOS, an app that an older .pkg installed in `/Applications` asks once for an administrator's password, because that installer left it owned by the system). **notify** only says that a release is available; **off** stops all update traffic. Help → Check for Updates checks right away in every mode.
 - **Update Channel** (`update.channel`): stable releases or nightly builds. Empty follows the channel the build came from. Switching from nightly builds to stable releases installs the newest stable release, even when it is older, after you confirm.
 - **Other installs**: the `.deb` and `.rpm` update with the system (`apt upgrade`, `dnf upgrade`); the zip, `.app` zip and tar.gz say that a release is out and link to it. Development builds never check.
 - **What's New** (Help → What's New): the release notes of the versions you skipped, shown once after an update.

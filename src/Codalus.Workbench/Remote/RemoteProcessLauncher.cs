@@ -115,8 +115,10 @@ public sealed class RemotePseudoTerminal : PseudoTerminal
         {
         }
 
-        // The output ended: the program exited (its code comes as a notification, which may lag the last bytes).
-        var code = await Task.WhenAny(process.Exited, Task.Delay(2000)).ConfigureAwait(false) == process.Exited ? process.Exited.Result : null;
+        // The output ended: the program exited (the server sends its code first; a server that didn't, an older one or
+        // a lost link, gets a few seconds).
+        await ((Task)process.Exited).WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        var code = process.Exited.IsCompletedSuccessfully ? process.Exited.Result : null;
         RaiseExited(code ?? -1);
     }
 

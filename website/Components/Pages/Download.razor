@@ -26,7 +26,7 @@
 
     <section style="padding-top: 32px" aria-labelledby="prereq">
         <div class="notice">
-            <p><strong id="prereq">Before you install:</strong> the <a href="https://dotnet.microsoft.com/download">.NET SDK 10.0</a> or newer, and <a href="https://git-scm.com/downloads">git</a> 2.30 or newer on the PATH.</p>
+            <p><strong id="prereq">Before you install:</strong> the <a href="https://dotnet.microsoft.com/download/dotnet/11.0">.NET 11 SDK</a> (release candidate 2 or later until .NET 11's release in November) or newer, and <a href="https://git-scm.com/downloads">git</a> 2.30 or newer on the PATH. Codalus runs its helper processes on .NET 11, and builds your solutions with any SDK from 2.1.200 on.</p>
             <a class="link-arrow" href="docs/getting-started/#prerequisites">Details</a>
         </div>
     </section>
@@ -109,7 +109,7 @@
             <div class="card card-outline">
                 <h2>Stable and nightly</h2>
                 <p>
-                    Stable releases come from master. Nightly builds come from develop every night it changed, and are marked as prereleases.
+                    Stable releases come from master. Nightly builds come from each change to develop that passes the tests on every platform, and are marked as prereleases.
                     @if (Releases.Stable is not null && Releases.Nightly is { } nightly)
                     {
                         @("The newest is ")<a href="@Releases.ReleaseUrl(nightly)">@nightly</a>@(".")
@@ -141,7 +141,7 @@
 </div>
 
 @code {
-    // The repositories are served next to the site (eng/linux-repos.sh, .github/workflows/linux-repos.yml).
+    // The repositories are served next to the site (eng/linux-repos.sh, .github/workflows/pages.yml).
     private string Apt => $"""
         curl -fsSL {Site.BaseUrl}codalus-packages.asc | sudo gpg --dearmor -o /usr/share/keyrings/codalus.gpg
         echo "deb [signed-by=/usr/share/keyrings/codalus.gpg] {Site.BaseUrl}apt stable main" | sudo tee /etc/apt/sources.list.d/codalus.list
@@ -166,7 +166,7 @@
 
     private string Source => $"""
         git clone {Site.GitHub}
-        cd codalus
+        cd codalus-ide
         dotnet run --project src/Codalus.Shell
         """;
 }

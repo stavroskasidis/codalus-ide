@@ -44,7 +44,7 @@ public sealed partial class ShellHost
                 _ = SwitchUpdateChannelAsync();
             }
         };
-        Workbench.Log.AppendLine($"[update] {install.Version}: {install.Kind}, channel {UpdateChannel(install)}, mode {UpdateModeSetting()}");
+        Workbench.Log.AppendLine($"[update] {install.Version}: {install.Kind}, channel {UpdateChannel(install)}, mode {UpdateModeSetting()}{(install.NeedsAdministrator ? ", needs an administrator to apply" : string.Empty)}");
     }
 
     /// <summary>Tests: the update UI on a fake backend and install.</summary>
@@ -146,7 +146,8 @@ public sealed partial class ShellHost
                 Workbench.StatusBar.Set(new StatusBarItem(UpdateStatusItem, $"$(refresh) Restart to update ({offer.Version})", StatusBarAlignment.Right, 5, ContributionSource.Shell.Id)
                 {
                     Command = "update.restart",
-                    Tooltip = $"Codalus IDE {offer.Version} is ready. Restart now, or it is applied when you next close the IDE.",
+                    Tooltip = $"Codalus IDE {offer.Version} is ready. Restart now, or it is applied when you next close the IDE."
+                        + (SelfUpdate.Install.NeedsAdministrator ? " macOS asks for an administrator's password to replace the app, this once (an older installer left it owned by the system)." : string.Empty),
                     Visible = !busy, // not offered while debugging or building
                 });
                 break;

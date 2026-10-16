@@ -177,7 +177,8 @@ public class UxPassTests
         Assert.All(CommandIcons.All, pair => Assert.True(IconSet.GetFilled(pair.Value.Kind) is not null || IconSet.Get(pair.Value.Kind) is not null, pair.Key));
         var listed = File.ReadAllLines(Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "Icons", "fluent-icons.txt"))
             .Concat(File.ReadAllLines(Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "Icons", "material-icons.txt"))).ToHashSet(StringComparer.Ordinal);
-        Assert.All(CompiledIcons.Names, name => Assert.Contains(name, listed));
+        // The classic icons are eng/icons/classic-icons.py's, which writes the whole of Icons/Classic.
+        Assert.All(CompiledIcons.Names.Where(n => !n.StartsWith("classic-", StringComparison.Ordinal)), name => Assert.Contains(name, listed));
     }
 
     [AvaloniaFact]
@@ -411,25 +412,54 @@ public class UxPassTests
     [AvaloniaFact]
     public void File_folder_and_project_icons_are_colored_and_compiled()
     {
-        Assert.Equal("mi:csharp", FileIcons.ForFile("Program.cs"));
-        Assert.Equal("mi:razor", FileIcons.ForFile("Counter.razor"));
-        Assert.Equal("mi:xaml", FileIcons.ForFile("MainWindow.axaml"));
-        Assert.Equal("mi:tune", FileIcons.ForFile("Directory.Build.props"));
-        Assert.Equal("mi:settings", FileIcons.ForFile("appsettings.Development.json"));
-        Assert.Equal("mi:json", FileIcons.ForFile("data.json"));
-        Assert.Equal("mi:yaml", FileIcons.ForFile("ci.yml"));
-        Assert.Equal("mi:readme", FileIcons.ForFile("README.md"));
-        Assert.Equal("mi:document", FileIcons.ForFile("unknown.xyz"));
-        Assert.Equal(FileIcons.Solution, FileIcons.ForFile("App.slnx"));
-        Assert.Equal("mi:folder-config", FileIcons.ForFolder("Properties", open: false));
-        Assert.Equal("mi:folder-public-open", FileIcons.ForFolder("wwwroot", open: true));
-        Assert.Equal("mi:folder-open", FileIcons.ForFolder("Anything", open: true));
+        // The built-in icons are the classic ones: outline pages with a colored badge, outline folders, project boxes.
+        Assert.Equal("cl:csharp", FileIcons.ForFile("Program.cs"));
+        Assert.Equal("cl:razor", FileIcons.ForFile("Counter.razor"));
+        Assert.Equal("cl:xaml", FileIcons.ForFile("MainWindow.axaml"));
+        Assert.Equal("cl:msbuild", FileIcons.ForFile("Directory.Build.props"));
+        Assert.Equal("cl:json", FileIcons.ForFile("appsettings.Development.json"));
+        Assert.Equal("cl:config", FileIcons.ForFile("NuGet.Config"));
+        Assert.Equal("cl:json", FileIcons.ForFile("data.json"));
+        Assert.Equal("cl:yaml", FileIcons.ForFile("ci.yml"));
+        Assert.Equal("cl:markdown", FileIcons.ForFile("README.md"));
+        Assert.Equal("cl:text", FileIcons.ForFile("notes.txt"));
+        Assert.Equal("cl:document", FileIcons.ForFile("unknown.xyz"));
+        Assert.Equal("cl:document", FileIcons.ForFile(".gitmessage"));
+        Assert.Equal("cl:solution", FileIcons.ForFile("App.slnx"));
+        Assert.Equal("cl:folder-properties", FileIcons.ForFolder("Properties", open: false));
+        Assert.Equal("cl:folder-web", FileIcons.ForFolder("wwwroot", open: true));
+        Assert.Equal("cl:folder-open", FileIcons.ForFolder("Anything", open: true));
+        Assert.Equal("cl:folder", FileIcons.ForFolder("Anything", open: false));
         ProjectInfo Info(string? outputType, bool test = false, params string[] items) =>
             new("p.csproj", "p", "loaded", null, ["net10.0"], outputType, [.. items.Select(i => new ProjectItemInfo("Content", i, null, null))], [], [], true, test);
-        Assert.Equal("mi:lib", FileIcons.ForProject("Lib.csproj", Info("Library")));
-        Assert.Equal("mi:console", FileIcons.ForProject("App.csproj", Info("Exe")));
-        Assert.Equal("beaker@Test", FileIcons.ForProject("Tests.csproj", Info("Exe", test: true)));
-        Assert.Equal("globe@Navigate", FileIcons.ForProject("Web.csproj", Info("Exe", false, "wwwroot/site.css")));
+        Assert.Equal("cl:project-csharp", FileIcons.ForProject("Lib.csproj", Info("Library")));
+        Assert.Equal("cl:project-csharp", FileIcons.ForProject("App.csproj", Info("Exe")));
+        Assert.Equal("cl:project-test", FileIcons.ForProject("Tests.csproj", Info("Exe", test: true)));
+        Assert.Equal("cl:project-web", FileIcons.ForProject("Web.csproj", Info("Exe", false, "wwwroot/site.css")));
+        Assert.Equal("cl:project-fsharp", FileIcons.ForProject("Lib.fsproj", null));
+
+        // Material Icon Theme is the other built-in theme.
+        FileIcons.Material = true;
+        try
+        {
+            Assert.Equal("mi:csharp", FileIcons.ForFile("Program.cs"));
+            Assert.Equal("mi:tune", FileIcons.ForFile("Directory.Build.props"));
+            Assert.Equal("mi:settings", FileIcons.ForFile("appsettings.Development.json"));
+            Assert.Equal("mi:readme", FileIcons.ForFile("README.md"));
+            Assert.Equal("mi:document", FileIcons.ForFile("unknown.xyz"));
+            Assert.Equal("solution@Build", FileIcons.ForFile("App.slnx"));
+            Assert.Equal("mi:folder-config", FileIcons.ForFolder("Properties", open: false));
+            Assert.Equal("mi:folder-public-open", FileIcons.ForFolder("wwwroot", open: true));
+            Assert.Equal("mi:folder-open", FileIcons.ForFolder("Anything", open: true));
+            Assert.Equal("mi:lib", FileIcons.ForProject("Lib.csproj", Info("Library")));
+            Assert.Equal("mi:console", FileIcons.ForProject("App.csproj", Info("Exe")));
+            Assert.Equal("beaker@Test", FileIcons.ForProject("Tests.csproj", Info("Exe", test: true)));
+            Assert.Equal("globe@Navigate", FileIcons.ForProject("Web.csproj", Info("Exe", false, "wwwroot/site.css")));
+        }
+        finally
+        {
+            FileIcons.Material = false;
+        }
 
         // Every icon these produce exists, and Material's keep their own colors.
         var names = File.ReadAllLines(Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "Icons", "material-icons.txt")).Where(l => l.Length > 0 && !l.StartsWith('#'));
@@ -439,6 +469,22 @@ public class UxPassTests
             Assert.True(icon is not null && icon.Layers.Count > 0 && icon.Layers.Any(l => l.Color != 0), name);
             Assert.True(icon.Bounds.Right <= icon.DesignSize + 0.5 && icon.Bounds.Bottom <= icon.DesignSize + 0.5 && icon.Bounds.X >= -0.5, $"{name}: {icon.Bounds} in {icon.DesignSize}");
         }
+
+        // The classic icons are 16 px drawings that FileIcons can name: every name it maps to exists.
+        var classic = Directory.GetFiles(Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "Icons", "Classic"), "classic-*.svg")
+            .Select(p => Path.GetFileNameWithoutExtension(p)["classic-".Length..]).ToList();
+        Assert.Contains("document", classic);
+        foreach (var name in classic)
+        {
+            var icon = IconSet.GetFilled(IconSet.ClassicPrefix + name);
+            Assert.True(icon is not null && icon.Layers.Count > 0 && icon.DesignSize == 16, name);
+            Assert.True(icon.Bounds.Right <= 16 && icon.Bounds.Bottom <= 16 && icon.Bounds.X >= 0 && icon.Bounds.Y >= 0, $"{name}: {icon.Bounds}");
+        }
+
+        var files = new[] { "a.cs", "a.fs", "a.razor", "a.axaml", "a.xml", "a.html", "a.props", "a.json", "a.yml", "a.md", "a.css", "a.scss", "a.js",
+            "a.ts", "a.ps1", "a.sh", "a.sql", "a.png", "a.svg", "a.http", "a.proto", "a.log", "a.pfx", "LICENSE", "a.snk", "packages.lock.json",
+            "a.dll", "a.exe", "a.zip", "a.pdf", "a.csv", "a.docx", "a.tt", "web.config", ".editorconfig", ".gitignore", "Dockerfile", "CHANGELOG", "a.txt" };
+        Assert.All(files, file => Assert.Contains(FileIcons.ForFile(file)[IconSet.ClassicPrefix.Length..], classic));
     }
 
     [AvaloniaFact]
@@ -452,13 +498,13 @@ public class UxPassTests
         var program = Path.Combine(folder, "src", "App", "Program.cs");
         explorer.Reveal("f:" + program);
         await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Name == "Program.cs"));
-        Assert.Equal("mi:csharp", explorer.Rows.First(r => r.Name == "Program.cs").Icon);
+        Assert.Equal("cl:csharp", explorer.Rows.First(r => r.Name == "Program.cs").Icon);
         Assert.Equal(FileIcons.Solution, explorer.Rows.First(r => r.Node.Kind == Codalus.Workbench.Projects.ExplorerNodeKind.Solution).Icon);
-        Assert.Equal("mi:console", explorer.Rows.First(r => r.Name == "App").Icon);
+        Assert.Equal("cl:project-csharp", explorer.Rows.First(r => r.Name == "App").Icon);
 
         var document = await f.Shell.OpenFileAsync(Path.Combine(folder, "src", "Lib", "Shapes.cs"));
         Assert.NotNull(document);
-        Assert.Equal("mi:csharp", document.TabIcon);
+        Assert.Equal("cl:csharp", document.TabIcon);
         await ShellFixture.PumpUntil(() => document.View is { NavigationBar.Types.Count: > 0 });
         var bar = document.View!.NavigationBar;
         var pickers = bar.GetVisualDescendants().OfType<ComboBox>().ToList();

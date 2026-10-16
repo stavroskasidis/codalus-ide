@@ -16,7 +16,7 @@ public sealed class SessionsFixture : IAsyncLifetime
 
     public string Project(string name) => Path.Combine(Folder, name, name + ".csproj");
 
-    public string Dll(string name, string framework = "net10.0") => Path.Combine(Folder, name, "bin", "Debug", framework, name + ".dll");
+    public string Dll(string name, string framework = "net11.0") => Path.Combine(Folder, name, "bin", "Debug", framework, name + ".dll");
 
     public string Source(string project, string file) => Path.Combine(Folder, project, file);
 
@@ -49,7 +49,7 @@ public sealed class SessionsFixture : IAsyncLifetime
         var arguments = json.RootElement.GetProperty("Items").GetProperty("CscCommandLineArgs").EnumerateArray().Select(i => i.GetProperty("Identity").GetString()!).ToArray();
         var sdk = json.RootElement.GetProperty("Properties").GetProperty("MSBuildExtensionsPath").GetString()!;
         Assert.NotEmpty(arguments);
-        return (new CompilerInputsInfo(path, "net10.0", "C#", CompilerInputStates.Ok, null, arguments, [], null, null), sdk);
+        return (new CompilerInputsInfo(path, "net11.0", "C#", CompilerInputStates.Ok, null, arguments, [], null, null), sdk);
     }
 
     private async Task<(int Code, string Output)> RunAsync(string program, IReadOnlyList<string> arguments)

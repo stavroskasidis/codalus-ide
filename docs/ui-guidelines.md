@@ -23,7 +23,8 @@ Review a surface against each line, in all four themes, at its narrowest and wid
 - **Text that doesn't fit**
   - Nothing is cut off without an ellipsis: single-line text in a constrained space has `TextTrimming="CharacterEllipsis"` and a tooltip with the full text (on the text or its row).
   - Messages wrap (`TextWrapping="Wrap"`).
-  - `PolishTests` walks every tool window at 280 px (`Shell.Size.ToolWindowMinWidth`) and fails on text cut off without an ellipsis or a tooltip.
+  - `PolishTests` walks every tool window at 280 px (`Shell.Size.ToolWindowMinWidth`), the documents that work as dialogs at 640 px and the in-window dialog's forms at 440 px. It fails on text cut off without an ellipsis or a tooltip.
+  - Columns: give the main column `*` and the others proportional (`2*,1.5*`) or modest fixed widths. Fixed columns that add up to most of 640 px squeeze the main one to nothing (the Keyboard Shortcuts header and Add New Item's list did, until M34's final pass).
 - **States**
   - Every surface has an empty state, a loading state and an error state, each with a next step: what to do (`Open Solution…`, `Press F9 in an editor to add one`), not only what is missing.
   - Empty and error messages use `TextBlock.emptyState` (muted, wrapped, `Shell.Padding.EmptyState` around).
@@ -38,6 +39,8 @@ Review a surface against each line, in all four themes, at its narrowest and wid
   - In High Contrast, color never carries meaning alone: icons are monochrome (shape carries it), and states also have a shape or a word.
 - **Operating systems and scales:** check Windows, Linux and macOS (Cmd shortcuts, the global menu) at 100 % to 200 %.
 - **Accessibility:** every control has a name (`AutomationProperties.Name`), live regions announce status (`AutomationProperties.LiveSetting`), and rows have an accessible name that reads like a sentence.
+  - A tooltip isn't a name: an icon-only button needs `AutomationProperties.Name` too.
+  - `PolishTests` fails on a visible button, toggle, combo box, text box, slider, list or tree without a name, its text, or a placeholder, in every tool window, document and dialog form.
 
 ## Tokens
 
@@ -65,6 +68,7 @@ All tokens are in `src/Codalus.Shell/Theming/Tokens.axaml`. Colors differ per th
 | `Shell.Caption.Active`, `Shell.Caption.Inactive` (with `.Foreground`) | Tool window captions with and without the focus |
 | `Shell.Editor.*` | The editor: text, line numbers, inlay hints, guides, brackets, folding |
 | `Shell.Icon.Run`, `.Stop`, `.Save`, `.Open`, `.Build`, `.Git`, `.Test`, `.Navigate` | Command icon families (white in High Contrast) |
+| `Shell.Icon.Outline` | The gray of the classic file icons' pages and outlines |
 
 ### Spacing, sizes and type
 
@@ -105,7 +109,9 @@ gray fills (outlines, pages) stay gray, as Visual Studio's do. Only chrome glyph
 color, and High Contrast draws every icon in the foreground.
 
 - **Commands and tool windows:** Fluent UI System Icons (Microsoft, MIT), 16 px regular. Add the file name to `src/Codalus.Shell/Icons/fluent-icons.txt`, run `eng/get-fluent-icons.sh`, commit the SVG, and map our name to it in `IconSet` (`Controls/Icon.cs`). A few small glyphs (chevrons, zoom, fit) are 16×16 stroke drawings in the same file.
-- **File types, folders and projects:** Material Icon Theme (MIT), `Icons/material-icons.txt` and `eng/get-material-icons.sh`, mapped in `Controls/FileIcons.cs`. Their colors become the palette's nearest (above), except in High Contrast.
+- **File types, folders and projects:** the classic icons (`cl:` names, our own drawings): 16 px pixel drawings in a classic IDE's style, a gray outline page with a small colored badge in its lower-left corner (`C#`, `YML`, `{}`, `M↓`…; the page's outline is cut around the badge), tan outline folders, and outline project boxes with the language in color. `eng/icons/classic-icons.py` draws them into `Icons/Classic/`: change a drawing there, run it and commit the SVGs. Their unfilled parts take `Shell.Icon.Outline` (the theme's icon gray), their colors the palette's nearest. `Controls/FileIcons.cs` works out a Material name for every file and maps it onto the classic set; a file type with no classic icon is a blank page.
+- **Material Icon Theme** (MIT) is the other built-in file icon theme (`workbench.iconTheme`: `material`): `Icons/material-icons.txt` and `eng/get-material-icons.sh`, mapped in `Controls/FileIcons.cs`. Its colors become the palette's nearest (above), except in High Contrast.
+- **Our own drawings:** icons that resemble another product's are drawn from scratch, never traced, and never use its logo.
 - **Compiled at build time:** `eng/icons/CompileIcons.cs` turns the SVGs into drawing operations; nothing parses SVG at runtime, and the shell stays Native AOT clean. Only `<path d>` is supported; anything else fails the build.
 - **Color by family:** a command's icon takes its family's token through an `accent-*` class (`Controls/CommandIcons.cs`): run green, stop red, save and navigation blue, open folder tan, build purple, Git orange, tests green. Other icons take their kind's palette color. States use `info`, `warning`, `error`, and the test outcome classes (`passed`, `failed`, `skipped`, `running`, `none`).
 - **High Contrast:** every icon is drawn in the foreground; shape carries the meaning.
@@ -114,4 +120,4 @@ color, and High Contrast draws every icon in the foreground.
 
 ## The gallery
 
-`eng/smoke-test.sh` runs the real app through the smoke test, whose `shell.galleryEmpty` and `shell.gallery` steps photograph every registered tool window, the main documents (Options, Keyboard Shortcuts, Project Properties, NuGet, Configuration Manager) and the window's chrome in each theme, empty, with data and in an error state. The pictures and an index (`index.md`) are in `gallery/` next to the report (`artifacts/smoke-test/gallery` by default; CI uploads them with the smoke test's artifact). Review a milestone's surfaces there against the checklist; the maintainer approves the gallery at M34's checkpoints (D25).
+`eng/smoke-test.sh` runs the real app through the smoke test, whose `shell.galleryEmpty` and `shell.gallery` steps photograph every registered tool window, the main documents (Options, Keyboard Shortcuts, Project Properties, NuGet, Configuration Manager, Add New Item, the Template Manager, Check Environment), the in-window dialog's forms (a preview of changes, a checklist, a name with an error) and the window's chrome in each theme, empty, with data and in an error state. The pictures and an index (`index.md`) are in `gallery/` next to the report (`artifacts/smoke-test/gallery` by default; CI uploads them with the smoke test's artifact). Review a milestone's surfaces there against the checklist; the maintainer approves the gallery at M34's checkpoints (D25).

@@ -10,6 +10,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\..\assets\logo\codalus.ico</ApplicationIcon>
     <PublishAot>true</PublishAot>
+    <!-- The .NET 11 SDK's Native AOT publish compiles without a full Build by default ("optimized publish"). It runs
+         PrepareResources before ResolveReferences, so Avalonia's resources (added before ResolveReferences) weren't
+         embedded: no compiled XAML, and the published shell failed at startup (M30b). The full Build it is. -->
+    <UseOptimizedPublish>false</UseOptimizedPublish>
     <IsAotCompatible>true</IsAotCompatible>
     <InvariantGlobalization>true</InvariantGlobalization>
     <!-- LibraryImport (AttachConsole) generates unsafe marshalling code. -->
@@ -48,6 +52,8 @@
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" PluginId="codalus.github" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" PluginId="codalus.azuredevops" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitLab\Codalus.Plugins.GitLab.csproj" PluginId="codalus.gitlab" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.OpenAI\Codalus.Plugins.OpenAI.csproj" PluginId="codalus.openai" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Anthropic\Codalus.Plugins.Anthropic.csproj" PluginId="codalus.anthropic" />
     <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
   </ItemGroup>
 
@@ -70,10 +76,11 @@
   <!-- Icons (D24, M34a): Icons/Fluent and Icons/Material SVGs compiled into geometries at build time. -->
   <Import Project="..\..\eng\icons\Icons.targets" />
 
-  <!-- The smoke test's mock GitHub (M13b): the same source as the tests' mock servers, so nothing reaches GitHub. -->
+  <!-- The smoke test's mock GitHub (M13b) and model servers (M28a): the same source as the tests' mock servers, so nothing reaches GitHub. -->
   <ItemGroup>
     <Compile Include="..\..\tests\Shared\MockHttpServer.cs" Link="Infrastructure\Mocks\MockHttpServer.cs" />
     <Compile Include="..\..\tests\Shared\MockGitHub.cs" Link="Infrastructure\Mocks\MockGitHub.cs" />
+    <Compile Include="..\..\tests\Shared\MockModelServers.cs" Link="Infrastructure\Mocks\MockModelServers.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -120,7 +127,7 @@
 
   <Target Name="CodalusRemoteServerForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
-      <_CodalusServerFiles Include="%(RemoteServer.RootDir)%(RemoteServer.Directory)bin\$(Configuration)\net10.0\**\*" />
+      <_CodalusServerFiles Include="%(RemoteServer.RootDir)%(RemoteServer.Directory)bin\$(Configuration)\$(TargetFramework)\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(_CodalusServerFiles)" DestinationFiles="@(_CodalusServerFiles->'$(OutDir)remote\server\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
@@ -149,7 +156,7 @@
   </Target>
   <Target Name="CodalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
-      <_CodalusHostFiles Include="%(HelperProcess.RootDir)%(HelperProcess.Directory)bin\$(Configuration)\net10.0\**\*">
+      <_CodalusHostFiles Include="%(HelperProcess.RootDir)%(HelperProcess.Directory)bin\$(Configuration)\$(TargetFramework)\**\*">
         <Folder>%(HelperProcess.Folder)</Folder>
       </_CodalusHostFiles>
     </ItemGroup>
@@ -169,14 +176,14 @@
 
   <Target Name="CodalusCopyBuiltInPlugins">
     <ItemGroup>
-      <_CodalusPluginFiles Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.dll;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\*.pdb;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\codalus-plugin.json;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\codalus-plugin.nls*.json">
+      <_CodalusPluginFiles Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\*.dll;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\*.pdb;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\codalus-plugin.json;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\codalus-plugin.nls*.json">
         <PluginId>%(BuiltInPlugin.PluginId)</PluginId>
       </_CodalusPluginFiles>
     </ItemGroup>
     <Copy SourceFiles="@(_CodalusPluginFiles)" DestinationFiles="@(_CodalusPluginFiles->'$(CodalusPluginTarget)%(PluginId)\%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <!-- Tools a plugin bundles in a coverage/ subfolder (the .NET test plugin's Coverlet, ADR 0011). -->
     <ItemGroup>
-      <_CodalusPluginTools Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\net10.0\coverage\**\*">
+      <_CodalusPluginTools Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\coverage\**\*">
         <PluginId>%(BuiltInPlugin.PluginId)</PluginId>
       </_CodalusPluginTools>
     </ItemGroup>

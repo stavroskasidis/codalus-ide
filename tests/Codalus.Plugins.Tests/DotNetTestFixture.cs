@@ -45,9 +45,9 @@ public sealed class DotNetTestFixture : IAsyncLifetime
     internal static string Configuration => PluginHostIntegrationTests.Configuration;
 
     private static string Bin(string project, string assembly) =>
-        Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", project, "bin", Configuration, "net10.0", assembly);
+        Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", project, "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, assembly);
 
-    public static string PluginDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.DotNetTest", "bin", Configuration, "net10.0");
+    public static string PluginDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.DotNetTest", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework);
 
     public static string? Netcoredbg => DebugAdapterLocator.Resolve();
 

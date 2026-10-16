@@ -309,7 +309,7 @@ internal sealed partial class SolutionSession
         await EfTool.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
+            using var process = DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
             var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
             await DotnetProcess.WaitOrKillAsync(process, cancellationToken).ConfigureAwait(false);

@@ -8,8 +8,9 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Projects.Tests;
 
 /// <summary>
-/// M30 (ADR 0025): the build host loads the SDK that <c>dotnet</c> resolves for the solution's folder, and a newer
-/// .NET's SDK through rolling forward. samples/Net11 needs the .NET 11 SDK: skipped without it locally, failing in CI.
+/// M30 (ADR 0025): the build host loads the SDK that <c>dotnet</c> resolves for the solution's folder, an older one
+/// that <c>global.json</c> pins included (on the hosts' .NET 11 since M30b), and a newer .NET's SDK through rolling
+/// forward. samples/Net11 needs the .NET 11 SDK: skipped without it locally, failing in CI.
 /// </summary>
 public sealed class DotnetVersionsTests : IAsyncLifetime
 {
@@ -73,7 +74,8 @@ public sealed class DotnetVersionsTests : IAsyncLifetime
         var shapes = Path.Combine(fixture, "src", "Shapes", "Shapes.csproj");
 
         var solution = await _solutions.OpenAsync(Path.Combine(fixture, "Net11.slnx"), trusted: true, restore: true, Timeout());
-        Assert.Contains(_log, l => l.Contains("DOTNET_ROLL_FORWARD=LatestMajor", StringComparison.Ordinal)); // the host is on .NET 10
+        // The host targets .NET 11 itself (M30b): it loads the .NET 11 SDK without rolling forward.
+        Assert.DoesNotContain(_log, l => l.Contains("DOTNET_ROLL_FORWARD=LatestMajor", StringComparison.Ordinal));
         await WaitUntilAsync(() => _solutions.Progress is { Completed: true } && _solutions.Projects.Count == solution.Projects.Length);
         Assert.StartsWith("11.0.", Path.GetFileName(Path.TrimEndingDirectorySeparator(_solutions.SdkPath!)), StringComparison.Ordinal);
         Assert.Null(_solutions.SdkWarning);

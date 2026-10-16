@@ -1,0 +1,42 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.DevicesView"
+             x:DataType="vm:DevicesViewModel">
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button x:Name="RefreshButton" Classes="toolbar" ToolTip.Tip="{l:T devices.refresh}" AutomationProperties.Name="{l:T devices.refreshTheDevices}">
+        <controls:Icon Kind="refresh" />
+      </Button>
+      <Button x:Name="StartButton" Classes="toolbar" IsEnabled="{Binding CanStart}" ToolTip.Tip="{l:T devices.start}" AutomationProperties.Name="{l:T devices.startTheEmulatorOrSimulator}">
+        <controls:Icon Kind="play" Classes="start" />
+      </Button>
+      <Button x:Name="UseButton" Classes="toolbar" IsEnabled="{Binding CanUse}" ToolTip.Tip="{l:T devices.runHere}" AutomationProperties.Name="{l:T devices.runOnTheSelectedDevice}">
+        <controls:Icon Kind="phone" />
+      </Button>
+      <Button x:Name="InstallButton" Classes="toolbar" IsVisible="{Binding CanInstallAndroid}" ToolTip.Tip="{l:T devices.installTheAndroidSdk}" AutomationProperties.Name="{l:T devices.installTheAndroidSdkAndJdk}">
+        <controls:Icon Kind="download" />
+      </Button>
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Bottom" Classes="muted" Margin="6,2" Text="{Binding Toolchain}" TextWrapping="Wrap" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    <ListBox x:Name="DeviceList" ItemsSource="{Binding Devices}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T devices.devices}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:DeviceRow">
+          <Setter Property="Padding" Value="4,2" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:DeviceRow">
+          <StackPanel>
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Detail}" Classes="muted" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

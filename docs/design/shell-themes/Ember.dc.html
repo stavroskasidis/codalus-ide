@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ember: Codalus IDE shell theme</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.mi{background:transparent;border:0;color:inherit;font:inherit;padding:0 6px;height:28px;border-radius:6px;cursor:default}
+.mi:hover,.tb:hover,.wc:hover,.tab:hover,.th:hover,.sb:hover,.tree li:hover{background-color:rgba(128,128,128,.2)}
+.tb{width:28px;height:26px;border:0;background:transparent;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:inherit;padding:0;flex:none}
+.wc{width:46px;height:44px;border:0;background:transparent;color:inherit;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.wc.x:hover{background:#C42B1C;color:#FFFFFF}
+.inp::placeholder{color:inherit;opacity:.9}
+.card{border-radius:10px;display:flex;flex-direction:column;overflow:hidden}
+.ch{display:flex;align-items:center;gap:2px;height:36px;padding:0 6px 0 12px;flex:none}
+.tab{display:flex;align-items:center;height:28px;border:0;font:inherit;color:inherit;background:transparent;gap:6px;padding:0 10px;border-radius:7px}
+.th{border:0;background:transparent;font:inherit;color:inherit;height:26px;padding:0 10px;border-radius:6px}
+.tree{list-style:none;margin:0;padding:2px 6px}
+.tree li{display:flex;align-items:center;gap:5px;height:22px;padding-right:8px;white-space:nowrap;border-radius:5px;cursor:default}
+.ln{display:flex;height:20px;align-items:center}
+.gut{width:46px;text-align:right;flex:none;font-size:12px}
+.bpc{width:22px;flex:none;display:flex;align-items:center;justify-content:center}
+.code{white-space:pre;padding-left:4px}
+.term{white-space:pre;height:18px;line-height:18px}
+.vars{width:100%;border-collapse:collapse}
+.vars th{font-weight:500;text-align:left;padding:0 8px;height:24px;white-space:nowrap}
+.vars td{padding:0 8px;height:22px;white-space:nowrap}
+.sb{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:inherit;font:inherit}
+</style>
+</helmet>
+<div style="min-height: 900px; display: flex; flex-direction: column; background: {{c.bg}}; color: {{c.fg}}; font-family: 'Geist', system-ui, sans-serif; font-size: 12px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 44px; padding-left: 12px; color: {{c.titleFg}}">
+  <svg width="20" height="20" viewBox="0 0 256 256" role="img" aria-label="Codalus IDE"><defs><linearGradient id="ember-violet" gradientUnits="userSpaceOnUse" x1="0" y1="38" x2="0" y2="218"><stop offset="0" stop-color="#A47BFF"></stop><stop offset="1" stop-color="#5B2EC7"></stop></linearGradient><linearGradient id="ember-ember" gradientUnits="userSpaceOnUse" x1="0" y1="38" x2="0" y2="218"><stop offset="0" stop-color="#FFC24A"></stop><stop offset="1" stop-color="#F0662A"></stop></linearGradient></defs><polygon fill="{{logo.a}}" points="20,218 124,38 124,92 58,208"></polygon><polygon fill="{{logo.a}}" fill-opacity="{{logo.o1}}" points="74,204 124,117.4 124,161.4 104,196"></polygon><polygon fill="{{logo.b}}" fill-opacity="{{logo.o2}}" points="236,218 132,38 132,92 198,208"></polygon><polygon fill="{{logo.b}}" fill-opacity="{{logo.o3}}" points="182,204 132,117.4 132,161.4 152,196"></polygon></svg>
+  <nav aria-label="Main menu" style="flex: 1 1 auto; display: flex; flex-wrap: wrap">
+    <button class="mi">File</button><button class="mi">Edit</button><button class="mi">View</button><button class="mi">Git</button><button class="mi">Project</button><button class="mi">Build</button><button class="mi">Debug</button><button class="mi">Test</button><button class="mi">Analyze</button><button class="mi">Tools</button><button class="mi">Extensions</button><button class="mi">Window</button><button class="mi">Help</button>
+  </nav>
+  <div role="toolbar" aria-label="Run" style="display: inline-flex; align-items: center; gap: 2px; height: 32px; padding: 0 3px 0 4px; background: {{c.pill}}; border: 1px solid {{c.pillBorder}}; border-radius: 9px">
+    <select aria-label="Solution configuration" style="height: 26px; font: inherit; color: {{c.fg}}; background: transparent; border: 0"><option>Debug</option><option>Release</option></select>
+    <select aria-label="Solution platform" style="height: 26px; font: inherit; color: {{c.fg}}; background: transparent; border: 0"><option>Any CPU</option></select>
+    <sc-if value="{{notDebugging}}" hint-placeholder-val="{{true}}">
+      <button style="display: inline-flex; align-items: center; gap: 6px; height: 26px; margin-left: 4px; padding: 0 12px 0 10px; border: 0; border-radius: 7px; background: {{c.accent}}; font: inherit; font-weight: 600; color: {{c.accentFg}}">
+        <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"></path></svg>
+        Samples.Debugging
+      </button>
+      <button class="tb" aria-label="Build Solution (Ctrl+Shift+B)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icPurple}}" stroke-width="1.3" stroke-linejoin="round"><path d="M2 5 8 2l6 3v6l-6 3-6-3z"></path><path d="M2 5l6 3 6-3M8 8v6"></path></svg></button>
+    </sc-if>
+    <sc-if value="{{debugging}}" hint-placeholder-val="{{false}}">
+      <span style="display: inline-flex; align-items: center; gap: 6px; height: 26px; margin-left: 4px; padding: 0 10px; border-radius: 7px; background: {{c.pausedBg}}; color: {{c.pausedFg}}; border: 1px solid {{c.pausedEdge}}; font-weight: 600"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 4px; background: {{c.pausedDot}}"></span>Paused on breakpoint</span>
+      <button class="tb" aria-label="Continue (F5)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="{{c.icGreen}}"></path></svg></button>
+      <button class="tb" aria-label="Step Over (F10)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 9a5.5 5.5 0 0 1 10.5-2"></path><path d="M13.5 3.5v3.5H10"></path><circle cx="8" cy="12.5" r="1.4" fill="{{c.icBlue}}"></circle></svg></button>
+      <button class="tb" aria-label="Stop Debugging (Shift+F5)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1" fill="{{c.icRed}}"></rect></svg></button>
+    </sc-if>
+  </div>
+  <label style="flex: 1 1 140px; max-width: 280px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; background: {{c.pill}}; border: 1px solid {{c.pillBorder}}; border-radius: 9px; color: {{c.muted}}">
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"></circle><path d="m10.5 10.5 3.5 3.5"></path></svg>
+    <input class="inp" aria-label="Search commands, files and settings" placeholder="Search" style="flex: 1; min-width: 0; border: 0; background: transparent; color: {{c.muted}}; font: inherit; outline: none">
+    <span style="font-size: 11px">Ctrl+Q</span>
+  </label>
+  <span style="display: flex; margin-left: auto">
+  <button class="wc" aria-label="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" stroke="currentColor"><path d="M0 5h10"></path></svg></button>
+  <button class="wc" aria-label="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" fill="none" stroke="currentColor"><rect x=".5" y=".5" width="9" height="9"></rect></svg></button>
+  <button class="wc x" aria-label="Close"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" stroke="currentColor"><path d="m0 0 10 10M10 0 0 10"></path></svg></button>
+  </span>
+</header>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 0 8px 8px; min-height: 0">
+
+  <aside aria-label="Solution Explorer" class="card" style="flex: 1 1 250px; max-width: 290px; height: 822px; background: {{c.card}}; border: 1px solid {{c.cardBorder}}">
+    <div class="ch">
+      <span style="font-weight: 600; color: {{c.strong}}">Explorer</span>
+      <span style="flex: 1"></span>
+      <button class="tb" aria-label="Sync with Active Document (Ctrl+[, S)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.4" stroke-linecap="round"><path d="M3 8h10M10 5l3 3-3 3M6 5 3 8l3 3"></path></svg></button>
+      <button class="tb" aria-label="Collapse All"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.3"><rect x="2.5" y="2.5" width="11" height="11" rx="1"></rect><path d="M5.5 8h5"></path></svg></button>
+    </div>
+    <div role="tablist" aria-label="Explorer views" style="display: flex; gap: 2px; padding: 0 8px 6px; color: {{c.soft}}">
+      <button role="tab" aria-selected="true" class="th" style="background: {{c.on}}; color: {{c.onFg}}; font-weight: 600">Solution</button>
+      <button role="tab" aria-selected="false" class="th">Git</button>
+      <button role="tab" aria-selected="false" class="th">Tests</button>
+    </div>
+    <ul role="tree" aria-label="Solution" class="tree" style="flex: 1; overflow: auto">
+      <li role="treeitem" aria-expanded="true" style="padding-left: 4px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icPurple}}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"></rect><path d="M4.5 6 7 8 4.5 10M8 10.5h3.5"></path></svg>Samples.Debugging</li>
+      <li role="treeitem" aria-expanded="true" style="padding-left: 12px; font-weight: 600; color: {{c.strong}}"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="none" stroke="{{c.icOutline}}"></rect><text x="8" y="11" text-anchor="middle" font-size="7" font-weight="700" fill="{{c.icGreen}}" font-family="sans-serif">C#</text></svg>Samples.Debugging</li>
+      <li role="treeitem" aria-expanded="false" style="padding-left: 30px"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 4 4-4 4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.2"><rect x="2" y="2" width="5" height="5"></rect><rect x="9" y="9" width="5" height="5"></rect><path d="M4.5 7v4.5H9"></path></svg>Dependencies</li>
+      <li role="treeitem" aria-expanded="false" style="padding-left: 30px"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 4 4-4 4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h4.5l1.5 1.5h7v8.5h-13z" fill="none" stroke="{{c.icFolder}}" stroke-width="1.2" stroke-linejoin="round"></path></svg>Properties</li>
+      <li role="treeitem" style="padding-left: 48px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>Forecast.cs</li>
+      <li role="treeitem" aria-selected="true" style="padding-left: 48px; background: {{c.selection}}; color: {{c.selectionFg}}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.selIcon}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.selIconFill}}"></rect></svg>ForecastService.cs<span style="margin-left: auto; font-weight: 600">M</span></li>
+      <li role="treeitem" style="padding-left: 48px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>IForecastStore.cs</li>
+      <li role="treeitem" style="padding-left: 48px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>Program.cs</li>
+      <li role="treeitem" style="padding-left: 48px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icYellow}}"></rect></svg>appsettings.json</li>
+      <li role="treeitem" aria-expanded="false" style="padding-left: 12px; font-weight: 600; color: {{c.strong}}"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 4 4-4 4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="none" stroke="{{c.icOutline}}"></rect><text x="8" y="11" text-anchor="middle" font-size="7" font-weight="700" fill="{{c.icGreen}}" font-family="sans-serif">C#</text></svg>Samples.Debugging.Tests</li>
+    </ul>
+  </aside>
+
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+    <section aria-label="Documents" class="card" style="height: 570px; background: {{c.editor}}; border: 1px solid {{c.cardBorder}}">
+      <div role="tablist" aria-label="Open documents" style="display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; flex: none; overflow: hidden; border-bottom: 1px solid {{c.softBorder}}; color: {{c.tabFg}}">
+        <div style="display: flex; align-items: center; background: {{c.tabActive}}; color: {{c.tabActiveFg}}; border-radius: 7px; box-shadow: inset 0 0 0 1px {{c.tabActiveEdge}}">
+          <button role="tab" aria-selected="true" class="tab" style="padding-right: 4px; font-weight: 500">
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.selIcon}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.selIconFill}}"></rect></svg>
+            ForecastService.cs
+          </button>
+          <button class="tb" aria-label="Close ForecastService.cs" style="width: 22px; height: 22px; margin-right: 3px"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" stroke="currentColor" stroke-width="1.3"><path d="m1.5 1.5 7 7M8.5 1.5l-7 7"></path></svg></button>
+        </div>
+        <button role="tab" aria-selected="false" class="tab"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>Program.cs</button>
+        <button role="tab" aria-selected="false" class="tab"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>Forecast.cs</button>
+        <span style="flex: 1"></span>
+        <span style="color: {{c.muted}}; padding-right: 8px">ForecastService › GetAsync</span>
+      </div>
+      <div style="flex: 1; min-height: 0; overflow: auto; padding: 8px 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px; color: {{c.code}}">
+        <sc-for list="{{lines}}" as="line" hint-placeholder-count="22">
+          <div class="ln" style="background: {{line.bg}}; box-shadow: {{line.edge}}">
+            <span class="gut" style="color: {{c.gutter}}">{{line.n}}</span>
+            <span class="bpc">
+              <sc-if value="{{line.bp}}" hint-placeholder-val="{{false}}"><svg width="12" height="12" viewBox="0 0 12 12" role="img" aria-label="Breakpoint"><circle cx="6" cy="6" r="5" fill="{{c.bp}}"></circle></svg></sc-if>
+              <sc-if value="{{line.arrow}}" hint-placeholder-val="{{false}}"><svg width="14" height="12" viewBox="0 0 14 12" role="img" aria-label="Current statement"><path d="M1 3.5h6V1l6 5-6 5V8.5H1z" fill="{{c.exec}}"></path></svg></sc-if>
+            </span>
+            <span class="code"><sc-for list="{{line.toks}}" as="tok" hint-placeholder-count="3"><span style="color: {{tok.c}}; font-style: {{tok.i}}; text-decoration: {{tok.d}}; text-underline-offset: 3px">{{tok.t}}</span></sc-for></span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="Terminal" class="card" style="flex: 1; min-height: 244px; background: {{c.card}}; border: 1px solid {{c.cardBorder}}">
+      <div class="ch" style="padding-left: 8px">
+        <div role="tablist" aria-label="Bottom tool windows" style="display: flex; gap: 2px; color: {{c.soft}}">
+          <button role="tab" aria-selected="true" class="th" style="background: {{c.on}}; color: {{c.onFg}}; font-weight: 600">Terminal</button>
+          <button role="tab" aria-selected="false" class="th">Output</button>
+          <button role="tab" aria-selected="false" class="th">Error List<span style="margin-left: 6px; padding: 0 5px; border-radius: 8px; background: {{c.chipBg}}; color: {{c.chipFg}}; border: 1px solid {{c.chipEdge}}; font-size: 11px">1</span></button>
+        </div>
+        <span style="flex: 1"></span>
+        <button class="tb" aria-label="New Terminal"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icGreen}}" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg></button>
+        <button class="tb" aria-label="Maximize Panel"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m4 10 4-4 4 4"></path></svg></button>
+      </div>
+      <div role="log" aria-label="Terminal output" style="flex: 1; min-height: 0; overflow: auto; padding: 4px 14px 10px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: {{c.termText}}">
+        <div class="term"><span style="color: {{c.termPath}}">~/src/samples/Debugging</span> <span style="color: {{c.termPrompt}}">$</span> dotnet test --filter ForecastService</div>
+        <div class="term" style="color: {{c.muted}}">  Determining projects to restore...</div>
+        <div class="term" style="color: {{c.muted}}">  All projects are up-to-date for restore.</div>
+        <div class="term">  Samples.Debugging.Tests -&gt; bin/Debug/net10.0/Samples.Debugging.Tests.dll</div>
+        <div class="term"><span style="color: {{c.termOk}}">Passed!</span>  - Failed: 0, Passed: 5, Skipped: 0, Total: 5, Duration: 30 ms</div>
+        <div class="term"><span style="color: {{c.termPath}}">~/src/samples/Debugging</span> <span style="color: {{c.termPrompt}}">$</span> <span aria-hidden="true" style="display: inline-block; width: 7px; height: 14px; vertical-align: -2px; background: {{c.cursor}}"></span></div>
+      </div>
+    </section>
+  </div>
+
+  <aside aria-label="Debug" class="card" style="flex: 1 1 280px; max-width: 330px; height: 822px; background: {{c.card}}; border: 1px solid {{c.cardBorder}}">
+    <div class="ch" style="padding-left: 8px">
+      <div role="tablist" aria-label="Debug windows" style="display: flex; gap: 2px; color: {{c.soft}}">
+        <button role="tab" aria-selected="true" class="th" style="background: {{c.on}}; color: {{c.onFg}}; font-weight: 600">Locals</button>
+        <button role="tab" aria-selected="false" class="th">Watch</button>
+        <button role="tab" aria-selected="false" class="th">Call Stack</button>
+      </div>
+    </div>
+    <sc-if value="{{debugging}}" hint-placeholder-val="{{false}}">
+      <div style="overflow: auto">
+        <table class="vars">
+          <thead><tr style="color: {{c.muted}}; box-shadow: inset 0 -1px 0 {{c.softBorder}}"><th>Name</th><th>Value</th><th>Type</th></tr></thead>
+          <tbody>
+            <tr style="box-shadow: inset 0 -1px 0 {{c.rowRule}}"><td>this</td><td style="color: {{c.muted}}">{ForecastService}</td><td style="color: {{c.ty}}">ForecastService</td></tr>
+            <tr style="box-shadow: inset 0 -1px 0 {{c.rowRule}}"><td>city</td><td style="color: {{c.st}}">"Oslo"</td><td style="color: {{c.ty}}">string</td></tr>
+            <tr style="box-shadow: inset 0 -1px 0 {{c.rowRule}}"><td>days</td><td style="color: {{c.nu}}">7</td><td style="color: {{c.ty}}">int</td></tr>
+            <tr style="box-shadow: inset 0 -1px 0 {{c.rowRule}}"><td>ct</td><td style="color: {{c.muted}}">IsCancellationRequested = false</td><td style="color: {{c.ty}}">CancellationToken</td></tr>
+            <tr style="box-shadow: inset 0 -1px 0 {{c.rowRule}}"><td>rows</td><td style="color: {{c.kw}}">null</td><td style="color: {{c.ty}}">IReadOnlyList&lt;ForecastRow&gt;</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin: 12px; padding: 10px 12px; background: {{c.inset}}; border: 1px solid {{c.insetEdge}}; border-radius: 8px">
+        <div style="font-weight: 600; color: {{c.strong}}; margin-bottom: 6px">Call Stack</div>
+        <div style="display: flex; align-items: center; gap: 6px; height: 22px"><svg width="12" height="10" viewBox="0 0 14 12" aria-hidden="true"><path d="M1 3.5h6V1l6 5-6 5V8.5H1z" fill="{{c.exec}}"></path></svg>ForecastService.GetAsync() <span style="color: {{c.muted}}">line 15</span></div>
+        <div style="height: 22px; padding-left: 18px; color: {{c.soft}}; display: flex; align-items: center">Program.&lt;Main&gt;$() <span style="color: {{c.muted}}; margin-left: 4px">line 9</span></div>
+        <div style="height: 22px; padding-left: 18px; color: {{c.muted}}; display: flex; align-items: center">[External Code]</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{notDebugging}}" hint-placeholder-val="{{true}}">
+      <div style="padding: 24px 16px; color: {{c.soft}}; line-height: 1.5">
+        <svg width="28" height="28" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.accent}}" stroke-width="1.1" stroke-linecap="round" style="margin-bottom: 10px"><rect x="5" y="5" width="6" height="8" rx="3"></rect><path d="M8 5V3M5 8H2.5M11 8h2.5M5 11.5l-2 1.5M11 11.5l2 1.5M6 3.5 5 2.5M10 3.5l1-1"></path></svg>
+        <div style="font-weight: 600; color: {{c.strong}}; margin-bottom: 4px">Locals appear while you debug</div>
+        <div>Press F5 to start debugging. Execution stops at the breakpoint on line 13.</div>
+      </div>
+    </sc-if>
+  </aside>
+</div>
+
+<footer style="display: flex; flex-wrap: wrap; align-items: center; min-height: 26px; padding: 0 8px; background: {{statusBg}}; color: {{statusFg}}; border-top: 1px solid {{c.statusEdge}}">
+  <span class="sb" role="status"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 4px; background: {{statusDot}}"></span>{{statusText}}</span>
+  <span style="flex: 1"></span>
+  <button class="sb">Ln 15, Ch 9</button>
+  <button class="sb">Spaces: 4</button>
+  <button class="sb">LF</button>
+  <button class="sb"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5" cy="4" r="1.6"></circle><circle cx="5" cy="12" r="1.6"></circle><circle cx="11" cy="6" r="1.6"></circle><path d="M5 5.6v4.8M11 7.6c0 2.4-6 1.6-6 3"></path></svg>main</button>
+  <button class="sb" aria-label="Notifications"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M4 11V7a4 4 0 0 1 8 0v4l1.2 1.5H2.8z"></path><path d="M6.5 14h3"></path></svg></button>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Dark","options":["Light","Dark","High contrast"]},"mode":{"editor":"enum","default":"Solution open","options":["Solution open","Debugging","No solution"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palettes() {
+    return {
+      'Light': {
+        bg: '#EDE8E3', titleFg: '#2A211B', card: '#FBF9F7', cardBorder: '#DDD5CD', editor: '#FFFFFF', softBorder: '#E6DED6', rowRule: '#EFE9E3',
+        fg: '#2A211B', strong: '#17110C', muted: '#6B5E53', soft: '#5A4D43',
+        pill: '#FBF9F7', pillBorder: '#DDD5CD', pillSep: '#DDD5CD', on: '#F1EAE3', onFg: '#17110C',
+        selection: '#F8E1CB', selectionFg: '#4A2508', selIcon: '#6E6E6E', selIconFill: '#388A34',
+        accent: '#B85A12', accentFg: '#FFFFFF',
+        tabActive: '#F8E1CB', tabActiveEdge: '#EBC7A2', tabActiveFg: '#4A2508', tabFg: '#5A4D43',
+        status: '#EDE8E3', statusFg: '#5A4D43', statusDebug: '#B4500F', statusDebugFg: '#FFFFFF', statusEmpty: '#EDE8E3', statusEmptyFg: '#5A4D43', statusEdge: 'transparent', dotOk: '#388A34', dotEmpty: '#7A6C60', dotDebug: '#FFE08A',
+        code: '#2A211B', gutter: '#7A6C60', curLine: '#FBF5EE', curEdge: 'none', bpLine: '#FCE9E7', execLine: '#FFF0BF',
+        kw: '#A34A0B', ty: '#1F6E63', fn: '#7A5A00', st: '#44701A', nu: '#8A3C8F', cm: '#76695E',
+        link: '#A04E10', bp: '#C4314B', squiggle: '#388A34', exec: '#E8B300',
+        pausedBg: '#FFF0BF', pausedFg: '#5C4300', pausedDot: '#8A6400', pausedEdge: '#FFF0BF',
+        chipBg: '#F6E7C1', chipFg: '#5C4300', chipEdge: '#F6E7C1',
+        termPath: '#1F6E63', termPrompt: '#A04E10', termText: '#3A2F27', termOk: '#1E7F34', cursor: '#2A211B',
+        inset: '#F5F0EA', insetEdge: '#E6DED6',
+        icBlue: '#00539C', icGreen: '#388A34', icRed: '#A1260D', icOrange: '#B26B12', icPurple: '#652D90', icYellow: '#8A6400', icFolder: '#8A6320', icOutline: '#6E6E6E'
+      },
+      'Dark': {
+        bg: '#0F0E0D', titleFg: '#E6DFD8', card: '#1A1816', cardBorder: '#2B2724', editor: '#171513', softBorder: '#2B2724', rowRule: '#221F1C',
+        fg: '#E6DFD8', strong: '#F2ECE6', muted: '#A39A90', soft: '#B8AFA5',
+        pill: '#1A1816', pillBorder: '#2B2724', pillSep: '#3A3430', on: '#26221F', onFg: '#F2ECE6',
+        selection: '#3A2A1C', selectionFg: '#F7E7D6', selIcon: '#C5C5C5', selIconFill: '#89D185',
+        accent: '#E08A3C', accentFg: '#1A0F05',
+        tabActive: '#2B2420', tabActiveEdge: '#4A3828', tabActiveFg: '#F7E7D6', tabFg: '#B8AFA5',
+        status: '#0F0E0D', statusFg: '#B8AFA5', statusDebug: '#A8480C', statusDebugFg: '#FFFFFF', statusEmpty: '#0F0E0D', statusEmptyFg: '#B8AFA5', statusEdge: 'transparent', dotOk: '#89D185', dotEmpty: '#8F867D', dotDebug: '#FFCC00',
+        code: '#E6DFD8', gutter: '#8F867D', curLine: '#211E1B', curEdge: 'none', bpLine: '#3A1C1C', execLine: '#3B3112',
+        kw: '#F0A36B', ty: '#9DD3C8', fn: '#E8D29A', st: '#B9D98A', nu: '#D9A6E0', cm: '#938980',
+        link: '#F2B27A', bp: '#F05A5A', squiggle: '#89D185', exec: '#FFCC00',
+        pausedBg: '#3B3112', pausedFg: '#FFE08A', pausedDot: '#FFCC00', pausedEdge: '#3B3112',
+        chipBg: '#3B3320', chipFg: '#F2D79A', chipEdge: '#3B3320',
+        termPath: '#9DD3C8', termPrompt: '#E08A3C', termText: '#D8CFC6', termOk: '#89D185', cursor: '#E6DFD8',
+        inset: '#211E1B', insetEdge: '#2B2724',
+        icBlue: '#75BEFF', icGreen: '#89D185', icRed: '#F48771', icOrange: '#E8AB53', icPurple: '#B180D7', icYellow: '#FFCC00', icFolder: '#DCB67A', icOutline: '#C5C5C5'
+      },
+      'High contrast': {
+        bg: '#000000', titleFg: '#FFFFFF', card: '#000000', cardBorder: '#FFFFFF', editor: '#000000', softBorder: '#8C8C8C', rowRule: '#5C5C5C',
+        fg: '#FFFFFF', strong: '#FFFFFF', muted: '#D6D6D6', soft: '#FFFFFF',
+        pill: '#000000', pillBorder: '#FFFFFF', pillSep: '#8C8C8C', on: '#FFB547', onFg: '#000000',
+        selection: '#FFB547', selectionFg: '#000000', selIcon: '#000000', selIconFill: '#000000',
+        accent: '#FFB547', accentFg: '#000000',
+        tabActive: '#FFB547', tabActiveEdge: '#FFB547', tabActiveFg: '#000000', tabFg: '#FFFFFF',
+        status: '#000000', statusFg: '#FFFFFF', statusDebug: '#FF7A45', statusDebugFg: '#000000', statusEmpty: '#000000', statusEmptyFg: '#FFFFFF', statusEdge: '#FFFFFF', dotOk: '#FFFFFF', dotEmpty: '#8C8C8C', dotDebug: '#000000',
+        code: '#FFFFFF', gutter: '#D6D6D6', curLine: '#000000', curEdge: 'inset 0 0 0 1px #FFFFFF', bpLine: '#4A0010', execLine: '#3D3300',
+        kw: '#FFB86B', ty: '#4FF0CF', fn: '#FFE66D', st: '#B8F07A', nu: '#F0AAFF', cm: '#D6D6D6',
+        link: '#7CF0FF', bp: '#FF5C5C', squiggle: '#FFD34D', exec: '#FFD34D',
+        pausedBg: '#000000', pausedFg: '#FFD34D', pausedDot: '#FFD34D', pausedEdge: '#FFD34D',
+        chipBg: '#000000', chipFg: '#FFFFFF', chipEdge: '#FFFFFF',
+        termPath: '#4FF0CF', termPrompt: '#FFB547', termText: '#FFFFFF', termOk: '#B8F07A', cursor: '#FFFFFF',
+        inset: '#000000', insetEdge: '#FFFFFF',
+        icBlue: '#FFFFFF', icGreen: '#FFFFFF', icRed: '#FFFFFF', icOrange: '#FFFFFF', icPurple: '#FFFFFF', icYellow: '#FFFFFF', icFolder: '#FFFFFF', icOutline: '#FFFFFF'
+      }
+    };
+  }
+  renderVals() {
+    const all = this.palettes();
+    const theme = all[this.props.theme] ? this.props.theme : 'Dark';
+    const c = all[theme];
+    const hc = theme === 'High contrast';
+    const mode = this.props.mode ?? 'Solution open';
+    const debugging = mode === 'Debugging';
+    const src = [
+      "kw:using| Microsoft.Extensions.Logging;",
+      "",
+      "kw:namespace| Samples.Debugging;",
+      "",
+      "kw:public| |kw:sealed| |kw:class| |ty:ForecastService|(|ty:IForecastStore| store, |ty:ILogger|<|ty:ForecastService|> logger)",
+      "{",
+      "    |cm:// Two weeks is as far ahead as the store keeps.",
+      "    |kw:private| |kw:const| |kw:int| MaxDays = |nu:14|;",
+      "",
+      "    |kw:public| |kw:async| |ty:Task|<|ty:IReadOnlyList|<|ty:Forecast|>> |fn:GetAsync|(|kw:string| city, |kw:int| days, |ty:CancellationToken| ct)",
+      "    {",
+      "        |ty:ArgumentOutOfRangeException|.|fn:ThrowIfGreaterThan|(days, MaxDays);",
+      "        logger.|fw:LogInformation|(|st:\"Loading {Days} days for {City}\"|, days, city);",
+      "",
+      "        |kw:var| rows = |kw:await| store.|fn:QueryAsync|(city, ct);",
+      "        |kw:return| rows",
+      "            .|fn:Where|(r => r.Date >= |ty:DateOnly|.|fn:FromDateTime|(|ty:DateTime|.Today))",
+      "            .|fn:Take|(days)",
+      "            .|fn:Select|(r => |kw:new| |ty:Forecast|(r.Date, r.TemperatureC, r.Summary))",
+      "            .|fd:ToList|();",
+      "    }",
+      "}"
+    ];
+    const tok = (seg) => {
+      const m = /^(kw|ty|fn|st|nu|cm|fw|fd):/.exec(seg);
+      if (!m) return { t: seg, c: c.code, i: 'normal', d: 'none' };
+      const k = m[1];
+      const t = seg.slice(3);
+      if (k === 'fw') return { t, c: c.fn, i: 'normal', d: 'underline wavy ' + c.squiggle };
+      if (k === 'fd') return { t, c: c.fn, i: 'normal', d: 'underline dotted ' + c.gutter };
+      return { t, c: c[k], i: k === 'cm' ? 'italic' : 'normal', d: 'none' };
+    };
+    const lines = src.map((s, i) => {
+      const n = i + 1;
+      return {
+        n,
+        bg: n === 15 ? (debugging ? c.execLine : c.curLine) : n === 13 ? c.bpLine : 'transparent',
+        edge: n === 15 ? c.curEdge : 'none',
+        bp: n === 13,
+        arrow: debugging && n === 15,
+        toks: s === '' ? [{ t: ' ', c: c.code, i: 'normal', d: 'none' }] : s.split('|').map(tok)
+      };
+    });
+    return {
+      c,
+      debugging,
+      notDebugging: !debugging,
+      lines,
+      logo: hc ? { a: '#FFFFFF', b: '#FFFFFF', o1: 0.82, o2: 0.6, o3: 0.49 } : { a: 'url(#ember-violet)', b: 'url(#ember-ember)', o1: 0.82, o2: 1, o3: 0.82 },
+      statusBg: debugging ? c.statusDebug : mode === 'No solution' ? c.statusEmpty : c.status,
+      statusFg: debugging ? c.statusDebugFg : mode === 'No solution' ? c.statusEmptyFg : c.statusFg,
+      statusDot: debugging ? c.dotDebug : mode === 'No solution' ? c.dotEmpty : c.dotOk,
+      statusText: debugging ? 'Debugging: Samples.Debugging (paused)' : 'Ready'
+    };
+  }
+}
+</script>
+</body>
+</html>

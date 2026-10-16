@@ -97,7 +97,7 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
     private WorkbenchServices _workbench = null!;
     private PluginManager _manager = null!;
 
-    private static string TemplatesDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.Templates", "bin", PluginHostIntegrationTests.Configuration, "net10.0");
+    private static string TemplatesDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.Templates", "bin", PluginHostIntegrationTests.Configuration, Codalus.Tests.RepoBuild.TargetFramework);
 
     public ValueTask InitializeAsync()
     {
@@ -146,7 +146,7 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
         Assert.Equal(PluginState.Ready, _manager.Plugins.Single().State);
         var location = Path.Combine(_root, "repos");
         // The framework: one every SDK from 10 on offers, not necessarily the default.
-        var prompts = new ScriptedPrompts(new Queue<string>(["console", location, "1nvalid", "Hello.App", "net10.0"]));
+        var prompts = new ScriptedPrompts(new Queue<string>(["console", "C#", location, "1nvalid", "Hello.App", "net10.0"]));
         _manager.Prompts = prompts;
         var opened = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         _workbench.Commands.Register(new CommandDescriptor("solution.getInfo", "info", ContributionSource.Shell), (_, _) => Task.FromResult<JsonElement?>(null));
@@ -164,7 +164,30 @@ public sealed class TemplatesPluginIntegrationTests : IAsyncLifetime
         Assert.Equal(Path.Combine(location, "Hello.App", "Hello.App.csproj"), project);
         Assert.Equal(project, result!.Value.GetString());
         Assert.True(File.Exists(Path.Combine(location, "Hello.App", "Program.cs")));
-        Assert.Equal(["Select a project template", "Location", "Project name", "Project name", "Target framework"], prompts.Asked); // the invalid name was asked again
+        Assert.Equal(["Select a project template", "Select the language", "Location", "Project name", "Project name", "Target framework"], prompts.Asked); // the invalid name was asked again
         Assert.Contains("<TargetFramework>net10.0</TargetFramework>", File.ReadAllText(project), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task New_project_in_visual_basic_passes_the_language()
+    {
+        var location = Path.Combine(_root, "vb");
+        var prompts = new ScriptedPrompts(new Queue<string>(["console", "VB", location, "Hello.Vb", "net10.0"]));
+        _manager.Prompts = prompts;
+        var opened = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _workbench.Commands.Register(new CommandDescriptor("solution.getInfo", "info", ContributionSource.Shell), (_, _) => Task.FromResult<JsonElement?>(null));
+        _workbench.Commands.Register(new CommandDescriptor("workbench.openSolution", "open", ContributionSource.Shell), (args, _) =>
+        {
+            opened.TrySetResult(args[0].GetString()!);
+            return Task.FromResult<JsonElement?>(null);
+        });
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(3));
+        await _workbench.Commands.ExecuteAsync("templates.newProject", timeout.Token);
+
+        var project = await opened.Task.WaitAsync(timeout.Token);
+        Assert.Equal(Path.Combine(location, "Hello.Vb", "Hello.Vb.vbproj"), project);
+        Assert.True(File.Exists(Path.Combine(location, "Hello.Vb", "Program.vb")));
     }
 }

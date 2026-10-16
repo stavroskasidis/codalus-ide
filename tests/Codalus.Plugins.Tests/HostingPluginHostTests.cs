@@ -25,7 +25,7 @@ public sealed class HostingPluginHostTests : IAsyncLifetime
     private PluginManager _manager = null!;
     private HostingService _hosting = null!;
 
-    internal static string GitHubPluginDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.GitHub", "bin", PluginHostIntegrationTests.Configuration, "net10.0");
+    internal static string GitHubPluginDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.GitHub", "bin", PluginHostIntegrationTests.Configuration, Codalus.Tests.RepoBuild.TargetFramework);
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(s_timeout).Token).Token;

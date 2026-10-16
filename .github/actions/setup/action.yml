@@ -1,0 +1,72 @@
+name: Setup
+description: >-
+  The .NET SDK of global.json, and what a job asks for: the extra SDKs, the NuGet cache, the debugger, the macOS
+  developer tools access and a display on Linux. Every workflow's jobs set up through it, so each pin lives here once.
+inputs:
+  extra-sdks:
+    description: >-
+      Also the .NET 10 SDK, for the fixtures that still target net10.0 and the net10.0 half of samples/Testing (M30b)
+    default: "false"
+  nuget-cache:
+    description: Cache ~/.nuget/packages (only jobs that restore the solution, so a small job doesn't save a thin cache)
+    default: "false"
+  netcoredbg:
+    description: The debugger (eng/get-netcoredbg.sh, pinned and checksummed) in .work/netcoredbg
+    default: "false"
+  devtools:
+    description: macOS developer tools access, for dumps (createdump) and attaching (netcoredbg)
+    default: "false"
+  display:
+    description: An X server on Linux (Xvfb on :99, DISPLAY set for the job's later steps)
+    default: "false"
+runs:
+  using: composite
+  steps:
+    # The SDK of global.json, spelled out: setup-dotnet reads global.json's "latestFeature" as the channel's newest
+    # release, which .NET 11 doesn't have before GA (M30b). Keep it in step with global.json and samples/Net11/global.json
+    # (docs/release/dotnet-upgrade.md). TODO(issue): back to global-json-file on the .NET 11 GA SDK.
+    - if: inputs.extra-sdks != 'true'
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 11.0.100-rc.2.26504.105
+    - if: inputs.extra-sdks == 'true'
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          10.0.x
+          11.0.100-rc.2.26504.105
+    - if: inputs.nuget-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+        restore-keys: nuget-${{ runner.os }}-
+    - if: inputs.netcoredbg == 'true'
+      uses: actions/cache@v4
+      with:
+        path: .work/netcoredbg
+        key: netcoredbg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('eng/get-netcoredbg.sh') }}
+    - name: Debugger (netcoredbg, pinned and checksummed)
+      if: inputs.netcoredbg == 'true'
+      shell: bash
+      run: eng/get-netcoredbg.sh
+    - name: Developer tools access (macOS)
+      # Otherwise the system asks for a password that nobody answers on a runner, and dumps and attaching time out (as
+      # a person would approve once). The windowed app runs in the runner's GUI session, where the task port right
+      # still asked with developer mode on: allowed only on these throwaway runners (the maintainer's decision, 2026-10-12).
+      if: inputs.devtools == 'true' && runner.os == 'macOS'
+      shell: bash
+      run: |
+        sudo DevToolsSecurity -enable
+        sudo dseditgroup -o edit -a "$USER" -t user _developer
+        sudo security authorizationdb write system.privilege.taskport allow
+    - name: Display (Xvfb)
+      # One X server for the whole job, so the steps run the same command on every OS (no xvfb-run around each).
+      if: inputs.display == 'true' && runner.os == 'Linux'
+      shell: bash
+      run: |
+        command -v Xvfb > /dev/null || { sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb; }
+        Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp > "$RUNNER_TEMP/xvfb.log" 2>&1 &
+        for _ in $(seq 50); do [ -S /tmp/.X11-unix/X99 ] && break; sleep 0.2; done
+        [ -S /tmp/.X11-unix/X99 ] || { cat "$RUNNER_TEMP/xvfb.log"; echo "::error::Xvfb didn't start"; exit 1; }
+        echo "DISPLAY=:99" >> "$GITHUB_ENV"

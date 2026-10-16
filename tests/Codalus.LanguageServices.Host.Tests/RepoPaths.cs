@@ -9,10 +9,10 @@ internal static class RepoPaths
     public static string Configuration { get; } = Metadata("CodalusConfiguration");
 
     public static string HostAssembly =>
-        Path.Combine(Root, "src", "Codalus.LanguageServices.Host", "bin", Configuration, "net10.0", "codalus-lshost.dll");
+        Path.Combine(Root, "src", "Codalus.LanguageServices.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-lshost.dll");
 
     public static string BuildHostAssembly =>
-        Path.Combine(Root, "src", "Codalus.Projects.Host", "bin", Configuration, "net10.0", "codalus-buildhost.dll");
+        Path.Combine(Root, "src", "Codalus.Projects.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-buildhost.dll");
 
     /// <summary>Copies samples/<paramref name="fixture"/> (and the files that keep fixtures standalone) under <paramref name="root"/>.</summary>
     public static string CopyFixture(string fixture, string root)

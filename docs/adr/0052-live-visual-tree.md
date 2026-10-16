@@ -1,6 +1,8 @@
-# ADR 0052: The Live Visual Tree and Live Property Explorer for running Avalonia apps
+# 0052. The Live Visual Tree and Live Property Explorer for running Avalonia apps
 
-Status: accepted (M19b, 2026-10-13)
+- **Status:** accepted (M19b, 2026-10-13)
+- **Date:** 2026-10-13
+- **Deciders:** maintainer
 
 ## Context
 

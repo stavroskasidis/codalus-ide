@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds and tests this checkout the way CI does, on Linux or macOS (eng/wsl-test.sh runs it under WSL; on the Mac it
 # runs in a clone, see CLAUDE.md). Installs the SDK pinned by global.json into ~/.dotnet when no matching one is on
-# the PATH, and fetches netcoredbg so the debugger tests run instead of skipping.
+# the PATH (the .NET 11 release candidate since M30b), and the .NET 10 SDK next to it for the fixtures that still
+# target net10.0, and fetches netcoredbg so the debugger tests run instead of skipping.
 #
 # Usage: eng/validate.sh [--smoke] [dotnet test arguments...]
 #   --smoke  also publishes the Native AOT shell and runs eng/smoke-test.sh against it (needs clang and, on Linux,
@@ -18,29 +19,23 @@ if [ "${1:-}" = --smoke ]; then smoke=yes; shift; fi
 export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 TESTINGPLATFORM_TELEMETRY_OPTOUT=1
 
 sdk="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' global.json | head -1)"
-band="${sdk%??}"   # 10.0.401 -> 10.0.4 (global.json rolls forward within the feature band and beyond)
-if ! dotnet --list-sdks 2>/dev/null | grep -q "^$band"; then
-  if [ ! -x "$HOME/.dotnet/dotnet" ] || ! "$HOME/.dotnet/dotnet" --list-sdks | grep -q "^$band"; then
-    echo "== install .NET SDK ${band}xx into ~/.dotnet"
+# `dotnet --version` here applies global.json (its version, roll-forward and prerelease rules) and fails without a
+# matching SDK.
+if ! dotnet --version > /dev/null 2>&1; then
+  if [ ! -x "$HOME/.dotnet/dotnet" ] || ! "$HOME/.dotnet/dotnet" --version > /dev/null 2>&1; then
+    echo "== install .NET SDK $sdk into ~/.dotnet"
     curl -fsSL https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
     bash "${TMPDIR:-/tmp}/dotnet-install.sh" --jsonfile global.json --install-dir "$HOME/.dotnet" --no-path
   fi
   export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"
 fi
-# The multi-targeted test fixtures (samples/Testing) also run on .NET 9.
-if ! dotnet --list-runtimes | grep -q '^Microsoft.NETCore.App 9\.'; then
+# The fixtures that still target net10.0 (and the net10.0 half of samples/Testing) run on .NET 10 (M30b). Its SDK
+# brings both runtimes, Microsoft.NETCore.App and Microsoft.AspNetCore.App, next to the SDK in use.
+if ! dotnet --list-runtimes | grep -q '^Microsoft.AspNetCore.App 10\.'; then
   root="$(dirname "$(readlink -f "$(command -v dotnet)")")"
-  echo "== install the .NET 9 runtime into $root"
+  echo "== install the .NET 10 SDK into $root"
   curl -fsSL https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
-  bash "${TMPDIR:-/tmp}/dotnet-install.sh" --runtime dotnet --channel 9.0 --install-dir "$root" --no-path
-fi
-# samples/Net11 needs the .NET 11 SDK (M30). It goes next to the SDK in use, so the build host can roll forward to
-# its runtime (ADR 0025).
-if ! dotnet --list-sdks | grep -q '^11\.0\.'; then
-  root="$(dirname "$(readlink -f "$(command -v dotnet)")")"
-  echo "== install the .NET 11 SDK (samples/Net11/global.json) into $root"
-  curl -fsSL https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
-  bash "${TMPDIR:-/tmp}/dotnet-install.sh" --jsonfile samples/Net11/global.json --install-dir "$root" --no-path
+  bash "${TMPDIR:-/tmp}/dotnet-install.sh" --channel 10.0 --install-dir "$root" --no-path
 fi
 echo "== $(uname -sm), .NET SDK $(dotnet --version), $(git --version)"
 
@@ -50,7 +45,7 @@ export CODALUS_NETCOREDBG="$repo/.work/netcoredbg"
 # The x64 debugger on Apple silicon, for .NET 5 and earlier under Rosetta 2 (M33; does nothing elsewhere).
 bash eng/get-netcoredbg.sh --x64
 
-# The target framework matrix (M33, ADR 0030): .NET Core 2.0 to .NET 9 and older SDKs, pinned, in .work/dotnet-compat.
+# The target framework matrix (M33, ADR 0030): .NET Core 2.0 to .NET 10 and older SDKs, pinned, in .work/dotnet-compat.
 # The first run downloads about 1.5 GB; Codalus.TargetFrameworks.Tests runs against it.
 echo "== target framework matrix"
 bash eng/get-runtimes.sh > /dev/null

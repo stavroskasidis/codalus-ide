@@ -88,4 +88,124 @@ public sealed class GitShellTests
         await f.Shell.Git.CreateBranchAsync("feature/x", switchTo: true, TestContext.Current.CancellationToken);
         await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.git.branch" && i.Text.Contains("feature/x", StringComparison.Ordinal)));
     }
+
+    [Fact]
+    public void Related_items_are_the_issue_references_in_the_message()
+    {
+        Assert.Equal(["#12", "#3"], GitChangesViewModel.MentionedItems("Fix #12 and #3 (see #12); not a#4 or ##5 or #x"));
+        Assert.Empty(GitChangesViewModel.MentionedItems("no references"));
+    }
+
+    private static GitFileRow Row(string relative, char workTree = 'M') =>
+        new(new GitFileStatus(Path.Combine("/repo", relative), relative, '.', workTree), staged: false);
+
+    [Fact]
+    public void The_changes_tree_is_the_repository_its_compacted_folders_and_files()
+    {
+        var sep = Path.DirectorySeparatorChar;
+        var single = GitChangesViewModel.BuildTree("/repo", [Row("src/Codalus.Data.Host/Transfer.cs")], "changes", staged: false, new HashSet<string>());
+        var repository = Assert.Single(single);
+        Assert.True(repository.IsRepository);
+        var folder = Assert.Single(repository.Children);
+        Assert.Equal($"src{sep}Codalus.Data.Host", folder.Text);
+        Assert.Equal("Transfer.cs", Assert.Single(folder.Children).Text);
+        Assert.Equal("M", folder.Children[0].Letter);
+
+        var collapsed = new HashSet<string> { "changes:/src/C" };
+        var tree = GitChangesViewModel.BuildTree("/repo", [Row("README.md"), Row("src/C/z.cs"), Row("src/A/B/y.cs"), Row("src/A/B/x.cs")], "changes", staged: false, collapsed);
+        var root = Assert.Single(tree);
+        Assert.Equal(["src", "README.md"], root.Children.Select(c => c.Text));
+        var src = root.Children[0];
+        Assert.Equal([$"A{sep}B", "C"], src.Children.Select(c => c.Text));
+        Assert.Equal(["x.cs", "y.cs"], src.Children[0].Children.Select(c => c.Text));
+        Assert.False(src.Children[1].IsExpanded);
+        Assert.True(src.Children[0].IsExpanded);
+        Assert.Equal(3, src.Rows.Count());
+        Assert.Empty(GitChangesViewModel.BuildTree("/repo", [], "changes", staged: false, new HashSet<string>()));
+    }
+
+    [AvaloniaFact]
+    public async Task Changes_view_lays_out_like_the_classic_ide_commits_all_with_new_files_and_lists_stashes()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = f.CopySample("BuildAndRun");
+        Git(folder, "init", "-q", "-b", "main");
+        Git(folder, "config", "user.name", "Ada Tester");
+        Git(folder, "config", "user.email", "ada@example.com");
+        Git(folder, "config", "commit.gpgsign", "false");
+        Git(folder, "config", "core.autocrlf", "false");
+        File.WriteAllText(Path.Combine(folder, ".gitignore"), "bin/\nobj/\n");
+        Git(folder, "add", ".");
+        Git(folder, "commit", "-q", "-m", "initial");
+
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "main" });
+        var vm = f.Shell.GitChanges;
+        f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitChangesView>().Any());
+
+        // The branch picker, an unpublished branch, and a commit button that waits for a message and a change.
+        Assert.Equal("main", vm.BranchName);
+        Assert.True(vm.IsNotPublished);
+        Assert.Equal("Changes", vm.ChangesHeader);
+        Assert.False(vm.CanCommit);
+        Assert.True(vm.HasNoStashes);
+
+        // A new (untracked) file: Commit All commits it too.
+        File.WriteAllText(Path.Combine(folder, "Notes.txt"), "notes\n");
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => vm.Changes.Any(r => r.Name == "Notes.txt"));
+        Assert.Equal("Commit All", vm.CommitText);
+        Assert.False(vm.CanCommit);
+        vm.Message = "Add notes for #7";
+        Assert.True(vm.CanCommit);
+        Assert.Equal([new RelatedItem("#7", null)], vm.RelatedItems);
+        await vm.CommitAsync(all: true);
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Files.Count: 0 });
+        Assert.Empty(vm.RelatedItems);
+
+        // The tree: the repository, then the file; the list: Name and Path, sorted and filtered.
+        File.WriteAllText(Path.Combine(folder, "Zeta.txt"), "z\n");
+        File.WriteAllText(Path.Combine(folder, "Alpha.txt"), "a\n");
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => vm.Changes.Count == 2);
+        Assert.Equal(["Alpha.txt", "Zeta.txt"], Assert.Single(vm.ChangesTree).Children.Select(c => c.Text));
+        vm.IsTreeView = false;
+        Assert.True(vm.IsListView);
+        Assert.Equal(Path.GetFileName(folder), vm.ChangesItems[0].Location);
+        vm.SortBy("name");
+        Assert.Equal(["Zeta.txt", "Alpha.txt"], vm.ChangesItems.Select(r => r.Name));
+        vm.ShowFilter = true;
+        vm.FilterText = "alp";
+        Assert.Equal(["Alpha.txt"], vm.ChangesItems.Select(r => r.Name));
+        vm.ShowFilter = false;
+        Assert.Equal(2, vm.ChangesItems.Count);
+        vm.IsTreeView = true;
+        File.Delete(Path.Combine(folder, "Zeta.txt"));
+        File.Delete(Path.Combine(folder, "Alpha.txt"));
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => vm.Changes.Count == 0);
+
+        // Staged changes turn it into Commit Staged.
+        File.AppendAllText(Path.Combine(folder, "Notes.txt"), "more\n");
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => vm.HasChanges);
+        await vm.StageAllAsync();
+        await ShellFixture.PumpUntil(() => vm.HasStaged);
+        Assert.Equal("Commit Staged", vm.CommitText);
+        Assert.Equal("Commit Staged and Push", vm.CommitAndPushText);
+
+        // Stashing lists the stash; applying it brings the change back; clearing empties the list.
+        await f.Shell.Git.StashAsync("wip notes", includeUntracked: false, cancellationToken: TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => vm.Stashes.Count == 1);
+        Assert.Contains("wip notes", vm.Stashes[0].Message, StringComparison.Ordinal);
+        Assert.Equal("Stashes (1)", vm.StashesHeader);
+        await vm.ApplyStashAsync(vm.Stashes[0], pop: true);
+        await ShellFixture.PumpUntil(() => vm.Stashes.Count == 0 && (vm.HasStaged || vm.HasChanges));
+        await f.Shell.Git.StashAsync(null, includeUntracked: false, cancellationToken: TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => vm.Stashes.Count == 1);
+        await f.Shell.Git.ClearStashesAsync(TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => vm.HasNoStashes);
+    }
 }

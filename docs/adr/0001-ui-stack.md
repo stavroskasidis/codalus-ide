@@ -1,6 +1,6 @@
 # 0001. UI stack for the Daedalus Studio shell
 
-- **Status:** accepted (2026-10-08). Prototype B was removed from the repository; its measurements stay in `benchmarks/results/windows/gpui/`.
+- **Status:** accepted (2026-10-08). Prototype B was removed from the repository; its measurements stay in `benchmarks/results/windows/gpui/`. The whole `spikes/` folder (prototype A too) was removed later, and the repository is public: the hosted benchmarks are `pipeline.yml`'s `benchmarks` job (ADR 0002), not `benchmarks.yml`.
 - **Date:** 2026-10-08
 - **Deciders:** maintainer
 

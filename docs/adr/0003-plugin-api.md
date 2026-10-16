@@ -1,6 +1,6 @@
 # 0003. Plugin API v0
 
-- **Status:** accepted (M1 plan approval, 2026-10-08)
+- **Status:** accepted (M1 plan approval, 2026-10-08). API 1.0 is [ADR 0058](0058-plugin-api-1-0.md), which keeps this ADR's versioning policy.
 - **Date:** 2026-10-08
 - **Deciders:** maintainer
 

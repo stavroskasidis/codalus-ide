@@ -1,6 +1,8 @@
-# ADR 0056: Daedalus Studio becomes Codalus IDE
+# 0056. Daedalus Studio becomes Codalus IDE
 
-Status: accepted (M39, 2026-10-13)
+- **Status:** accepted (M39, 2026-10-13)
+- **Date:** 2026-10-13
+- **Deciders:** maintainer
 
 ## Context
 

@@ -1,6 +1,8 @@
-# ADR 0055: Remote test environments
+# 0055. Remote test environments
 
-Status: accepted (M21b, 2026-10-13)
+- **Status:** accepted (M21b, 2026-10-13)
+- **Date:** 2026-10-13
+- **Deciders:** maintainer
 
 ## Context
 

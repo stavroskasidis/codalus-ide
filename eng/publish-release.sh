@@ -20,7 +20,7 @@ cat "$downloaded"/*/SHA256SUMS-*.txt | sort -k2 > "$assets/SHA256SUMS.txt"
 if [ "$kind" = stable ] && winget="$(ls -d "$downloaded"/*/winget-* 2> /dev/null | head -n 1)" && [ -n "$winget" ]; then
   (cd "$winget" && zip -q "$assets/winget-manifests-$version.zip" ./*.yaml)
 fi
-# The AUR package (PKGBUILD and .SRCINFO) of a stable release with both Linux builds: release.yml pushes it to the
+# The AUR package (PKGBUILD and .SRCINFO) of a stable release with both Linux builds: pipeline.yml pushes it to the
 # AUR, and Arch users can build it from the release page meanwhile.
 if [ "$kind" = stable ] && [ -f "$assets/codalus-$version-linux-x64.tar.gz" ] && [ -f "$assets/codalus-$version-linux-arm64.tar.gz" ]; then
   bash "$repo/eng/aur.sh" "$version" "$assets" "$work/aur"
@@ -28,7 +28,7 @@ if [ "$kind" = stable ] && [ -f "$assets/codalus-$version-linux-x64.tar.gz" ] &&
 fi
 
 dotnet run --project "$repo/eng/Codalus.Release" -- notes "$kind" "$version" --repo "${GITHUB_REPOSITORY:-stavroskasidis/codalus-ide}" --to "$ref" > "$work/notes.md"
-# The workflow tagged the commit when it started (see release.yml): the release goes on that tag.
+# The workflow tagged the commit when it started (see pipeline.yml): the release goes on that tag.
 flags=(--verify-tag --title "Codalus IDE $version" --notes-file "$work/notes.md")
 if [ "$kind" = nightly ]; then flags+=(--prerelease); else flags+=(--latest); fi
 

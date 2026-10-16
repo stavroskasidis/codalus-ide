@@ -125,7 +125,16 @@ public sealed class WhenClause
                 case "!=":
                     return !string.Equals(text, value, StringComparison.Ordinal);
                 case "=~":
-                    return _regex!.IsMatch(text);
+                    try
+                    {
+                        return _regex!.IsMatch(text);
+                    }
+                    catch (RegexMatchTimeoutException)
+                    {
+                        // A pattern that backtracks past its budget (or a thread paused mid-match on a busy machine)
+                        // doesn't match: the exception, a TimeoutException, would fail whatever evaluated the clause.
+                        return false;
+                    }
                 default:
                     if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var left)
                         || !double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var right))

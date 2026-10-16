@@ -91,6 +91,7 @@ merge_16_regular
 new_16_regular
 pause_16_regular
 person_16_regular
+phone_16_regular
 pin_16_regular
 play_16_filled
 play_16_regular

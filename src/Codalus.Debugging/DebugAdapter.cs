@@ -147,7 +147,7 @@ public sealed class DebugAdapter : IDebugAdapter
 
     private async Task AbandonUnlessClosedAsync()
     {
-        await Task.WhenAny(_connection.Closed, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
+        await _connection.Closed.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         if (!_connection.Closed.IsCompleted)
         {
             Log?.Invoke(this, $"The debug adapter exited (code {ExitCode()}), and a process it started still holds its output.");
@@ -347,7 +347,8 @@ public sealed class DebugAdapter : IDebugAdapter
 
     public async ValueTask DisposeAsync()
     {
-        if (await Task.WhenAny(_process.Exited, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false) != _process.Exited)
+        await ((Task)_process.Exited).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        if (!_process.Exited.IsCompleted)
         {
             _process.Kill();
         }

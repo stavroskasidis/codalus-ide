@@ -122,7 +122,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
   - strings: **Text, JSON, XML or HTML Visualizer**, the whole string in a read-only, colored document, with JSON and XML indented;
   - arrays and collections (`List<T>`, `Queue<T>`, `Stack<T>`, `HashSet<T>`, …): the **Grid Visualizer**, a table of up to 500 elements, with an object's properties and fields as columns;
   - byte arrays: the **Image Visualizer**, which opens a PNG, JPEG, GIF, BMP, WebP or ICO image they hold in the image viewer;
-  - plugins can add their own visualizers for other types (see [Plugins](../plugins.md#proposed-apis)).
+  - plugins can add their own visualizers for other types (see [Plugins](../plugins.md#workbench-apis)).
 - **Display attributes**: objects whose type has `[DebuggerDisplay]` show its text (`Order 7: Ada (1 lines)` instead of `{MyApp.Order}`), and members marked `[DebuggerBrowsable(Never)]` are hidden, in Locals, Autos, Watch, QuickWatch and data tips.
 - **Call Stack** (`Ctrl+Alt+C`): the frames of the selected thread. Pick another thread at the top. Double-click a frame to see its source and its variables.
 - **Threads** (`Ctrl+Alt+H`): every thread with its id, name and location. Double-click to switch to a thread; flag threads and show only the flagged ones.
@@ -183,5 +183,6 @@ These come from netcoredbg:
 - remote debugging covers Linux and macOS targets with `sh`, `tar` and `gzip`; not Windows machines over SSH, nor Windows containers
 - on macOS, the program's exit code is reported as 0
 - no debugger for macOS on Intel
+- .NET 11 programs debug with the bundled netcoredbg (3.2.0), except exception module conditions: it gives their stack frames no module, so a condition can't tell where an exception was thrown: one that names modules (`MyApp.dll`) doesn't break, and one that only leaves modules out (`!System.*`) always breaks
 
 Hit counts, logpoints, filters, dependent and temporary breakpoints, exception module conditions and Run to Cursor are implemented by the IDE, so each hit pauses the program briefly.

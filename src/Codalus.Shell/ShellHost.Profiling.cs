@@ -459,6 +459,7 @@ public sealed partial class ShellHost
             {
                 SaveFile = (title, name, filter, patterns) => Window?.SaveFileAsync(title, name, filter, patterns) ?? Task.FromResult<string?>(null),
                 OpenDump = path => OpenDumpAsync(path),
+                SummarizeWithAi = SummarizeProfileWithAiAsync,
             },
             vm => "Report: " + vm.Session.ProcessName);
     }

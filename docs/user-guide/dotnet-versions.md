@@ -1,10 +1,10 @@
 # Older .NET versions
 
-Codalus IDE opens, builds, runs, debugs and tests projects of every .NET (Core) version from .NET Core 2.0 to .NET 10, and .NET Standard 2.0 and 2.1 libraries, with the current .NET SDK (ADR 0030). `netcoreapp1.x` and .NET Framework are out of scope. This page says what works where, and what each gap needs.
+Codalus IDE opens, builds, runs, debugs and tests projects of every .NET (Core) version from .NET Core 2.0 to .NET 10, and .NET Standard 2.0 and 2.1 libraries, with the current .NET SDK (.NET 11's since Codalus moved to .NET 11; `net11.0` itself is the current framework, covered everywhere else in this guide). `netcoreapp1.x` and .NET Framework are out of scope. This page says what works where, and what each gap needs.
 
 ## With the current SDK
 
-Install the current .NET SDK and the runtimes your projects target (the SDK builds every framework; a program runs on its own runtime). The tables below come from the test suite (`tests/Codalus.TargetFrameworks.Tests` on `samples/TargetFrameworks`), run on each operating system.
+Install the current .NET SDK and the runtimes your projects target (the SDK builds every framework; a program runs on its own runtime). The tables below come from the test suite (`tests/Codalus.TargetFrameworks.Tests` on `samples/TargetFrameworks`), run on each operating system with the .NET 10 SDK; its run with the .NET 11 SDK is pending.
 
 - **Open:** the project loads and evaluates; the Dependencies node shows the framework (the `Microsoft.NETCore.App` package before .NET Core 3.0) and the project and package references; the property pages read the framework and its C# version.
 - **Editor:** references and the C# version each framework defaults to (7.3 for .NET Core 2.x and .NET Standard 2.0, 8.0 for 3.x and .NET Standard 2.1, 9.0 for .NET 5, then one per release), so the editor reports what the compiler reports.
@@ -52,7 +52,7 @@ Validated on an Apple M4 (macOS 27.0.1). Every framework from `netcoreapp2.0` to
 2. **ICU on current Linux distributions.** .NET Core 2.x to 3.1 look for the ICU versions that existed when they shipped, and stop at start on a newer distribution ("Couldn't find a valid ICU package"). Codalus sets `CLR_ICU_VERSION_OVERRIDE` to the system's ICU when it runs, debugs or tests them, and says so in the output. The debugger gets the same setting: netcoredbg reads symbols on the program's own runtime. To choose otherwise, set `CLR_ICU_VERSION_OVERRIDE` or `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` in the launch profile. Outside Codalus (`dotnet run`, a terminal), set the same variable yourself.
 3. **OpenSSL 1.x for .NET Core 2.x to .NET 5 on Linux.** These runtimes use OpenSSL 1.0 or 1.1 for cryptography and HTTPS; .NET 6 added OpenSSL 3, the only one current distributions have (Ubuntu 22.04 and later, Debian 12, Fedora 36 and later). Programs that hash, encrypt or call HTTPS fail ("No usable version of libssl was found"); the rest runs. Test hosts hash test names, so tests of these versions don't run without it (the Test Explorer still lists them from the sources). To use those features, install OpenSSL 1.1 next to OpenSSL 3 (for example `libssl1.1` from the distribution's previous release, or OpenSSL 1.1.1 built into `/usr/local/lib` with `LD_LIBRARY_PATH` set in the launch profile), or develop in a container of a distribution of that time. A documented gap: Codalus can't supply a library the distribution lacks. .NET Core 2.0 also needs the system's `libunwind` (`libunwind8` on Debian and Ubuntu), which later runtimes bring with them.
 4. **x64 under Rosetta 2.** Install Rosetta 2 (`softwareupdate --install-rosetta`) and the x64 runtime of each version (the x64 installer, or `dotnet-install.sh --architecture x64 --install-dir /usr/local/share/dotnet/x64`). Without it, Run says which runtime to install. The .NET test plugin runs these test hosts as x64 too.
-5. **Attaching to an x64 process** (Debug → Attach to Process) on Apple silicon uses the Arm64 debugger, which can't debug it. Start such programs with F5 instead. `TODO(issue)`: pick the debugger by the process's architecture.
+5. **Attaching to an x64 process** (Debug → Attach to Process) on Apple silicon uses the Arm64 debugger, which can't debug it. Start such programs with F5 instead.
 
 ## With an older SDK pinned in global.json
 

@@ -21,6 +21,7 @@ public sealed class TextMateSupport : IRegistryOptions
     {
         ["msbuild"] = "xml",
         ["axaml"] = "xml",
+        ["xaml"] = "xml",
         ["editorconfig"] = "ini",
         ["properties"] = "ini",
         ["javascriptreact"] = "javascript",

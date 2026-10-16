@@ -1,6 +1,6 @@
 # 0028. Release cycle and installers
 
-- **Status:** accepted (M31, 2026-10-11; the maintainer's go-ahead to complete every milestone). It replaces ADR 0009's packaging table; ADR 0009's crash reports and performance gates stand.
+- **Status:** accepted (M31, 2026-10-11; the maintainer's go-ahead to complete every milestone), amended 2026-10-13 and 2026-10-14 (the workflows: one `pipeline.yml` and `pages.yml`; see the updates under **Workflows**). It replaces ADR 0009's packaging table; ADR 0009's crash reports and performance gates stand.
 - **Date:** 2026-10-11
 - **Deciders:** maintainer (D16–D21, D27 in the roadmap's decision register)
 
@@ -39,16 +39,17 @@ M7 shipped hand-run packages (ADR 0009): a portable zip, a `.dmg`, a `.tar.gz`, 
 - **The `.deb` and `.rpm` versions** turn the prerelease dash into a tilde (`0.2.0~nightly.20261011.1`), so a nightly sorts before its release in both formats.
 - **Prerequisites.** The installers don't install the .NET SDK or git; the `.deb` and `.rpm` declare them (git required, the SDK recommended), and winget lists them as dependencies.
 
-**Workflows** (D20).
+**Workflows** (D20). The first bullets are M31's design; the dated updates after them supersede it.
 - `packages.yml` (reusable): the platform matrix builds the packages, installs them the way users would, runs the smoke test on the installed app, uninstalls them and checks that nothing is left (`eng/smoke-test.sh --packages`). Linux ARM64 joins when the repository is public: GitHub's ARM64 Linux runners are free for public repositories only.
 - `nightly.yml` runs from `develop` at night when it changed since the last nightly, and on manual dispatch. It publishes a prerelease and keeps the newest 14.
 - `release.yml` runs on every push to `master` and on manual dispatch. It publishes `vX.Y.Z` as the latest release, then merges `master` into `develop` (a hotfix) and moves `develop`'s `VERSION` past the release.
 - Both publish through `eng/publish-release.sh`: every platform's files, one `SHA256SUMS.txt`, the winget manifests (stable) and the generated notes.
 - Both have a dry run (the dispatch default): build and test everything, publish nothing.
 - *Update 2026-10-13:* the two are one workflow, `release.yml`, whose trigger picks the kind (the schedule a nightly, a push to `master` a stable release, manual dispatch either); the jobs they shared are written once.
-- While the repository is private, the schedule and the push trigger do nothing (a job condition on `github.event.repository.private`), so they switch on by themselves when it goes public.
+- *Update 2026-10-14:* one pipeline, `pipeline.yml`, for `develop`, `master` and pull requests: CI on every run, then a nightly from every push to `develop` and a stable release from every push to `master`, each gated on CI and the packages of its own run (no schedule; a nightly is no longer published from a commit CI never passed). `packages.yml`, `ci.yml` and `benchmarks.yml` are its jobs; the target framework matrix is `compat.yml`. The private-repository conditions are gone (public since 2026-10-11). `linux-repos.yml` is `pages.yml`, since it builds everything Pages serves; on its own it deploys only for pushes to `master` that touch the user guide.
+- While the repository was private (until 2026-10-11), the schedule and the push trigger did nothing (a job condition on `github.event.repository.private`).
 
-**apt and dnf repositories** (D18). `linux-repos.yml` rebuilds them after each release, from the newest stable release and the newest nightly:
+**apt and dnf repositories** (D18). `linux-repos.yml` (`pages.yml` since 2026-10-14) rebuilds them after each stable release, from the newest stable release and the newest nightly:
 - `eng/linux-repos.sh` writes the site: an apt archive with the suites `stable` and `nightly` (signed `InRelease` and `Release.gpg`), a dnf repository per channel (signed packages and a signed `repomd.xml`), `.repo` files, the public key and an index page with the instructions.
 - The signing key is the project's package key. Its private half is the `PACKAGES_GPG_PRIVATE_KEY` secret (generated 2026-10-11, fingerprint `765B8B725B3FD42A8EAA508F59C7590683C2B9B3`); the public half is `eng/packaging/linux/daedalus-studio-packages.asc`.
 - `eng/test-linux-repos.sh` installs from the site in Ubuntu and Fedora containers through `file:` URLs, with the signatures checked, then removes the package.
@@ -60,7 +61,7 @@ M7 shipped hand-run packages (ADR 0009): a portable zip, a `.dmg`, a `.tar.gz`, 
 ## Consequences
 
 - A release is a dispatch (while private) or a merge into `master` (once public); nothing is uploaded by hand.
-- The installed Windows app runs from `current\`, which Velopack replaces on every update: nothing may be written next to the executable. User data was already in the platform folders (ADR 0001's `AppPaths`).
+- The installed Windows app runs from `current\`, which Velopack replaces on every update: nothing may be written next to the executable. User data was already in the platform folders (`AppPaths` in `Codalus.Platform`).
 - The `daedalus` command from a terminal on Windows goes through `cmd`, which gives a GUI program no output handles to capture: `daedalus --version` prints to the console window, not to a pipe. Waiting and the exit code work, which is what `--wait` and `merge` need.
 - The previous dmg and appimagetool are gone; vpk brings its own AppImage runtime (THIRD-PARTY-NOTICES).
 - `TODO(issue)`: Flatpak (the manifest stays in `eng/packaging/flatpak`); Windows ARM64 and Intel Mac builds (D27); code signing when the repository goes public (D19); the winget submission to `microsoft/winget-pkgs` after the first public release.

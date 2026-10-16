@@ -18,7 +18,9 @@ internal static class DocumentSymbolsFeature
     {
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
-        return root is null ? [] : [.. Children(root, text)];
+        return root is null ? []
+            : document.Project.Language == LanguageNames.VisualBasic ? [.. VisualBasicStructure.Symbols(root, text)]
+            : [.. Children(root, text)];
     }
 
     internal static IEnumerable<DocumentSymbol> Children(SyntaxNode node, SourceText text)

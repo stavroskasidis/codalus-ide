@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Mono's soft debugger client (MIT, Novell and Xamarin), vendored from mono/debugger-libs (see README.md): the
+       protocol client of the Mono debugger adapter (M20b, ADR 0065). Third-party code: built as it is, without our
+       analyzers or nullable annotations. -->
+  <PropertyGroup>
+    <RootNamespace>Mono.Debugger.Soft</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <AnalysisLevel>none</AnalysisLevel>
+    <NoWarn>$(NoWarn);CS0168;CS0169;CS0219;CS0414;CS0618;CS0649;CS0659;CS0661;CS0672;CS1570;CS1572;CS1573;CS1587;CS1591;CS8981;SYSLIB0001;SYSLIB0011;SYSLIB0050;SYSLIB0051;CS9258</NoWarn>
+    <DefineConstants>$(DefineConstants);MONO_DATACONVERTER_STATIC_METHODS</DefineConstants>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

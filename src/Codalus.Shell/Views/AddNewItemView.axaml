@@ -28,7 +28,7 @@
       </StackPanel>
     </Grid>
 
-    <Grid ColumnDefinitions="170,*,340">
+    <Grid ColumnDefinitions="150,2*,1.5*">
       <ListBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" Background="Transparent" AutomationProperties.Name="{l:T addNewItem.templateCategories}" />
       <DockPanel Grid.Column="1" Margin="8,0">
         <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
@@ -38,8 +38,8 @@
               <Grid ColumnDefinitions="Auto,*" Margin="0,2" AutomationProperties.Name="{Binding AccessibleName}">
                 <controls:Icon Kind="{Binding Icon}" Margin="0,0,8,0" VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1">
-                  <TextBlock Text="{Binding Name}" />
-                  <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" />
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                  <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
                 </StackPanel>
               </Grid>
             </DataTemplate>

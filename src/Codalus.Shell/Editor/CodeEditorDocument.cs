@@ -12,6 +12,7 @@ public sealed class CodeEditorDocument : ShellDocument
 {
     private readonly Func<CodeDocument, int> _viewCount;
     private Position? _pendingCaret;
+    private int _pendingSelection;
 
     public CodeEditorDocument(CodeDocument model, string id, Func<CodeDocument, int> viewCount, IEditorServices services, Infrastructure.EditorFont font)
     {
@@ -54,15 +55,16 @@ public sealed class CodeEditorDocument : ShellDocument
     protected override bool NeedsSaveOnClose => Model.IsModified && _viewCount(Model) <= 1;
 
     /// <summary>Moves the caret to <paramref name="position"/> now, or when the view is created.</summary>
-    public void Navigate(Position position)
+    public void Navigate(Position position, int selectLength = 0)
     {
         if (Controller is { } controller)
         {
-            controller.Navigate(position);
+            controller.Navigate(position, selectLength);
         }
         else
         {
             _pendingCaret = position;
+            _pendingSelection = selectLength;
         }
     }
 
@@ -73,7 +75,7 @@ public sealed class CodeEditorDocument : ShellDocument
         if (_pendingCaret is { } caret)
         {
             _pendingCaret = null;
-            controller.Navigate(caret);
+            controller.Navigate(caret, _pendingSelection);
         }
     }
 

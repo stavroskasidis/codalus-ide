@@ -109,4 +109,6 @@ internal sealed class TextDocuments
     public void Close(string uri) => _documents.TryRemove(uri, out _);
 
     public TextDocument? Get(string uri) => _documents.GetValueOrDefault(uri);
+
+    public IReadOnlyCollection<TextDocument> All => [.. _documents.Values];
 }

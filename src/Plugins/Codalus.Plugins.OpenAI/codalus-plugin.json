@@ -1,0 +1,34 @@
+{
+  "id": "codalus.openai",
+  "version": "0.1.0",
+  "displayName": "OpenAI-compatible models",
+  "publisher": "codalus",
+  "description": "AI assistance through OpenAI's chat completions API: OpenAI, any compatible endpoint (LM Studio, llama.cpp, vLLM, a gateway), and Ollama on this machine. Inactive until you pick one of its providers.",
+  "engines": { "codalus": "^1.0.0" },
+  "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.OpenAI.dll" },
+  "enableProposedApi": true,
+  "permissions": ["network", "secrets"],
+  "contributes": {
+    "languageModelProviders": [
+      { "id": "openai", "label": "OpenAI-compatible", "description": "OpenAI, or any endpoint that serves its chat completions API. A key, when the endpoint needs one, is kept in the OS credential store." },
+      { "id": "ollama", "label": "Ollama", "description": "Models running in Ollama on this machine: nothing leaves it.", "local": true }
+    ],
+    "settings": {
+      "title": "AI: OpenAI-compatible",
+      "properties": {
+        "ai.openai.endpoint": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "The base URL of the chat completions API: OpenAI's, or a compatible server's (for example http://localhost:1234/v1 for LM Studio).",
+          "scope": "user"
+        },
+        "ai.ollama.endpoint": {
+          "type": "string",
+          "default": "http://localhost:11434/v1",
+          "description": "The base URL of Ollama's OpenAI-compatible API.",
+          "scope": "user"
+        }
+      }
+    }
+  }
+}

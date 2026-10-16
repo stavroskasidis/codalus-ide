@@ -1,6 +1,6 @@
 # NNNN. Title
 
-- **Status:** proposed | accepted | superseded by NNNN
+- **Status:** proposed | accepted | accepted, amended YYYY-MM-DD | superseded (in part) by NNNN
 - **Date:** YYYY-MM-DD
 - **Deciders:** maintainer
 

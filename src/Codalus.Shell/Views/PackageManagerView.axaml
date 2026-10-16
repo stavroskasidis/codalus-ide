@@ -72,7 +72,11 @@
           <Button Grid.Column="1" Classes="link" Content="{l:T packageManager.showOutput}" Command="{Binding ShowRestoreOutputCommand}" />
         </Grid>
         <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
-        <TextBlock Foreground="{DynamicResource Shell.Warning}" FontSize="12" Text="{Binding SourceErrors}" TextWrapping="Wrap" IsVisible="{Binding HasSourceErrors}" />
+        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasSourceErrors}">
+          <TextBlock Foreground="{DynamicResource Shell.Warning}" FontSize="12" Text="{Binding SourceErrors}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Classes="link" Content="{l:T packageManager.signIn}" Command="{Binding SignInCommand}" IsVisible="{Binding CanSignIn}"
+                  AutomationProperties.Name="{l:T packageManager.signIn}" />
+        </Grid>
       </StackPanel>
     </Border>
 

@@ -127,7 +127,7 @@ internal static class ServiceReferences
             return false;
         }
 
-        xml.Save();
+        xml.SaveFile();
         return true;
     }
 
@@ -149,7 +149,7 @@ internal static class ServiceReferences
             group.Parent.RemoveChild(group);
         }
 
-        xml.Save();
+        xml.SaveFile();
         return true;
     }
 
@@ -175,7 +175,7 @@ internal static class ServiceReferences
 
         if (changed)
         {
-            xml.Save();
+            xml.SaveFile();
         }
 
         return changed;

@@ -42,7 +42,13 @@ public sealed class IconThemeTests
         try
         {
             Assert.Contains("blocks", f.Shell.Workbench.Settings.Descriptors.Single(d => d.Key == ShellHost.IconThemeSetting).Enum!);
-            Assert.StartsWith("mi:", FileIcons.ForFile("Program.cs"), StringComparison.Ordinal);
+            Assert.Contains("material", f.Shell.Workbench.Settings.Descriptors.Single(d => d.Key == ShellHost.IconThemeSetting).Enum!);
+            Assert.Equal("cl:csharp", FileIcons.ForFile("Program.cs"));
+
+            // Material Icon Theme is the other built-in theme.
+            await f.Shell.Workbench.Settings.SetAsync(ShellHost.IconThemeSetting, "material", SettingScope.User, CancellationToken.None);
+            await ShellFixture.PumpUntil(() => FileIcons.ForFile("Program.cs") == "mi:csharp");
+            Assert.Equal("mi:folder-src", FileIcons.ForFolder("src", open: false));
 
             await f.Shell.Workbench.Settings.SetAsync(ShellHost.IconThemeSetting, "blocks", SettingScope.User, CancellationToken.None);
             await ShellFixture.PumpUntil(() => FileIcons.ForFile("Program.cs").StartsWith("img:", StringComparison.Ordinal));
@@ -55,11 +61,12 @@ public sealed class IconThemeTests
             Assert.NotNull(markdown);
 
             await f.Shell.Workbench.Settings.SetAsync(ShellHost.IconThemeSetting, "default", SettingScope.User, CancellationToken.None);
-            await ShellFixture.PumpUntil(() => FileIcons.ForFile("Program.cs").StartsWith("mi:", StringComparison.Ordinal));
+            await ShellFixture.PumpUntil(() => FileIcons.ForFile("Program.cs") == "cl:csharp");
         }
         finally
         {
             FileIcons.Theme = null; // static: leave the built-in icons for the other tests
+            FileIcons.Material = false;
         }
     }
 }

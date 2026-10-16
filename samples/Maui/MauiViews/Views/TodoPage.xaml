@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:MauiViews.ViewModels"
+             xmlns:models="clr-namespace:MauiViews.Models"
+             xmlns:controls="clr-namespace:MauiViews.Controls"
+             x:Class="MauiViews.Views.TodoPage"
+             x:DataType="vm:TodoViewModel"
+             Title="Todo">
+  <Grid RowDefinitions="Auto,*,Auto" Padding="16" RowSpacing="12">
+    <HorizontalStackLayout Spacing="8">
+      <Label Text="Remaining" FontSize="20" VerticalOptions="Center" />
+      <controls:Badge Count="{Binding RemainingCount}" controls:Badge.IsHighlighted="True" BackgroundColor="Orange" />
+    </HorizontalStackLayout>
+
+    <CollectionView Grid.Row="1" ItemsSource="{Binding Items}">
+      <CollectionView.ItemTemplate>
+        <DataTemplate x:DataType="models:TodoItem">
+          <HorizontalStackLayout Spacing="8">
+            <CheckBox IsChecked="{Binding IsDone}" />
+            <Label Text="{Binding Title}" VerticalOptions="Center" />
+          </HorizontalStackLayout>
+        </DataTemplate>
+      </CollectionView.ItemTemplate>
+    </CollectionView>
+
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <Entry x:Name="NewTitleEntry" Text="{Binding NewTitle}" Placeholder="New item" />
+      <Button Grid.Column="1" Text="Add" Command="{Binding AddCommand}" Clicked="OnAddClicked" />
+    </Grid>
+  </Grid>
+</ContentPage>

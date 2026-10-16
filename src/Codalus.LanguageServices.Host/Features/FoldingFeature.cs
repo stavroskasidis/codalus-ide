@@ -22,6 +22,11 @@ internal static class FoldingFeature
             return [];
         }
 
+        if (document.Project.Language == LanguageNames.VisualBasic)
+        {
+            return [.. VisualBasicStructure.Folding(root, text, cancellationToken)];
+        }
+
         var ranges = new List<FoldingRange>();
         void Add(int start, int end, string? kind = null, string? collapsed = null)
         {

@@ -40,8 +40,13 @@ internal static class Updates
             install = install with { DefaultChannel = channel[(Rid.Length + 1)..] }; // the installed channel, <rid>-<kind>
         }
 
+        if (installed && OperatingSystem.IsMacOS() && Velopack.Locators.VelopackLocator.Current.RootAppDir is { } bundle)
+        {
+            install = install with { NeedsAdministrator = MacUpdateLocator.NeedsAdministrator(bundle) };
+        }
+
         IUpdateBackend backend = install.Kind == InstallKind.SelfUpdating
-            ? new VelopackBackend(store, log)
+            ? new VelopackBackend(store, log, install.NeedsAdministrator)
             : new FeedOnlyBackend(store, ShellInfo.Version);
         return (install, backend);
     }
@@ -134,7 +139,11 @@ internal static class Updates
     }
 
     /// <summary>An install Velopack made: check, download in the background, apply after the IDE exits.</summary>
-    private sealed class VelopackBackend(IReleaseStore store, Action<string> log) : IUpdateBackend
+    /// <remarks>
+    /// The updater runs silently unless the install <paramref name="needsAdministrator"/>: silent, it can't ask for the
+    /// password, fails with "Permission denied" and starts the old version again, which offers the same update.
+    /// </remarks>
+    private sealed class VelopackBackend(IReleaseStore store, Action<string> log, bool needsAdministrator) : IUpdateBackend
     {
         private readonly Dictionary<string, (UpdateManager Manager, UpdateInfo Info)> _offers = new(StringComparer.Ordinal);
 
@@ -166,7 +175,12 @@ internal static class Updates
         public void ApplyAfterExit(UpdateOffer offer, bool restart, IReadOnlyList<string> arguments)
         {
             var (manager, info) = Offer(offer);
-            manager.WaitExitThenApplyUpdates(info.TargetFullRelease, silent: true, restart, [.. arguments]);
+            if (needsAdministrator)
+            {
+                log("[update] The app isn't writable by this user: the updater asks for an administrator's password.");
+            }
+
+            manager.WaitExitThenApplyUpdates(info.TargetFullRelease, silent: !needsAdministrator, restart, [.. arguments]);
         }
 
         private (UpdateManager Manager, UpdateInfo Info) Offer(UpdateOffer offer)

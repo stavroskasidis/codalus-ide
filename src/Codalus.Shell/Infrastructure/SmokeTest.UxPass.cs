@@ -131,9 +131,9 @@ internal sealed partial class SmokeTest
             shell.Layout.ShowToolWindow(ViewModels.SolutionExplorerViewModel.ToolWindowId, focus: false);
             shell.Explorer.Reveal("f:" + Program);
             shell.Explorer.Reveal("f:" + Greeter);
-            await WaitAsync(() => shell.Explorer.Rows.Any(r => r.Name == "Greeter.cs" && r.Icon == "mi:csharp"), "Greeter.cs shows the C# file icon").ConfigureAwait(true);
-            Check(shell.Explorer.Rows.Any(r => r.Name == "Hello" && r.Icon == "mi:console"), "the console app shows its project icon");
-            Check(shell.Explorer.Rows.Any(r => r.Name == "Greetings" && r.Icon == "mi:lib"), "the library shows its project icon");
+            await WaitAsync(() => shell.Explorer.Rows.Any(r => r.Name == "Greeter.cs" && r.Icon == "cl:csharp"), "Greeter.cs shows the C# file icon").ConfigureAwait(true);
+            Check(shell.Explorer.Rows.Any(r => r.Name == "Hello" && r.Icon == "cl:project-csharp"), "the console app shows its project icon");
+            Check(shell.Explorer.Rows.Any(r => r.Name == "Greetings" && r.Icon == "cl:project-csharp"), "the library shows its project icon");
             await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 60).ConfigureAwait(true);
             greeter.Editor.TextArea.Focus();
             var before = shell.Theme.Setting;

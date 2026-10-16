@@ -207,7 +207,9 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
         Assert.Contains(threads.Threads, t => t.Running > 0);
         Assert.Contains(threads.Threads, t => t.Contention > 0);
         Assert.Contains(threads.Threads, t => t.States.Contains('W'));
-        if (threads.Threads.Max(t => t.Contention) > threads.BucketMilliseconds * 5)
+        // A bucket shows C when a third of it is spent blocked: only a thread blocked for a third of the whole trace is
+        // sure to have one (more contention spread thinly, as on a busy Windows runner, may never fill a third of a bucket).
+        if (threads.Threads.Max(t => t.Contention) >= threads.BucketMilliseconds * 100 / 3)
         {
             Assert.Contains(threads.Threads, t => t.States.Contains('C'));
         }
@@ -391,7 +393,10 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
         // samples at all (the Windows runner), which still compares.
         Assert.True(result.BaselineTotal > 0, $"the CpuBound baseline has samples ({result.BaselineTotal}, AsyncHeavy {result.Total})");
         var isPrime = result.Functions.First(f => f.Name.Contains("Primes.IsPrime", StringComparison.Ordinal));
-        Assert.True(isPrime.BaselineSelf > 0.2, $"{isPrime.BaselineSelf:P0}");
+        // The baseline's hottest among CpuBound's own functions (a loaded runner can rank runtime frames above it).
+        var own = result.Functions.Where(f => f.Module == "CpuBound").ToList();
+        Assert.True(isPrime.BaselineSelf > 0 && own.All(f => f.BaselineSelf <= isPrime.BaselineSelf),
+            string.Join(", ", own.OrderByDescending(f => f.BaselineSelf).Take(5).Select(f => $"{f.Name} {f.BaselineSelf:P0}")));
         Assert.Equal(0, isPrime.Self);
         Assert.True(isPrime.Delta < 0);
         Assert.True(result.Functions.Zip(result.Functions.Skip(1)).All(p => Math.Abs(p.First.Delta) >= Math.Abs(p.Second.Delta)), "the largest changes first");

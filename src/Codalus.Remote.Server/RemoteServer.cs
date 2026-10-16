@@ -211,7 +211,7 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
         _ = Task.Run(async () =>
         {
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-            await Task.WhenAny(stdout, Task.Delay(2000)).ConfigureAwait(false);
+            await ((Task)stdout).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             int? code;
             try
             {
@@ -309,11 +309,18 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
                 return;
             }
 
-            output.Writer.TryComplete();
             _ = Task.Run(async () =>
             {
                 _terminals.TryRemove(p.Channel, out _);
-                await Notify(RemoteMethods.Exited, new ExitedParams(p.Channel, code), Json.ExitedParams).ConfigureAwait(false);
+                try
+                {
+                    // The code goes before the output ends: the client asks for it once its reading ends.
+                    await Notify(RemoteMethods.Exited, new ExitedParams(p.Channel, code), Json.ExitedParams).ConfigureAwait(false);
+                }
+                finally
+                {
+                    output.Writer.TryComplete();
+                }
             });
         }
 

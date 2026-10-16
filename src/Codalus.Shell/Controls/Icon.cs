@@ -98,7 +98,7 @@ public sealed class Icon : Control
 
             kind = kind[..at];
         }
-        else if (kind is not null && !kind.StartsWith("mi:", StringComparison.Ordinal) && !IsSet(ForegroundProperty) && ActualThemeVariant != Theming.ThemeService.HighContrast
+        else if (kind is not null && !kind.StartsWith(IconSet.MaterialPrefix, StringComparison.Ordinal) && !kind.StartsWith(IconSet.ClassicPrefix, StringComparison.Ordinal) && !IsSet(ForegroundProperty) && ActualThemeVariant != Theming.ThemeService.HighContrast
                  && CommandIcons.DefaultColorOf(kind) is { } color
                  && this.TryFindResource("Shell.Icon." + char.ToUpperInvariant(color[0]) + color[1..], ActualThemeVariant, out var token) && token is IBrush colored)
         {
@@ -111,16 +111,19 @@ public sealed class Icon : Control
         if (IconSet.GetFilled(kind) is { } filled)
         {
             // Multicolor icons (file types) take the Visual Studio palette's nearest color in the current theme (folders its
-            // tan), except in High Contrast, where shape carries the meaning.
+            // tan), except in High Contrast, where shape carries the meaning. The classic file icons' unfilled parts (pages,
+            // outlines) are the theme's outline gray.
             var monochrome = ActualThemeVariant == Theming.ThemeService.HighContrast;
             var folder = kind!.StartsWith("mi:folder", StringComparison.Ordinal);
+            var outline = kind.StartsWith(IconSet.ClassicPrefix, StringComparison.Ordinal)
+                && this.TryFindResource("Shell.Icon.Outline", ActualThemeVariant, out var gray) && gray is IBrush outlineBrush ? outlineBrush : brush;
             var scale = size / filled.DesignSize;
             using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(offset.X, offset.Y)))
             {
                 foreach (var layer in filled.Layers)
                 {
-                    var fill = layer.Color == 0 || monochrome
-                        ? brush
+                    var fill = monochrome ? brush
+                        : layer.Color == 0 ? outline
                         : (folder ? "Folder" : PaletteColor(layer.Color)) is { } family && this.TryFindResource("Shell.Icon." + family, ActualThemeVariant, out var token) && token is IBrush palette
                             ? palette
                             : filled.Brush(layer.Color);
@@ -335,6 +338,7 @@ public static class IconSet
         ["document-text"] = "document_text_16_regular",
         ["update"] = "arrow_sync_circle_16_regular",
         ["sparkle"] = "sparkle_16_regular",
+        ["phone"] = "phone_16_regular",
     };
 
     private static readonly Dictionary<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);
@@ -373,8 +377,14 @@ public static class IconSet
     public const string MaterialPrefix = "mi:";
 
     /// <summary>
+    /// The prefix of the classic file, folder and project icons (<c>cl:csharp</c>, <c>cl:folder-open</c>; Icons/Classic,
+    /// drawn by eng/icons/classic-icons.py; Controls/FileIcons.cs).
+    /// </summary>
+    public const string ClassicPrefix = "cl:";
+
+    /// <summary>
     /// A compiled icon, or null when <paramref name="name"/> is a stroke icon or unknown: one of our Fluent names, or
-    /// <c>mi:</c> and a Material Icon Theme file name.
+    /// <c>mi:</c> and a Material Icon Theme file name, or <c>cl:</c> and a classic icon's name.
     /// </summary>
     internal static FilledIcon? GetFilled(string? name)
     {
@@ -390,6 +400,10 @@ public static class IconSet
         if (name is not null && !s_fluent.TryGetValue(name, out file) && name.StartsWith(MaterialPrefix, StringComparison.Ordinal))
         {
             file = name[MaterialPrefix.Length..];
+        }
+        else if (name is not null && file is null && name.StartsWith(ClassicPrefix, StringComparison.Ordinal))
+        {
+            file = "classic-" + name[ClassicPrefix.Length..];
         }
 
         if (name is null || file is null)
@@ -454,6 +468,8 @@ public static class IconSet
         ["trash"] = "M2.5,4 H13.5 M6,4 V2.5 H10 V4 M4,4 L4.75,14 H11.25 L12,4 M6.75,6.5 V11.5 M9.25,6.5 V11.5",
         ["layout"] = "M1.5,2.5 H14.5 V13.5 H1.5 Z M5.5,2.5 V13.5 M5.5,10 H14.5",
         ["dot"] = Circle(8, 8, 2),
+        ["more"] = Dot(3, 8) + Dot(8, 8) + Dot(13, 8),
+        ["arrow-up-down"] = "M5,13.5 V2.5 M2.5,5 L5,2.5 L7.5,5 M11,2.5 V13.5 M8.5,11 L11,13.5 L13.5,11",
         ["pin"] = "M5.5,2 H10.5 M6.5,2 V6.5 L4,9.5 H12 L9.5,6.5 V2 M8,9.5 V14.5",
 
         // Test outcomes (Test Explorer, editor margin): colored by the test-* icon classes.

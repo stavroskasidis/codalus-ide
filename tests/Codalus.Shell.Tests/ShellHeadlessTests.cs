@@ -116,7 +116,7 @@ public class ShellHeadlessTests
 
         await ShellFixture.PumpUntil(() => !f.Shell.StatusBar.IsVisible);
         Assert.Contains("\"workbench.statusBar.visible\": false", File.ReadAllText(f.Shell.Paths.SettingsFile), StringComparison.Ordinal);
-        Assert.True(visible.IsModified);
+        await ShellFixture.PumpUntil(() => visible.IsModified); // the row refreshes on the settings' change, posted to the UI
 
         var size = Assert.IsType<TextSettingViewModel>(FindSetting(settings, "editor.fontSize"));
         size.Text = "500";
@@ -165,6 +165,27 @@ public class ShellHeadlessTests
         second.Shell.Layout.ResetLayout();
         Assert.True(second.Shell.Layout.IsVisible(BuiltIns.OutputWindow));
         Assert.False(second.Shell.Layout.IsVisible(BuiltIns.PluginsWindow));
+    }
+
+    [AvaloniaFact]
+    public async Task A_side_pane_added_to_the_default_layout_keeps_the_documents_share()
+    {
+        // The default layout has no left pane (no left tool window shows by default) and its center has no proportion
+        // until the dock panel arranges it. The first left tool window shown before that (the smoke test's Start page
+        // after View: Reset Layout) once made the proportions 0.22 + 0.39 + 0.78, normalized to a right pane twice the
+        // documents' width: on the 1024-pixel macOS runner the terminal under the documents was 14 columns wide.
+        await using var f = ShellFixture.Create();
+        f.Shell.Layout.ResetLayout();
+        Assert.False(f.Shell.Layout.IsVisible(TestExplorerViewModel.ToolWindowId));
+        f.Shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId);
+
+        var main = f.Shell.Layout.Capture(null).Root;
+        var panes = (main.Children ?? []).Where(c => c.Kind != "splitter").ToList();
+        Assert.Equal(["LeftPane", "Center", "RightPane"], panes.Select(p => p.Id ?? string.Empty).ToList());
+        Assert.Equal(1.0, panes.Sum(p => p.Proportion ?? double.NaN), 6);
+        Assert.Equal(0.22, panes[0].Proportion!.Value, 6);
+        Assert.Equal(0.78 * 0.78, panes[1].Proportion!.Value, 6);
+        Assert.Equal(0.22 * 0.78, panes[2].Proportion!.Value, 6);
     }
 
     [AvaloniaFact]

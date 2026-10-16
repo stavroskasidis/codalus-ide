@@ -171,6 +171,7 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
         _connection.OnRequest(ItemMethods.Set, json.ItemSetParams, json.ItemEditResult, (p, _) => Guard(() => Session.SetItemAsync(p)));
         _connection.OnRequest(ItemMethods.Exclude, json.ItemPathsParams, json.ItemEditResult, (p, _) => Guard(() => Session.ExcludeAsync(p)));
         _connection.OnRequest(ItemMethods.Include, json.ItemPathsParams, json.ItemEditResult, (p, _) => Guard(() => Session.IncludeAsync(p)));
+        _connection.OnRequest(ItemMethods.Move, json.MoveItemParams, json.ItemEditResult, (p, _) => Guard(() => Session.MoveItemAsync(p)));
         _connection.OnRequest(ItemMethods.AddExisting, json.AddExistingItemsParams, json.FileOperationResult, (p, _) => Guard(() => Session.AddExistingAsync(p)));
         _connection.OnRequest(ItemMethods.ListTree, json.ListTreeParams, json.ListTreeResult, (p, _) => Guard(() => Task.Run(() => Session.ListTree(p))));
         _connection.OnRequest(ItemMethods.Discover, json.EmptyParams, json.DiscoverProjectsResult, (_, _) => Guard(() => Task.Run(Session.DiscoverProjects)));
@@ -226,6 +227,8 @@ internal sealed class BuildHostServer : IAsyncDisposable, IHostEvents
             Session.NuGet.SetSources(p);
             return Task.FromResult(new EmptyResult());
         }));
+        _connection.OnRequest(PackageMethods.SignIn, json.PackageSignInParams, json.PackageSignInResult, (p, ct) => GuardNuGet(() =>
+            Session.NuGet.SignInAsync(p, message => Post(PackageMethods.SignInMessage, new PackageSignInMessage(p.Source, message), json.PackageSignInMessage), ct)));
         _connection.OnRequest(PackageMethods.Tools, json.EmptyParams, json.ToolsResult, (_, ct) => Guard(() => Session.Tools.ListAsync(ct)));
         _connection.OnRequest(PackageMethods.ToolCommand, json.ToolCommandParams, json.ToolCommandResult, async (p, ct) =>
         {

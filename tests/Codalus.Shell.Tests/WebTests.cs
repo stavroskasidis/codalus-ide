@@ -116,6 +116,7 @@ public sealed class WebTests
             Assert.Equal("Hello from the Web fixture", await http.GetStringAsync("/", TestContext.Current.CancellationToken));
             Assert.Contains("dotnet", program.Channel!.GetText().Split('\n')[0], StringComparison.Ordinal); // "> dotnet watch run …"
             Assert.True(Equals(f.Shell.Workbench.Context.GetValue("hotReloadRunning"), true));
+            Assert.True(f.Shell.Toolbar is { IsHotReloadRunning: true, CanHotReload: true }); // the toolbar's button applies code changes
 
             // Edit the handler in the editor and save: dotnet watch applies it to the running app.
             var file = Path.Combine(project, "Program.cs");

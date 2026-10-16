@@ -56,7 +56,7 @@ internal static class BuildEvents
             return false;
         }
 
-        xml.Save();
+        xml.SaveFile();
         return true;
     }
 

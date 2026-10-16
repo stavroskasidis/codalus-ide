@@ -6,7 +6,7 @@ Plugins extend Codalus IDE with commands, menus, key bindings, settings, tool wi
 
 ## How plugins run
 
-- A plugin is a .NET 10 class library. It runs in a **plugin host** process (`codalus-pluginhost`), never in the IDE process, so a slow or crashing plugin can't freeze the UI. Built-in plugins share one host, and third-party plugins share another. A plugin can ask for a host of its own with `"isolation": "dedicated"`.
+- A plugin is a .NET 10 class library (`net10.0`; the API's packages target it, so the .NET 10 SDK builds plugins). It runs in a **plugin host** process (`codalus-pluginhost`, on .NET 11 since M30b), never in the IDE process, so a slow or crashing plugin can't freeze the UI. Built-in plugins share one host, and third-party plugins share another. A plugin can ask for a host of its own with `"isolation": "dedicated"`.
 - Everything a user can see before your code runs comes from the **manifest** (`codalus-plugin.json`): commands in the palette and menus, key bindings, tool windows and settings, including the Settings UI.
 - Your code is loaded on the first **activation event**: a contributed command is run, a contributed tool window is opened, a setting changes, or startup. Until then no host process runs at all.
 - If a host crashes, Codalus restarts it and reactivates its plugins, and the user is notified. If it keeps crashing, the host is stopped for the session and its plugins are marked failed.
@@ -296,7 +296,25 @@ A plugin can sign users in to a service for itself and for other plugins (`contr
 
 ## Proposed APIs
 
-Proposed APIs are not covered by the versioning policy: they may change in any release, and are proved by built-in plugins before they become stable. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. 1.0 has none: they all became members of `IPluginContext`. Webviews are expected to start here.
+Proposed APIs are not covered by the versioning policy: they may change in any release, and are proved by built-in plugins before they become stable. Set `"enableProposedApi": true` and call `context.Proposed()` (namespace `Codalus.Plugins.Proposed`). Third-party plugins also need `--enable-proposed-api`. 1.0 had none: they all became members of `IPluginContext`. Webviews are expected to start here.
+
+### Language model providers (proposed)
+
+`context.Proposed().LanguageModels.RegisterProvider(provider)` offers chat models to AI assistance ([ADR 0062](adr/0062-ai-provider-api-and-data-boundaries.md)). Declare the provider in the manifest, so the IDE lists it before your plugin runs:
+
+```json
+"contributes": {
+  "languageModelProviders": [ { "id": "acme", "label": "Acme AI", "description": "Acme's hosted models.", "local": false } ]
+}
+```
+
+Your plugin activates only when the user picks the provider (`onLanguageModelProvider:acme`, implicit). Derive from `LanguageModelProvider`:
+- `GetModelsAsync`: the models you offer (`LanguageModelInfo`: id, name, context window, whether it takes tools).
+- `ChatAsync(request, progress, cancellationToken)`: send `request.Messages` (a `ChatMessage` is a role, text, and tool calls or a tool result), report each piece of text and each complete tool call with `progress.Report(new ChatResponsePart(text))`, and return how the reply ended (`ChatResult`). Stop when the token is cancelled.
+- `GetStatusAsync` and `ConfigureAsync`: whether you're ready (a key, an endpoint), and asking the user for what's missing with `Window.ShowInputBoxAsync`. Keep keys in `Secrets`.
+- Throw `LanguageModelException` with a message the user can act on; set `NeedsConfiguration` when the key is missing or refused.
+
+The IDE decides what is sent: your provider never reads the workspace. The built-in providers (`src/Plugins/Codalus.Plugins.OpenAI`, `Codalus.Plugins.Anthropic`) are examples.
 
 ## Testing plugins
 
@@ -346,6 +364,18 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### M30b (no API version change)
+
+Codalus and its plugin host moved to .NET 11. `Codalus.Plugins.Abstractions`, `Codalus.Plugins.Testing` and the `codalus-plugin` template stay on `net10.0`: plugins built for .NET 10 load into the .NET 11 host unchanged, and keep building with the .NET 10 SDK. A plugin may target `net11.0` instead, to use .NET 11's libraries. The API didn't change.
+
+### M28a (proposed API)
+
+Added, as a proposed API: `IProposedApi.LanguageModels`, `LanguageModelProvider` and the chat types, and `contributes.languageModelProviders` with the activation event `onLanguageModelProvider:<id>` ([Language model providers](#language-model-providers-proposed)). The stable API didn't change.
+
+### M22d (no API version change)
+
+The Components window and plugin performance (activation time, command time and host memory per plugin, slow plugins offered to turn off; [ADR 0061](adr/0061-components-and-plugin-performance.md)) are in the shell. The API didn't change.
 
 ### M22c (no API version change)
 
@@ -465,10 +495,10 @@ Additive (plugins built for 0.2.0 keep working):
 
 ### 0.2.0 (after M7): breaking
 
-The SDK is now the assembly and NuGet package **`Codalus.Plugins.Abstractions`**, with the namespace **`Codalus.Plugins`**; it was `Codalus.Plugins.Abstractions` and `Codalus.Plugins`. The `Codalus.*` package prefix on nuget.org belongs to unrelated packages, so every Codalus IDE assembly and namespace now uses `Codalus.*`. To update a plugin:
-1. Reference `Codalus.Plugins.Abstractions`.
-2. Replace `using Codalus.Plugins;` with `using Codalus.Plugins;`.
-3. Set `"engines": { "codalus": "^0.2.0" }`.
+The SDK became the assembly and NuGet package **`DaedalusStudio.Plugins.Abstractions`**, with the namespace **`DaedalusStudio.Plugins`**; it was `Daedalus.Plugins.Abstractions` and `Daedalus.Plugins`. The `Daedalus.*` package prefix on nuget.org belongs to unrelated packages, so every Daedalus Studio assembly and namespace moved to `DaedalusStudio.*` (renamed again to `Codalus.*` in [0.3.0](#030-m39)). To update a plugin then:
+1. Reference `DaedalusStudio.Plugins.Abstractions`.
+2. Replace `using Daedalus.Plugins;` with `using DaedalusStudio.Plugins;`.
+3. Set `"engines": { "daedalus": "^0.2.0" }`.
 
 Plugins built for 0.1.x are refused with a message: they reference an assembly that no longer exists. Nothing else changed: the protocol, the manifest format and the API surface are the same.
 

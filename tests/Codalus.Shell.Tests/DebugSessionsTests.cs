@@ -216,7 +216,7 @@ public sealed class DebugSessionsTests
         var folder = f.CopySample("Debugging");
         var build = RunDotnet(["build", Path.Combine(folder, "Debugging.slnx"), "-nologo", "-v", "quiet"], null);
         Assert.True(build.Code == 0, build.Output);
-        var crash = RunDotnet(["exec", Path.Combine(folder, "Debuggee", "bin", "Debug", "net10.0", "Debuggee.dll"), "--crash"], environment.Values);
+        var crash = RunDotnet(["exec", Path.Combine(folder, "Debuggee", "bin", "Debug", "net11.0", "Debuggee.dll"), "--crash"], environment.Values);
         Assert.NotEqual(0, crash.Code);
         Assert.True(Directory.GetFiles(dumps, "*.dmp").Length == 1, $"the program wrote a dump into {dumps}:\n{crash.Output}\nVariables: {string.Join(", ", environment.Values)}");
         try

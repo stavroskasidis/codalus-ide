@@ -28,7 +28,7 @@ internal static class XamlAnalysis
             Report(error.Start, error.End, "XAML0001", error.Message);
         }
 
-        if (context.Types is not { IsAvalonia: true } types || context.Document.Root is not { } root)
+        if (context.Types is not { HasDialect: true } types || context.Document.Root is not { } root)
         {
             return [.. result];
         }

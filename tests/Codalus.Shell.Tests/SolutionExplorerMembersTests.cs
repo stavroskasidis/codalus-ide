@@ -1,0 +1,78 @@
+using Avalonia.Headless.XUnit;
+using Codalus.Shell.ViewModels;
+using Codalus.Workbench.Projects;
+
+namespace Codalus.Shell.Tests;
+
+/// <summary>The Solution Explorer's members under code files (deferred from M12a): types and members from the language service.</summary>
+public sealed class SolutionExplorerMembersTests
+{
+    [AvaloniaFact]
+    public async Task Code_files_expand_into_their_types_and_members()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var explorer = f.Shell.Explorer;
+        var path = Path.Combine(folder, "src", "Lib", "Shapes.cs");
+        ExplorerRowViewModel Row(Func<ExplorerRowViewModel, bool> match) => explorer.Rows.First(match);
+
+        // Reveal the file, then expand it: its types come in place of "Loading…".
+        await ShellFixture.PumpUntil(() => explorer.Root is not null && FindId(explorer.Root, path) is not null, seconds: 60);
+        explorer.Reveal(FindId(explorer.Root!, path)!);
+        var file = Row(r => r.Node.Kind == ExplorerNodeKind.File && r.Node.Path == path);
+        Assert.True(file.HasChildren);
+        explorer.SetExpanded(file, true);
+        await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Node is { Kind: ExplorerNodeKind.Member, Name: "Circle" }), seconds: 60);
+        Assert.Contains(explorer.Rows, r => r.Node is { Kind: ExplorerNodeKind.Member, Name: "IShape" });
+        Assert.DoesNotContain(explorer.Rows, r => r.Node.Kind == ExplorerNodeKind.Member && r.Node.Name.StartsWith("Lib", StringComparison.Ordinal)); // namespaces left out
+
+        // A type expands into its members, and choosing one goes to its declaration.
+        var circle = Row(r => r.Node is { Kind: ExplorerNodeKind.Member, Name: "Circle" });
+        explorer.SetExpanded(circle, true);
+        var area = Row(r => r.Node.Kind == ExplorerNodeKind.Member && r.Node.Name.StartsWith("Area", StringComparison.Ordinal) && r.Depth == circle.Depth + 1);
+        await explorer.ActivateAsync(area);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: not null } editor && editor.Model.Path == path);
+        var controller = f.Shell.ActiveEditor!.Controller!;
+        Assert.Equal(area.Node.Position!.Value.Line + 1, controller.Caret.Line);
+
+        // An edit adds a type: the members follow.
+        controller.Model.Text.Insert(controller.Model.Text.TextLength, "\npublic sealed class Hexagon { }\n");
+        await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Node is { Kind: ExplorerNodeKind.Member, Name: "Hexagon" }), seconds: 60);
+
+        // Turned off, files have no members.
+        await f.Shell.Workbench.Settings.SetAsync(SolutionExplorerViewModel.ShowMembersSetting, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => !explorer.Rows.Any(r => r.Node.Kind == ExplorerNodeKind.Member));
+    }
+
+    [AvaloniaFact]
+    public async Task Analyzers_expand_into_the_files_their_generators_made()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var explorer = f.Shell.Explorer;
+        var app = Path.Combine(folder, "src", "App", "App.csproj");
+
+        // App's JSON context (Json.cs) makes System.Text.Json's generator write files.
+        string? analyzerId = null;
+        await ShellFixture.PumpUntil(() => (analyzerId = explorer.Root is { } root ? Find(root, n => n.Kind == ExplorerNodeKind.Dependency && n.ProjectPath == app && n.Name == "System.Text.Json.SourceGeneration") : null) is not null, seconds: 90);
+        explorer.Reveal(analyzerId!);
+        var analyzer = explorer.Rows.First(r => r.Id == analyzerId);
+        Assert.True(analyzer.HasChildren);
+        explorer.SetExpanded(analyzer, true);
+        await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Node.Kind == ExplorerNodeKind.GeneratedFile), seconds: 90);
+        var generated = explorer.Rows.First(r => r.Node.Kind == ExplorerNodeKind.GeneratedFile && r.Node.Name.EndsWith(".g.cs", StringComparison.Ordinal));
+        Assert.Equal("JsonSourceGenerator", generated.Node.Detail);
+        Assert.StartsWith("codalus-generated:", generated.Node.Path, StringComparison.Ordinal);
+
+        // Choosing one opens it, read-only.
+        await explorer.ActivateAsync(generated);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model is { IsReadOnly: true } model && model.Name == generated.Node.Name, seconds: 30);
+        Assert.Contains("JsonTypeInfo", f.Shell.ActiveEditor!.Model.Text.Text, StringComparison.Ordinal);
+    }
+
+    private static string? Find(ExplorerNode node, Func<ExplorerNode, bool> match) =>
+        match(node) ? node.Id : node.Children.Select(c => Find(c, match)).FirstOrDefault(id => id is not null);
+
+    private static string? FindId(ExplorerNode node, string path) =>
+        node.Kind == ExplorerNodeKind.File && node.Path == path ? node.Id : node.Children.Select(c => FindId(c, path)).FirstOrDefault(id => id is not null);
+}

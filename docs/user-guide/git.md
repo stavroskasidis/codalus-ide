@@ -6,10 +6,13 @@ When the open solution is in a git repository, Codalus IDE shows its state and l
 
 Git → Git Changes (`Ctrl+0 Ctrl+G`).
 
-- **At the top**: the branch, with commits ahead ↑ and behind ↓ its upstream; Fetch, Pull and Push.
-- **Commit**: write a message, then **Commit Staged**, or **Commit All** (every change to tracked files). `Ctrl+Enter` in the message box commits. **Amend** fills in the last commit's message and rewrites that commit.
-- **Staged Changes** and **Changes**: each file has buttons to stage (`+`), unstage (`−`) and discard. **Stage All** and **Unstage All** act on the whole list. Double-click a file to see its diff.
-- **Stash**, **Stashes** and **History** buttons under the commit box.
+- **At the top**: the branch (click to switch or create one), then **Fetch**, **Pull**, **Push**, **Sync** (pull, then push) and **⋯** (new branch, merge, rebase, stash, history, remotes, tags, refresh).
+- **Outgoing / incoming**: the commits to push and to pull (⇅ 2 / 1); click it, or **View all commits**, for the history. A branch with no upstream offers **Publish branch**. The pull request button creates a pull request on GitHub, Azure DevOps or GitLab.
+- **Commit**: a message is required. The button commits the staged changes when there are some (**Commit Staged**), otherwise every change, new files included (**Commit All**); its menu also commits **and Push** or **and Sync**. `Ctrl+Enter` in the message box commits. **Amend** fills in the last commit's message and rewrites that commit. The **#** button (or typing `#`) mentions an issue or work item.
+- **Related Items**: the issues and work items the message mentions.
+- **Staged Changes** and **Changes**: a tree of the repository, its folders (a folder holding a single folder is shown with it, as `src\Data`) and files, each with its status letter. Hover a file or folder for the buttons that stage (`+`) and unstage (`−`) it, and a file for discard; right-click for the same and to open the file or its diff. **Stage All** (`+`) and **Unstage All** (`−`) act on the whole section. Double-click a file to see its diff.
+- **The Changes menu (⋯)**: **Open File as Default Action** (double-click opens the file instead of its diff), **Switch to List View** (Name and Path columns; click a column to sort) or back to the tree, and **Show Filter** (only the files whose path contains the text).
+- **Stashes**: double-click one to apply it; right-click to apply, pop or drop it. **Drop All** drops every stash.
 - **An operation in progress** (a merge, rebase, cherry-pick or revert) shows a banner with **Continue**, **Skip** (to leave out the commit that stopped it) and **Abort**.
 - **Merge Conflicts**: double-click one to open it in the merge editor.
 
@@ -44,7 +47,7 @@ Git → View History (`Ctrl+0 Ctrl+H`) shows the commits of every branch as a gr
 
 ## Stash, rebase, tags and remotes
 
-- **Stash Changes** (with untracked files if you like) and **Stashes** to apply, pop or drop one.
+- **Stash Changes** (with untracked files if you like) and **Stashes** to apply, pop or drop one; **Drop All Stashes** clears them. Git Changes lists the stashes too.
 - **Rebase Current Branch** onto another branch.
 - **Interactive Rebase**: from Git → Interactive Rebase or a commit in the history. The commits after the base are listed oldest first; reorder them and choose pick, reword (with a new message), squash, fixup or drop for each. No text editor opens.
 - **Tags**: create (annotated with a message, or lightweight), push, delete locally or on origin.
@@ -116,7 +119,7 @@ Git → Compare with Unmodified opens the active file's diff.
 
 - **The status bar's branch item** (or Git → Switch Branch) lists local and remote branches, and offers to create a new one. Switching to a remote branch creates a local branch that tracks it.
 - **Git → Merge Branch** merges another branch into the current one.
-- **Git → Fetch, Pull and Push**. The first push of a new branch publishes it to `origin` (or your only remote) and sets its upstream.
+- **Git → Fetch, Pull, Push and Sync** (pull, then push). The first push of a new branch publishes it to `origin` (or your only remote) and sets its upstream.
 - **Credentials** come from your git credential helper (Git Credential Manager, the macOS keychain, …), or from you, in a dialog, when no helper answers ([above](#credentials-and-ssh-passphrases)).
 
 Errors from git are shown as notifications. The full log of git commands is in View → Output → Git.

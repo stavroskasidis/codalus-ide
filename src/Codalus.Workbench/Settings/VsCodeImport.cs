@@ -67,9 +67,35 @@ public static class VsCodeImport
                 continue;
             }
 
-            if (property.Name.StartsWith('['))
+            if (SettingsService.LanguageIds(property.Name) is not null && value.ValueKind == JsonValueKind.Object)
             {
-                skipped.Add((property.Name, "language-specific settings aren't supported yet"));
+                // Language-specific settings: the block with the settings that are ours and valid.
+                var block = new System.Text.Json.Nodes.JsonObject();
+                foreach (var inner in value.EnumerateObject())
+                {
+                    if (find(inner.Name) is not { } innerDescriptor)
+                    {
+                        skipped.Add(($"{property.Name} {inner.Name}", "not a Codalus IDE setting"));
+                    }
+                    else if (innerDescriptor.Validate(inner.Value) is { } innerError)
+                    {
+                        skipped.Add(($"{property.Name} {inner.Name}", innerError));
+                    }
+                    else
+                    {
+                        block[inner.Name] = System.Text.Json.Nodes.JsonNode.Parse(inner.Value.GetRawText());
+                    }
+                }
+
+                if (block.Count > 0)
+                {
+                    using var written = JsonDocument.Parse(block.ToJsonString());
+                    imported.Add((property.Name, written.RootElement.Clone()));
+                }
+            }
+            else if (property.Name.StartsWith('['))
+            {
+                skipped.Add((property.Name, "not a Codalus IDE setting"));
             }
             else if (find(property.Name) is not { } descriptor)
             {

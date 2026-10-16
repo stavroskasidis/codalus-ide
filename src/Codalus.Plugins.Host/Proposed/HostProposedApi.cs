@@ -20,11 +20,14 @@ internal sealed class ProposedHost : IDisposable
         _server = server;
         Tests = new HostTestRegistry(server);
         Hosting = new HostHostingRegistry(server);
+        LanguageModels = new HostLanguageModelRegistry(server);
     }
 
     public HostTestRegistry Tests { get; }
 
     public HostHostingRegistry Hosting { get; }
+
+    public HostLanguageModelRegistry LanguageModels { get; }
 
     internal PluginHostServer Server => _server;
 
@@ -39,6 +42,7 @@ internal sealed class ProposedHost : IDisposable
         var json = PluginJsonContext.Default;
         var connection = _server.Connection;
         Hosting.RegisterHandlers(connection);
+        LanguageModels.RegisterHandlers(connection);
         connection.OnRequest(ProposedMethods.TestsRun, json.TestRunParams, json.TestRunResultDto, async (p, ct) =>
             new TestRunResultDto([.. await Tests.RunAsync(p, ct).ConfigureAwait(false)]));
         connection.OnRequest(ProposedMethods.TestsRefresh, json.TestControllerIdParams, json.EmptyResult, async (p, ct) =>
@@ -283,6 +287,10 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
 
     public ISecrets Secrets => _secrets ??= new HostSecrets(_host.Server, _pluginId);
 
+    public ILanguageModels LanguageModels => _languageModels ??= new PluginLanguageModels(_host.LanguageModels, _pluginId);
+
+    private PluginLanguageModels? _languageModels;
+
     private HostSecrets? _secrets;
     private readonly List<IDisposable> _providers = [];
 
@@ -433,6 +441,7 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
         _host.SolutionChanged -= OnSolutionChanged;
         _host.DocumentsChanged -= OnDocumentsChanged;
         _host.BuildFinished -= OnBuildFinished;
+        _languageModels?.Dispose();
         List<HostTestController> controllers;
         lock (_controllers)
         {

@@ -51,7 +51,7 @@ public class CommandRegistryTests
         registry.Declare(new CommandDescriptor("plugin.cmd", "Plugin", ContributionSource.Plugin("p", builtIn: false)));
         registry.MissingHandler = (id, _) =>
         {
-            registry.RegisterHandler(id, (args, _) => Task.FromResult<JsonElement?>(JsonDocument.Parse("42").RootElement.Clone()));
+            registry.RegisterHandler(id, (args, _) => Task.FromResult<JsonElement?>(JsonElement.Parse("42")));
             return Task.CompletedTask;
         };
 

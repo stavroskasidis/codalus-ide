@@ -21,6 +21,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 {
     private readonly ShellHost _shell = null!;
     private IInputElement? _focusBeforePalette;
+    private IInputElement? _focusBeforeFind;
     private bool _chordPending;
     private bool _closeConfirmed;
     private PixelPoint _normalPosition;
@@ -45,6 +46,14 @@ public sealed partial class MainWindow : Window, IShellWindow
         SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
+        SwitcherLayer.PointerPressed += (_, e) =>
+        {
+            if (e.Source == SwitcherLayer)
+            {
+                shell.Switcher.Close();
+            }
+        };
         // handledEventsToo: the code editor's text area marks GotFocus handled, which left editorTextFocus unset, so the
         // editor's key bindings (Ctrl+Space, F12…) never matched a focused editor (M34a).
         AddHandler(GotFocusEvent, (_, e) => OnFocusChanged(e.Source as Visual), RoutingStrategies.Bubble, handledEventsToo: true);
@@ -70,6 +79,31 @@ public sealed partial class MainWindow : Window, IShellWindow
             _focusBeforePalette = null;
         };
         shell.Layout.FocusRequested += (_, dockable) => FocusDockableSoon(dockable, attempts: 10);
+        shell.FindReplace.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(ViewModels.FindReplaceViewModel.IsOpen))
+            {
+                return;
+            }
+
+            if (shell.FindReplace.IsOpen)
+            {
+                _focusBeforeFind ??= FocusManager?.GetFocusedElement() is Visual focused && !FindReplace.IsVisualAncestorOf(focused) ? focused as IInputElement : null;
+            }
+            else
+            {
+                // Closed: the focus goes back where it was, unless something else took it meanwhile (an editor that
+                // Find Next opened).
+                var now = FocusManager?.GetFocusedElement() as Visual;
+                if (_focusBeforeFind is Visual previous && TopLevel.GetTopLevel(previous) == this
+                    && (now is null || !now.IsEffectivelyVisible || FindReplace.IsVisualAncestorOf(now)))
+                {
+                    _focusBeforeFind.Focus();
+                }
+
+                _focusBeforeFind = null;
+            }
+        };
         PositionChanged += (_, _) => RememberNormalBounds();
         Resized += (_, _) => RememberNormalBounds();
         Opened += OnOpened;
@@ -356,6 +390,29 @@ public sealed partial class MainWindow : Window, IShellWindow
             return;
         }
 
+        // The Ctrl+Tab switcher: the arrows move, Enter switches, Esc leaves (Tab comes through its key binding).
+        if (_shell.Switcher.IsOpen && e.Key is Key.Up or Key.Down or Key.Enter or Key.Escape)
+        {
+            switch (e.Key)
+            {
+                case Key.Up:
+                    _shell.Switcher.Move(-1);
+                    break;
+                case Key.Down:
+                    _shell.Switcher.Move(+1);
+                    break;
+                case Key.Enter:
+                    _shell.Switcher.Commit();
+                    break;
+                default:
+                    _shell.Switcher.Close();
+                    break;
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         // A modal dialog owns the keyboard.
         if (e.Handled || _shell.Dialogs.IsOpen || KeyMapper.ToChord(e.Key, e.KeyModifiers) is not { } chord)
         {
@@ -400,6 +457,16 @@ public sealed partial class MainWindow : Window, IShellWindow
                 }
 
                 break;
+        }
+    }
+
+    /// <summary>Releasing Ctrl switches to the document the Ctrl+Tab switcher has selected.</summary>
+    private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (_shell.Switcher.IsOpen && e.Key is Key.LeftCtrl or Key.RightCtrl)
+        {
+            _shell.Switcher.Commit();
+            e.Handled = true;
         }
     }
 

@@ -228,37 +228,55 @@ internal sealed partial class SolutionSession
         var psi = DotnetProcess.StartInfo(_dotnet, directory, args);
         psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
-        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1"; // the generator's build leaves no MSBuild nodes behind
+        DotnetProcess.NoLingeringBuildProcesses(psi); // the generator builds the project
         psi.StandardOutputEncoding = Encoding.UTF8;
         psi.StandardErrorEncoding = Encoding.UTF8;
         await _events.ScaffoldOutputAsync(new ScaffoldOutputParams("info", "> dotnet " + string.Join(' ', args.Select(a => a.Contains(' ', StringComparison.Ordinal) ? "\"" + a + "\"" : a)))).ConfigureAwait(false);
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
+        using var process = DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
         var text = new StringBuilder();
         var stdout = PumpScaffoldAsync(process.StandardOutput, "info", text);
         var stderr = PumpScaffoldAsync(process.StandardError, "error", text);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
         timeout.CancelAfter(s_scaffoldTimeout);
         await DotnetProcess.WaitOrKillAsync(process, timeout.Token).ConfigureAwait(false);
-        await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
-        return (process.ExitCode, text.ToString(), await stderr.ConfigureAwait(false));
+        await DotnetProcess.DrainAsync(stdout, stderr).ConfigureAwait(false);
+        lock (text)
+        {
+            return (process.ExitCode, text.ToString(), stderr.IsCompletedSuccessfully ? stderr.Result : 0);
+        }
     }
 
     /// <summary>Copies the lines to the output; returns how many there were.</summary>
     private async Task<int> PumpScaffoldAsync(StreamReader reader, string level, StringBuilder text)
     {
         var count = 0;
-        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
+        try
         {
-            count += line.Trim().Length > 0 ? 1 : 0;
-            lock (text)
+            await foreach (var line in Lines(reader).ConfigureAwait(false))
             {
-                text.AppendLine(line);
-            }
+                count += line.Trim().Length > 0 ? 1 : 0;
+                lock (text)
+                {
+                    text.AppendLine(line);
+                }
 
-            await _events.ScaffoldOutputAsync(new ScaffoldOutputParams(level, line)).ConfigureAwait(false);
+                await _events.ScaffoldOutputAsync(new ScaffoldOutputParams(level, line)).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // Closed after the process exited, while a build it ran still held the pipe (DotnetProcess.DrainAsync).
         }
 
         return count;
+    }
+
+    private static async IAsyncEnumerable<string> Lines(StreamReader reader)
+    {
+        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
+        {
+            yield return line;
+        }
     }
 
     /// <summary>Each file under the project's folder (without bin and obj) and when it was written.</summary>

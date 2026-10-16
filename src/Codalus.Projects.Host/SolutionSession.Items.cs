@@ -68,6 +68,10 @@ internal sealed partial class SolutionSession
             }
         });
 
+    /// <summary>F# compile order (M36): moves a <c>Compile</c> item before or after another in the project file.</summary>
+    public Task<ItemEditResult> MoveItemAsync(MoveItemParams parameters) =>
+        EditItemsAsync(parameters.Project, items => items.Move(parameters.Path, parameters.Target, parameters.After));
+
     /// <summary>Add Existing Item: copies the files into the folder (or links them), and makes sure they are items.</summary>
     public async Task<FileOperationResult> AddExistingAsync(AddExistingItemsParams parameters)
     {
@@ -429,7 +433,7 @@ internal sealed partial class SolutionSession
     {
         var psi = DotnetProcess.StartInfo(_dotnet, directory, args);
         psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
+        using var process = DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
         var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);

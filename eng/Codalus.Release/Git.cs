@@ -7,11 +7,15 @@ internal sealed class Git(string repository)
 {
     public string Repository { get; } = repository;
 
-    public string Run(params string[] arguments)
+    public string Run(params string[] arguments) => RunWithInput(input: null, arguments);
+
+    /// <summary>Runs git with <paramref name="input"/> on its standard input (for filters such as <c>git patch-id</c>).</summary>
+    public string RunWithInput(string? input, params string[] arguments)
     {
         var start = new ProcessStartInfo("git")
         {
             WorkingDirectory = Repository,
+            RedirectStandardInput = input is not null,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -23,14 +27,21 @@ internal sealed class Git(string repository)
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("git did not start.");
         var error = process.StandardError.ReadToEndAsync();
-        var output = process.StandardOutput.ReadToEnd();
+        var output = process.StandardOutput.ReadToEndAsync();
+        if (input is not null)
+        {
+            process.StandardInput.Write(input);
+            process.StandardInput.Close();
+        }
+
+        output.Wait();
         process.WaitForExit();
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException($"git {string.Join(' ', arguments)} failed ({process.ExitCode}): {error.Result.Trim()}");
         }
 
-        return output;
+        return output.Result;
     }
 
     public IReadOnlyList<string> Lines(params string[] arguments) =>

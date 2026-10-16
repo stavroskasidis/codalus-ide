@@ -98,7 +98,7 @@ public sealed class GitLabProviderTests : IAsyncLifetime
                     ]
                     """);
             case ("POST", ProjectPath + "/merge_requests"):
-                var body = JsonDocument.Parse(request.Body).RootElement;
+                var body = JsonElement.Parse(request.Body);
                 _created.Add($"merge request {body.GetProperty("source_branch").GetString()} -> {body.GetProperty("target_branch").GetString()}: {body.GetProperty("title").GetString()}");
                 return MockHttpResponse.Json($$"""{ "iid": 7, "title": {{S(body.GetProperty("title").GetString())}}, "state": "opened", "draft": true, "author": { "username": "ada" }, "source_branch": {{S(body.GetProperty("source_branch").GetString())}}, "target_branch": "main", "web_url": "x" }""", 201);
             case ("GET", ProjectPath + "/pipelines"):
@@ -118,7 +118,7 @@ public sealed class GitLabProviderTests : IAsyncLifetime
             case ("GET", "/api/v4/namespaces"):
                 return MockHttpResponse.Json("""[ { "id": 7, "full_path": "ada", "kind": "user" }, { "id": 40, "full_path": "platform/web", "kind": "group" } ]""");
             case ("POST", "/api/v4/projects"):
-                var project = JsonDocument.Parse(request.Body).RootElement;
+                var project = JsonElement.Parse(request.Body);
                 _created.Add($"project {project.GetProperty("name").GetString()} in {(project.TryGetProperty("namespace_id", out var ns) ? ns.GetInt64().ToString(System.Globalization.CultureInfo.InvariantCulture) : "mine")} {project.GetProperty("visibility").GetString()}");
                 return MockHttpResponse.Json($$"""{ "http_url_to_repo": {{S(Server + "/platform/web/catalog.git")}}, "web_url": {{S(Server + "/platform/web/catalog")}}, "ssh_url_to_repo": "git@gitlab.com:platform/web/catalog.git" }""", 201);
         }
