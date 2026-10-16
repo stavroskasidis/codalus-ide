@@ -146,14 +146,21 @@ public sealed class SolutionService : IAsyncDisposable
     /// <summary>
     /// Opens <paramref name="path"/> (<c>.sln</c>, <c>.slnx</c> or a project file) in a new build host. Untrusted
     /// solutions show their structure only. Returns the structure from the solution file; projects follow as
-    /// <see cref="ProjectChanged"/> events.
+    /// <see cref="ProjectChanged"/> events. <paramref name="configuration"/> and <paramref name="platform"/> are used
+    /// when the solution has them, and <paramref name="activeFrameworks"/> for the projects that still target them
+    /// (the session kept with the solution, ADR 0070).
     /// </summary>
-    public async Task<SolutionInfo> OpenAsync(string path, bool trusted, bool restore, CancellationToken cancellationToken, string? configuration = null, string? platform = null)
+    public async Task<SolutionInfo> OpenAsync(string path, bool trusted, bool restore, CancellationToken cancellationToken, string? configuration = null, string? platform = null, IReadOnlyDictionary<string, string>? activeFrameworks = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await CloseCoreAsync().ConfigureAwait(false);
+            foreach (var (project, framework) in activeFrameworks ?? new Dictionary<string, string>())
+            {
+                _activeFrameworks[project] = framework;
+            }
+
             var full = Path.GetFullPath(path);
             var hostPath = _resolveHost() ?? throw new InvalidOperationException("The build host (codalus-buildhost) was not found.");
             _openParams = new OpenSolutionParams(full, trusted, configuration, platform, restore);
@@ -333,9 +340,16 @@ public sealed class SolutionService : IAsyncDisposable
         InvokeAsync(ProjectMethods.Restore, new RestoreParams(path), ProjectJsonContext.Default.RestoreParams, cancellationToken);
 
     /// <summary>The target framework the language service sees for a multi-targeted project.</summary>
-    public string? ActiveFramework(string projectPath) =>
-        _activeFrameworks.TryGetValue(projectPath, out var framework) ? framework
-        : _projects.TryGetValue(projectPath, out var project) ? project.TargetFrameworks.FirstOrDefault() : null;
+    public string? ActiveFramework(string projectPath)
+    {
+        var frameworks = _projects.TryGetValue(projectPath, out var project) ? project.TargetFrameworks : [];
+        return _activeFrameworks.TryGetValue(projectPath, out var framework) && (frameworks.Length == 0 || frameworks.Contains(framework, StringComparer.OrdinalIgnoreCase))
+            ? framework // a kept choice the project no longer targets falls back to its first framework
+            : frameworks.FirstOrDefault();
+    }
+
+    /// <summary>The target frameworks chosen for multi-targeted projects (kept with the solution).</summary>
+    public IReadOnlyDictionary<string, string> ActiveFrameworks => new Dictionary<string, string>(_activeFrameworks, PathComparer);
 
     public async Task SetActiveFrameworkAsync(string projectPath, string targetFramework, CancellationToken cancellationToken)
     {
