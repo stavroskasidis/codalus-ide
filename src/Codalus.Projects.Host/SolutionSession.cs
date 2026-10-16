@@ -36,6 +36,9 @@ internal interface ISessionEvents
 
     /// <summary>A line of a running <c>dotnet aspnet-codegenerator</c> (ADR 0041).</summary>
     Task ScaffoldOutputAsync(ScaffoldOutputParams output);
+
+    /// <summary>A line of a running <c>dotnet-svcutil</c> (ADR 0069).</summary>
+    Task WcfOutputAsync(ScaffoldOutputParams output);
 }
 
 /// <summary>The session's events plus those of builds.</summary>
