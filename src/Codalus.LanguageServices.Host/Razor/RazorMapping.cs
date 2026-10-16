@@ -54,21 +54,83 @@ internal static class RazorFiles
 
         return null;
     }
+
+    /// <summary>
+    /// The declaration document next to a generated document (<c>Counter_razor.decl.g.cs</c> beside
+    /// <c>Counter_razor.g.cs</c>), or null. The .NET 11 SDK's Razor generator writes a component's class with its
+    /// <c>@code</c> blocks there, and the render tree in the other (M30b).
+    /// </summary>
+    public static async Task<SourceGeneratedDocument?> DeclarationAsync(SourceGeneratedDocument generated, CancellationToken cancellationToken)
+    {
+        if (!generated.HintName.EndsWith(".g.cs", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var hint = generated.HintName[..^".g.cs".Length] + ".decl.g.cs";
+        var path = generated.FilePath is { } file && file.EndsWith(".g.cs", StringComparison.Ordinal) ? file[..^".g.cs".Length] + ".decl.g.cs" : null; // the same generator's
+        foreach (var document in await generated.Project.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (document.HintName == hint && string.Equals(document.FilePath, path, StringComparison.Ordinal))
+            {
+                return document;
+            }
+        }
+
+        return null;
+    }
 }
 
-/// <summary>A Razor file and its generated C#, with the C# spans that map between them.</summary>
+/// <summary>One document the Razor generator wrote for a Razor file, with the C# spans that map between them.</summary>
+internal sealed class RazorPart(SourceGeneratedDocument document, SourceText text, SourceText razorText, List<(TextSpan Razor, TextSpan Generated)> spans)
+{
+    public SourceGeneratedDocument Document { get; } = document;
+
+    public SourceText Text { get; } = text;
+
+    /// <summary>The C# spans of the Razor file and where they are in this document.</summary>
+    public IReadOnlyList<(TextSpan Razor, TextSpan Generated)> Spans => spans;
+
+    /// <summary>The Razor span of a span of this document inside one C# span, or null (code the generator wrote).</summary>
+    public TextSpan? ToRazor(TextSpan generatedSpan)
+    {
+        foreach (var (razor, generated) in spans)
+        {
+            if (generatedSpan.Start >= generated.Start && generatedSpan.End <= generated.End)
+            {
+                return new TextSpan(razor.Start + (generatedSpan.Start - generated.Start), generatedSpan.Length);
+            }
+        }
+
+        return null;
+    }
+
+    public Range? ToRazor(Range generated)
+    {
+        var start = Positions.ToOffset(Text, generated.Start);
+        var end = Positions.ToOffset(Text, generated.End);
+        return ToRazor(TextSpan.FromBounds(start, Math.Max(start, end))) is { } span ? Positions.ToRange(razorText, span) : null;
+    }
+}
+
+/// <summary>A position in a document the Razor generator wrote, for a position in C# of the Razor file.</summary>
+internal readonly record struct GeneratedPosition(RazorPart Part, int Offset)
+{
+    public SourceGeneratedDocument Document => Part.Document;
+}
+
+/// <summary>
+/// A Razor file and the C# the generator wrote for it: one document, or two from the .NET 11 SDK's generator (the
+/// render tree, and the class with its <c>@code</c> blocks), each with the C# spans that map between them.
+/// </summary>
 internal sealed class RazorMapping
 {
-    private readonly List<(TextSpan Razor, TextSpan Generated)> _spans;
-
-    private RazorMapping(string path, TextDocument razor, SourceText razorText, SourceGeneratedDocument generated, SourceText generatedText, List<(TextSpan, TextSpan)> spans)
+    private RazorMapping(string path, TextDocument razor, SourceText razorText, IReadOnlyList<RazorPart> parts)
     {
         Path = path;
         Razor = razor;
         RazorText = razorText;
-        Generated = generated;
-        GeneratedText = generatedText;
-        _spans = spans;
+        Parts = parts;
     }
 
     public string Path { get; }
@@ -77,23 +139,40 @@ internal sealed class RazorMapping
 
     public SourceText RazorText { get; }
 
-    public SourceGeneratedDocument Generated { get; }
+    /// <summary>The generated documents: the one with the file's <c>#pragma checksum</c> first.</summary>
+    public IReadOnlyList<RazorPart> Parts { get; }
 
-    public SourceText GeneratedText { get; }
-
-    /// <summary>The C# spans of the Razor file and where they are in the generated document.</summary>
-    public IReadOnlyList<(TextSpan Razor, TextSpan Generated)> Spans => _spans;
+    /// <summary>The generated document with the file's <c>#pragma checksum</c>.</summary>
+    public SourceGeneratedDocument Generated => Parts[0].Document;
 
     public static async Task<RazorMapping?> CreateAsync(Solution solution, string path, CancellationToken cancellationToken)
     {
         if (RazorFiles.Find(solution, path) is not { } razor
-            || await RazorFiles.GeneratedAsync(razor.Project, path, cancellationToken).ConfigureAwait(false) is not { } generated
-            || await generated.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false) is not { } tree)
+            || await RazorFiles.GeneratedAsync(razor.Project, path, cancellationToken).ConfigureAwait(false) is not { } generated)
         {
             return null;
         }
 
         var razorText = await razor.GetTextAsync(cancellationToken).ConfigureAwait(false);
+        var parts = new List<RazorPart>();
+        foreach (var document in new[] { generated, await RazorFiles.DeclarationAsync(generated, cancellationToken).ConfigureAwait(false) })
+        {
+            if (document is not null && await PartAsync(document, path, razorText, cancellationToken).ConfigureAwait(false) is { } part)
+            {
+                parts.Add(part);
+            }
+        }
+
+        return parts.Count > 0 && parts[0].Document == generated ? new RazorMapping(path, razor, razorText, parts) : null;
+    }
+
+    private static async Task<RazorPart?> PartAsync(SourceGeneratedDocument generated, string path, SourceText razorText, CancellationToken cancellationToken)
+    {
+        if (await generated.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false) is not { } tree)
+        {
+            return null;
+        }
+
         var generatedText = await generated.GetTextAsync(cancellationToken).ConfigureAwait(false);
         var spans = new List<(TextSpan, TextSpan)>();
         foreach (var mapping in tree.GetLineMappings(cancellationToken))
@@ -124,60 +203,42 @@ internal sealed class RazorMapping
             spans.Add((new TextSpan(razorStart, length), new TextSpan(generatedStart, length)));
         }
 
-        return new RazorMapping(path, razor, razorText, generated, generatedText, spans);
+        return new RazorPart(generated, generatedText, razorText, spans);
     }
 
     private static int Offset(SourceText text, LinePosition position) =>
         position.Line >= text.Lines.Count ? text.Length : Math.Min(text.Lines[position.Line].Start + position.Character, text.Lines[position.Line].End);
 
-    /// <summary>The generated offset of a Razor offset in C# (an end position counts), or null in markup.</summary>
-    public int? ToGenerated(int razorOffset)
+    /// <summary>Where a Razor offset in C# (an end position counts) is in a generated document, or null in markup.</summary>
+    public GeneratedPosition? ToGenerated(int razorOffset)
     {
-        foreach (var (razor, generated) in _spans)
+        foreach (var part in Parts)
         {
-            if (razorOffset >= razor.Start && razorOffset <= razor.End)
+            foreach (var (razor, generated) in part.Spans)
             {
-                return generated.Start + (razorOffset - razor.Start);
+                if (razorOffset >= razor.Start && razorOffset <= razor.End)
+                {
+                    return new GeneratedPosition(part, generated.Start + (razorOffset - razor.Start));
+                }
             }
         }
 
         return null;
     }
 
-    /// <summary>The Razor span of a generated span inside one C# span, or null (code the generator wrote).</summary>
-    public TextSpan? ToRazor(TextSpan generatedSpan)
-    {
-        foreach (var (razor, generated) in _spans)
-        {
-            if (generatedSpan.Start >= generated.Start && generatedSpan.End <= generated.End)
-            {
-                return new TextSpan(razor.Start + (generatedSpan.Start - generated.Start), generatedSpan.Length);
-            }
-        }
-
-        return null;
-    }
-
-    public Range? ToRazor(Range generated)
-    {
-        var start = Positions.ToOffset(GeneratedText, generated.Start);
-        var end = Positions.ToOffset(GeneratedText, generated.End);
-        return ToRazor(TextSpan.FromBounds(start, Math.Max(start, end))) is { } span ? Positions.ToRange(RazorText, span) : null;
-    }
-
-    /// <summary>Locations in the generated document move to the Razor file (dropped if they are generated code); others stay.</summary>
+    /// <summary>Locations in the generated documents move to the Razor file (dropped if they are generated code); others stay.</summary>
     public Location[] MapLocations(IEnumerable<Location> locations)
     {
-        var generatedUri = WorkspaceManager.UriOf(Generated);
+        var parts = Parts.ToDictionary(p => WorkspaceManager.UriOf(p.Document), StringComparer.Ordinal);
         var razorUri = DocumentUris.FromPath(Path);
         var result = new List<Location>();
         foreach (var location in locations)
         {
-            if (location.Uri != generatedUri)
+            if (!parts.TryGetValue(location.Uri, out var part))
             {
                 result.Add(location);
             }
-            else if (ToRazor(location.Range) is { } range)
+            else if (part.ToRazor(location.Range) is { } range)
             {
                 result.Add(new Location(razorUri, range));
             }
@@ -210,8 +271,14 @@ internal static class RazorLocations
         return SourceFile(tree) is { } file ? new Location(DocumentUris.FromPath(file), new Range(new Position(0, 0), new Position(0, 0))) : null;
     }
 
+    /// <summary>Whether a path is a document the Razor generator wrote: <c>_razor.g.cs</c>, or its declarations' <c>_razor.decl.g.cs</c> (M30b).</summary>
     public static bool IsRazorGenerated(string? path) =>
-        path is not null && (path.EndsWith("_razor.g.cs", StringComparison.Ordinal) || path.EndsWith("_cshtml.g.cs", StringComparison.Ordinal));
+        path is not null && (path.EndsWith("_razor.g.cs", StringComparison.Ordinal) || path.EndsWith("_cshtml.g.cs", StringComparison.Ordinal)
+                             || path.EndsWith("_razor.decl.g.cs", StringComparison.Ordinal) || path.EndsWith("_cshtml.decl.g.cs", StringComparison.Ordinal));
+
+    /// <summary>Whether a Razor file is an imports file (<c>_Imports.razor</c>, <c>_ViewImports.cshtml</c>), which every generated document maps.</summary>
+    public static bool IsImports(string path) =>
+        System.IO.Path.GetFileName(path) is var name && (name.Equals("_Imports.razor", StringComparison.OrdinalIgnoreCase) || name.Equals("_ViewImports.cshtml", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The Razor file a generated tree came from (its <c>#pragma checksum</c>).</summary>
     public static string? SourceFile(SyntaxTree tree) =>

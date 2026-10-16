@@ -160,7 +160,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             (xaml, offset, _, ct) => Xaml.XamlNavigation.HoverAsync(xaml, offset, ct), Semantics.Analysis);
         OnPosition(Methods.SignatureHelp, json.SignatureHelpParams, json.SignatureHelp, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => SignatureHelpFeature.SignatureHelpAsync(document, offset, ct), null,
-            (mapping, offset, _, ct) => mapping.ToGenerated(offset) is { } generated ? SignatureHelpFeature.SignatureHelpAsync(mapping.Generated, generated, ct) : Task.FromResult<SignatureHelp?>(null),
+            (mapping, offset, _, ct) => mapping.ToGenerated(offset) is { } generated ? SignatureHelpFeature.SignatureHelpAsync(generated.Document, generated.Offset, ct) : Task.FromResult<SignatureHelp?>(null),
             semantics: Semantics.Analysis);
         OnPosition(Methods.Definition, json.TextDocumentPositionParams, json.LocationArray, p => (p.TextDocument, p.Position),
             async (document, offset, _, ct) => await NavigationFeature.DefinitionAsync(document, offset, ct).ConfigureAwait(false), [],
@@ -183,7 +183,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         OnPosition(Methods.References, json.ReferenceParams, json.LocationArray, p => (p.TextDocument, p.Position),
             async (document, offset, p, ct) => await ReferencesFeature.ReferencesAsync(document, offset, p.Context.IncludeDeclaration, ct).ConfigureAwait(false), [],
             async (mapping, offset, p, ct) => mapping.ToGenerated(offset) is { } generated
-                ? await ReferencesFeature.ReferencesAsync(mapping.Generated, generated, p.Context.IncludeDeclaration, ct).ConfigureAwait(false)
+                ? await ReferencesFeature.ReferencesAsync(generated.Document, generated.Offset, p.Context.IncludeDeclaration, ct).ConfigureAwait(false)
                 : []);
         OnPosition(Methods.PrepareRename, json.TextDocumentPositionParams, json.PrepareRenameResult, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => RenameFeature.PrepareAsync(document, offset, ct), null,

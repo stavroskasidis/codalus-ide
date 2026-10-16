@@ -54,8 +54,8 @@ internal sealed class RazorFeatures
     {
         if (mapping.ToGenerated(offset) is { } generated)
         {
-            var list = await _completion.CompleteAsync(mapping.Generated, generated, context, cancellationToken).ConfigureAwait(false);
-            var mapped = list is null ? null : MapCompletion(mapping, list);
+            var list = await _completion.CompleteAsync(generated.Document, generated.Offset, context, cancellationToken).ConfigureAwait(false);
+            var mapped = list is null ? null : MapCompletion(generated.Part, list);
 
             // "@word" at the start of a line is an implicit expression until it is a known directive: offer both.
             if (RazorContext.At(mapping.RazorText.ToString(), offset).Kind == RazorContextKind.Directive
@@ -70,18 +70,18 @@ internal sealed class RazorFeatures
         return await MarkupCompletionAsync(mapping, offset, cancellationToken).ConfigureAwait(false);
     }
 
-    private CompletionList MapCompletion(RazorMapping mapping, CompletionList list)
+    private CompletionList MapCompletion(RazorPart part, CompletionList list)
     {
-        _completion.MapLastList(mapping.ToRazor);
+        _completion.MapLastList(part.ToRazor);
         var items = list.Items.Select(item => item with
         {
-            TextEdit = item.TextEdit is { } edit ? mapping.ToRazor(edit.Range) is { } range ? edit with { Range = range } : null : null,
-            InsertText = item.TextEdit is { } original && mapping.ToRazor(original.Range) is null ? original.NewText : item.InsertText,
+            TextEdit = item.TextEdit is { } edit ? part.ToRazor(edit.Range) is { } range ? edit with { Range = range } : null : null,
+            InsertText = item.TextEdit is { } original && part.ToRazor(original.Range) is null ? original.NewText : item.InsertText,
             AdditionalTextEdits = null,
         }).ToArray();
         return new CompletionList(list.IsIncomplete, items)
         {
-            ItemDefaults = list.ItemDefaults?.EditRange is { } editRange && mapping.ToRazor(editRange) is { } mapped ? new CompletionItemDefaults(mapped) : null,
+            ItemDefaults = list.ItemDefaults?.EditRange is { } editRange && part.ToRazor(editRange) is { } mapped ? new CompletionItemDefaults(mapped) : null,
         };
     }
 
@@ -138,8 +138,8 @@ internal sealed class RazorFeatures
     {
         if (mapping.ToGenerated(offset) is { } generated)
         {
-            var hover = await HoverFeature.HoverAsync(mapping.Generated, generated, cancellationToken).ConfigureAwait(false);
-            return hover is null ? null : hover with { Range = hover.Range is { } range ? mapping.ToRazor(range) : null };
+            var hover = await HoverFeature.HoverAsync(generated.Document, generated.Offset, cancellationToken).ConfigureAwait(false);
+            return hover is null ? null : hover with { Range = hover.Range is { } range ? generated.Part.ToRazor(range) : null };
         }
 
         if (await SymbolAtAsync(mapping, offset, cancellationToken).ConfigureAwait(false) is not var (symbol, span))
@@ -158,7 +158,7 @@ internal sealed class RazorFeatures
     {
         if (mapping.ToGenerated(offset) is { } generated)
         {
-            return await NavigationFeature.DefinitionAsync(mapping.Generated, generated, cancellationToken).ConfigureAwait(false);
+            return await NavigationFeature.DefinitionAsync(generated.Document, generated.Offset, cancellationToken).ConfigureAwait(false);
         }
 
         return await SymbolAtAsync(mapping, offset, cancellationToken).ConfigureAwait(false) is var (symbol, _)
@@ -173,8 +173,8 @@ internal sealed class RazorFeatures
             return [];
         }
 
-        var highlights = await NavigationFeature.HighlightsAsync(mapping.Generated, generated, cancellationToken).ConfigureAwait(false);
-        return [.. highlights.Select(h => mapping.ToRazor(h.Range) is { } range ? h with { Range = range } : null).OfType<DocumentHighlight>()];
+        var highlights = await NavigationFeature.HighlightsAsync(generated.Document, generated.Offset, cancellationToken).ConfigureAwait(false);
+        return [.. highlights.Select(h => generated.Part.ToRazor(h.Range) is { } range ? h with { Range = range } : null).OfType<DocumentHighlight>()];
     }
 
     /// <summary>The component or parameter named at <paramref name="offset"/> in markup, with the name's span.</summary>
