@@ -28,6 +28,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 | Plugin API and built-in plugins | `src/Codalus.Plugins.Abstractions`, `src/Plugins/`, `docs/plugins.md` |
 | Fixtures | `samples/` (standalone; they don't inherit the repo's build settings) |
 | User guide (also the website's docs) | `docs/user-guide/` |
+| Designs before they're built (mockups that open in a browser, their colors) | `docs/design/` |
 | Build, packaging, release scripts | `eng/` |
 
 ## Architecture rules
