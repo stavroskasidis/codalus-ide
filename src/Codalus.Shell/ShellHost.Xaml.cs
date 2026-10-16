@@ -365,7 +365,7 @@ public sealed partial class ShellHost
     }
     // ------------------------------------------------------------------ the XAML compiler's errors
 
-    /// <summary>The last build's AVLN errors as squiggles in their .axaml files, until the file changes or the next build.</summary>
+    /// <summary>The last build's AVLN and MC errors as squiggles in their .axaml and .xaml files, until the file changes or the next build.</summary>
     private void ShowXamlBuildDiagnostics()
     {
         var byFile = XamlBuildDiagnostics.ByFile(Builds.Diagnostics);
@@ -382,7 +382,7 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>An edited .axaml file's build errors no longer point where they did.</summary>
+    /// <summary>An edited .axaml or .xaml file's build errors no longer point where they did.</summary>
     private void ClearXamlBuildDiagnostics(string path)
     {
         if (_buildXamlFiles.Remove(path))

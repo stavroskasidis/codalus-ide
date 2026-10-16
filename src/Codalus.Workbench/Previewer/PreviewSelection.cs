@@ -83,8 +83,9 @@ public static class PreviewSelection
 }
 
 /// <summary>
-/// The XAML compiler's errors (AVLN…) from the last build, as editor diagnostics of their <c>.axaml</c> files (M19a):
-/// squiggles where the build put them, until the file changes or the next build.
+/// The XAML compiler's errors (Avalonia's AVLN…, M19a; WPF's markup compiler's MC…, M40a) from the last build, as
+/// editor diagnostics of their <c>.axaml</c> and <c>.xaml</c> files: squiggles where the build put them, until the file
+/// changes or the next build.
 /// </summary>
 public static class XamlBuildDiagnostics
 {
@@ -93,7 +94,7 @@ public static class XamlBuildDiagnostics
 
     public static IReadOnlyDictionary<string, Diagnostic[]> ByFile(IEnumerable<BuildDiagnosticInfo> diagnostics) =>
         diagnostics
-            .Where(d => d.File is { } file && file.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase))
+            .Where(d => d.File is { } file && (file.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase)))
             .GroupBy(d => d.File!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,

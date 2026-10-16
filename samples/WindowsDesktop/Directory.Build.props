@@ -1,0 +1,10 @@
+<Project>
+  <!-- Standalone fixture (see README.md): nothing is inherited from the repository. Linux and macOS build these
+       net11.0-windows projects only with EnableWindowsTargeting, which Codalus's build host sets there. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

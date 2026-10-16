@@ -10,6 +10,7 @@
     <!-- Host code without MSBuild types, tested on its own. -->
     <Compile Include="..\..\src\Codalus.Projects.Host\SdkSelection.cs" Link="Host\SdkSelection.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\DesignTimeCache.cs" Link="Host\DesignTimeCache.cs" />
+    <Compile Include="..\..\src\Codalus.Projects.Host\WindowsDesktop.cs" Link="Host\WindowsDesktop.cs" />
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
 </Project>

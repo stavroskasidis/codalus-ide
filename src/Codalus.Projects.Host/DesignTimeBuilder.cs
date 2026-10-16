@@ -101,6 +101,8 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             ["VbcCommandLineArgs"] = [],
             ["FscCommandLineArgs"] = [],
             ["ProjectReference"] = [],
+            ["Page"] = [],
+            ["ApplicationDefinition"] = [],
         },
     };
 
@@ -139,6 +141,13 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             var state = result.ProjectStateAfterBuild;
             var arguments = state?.GetItems(language switch { "VB" => "VbcCommandLineArgs", "F#" => "FscCommandLineArgs", _ => "CscCommandLineArgs" })
                 .Select(i => i.EvaluatedInclude).ToArray() ?? [];
+            if (state is not null && language != "F#" && arguments.Length > 0)
+            {
+                var projectDirectory = Path.GetDirectoryName(request.Path)!;
+                arguments = WindowsDesktop.WithWpfXaml(arguments, state.GetItems("Page").Concat(state.GetItems("ApplicationDefinition"))
+                    .Select(i => Path.GetFullPath(Path.Combine(projectDirectory, i.EvaluatedInclude.Replace('\\', Path.DirectorySeparatorChar)))));
+            }
+
             if (state is not null && framework.Length == 0)
             {
                 framework = state.GetPropertyValue("TargetFramework");
