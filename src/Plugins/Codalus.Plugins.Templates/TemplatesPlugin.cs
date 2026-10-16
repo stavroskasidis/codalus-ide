@@ -25,24 +25,22 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
         return Task.CompletedTask;
     }
 
-    /// <summary>The Avalonia project templates' package (M19b), offered in New Project when none is installed.</summary>
-    private const string AvaloniaTemplates = "Avalonia.Templates";
-
     private async Task<object?> NewProjectAsync(CancellationToken cancellationToken)
     {
         _templates ??= TemplateCatalog.LoadAsync(Context.Log, CancellationToken.None);
         var templates = await _templates.ConfigureAwait(false);
         var items = templates.Select(t => new QuickPickItem(t.Name) { Description = t.ShortName, Detail = t.Languages, Tag = t }).ToList();
-        // The Avalonia templates (M19b) when they aren't installed: dotnet new install, then the list again.
-        if (!templates.Any(t => t.ShortName.StartsWith("avalonia", StringComparison.OrdinalIgnoreCase)))
+        // Template packs that aren't installed (Avalonia, M19b; CoreWCF, M42): picking one is the consent to
+        // dotnet new install it, then the list comes again.
+        foreach (var pack in TemplatePacks.Missing(templates))
         {
-            items.Add(new QuickPickItem("Install the Avalonia templates…") { Description = AvaloniaTemplates, Detail = "dotnet new install " + AvaloniaTemplates, Tag = AvaloniaTemplates });
+            items.Add(new QuickPickItem(pack.Title) { Description = pack.Package, Detail = "dotnet new install " + pack.Package, Tag = pack });
         }
 
         var picked = await Context.Window.ShowQuickPickAsync(items, "Select a project template", cancellationToken).ConfigureAwait(false);
-        if (picked is { Tag: AvaloniaTemplates })
+        if (picked is { Tag: TemplatePack install })
         {
-            if (!await RunDotnetAsync(["new", "install", AvaloniaTemplates], cancellationToken).ConfigureAwait(false))
+            if (!await RunDotnetAsync(["new", "install", install.Package], cancellationToken).ConfigureAwait(false))
             {
                 return null;
             }
@@ -241,8 +239,26 @@ internal sealed record ProjectTemplate(string Name, string ShortName, string Lan
         "xunit" or "nunit" or "mstest" => "TestProject1",
         "web" or "webapi" or "mvc" or "webapp" or "blazor" or "grpc" => "WebApplication1",
         "worker" => "WorkerService1",
+        "corewcf" => "CoreWCFService1",
         _ => "Project1",
     };
+}
+
+/// <summary>A template package New Project offers to install while none of its templates is (<see cref="Prefix"/>).</summary>
+internal sealed record TemplatePack(string Package, string Prefix, string Title);
+
+internal static class TemplatePacks
+{
+    /// <summary>The packs New Project knows: Avalonia's (M19b) and CoreWCF's (M42), both from nuget.org.</summary>
+    public static readonly TemplatePack[] Known =
+    [
+        new("Avalonia.Templates", "avalonia", "Install the Avalonia templates…"),
+        new("CoreWCF.Templates", "corewcf", "Install the CoreWCF templates…"),
+    ];
+
+    /// <summary>The known packs none of whose templates is in <paramref name="templates"/>.</summary>
+    public static IEnumerable<TemplatePack> Missing(IReadOnlyList<ProjectTemplate> templates) =>
+        Known.Where(p => !templates.Any(t => t.ShortName.StartsWith(p.Prefix, StringComparison.OrdinalIgnoreCase)));
 }
 
 internal static class TemplateCatalog
@@ -262,6 +278,7 @@ internal static class TemplateCatalog
         ("mvc", "ASP.NET Core Web App (Model-View-Controller)"),
         ("blazor", "Blazor Web App"),
         ("grpc", "ASP.NET Core gRPC Service"),
+        ("corewcf", "CoreWCF Service"), // CoreWCF.Templates (M42)
         ("razorclasslib", "Razor Class Library"),
         ("maui", ".NET MAUI App"), // with the MAUI workloads (M20a)
         ("maui-blazor", ".NET MAUI Blazor Hybrid App"),

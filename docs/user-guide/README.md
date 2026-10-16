@@ -25,7 +25,8 @@ Codalus IDE is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linu
 21. [.NET MAUI: devices, emulators and simulators, running and debugging on Android and iOS, the workloads and the Android SDK, MAUI XAML](maui.md)
 22. [Visual Basic: editing, mixed C# and VB solutions, what the editor adds as you type, project options, tests and debugging](visual-basic.md)
 23. [F#: editing with FsAutoComplete and Fantomas, the compile order, F# Interactive, scripts, type providers, analyzers, Expecto tests and debugging](fsharp.md)
-24. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
+24. [WCF: Add Service Reference with dotnet-svcutil, CoreWCF services, the WCF Test Client, and system.serviceModel in configuration files](wcf.md)
+25. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md), with the [API reference](plugin-api.md).
 

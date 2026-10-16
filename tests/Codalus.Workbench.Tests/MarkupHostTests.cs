@@ -31,7 +31,7 @@ public sealed class MarkupHostTests : IAsyncLifetime
         Directory.CreateDirectory(_root);
         foreach (var (id, extensions, names) in new (string, string[], string[])[]
         {
-            ("json", [".json"], []), ("jsonc", [".jsonc"], ["launchSettings.json"]), ("xml", [".xml", ".book"], []), ("msbuild", [".csproj", ".props"], []),
+            ("json", [".json"], []), ("jsonc", [".jsonc"], ["launchSettings.json"]), ("xml", [".xml", ".book", ".config"], []), ("msbuild", [".csproj", ".props"], []),
             ("yaml", [".yml", ".yaml"], []), ("editorconfig", [], [".editorconfig"]),
         })
         {
@@ -247,5 +247,66 @@ public sealed class MarkupHostTests : IAsyncLifetime
 
         await _service.ChangeAsync(compose, ++_version, [new TextDocumentContentChangeEvent(null, text.Replace("ports: 8080", "ports:\n      - \"8080:8080\"", StringComparison.Ordinal))]);
         Assert.Empty(await DiagnosticsAsync(compose, d => d.Count == 0, ct));
+    }
+
+    [Fact]
+    public async Task Config_files_know_the_system_serviceModel_section()
+    {
+        var ct = Timeout();
+        var text = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <configuration>
+              <appSettings>
+                <add key="anything" value="not checked" />
+              </appSettings>
+              <system.serviceModel>
+                <bindings>
+                  <basicHttpBinding>
+                    <binding name="Large" maxReceivedMessageSize="lots">
+                      <security mode="Transport" />
+                    </binding>
+                  </basicHttpBinding>
+                </bindings>
+                <client>
+                  <endpoint address="http://localhost:5280/CalculatorService.svc" binding="basicHttpBinding" bindingConfiguration="" contract="ICalculatorService" colour="blue" />
+                  <endpont />
+                </client>
+              </system.serviceModel>
+            </configuration>
+            """.ReplaceLineEndings("\n");
+        var (config, uri, client) = await OpenAsync("App.config", text);
+
+        // The section is checked (a bad number, an unknown attribute, a misspelt element); the rest of the file isn't.
+        var diagnostics = await DiagnosticsAsync(config, d => d.Count(x => x.Code == "xml.serviceModel") >= 3, ct);
+        var problems = diagnostics.Where(d => d.Code == "xml.serviceModel").ToList();
+        Assert.All(problems, p => Assert.Equal(DiagnosticSeverity.Warning, p.Severity));
+        Assert.Contains(problems, p => p.Range.Start.Line == 8 && p.Message.Contains("maxReceivedMessageSize", StringComparison.Ordinal));
+        Assert.Contains(problems, p => p.Range.Start.Line == 14 && p.Message.Contains("colour", StringComparison.Ordinal));
+        Assert.Contains(problems, p => p.Range.Start.Line == 15 && p.Message.Contains("endpont", StringComparison.Ordinal));
+        Assert.DoesNotContain(problems, p => p.Range.Start.Line < 5);
+
+        // Completion: elements, attributes, values from the schema, and the document's own binding names.
+        var children = await client.CompletionAsync(uri, At(text, "<client>\n      <"), null, ct);
+        Assert.Equal(["clear", "endpoint", "metadata", "remove"], children.Items.Select(i => i.Label));
+        var attributes = await client.CompletionAsync(uri, At(text, "<endpoint "), null, ct);
+        Assert.Contains(attributes.Items, i => i.Label == "behaviorConfiguration");
+        Assert.Contains(attributes.Items, i => i.Label == "contract" && i.Documentation!.Value.Contains("[ServiceContract]", StringComparison.Ordinal));
+        var bindings = await client.CompletionAsync(uri, At(text, "binding=\""), null, ct);
+        Assert.Contains(bindings.Items, i => i.Label == "wsHttpBinding");
+        Assert.Contains(bindings.Items, i => i.Label == "netTcpBinding");
+        var configurations = await client.CompletionAsync(uri, At(text, "bindingConfiguration=\""), null, ct);
+        Assert.Equal(["Large"], configurations.Items.Select(i => i.Label));
+        var modes = await client.CompletionAsync(uri, At(text, "<security mode=\""), null, ct);
+        Assert.Equal(["None", "Transport", "Message", "TransportWithMessageCredential", "TransportCredentialOnly"], modes.Items.Select(i => i.Label));
+        var section = await client.CompletionAsync(uri, At(text, "</appSettings>\n  <"), null, ct);
+        Assert.Equal(["system.serviceModel"], section.Items.Select(i => i.Label));
+
+        // Hover: the schema's documentation.
+        var hover = await client.HoverAsync(uri, At(text, "<bind"), ct);
+        Assert.Contains("Binding configurations", hover!.Contents.Value, StringComparison.Ordinal);
+
+        // A plain XML file named otherwise gets none of it.
+        var (_, plainUri, _) = await OpenAsync("data.xml", text);
+        Assert.Empty((await client.CompletionAsync(plainUri, At(text, "<client>\n      <"), null, ct)).Items);
     }
 }

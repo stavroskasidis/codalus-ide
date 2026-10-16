@@ -58,7 +58,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M38 | Start window | done (at checkpoint, [m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
 | M40 | WinForms and WPF projects, WPF XAML and previewer | scheduled ([Windows desktop](#proposed-phase-windows-desktop), D31: Windows only), after M42 |
 | M41 | Windows Forms designer | scheduled (Windows only), after M40 |
-| M42 | WCF | scheduled, after M30b (cross-platform) |
+| M42 | WCF | done (at checkpoint, [m42](checkpoints/m42.md), ADR 0069), 2026-10-16: Add Service Reference for WCF through the user's `dotnet-svcutil` (local or global tool, installed with consent, trusted folders only) into `Connected Services/<name>/` with Visual Studio's `ConnectedService.json`, Update and Remove; the CoreWCF templates in New Project, and running CoreWCF services' metadata found; the WCF Test Client of our own (WSDL and XSD read with `System.Xml.Linq`, SOAP 1.1 and SOAP 1.2 with WS-Addressing over `HttpClient`, a form per operation, raw XML, the response as a tree and XML); the `system.serviceModel` schema for `app.config` and `web.config`. Gaps: message security, duplex, NetTcp and MEX-only metadata in the test client. Validated on Linux; Windows and macOS from CI |
 | M43 | .NET Framework | scheduled (Windows only), last of the phase, after M44; M43b (the desktop-CLR debugger) included |
 | M44 | MAUI on Windows and WinUI 3 | scheduled (Windows only), after M41 |
 | M45 | Theme families | planned (2026-10-16; D32 decided), after M43: Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, from the [designs](design/shell-themes.md) |
@@ -1651,7 +1651,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 | WPF XAML editing (M40a) | The M19a engine | The same, locally | ~1 | WPF's conventions |
 | WPF previewer and Live Visual Tree (M40b) | M19's designs on WPF | Frames from the Windows target | ~1–1.5 | Loading the project's own controls |
 | WinForms designer (M41) | dotnet/winforms' design-time code (MIT) | Frames from the Windows target | ~2–3 | Reading and writing `InitializeComponent` |
-| WCF (M42) | Clients, CoreWCF, `dotnet-svcutil` | The same | ~½–1 | Nothing hard |
+| WCF (M42, done) | Clients, CoreWCF, `dotnet-svcutil` | The same | ~½–1 | Nothing hard |
 | .NET Framework (M43) | Build, run; a desktop-CLR debugger | Edit and build locally; run on Mono or the Windows target | ~3+ | The debugger |
 | MAUI on Windows and WinUI 3 (M44) | CoreCLR: netcoredbg | Only through the Windows target | ~1 | MSIX launch and attach |
 
@@ -1736,6 +1736,8 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 - Commercial control suites that rely on design-time licensing (`licenses.licx`) or on Visual Studio's own services.
 
 ### M42 — WCF
+
+**Status.** Done (at checkpoint, [m42](checkpoints/m42.md), [ADR 0069](adr/0069-wcf-references-and-test-client.md)), 2026-10-16.
 
 **Goal.** Build WCF clients and CoreWCF services on every OS.
 
@@ -2405,7 +2407,7 @@ The "Codalus" column uses these terms:
 | Shared projects (`.shproj`, `.projitems`) | M9 (low priority) |
 | Project, assembly and analyzer references | M9 |
 | COM references | Non-goal |
-| WCF service references and a WCF test client | Proposed for M42 |
+| WCF service references and a WCF test client | M42 (ADR 0069): `dotnet-svcutil` into `Connected Services` with `ConnectedService.json`; our own test client (BasicHttpBinding, WSHttpBinding without security); message security and duplex are gaps |
 | Connected Services, OpenAPI and gRPC service references | M15c (ADR 0041): `OpenApiReference` with NSwag, `Protobuf` with `Grpc.Tools`; Kiota and other connected services (Azure, databases) are gaps |
 | Custom tools (single-file generators), T4 text templates | M26b |
 | User secrets | M15 |
@@ -2923,3 +2925,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-16: the maintainer's decisions for the rest of the plan. D31 is decided: M40–M44 move into scope as Windows-only features (the other OSes later), M43 with its debugger. M30b moves forward onto the .NET 11 release candidate. The order is M30b, M42, M40, M41, M44, M43, then M34g, a polish pass over the new designers and previewers; each milestone ends with a nightly and a stable release. The unscheduled candidates (D30) stay for the maintainer's review after that.
 - 2026-10-16: M45 and M46 join the order after M43 and before M34g (the maintainer's choice), so the last polish pass covers the theme families and the first-run setup too: M30b, M42, M40, M41, M44, M43, M45, M46, M34g.
 - 2026-10-16: M30b at checkpoint ([m30b](checkpoints/m30b.md)), on the .NET 11 SDK's second release candidate: Codalus targets `net11.0` (the plugin API stays on `net10.0`), Roslyn 5.12.0-1.26504.105 (the RC2 SDK's compiler, from the public `dotnet-tools` feed until GA) brings C# 15 and the .NET 11 SDK's Razor generator, whose separate declaration documents the Razor mapping now covers. The hosts still roll forward (ADR 0025 amended), so the .NET 11 SDK is the prerequisite: Check Environment, the packages and the website say so. The SDK's optimized Native AOT publish dropped Avalonia's compiled XAML (`UseOptimizedPublish=false`). Validated on Linux; Windows and macOS by CI. Gaps: the GA swap, netcoredbg's missing frame modules on .NET 11 (exception module conditions), and the target framework matrix's run on 11.
+- 2026-10-16: M42 at its checkpoint ([m42](checkpoints/m42.md), ADR 0069), the first milestone of the [Windows desktop](#proposed-phase-windows-desktop) phase, which D31 doesn't gate. Add Service Reference for WCF runs the user's `dotnet-svcutil` (a local or global tool, installed with consent, trusted folders only) and keeps the reference as Visual Studio does, `Connected Services/<name>/Reference.cs` with a `ConnectedService.json` that `dotnet-svcutil --update` also reads; Update and Remove. New Project offers the CoreWCF templates, and the metadata of running CoreWCF services is found from their endpoints and listening addresses. The WCF Test Client is our own, in the workbench (AOT-clean: WSDL and XSD with `System.Xml.Linq`, SOAP over `HttpClient`), for BasicHttpBinding and WSHttpBinding without security. The markup host knows `system.serviceModel` in `app.config` and `web.config`. Fixture `samples/Wcf`; validated on Linux, with Windows and macOS left to CI's runners.
