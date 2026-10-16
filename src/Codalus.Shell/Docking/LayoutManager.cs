@@ -185,14 +185,30 @@ public sealed class LayoutManager : ObservableObject
     }
 
     /// <summary>Scales the other children of <paramref name="dock"/> so <paramref name="pane"/> gets its proportion.</summary>
+    /// <remarks>
+    /// A child without a proportion (NaN: the default layout's center, a restored node saved without one) holds the
+    /// share the others leave, which the dock panel writes into it only when it next arranges. It is scaled with that
+    /// share: scaling the known children up to the whole rest and giving the unknown ones more on top made the
+    /// proportions add up to more than 1, and the panel's normalizing them squeezed the documents (the default layout's
+    /// right pane at 0.78 beside a center at 0.39 when the first left tool window opened).
+    /// </remarks>
     private static void MakeRoomFor(IDock dock, IDockable pane)
     {
         var others = dock.VisibleDockables!.Where(d => d != pane && d is not IProportionalDockSplitter).ToList();
+        if (others.Count == 0)
+        {
+            return;
+        }
+
         var known = others.Where(d => !double.IsNaN(d.Proportion)).Sum(d => d.Proportion);
+        var unknown = others.Count(d => double.IsNaN(d.Proportion));
+        var unassigned = unknown == 0 ? 0 : known < 1 ? (1 - known) / unknown : 1.0 / others.Count;
+        var total = known + (unassigned * unknown);
         var rest = 1 - pane.Proportion;
         foreach (var other in others)
         {
-            other.Proportion = double.IsNaN(other.Proportion) || known <= 0 ? rest / others.Count : other.Proportion / known * rest;
+            var share = double.IsNaN(other.Proportion) ? unassigned : other.Proportion;
+            other.Proportion = total > 0 ? share / total * rest : rest / others.Count;
         }
     }
 
