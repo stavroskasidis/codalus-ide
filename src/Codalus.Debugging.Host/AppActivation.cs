@@ -47,6 +47,8 @@ internal static partial class AppActivation
     [SupportedOSPlatform("windows")]
     private static uint Activate(string aumid, string? arguments)
     {
+        // COM on this thread (the multithreaded apartment); S_FALSE or RPC_E_CHANGED_MODE mean it already is.
+        _ = CoInitializeEx(0, CoinitMultithreaded);
         var clsid = new Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C"); // ApplicationActivationManager
         var iid = typeof(IApplicationActivationManager).GUID;
         Marshal.ThrowExceptionForHR(CoCreateInstance(in clsid, 0, ClsctxLocalServer | ClsctxInprocServer, in iid, out var pointer));
@@ -64,6 +66,11 @@ internal static partial class AppActivation
 
     private const uint ClsctxInprocServer = 0x1;
     private const uint ClsctxLocalServer = 0x4;
+    private const uint CoinitMultithreaded = 0x0;
+
+    [LibraryImport("ole32.dll")]
+    [SupportedOSPlatform("windows")]
+    private static partial int CoInitializeEx(nint reserved, uint coInit);
 
     [LibraryImport("ole32.dll")]
     [SupportedOSPlatform("windows")]
