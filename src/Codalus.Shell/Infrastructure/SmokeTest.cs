@@ -43,7 +43,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private readonly List<StepResult> _results = [];
     private readonly Stopwatch _clock = Stopwatch.StartNew();
-    private string _work = string.Empty;
+    private string _workRoot = string.Empty;
     private string _folder = string.Empty;
     private string _testing = string.Empty;
 
@@ -99,7 +99,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// <summary>Closes the solution (its hosts and programs hold the folder) and deletes the fixture, retrying briefly.</summary>
     private async Task DeleteFixtureAsync()
     {
-        if (_work.Length == 0 || !Directory.Exists(_work))
+        if (_workRoot.Length == 0 || !Directory.Exists(_workRoot))
         {
             return;
         }
@@ -114,16 +114,16 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Workbench.Log.AppendLine($"[smoke] Could not close the solution: {ex.Message}");
         }
 
-        for (var attempt = 0; attempt < 20 && Directory.Exists(_work); attempt++)
+        for (var attempt = 0; attempt < 20 && Directory.Exists(_workRoot); attempt++)
         {
             try
             {
-                foreach (var file in Directory.EnumerateFiles(_work, "*", SearchOption.AllDirectories))
+                foreach (var file in Directory.EnumerateFiles(_workRoot, "*", SearchOption.AllDirectories))
                 {
                     File.SetAttributes(file, FileAttributes.Normal); // git writes its object files read-only
                 }
 
-                Directory.Delete(_work, recursive: true);
+                Directory.Delete(_workRoot, recursive: true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -271,7 +271,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>
         {
             PrepareFixture();
-            shell.Trust.Trust(_work);
+            shell.Trust.Trust(Work);
             await shell.OpenSolutionAsync(Path.Combine(_folder, "BuildAndRun.slnx")).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "both projects are evaluated", 240).ConfigureAwait(true);
             Check(shell.Runs.StartupProject?.EndsWith("Hello.csproj", StringComparison.Ordinal) == true, $"Hello is the startup project (got {shell.Runs.StartupProject})");
@@ -828,7 +828,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var configurations = shell.OpenConfigurationManager() ?? throw new SmokeFailure("The Configuration Manager did not open.");
             await WaitAsync(() => configurations.Rows.Count == 4, "it lists the four projects").ConfigureAwait(true);
 
-            var multi = Path.Combine(_work, "Packages", "src", "Multi", "Multi.csproj");
+            var multi = Path.Combine(Work, "Packages", "src", "Multi", "Multi.csproj");
             await shell.UnloadProjectAsync(multi).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.TryGetValue(multi, out var p) && p.State == Projects.Protocol.ProjectStates.Unloaded, "Multi is unloaded").ConfigureAwait(true);
             await shell.ReloadProjectAsync(multi).ConfigureAwait(true);
@@ -907,7 +907,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M11: languages and TextMate grammars (ADR 0016).
         await StepAsync("languages.grammars", "M11", "JSON and MSBuild files are colored by their TextMate grammars", async () =>
         {
-            var json = Path.Combine(_work, "smoke-settings.json");
+            var json = Path.Combine(Work, "smoke-settings.json");
             await File.WriteAllTextAsync(json, "{\n  \"Logging\": { \"Level\": 3, \"On\": true }\n}\n").ConfigureAwait(true);
             var editor = await OpenAsync(json).ConfigureAwait(true);
             Check(editor.Model.LanguageId == "json" && editor.GrammarScope == "source.json", $"the file is JSON with its grammar (got {editor.Model.LanguageId}, {editor.GrammarScope})");
@@ -949,8 +949,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("web.hotReload", "M15", "Hot Reload applies a saved edit to the running web app (dotnet watch)", async () =>
         {
             await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-            var programFile = Path.Combine(_work, "Web", "WebApi", "Program.cs");
-            var urls = (await shell.Runs.PlanAsync(Path.Combine(_work, "Web", "WebApi", "WebApi.csproj"), CancellationToken.None).ConfigureAwait(true)).Plan.Environment["ASPNETCORE_URLS"];
+            var programFile = Path.Combine(Work, "Web", "WebApi", "Program.cs");
+            var urls = (await shell.Runs.PlanAsync(Path.Combine(Work, "Web", "WebApi", "WebApi.csproj"), CancellationToken.None).ConfigureAwait(true)).Plan.Environment["ASPNETCORE_URLS"];
             await shell.StartWithHotReloadAsync().ConfigureAwait(true);
             await WaitAsync(() => shell.HotReloadProgram is not null, "the app runs under dotnet watch", 240).ConfigureAwait(true);
             var program = shell.HotReloadProgram!;
@@ -993,7 +993,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.OpenSolutionAsync(solution).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Blazor solution is open", 300).ConfigureAwait(true);
             await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready, Projects: 1 }, "the C# service loads the Blazor project", 300).ConfigureAwait(true);
-            var counter = Path.Combine(_work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
+            var counter = Path.Combine(Work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
             var editor = await OpenAsync(counter).ConfigureAwait(true);
             Check(editor.Model.LanguageId == ShellHost.RazorLanguageId, "Counter.razor is a Razor file");
             var client = shell.Languages.RunningClient(ShellHost.CSharpLanguageId)!;
@@ -1035,7 +1035,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
             Check(File.Exists(Path.Combine(samples, "Net11", "Net11.slnx")), $"the samples folder {samples} has Net11");
-            var target = Path.Combine(_work, "Net11");
+            var target = Path.Combine(Work, "Net11");
             Copy(Path.Combine(samples, "Net11"), target);
             await shell.OpenSolutionAsync(Path.Combine(target, "Net11.slnx")).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Projects.Count == 5 && shell.Solutions.Progress is { Completed: true }, "the .NET 11 solution is open", 300).ConfigureAwait(true);
@@ -1075,7 +1075,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
             var source = Path.Combine(samples, "ProjectSystem", "FolderOnly");
             Check(Directory.Exists(source), $"the samples folder {samples} has ProjectSystem/FolderOnly");
-            var parent = Path.Combine(_work, "FolderMode");
+            var parent = Path.Combine(Work, "FolderMode");
             Directory.CreateDirectory(parent);
             File.Copy(Path.Combine(samples, "ProjectSystem", "Directory.Build.props"), Path.Combine(parent, "Directory.Build.props"), overwrite: true);
             var folder = Path.Combine(parent, "FolderOnly");
@@ -1131,7 +1131,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("publish.folder", "M17", "The Publish page saves a folder profile and publishes a single-file app for this machine's runtime", async () =>
         {
             await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-            var target = Path.Combine(_work, "Containers");
+            var target = Path.Combine(Work, "Containers");
             if (!Directory.Exists(target))
             {
                 Copy(Path.Combine(samples, "Containers"), target);
@@ -1222,7 +1222,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.CloseSolutionAsync().ConfigureAwait(true);
         }
 
-        var folder = Path.Combine(_work, "RemoteBuildAndRun");
+        var folder = Path.Combine(Work, "RemoteBuildAndRun");
         Copy(Path.Combine(samples, "BuildAndRun"), folder);
         string RemoteLog() => Tail(shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Remote")?.GetText() ?? string.Empty, 3000);
         var spec = Workbench.Remote.RemoteTargetSpec.Parse("local")!;
@@ -1308,7 +1308,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
         var source = Path.Combine(samples, "TargetFrameworks");
         Check(File.Exists(Path.Combine(source, "TargetFrameworks.sln")), $"the samples folder {samples} has TargetFrameworks");
-        var target = Path.Combine(_work, "TargetFrameworks");
+        var target = Path.Combine(Work, "TargetFrameworks");
         Copy(source, target);
         await shell.OpenSolutionAsync(Path.Combine(target, "TargetFrameworks.sln")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 38 && shell.Solutions.Progress is { Completed: true } && shell.Solutions.RestoreState is "succeeded" or "failed",
@@ -1371,7 +1371,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     // ------------------------------------------------------------------ M14c: debugger sessions
 
-    private string Sessions => Path.Combine(_work, "Debugging");
+    private string Sessions => Path.Combine(Work, "Debugging");
 
     private string SessionSource(string project, string file) => Path.Combine(Sessions, project, file);
 
@@ -1509,13 +1509,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return null;
         }
 
-        if (_work.Length == 0)
-        {
-            return null; // no fixture folder: CODALUS_SMOKE_ONLY left out the steps that make it
-        }
-
-        Directory.CreateDirectory(_work);
-        var ssh = Path.Combine(_work, "stand-in-ssh");
+        var ssh = Path.Combine(Work, "stand-in-ssh");
         await File.WriteAllTextAsync(ssh, "#!/bin/sh\n# A stand-in for ssh: skip the options and the destination, run the command here.\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -T) shift ;;\n    -o|-p|-i|-l) shift 2 ;;\n    *) break ;;\n  esac\ndone\nshift\nexec sh -c \"$*\"\n").ConfigureAwait(true);
         File.SetUnixFileMode(ssh, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return new SshTarget("stand-in.invalid", "smoke", null, ssh) { Home = home };
@@ -1603,7 +1597,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "Data", "Data.slnx")), $"the samples folder {samples} has Data");
-        var target = Path.Combine(_work, "Data");
+        var target = Path.Combine(Work, "Data");
         Copy(Path.Combine(samples, "Data"), target);
         shell.Trust.Trust(target); // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=data.efMigrations skips it
         await shell.OpenSolutionAsync(Path.Combine(target, "Data.slnx")).ConfigureAwait(true);
@@ -1666,7 +1660,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "Scaffolding", "Scaffolding.slnx")), $"the samples folder {samples} has Scaffolding");
-        var target = Path.Combine(_work, "Scaffolding");
+        var target = Path.Combine(Work, "Scaffolding");
         Copy(Path.Combine(samples, "Scaffolding"), target);
         string Log() => Tail(shell.Scaffolding.Channel.GetText(), 2500);
 
@@ -1742,7 +1736,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task ContainerRunStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Containers");
+        var target = Path.Combine(Work, "Containers");
         Copy(Path.Combine(samples, "Containers"), target);
         await shell.OpenSolutionAsync(Path.Combine(target, "Containers.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the containers solution is open", 300).ConfigureAwait(true);
@@ -1790,7 +1784,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task AspireRunStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Containers");
+        var target = Path.Combine(Work, "Containers");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Containers"), target);
@@ -1830,7 +1824,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task MauiStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Maui");
+        var target = Path.Combine(Work, "Maui");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Maui"), target);
@@ -1877,7 +1871,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task VisualBasicStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "VisualBasic");
+        var target = Path.Combine(Work, "VisualBasic");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "VisualBasic"), target);
@@ -1937,7 +1931,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task FSharpStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "FSharp");
+        var target = Path.Combine(Work, "FSharp");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "FSharp"), target);
@@ -1995,7 +1989,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private async Task FSharpInteractiveStepAsync()
     {
-        var target = Path.Combine(_work, "FSharp");
+        var target = Path.Combine(Work, "FSharp");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "FSharp"), target);
@@ -2018,7 +2012,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task XamlPreviewStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Avalonia");
+        var target = Path.Combine(Work, "Avalonia");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Avalonia"), target);
@@ -2086,7 +2080,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task ProfilerStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Diagnostics");
+        var target = Path.Combine(Work, "Diagnostics");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Diagnostics"), target);
@@ -2135,7 +2129,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task<string> DiagnosticsStartupAsync(string project, string arguments)
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && shell.ActiveProfiling is null && !shell.Builds.IsBuilding, $"the previous run, collection and build have stopped (collecting: {shell.ActiveProfiling?.Target}, building: {shell.Builds.IsBuilding})", 120).ConfigureAwait(true);
-        var target = Path.Combine(_work, "Diagnostics");
+        var target = Path.Combine(Work, "Diagnostics");
         if (!Directory.Exists(target))
         {
             Copy(Path.Combine(samples, "Diagnostics"), target);
@@ -2266,7 +2260,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private async Task DataExplorerStepAsync()
     {
-        var database = Path.Combine(_work, "smoke-inventory.db");
+        var database = Path.Combine(Work, "smoke-inventory.db");
         File.Copy(Path.Combine(samples, "Data", "Inventory", "inventory.db"), database, overwrite: true);
         shell.ShowDatabaseExplorer();
         var form = shell.OpenConnectionForm().ViewModel;
@@ -2334,7 +2328,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// </summary>
     private async Task RazorHtmlStepAsync()
     {
-        var counter = Path.Combine(_work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
+        var counter = Path.Combine(Work, "Blazor", "BlazorApp", "Components", "Pages", "Counter.razor");
         var editor = await OpenAsync(counter).ConfigureAwait(true);
         var heading = editor.Model.Text.Text.IndexOf("<h1>Counter</h1>", StringComparison.Ordinal) + "<h1>Counter</h1>".Length;
         editor.Model.Text.Insert(heading, "\n<blockq");
@@ -2439,7 +2433,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "WebScripts", "WebScripts.slnx")), $"the samples folder {samples} has WebScripts");
-        var target = Path.Combine(_work, "WebScripts");
+        var target = Path.Combine(Work, "WebScripts");
         Copy(Path.Combine(samples, "WebScripts"), target);
         await shell.OpenSolutionAsync(Path.Combine(target, "WebScripts.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the WebScripts solution is open", 300).ConfigureAwait(true);
@@ -2467,7 +2461,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task EslintStepAsync()
     {
         Check(File.Exists(Path.Combine(samples, "WebLint", "package-lock.json")), $"the samples folder {samples} has WebLint");
-        var target = Path.Combine(_work, "WebLint");
+        var target = Path.Combine(Work, "WebLint");
         Copy(Path.Combine(samples, "WebLint"), target);
         var npm = Workbench.Node.Npm.UserNpm() ?? Workbench.Node.Npm.BuiltIn(shell.Node);
         var log = new System.Text.StringBuilder();
@@ -2490,7 +2484,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous session has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "BlazorHosted", "BlazorHosted.slnx")), $"the samples folder {samples} has BlazorHosted");
-        var target = Path.Combine(_work, "BlazorHosted");
+        var target = Path.Combine(Work, "BlazorHosted");
         Copy(Path.Combine(samples, "BlazorHosted"), target);
         using (var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
         {
@@ -2539,7 +2533,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "BlazorWasm", "BlazorWasm.slnx")), $"the samples folder {samples} has BlazorWasm");
-        var target = Path.Combine(_work, "BlazorWasm");
+        var target = Path.Combine(Work, "BlazorWasm");
         Copy(Path.Combine(samples, "BlazorWasm"), target);
         using (var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
         {
@@ -2589,7 +2583,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await shell.InstallWebLanguagesAsync().ConfigureAwait(true);
         Check(shell.WebServers.IsInstalled, "Node.js and the web language servers are installed: " + Tail(shell.LanguageLog.GetText(), 1500));
-        var folder = Path.Combine(_work, "site");
+        var folder = Path.Combine(Work, "site");
         Directory.CreateDirectory(folder);
         var script = Path.Combine(folder, "app.ts");
         await File.WriteAllTextAsync(script, "const count: number = \"three\";\nconsole.log(count);\n").ConfigureAwait(true);
@@ -2610,7 +2604,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private (string Solution, string Port) PrepareBlazorFixture()
     {
         Check(File.Exists(Path.Combine(samples, "Blazor", "Blazor.slnx")), $"the samples folder {samples} has Blazor");
-        var target = Path.Combine(_work, "Blazor");
+        var target = Path.Combine(Work, "Blazor");
         Copy(Path.Combine(samples, "Blazor"), target);
         using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         socket.Start();
@@ -2625,7 +2619,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private (string Solution, string Http) PrepareWebFixture()
     {
         Check(File.Exists(Path.Combine(samples, "Web", "Web.slnx")), $"the samples folder {samples} has Web");
-        var target = Path.Combine(_work, "Web");
+        var target = Path.Combine(Work, "Web");
         Copy(Path.Combine(samples, "Web"), target);
         using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         socket.Start();
@@ -2665,7 +2659,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await settings.SetAsync(Workbench.Ai.AiService.ModelSetting, "gpt-test", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
             await shell.Secrets.StoreAsync("codalus.openai", "apiKey:openai", Tests.MockModelServers.Key, CancellationToken.None).ConfigureAwait(true);
 
-            var path = Path.Combine(_work, "Calculator.cs");
+            var path = Path.Combine(Work, "Calculator.cs");
             await File.WriteAllTextAsync(path, "namespace Samples;\n\npublic static class Calculator\n{\n    static int Add(int a, int b)\n    {\n        return a + b;\n    }\n}\n").ConfigureAwait(true);
             var editor = await OpenAsync(path).ConfigureAwait(true);
             var method = "    static int Add(int a, int b)\n    {\n        return a + b;\n    }\n";
@@ -2706,7 +2700,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private async Task HostingStepAsync()
     {
         await using var github = new Tests.MockGitHub("codalus-samples", "BuildAndRun");
-        var bare = Path.Combine(_work, "BuildAndRun.git");
+        var bare = Path.Combine(Work, "BuildAndRun.git");
         Directory.CreateDirectory(bare);
         GitIn(bare, "init", "-q", "--bare", "-b", Branch);
         Git("remote", "add", "origin", github.RemoteUrl);
@@ -2772,7 +2766,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await AskpassCheckAsync(bare).ConfigureAwait(true);
 
         // A worktree, listed in the Worktrees window, then removed.
-        var worktree = Path.Combine(_work, "BuildAndRun-worktree");
+        var worktree = Path.Combine(Work, "BuildAndRun-worktree");
         await shell.Git.AddWorktreeAsync(worktree, "smoke/worktree", null).ConfigureAwait(true);
         shell.Layout.ShowToolWindow(WorktreesViewModel.ToolWindowId);
         await shell.Worktrees.ReloadAsync().ConfigureAwait(true);
@@ -2940,7 +2934,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         Console.Out.WriteLine("  --- Processes (by CPU) ---");
-        Console.Out.WriteLine(string.Join('\n', Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu").Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
+        Console.Out.WriteLine(string.Join('\n', (OperatingSystem.IsMacOS() ? Run("ps", "-axro", "pid,ppid,etime,pcpu,rss,command") : Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu")).Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
         var tool = new[] { Environment.GetEnvironmentVariable("HOME") is { } home ? Path.Combine(home, ".dotnet", "tools", "dotnet-stack") : null }
             .OfType<string>().FirstOrDefault(File.Exists);
         if (tool is not null && shell.Languages.HostProcessId(ShellHost.CSharpLanguageId) is { } pid)
@@ -3021,15 +3015,32 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     // ------------------------------------------------------------------ fixture and editor helpers
 
+    /// <summary>
+    /// The temporary folder every step copies its fixtures into, made on first use with the samples' build files (so a
+    /// fixture never inherits the repository's), whichever steps CODALUS_SMOKE_ONLY keeps.
+    /// </summary>
+    private string Work
+    {
+        get
+        {
+            if (_workRoot.Length == 0)
+            {
+                var folder = Path.Combine(RealPath.Resolve(Path.GetTempPath()), "codalus-smoke-" + Guid.NewGuid().ToString("N")[..8]);
+                Directory.CreateDirectory(folder);
+                File.Copy(Path.Combine(samples, "Directory.Build.props"), Path.Combine(folder, "Directory.Build.props"));
+                File.Copy(Path.Combine(samples, "Directory.Packages.props"), Path.Combine(folder, "Directory.Packages.props"));
+                _workRoot = folder;
+            }
+
+            return _workRoot;
+        }
+    }
+
     /// <summary>Copies samples/BuildAndRun (standalone, as under samples/) to a temporary folder and makes it a git repository.</summary>
     private void PrepareFixture()
     {
         Check(File.Exists(Path.Combine(samples, "BuildAndRun", "BuildAndRun.slnx")), $"the samples folder {samples} has BuildAndRun");
-        _work = Path.Combine(RealPath.Resolve(Path.GetTempPath()), "codalus-smoke-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_work);
-        File.Copy(Path.Combine(samples, "Directory.Build.props"), Path.Combine(_work, "Directory.Build.props"));
-        File.Copy(Path.Combine(samples, "Directory.Packages.props"), Path.Combine(_work, "Directory.Packages.props"));
-        _folder = Path.Combine(_work, "BuildAndRun");
+        _folder = Path.Combine(Work, "BuildAndRun");
         Copy(Path.Combine(samples, "BuildAndRun"), _folder);
         File.WriteAllText(Path.Combine(_folder, ".gitignore"), "bin/\nobj/\n");
 
@@ -3046,13 +3057,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// Copies samples/Testing next to BuildAndRun and returns a solution with the code under test and the two xUnit
     /// projects (one per test platform), so the step builds three projects rather than eight.
     /// </summary>
-    private string PlainProject => Path.Combine(_work, "Packages", "src", "Plain", "Plain.csproj");
+    private string PlainProject => Path.Combine(Work, "Packages", "src", "Plain", "Plain.csproj");
 
     private string PreparePackagesFixture()
     {
         Check(File.Exists(Path.Combine(samples, "Packages", "Packages.slnx")), $"the samples folder {samples} has Packages");
-        Copy(Path.Combine(samples, "Packages"), Path.Combine(_work, "Packages"));
-        return Path.Combine(_work, "Packages", "Packages.slnx");
+        Copy(Path.Combine(samples, "Packages"), Path.Combine(Work, "Packages"));
+        return Path.Combine(Work, "Packages", "Packages.slnx");
     }
 
     /// <summary>A file's text, or empty while another process writes it.</summary>
@@ -3071,7 +3082,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private string PrepareTestingFixture()
     {
         Check(File.Exists(Path.Combine(samples, "Testing", "Testing.slnx")), $"the samples folder {samples} has Testing");
-        _testing = Path.Combine(_work, "Testing");
+        _testing = Path.Combine(Work, "Testing");
         Copy(Path.Combine(samples, "Testing"), _testing);
         var solution = Path.Combine(_testing, "Smoke.slnx");
         File.WriteAllText(solution, """
