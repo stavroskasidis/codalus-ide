@@ -162,7 +162,7 @@ Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 ## Updates and network access
 
 **Updates** (Environment → Updates):
-- **Updates** (`update.mode`): installed builds (the Windows Setup.exe, the macOS .pkg, the AppImage, winget) download new releases in the background and apply them when the IDE restarts: a status bar item offers **Restart to update**, which reopens your solution. **notify** only says that a release is available; **off** stops all update traffic. Help → Check for Updates checks right away in every mode.
+- **Updates** (`update.mode`): installed builds (the Windows Setup.exe, the macOS .pkg, the AppImage, winget) download new releases in the background and apply them when the IDE restarts: a status bar item offers **Restart to update**, which reopens your solution (on macOS, an app that an older .pkg installed in `/Applications` asks once for an administrator's password, because that installer left it owned by the system). **notify** only says that a release is available; **off** stops all update traffic. Help → Check for Updates checks right away in every mode.
 - **Update Channel** (`update.channel`): stable releases or nightly builds. Empty follows the channel the build came from. Switching from nightly builds to stable releases installs the newest stable release, even when it is older, after you confirm.
 - **Other installs**: the `.deb` and `.rpm` update with the system (`apt upgrade`, `dnf upgrade`); the zip, `.app` zip and tar.gz say that a release is out and link to it. Development builds never check.
 - **What's New** (Help → What's New): the release notes of the versions you skipped, shown once after an update.

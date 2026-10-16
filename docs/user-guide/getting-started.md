@@ -25,7 +25,7 @@ Every release on the [releases page](https://github.com/stavroskasidis/codalus-i
 |---|---|---|
 | Windows | `codalus-<version>-win-x64-setup.exe` | Run it. It installs for you alone (no administrator rights) into `%LocalAppData%\Codalus`, adds Codalus IDE to the Start menu and `codalus` to your `PATH`, and updates itself. Uninstall it from Settings → Apps. Or: `winget install Codalus.Codalus`, once the package is published. |
 | Windows | `codalus-<version>-win-x64.zip` | A portable build: unzip anywhere and run `codalus.exe`. It doesn't update itself. |
-| macOS | `codalus-<version>-osx-arm64.pkg` | Open it and choose to install for you (`~/Applications`) or for every user (`/Applications`). The app updates itself. |
+| macOS | `codalus-<version>-osx-arm64.pkg` | Open it and choose to install for you (`~/Applications`) or for every user (`/Applications`). The app belongs to you either way, and updates itself. |
 | macOS | `codalus-<version>-osx-arm64.app.zip` | The app on its own: unzip it and move it where you like. |
 | Linux | `.AppImage` | `chmod +x` the file and run it. It updates itself. |
 | Linux | `.deb` and `.rpm` | Install from our apt or dnf repository, so that they update with the system (the instructions are on the [download page](https://stavroskasidis.com/codalus-ide/download/#linux)), or install the file: `sudo apt install ./codalus-<version>-linux-x64.deb`, `sudo dnf install ./codalus-<version>-linux-x64.rpm`. |

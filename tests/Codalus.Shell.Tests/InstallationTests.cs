@@ -94,4 +94,33 @@ public sealed class InstallationTests
         Assert.Equal(MacUpdateLocator.Device(temp), MacUpdateLocator.Device(Path.Combine(temp, "velopack", Guid.NewGuid().ToString("N"), "packages")));
         Assert.Equal(MacUpdateLocator.Device("/Applications"), MacUpdateLocator.Device(temp)); // both on the system's data volume
     }
+
+    [Fact]
+    [System.Runtime.Versioning.SupportedOSPlatform("macos")]
+    public void A_bundle_the_user_cant_write_needs_an_administrator_to_be_replaced()
+    {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS only");
+        Assert.SkipWhen(Environment.UserName == "root", "root writes everything");
+        var folder = Directory.CreateTempSubdirectory("codalus-bundle-").FullName;
+        var bundle = Path.Combine(folder, "Codalus IDE.app");
+        Directory.CreateDirectory(Path.Combine(bundle, "Contents"));
+        try
+        {
+            Assert.False(MacUpdateLocator.NeedsAdministrator(bundle));
+
+            File.SetUnixFileMode(bundle, UnixFileMode.UserRead | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            Assert.True(MacUpdateLocator.NeedsAdministrator(bundle)); // a root-owned bundle from the .pkg: 755, not ours
+            Assert.True(MacUpdateLocator.NeedsAdministrator(bundle + "/"));
+
+            File.SetUnixFileMode(bundle, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            Assert.True(MacUpdateLocator.NeedsAdministrator(bundle)); // its folder isn't writable either
+        }
+        finally
+        {
+            File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(bundle, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            Directory.Delete(folder, recursive: true);
+        }
+    }
 }

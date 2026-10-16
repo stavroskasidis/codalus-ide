@@ -134,13 +134,24 @@ case "$rid" in
     sed -e "s/{{BUNDLE_VERSION}}/${version%%-*}/g" "$repo/eng/packaging/macos/Info.plist" > "$stage/Info.plist"
     sign_args=()
     if [ -n "${CODALUS_CODESIGN_IDENTITY:-}" ]; then
-      # D19: unsigned until the repository goes public; the signing step waits behind this variable.
-      sign_args=(--signAppIdentity "$CODALUS_CODESIGN_IDENTITY" --signInstallIdentity "${CODALUS_INSTALLER_IDENTITY:-$CODALUS_CODESIGN_IDENTITY}")
+      # D19: unsigned until the repository goes public; the signing step waits behind this variable. vpk signs and
+      # notarizes the app; the installer is signed and notarized below, once its postinstall is ours.
+      sign_args=(--signAppIdentity "$CODALUS_CODESIGN_IDENTITY")
       [ -n "${CODALUS_NOTARY_PROFILE:-}" ] && sign_args+=(--notaryProfile "$CODALUS_NOTARY_PROFILE")
     fi
     "$vpk" pack "${vpk_args[@]}" --packDir "$app" --mainExe codalus --icon "$stage/codalus.icns" --plist "$stage/Info.plist" \
       ${sign_args[@]+"${sign_args[@]}"} # macOS bash 3.2 calls an empty array unbound under set -u
-    mv "$feed/$packid-$channel-Setup.pkg" "$out/$name.pkg"
+    # The app belongs to the user who installs it, so its updates need no administrator's password.
+    bash "$repo/eng/packaging/macos/user-owned-pkg.sh" "$feed/$packid-$channel-Setup.pkg" "$out/$name.pkg" "Codalus IDE.app"
+    rm "$feed/$packid-$channel-Setup.pkg"
+    if [ -n "${CODALUS_CODESIGN_IDENTITY:-}" ]; then
+      productsign --sign "${CODALUS_INSTALLER_IDENTITY:-$CODALUS_CODESIGN_IDENTITY}" "$out/$name.pkg" "$stage/signed.pkg"
+      mv "$stage/signed.pkg" "$out/$name.pkg"
+      if [ -n "${CODALUS_NOTARY_PROFILE:-}" ]; then
+        xcrun notarytool submit "$out/$name.pkg" --keychain-profile "$CODALUS_NOTARY_PROFILE" --wait
+        xcrun stapler staple "$out/$name.pkg"
+      fi
+    fi
     mv "$feed/$packid-$channel-Portable.zip" "$out/$name.app.zip"
     ;;
   linux-*)

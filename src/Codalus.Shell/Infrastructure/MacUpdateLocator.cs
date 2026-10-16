@@ -65,6 +65,20 @@ internal sealed partial class MacUpdateLocator() : OsxVelopackLocator(null, null
         }
     }
 
+    /// <summary>
+    /// Whether replacing <paramref name="bundle"/> needs an administrator: UpdateMac moves the bundle into its packages
+    /// folder, which needs write access to the bundle itself and to its folder. The .pkg gives the app to the user who installs
+    /// it (eng/packaging/macos/user-owned-pkg.sh), but an older one left it root's in <c>/Applications</c>: such an install
+    /// needs it once; the bundle that replaces it is the user's, and later updates don't.
+    /// </summary>
+    internal static bool NeedsAdministrator(string bundle)
+    {
+        bundle = Path.TrimEndingDirectorySeparator(bundle);
+        return Access(bundle, WriteAccess) != 0 || Access(Path.GetDirectoryName(bundle) ?? "/", WriteAccess) != 0;
+    }
+
+    private const int WriteAccess = 2; // W_OK
+
     /// <summary>The device of <paramref name="path"/>, or of its nearest folder that exists.</summary>
     internal static long? Device(string path)
     {
@@ -96,6 +110,9 @@ internal sealed partial class MacUpdateLocator() : OsxVelopackLocator(null, null
 
     [LibraryImport(LibSystem, EntryPoint = "stat$INODE64", StringMarshalling = StringMarshalling.Utf8)]
     private static partial int StatInode64(string path, [Out] byte[] buffer);
+
+    [LibraryImport(LibSystem, EntryPoint = "access", StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int Access(string path, int mode);
 
     [LibraryImport(LibSystem, EntryPoint = "confstr")]
     private static partial nuint Confstr(int name, [Out] byte[] buffer, nuint length);
