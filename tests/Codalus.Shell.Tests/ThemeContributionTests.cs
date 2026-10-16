@@ -57,6 +57,36 @@ public sealed class ThemeContributionTests
         Assert.Equal(0xFF000004u, merged.Tokens["string"]);
     }
 
+    [Fact]
+    public void A_theme_colors_razor_markup_through_its_html_and_razor_scopes()
+    {
+        using var document = JsonDocument.Parse("""
+            {
+              "tokenColors": [
+                { "scope": "entity.name.tag", "settings": { "foreground": "#000001" } },
+                { "scope": "entity.other.attribute-name", "settings": { "foreground": "#000002" } },
+                { "scope": "punctuation.definition.tag", "settings": { "foreground": "#000003" } },
+                { "scope": "keyword.control.razor.directive", "settings": { "foreground": "#000004" } },
+                { "scope": "entity.name.type", "settings": { "foreground": "#000005" } },
+                { "scope": "comment", "settings": { "foreground": "#000006" } },
+                { "scope": "punctuation", "settings": { "foreground": "#000007" } }
+              ],
+              "semanticTokenColors": { "razorComponentAttribute": "#000008" }
+            }
+            """);
+        var colors = ThemeFiles.Read(document.RootElement);
+
+        Assert.Equal(0xFF000001u, colors.Tokens["markupElement"]);
+        Assert.Equal(0xFF000002u, colors.Tokens["markupAttribute"]);
+        Assert.Equal(0xFF000003u, colors.Tokens["markupTagDelimiter"]); // not the theme's punctuation
+        Assert.Equal(0xFF000007u, colors.Tokens["punctuation"]);
+        Assert.Equal(0xFF000004u, colors.Tokens["razorDirective"]);
+        Assert.False(colors.Tokens.ContainsKey("controlKeyword"));
+        Assert.Equal(0xFF000005u, colors.Tokens["razorComponentElement"]); // like a type
+        Assert.Equal(0xFF000006u, colors.Tokens["razorComment"]);
+        Assert.Equal(0xFF000008u, colors.Tokens["razorComponentAttribute"]);
+    }
+
     [AvaloniaFact]
     public async Task A_plugin_theme_is_offered_applied_over_its_base_and_customizable()
     {

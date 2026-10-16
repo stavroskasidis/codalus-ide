@@ -2,7 +2,7 @@ namespace Codalus.LanguageServices.Protocol;
 
 /// <summary>
 /// Semantic token legend. The first block mirrors the LSP standard token types;
-/// the rest are Roslyn-specific types that LSP has no name for (documented in docs/protocol.md).
+/// then Roslyn-specific types that LSP has no name for, then Razor's markup types (documented in docs/protocol.md).
 /// Indices are part of the wire contract: append only.
 /// </summary>
 public static class TokenTypes
@@ -17,6 +17,12 @@ public static class TokenTypes
         "delegate", "record", "recordStruct", "field", "constant", "local", "label",
         "excludedCode", "preprocessor", "punctuation", "stringEscape", "xmlDocComment",
         "controlKeyword", "extensionMethod", "stringVerbatim",
+        // Razor's own types (the names the Razor language server uses), for markup in .razor and .cshtml files
+        "razorComponentElement", "razorComponentAttribute", "razorTagHelperElement", "razorTagHelperAttribute",
+        "razorTransition", "razorDirective", "razorDirectiveAttribute", "razorDirectiveColon",
+        "razorComment", "razorCommentTransition", "razorCommentStar",
+        "markupTagDelimiter", "markupElement", "markupAttribute", "markupAttributeQuote", "markupAttributeValue",
+        "markupOperator", "markupComment", "markupCommentPunctuation",
     ];
 
     public static int IndexOf(string name)
