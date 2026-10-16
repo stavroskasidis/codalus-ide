@@ -52,6 +52,15 @@ public class WhenClauseTests
     }
 
     [Fact]
+    public void A_regular_expression_over_its_time_budget_does_not_match()
+    {
+        // Catastrophic backtracking on a 40-character name: the match stops at the clause's budget and the clause is
+        // false, instead of a RegexMatchTimeoutException (a TimeoutException) failing whatever evaluated it.
+        var context = Context(("explorerItemName", new string('a', 40) + "!"));
+        Assert.False(WhenClause.Parse("explorerItemName =~ /^(\\w+\\s?)*$/").Evaluate(context));
+    }
+
+    [Fact]
     public void Overlay_wins_over_global_keys()
     {
         var context = Context(("focusedView", "output"));
