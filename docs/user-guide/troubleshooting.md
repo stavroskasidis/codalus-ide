@@ -32,6 +32,7 @@ Help → Show Logs opens the Codalus IDE channel. Crash reports are saved in the
 | No IntelliSense in a project | Its design-time build failed (Output → Build Host). It is often a missing restore or SDK. |
 | "The debugger (netcoredbg) was not found" | A source build: run `eng/get-netcoredbg.sh`. Packages include it. |
 | Git features missing | Install git and make sure it is on the `PATH` (or set `CODALUS_GIT`). |
+| On macOS, git or restore fails with "Failed to connect to … port 443" or "Couldn't connect to server", though the same command works in Terminal | macOS's local network privacy may be blocking Codalus IDE: turn it on in System Settings → Privacy & Security → Local Network. Servers on your company network or a VPN count as local. Codalus IDE also takes the proxy and certificate variables your login shell exports (`HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, …); a proxy set only in `~/.zshrc` reaches it after a restart. |
 | Push or pull fails with an authentication error | Configure a git credential helper or SSH keys. Codalus IDE doesn't prompt for passwords. |
 
 A helper process that crashes (build host, language service, plugin host) is restarted automatically, and a notification tells you.

@@ -39,6 +39,33 @@ public sealed class LoginShellPathTests
         Assert.Contains("/bin", path.Split(':'), StringComparer.Ordinal);
     }
 
+    [Fact]
+    public void The_login_shells_proxies_and_certificates_are_imported_with_its_path()
+    {
+        // The Mac's case: git from a Finder launch couldn't reach a server behind the proxy that ~/.zshrc exports.
+        var login = LoginShellPath.ParseEnvironment(
+            "PATH=/opt/homebrew/bin:/usr/bin\nHTTPS_PROXY=http://proxy.corp:8080\nno_proxy=localhost,.corp\n" +
+            "SSL_CERT_FILE=/etc/corp.pem\nPROMPT=line one\nline two\nTERM=xterm-256color\nSHLVL=1\nHTTP_PROXY=\n");
+
+        Assert.Equal("line one", login["PROMPT"]);
+        Assert.Equal(
+            ["PATH=/opt/homebrew/bin:/usr/bin", "HTTPS_PROXY=http://proxy.corp:8080", "no_proxy=localhost,.corp", "SSL_CERT_FILE=/etc/corp.pem"],
+            LoginShellPath.Imported(login).Select(v => $"{v.Key}={v.Value}"));
+    }
+
+    [Fact]
+    public void The_login_shells_environment_is_read()
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists("/bin/sh"))
+        {
+            Assert.Skip("A Unix shell is needed.");
+        }
+
+        var environment = LoginShellPath.ReadEnvironment("/bin/sh", TimeSpan.FromSeconds(20));
+        Assert.NotNull(environment);
+        Assert.Contains("/bin", environment["PATH"].Split(':'), StringComparer.Ordinal);
+    }
+
     /// <summary>
     /// The Mac's case: the login PATH puts Homebrew's dotnet first, a link to a wrapper script whose folder has no SDKs,
     /// so the build host's MSBuildLocator can't use it. The root with the newest SDK is chosen instead.
