@@ -171,9 +171,13 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
         _cts?.Dispose();
     }
 
-    /// <summary>Fills the branch list and loads the first page.</summary>
+    /// <summary>Loads the first page and fills the branch list.</summary>
     public async Task LoadAsync()
     {
+        // The first page starts before git lists the branches: the view asks for more rows as soon as it is laid out,
+        // and a reload once the branches arrived (git is slow to start on Windows) cleared the page that request had
+        // loaded, with the commit selected in it meanwhile.
+        var firstPage = ReloadAsync();
         try
         {
             foreach (var branch in (await _git.BranchesAsync().ConfigureAwait(true)).Select(b => b.Name))
@@ -188,7 +192,7 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
         {
         }
 
-        await ReloadAsync().ConfigureAwait(true);
+        await firstPage.ConfigureAwait(true);
     }
 
     /// <summary>Starts again with the current filters.</summary>
