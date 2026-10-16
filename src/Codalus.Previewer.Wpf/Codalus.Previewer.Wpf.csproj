@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!--
+      WPF code (M40b, ADR 0072): the WPF previewer's designer host, run with `dotnet exec` on the previewed app's own
+      runtimeconfig.json and deps.json (so on the app's .NET and WPF), and the live agent, a startup hook in a WPF app
+      run or debugged from the IDE. Both load into the user's WPF version, so this targets the oldest supported one and
+      references nothing but the framework. It builds on every OS (EnableWindowsTargeting) and ships only in the
+      Windows package (wpfpreviewer/ next to the shell).
+    -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>codalus-wpfpreviewer</AssemblyName>
+    <RootNamespace>Codalus.Previewer.Wpf</RootNamespace>
+    <Description>Codalus IDE: the WPF previewer's designer host and the Live Visual Tree's agent for WPF apps (M40b, ADR 0072). Runs the user's code, only for trusted folders.</Description>
+    <UseAppHost>false</UseAppHost>
+    <RollForward>Major</RollForward>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <IsTrimmable>false</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WPF's implicit usings leave out System.IO (System.Windows.Shapes.Path); the protocol codec needs it. -->
+    <Using Include="System.IO" />
+    <!-- Avalonia's remote protocol, the codec the workbench speaks (ADR 0048): the designer host answers in it. -->
+    <Compile Include="..\Codalus.Workbench\Previewer\RemoteProtocol.cs" Link="Protocol\RemoteProtocol.cs" />
+  </ItemGroup>
+</Project>

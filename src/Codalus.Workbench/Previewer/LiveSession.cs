@@ -20,7 +20,8 @@ public sealed record LiveProperty(string Name, string Value, string Type, string
 public sealed record LivePath(string WindowType, IReadOnlyList<PreviewPathStep> Steps);
 
 /// <summary>
-/// The IDE's side of the live agent (M19b, ADR 0052) in a running Avalonia app: a loopback listener whose port and token
+/// The IDE's side of the live agent (M19b, ADR 0052) in a running Avalonia app, or WPF app (M40b, ADR 0072: the WPF
+/// previewer's assembly is its agent, with the same protocol): a loopback listener whose port and token
 /// the app gets with the agent (<see cref="Environment"/>), the app's connection once it starts, its requests and its
 /// events (<see cref="Picked"/>). One session per run; the app's exit ends the connection. Events arrive on any thread.
 /// </summary>

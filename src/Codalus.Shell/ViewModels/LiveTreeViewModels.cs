@@ -36,9 +36,10 @@ public sealed class LiveNodeViewModel(int id, string type, string name, bool tem
 }
 
 /// <summary>
-/// Debug → Windows → Live Visual Tree (M19b, ADR 0052): the running Avalonia app's windows and elements, the logical
-/// tree by default (a classic IDE's "Just My XAML"), the visual tree with templates' parts on request. Selecting an
-/// element highlights it in the app and shows its properties; Select Element in the App picks one by clicking it.
+/// Debug → Windows → Live Visual Tree (M19b, ADR 0052; WPF apps in M40b, ADR 0072): the running app's windows and
+/// elements, the logical tree by default (a classic IDE's "Just My XAML"), the visual tree with templates' parts on
+/// request. Selecting an element highlights it in the app and shows its properties; Select Element in the App picks one
+/// by clicking it.
 /// </summary>
 public sealed class LiveTreeViewModel : ObservableObject
 {
@@ -51,7 +52,10 @@ public sealed class LiveTreeViewModel : ObservableObject
     private string _message = NotRunning;
     private int _generation;
 
-    private const string NotRunning = "Start an Avalonia app (F5 or Ctrl+F5) to see its live visual tree.";
+    /// <summary>What the tree says before an app runs: WPF apps run (and get the live tools) on Windows only (D31).</summary>
+    internal static string NotRunning { get; } = OperatingSystem.IsWindows()
+        ? "Start an Avalonia or WPF app (F5 or Ctrl+F5) to see its live visual tree."
+        : "Start an Avalonia app (F5 or Ctrl+F5) to see its live visual tree. A WPF app's live visual tree is Windows only.";
 
     public LiveTreeViewModel(Func<LiveSession?> session, Func<LiveNodeViewModel, Task> goToXaml)
     {
@@ -321,9 +325,9 @@ public sealed class LivePropertyRow(LiveProperty property, Func<LivePropertyRow,
 }
 
 /// <summary>
-/// Debug → Windows → Live Property Explorer (M19b, ADR 0052): the selected element's Avalonia properties, their values
-/// and where they come from (local, style, template, inherited, default); editing a value sets it as a local value in
-/// the running app (not in the XAML).
+/// Debug → Windows → Live Property Explorer (M19b, ADR 0052; M40b, ADR 0072): the selected element's Avalonia or WPF
+/// dependency properties, their values and where they come from (local, style, template, inherited, default); editing
+/// a value sets it as a local value in the running app (not in the XAML).
 /// </summary>
 public sealed class LivePropertiesViewModel : ObservableObject
 {

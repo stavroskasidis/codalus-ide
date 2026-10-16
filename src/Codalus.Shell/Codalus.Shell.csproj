@@ -114,6 +114,7 @@
       debughost/                  codalus-debughost, the debug companion: debugger attributes, dumps (likewise),
                                   Codalus.Debugging.StartupHook.dll for programs debugged in the terminal, and
                                   Codalus.Previewer.Agent.dll for Avalonia's designer host (the XAML previewer)
+      wpfpreviewer/               codalus-wpfpreviewer, the WPF previewer's designer host and the WPF live agent (Windows only)
       diaghost/                   codalus-diaghost, EventPipe sessions and trace processing for the profiler (likewise)
       plugins/<plugin id>/        built-in plugins
       terminal/                   shell integration scripts for the integrated terminal
@@ -154,6 +155,29 @@
     <Exec Condition="'@(_CodalusServerRid)' != ''"
           Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusServerProject)&quot; -c $(Configuration) -r %(_CodalusServerRid.Identity) --self-contained -p:PublishSingleFile=true -p:Version=$(Version) -p:PublishTrimmed=true -p:DebugType=none -o &quot;$(_CodalusRemoteDir)%(_CodalusServerRid.Identity)&quot; -nologo" />
   </Target>
+  <!--
+    The WPF previewer and the Live Visual Tree's agent for WPF apps (M40b, ADR 0072): WPF code (net8.0-windows), built on
+    every OS (EnableWindowsTargeting) and shipped only on Windows, in wpfpreviewer/: a build on Windows copies it, and so
+    does a publish for a win-* runtime. Linux and macOS packages don't have it (D31: the WPF previewer is Windows only).
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Codalus.Previewer.Wpf\Codalus.Previewer.Wpf.csproj" ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;TargetFramework" />
+  </ItemGroup>
+
+  <Target Name="CodalusWpfPreviewerFiles">
+    <ItemGroup>
+      <_CodalusWpfPreviewerFiles Include="$(MSBuildThisFileDirectory)..\Codalus.Previewer.Wpf\bin\$(Configuration)\net8.0-windows\codalus-wpfpreviewer.*" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CodalusCopyWpfPreviewer" AfterTargets="Build" DependsOnTargets="CodalusWpfPreviewerFiles" Condition="'$(DesignTimeBuild)' != 'true' And '$(OS)' == 'Windows_NT'">
+    <Copy SourceFiles="@(_CodalusWpfPreviewerFiles)" DestinationFolder="$(OutDir)wpfpreviewer" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CodalusPublishWpfPreviewer" AfterTargets="Publish" DependsOnTargets="CodalusWpfPreviewerFiles" Condition="$(RuntimeIdentifier.StartsWith('win'))">
+    <Copy SourceFiles="@(_CodalusWpfPreviewerFiles)" DestinationFolder="$(PublishDir)wpfpreviewer" SkipUnchangedFiles="true" />
+  </Target>
+
   <Target Name="CodalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
     <ItemGroup>
       <_CodalusHostFiles Include="%(HelperProcess.RootDir)%(HelperProcess.Directory)bin\$(Configuration)\$(TargetFramework)\**\*">
