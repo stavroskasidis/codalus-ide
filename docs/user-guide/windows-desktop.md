@@ -1,6 +1,6 @@
 # WPF and Windows Forms
 
-Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NET (`net8.0-windows` and later) on Windows, Linux and macOS. They run, debug, test and use Hot Reload on Windows. On Linux and macOS, starting one says that it runs only on Windows.
+Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NET (`net8.0-windows` and later) on Windows, Linux and macOS. They run, debug, test and use Hot Reload on Windows, where WPF XAML also gets a previewer and running WPF apps the Live Visual Tree. On Linux and macOS, starting one says that it runs only on Windows.
 
 | | Windows | Linux and macOS |
 |---|---|---|
@@ -8,6 +8,7 @@ Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NE
 | Build | ✓ | ✓ |
 | Run, debug, Hot Reload | ✓ | Windows only |
 | Run their tests (`net*-windows` test projects) | ✓ | Windows only |
+| WPF XAML Previewer, Live Visual Tree and Live Property Explorer | ✓ | Windows only |
 
 ## Opening and building on Linux and macOS
 
@@ -60,9 +61,33 @@ Solution Explorer nests a window's `.xaml.cs` under its `.xaml`, and a form's `.
 - **Rename** an `x:Name`: the name, `ElementName=` references, and its uses in the code-behind.
 - **Formatting**, folding and the Document Outline.
 
+## The WPF XAML Previewer
+
+On Windows, View → Other Windows → **XAML Previewer**, or `Shift+F7` in a WPF `.xaml` editor, shows the file as WPF draws it, next to the editor. It's the same tool window as [Avalonia's](avalonia.md#the-xaml-previewer):
+- It runs your app's own .NET and WPF: the first preview builds the app, and saving a C# or XAML file of the app rebuilds it. App.xaml's resources and the dictionaries it merges apply, and your own controls (a user control the window uses) show as they're built.
+- It follows the editor: the preview updates 150 ms after you stop typing. A XAML error shows with its line above the last good preview.
+- **Design-time data:** `d:DataContext="{d:DesignInstance Type=vm:MainViewModel, IsDesignTimeCreatable=True}"` on the root creates your view model for the preview, so bindings show its data. Without `IsDesignTimeCreatable=True` the bindings show nothing, as in Visual Studio. `d:DesignWidth` and `d:DesignHeight` set the size; without them, a window's `Width` and `Height`, else the content's size.
+- **Zoom** and **render scale** (100–200 %) are on its toolbar. WPF has no theme variants, so the theme picker hides.
+- **Click** an element in the preview to select its tag in the XAML; a click on a button's text, or on an item of a list, selects the button or the list. The caret's element is outlined in the preview.
+
+What the preview shows is your XAML, not your compiled class: the code-behind's constructor and event handlers don't run (`Click="…"` and `EventSetter`s are left out, as designers do). A window or page shows its content at its size, without the window's frame. A resource dictionary or `App.xaml` shows a short description; their resources show in the previews that use them. Pointer hover isn't shown.
+
+The previewer needs an app on .NET 8 or later. A WPF class library's XAML previews through a WPF app in the solution that references it (the startup project first). It runs your code, so it works only in folders you trust.
+
+On Linux and macOS the XAML Previewer says that the WPF previewer runs only on Windows, and builds and starts nothing; WPF XAML still edits with completion, errors and navigation.
+
+## The Live Visual Tree for WPF apps
+
+On Windows, run or debug a WPF app (`Ctrl+F5` or `F5`) and open Debug → Windows → **Live Visual Tree** and **Live Property Explorer**. They work as for [Avalonia apps](avalonia.md#the-live-visual-tree-and-live-property-explorer):
+- **Live Visual Tree** shows the app's windows and the elements your XAML declares (WPF's logical tree); **Show Visual Tree** adds the parts that control and data templates make, in gray. Selecting an element highlights it in the app. **Select Element in the App** makes your next click in the app select the element under it, without clicking it. **Go to XAML** opens the window's `.xaml` file with the element's tag selected.
+- **Live Property Explorer** lists the selected element's dependency properties, and the attached properties set on it (`Grid.Row`, `DockPanel.Dock`), with where each value comes from: **Local** (set on the element, or bound, in bold), **Style**, **Style trigger**, **Implicit style**, **Theme style**, **Template**, **Template trigger**, **Inherited** or **Default**. Type a new value to set it in the running app, written as in XAML (`8,4`, `Red`, `Auto`, `Center`). It isn't written back to your XAML.
+
+Running or debugging a WPF app loads a small agent into it (a .NET startup hook). It connects only to this IDE, on this machine, and your app needs no package or code for it. It needs .NET 8 or later. To turn it off, set **Live Visual Tree for Avalonia and WPF apps** off (Settings → Debugging, `debug.liveVisualTree`). While the app is paused in the debugger, the tree can't refresh.
+
 ## Not available yet
 
-- A WPF XAML previewer and the Live Visual Tree for WPF apps (planned), and XAML Hot Reload.
+- XAML Hot Reload (changes made in the Live Property Explorer stay in the running app).
+- The WPF previewer and the Live Visual Tree on Linux and macOS (through a Windows machine), and for WPF on .NET Framework.
 - The Windows Forms designer: forms open as code (planned).
 - Running and debugging these apps from Linux and macOS through a Windows machine.
 - WPF and Windows Forms on .NET Framework.
