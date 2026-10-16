@@ -19,12 +19,19 @@ var batches = meter.CreateHistogram<double>("batch.duration", "ms");
 var hashing = new Thread(() => Hashing.Run(until)) { IsBackground = true, Name = "Hashing" };
 hashing.Start();
 
+// A batch counts the primes below a million (0.1 to 0.2 s), long on purpose. The sampler stops each thread for every
+// sample; where the interruption that stops a running thread comes late (by milliseconds on some Windows runners), the
+// thread stops at its next safe point instead, the GC poll after Stopwatch's clock read at the batch's end. With short
+// batches (the primes below 20,000: 0.7 ms) that took nearly every sample, and Stopwatch.get_Elapsed was the hottest
+// function; with long ones a late stop still lands in Primes.IsPrime.
+const int BatchLimit = 1_000_000;
+
 long total = 0;
 var watch = new Stopwatch();
 while (DateTime.UtcNow < until)
 {
     watch.Restart();
-    var found = Primes.Count(20_000);
+    var found = Primes.Count(BatchLimit);
     total += found;
     processed.Add(found);
     WorkEvents.Log.WorkDone(found);

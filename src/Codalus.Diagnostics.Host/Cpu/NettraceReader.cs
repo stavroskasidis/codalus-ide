@@ -456,9 +456,10 @@ internal sealed class NettraceReader : IDisposable
     };
 
     /// <summary>
-    /// The runtime's GC poll (<c>Thread.PollGC</c> and its worker), where a thread running a loop stops when the runtime
-    /// suspends it: the sampler suspends every thread for each sample, so without folding it took the samples of the
-    /// code that called it (seen on Windows runners, where it was the hottest function of a CPU-bound loop).
+    /// The runtime's GC poll (<c>Thread.PollGC</c> and its worker), which the JIT puts after a call that skips the GC
+    /// transition (<c>Stopwatch</c>'s clock read, for one): the sampler suspends every thread for each sample, and a
+    /// thread it couldn't interrupt where it ran stops at such a poll, so without folding the poll took the samples
+    /// (seen on Windows runners, where it was the hottest function of CpuBound).
     /// </summary>
     internal static bool IsSuspensionMethod(string name) =>
         name.StartsWith("System.Threading.Thread.PollGC", StringComparison.Ordinal)
