@@ -20,7 +20,7 @@ public sealed class PackageSignInTests : IAsyncLifetime
     private MockHttpServer _feed = null!;
     private SolutionService _service = null!;
 
-    private static string Plugin => Path.Combine(BuildHostIntegrationTests.RepoRoot, "tests", "Codalus.NuGetCredentialProvider.Fake", "bin", BuildHostIntegrationTests.Configuration, "net10.0", "codalus-fake-credential-provider.dll");
+    private static string Plugin => Path.Combine(BuildHostIntegrationTests.RepoRoot, "tests", "Codalus.NuGetCredentialProvider.Fake", "bin", BuildHostIntegrationTests.Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-fake-credential-provider.dll");
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(s_timeout).Token).Token;

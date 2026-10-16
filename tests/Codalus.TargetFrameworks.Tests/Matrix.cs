@@ -38,7 +38,7 @@ internal static class Matrix
         new("Net70", "net7.0", new(7, 0), "11.0", "int[] next = [1];"),
         new("Net80", "net8.0", new(8, 0), "12.0", "var next = \"\\e\";"),
         new("Net90", "net9.0", new(9, 0), "13.0", "var next = nameof(System.Collections.Generic.List<>);"),
-        new("Net100", "net10.0", new(10, 0), "14.0", null),
+        new("Net100", "net10.0", new(10, 0), "14.0", "System.Collections.Generic.List<int> next = [with(capacity: 1)];"),
     ];
 
     public static Framework Get(string id) => All.Single(f => f.Id == id);
@@ -50,7 +50,7 @@ internal static class Matrix
 
     internal static string Configuration => Metadata("CodalusConfiguration");
 
-    internal static string BuildHost => Path.Combine(RepoRoot, "src", "Codalus.Projects.Host", "bin", Configuration, "net10.0", "codalus-buildhost.dll");
+    internal static string BuildHost => Path.Combine(RepoRoot, "src", "Codalus.Projects.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-buildhost.dll");
 
     /// <summary>The 1-based line of the <c>// [name]</c> marker.</summary>
     public static int Line(string file, string marker) =>

@@ -217,7 +217,7 @@ public sealed partial class AgentTools(AiService ai, IAgentHost host, string wor
 
                 // A link is listed, never followed: it may lead outside the workspace.
                 var link = entry.LinkTarget is not null;
-                sb.Append(new string(' ', depth * 2)).Append(entry.Name).Append(entry is DirectoryInfo ? "/" : "").Append(link ? " (link)" : "").Append('\n');
+                sb.Append(' ', depth * 2).Append(entry.Name).Append(entry is DirectoryInfo ? "/" : "").Append(link ? " (link)" : "").Append('\n');
                 if (entry is DirectoryInfo && !link && depth < 1 && sb.Length < MaxResult)
                 {
                     await ListAsync(entry.FullName, depth + 1).ConfigureAwait(false);

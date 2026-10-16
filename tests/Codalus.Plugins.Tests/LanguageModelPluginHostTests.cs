@@ -34,7 +34,7 @@ public sealed class LanguageModelPluginHostTests : IAsyncLifetime
         : request.Body.Contains("fix a compiler", StringComparison.Ordinal) ? "```csharp\nint x = 1;\nint y = x;\n```"
         : "A reply streamed from the plugin host.";
 
-    internal static string OpenAIPluginDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.OpenAI", "bin", PluginHostIntegrationTests.Configuration, "net10.0");
+    internal static string OpenAIPluginDir => Path.Combine(PluginHostIntegrationTests.RepoRoot, "src", "Plugins", "Codalus.Plugins.OpenAI", "bin", PluginHostIntegrationTests.Configuration, Codalus.Tests.RepoBuild.TargetFramework);
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(s_timeout).Token).Token;

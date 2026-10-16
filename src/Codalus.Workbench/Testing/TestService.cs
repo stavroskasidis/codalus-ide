@@ -433,7 +433,7 @@ public sealed class TestService : ITestSink, IDisposable
         }
 
         // A plugin that never ends its run (it crashed) is not waited for forever.
-        await Task.WhenAny(ended, Task.Delay(TimeSpan.FromSeconds(30))).ConfigureAwait(false);
+        await ((Task)ended).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         lock (_gate)
         {
             _runEnded.Remove(runId);

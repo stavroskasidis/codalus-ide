@@ -27,7 +27,7 @@ public sealed class RemoteShellTests
 {
     private static string ServerDll => Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Remote.Server", "bin",
         typeof(RemoteShellTests).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
-            .Cast<System.Reflection.AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusConfiguration").Value!, "net10.0", "codalus-server.dll");
+            .Cast<System.Reflection.AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusConfiguration").Value!, Codalus.Tests.RepoBuild.TargetFramework, "codalus-server.dll");
 
     /// <summary>
     /// A folder as the server's programs see it: macOS's temp folder is under the <c>/var</c> link, and the debugger

@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- The plugin API stays on .NET 10 (M30b): plugins built with the .NET 10 SDK load in the .NET 11 plugin host. -->
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Codalus.Plugins.Testing</RootNamespace>
     <Description>Headless tests for Codalus IDE plugins (M22b): an in-memory IPluginContext that records what a plugin registers and shows, and drives its commands, views, trees and providers.</Description>
     <Version>1.0.0</Version>

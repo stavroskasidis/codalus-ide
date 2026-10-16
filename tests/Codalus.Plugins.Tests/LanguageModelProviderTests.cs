@@ -83,7 +83,7 @@ public sealed class LanguageModelProviderTests
         var parts = new Parts();
         var request = Hello("gpt-test") with
         {
-            Tools = [new ChatTool("read_file", "Reads a file.", JsonDocument.Parse("""{"type":"object","properties":{"path":{"type":"string"}}}""").RootElement)],
+            Tools = [new ChatTool("read_file", "Reads a file.", JsonElement.Parse("""{"type":"object","properties":{"path":{"type":"string"}}}"""))],
         };
 
         var result = await provider.ChatAsync(request, parts, Ct);

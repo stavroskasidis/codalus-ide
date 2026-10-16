@@ -93,7 +93,7 @@ public sealed class AzureDevOpsProviderTests : IAsyncLifetime
             case ("GET", "/contoso/_apis/projects"):
                 return MockHttpResponse.Json("""{ "value": [ { "name": "Web Apps" }, { "name": "Tools" } ] }""");
             case ("POST", "/contoso/Tools/_apis/git/repositories"):
-                _created.Add("repository " + JsonDocument.Parse(request.Body).RootElement.GetProperty("name").GetString());
+                _created.Add("repository " + JsonElement.Parse(request.Body).GetProperty("name").GetString());
                 return MockHttpResponse.Json($$"""{ "name": "cli", "remoteUrl": {{S(Server + "/contoso/Tools/_git/cli")}}, "webUrl": {{S(Server + "/contoso/Tools/_git/cli")}}, "sshUrl": "git@ssh.dev.azure.com:v3/contoso/Tools/cli" }""", 201);
             case ("GET", var p) when p == repo:
                 return MockHttpResponse.Json("""{ "defaultBranch": "refs/heads/develop", "webUrl": "https://dev.azure.com/contoso/Web%20Apps/_git/portal", "project": { "visibility": "private" } }""");
@@ -122,7 +122,7 @@ public sealed class AzureDevOpsProviderTests : IAsyncLifetime
                     ] }
                     """);
             case ("POST", var p) when p == repo + "/pullrequests":
-                var body = JsonDocument.Parse(request.Body).RootElement;
+                var body = JsonElement.Parse(request.Body);
                 _created.Add($"pull request {body.GetProperty("sourceRefName").GetString()} -> {body.GetProperty("targetRefName").GetString()} draft={body.GetProperty("isDraft").GetBoolean()}");
                 return MockHttpResponse.Json($$"""{ "pullRequestId": 43, "title": {{S(body.GetProperty("title").GetString())}}, "status": "active", "createdBy": { "displayName": "Ada Tester" }, "sourceRefName": {{S(body.GetProperty("sourceRefName").GetString())}}, "targetRefName": {{S(body.GetProperty("targetRefName").GetString())}}, "isDraft": true }""", 201);
             case ("GET", "/contoso/Web Apps/_apis/build/builds"):
@@ -135,7 +135,7 @@ public sealed class AzureDevOpsProviderTests : IAsyncLifetime
                     ] }
                     """);
             case ("POST", "/contoso/Web Apps/_apis/wit/wiql"):
-                var query = JsonDocument.Parse(request.Body).RootElement.GetProperty("query").GetString()!;
+                var query = JsonElement.Parse(request.Body).GetProperty("query").GetString()!;
                 return MockHttpResponse.Json(query.Contains("@Me", StringComparison.Ordinal)
                     ? """{ "workItems": [ { "id": 101 } ] }"""
                     : query.Contains("CONTAINS 'login'", StringComparison.Ordinal) ? """{ "workItems": [ { "id": 101 }, { "id": 102 } ] }""" : """{ "workItems": [] }""");

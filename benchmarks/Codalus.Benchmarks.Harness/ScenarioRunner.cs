@@ -702,7 +702,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 result.Add($"{Path.GetFileName(helper)}_mb", DirectorySize(helper, exclude: []) / 1048576.0);
             }
 
-            result.Notes.Add("Debug symbols (*.pdb) excluded. Helper processes (language service host, plugin host) need the .NET 10 runtime.");
+            result.Notes.Add($"Debug symbols (*.pdb) excluded. Helper processes (language service host, plugin host) need the .NET {Environment.Version.Major} runtime or later.");
         }
         else
         {
