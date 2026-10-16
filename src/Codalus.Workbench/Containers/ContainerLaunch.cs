@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Codalus.Projects.Protocol;
 using Codalus.Workbench.Build;
 
@@ -11,7 +13,9 @@ namespace Codalus.Workbench.Containers;
 /// <list type="bullet">
 /// <item><b>Fast mode</b> (Debug builds, as Visual Studio's): the Dockerfile's <c>base</c> stage is built, and a
 /// container of it idles (<c>tail -f /dev/null</c>) with the build output mounted at <c>/app</c>; the app starts in
-/// it through <c>exec</c>, or under netcoredbg copied there for debugging. A rebuild needs no image build.</item>
+/// it through <c>exec</c>, or under netcoredbg copied there for debugging. A rebuild needs no image build. The app's
+/// static web assets (its <c>wwwroot</c>, Razor class libraries', the SDK's) are mounted too, with a manifest of their
+/// container paths.</item>
 /// <item><b>Regular mode</b> (Release, or <c>containers.fastMode</c> off): the whole Dockerfile is built and its
 /// container runs its own entry point; debugging attaches to the app in it.</item>
 /// </list>
@@ -35,6 +39,12 @@ public sealed record ContainerLaunch(
 
     /// <summary>Where the build output is mounted in a fast-mode container.</summary>
     public const string AppFolder = "/app";
+
+    /// <summary>Where static web assets folders outside the build output are mounted in a fast-mode container, one per content root.</summary>
+    public const string StaticWebAssetsFolder = "/staticwebassets";
+
+    /// <summary>The variable naming the static web assets manifest ASP.NET Core reads in Development.</summary>
+    public const string StaticWebAssetsVariable = "ASPNETCORE_STATICWEBASSETS";
 
     /// <summary>
     /// Plans a project's container run. <paramref name="info"/> is the built project (its <c>TargetPath</c> is mounted
@@ -117,12 +127,19 @@ public sealed record ContainerLaunch(
                 program = Path.ChangeExtension(program, ".dll");
             }
 
+            var mounts = new List<string> { hostPath(output) + ":" + AppFolder };
+            if (ContainerStaticWebAssets(output, program, hostPath) is { } assets)
+            {
+                mounts.AddRange(assets.Mounts);
+                variables.TryAdd(StaticWebAssetsVariable, assets.Manifest);
+            }
+
             var image = name + ":dev";
             var spec = new ContainerRunSpec(name, image)
             {
                 Labels = labels,
                 Ports = ports,
-                Mounts = [hostPath(output) + ":" + AppFolder],
+                Mounts = mounts,
                 Environment = [.. variables],
                 WorkingDirectory = AppFolder,
                 Entrypoint = "tail",
@@ -142,6 +159,68 @@ public sealed record ContainerLaunch(
             ExtraArguments = extra,
         };
         return new ContainerLaunch(info.Path, name, dockerfile, context, full, null, regular, string.Empty, arguments, string.Empty, variables, browser, FastMode: false);
+    }
+
+    /// <summary>
+    /// The static web assets of a fast-mode container. A Debug build's <c>App.staticwebassets.runtime.json</c> names
+    /// this machine's folders (the project's <c>wwwroot</c>, <c>obj</c>, Razor class libraries' packages), and ASP.NET
+    /// Core fails to start in Development when one is missing, so each folder outside the build output is mounted
+    /// read-only under <see cref="StaticWebAssetsFolder"/> and <c>App.staticwebassets.runtime.container.json</c>, the
+    /// manifest with the container's paths, is written beside it (in the mounted output) for
+    /// <see cref="StaticWebAssetsVariable"/>. Null without a manifest (not a web app, or no static web assets).
+    /// </summary>
+    internal static (string Manifest, IReadOnlyList<string> Mounts)? ContainerStaticWebAssets(string output, string program, Func<string, string> hostPath)
+    {
+        var name = Path.GetFileNameWithoutExtension(program);
+        var manifest = Path.Combine(output, name + ".staticwebassets.runtime.json");
+        try
+        {
+            if (!File.Exists(manifest) || JsonNode.Parse(File.ReadAllText(manifest)) is not JsonObject root || root["ContentRoots"] is not JsonArray roots || roots.Count == 0)
+            {
+                return null;
+            }
+
+            var outputFolder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(output));
+            var mounts = new List<string>();
+            for (var i = 0; i < roots.Count; i++)
+            {
+                if (roots[i] is not JsonValue value || value.GetValueKind() != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                var folder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(value.GetValue<string>()));
+                var relative = Path.GetRelativePath(outputFolder, folder);
+                string target;
+                if (relative == ".")
+                {
+                    target = AppFolder + "/";
+                }
+                else if (!Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                {
+                    target = AppFolder + "/" + relative.Replace('\\', '/') + "/";
+                }
+                else
+                {
+                    // A missing folder isn't mounted (the engine would create it): the app fails as it does here.
+                    target = string.Create(CultureInfo.InvariantCulture, $"{StaticWebAssetsFolder}/{i}/");
+                    if (Directory.Exists(folder))
+                    {
+                        mounts.Add(hostPath(folder) + ":" + target.TrimEnd('/') + ":ro");
+                    }
+                }
+
+                roots[i] = target;
+            }
+
+            var container = name + ".staticwebassets.runtime.container.json";
+            File.WriteAllText(Path.Combine(output, container), root.ToJsonString());
+            return (AppFolder + "/" + container, mounts);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The launch URL with the template's placeholders: <c>{Scheme}://{ServiceHost}:{ServicePort}</c>, or a relative path.</summary>
