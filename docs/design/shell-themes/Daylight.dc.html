@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Daylight: Codalus IDE shell theme</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600&amp;family=Source+Code+Pro:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.mi{background:transparent;border:0;color:inherit;font:inherit;padding:0 8px;height:26px;border-radius:5px;cursor:default}
+.mi:hover,.tb:hover,.wc:hover,.rail:hover,.vt:hover,.tab:hover,.th:hover,.sb:hover,.tree li:hover{background-color:rgba(128,128,128,.18)}
+.tb{width:28px;height:26px;border:0;background:transparent;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;color:inherit;padding:0;flex:none}
+.grp{display:inline-flex;align-items:center;gap:1px;padding:2px;border-radius:7px}
+.wc{width:46px;height:34px;border:0;background:transparent;color:inherit;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.wc.x:hover{background:#C42B1C;color:#FFFFFF}
+.inp::placeholder{color:inherit;opacity:.9}
+.rail{width:36px;height:36px;border:0;border-radius:8px;background:transparent;display:inline-flex;align-items:center;justify-content:center;padding:0;color:inherit}
+.vt{writing-mode:vertical-rl;border:0;background:transparent;font:inherit;color:inherit;padding:10px 4px;border-radius:5px}
+.tab{display:flex;align-items:center;height:28px;border:0;font:inherit;color:inherit;background:transparent;gap:6px;padding:0 10px;border-radius:6px}
+.th{border:0;background:transparent;font:inherit;color:inherit;height:28px;padding:0 10px;border-radius:6px}
+.tree{list-style:none;margin:0;padding:2px 6px}
+.tree li{display:flex;align-items:center;gap:5px;height:22px;padding-right:8px;white-space:nowrap;border-radius:4px;cursor:default}
+.ln{display:flex;height:20px;align-items:center}
+.gut{width:46px;text-align:right;flex:none;font-size:12px}
+.bpc{width:22px;flex:none;display:flex;align-items:center;justify-content:center}
+.code{white-space:pre;padding-left:4px}
+.sb{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border:0;background:transparent;color:inherit;font:inherit}
+.dur{margin-left:auto;font-size:11px;opacity:.95}
+</style>
+</helmet>
+<div style="min-height: 900px; display: flex; flex-direction: column; background: {{c.bg}}; color: {{c.fg}}; font-family: 'Public Sans', system-ui, sans-serif; font-size: 12px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 34px; padding-left: 12px; background: {{c.title}}; color: {{c.titleFg}}">
+  <svg width="18" height="18" viewBox="0 0 256 256" role="img" aria-label="Codalus IDE"><defs><linearGradient id="daylight-violet" gradientUnits="userSpaceOnUse" x1="0" y1="38" x2="0" y2="218"><stop offset="0" stop-color="#A47BFF"></stop><stop offset="1" stop-color="#5B2EC7"></stop></linearGradient><linearGradient id="daylight-ember" gradientUnits="userSpaceOnUse" x1="0" y1="38" x2="0" y2="218"><stop offset="0" stop-color="#FFC24A"></stop><stop offset="1" stop-color="#F0662A"></stop></linearGradient></defs><polygon fill="{{logo.a}}" points="20,218 124,38 124,92 58,208"></polygon><polygon fill="{{logo.a}}" fill-opacity="{{logo.o1}}" points="74,204 124,117.4 124,161.4 104,196"></polygon><polygon fill="{{logo.b}}" fill-opacity="{{logo.o2}}" points="236,218 132,38 132,92 198,208"></polygon><polygon fill="{{logo.b}}" fill-opacity="{{logo.o3}}" points="182,204 132,117.4 132,161.4 152,196"></polygon></svg>
+  <nav aria-label="Main menu" style="display: flex; flex-wrap: wrap">
+    <button class="mi">File</button><button class="mi">Edit</button><button class="mi">View</button><button class="mi">Git</button><button class="mi">Project</button><button class="mi">Build</button><button class="mi">Debug</button><button class="mi">Test</button><button class="mi">Analyze</button><button class="mi">Tools</button><button class="mi">Extensions</button><button class="mi">Window</button><button class="mi">Help</button>
+  </nav>
+  <span style="flex: 1"></span>
+  <span style="color: {{c.titleMuted}}">Samples.Debugging</span>
+  <span style="flex: 1"></span>
+  <button class="wc" aria-label="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" stroke="currentColor"><path d="M0 5h10"></path></svg></button>
+  <button class="wc" aria-label="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" fill="none" stroke="currentColor"><rect x=".5" y=".5" width="9" height="9"></rect></svg></button>
+  <button class="wc x" aria-label="Close"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" stroke="currentColor"><path d="m0 0 10 10M10 0 0 10"></path></svg></button>
+</header>
+
+<div role="toolbar" aria-label="Standard" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 40px; padding: 2px 10px 6px">
+  <span class="grp" style="background: {{c.group}}; border: 1px solid {{c.groupBorder}}">
+    <button class="tb" aria-label="Navigate Backward (Ctrl+-)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8H3.5M7.5 4 3.5 8l4 4"></path></svg></button>
+    <button class="tb" aria-label="Navigate Forward (Ctrl+Shift+-)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h9.5M8.5 4l4 4-4 4"></path></svg></button>
+  </span>
+  <span class="grp" style="background: {{c.group}}; border: 1px solid {{c.groupBorder}}">
+    <button class="tb" aria-label="New File (Ctrl+N)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke-width="1.3" stroke-linejoin="round"><path d="M3.5 1.5h5l3 3v4M3.5 1.5v13h5" stroke="{{c.icOutline}}"></path><path d="M12 10v5M9.5 12.5h5" stroke="{{c.icGreen}}" stroke-linecap="round"></path></svg></button>
+    <button class="tb" aria-label="Open Folder (Ctrl+Shift+O)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icFolder}}" stroke-width="1.3" stroke-linejoin="round"><path d="M1.5 3.5h4.5l1.5 1.5h7v8.5h-13z"></path></svg></button>
+    <button class="tb" aria-label="Save All (Ctrl+Shift+S)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.3" stroke-linejoin="round"><path d="M2.5 2.5h9l2 2v9h-11z"></path><path d="M5 2.5v3.5h5V2.5M5 13.5V9.5h6v4"></path></svg></button>
+    <button class="tb" aria-label="Undo (Ctrl+Z)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5h6a3 3 0 0 1 0 6H7"></path><path d="M7 4 4.5 6.5 7 9"></path></svg></button>
+    <button class="tb" aria-label="Redo (Ctrl+Y)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 6.5h-6a3 3 0 0 0 0 6H9"></path><path d="M9 4l2.5 2.5L9 9"></path></svg></button>
+  </span>
+  <span class="grp" style="padding: 2px 2px 2px 4px; gap: 4px; background: {{c.group}}; border: 1px solid {{c.groupBorder}}">
+    <select aria-label="Solution configuration" style="height: 26px; font: inherit; color: {{c.fg}}; background: transparent; border: 0"><option>Debug</option><option>Release</option></select>
+    <span aria-hidden="true" style="width: 1px; height: 16px; background: {{c.groupSep}}"></span>
+    <select aria-label="Solution platform" style="height: 26px; font: inherit; color: {{c.fg}}; background: transparent; border: 0"><option>Any CPU</option></select>
+    <button style="display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 0; border-radius: 5px; background: {{c.accent}}; font: inherit; font-weight: 600; color: {{c.accentFg}}">
+      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"></path></svg>
+      Samples.Debugging
+    </button>
+    <button class="tb" aria-label="Start Without Debugging (Ctrl+F5)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icGreen}}" stroke-width="1.4" stroke-linejoin="round"><path d="M4 2.5v11l9-5.5z"></path></svg></button>
+    <button class="tb" aria-label="Build Solution (Ctrl+Shift+B)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icPurple}}" stroke-width="1.3" stroke-linejoin="round"><path d="M2 5 8 2l6 3v6l-6 3-6-3z"></path><path d="M2 5l6 3 6-3M8 8v6"></path></svg></button>
+  </span>
+  <sc-if value="{{debugging}}" hint-placeholder-val="{{false}}">
+    <span class="grp" style="background: {{c.group}}; border: 1px solid {{c.groupBorder}}">
+      <button class="tb" aria-label="Break All (Ctrl+Alt+Break)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="{{c.icBlue}}"><rect x="4" y="3" width="2.6" height="10" rx=".6"></rect><rect x="9.4" y="3" width="2.6" height="10" rx=".6"></rect></svg></button>
+      <button class="tb" aria-label="Stop Debugging (Shift+F5)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1" fill="{{c.icRed}}"></rect></svg></button>
+      <button class="tb" aria-label="Step Over (F10)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 9a5.5 5.5 0 0 1 10.5-2"></path><path d="M13.5 3.5v3.5H10"></path><circle cx="8" cy="12.5" r="1.4" fill="{{c.icBlue}}"></circle></svg></button>
+    </span>
+  </sc-if>
+  <span style="flex: 1"></span>
+  <label style="flex: 0 1 300px; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; background: {{c.searchField}}; border: 1px solid {{c.searchBorder}}; border-radius: 7px; color: {{c.muted}}">
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"></circle><path d="m10.5 10.5 3.5 3.5"></path></svg>
+    <input class="inp" aria-label="Search commands, files and settings" placeholder="Search (Ctrl+Q)" style="flex: 1; min-width: 0; border: 0; background: transparent; color: {{c.muted}}; font: inherit; outline: none">
+  </label>
+</div>
+
+<div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0; background: {{c.surface}}; border-top: 1px solid {{c.border}}">
+  <nav aria-label="Tool windows" style="width: 44px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 6px; background: {{c.rail}}; color: {{c.railFg}}; border-right: 1px solid {{c.border}}">
+    <button class="rail" aria-label="Solution Explorer (Ctrl+Alt+L)" aria-pressed="true" style="background: {{c.railOn}}; color: {{c.railOnFg}}"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M2 2.5h5v4H2zM9 9.5h5v4H9zM4.5 6.5v5H9"></path></svg></button>
+    <button class="rail" aria-label="Git Changes (Ctrl+0, Ctrl+G)"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icOrange}}" stroke-width="1.3"><circle cx="5" cy="4" r="1.6"></circle><circle cx="5" cy="12" r="1.6"></circle><circle cx="11" cy="6" r="1.6"></circle><path d="M5 5.6v4.8M11 7.6c0 2.4-6 1.6-6 3"></path></svg></button>
+    <button class="rail" aria-label="Test Explorer (Ctrl+E, T)"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icGreen}}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 1.5h4M7 1.5v4L3 13a1 1 0 0 0 .9 1.5h8.2A1 1 0 0 0 13 13L9 5.5v-4"></path><path d="M4.5 10h7"></path></svg></button>
+    <button class="rail" aria-label="Find in Files (Ctrl+Shift+F)"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.4" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"></circle><path d="m10.5 10.5 3.5 3.5"></path></svg></button>
+    <button class="rail" aria-label="Containers"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.3" stroke-linejoin="round"><path d="M1.5 8.5h13l-1.5 4h-10zM3 5.5h2.5v3H3zM6 5.5h2.5v3H6zM6 2.5h2.5v3H6zM9 5.5h2.5v3H9z"></path></svg></button>
+    <span style="flex: 1"></span>
+    <button class="rail" aria-label="Settings" style="margin-bottom: 8px"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.3"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg></button>
+  </nav>
+
+  <aside aria-label="Solution Explorer" style="flex: 1 1 260px; max-width: 320px; height: 800px; display: flex; flex-direction: column; border-right: 1px solid {{c.border}}">
+    <div style="display: flex; align-items: center; height: 36px; padding: 0 6px 0 12px">
+      <span style="font-weight: 600; font-size: 13px; color: {{c.strong}}">Solution Explorer</span>
+      <span style="flex: 1"></span>
+      <button class="tb" aria-label="Sync with Active Document (Ctrl+[, S)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.4" stroke-linecap="round"><path d="M3 8h10M10 5l3 3-3 3M6 5 3 8l3 3"></path></svg></button>
+      <button class="tb" aria-label="Collapse All"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.3"><rect x="2.5" y="2.5" width="11" height="11" rx="1"></rect><path d="M5.5 8h5"></path></svg></button>
+      <button class="tb" aria-label="Auto Hide"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5h4M7 2.5v4l-2 2.5h6L9 6.5v-4M8 9v4.5"></path></svg></button>
+    </div>
+    <label style="display: flex; align-items: center; gap: 6px; height: 28px; margin: 0 10px 6px; padding: 0 8px; background: {{c.field}}; border: 1px solid {{c.fieldBorder}}; border-radius: 6px; color: {{c.muted}}">
+      <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"></circle><path d="m10.5 10.5 3.5 3.5"></path></svg>
+      <input class="inp" aria-label="Search Solution Explorer" placeholder="Search (Ctrl+;)" style="flex: 1; min-width: 0; border: 0; font: inherit; color: {{c.muted}}; outline: none; background: transparent">
+    </label>
+    <ul role="tree" aria-label="Solution" class="tree" style="flex: 1; overflow: auto">
+      <li role="treeitem" aria-expanded="true" style="padding-left: 4px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icPurple}}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"></rect><path d="M4.5 6 7 8 4.5 10M8 10.5h3.5"></path></svg>Solution 'Samples.Debugging'</li>
+      <li role="treeitem" aria-expanded="true" style="padding-left: 12px; font-weight: 600; color: {{c.strong}}"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="none" stroke="{{c.icOutline}}"></rect><text x="8" y="11" text-anchor="middle" font-size="7" font-weight="700" fill="{{c.icGreen}}" font-family="sans-serif">C#</text></svg>Samples.Debugging</li>
+      <li role="treeitem" aria-expanded="false" style="padding-left: 30px"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 4 4-4 4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.2"><rect x="2" y="2" width="5" height="5"></rect><rect x="9" y="9" width="5" height="5"></rect><path d="M4.5 7v4.5H9"></path></svg>Dependencies</li>
+      <li role="treeitem" aria-expanded="false" style="padding-left: 30px"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 4 4-4 4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h4.5l1.5 1.5h7v8.5h-13z" fill="none" stroke="{{c.icFolder}}" stroke-width="1.2" stroke-linejoin="round"></path></svg>Properties</li>
+      <li role="treeitem" style="padding-left: 48px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>Forecast.cs</li>
+      <li role="treeitem" aria-selected="true" style="padding-left: 48px; background: {{c.selection}}; color: {{c.selectionFg}}"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.selIcon}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.selIconFill}}"></rect></svg>ForecastService.cs<span style="margin-left: auto; font-weight: 600">M</span></li>
+      <li role="treeitem" style="padding-left: 48px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>IForecastStore.cs</li>
+      <li role="treeitem" style="padding-left: 48px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>Program.cs</li>
+      <li role="treeitem" style="padding-left: 48px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icYellow}}"></rect></svg>appsettings.json</li>
+      <li role="treeitem" aria-expanded="false" style="padding-left: 12px; font-weight: 600; color: {{c.strong}}"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 4 4-4 4"></path></svg><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="none" stroke="{{c.icOutline}}"></rect><text x="8" y="11" text-anchor="middle" font-size="7" font-weight="700" fill="{{c.icGreen}}" font-family="sans-serif">C#</text></svg>Samples.Debugging.Tests</li>
+    </ul>
+  </aside>
+
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <section aria-label="Documents" style="height: 520px; display: flex; flex-direction: column">
+      <div role="tablist" aria-label="Open documents" style="display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 8px; overflow: hidden; border-bottom: 1px solid {{c.softBorder}}; color: {{c.tabFg}}">
+        <div style="display: flex; align-items: center; background: {{c.tabActive}}; color: {{c.tabActiveFg}}; border-radius: 6px">
+          <button role="tab" aria-selected="true" class="tab" style="font-weight: 600; padding-right: 4px">
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.selIcon}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.selIconFill}}"></rect></svg>
+            ForecastService.cs
+          </button>
+          <button class="tb" aria-label="Close ForecastService.cs" style="width: 22px; height: 22px; margin-right: 3px"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" stroke="currentColor" stroke-width="1.3"><path d="m1.5 1.5 7 7M8.5 1.5l-7 7"></path></svg></button>
+        </div>
+        <button role="tab" aria-selected="false" class="tab"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>Program.cs</button>
+        <button role="tab" aria-selected="false" class="tab"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icGreen}}"></rect></svg>ForecastServiceTests.cs</button>
+        <button role="tab" aria-selected="false" class="tab" style="font-style: italic"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="{{c.icOutline}}"></path><rect x="1" y="8" width="9" height="7" rx="1" fill="{{c.icYellow}}"></rect></svg>appsettings.json</button>
+      </div>
+      <div style="flex: 1; min-height: 0; overflow: auto; padding: 8px 0; font-family: 'Source Code Pro', ui-monospace, monospace; font-size: 13px; color: {{c.code}}">
+        <sc-for list="{{lines}}" as="line" hint-placeholder-count="22">
+          <div class="ln" style="background: {{line.bg}}; box-shadow: {{line.edge}}">
+            <span class="gut" style="color: {{c.gutter}}">{{line.n}}</span>
+            <span class="bpc">
+              <sc-if value="{{line.bp}}" hint-placeholder-val="{{false}}"><svg width="12" height="12" viewBox="0 0 12 12" role="img" aria-label="Breakpoint"><circle cx="6" cy="6" r="5" fill="{{c.bp}}"></circle></svg></sc-if>
+              <sc-if value="{{line.arrow}}" hint-placeholder-val="{{false}}"><svg width="14" height="12" viewBox="0 0 14 12" role="img" aria-label="Current statement"><path d="M1 3.5h6V1l6 5-6 5V8.5H1z" fill="{{c.exec}}" stroke="{{c.execStroke}}" stroke-width=".8" stroke-linejoin="round"></path></svg></sc-if>
+            </span>
+            <span class="code"><sc-for list="{{line.toks}}" as="tok" hint-placeholder-count="3"><span style="color: {{tok.c}}; font-style: {{tok.i}}; text-decoration: {{tok.d}}; text-underline-offset: 3px">{{tok.t}}</span></sc-for></span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section aria-label="Test Explorer" style="flex: 1; min-height: 260px; display: flex; flex-direction: column; border-top: 1px solid {{c.border}}; background: {{c.panelAlt}}">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 40px; padding: 0 8px">
+        <div role="tablist" aria-label="Bottom tool windows" style="display: flex; gap: 2px; color: {{c.tabFg}}">
+          <button role="tab" aria-selected="true" class="th" style="background: {{c.tabActive}}; color: {{c.tabActiveFg}}; font-weight: 600">Test Explorer</button>
+          <button role="tab" aria-selected="false" class="th">Error List</button>
+          <button role="tab" aria-selected="false" class="th">Output</button>
+          <button role="tab" aria-selected="false" class="th">Terminal</button>
+        </div>
+        <span style="flex: 1"></span>
+        <span class="grp" style="background: {{c.group}}; border: 1px solid {{c.groupBorder}}">
+          <button class="tb" aria-label="Run All Tests (Ctrl+R, A)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3v10l6-5zM8.5 3v10l6-5z" fill="{{c.icGreen}}"></path></svg></button>
+          <button class="tb" aria-label="Run Failed Tests"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5v11l8-5.5z" fill="{{c.icGreen}}"></path><circle cx="12" cy="12" r="3.2" fill="{{c.fail}}"></circle><path d="m10.8 10.8 2.4 2.4m0-2.4-2.4 2.4" stroke="{{c.badgeFg}}" stroke-width="1.1"></path></svg></button>
+          <button class="tb" aria-label="Debug Test"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="{{c.icBlue}}" stroke-width="1.3" stroke-linecap="round"><rect x="5" y="5" width="6" height="8" rx="3"></rect><path d="M8 5V3M5 8H2.5M11 8h2.5M5 11.5l-2 1.5M11 11.5l2 1.5M6 3.5 5 2.5M10 3.5l1-1"></path></svg></button>
+        </span>
+        <span style="display: inline-flex; align-items: center; gap: 10px; padding: 0 8px">
+          <span style="display: inline-flex; align-items: center; gap: 4px"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="{{c.pass}}"></circle><path d="m5 8.2 2 2 4-4.2" fill="none" stroke="{{c.badgeFg}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>7 passed</span>
+          <span style="display: inline-flex; align-items: center; gap: 4px"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="{{c.fail}}"></circle><path d="m5.5 5.5 5 5m0-5-5 5" stroke="{{c.badgeFg}}" stroke-width="1.5"></path></svg>1 failed</span>
+          <span style="color: {{c.muted}}">0.41 s</span>
+        </span>
+      </div>
+      <div style="flex: 1; min-height: 0; display: flex; flex-wrap: wrap; border-top: 1px solid {{c.softBorder}}">
+        <ul role="tree" aria-label="Tests" class="tree" style="flex: 1 1 340px; overflow: auto; padding-top: 4px">
+          <li role="treeitem" aria-expanded="true" style="padding-left: 4px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"></path></svg><svg width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Failed"><circle cx="8" cy="8" r="6.5" fill="{{c.fail}}"></circle><path d="m5.5 5.5 5 5m0-5-5 5" stroke="{{c.badgeFg}}" stroke-width="1.5"></path></svg>Samples.Debugging.Tests (8)<span class="dur" style="color: {{c.muted}}">0.41 s</span></li>
+          <li role="treeitem" aria-expanded="true" style="padding-left: 22px"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"></path></svg><svg width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Failed"><circle cx="8" cy="8" r="6.5" fill="{{c.fail}}"></circle><path d="m5.5 5.5 5 5m0-5-5 5" stroke="{{c.badgeFg}}" stroke-width="1.5"></path></svg>ForecastServiceTests (5)<span class="dur" style="color: {{c.muted}}">30 ms</span></li>
+          <li role="treeitem" style="padding-left: 56px"><svg width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Passed"><circle cx="8" cy="8" r="6.5" fill="{{c.pass}}"></circle><path d="m5 8.2 2 2 4-4.2" fill="none" stroke="{{c.badgeFg}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>GetAsync_ReturnsRequestedDays<span class="dur" style="color: {{c.muted}}">12 ms</span></li>
+          <li role="treeitem" style="padding-left: 56px"><svg width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Passed"><circle cx="8" cy="8" r="6.5" fill="{{c.pass}}"></circle><path d="m5 8.2 2 2 4-4.2" fill="none" stroke="{{c.badgeFg}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>GetAsync_SkipsPastDates<span class="dur" style="color: {{c.muted}}">4 ms</span></li>
+          <li role="treeitem" aria-selected="true" style="padding-left: 56px; font-weight: 500; background: {{c.failRow}}; color: {{c.failRowFg}}; box-shadow: {{c.failRowEdge}}"><svg width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Failed"><circle cx="8" cy="8" r="6.5" fill="{{c.fail}}"></circle><path d="m5.5 5.5 5 5m0-5-5 5" stroke="{{c.badgeFg}}" stroke-width="1.5"></path></svg>GetAsync_ThrowsAboveMaxDays<span class="dur">9 ms</span></li>
+          <li role="treeitem" style="padding-left: 56px"><svg width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Passed"><circle cx="8" cy="8" r="6.5" fill="{{c.pass}}"></circle><path d="m5 8.2 2 2 4-4.2" fill="none" stroke="{{c.badgeFg}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>GetAsync_HonoursCancellation<span class="dur" style="color: {{c.muted}}">3 ms</span></li>
+          <li role="treeitem" style="padding-left: 56px"><svg width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Passed"><circle cx="8" cy="8" r="6.5" fill="{{c.pass}}"></circle><path d="m5 8.2 2 2 4-4.2" fill="none" stroke="{{c.badgeFg}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>GetAsync_LogsCityAndDays<span class="dur" style="color: {{c.muted}}">2 ms</span></li>
+          <li role="treeitem" aria-expanded="false" style="padding-left: 22px"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 4 4-4 4"></path></svg><svg width="14" height="14" viewBox="0 0 16 16" role="img" aria-label="Passed"><circle cx="8" cy="8" r="6.5" fill="{{c.pass}}"></circle><path d="m5 8.2 2 2 4-4.2" fill="none" stroke="{{c.badgeFg}}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>ForecastTests (3)<span class="dur" style="color: {{c.muted}}">6 ms</span></li>
+        </ul>
+        <div aria-label="Test detail summary" role="region" style="flex: 1 1 320px; min-width: 0; padding: 10px 14px; border-left: 1px solid {{c.softBorder}}; overflow: auto">
+          <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; color: {{c.strong}}">GetAsync_ThrowsAboveMaxDays</div>
+          <div style="color: {{c.muted}}; margin-bottom: 8px">Source: <a href="#" style="color: {{c.link}}">ForecastServiceTests.cs line 41</a> · Duration: 9 ms</div>
+          <div style="font-weight: 600; margin-bottom: 4px; color: {{c.failHead}}">Message</div>
+          <div style="white-space: pre-line; font-family: 'Source Code Pro', ui-monospace, monospace; font-size: 12px; padding: 8px 10px; background: {{c.failBg}}; border: 1px solid {{c.failEdge}}; border-radius: 6px; color: {{c.failFg}}">Assert.Throws() Failure: No exception was thrown
+Expected: typeof(System.ArgumentOutOfRangeException)</div>
+          <div style="font-weight: 600; margin: 8px 0 4px">Stack trace</div>
+          <div style="font-family: 'Source Code Pro', ui-monospace, monospace; font-size: 12px"><a href="#" style="color: {{c.link}}">ForecastServiceTests.GetAsync_ThrowsAboveMaxDays() line 44</a></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <nav aria-label="Auto-hidden tool windows" style="width: 28px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 6px; background: {{c.rail}}; color: {{c.railFg}}; border-left: 1px solid {{c.border}}">
+    <button class="vt">Properties</button>
+    <button class="vt">Notifications</button>
+    <button class="vt">AI Chat</button>
+  </nav>
+</div>
+
+<footer style="display: flex; flex-wrap: wrap; align-items: center; min-height: 24px; padding: 0 4px; background: {{statusBg}}; color: {{statusFg}}; border-top: 1px solid {{c.statusEdge}}">
+  <span class="sb" role="status">{{statusText}}</span>
+  <span style="flex: 1"></span>
+  <button class="sb">Ln 15, Ch 9</button>
+  <button class="sb">Spaces: 4</button>
+  <button class="sb">CRLF</button>
+  <button class="sb"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5" cy="4" r="1.6"></circle><circle cx="5" cy="12" r="1.6"></circle><circle cx="11" cy="6" r="1.6"></circle><path d="M5 5.6v4.8M11 7.6c0 2.4-6 1.6-6 3"></path></svg>main</button>
+  <button class="sb" aria-label="Notifications"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M4 11V7a4 4 0 0 1 8 0v4l1.2 1.5H2.8z"></path><path d="M6.5 14h3"></path></svg></button>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"Light","options":["Light","Dark","High contrast"]},"mode":{"editor":"enum","default":"Solution open","options":["Solution open","Debugging","No solution"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palettes() {
+    return {
+      'Light': {
+        bg: '#F3F3F6', title: '#F3F3F6', titleFg: '#1F1F24', titleMuted: '#5C5C66',
+        group: '#FFFFFF', groupBorder: '#E0E0E6', groupSep: '#E0E0E6',
+        rail: '#F3F3F6', railFg: '#3D3D45', railOn: '#EEE8FA', railOnFg: '#6B3FC4',
+        surface: '#FFFFFF', border: '#E0E0E6', softBorder: '#ECECF1', panelAlt: '#FBFBFC',
+        fg: '#1F1F24', strong: '#111114', muted: '#5C5C66',
+        selection: '#EEE8FA', selectionFg: '#2A1660', selIcon: '#6E6E6E', selIconFill: '#388A34',
+        accent: '#6B3FC4', accentFg: '#FFFFFF',
+        field: '#F3F3F6', fieldBorder: '#F3F3F6', searchField: '#FFFFFF', searchBorder: '#E0E0E6',
+        tabActive: '#EEE8FA', tabActiveFg: '#2A1660', tabFg: '#3D3D45',
+        status: '#6B3FC4', statusFg: '#FFFFFF', statusDebug: '#B4500F', statusDebugFg: '#FFFFFF', statusEmpty: '#55555F', statusEmptyFg: '#FFFFFF', statusEdge: 'transparent',
+        code: '#1F1F24', gutter: '#6B6B76', curLine: '#F7F5FC', curEdge: 'none', bpLine: '#FCEDEC', execLine: '#FFF3BF',
+        kw: '#0B4FB8', ty: '#00796B', fn: '#845300', st: '#B3261E', nu: '#9C2F7A', cm: '#56703F',
+        link: '#5A2FB0', bp: '#C4314B', squiggle: '#388A34', exec: '#E8B300', execStroke: '#8A6400',
+        pass: '#388A34', fail: '#A1260D', badgeFg: '#FFFFFF', failBg: '#FCEDEC', failFg: '#5A1610', failEdge: '#FCEDEC', failHead: '#A1260D', failRow: '#FCEDEC', failRowFg: '#5A1610', failRowEdge: 'none',
+        icBlue: '#00539C', icGreen: '#388A34', icRed: '#A1260D', icOrange: '#B26B12', icPurple: '#652D90', icYellow: '#8A6400', icFolder: '#8A6320', icOutline: '#6E6E6E'
+      },
+      'Dark': {
+        bg: '#1C1B22', title: '#1C1B22', titleFg: '#E4E2EC', titleMuted: '#A7A3B8',
+        group: '#25232E', groupBorder: '#353242', groupSep: '#353242',
+        rail: '#1C1B22', railFg: '#C4C0D3', railOn: '#3A2E5E', railOnFg: '#C9B5FF',
+        surface: '#222029', border: '#34313F', softBorder: '#2B2935', panelAlt: '#1F1D26',
+        fg: '#E4E2EC', strong: '#F5F3FA', muted: '#A7A3B8',
+        selection: '#3A2E5E', selectionFg: '#F1EBFF', selIcon: '#C5C5C5', selIconFill: '#89D185',
+        accent: '#A98BFF', accentFg: '#160A33',
+        field: '#2A2834', fieldBorder: '#2A2834', searchField: '#25232E', searchBorder: '#353242',
+        tabActive: '#3A2E5E', tabActiveFg: '#F1EBFF', tabFg: '#C4C0D3',
+        status: '#5B3DB8', statusFg: '#FFFFFF', statusDebug: '#A8480C', statusDebugFg: '#FFFFFF', statusEmpty: '#3C3949', statusEmptyFg: '#FFFFFF', statusEdge: 'transparent',
+        code: '#E4E2EC', gutter: '#8E8AA0', curLine: '#29263A', curEdge: 'none', bpLine: '#3A1E26', execLine: '#3D3514',
+        kw: '#8FB3FF', ty: '#6FD6C0', fn: '#F0CC85', st: '#F49A8C', nu: '#E39AD0', cm: '#8FA67E',
+        link: '#C4AEFF', bp: '#F05A6E', squiggle: '#89D185', exec: '#FFCC00', execStroke: '#8A6400',
+        pass: '#89D185', fail: '#F48771', badgeFg: '#1C1B22', failBg: '#3A1E22', failFg: '#FFD2CC', failEdge: '#3A1E22', failHead: '#F48771', failRow: '#3A1E22', failRowFg: '#FFD2CC', failRowEdge: 'none',
+        icBlue: '#75BEFF', icGreen: '#89D185', icRed: '#F48771', icOrange: '#E8AB53', icPurple: '#B180D7', icYellow: '#FFCC00', icFolder: '#DCB67A', icOutline: '#C5C5C5'
+      },
+      'High contrast': {
+        bg: '#000000', title: '#000000', titleFg: '#FFFFFF', titleMuted: '#D6D6D6',
+        group: '#000000', groupBorder: '#FFFFFF', groupSep: '#8C8C8C',
+        rail: '#000000', railFg: '#FFFFFF', railOn: '#D2B3FF', railOnFg: '#000000',
+        surface: '#000000', border: '#FFFFFF', softBorder: '#8C8C8C', panelAlt: '#000000',
+        fg: '#FFFFFF', strong: '#FFFFFF', muted: '#D6D6D6',
+        selection: '#D2B3FF', selectionFg: '#000000', selIcon: '#000000', selIconFill: '#000000',
+        accent: '#D2B3FF', accentFg: '#000000',
+        field: '#000000', fieldBorder: '#FFFFFF', searchField: '#000000', searchBorder: '#FFFFFF',
+        tabActive: '#D2B3FF', tabActiveFg: '#000000', tabFg: '#FFFFFF',
+        status: '#D2B3FF', statusFg: '#000000', statusDebug: '#FFB000', statusDebugFg: '#000000', statusEmpty: '#000000', statusEmptyFg: '#FFFFFF', statusEdge: '#FFFFFF',
+        code: '#FFFFFF', gutter: '#D6D6D6', curLine: '#000000', curEdge: 'inset 0 0 0 1px #FFFFFF', bpLine: '#4A0010', execLine: '#2E2600',
+        kw: '#7CC7FF', ty: '#4FF0CF', fn: '#FFE66D', st: '#FFA680', nu: '#FFA3E0', cm: '#9FE870',
+        link: '#D2B3FF', bp: '#FF5C5C', squiggle: '#FFD34D', exec: '#FFD34D', execStroke: '#FFD34D',
+        pass: '#FFFFFF', fail: '#FFFFFF', badgeFg: '#000000', failBg: '#000000', failFg: '#FFFFFF', failEdge: '#FFFFFF', failHead: '#FFFFFF', failRow: '#000000', failRowFg: '#FFFFFF', failRowEdge: 'inset 0 0 0 1px #D2B3FF',
+        icBlue: '#FFFFFF', icGreen: '#FFFFFF', icRed: '#FFFFFF', icOrange: '#FFFFFF', icPurple: '#FFFFFF', icYellow: '#FFFFFF', icFolder: '#FFFFFF', icOutline: '#FFFFFF'
+      }
+    };
+  }
+  renderVals() {
+    const all = this.palettes();
+    const theme = all[this.props.theme] ? this.props.theme : 'Light';
+    const c = all[theme];
+    const hc = theme === 'High contrast';
+    const mode = this.props.mode ?? 'Solution open';
+    const debugging = mode === 'Debugging';
+    const src = [
+      "kw:using| Microsoft.Extensions.Logging;",
+      "",
+      "kw:namespace| Samples.Debugging;",
+      "",
+      "kw:public| |kw:sealed| |kw:class| |ty:ForecastService|(|ty:IForecastStore| store, |ty:ILogger|<|ty:ForecastService|> logger)",
+      "{",
+      "    |cm:// Two weeks is as far ahead as the store keeps.",
+      "    |kw:private| |kw:const| |kw:int| MaxDays = |nu:14|;",
+      "",
+      "    |kw:public| |kw:async| |ty:Task|<|ty:IReadOnlyList|<|ty:Forecast|>> |fn:GetAsync|(|kw:string| city, |kw:int| days, |ty:CancellationToken| ct)",
+      "    {",
+      "        |ty:ArgumentOutOfRangeException|.|fn:ThrowIfGreaterThan|(days, MaxDays);",
+      "        logger.|fw:LogInformation|(|st:\"Loading {Days} days for {City}\"|, days, city);",
+      "",
+      "        |kw:var| rows = |kw:await| store.|fn:QueryAsync|(city, ct);",
+      "        |kw:return| rows",
+      "            .|fn:Where|(r => r.Date >= |ty:DateOnly|.|fn:FromDateTime|(|ty:DateTime|.Today))",
+      "            .|fn:Take|(days)",
+      "            .|fn:Select|(r => |kw:new| |ty:Forecast|(r.Date, r.TemperatureC, r.Summary))",
+      "            .|fd:ToList|();",
+      "    }",
+      "}"
+    ];
+    const tok = (seg) => {
+      const m = /^(kw|ty|fn|st|nu|cm|fw|fd):/.exec(seg);
+      if (!m) return { t: seg, c: c.code, i: 'normal', d: 'none' };
+      const k = m[1];
+      const t = seg.slice(3);
+      if (k === 'fw') return { t, c: c.fn, i: 'normal', d: 'underline wavy ' + c.squiggle };
+      if (k === 'fd') return { t, c: c.fn, i: 'normal', d: 'underline dotted ' + c.gutter };
+      return { t, c: c[k], i: k === 'cm' ? 'italic' : 'normal', d: 'none' };
+    };
+    const lines = src.map((s, i) => {
+      const n = i + 1;
+      return {
+        n,
+        bg: n === 15 ? (debugging ? c.execLine : c.curLine) : n === 13 ? c.bpLine : 'transparent',
+        edge: n === 15 ? c.curEdge : 'none',
+        bp: n === 13,
+        arrow: debugging && n === 15,
+        toks: s === '' ? [{ t: ' ', c: c.code, i: 'normal', d: 'none' }] : s.split('|').map(tok)
+      };
+    });
+    return {
+      c,
+      debugging,
+      lines,
+      logo: hc ? { a: '#FFFFFF', b: '#FFFFFF', o1: 0.82, o2: 0.6, o3: 0.49 } : { a: 'url(#daylight-violet)', b: 'url(#daylight-ember)', o1: 0.82, o2: 1, o3: 0.82 },
+      statusBg: debugging ? c.statusDebug : mode === 'No solution' ? c.statusEmpty : c.status,
+      statusFg: debugging ? c.statusDebugFg : mode === 'No solution' ? c.statusEmptyFg : c.statusFg,
+      statusText: debugging ? 'Running: Samples.Debugging' : mode === 'No solution' ? 'Ready' : 'Ready · 1 test failed'
+    };
+  }
+}
+</script>
+</body>
+</html>

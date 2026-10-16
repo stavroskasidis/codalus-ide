@@ -10,7 +10,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 
 1. Read `CLAUDE.md`, then the latest checkpoint summary, then this document's [status table](#status).
 2. Pick the next milestone allowed by the [dependency graph](#dependency-graph) and the maintainer's instructions. The numbers are identifiers, not a strict order. The maintainer may reorder phases.
-3. Check the milestone's **Decisions** entries against the [decision register](#decision-register). Every decision there is closed as of 2026-10-10, except D31 (2026-10-13). If a new question comes up, don't start work that depends on it. Add it to the register and raise it with the maintainer.
+3. Check the milestone's **Decisions** entries against the [decision register](#decision-register). Every decision there is closed as of 2026-10-10, except D31 (2026-10-13) and D32 (2026-10-16). If a new question comes up, don't start work that depends on it. Add it to the register and raise it with the maintainer.
 4. Follow the milestone workflow:
    - plan mode
    - ADRs before code
@@ -61,6 +61,8 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M42 | WCF | proposed, unscheduled (cross-platform, so it doesn't wait for D31) |
 | M43 | .NET Framework | proposed, waits for D31 and a spike on debugging the desktop CLR |
 | M44 | MAUI on Windows and WinUI 3 | proposed, waits for D31 and M20 |
+| M45 | Theme families | planned (2026-10-16), waits for D32: Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, from the [designs](design/shell-themes.md) |
+| M46 | First-run setup | planned (2026-10-16), after M45: a setup at the first start, with appearance (the theme families), keyboard, settings import and a tools check, before the start window |
 | M35 | Visual Basic | done (at checkpoint, [m35](checkpoints/m35.md), ADR 0066): VB in the C# host's workspace (completion, Quick Info, signature help, live diagnostics, classification with XML literals, navigation, references and rename across C# and VB, code fixes and refactorings, formatting, outline and folding), our own pretty listing (`End` constructs, keyword casing, XML end tags), VB snippets and item templates, New Project in any language, VB property pages, VB tests from source, debugging tested on netcoredbg. Gaps: VB expressions in Watch (netcoredbg reads C#), automatic line continuation, a page for project imports |
 | M36 | F# | done (at checkpoints [m36a](checkpoints/m36a.md) and [m36b](checkpoints/m36b.md), ADR 0067 and 0068), 2026-10-15. M36a: FsAutoComplete (D10) and Fantomas installed with the user's `dotnet tool install` on the first F# file, trusted folders only; completion, Quick Info, diagnostics with FSharpLint, navigation, rename, fixes, inlay hints, CodeLens and formatting through the LSP bridge; the compile order in Solution Explorer (`items/move`, Move Up/Down, Add Above/Below, `.fsi` nesting), F# item templates and property pages. M36b: F# Interactive as `dotnet fsi` in a terminal (send a selection, line, file or project references; reset; run script), scripts with `#load` and `#r "nuget:"`, type providers, F# analyzers, Expecto in the Test Explorer, debugging F# tested. Gaps: F# tests from source, F# expressions in Watch, F# → C# references before a build, remote windows |
 
@@ -142,7 +144,7 @@ All seven are settled:
 | 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
 | 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
 | Proposed: Windows desktop | M40–M44 | WinForms, WPF, WCF, .NET Framework and MAUI's Windows target, on Windows and from the other OSes through a Windows machine. Waits for D31; M42 (WCF) doesn't. |
-| 11. Polish | M34, M39, M37, M38 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38). |
+| 11. Polish | M34, M39, M37, M38, M45, M46 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38); four theme families (M45) and a first-run setup that offers them (M46). |
 | 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
 Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. After M30a, the maintainer moved M16c ahead of the rest of phase 4 (M31–M33).
@@ -198,6 +200,8 @@ graph LR
   M20 --> M43 & M44
   M21 -.-> M40 & M41 & M43 & M44
   M8 & M11 & M14 --> M22
+  M29 & M34 --> M45
+  M45 & M37 & M38 --> M46
 ```
 
 A dashed edge means "better with", not "blocked by".
@@ -2014,6 +2018,116 @@ The table and the steps below were written before the name was chosen; `<name>` 
 
 **Status.** At checkpoint: [m38](checkpoints/m38.md).
 
+### M45 — Theme families
+
+**Why.** On 2026-10-16 the maintainer asked for a look "close to Visual Studio style but original too". From the proposed directions they chose all four: Harbor, Graphite, Daylight and Ember. Each one is to become a real theme in Light, Dark and High contrast, and users choose between them. Today's themes (Blue, Light, Dark, High Contrast, M29) copy Visual Studio's palettes closely. The designs, with every color, are in [`design/shell-themes.md`](design/shell-themes.md). Its mockups (`design/shell-themes/*.dc.html`) open in a browser.
+
+**Depends on.**
+- M29: themes as tokens.
+- M34d: the size tokens, the gallery and the contrast tests.
+- M22a: contributed color themes.
+- M23a: Fonts and Colors over the theme.
+
+**Decisions.**
+- D32: the names, the default, what happens to today's themes, and the setting's shape.
+- An ADR before code on how a family's shapes become tokens and style classes, so that views don't change.
+
+**Scope.**
+- **Twelve themes:** Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast. Each is a theme variant in `Theming/Tokens.axaml` with every token from the design's tables. New tokens from the design:
+  - `Shell.Selection.Foreground` and `Shell.Input`;
+  - the editor's current line, breakpoint line, current-statement line and breakpoint glyph.
+- **Shapes:** each family's shape tokens and classes in `ShellStyles.axaml` and Dock's templates (the design's [Shapes](design/shell-themes.md#shapes) table):
+  - the gutter between docked windows, and panel corners;
+  - document tab and tool window caption styles;
+  - toolbar groups;
+  - Ember's run controls in the title bar, Daylight's tool window rail;
+  - the status bar's style.
+
+  Views don't change. Each shape must work at every size `PolishTests` walks.
+- **Editor colors:** for each family and variant, the C# classification colors, the terminal's palette and the inline markers (breakpoint, current statement, current line). Fonts and Colors (M23a) still overrides them.
+- **Choosing a theme:**
+  - The setting takes a family and a mode (Light, Dark, High contrast, Follow System), in the shape D32 decides. Follow System picks the variant within the family.
+  - Tools → Options → Environment gets a family picker with pictures and a mode.
+  - Color Theme (the quick pick) lists all twelve.
+  - Switching stays live and previews before it saves (`ThemeService.Preview`).
+  - The resolved family becomes a `themeFamily` context key for plugins' `when` clauses (noted in `docs/plugins.md`).
+- **Today's themes:** kept or folded in as D32 decides. The recommendation is a Classic family (Blue, Light, Dark and High Contrast), so a saved setting keeps its look.
+- **Plugins:** a contributed color theme still applies over its `uiTheme` base, on Classic or on the family in use, as D32 decides.
+- **Docs and site:**
+  - the user guide's settings page on appearance;
+  - [`ui-guidelines.md`](ui-guidelines.md): the checklist's theme line covers every family;
+  - the Features page with a screenshot of each family;
+  - fresh smoke-test screenshots.
+
+**Tests.**
+- **Contrast:** `contrast-pairs.txt` gains every pair in the design's tables, and `PolishTests` checks them in all twelve themes: 4.5:1 for text in Light and Dark, 7:1 in High contrast, 3:1 for graphics.
+- **Clipped text:** the walk runs in every family, because the shapes change sizes.
+- **Headless:**
+  - switching family and mode live;
+  - Follow System within a family;
+  - a saved setting from before M45 (D32's mapping);
+  - a contributed theme over a family;
+  - the `themeFamily` context key.
+- **The gallery:** the smoke test's gallery (`shell.gallery`) photographs every surface in every family and variant. The maintainer approves it against the design's pictures.
+
+**Budgets.** Startup and the theme switch must not regress. Report what the twelve variants add to the shell's size.
+
+**Exit criteria.** All twelve themes match their designs in the gallery on Windows, Linux and macOS, every contrast pair passes, and the maintainer has approved the gallery.
+
+### M46 — First-run setup
+
+**Why.** On 2026-10-16 the maintainer asked for a theme chooser in a setup wizard the first time the IDE opens. No milestone recorded such a wizard:
+- M23a's onboarding is the Get Started list at the top of the Start page (the Welcome plugin).
+- M37 offers installs from notifications and Help → Check Environment.
+- M38's start window left Get Started on the Start page (a `TODO(issue)` in [m38](checkpoints/m38.md)).
+
+**Depends on.**
+- M45: the theme families.
+- M23a: Get Started, the importers and the keyboard schemes. M23b: settings sync.
+- M37: the environment checks and consented installs.
+- M38: the start window, which opens after the setup.
+
+**Decisions.** D32's default family. Its own ADR only if the setup's state needs a new store.
+
+**Scope.**
+- **When it runs:** the first time the IDE starts for a user data folder, before the start window. A `workbench.setupCompleted` setting records that it ran.
+- **When it doesn't run:**
+  - command-line invocations that open something specific (a path, diff, merge, `--wait`);
+  - the smoke test, benchmarks and screenshots;
+  - a profile that arrived with settings sync.
+
+  A command-line switch skips it for automation, and any new environment variable gets a row in [`environment-variables.md`](environment-variables.md). Help → Set Up Codalus IDE runs it again.
+- **The window:** its own window, which repaints in the chosen theme as the user chooses. It works from the keyboard, has accessible names, and its text is in the catalogue.
+- **Steps:**
+  1. **Appearance** ([design](design/shell-themes.md#the-first-run-setup-appearance), `design/shell-themes/Setup.dc.html`):
+     - the four families as cards with a picture of each;
+     - a mode picker: Light, Dark, High contrast, or Match system (the default);
+     - a live preview of the setup window and of the IDE behind it.
+  2. **Keyboard:** the keyboard scheme: Visual Studio's (the default), VS Code's, ReSharper's or Emacs.
+  3. **Your settings:** import from VS Code or a `.vssettings` file (M23a), or turn on settings sync from a folder or a Git repository (M23b).
+  4. **Tools:** M37's environment check. The .NET SDK and git are found or offered, with exactly what would run, and nothing installs without the user's yes.
+
+  Done opens the start window. Skip setup keeps the defaults (D32's family, Match system) and records that setup ran.
+- **Get Started:** the Start page's Get Started list (M23a) folds into the setup. Help → Get Started opens the setup, which closes M38's Get Started gap. Tips stay on the Start page.
+- **AI:** stays off, and the setup doesn't ask about it (ADR 0062).
+- **Docs and site:**
+  - `docs/user-guide/getting-started.md`;
+  - the Features page;
+  - a screenshot of the appearance step from the smoke test.
+
+**Tests.**
+- **Headless:**
+  - a new user data folder shows the setup once;
+  - Skip;
+  - each step writes its setting;
+  - the live theme preview;
+  - Done opens the start window;
+  - the setup doesn't show in the automation modes or after a sync.
+- **The smoke test:** a step, `shell.setup`, runs it in the shipped app and saves the website's screenshot.
+- **Translations:** the window's text is in the catalogue.
+
+**Exit criteria.** On Windows, Linux and macOS, a new user data folder goes through the setup to the start window with the chosen theme, keyboard scheme and imported settings applied.
+
 ---
 
 ## Phase 12: Visual Basic and F#
@@ -2235,7 +2349,8 @@ The "Codalus" column uses these terms:
 | Commands, key bindings, keyboard mapping schemes | M1; keymap presets and importers M23 |
 | Feature search (Ctrl+Q), command palette | M1 |
 | Tools > Options with search | M1 |
-| Themes (light, dark, high contrast) | M1; theme contributions M22 |
+| Themes (light, dark, high contrast) | M1; theme contributions M22; four theme families, each light, dark and high contrast, M45 |
+| First launch: choose the color theme and development settings | M46 (the first-run setup: theme, keyboard scheme, settings import, tools check); no account sign-in |
 | Fonts and Colors per element | M23 |
 | Customize menus, toolbars and context menus | M23 |
 | Import and Export Settings, settings sync | M23 |
@@ -2588,7 +2703,7 @@ Restated from the original project brief, plus what follows from it for the area
 
 ## Decision register
 
-These are the maintainer decisions this plan depends on. Update the status column at each checkpoint. As of 2026-10-10 every decision here is closed; D31 is open (2026-10-13). Last reviewed 2026-10-14. New questions get the next free number.
+These are the maintainer decisions this plan depends on. Update the status column at each checkpoint. As of 2026-10-10 every decision here is closed; D31 is open (2026-10-13), and D32 (2026-10-16). Last reviewed 2026-10-14. New questions get the next free number.
 
 | ID | Question | Needed by | Recommendation | Status |
 |---|---|---|---|---|
@@ -2623,6 +2738,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D29 | When the repository goes public | M32 | After M32 | decided 2026-10-10: after M32's checkpoint, through the go-public checklist. Changing the visibility stays the maintainer's action. Done 2026-10-11. |
 | D30 | The unscheduled candidates | After M36 | Review them after the last milestone | decided 2026-10-10: as recommended. Managed settings for organizations (from M23) and the instrumentation profiler (from M18) join the candidates. |
 | D31 | Windows desktop: move WinForms, WPF, MAUI's Windows target and .NET Framework from the non-goals into scope ([proposed phase](#proposed-phase-windows-desktop))? | Before any of M40, M41, M43, M44 | Yes for M40, M41 and M44, with the other OSes served through a Windows machine as a remote target; M43 only after a spike shows a desktop-CLR port of netcoredbg works, and Build Tools only after a licence check. M42 (WCF) needs no decision. | open (2026-10-13) |
+| D32 | Theme families ([M45](#m45--theme-families), [design](design/shell-themes.md)): their names, the default for new installs, what happens to today's Blue, Light, Dark and High Contrast, and the setting's shape | M45 | Harbor, Graphite, Daylight and Ember as designed; Harbor with Follow System for new installs (offered by M46's setup); today's four themes kept as a Classic family, so a saved setting keeps its look; `workbench.colorTheme` takes `<family>` (follows the system) or `<family>.<light\|dark\|highContrast>`, with today's values read as Classic | open (2026-10-16) |
 
 ## Change log
 
@@ -2785,3 +2901,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-16: CPU traces fold the runtime's GC poll (`Thread.PollGC` and its worker) into the calling function: the sampler suspends every thread for each sample, and a loop stopped at its GC poll had its samples counted against the poll, which became the hottest function of a CPU-bound loop on the Windows runners (`DiagnosticsHostTests`, `Two_traces_compare_by_function`).
 - 2026-10-16: the remote window test's run in a terminal checks the launch profile's lines on Windows, not the program's first line: the stand-in server's ConPTY repaints from the cursor's home, and on a busy runner its repaint landed one line up, over that line (the screen started at `args:`). TODO(issue): find whether a remote terminal's size change in flight (the view's resize reaches the server's ConPTY after its first frame) causes it, and size the server's terminal before it starts if so.
 - 2026-10-16: the smoke step `blazor.wasmDebug` starts debugging again once when the first session's page never stops: on the linux-arm64 installed app the dev server's debugging proxy stalled before reporting the page's .NET runtime (js-debug's log: no `Mono.runtimeReady`, none of the app's sources, the page ran), and no breakpoint bound for 10 minutes; the second session must stop. A page reload in the same session doesn't recover it (tried: the proxy reported the runtime after the reload but not the sources). TODO(issue): find why the proxy stalls (BrowserDebugHost on a loaded runner) and recover in the session itself.
+- 2026-10-16: four theme families designed at the maintainer's request ("close to Visual Studio style but original too"): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with the mockups, previews and every color in [`design/shell-themes.md`](design/shell-themes.md). The maintainer wants all four as real themes. New milestones in Phase 11: M45 (theme families) and M46 (a first-run setup with the theme chooser; no milestone recorded a setup wizard: M23a's onboarding is the Start page's Get Started list). New decision D32 (names, default, today's themes, the setting). The parity matrix gains the first-launch row.
