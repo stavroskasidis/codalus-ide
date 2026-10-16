@@ -23,7 +23,7 @@ public sealed class ItemTemplateRowViewModel(ItemTemplate template)
 
     public string Icon => Template.Extension switch
     {
-        ".cs" or ".vb" or ".fs" or ".js" or ".ts" or ".html" or ".css" => "file-code",
+        ".cs" or ".vb" or ".fs" or ".js" or ".ts" or ".html" or ".css" or ".xaml" => "file-code",
         ".json" or ".xml" or ".resx" => "file-data",
         _ => Template.Source == ItemTemplateSource.DotnetNew ? "package" : "file",
     };
@@ -179,7 +179,8 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
             if (template.Content is { } content)
             {
                 var file = template.FileName(_name.Trim().Length > 0 ? _name.Trim() : template.DefaultName);
-                return content(new ItemTemplateContext(Path.GetFileNameWithoutExtension(file), Namespace, _fileScoped));
+                var context = new ItemTemplateContext(Path.GetFileNameWithoutExtension(file), Namespace, _fileScoped);
+                return string.Concat(template.Companions.Zip(template.CompanionNames(file)).Select(c => $"\n// {c.Second}\n\n{c.First.Content(context)}").Prepend(content(context)));
             }
 
             return $"{template.Description}\n\nRuns: dotnet new {template.ShortName} --name {Path.GetFileNameWithoutExtension(_name.Trim())} --output {Location}\n\n"
@@ -307,6 +308,7 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
             : name.Length == 0 ? "Enter a name."
             : name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.IndexOfAny(['/', '\\']) >= 0 ? "The name contains characters that aren't allowed in file names."
             : File.Exists(Path.Combine(Folder, _selected.Template.FileName(name))) ? $"'{_selected.Template.FileName(name)}' already exists here."
+            : _selected.Template.CompanionNames(_selected.Template.FileName(name)).FirstOrDefault(c => File.Exists(Path.Combine(Folder, c))) is { } companion ? $"'{companion}' already exists here."
             : _selected.Template.Source == ItemTemplateSource.DotnetNew && _shell.Solutions.Solution is not { Trusted: true } ? "dotnet new templates run only in trusted folders."
             : null;
     }
@@ -332,8 +334,15 @@ public sealed class AddNewItemViewModel : ObservableObject, ILoadable
             if (template.Content is { } content)
             {
                 var path = Path.Combine(Folder, fileName);
-                await _shell.Solutions.CreateFileAsync(path, content(new ItemTemplateContext(ItemTemplates.Identifier(stem), Namespace, _fileScoped)), CancellationToken.None).ConfigureAwait(true);
+                var context = new ItemTemplateContext(ItemTemplates.Identifier(stem), Namespace, _fileScoped);
+                await _shell.Solutions.CreateFileAsync(path, content(context), CancellationToken.None).ConfigureAwait(true);
                 created = path;
+
+                // A WPF window's code-behind, a form's Designer.cs (M40a): nested under the main file by their names.
+                foreach (var (companion, companionName) in template.Companions.Zip(template.CompanionNames(fileName)))
+                {
+                    await _shell.Solutions.CreateFileAsync(Path.Combine(Folder, companionName), companion.Content(context), CancellationToken.None).ConfigureAwait(true);
+                }
                 if ((template.ItemType is not null || template.Metadata is { Count: > 0 }) && _shell.Solutions.Solution is { Trusted: true })
                 {
                     var metadata = template.Metadata?.ToDictionary(m => m.Key, m => (string?)m.Value.Replace("{name}", stem, StringComparison.Ordinal));

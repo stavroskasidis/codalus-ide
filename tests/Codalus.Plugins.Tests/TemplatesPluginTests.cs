@@ -38,6 +38,34 @@ public class TemplateCatalogTests
 
     [Fact]
     public void Garbage_parses_to_nothing() => Assert.Empty(TemplateCatalog.Parse("dotnet: command failed"));
+
+    [Fact]
+    public void Wpf_and_windows_forms_templates_have_names_and_go_last_off_windows()
+    {
+        const string desktop = """
+            Template Name                    Short Name           Language    Tags
+            -------------------------------  -------------------  ----------  ---------------
+            Console App                      console              [C#],F#,VB  Common/Console
+            Windows Forms App                winforms             [C#],VB     Common/WinForms
+            Windows Forms Class Library      winformslib          [C#],VB     Common/WinForms
+            Windows Forms Control Library    winformscontrollib   [C#],VB     Common/WinForms
+            WPF Application                  wpf                  [C#],VB     Common/WPF
+            WPF Class Library                wpflib               [C#],VB     Common/WPF
+            WPF User Control Library         wpfusercontrollib    [C#],VB     Common/WPF
+            Class Library                    classlib             [C#],F#,VB  Common/Library
+            """;
+        var templates = TemplateCatalog.Parse(desktop);
+        Assert.Equal(["console", "classlib", "wpf", "wpflib", "wpfusercontrollib", "winforms", "winformslib", "winformscontrollib"], templates.Select(t => t.ShortName));
+        Assert.Equal("WPF User Control Library", templates.Single(t => t.ShortName == "wpfusercontrollib").Name);
+        Assert.Equal("WinFormsApp1", templates.Single(t => t.ShortName == "winforms").DefaultName);
+        Assert.Equal("WpfApp1", templates.Single(t => t.ShortName == "wpf").DefaultName);
+        Assert.True(templates.Single(t => t.ShortName == "winformslib").IsWindowsDesktop);
+        Assert.False(templates[0].IsWindowsDesktop);
+
+        Assert.Equal(templates, TemplateCatalog.ForThisOs(templates, windows: true));
+        var elsewhere = TemplateCatalog.ForThisOs([templates[2], templates[0], templates[5], templates[1]], windows: false);
+        Assert.Equal(["console", "classlib", "wpf", "winforms"], elsewhere.Select(t => t.ShortName));
+    }
 }
 
 public class TemplateFrameworksTests
