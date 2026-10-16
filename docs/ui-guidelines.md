@@ -68,6 +68,7 @@ All tokens are in `src/Codalus.Shell/Theming/Tokens.axaml`. Colors differ per th
 | `Shell.Caption.Active`, `Shell.Caption.Inactive` (with `.Foreground`) | Tool window captions with and without the focus |
 | `Shell.Editor.*` | The editor: text, line numbers, inlay hints, guides, brackets, folding |
 | `Shell.Icon.Run`, `.Stop`, `.Save`, `.Open`, `.Build`, `.Git`, `.Test`, `.Navigate` | Command icon families (white in High Contrast) |
+| `Shell.Icon.Outline` | The gray of the classic file icons' pages and outlines |
 
 ### Spacing, sizes and type
 
@@ -108,7 +109,9 @@ gray fills (outlines, pages) stay gray, as Visual Studio's do. Only chrome glyph
 color, and High Contrast draws every icon in the foreground.
 
 - **Commands and tool windows:** Fluent UI System Icons (Microsoft, MIT), 16 px regular. Add the file name to `src/Codalus.Shell/Icons/fluent-icons.txt`, run `eng/get-fluent-icons.sh`, commit the SVG, and map our name to it in `IconSet` (`Controls/Icon.cs`). A few small glyphs (chevrons, zoom, fit) are 16×16 stroke drawings in the same file.
-- **File types, folders and projects:** Material Icon Theme (MIT), `Icons/material-icons.txt` and `eng/get-material-icons.sh`, mapped in `Controls/FileIcons.cs`. Their colors become the palette's nearest (above), except in High Contrast.
+- **File types, folders and projects:** the classic icons (`cl:` names, our own drawings): 16 px pixel drawings in a classic IDE's style, a gray outline page with a small colored badge in its lower-left corner (`C#`, `YML`, `{}`, `M↓`…; the page's outline is cut around the badge), tan outline folders, and outline project boxes with the language in color. `eng/icons/classic-icons.py` draws them into `Icons/Classic/`: change a drawing there, run it and commit the SVGs. Their unfilled parts take `Shell.Icon.Outline` (the theme's icon gray), their colors the palette's nearest. `Controls/FileIcons.cs` works out a Material name for every file and maps it onto the classic set; a file type with no classic icon is a blank page.
+- **Material Icon Theme** (MIT) is the other built-in file icon theme (`workbench.iconTheme`: `material`): `Icons/material-icons.txt` and `eng/get-material-icons.sh`, mapped in `Controls/FileIcons.cs`. Its colors become the palette's nearest (above), except in High Contrast.
+- **Our own drawings:** icons that resemble another product's are drawn from scratch, never traced, and never use its logo.
 - **Compiled at build time:** `eng/icons/CompileIcons.cs` turns the SVGs into drawing operations; nothing parses SVG at runtime, and the shell stays Native AOT clean. Only `<path d>` is supported; anything else fails the build.
 - **Color by family:** a command's icon takes its family's token through an `accent-*` class (`Controls/CommandIcons.cs`): run green, stop red, save and navigation blue, open folder tan, build purple, Git orange, tests green. Other icons take their kind's palette color. States use `info`, `warning`, `error`, and the test outcome classes (`passed`, `failed`, `skipped`, `running`, `none`).
 - **High Contrast:** every icon is drawn in the foreground; shape carries the meaning.

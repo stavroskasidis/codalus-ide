@@ -3,9 +3,11 @@
 #   1. builds the installer of version N and of N+1 (with a delta against N) on a test channel, the feed signed with a
 #      throwaway key;
 #   2. installs N the way a user does (Windows: the silent Setup.exe; Linux: the AppImage; macOS: the .pkg in the
-#      user's home);
+#      user's home); the test builds are their own app (package id CodalusUpdateTest), apart from a real install;
 #   3. runs N with `--update-now` on a tampered copy of the feed: it must refuse it (exit code 2);
-#   4. runs N with `--update-now` on the feed: it downloads N+1 and has it applied once it exits;
+#   4. runs N with `--update-now` on the feed: it downloads N+1 and has it applied once it exits (on macOS the app runs
+#      with its home folder on a disk image, another volume than the app's, as on a Mac whose home is on an external
+#      disk, and none of the test's runs touch the real home);
 #   5. checks that the installed app is now N+1, then uninstalls it.
 # The app reads the feed from a folder (CODALUS_UPDATE_SOURCE) and trusts the throwaway key for that folder only
 # (CODALUS_UPDATE_TEST_KEY).
@@ -21,6 +23,7 @@ new="$base-test.2"
 fail() { echo "error: $*" >&2; exit 1; }
 native() { if command -v cygpath > /dev/null; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 
+[ "$(uname -s)" != Darwin ] || hdiutil detach -quiet -force "$work/home-volume" > /dev/null 2>&1 || true # a run that was stopped
 rm -rf "$work"
 mkdir -p "$work"
 echo "== A throwaway feed key"
@@ -50,6 +53,7 @@ for file in "$tampered"/releases.*.json; do
 done
 
 echo "== Installing $old"
+app_env=()
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*)
     root="$work/install"
@@ -62,9 +66,22 @@ case "$(uname -s)" in
     bundle="$HOME/Applications/Codalus IDE.app"
     [ ! -e "$bundle" ] || fail "$bundle exists already: this test installs there"
     installer -pkg "$work/old/codalus-$old-$rid.pkg" -target CurrentUserHomeDirectory
-    pkill -f "$bundle/Contents/MacOS/codalus" || true
+    # The installer starts the app; ~/Applications may be a link to another volume, and the process has the real path.
+    real_bundle="$(cd "$bundle" && pwd -P)"
+    pkill -f "$real_bundle/Contents/MacOS/codalus" || true
     app="$bundle/Contents/MacOS/codalus"
-    uninstall() { rm -rf "$bundle"; pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i codalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true; }
+    # Velopack stages updates under ~/Library/Caches and renames them onto the bundle, which can't cross volumes.
+    hdiutil create -quiet -size 1g -type SPARSE -fs APFS -volname CodalusUpdateHome "$work/home"
+    mkdir -p "$work/home-volume"
+    hdiutil attach -quiet -nobrowse -mountpoint "$work/home-volume" "$work/home.sparseimage"
+    app_env=(HOME="$work/home-volume")
+    uninstall() {
+      rm -rf "$bundle" "$(dirname "$real_bundle")/.CodalusUpdateTest.velopack" # and the staging folder next to it
+      # The app the installer starts has the real home: its Velopack log and (empty) cache folder.
+      rm -rf "$HOME/Library/Caches/velopack/CodalusUpdateTest" "$HOME/Library/Logs/velopack_CodalusUpdateTest.log"
+      pkgutil --pkgs --volume "$HOME" 2> /dev/null | grep -i codalus | xargs -I{} pkgutil --forget {} --volume "$HOME" > /dev/null 2>&1 || true
+      hdiutil detach -quiet -force "$work/home-volume" > /dev/null 2>&1 || true
+    }
     ;;
   Linux)
     mkdir -p "$work/install"
@@ -76,17 +93,18 @@ case "$(uname -s)" in
     ;;
 esac
 trap uninstall EXIT
-installed_version() { "$app" --version 2> /dev/null | head -n 1; }
+run_app() { env ${app_env[@]+"${app_env[@]}"} "$@"; }
+installed_version() { run_app "$app" --version 2> /dev/null | head -n 1; }
 [ "$(installed_version)" = "Codalus IDE $old" ] || fail "the installed app says '$(installed_version)', not $old"
 
 echo "== A tampered feed is refused"
 status=0
-CODALUS_UPDATE_SOURCE="$(native "$tampered")" CODALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now || status=$?
+run_app CODALUS_UPDATE_SOURCE="$(native "$tampered")" CODALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now || status=$?
 [ "$status" -eq 2 ] || fail "the tampered feed wasn't refused (exit code $status)"
 [ "$(installed_version)" = "Codalus IDE $old" ] || fail "the tampered feed changed the install"
 
 echo "== Updating $old to $new"
-CODALUS_UPDATE_SOURCE="$(native "$feed")" CODALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now \
+run_app CODALUS_UPDATE_SOURCE="$(native "$feed")" CODALUS_UPDATE_TEST_KEY="$public_key" "$app" --update-now \
   || fail "--update-now failed (exit code $?)"
 # Velopack's updater applies the package once the app has exited.
 for _ in $(seq 90); do
