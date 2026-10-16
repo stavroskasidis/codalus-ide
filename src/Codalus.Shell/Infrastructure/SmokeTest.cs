@@ -477,7 +477,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 Screenshot("smoke-test-progress.png");
             }
 
-            await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 420).ConfigureAwait(true);
+            await WaitAsync(() => BuildDone(before), "the build finishes", 420).ConfigureAwait(true);
             Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             await WaitAsync(() => !shell.StatusBar.HasProgress, "the status bar is ready again", 30).ConfigureAwait(true);
             Check(!shell.ErrorList.Rows.Any(r => r.Source == ErrorListViewModel.BuildSource && r.Code.StartsWith("CS", StringComparison.Ordinal)), "the Error List has no build errors");
@@ -1044,7 +1044,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Runs.SetStartupProject(Path.Combine(target, "src", "App", "App.csproj"));
             var before = shell.Builds.LastBuild;
             shell.Run("build.buildSolution");
-            await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 420).ConfigureAwait(true);
+            await WaitAsync(() => BuildDone(before), "the build finishes", 420).ConfigureAwait(true);
             Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             shell.Run("run.startWithoutDebugging");
             string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: App")?.GetText() ?? string.Empty;
@@ -1257,7 +1257,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             var before = shell.Builds.LastBuild;
             shell.Run("build.buildSolution");
-            await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build on the server finishes", 420).ConfigureAwait(true);
+            await WaitAsync(() => BuildDone(before), "the build on the server finishes", 420).ConfigureAwait(true);
             Check(shell.Builds.LastBuild!.Result.Succeeded, "the build on the server succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
 
             var sessions = shell.Terminals.Sessions.Count;
@@ -1324,7 +1324,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         var before = shell.Builds.LastBuild;
         shell.Run("build.buildSolution");
-        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 600).ConfigureAwait(true);
+        await WaitAsync(() => BuildDone(before), "the build finishes", 600).ConfigureAwait(true);
         Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
 
         var apps = new List<string> { "Net100.App" };
@@ -1338,12 +1338,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Runs.SetStartupProject(shell.Solutions.Projects.Values.Single(p => p.Name == name).Path);
             shell.Run("run.startWithoutDebugging");
             string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: " + name)?.GetText() ?? string.Empty;
-            await WaitAsync(() => Output().Contains("has exited with code", StringComparison.Ordinal), $"{name} runs and exits", 300).ConfigureAwait(true);
+            await WaitAsync(() => Output().Contains("has exited with code", StringComparison.Ordinal), () => $"{name} runs and exits (its output:\n{Tail(Output(), 1000)})", 300).ConfigureAwait(true);
             Check(Output().Contains("has exited with code 0", StringComparison.Ordinal) && Output().Contains("Hello, ", StringComparison.Ordinal), $"{name} ran:\n" + Tail(Output(), 1000));
         }
 
         Console.Out.WriteLine($"  ran: {string.Join(", ", apps)}" + (apps.Count == 1 ? " (no .NET Core 2.1 runtime here)" : string.Empty));
     }
+
+    /// <summary>
+    /// A build after <paramref name="before"/> finished, and the shell knows it: the service records the build before the
+    /// UI clears <c>buildRunning</c>, and until then the commands that start a build or a run are disabled.
+    /// </summary>
+    private bool BuildDone(Workbench.Build.BuildCompleted? before) =>
+        shell.Builds.LastBuild is { } build && build != before && shell.Workbench.Context.GetValue("buildRunning") is not true;
 
     /// <summary>Whether <c>dotnet --list-runtimes</c> lists a Microsoft.NETCore.App version starting with <paramref name="prefix"/>.</summary>
     private static bool HasRuntime(string prefix)
@@ -1960,11 +1967,16 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             try
             {
+                client = await shell.Languages.ClientAsync(ShellHost.FSharpLanguageId).ConfigureAwait(true) ?? client;
                 info = (await client!.HoverAsync(uri, new LanguageServices.Protocol.Position(line.LineNumber - 1, offset - line.Offset), CancellationToken.None).ConfigureAwait(true))?.Contents.Value;
             }
             catch (Rpc.JsonRpcRemoteException)
             {
                 // not loaded yet
+            }
+            catch (Exception ex) when (ex is Rpc.JsonRpcConnectionLostException or ObjectDisposedException)
+            {
+                // FsAutoComplete starts again once a project it loaded is restored
             }
 
             if (info?.Contains("val area", StringComparison.Ordinal) != true)
@@ -2344,7 +2356,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => !shell.Builds.IsBuilding && shell.Runs.Running.Count == 0, "the previous build and run have finished", 120).ConfigureAwait(true);
         var before = shell.Builds.LastBuild;
         shell.Run("build.buildSolution");
-        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 300).ConfigureAwait(true);
+        await WaitAsync(() => BuildDone(before), "the build finishes", 300).ConfigureAwait(true);
         Check(shell.Builds.LastBuild!.Result is { Succeeded: true, UpToDate: true }, "Build Solution right after a build is up to date:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
 
         // A binary log, read by the build host and browsed in the viewer.
@@ -2442,7 +2454,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         var before = shell.Builds.LastBuild;
         shell.Run("build.buildSolution");
-        await WaitAsync(() => shell.Builds.LastBuild is { } b && b != before, "the build finishes", 300).ConfigureAwait(true);
+        await WaitAsync(() => BuildDone(before), "the build finishes", 300).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(project, "stamp.txt")), "the Before Build script ran: " + Tail(shell.NpmLog.GetText(), 1500));
     }
 
@@ -2493,6 +2505,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
         var line = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [initialized]", StringComparison.Ordinal)) + 1;
         shell.Debugger.Breakpoints.Toggle(counter, line);
+        // The page's ticks: WebAssembly breakpoints can bind after the page's OnInitialized has run.
+        shell.Debugger.Breakpoints.Toggle(counter, Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [tick]", StringComparison.Ordinal)) + 1);
         string Thread() => shell.Debugger.Threads.FirstOrDefault(t => t.Id == shell.Debugger.CurrentStop?.ThreadId)?.Name ?? string.Empty;
         shell.Run("debug.start");
         try
@@ -2539,6 +2553,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var counter = Path.Combine(target, "BlazorWasm", "Pages", "Counter.razor");
         var line = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [initialized]", StringComparison.Ordinal)) + 1;
         shell.Debugger.Breakpoints.Toggle(counter, line);
+        // The page's ticks: WebAssembly breakpoints can bind after the page's OnInitialized has run.
+        shell.Debugger.Breakpoints.Toggle(counter, Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [tick]", StringComparison.Ordinal)) + 1);
         var buildBefore = shell.Builds.LastBuild;
         bool BuildFailed() => shell.Builds.LastBuild is { Result.Succeeded: false } build && build != buildBefore;
         shell.Run("debug.start");
@@ -2548,7 +2564,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), () => "the browser session stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
             Check(!BuildFailed(), "the build before debugging succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the call stack", 60).ConfigureAwait(true);
-            Check(shell.CallStack.Frames[0].Name.Contains("Counter.OnInitialized", StringComparison.Ordinal), "the top frame is Counter.OnInitialized, in the browser: " + shell.CallStack.Frames[0].Name);
+            Check(shell.CallStack.Frames[0].Name is var top && (top.Contains("Counter.OnInitialized", StringComparison.Ordinal) || top.Contains("Counter.Tick", StringComparison.Ordinal)),
+                "the top frame is Counter.OnInitialized or Counter.Tick, in the browser: " + shell.CallStack.Frames[0].Name);
             Screenshot("smoke-test-blazor-wasm-debug.png");
         }
         finally

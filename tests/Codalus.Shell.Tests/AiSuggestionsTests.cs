@@ -83,8 +83,16 @@ public sealed class AiSuggestionsTests
         text.Replace(text.Text.IndexOf("int count", StringComparison.Ordinal) + 4, "count".Length, "total");
         var edit = Assert.Single(next.RecentEdits);
         Assert.Equal((3, "    void Run(int count)", "    void Run(int total)"), (edit.Line, edit.OldText, edit.NewText));
-        await next.RequestAsync();
-        await ShellFixture.PumpUntil(() => next.Suggestion is not null, 30);
+        // The edit's own pause asks (a request made here as well would be cancelled by it: only the newest one answers).
+        try
+        {
+            await ShellFixture.PumpUntil(() => next.Suggestion is not null, 30);
+        }
+        catch (Xunit.Sdk.XunitException)
+        {
+            Assert.Fail("No suggestion:\n" + f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId, "AI").GetText());
+        }
+
         Assert.Equal(new AiEditSuggestion(5, 5, "        Print(count);", "        Print(total);"), next.Suggestion);
 
         editor.Editor.Focus();
