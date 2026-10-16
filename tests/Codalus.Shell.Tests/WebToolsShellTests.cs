@@ -80,7 +80,7 @@ public sealed class WebToolsShellTests
         references.EditServices = GrpcServiceKinds.Both;
         await references.RunAsync("save");
         Assert.True(references.Error is null, references.Error);
-        Assert.Equal(GrpcServiceKinds.Both, references.Selected?.Info.GrpcServices);
+        Assert.Equal(GrpcServiceKinds.Both, references.Selected?.Info?.GrpcServices);
         Assert.Contains("GrpcServices=\"Both\"", File.ReadAllText(client), StringComparison.Ordinal);
     }
 }
