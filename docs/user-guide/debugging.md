@@ -151,7 +151,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
 - **Debug → Open Dump File** opens a dump (`.dmp` on Windows, a core dump on Linux and macOS) of a .NET program:
   - **Threads**: each managed thread with its exception, if it had one, and its call stack. Frames map to source lines when the program's PDBs are next to its assemblies; double-click a frame to open the line.
   - **Heap**: the objects by type, with their count and size. Pick a type to list its instances, and an instance to see its fields; follow references to other objects, and go back.
-- Dumps open on the operating system that wrote them, because the runtime's debugging library has to load on the machine reading them.
+- Dumps open on the operating system that wrote them, because the runtime's debugging library has to load on the machine reading them. It comes from a .NET installation with the dump's runtime version (`dotnet --list-runtimes`): on Linux and macOS, a dump of a runtime that isn't installed (a self-contained app's) doesn't open.
 - On macOS, the first dump may make the system ask for your password (access to developer tools). The dump waits until you approve it, and is abandoned with a message after 3 minutes.
 
 ## Settings

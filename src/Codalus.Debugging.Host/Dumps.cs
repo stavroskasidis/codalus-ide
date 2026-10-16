@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using Codalus.Debugging.Companion;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Runtime;
@@ -23,7 +24,9 @@ internal sealed class Dumps : IDisposable
         try
         {
             var clr = target.ClrVersions.FirstOrDefault() ?? throw new InvalidOperationException("The dump has no .NET runtime in it.");
-            var runtime = clr.CreateRuntime();
+            var runtime = InstalledDac(target, clr) is { } dac
+                ? clr.CreateRuntime(dac, ignoreMismatch: clr.Version.Major == 0) // ELF and Mach-O runtimes: matched by version folder
+                : clr.CreateRuntime(); // ClrMD's symbol server lookup (Windows)
             var id = Interlocked.Increment(ref _next).ToString(CultureInfo.InvariantCulture);
             _sessions[id] = new Session(target, runtime);
             var threads = runtime.Threads.Where(t => t.IsAlive).Select(Thread).ToList();
@@ -51,6 +54,73 @@ internal sealed class Dumps : IDisposable
     internal static string RuntimeVersion(ClrInfo clr) =>
         clr.Version.Major > 0 ? clr.Version.ToString()
         : FolderVersion(clr.ModuleInfo.FileName) ?? clr.Version.ToString();
+
+    /// <summary>
+    /// The DAC that reads a dump's runtime, from a .NET installation on this machine: ClrMD 4.2 no longer looks beside the
+    /// runtime path the dump names (a path the dump file chooses), and asks the symbol server only on Windows. The
+    /// installations are the one the host runs on, <c>DOTNET_ROOT</c>'s, the <c>dotnet</c> on the PATH and the default
+    /// install folders; the DAC is the one in the shared framework folder of the dump's runtime version. Null for a dump
+    /// of another OS or architecture, or a runtime none of them has (a self-contained app's).
+    /// </summary>
+    internal static string? InstalledDac(DataTarget target, ClrInfo clr)
+    {
+        var (platform, name) = OperatingSystem.IsWindows() ? (OSPlatform.Windows, "mscordaccore.dll")
+            : OperatingSystem.IsMacOS() ? (OSPlatform.OSX, "libmscordaccore.dylib")
+            : (OSPlatform.Linux, "libmscordaccore.so");
+        if (target.DataReader.TargetPlatform != platform || target.DataReader.Architecture != RuntimeInformation.ProcessArchitecture
+            || FolderVersion(clr.ModuleInfo.FileName) is not { } version)
+        {
+            return null;
+        }
+
+        return DotNetRoots().Select(root => Path.Combine(root, "shared", "Microsoft.NETCore.App", version, name)).FirstOrDefault(File.Exists);
+    }
+
+    private static IEnumerable<string> DotNetRoots()
+    {
+        // The host's own runtime: <root>/shared/Microsoft.NETCore.App/<version>/.
+        yield return Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", ".."));
+        foreach (var variable in new[] { "DOTNET_ROOT_" + RuntimeInformation.ProcessArchitecture.ToString().ToUpperInvariant(), "DOTNET_ROOT" })
+        {
+            if (Environment.GetEnvironmentVariable(variable) is { Length: > 0 } root)
+            {
+                yield return root;
+            }
+        }
+
+        var exe = OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet";
+        foreach (var folder in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var dotnet = Path.Combine(folder, exe);
+            if (File.Exists(dotnet))
+            {
+                var real = File.ResolveLinkTarget(dotnet, returnFinalTarget: true)?.FullName ?? dotnet;
+                yield return Path.GetDirectoryName(Path.GetFullPath(real))!;
+                break;
+            }
+        }
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (OperatingSystem.IsWindows())
+        {
+            yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet");
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            yield return "/usr/local/share/dotnet";
+        }
+        else
+        {
+            yield return "/usr/share/dotnet";
+            yield return "/usr/lib/dotnet";
+            yield return "/usr/lib64/dotnet";
+        }
+
+        if (home.Length > 0)
+        {
+            yield return Path.Combine(home, ".dotnet");
+        }
+    }
 
     internal static string? FolderVersion(string? runtimePath) =>
         runtimePath is null ? null
