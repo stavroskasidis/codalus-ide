@@ -1,0 +1,1 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><AddResponse xmlns="http://samples.codalus.dev/calculator"><AddResult>5.5</AddResult></AddResponse></s:Body></s:Envelope>
