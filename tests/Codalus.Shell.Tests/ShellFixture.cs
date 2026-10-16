@@ -36,6 +36,7 @@ internal sealed class ShellFixture : IAsyncDisposable
         Environment.SetEnvironmentVariable("CODALUS_DEBUGHOST", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-debughost.dll"));
         Environment.SetEnvironmentVariable("CODALUS_DIAGHOST", Path.Combine(RepoRoot, "src", "Codalus.Diagnostics.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-diaghost.dll"));
         Environment.SetEnvironmentVariable("CODALUS_PREVIEWER_AGENT", Path.Combine(RepoRoot, "src", "Codalus.Debugging.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "Codalus.Previewer.Agent.dll"));
+        Environment.SetEnvironmentVariable("CODALUS_WPF_PREVIEWER", Path.Combine(RepoRoot, "src", "Codalus.Previewer.Wpf", "bin", Configuration, "net8.0-windows", "codalus-wpfpreviewer.dll"));
 
         // Hosting tokens stay in this process: the tests never touch the OS credential store (M13b).
         Environment.SetEnvironmentVariable(Codalus.Platform.Credentials.CredentialStore.EnvironmentVariable, "memory");
