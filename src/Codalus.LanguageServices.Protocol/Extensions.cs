@@ -405,3 +405,129 @@ public sealed record XamlLogicalTreeParams(TextDocumentIdentifier TextDocument);
 public sealed record XamlLogicalNode(string Type, string? Name, Range Range, Range Tag, XamlLogicalNode[] Children);
 
 public sealed record XamlLogicalTreeResult(XamlLogicalNode[] Nodes);
+
+/// <summary>
+/// <c>codalus/winforms/read</c> (M41a, ADR 0073): a form's or user control's designer model, from its code file
+/// (<c>MainForm.cs</c>) or its designer file (<c>MainForm.Designer.cs</c>).
+/// </summary>
+public sealed record WinFormsReadParams(TextDocumentIdentifier TextDocument);
+
+/// <summary>
+/// The designer files of a class (<see cref="CodeFile"/> and <see cref="DesignerFile"/>) and, when InitializeComponent
+/// can be read, its <see cref="Model"/>. Otherwise <see cref="Problem"/> says why, at <see cref="ProblemLine"/>
+/// (zero-based) of the designer file when it's a statement: the file opens as code, as Visual Studio does.
+/// <see cref="IsDesignable"/> is false when the class isn't a form, a user control or another control.
+/// </summary>
+public sealed record WinFormsReadResult(string? CodeFile, string? DesignerFile, bool IsDesignable, DesignerModel? Model, string? Problem, int? ProblemLine)
+{
+    /// <summary>The <c>.resx</c> next to the code file, if any.</summary>
+    public string? ResourceFile { get; init; }
+
+    /// <summary>The project the file belongs to.</summary>
+    public string? Project { get; init; }
+
+    /// <summary>The class's full name (<c>WinFormsApp.MainForm</c>), whose compiled resources <c>resources</c> reads.</summary>
+    public string? ClassFullName { get; init; }
+}
+
+/// <summary>The kinds of <see cref="DesignerEdit"/>.</summary>
+public static class DesignerEditKinds
+{
+    /// <summary>Sets <see cref="DesignerEdit.Property"/> of <see cref="DesignerEdit.Component"/> to <see cref="DesignerEdit.Value"/>, or removes its assignment when the value is null (the default).</summary>
+    public const string SetProperty = "setProperty";
+
+    /// <summary>Adds a component: its field, creation, section with <see cref="DesignerEdit.Properties"/>, and its <c>Controls.Add</c> in <see cref="DesignerEdit.Parent"/>.</summary>
+    public const string AddComponent = "addComponent";
+
+    /// <summary>Removes a component and every statement about it.</summary>
+    public const string RemoveComponent = "removeComponent";
+
+    /// <summary>Renames a component (<see cref="DesignerEdit.NewName"/>): its field, statements, section, <c>Name</c>, and its uses in the class.</summary>
+    public const string RenameComponent = "renameComponent";
+
+    /// <summary>Moves a control to another parent (<see cref="DesignerEdit.Parent"/>, <see cref="DesignerEdit.ParentPath"/>, <see cref="DesignerEdit.Cell"/>, <see cref="DesignerEdit.Index"/>).</summary>
+    public const string SetParent = "setParent";
+
+    /// <summary>Hooks <see cref="DesignerEdit.Event"/> to <see cref="DesignerEdit.Handler"/>, generating the handler in the code file when it doesn't exist.</summary>
+    public const string AddEvent = "addEvent";
+
+    /// <summary>Unhooks <see cref="DesignerEdit.Event"/> (the handler method stays, as in Visual Studio).</summary>
+    public const string RemoveEvent = "removeEvent";
+}
+
+/// <summary>
+/// A change the designer makes. <see cref="Component"/> is a name, empty for the root. <see cref="Parent"/> is the
+/// parent control's name (empty for the root), <see cref="ParentPath"/> a sub-control holding its children
+/// (<c>Panel1</c> of a <c>SplitContainer</c>), <see cref="Cell"/> a <c>TableLayoutPanel</c>'s column and row, and
+/// <see cref="Index"/> the position in the parent's <c>Controls</c> (0, the front, is where new controls go).
+/// </summary>
+public sealed record DesignerEdit
+{
+    public required string Kind { get; init; }
+
+    public string Component { get; init; } = string.Empty;
+
+    public string? Property { get; init; }
+
+    public DesignerValue? Value { get; init; }
+
+    public string? Type { get; init; }
+
+    public DesignerValue[]? CreationArguments { get; init; }
+
+    public string? Parent { get; init; }
+
+    public string? ParentPath { get; init; }
+
+    public int[]? Cell { get; init; }
+
+    public int? Index { get; init; }
+
+    /// <summary>The new component's properties in the order they are written (the writer sorts them as Visual Studio does).</summary>
+    public DesignerPropertyValue[]? Properties { get; init; }
+
+    /// <summary>The new component implements <c>ISupportInitialize</c> (BeginInit and EndInit around the statements).</summary>
+    public bool SupportsInitialize { get; init; }
+
+    public string? NewName { get; init; }
+
+    public string? Event { get; init; }
+
+    public string? Handler { get; init; }
+
+    /// <summary>The event's delegate type (<c>System.EventHandler</c>), when the caller knows it; else the C# host finds it.</summary>
+    public string? DelegateType { get; init; }
+
+    /// <summary>The handler's parameters as <c>Type name</c> pairs (<c>System.Object sender</c>), when the caller knows them.</summary>
+    public string[]? HandlerParameters { get; init; }
+}
+
+/// <summary>A property and its value, for a new component.</summary>
+public sealed record DesignerPropertyValue(string Name, DesignerValue Value);
+
+/// <summary><c>codalus/winforms/edit</c>: <see cref="Edits"/> applied in order to the designer file at <see cref="Version"/>.</summary>
+public sealed record WinFormsEditParams(TextDocumentIdentifier TextDocument, DesignerEdit[] Edits)
+{
+    public int? Version { get; init; }
+}
+
+/// <summary>
+/// The edit to apply (minimal text edits of the designer file, and of the code file for a new event handler; a rename
+/// also reaches the class's other uses), the model after it, and where a new or existing event handler is.
+/// <see cref="Error"/> says why nothing could be done.
+/// </summary>
+public sealed record WinFormsEditResult(WorkspaceEdit Edit, DesignerModel? Model, string? Error)
+{
+    public Location? Handler { get; init; }
+}
+
+/// <summary><c>codalus/winforms/toolbox</c>: the components a project and the projects it references declare, for the Toolbox.</summary>
+public sealed record WinFormsToolboxParams(string Project);
+
+/// <summary>A component for the Toolbox: its full type name, its display name, and the project that declares it.</summary>
+public sealed record WinFormsToolboxItem(string Type, string Name, string Project, bool IsControl)
+{
+    public string? Description { get; init; }
+}
+
+public sealed record WinFormsToolboxResult(WinFormsToolboxItem[] Items);
