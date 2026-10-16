@@ -27,6 +27,7 @@ Help → Show Logs opens the Codalus IDE channel. Crash reports are saved in the
 | Symptom | What to check |
 |---|---|
 | "No .NET SDK was found" | Install the .NET SDK. If the solution has a `global.json`, install the SDK version it asks for. |
+| Nothing loads, and the helper processes (build host, language service, plugin host) stop at start with "You must install or update .NET" | They run on .NET 11 or newer: install the .NET 11 SDK (Help → Check Environment offers it). SDKs of older versions alone can't start them. |
 | Projects stay in "Restricted mode" | The folder isn't trusted. Click the status bar item to trust it. |
 | Packages show as unresolved | Restore failed: see Output → Restore. |
 | No IntelliSense in a project | Its design-time build failed (Output → Build Host). It is often a missing restore or SDK. |

@@ -1,10 +1,10 @@
 # Older .NET versions
 
-Codalus IDE opens, builds, runs, debugs and tests projects of every .NET (Core) version from .NET Core 2.0 to .NET 10, and .NET Standard 2.0 and 2.1 libraries, with the current .NET SDK. `netcoreapp1.x` and .NET Framework are out of scope. This page says what works where, and what each gap needs.
+Codalus IDE opens, builds, runs, debugs and tests projects of every .NET (Core) version from .NET Core 2.0 to .NET 10, and .NET Standard 2.0 and 2.1 libraries, with the current .NET SDK (.NET 11's since Codalus moved to .NET 11; `net11.0` itself is the current framework, covered everywhere else in this guide). `netcoreapp1.x` and .NET Framework are out of scope. This page says what works where, and what each gap needs.
 
 ## With the current SDK
 
-Install the current .NET SDK and the runtimes your projects target (the SDK builds every framework; a program runs on its own runtime). The tables below come from the test suite (`tests/Codalus.TargetFrameworks.Tests` on `samples/TargetFrameworks`), run on each operating system.
+Install the current .NET SDK and the runtimes your projects target (the SDK builds every framework; a program runs on its own runtime). The tables below come from the test suite (`tests/Codalus.TargetFrameworks.Tests` on `samples/TargetFrameworks`), run on each operating system with the .NET 10 SDK; its run with the .NET 11 SDK is pending.
 
 - **Open:** the project loads and evaluates; the Dependencies node shows the framework (the `Microsoft.NETCore.App` package before .NET Core 3.0) and the project and package references; the property pages read the framework and its C# version.
 - **Editor:** references and the C# version each framework defaults to (7.3 for .NET Core 2.x and .NET Standard 2.0, 8.0 for 3.x and .NET Standard 2.1, 9.0 for .NET 5, then one per release), so the editor reports what the compiler reports.
