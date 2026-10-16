@@ -45,7 +45,11 @@ Setting **NuGet → Offline** limits the package manager to local sources (folde
 
 Saving writes each change to the file that defines the source. New sources and mappings go into the solution folder's `nuget.config`, which is created when there is none, so your user-wide settings and other solutions don't change. Machine-wide sources are read-only.
 
-**Private feeds:** credentials come from your `NuGet.Config` and from NuGet credential providers you installed (for example the Azure Artifacts credential provider). If a feed asks you to sign in interactively, run `dotnet restore --interactive` once in a terminal.
+**Private feeds:** credentials come from your `NuGet.Config` and from NuGet credential providers you installed (for example the Azure Artifacts credential provider).
+- **Signing in:** when a feed refuses for want of a sign-in, the package manager shows **Sign In…** next to its error. You can also use Project → Packages and Tools → **Sign In to a Package Source…**.
+- **Device codes:** the credential provider runs interactively. When it gives a device code, a notification shows it, and **Copy Code and Open Browser** takes you to the page.
+- **After signing in:** the feed answers for the rest of the session. Most providers also keep the sign-in for later sessions and for restore.
+- **Restore:** if a restore still can't reach the feed, run `dotnet restore --interactive` once in a terminal.
 
 ## Pack
 

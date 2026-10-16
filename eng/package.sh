@@ -87,7 +87,11 @@ if [[ "$rid" != win-* ]] && ! command -v zstd > /dev/null; then
   echo "warning: no zstd on the PATH: no delta package (sudo apt install zstd, brew install zstd)" >&2
   delta=None
 fi
-vpk_args=(--packId Codalus --packVersion "$version" --packTitle "Codalus IDE" --packAuthors "Codalus IDE contributors"
+# The update test's builds (kind test) are an app of their own: they never share Velopack's caches, install folder or
+# receipts with a real install on the same machine.
+packid=Codalus
+[ "$kind" != test ] || packid=CodalusUpdateTest
+vpk_args=(--packId "$packid" --packVersion "$version" --packTitle "Codalus IDE" --packAuthors "Codalus IDE contributors"
   --runtime "$rid" --channel "$channel" --outputDir "$(native "$feed")" --delta "$delta")
 if [ -n "${CODALUS_RELEASE_NOTES:-}" ] && [ -f "$CODALUS_RELEASE_NOTES" ]; then
   vpk_args+=(--releaseNotes "$(native "$CODALUS_RELEASE_NOTES")")
@@ -107,8 +111,8 @@ case "$rid" in
     echo "== Windows: Setup.exe (Velopack)"
     "$vpk" pack "${vpk_args[@]}" --packDir "$(native "$app")" --mainExe codalus.exe --icon "$(native "$repo/assets/logo/codalus.ico")" \
       --shortcuts StartMenuRoot --skipVeloAppCheck # a Native AOT exe has no IL for vpk to look for VelopackApp.Run in
-    mv "$feed/Codalus-$channel-Setup.exe" "$out/$name-setup.exe"
-    rm -f "$feed/Codalus-$channel-Portable.zip" # the plain zip above is the portable build
+    mv "$feed/$packid-$channel-Setup.exe" "$out/$name-setup.exe"
+    rm -f "$feed/$packid-$channel-Portable.zip" # the plain zip above is the portable build
 
     sha="$(sha256 "$out/$name-setup.exe")"
     manifests="$out/winget-$version"
@@ -136,8 +140,8 @@ case "$rid" in
     fi
     "$vpk" pack "${vpk_args[@]}" --packDir "$app" --mainExe codalus --icon "$stage/codalus.icns" --plist "$stage/Info.plist" \
       ${sign_args[@]+"${sign_args[@]}"} # macOS bash 3.2 calls an empty array unbound under set -u
-    mv "$feed/Codalus-$channel-Setup.pkg" "$out/$name.pkg"
-    mv "$feed/Codalus-$channel-Portable.zip" "$out/$name.app.zip"
+    mv "$feed/$packid-$channel-Setup.pkg" "$out/$name.pkg"
+    mv "$feed/$packid-$channel-Portable.zip" "$out/$name.app.zip"
     ;;
   linux-*)
     echo "== Linux: tar.gz"
@@ -173,7 +177,7 @@ case "$rid" in
     echo "== Linux: AppImage (Velopack)"
     "$vpk" pack "${vpk_args[@]}" --packDir "$app" --mainExe codalus --icon "$repo/assets/logo/png/codalus-512.png" \
       --categories "Development;IDE"
-    mv "$feed/Codalus-$channel.AppImage" "$out/$name.AppImage"
+    mv "$feed/$packid-$channel.AppImage" "$out/$name.AppImage"
     ;;
 esac
 

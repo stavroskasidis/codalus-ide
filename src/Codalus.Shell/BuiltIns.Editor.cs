@@ -34,11 +34,14 @@ internal static partial class BuiltIns
           { "key": "ctrl+alt+down", "linux": "shift+alt+down", "command": "editor.action.insertCursorBelow", "when": "editorTextFocus" },
           { "key": "shift+alt+.", "command": "editor.action.addSelectionToNextFindMatch", "when": "editorTextFocus" },
           { "key": "shift+alt+;", "command": "editor.action.selectHighlights", "when": "editorTextFocus" },
+          { "key": "primary+k primary+b", "command": "snippets.manager" },
           { "key": "primary+shift+s", "command": "file.saveAll" },
           { "key": "ctrl+-", "mac": "ctrl+-", "command": "workbench.navigateBack" },
           { "key": "ctrl+shift+-", "mac": "ctrl+shift+-", "command": "workbench.navigateForward" },
-          { "key": "ctrl+tab", "command": "workbench.nextDocument", "when": "activeDocumentKind" },
-          { "key": "ctrl+shift+tab", "command": "workbench.previousDocument", "when": "activeDocumentKind" },
+          { "key": "ctrl+tab", "command": "workbench.switchDocument", "when": "activeDocumentKind" },
+          { "key": "ctrl+shift+tab", "command": "workbench.switchDocumentBack", "when": "activeDocumentKind" },
+          { "key": "ctrl+alt+pagedown", "command": "workbench.nextDocument", "when": "activeDocumentKind" },
+          { "key": "ctrl+alt+pageup", "command": "workbench.previousDocument", "when": "activeDocumentKind" },
           { "key": "primary+\\", "command": "workbench.splitEditorRight", "when": "activeDocumentKind == textFile" },
           { "key": "primary+k primary+\\", "command": "workbench.splitEditorDown", "when": "activeDocumentKind == textFile" },
           { "key": "primary+\\ primary+e", "command": "workbench.view.errorList" },
@@ -99,6 +102,12 @@ internal static partial class BuiltIns
             Setting(EditorOptions.RulersKey, "[]", SettingType.StringArray, "Rulers", "Columns at which to draw vertical rulers, e.g. 120.", 9),
             Setting(EditorOptions.HighlightCurrentLineKey, "true", SettingType.Boolean, "Highlight Current Line", "Highlight the line with the caret.", 10),
             Setting(EditorOptions.FormatOnTypeKey, "true", SettingType.Boolean, "Format on Type", "Format the statement or block after typing ; or }.", 11),
+            SettingDescriptor.Create(ShellHost.XmlSchemasSetting, "{}", SettingType.Object, ContributionSource.Shell) with
+            {
+                Title = "XML Schemas",
+                Category = "XML",
+                Description = "XSD schemas that validate XML files, by a glob over their paths: { \"**/*.config\": \"schemas/config.xsd\" }. Relative schema paths are from the solution's folder. Files can also name their schemas with xsi:schemaLocation or xsi:noNamespaceSchemaLocation. Schemas are never downloaded.",
+            },
             SettingDescriptor.Create(ShellHost.SchemaDownloadSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
             {
                 Title = "Download JSON Schemas",
@@ -109,6 +118,8 @@ internal static partial class BuiltIns
             Setting(EditorOptions.InlayParameterNamesKey, "true", SettingType.Boolean, "Inlay Hints: Parameter Names", "Show parameter names before literal and new arguments.", 13),
             Setting(EditorOptions.InlayTypesKey, "false", SettingType.Boolean, "Inlay Hints: Types", "Show the inferred types of var declarations and lambda parameters.", 14),
             Setting(EditorOptions.CodeLensKey, "true", SettingType.Boolean, "CodeLens", "Show reference and implementation counts at the end of declarations.", 15),
+            Setting(EditorOptions.GitCodeLensKey, "true", SettingType.Boolean, "CodeLens: Git History", "Show each member's last author and when, and its numbers of authors and changes, from Git blame (files in a repository).", 15),
+            Setting(EditorOptions.TestCodeLensKey, "true", SettingType.Boolean, "CodeLens: Test Status", "Show each test's last outcome, and how many of a test class's tests pass.", 15),
             Setting(EditorOptions.InlineDiagnosticsKey, "false", SettingType.Boolean, "Inline Diagnostics", "Show error and warning messages at the end of their line.", 16),
             Setting(EditorOptions.InheritanceMarginKey, "true", SettingType.Boolean, "Inheritance Margin", "Show glyphs for members that implement, override or are overridden, with navigation.", 17),
             Setting(EditorOptions.IndentGuidesKey, "true", SettingType.Boolean, "Indentation Guides", "Draw vertical lines at indentation levels.", 18),
@@ -117,6 +128,7 @@ internal static partial class BuiltIns
             Setting(EditorOptions.OverviewRulerKey, "true", SettingType.Boolean, "Overview Ruler", "Mark errors, warnings, changes, breakpoints, find results and the caret beside the scroll bar.", 21),
             Setting(EditorOptions.NavigationBarKey, "true", SettingType.Boolean, "Navigation Bar", "Show the type and member drop-downs above the editor.", 22),
             Setting(ShellHost.FormatOnSaveSetting, "false", SettingType.Boolean, "Format on Save", "Format the document with its language service before saving.", 23),
+            Setting(ShellHost.PasteAddsImportsSetting, "true", SettingType.Boolean, "Add Missing Usings on Paste", "Add the usings (Imports) that pasted C# or Visual Basic code needs, when the namespace is unambiguous or the one it was copied under.", 24),
             SettingDescriptor.Create(ShellHost.CodeCleanupFixesSetting, "[]", SettingType.StringArray, shell) with
             {
                 Title = "Code Cleanup Fixes",
@@ -151,9 +163,23 @@ internal static partial class BuiltIns
             {
                 Title = "Background Analysis Scope",
                 Category = "Language Services",
-                Description = "Where analyzers run in the background. Compiler errors are always reported for the whole solution.",
-                Enum = ["openDocuments", "solution"],
-                EnumDescriptions = ["Open documents", "Entire solution"],
+                Description = "Where analyzers run in the background. Compiler errors are always reported for the whole solution. The current project is the active document's, or the startup project.",
+                Enum = ["openDocuments", "currentProject", "solution"],
+                EnumDescriptions = ["Open documents", "Current project", "Entire solution"],
+            },
+            SettingDescriptor.Create(ViewModels.SolutionExplorerViewModel.ShowMembersSetting, "true", SettingType.Boolean, shell) with
+            {
+                Title = "Show Members Under Files",
+                Category = "Solution Explorer",
+                Description = "C# and Visual Basic files expand into the types and members they declare; choosing one goes to it.",
+            },
+            SettingDescriptor.Create("errorList.groupBy", "\"none\"", SettingType.String, shell) with
+            {
+                Title = "Group By",
+                Category = "Error List",
+                Description = "How the Error List groups its diagnostics. Groups collapse with a click.",
+                Enum = ["none", "project", "file", "severity", "code", "source"],
+                EnumDescriptions = ["No grouping", "Project", "File", "Severity", "Code", "Source (build or IntelliSense)"],
             },
         ];
     }
@@ -221,12 +247,17 @@ internal static partial class BuiltIns
         Add("editor.action.smartSelect.shrink", "Shrink Selection", "Editor", OnEditor(c => c.ShrinkSelection()), Editor);
         Add("editor.action.pasteFromClipboardRing", "Paste from Clipboard Ring", "Editor", Ui(shell.PasteFromClipboardRingAsync), Editor);
         Add("editor.action.pasteJsonAsClasses", "Paste JSON as Classes", "Editor", Ui(shell.PasteJsonAsClassesAsync), Editor);
+        Add("workbench.openWithHexViewer", "Open With Hex Viewer", "File", Ui(() => shell.OpenWithHexViewer()));
+        Add("workbench.openWithResourceEditor", "Open With Resource Editor", "File", Ui(() => shell.OpenWithResourceEditor()));
+        Add("workbench.editorConfigSettings", "EditorConfig Settings", "Preferences", Ui(() => shell.OpenEditorConfigSettings()));
+        Add("editor.action.pasteXmlAsClasses", "Paste XML as Classes", "Editor", Ui(shell.PasteXmlAsClassesAsync), Editor);
         Add("editor.action.fontZoomIn", "Zoom In (Editor)", "Editor", OnEditor(c => c.Zoom *= 1.1), Editor);
         Add("editor.action.fontZoomOut", "Zoom Out (Editor)", "Editor", OnEditor(c => c.Zoom /= 1.1), Editor);
         Add("editor.action.fontZoomReset", "Reset Zoom (Editor)", "Editor", OnEditor(c => c.Zoom = 1), Editor);
         Add("workbench.action.localHistory", "Show Local History", "File", Ui(shell.ShowLocalHistoryAsync), Editor);
         Add("editor.action.surroundWithSnippet", "Surround With", "Snippets", Ui(shell.SurroundWithAsync), Editor);
-        Add("workbench.action.openSnippets", "Configure User Snippets", "Snippets", Ui(shell.OpenUserSnippetsAsync));
+        Add("workbench.action.openSnippets", "Configure User Snippets", "Snippets", Ui(() => shell.OpenUserSnippetsAsync()));
+        Add("snippets.manager", "Code Snippets Manager…", "Snippets", Ui(() => shell.OpenSnippetsManager()));
         Add("snippets.importVisualStudio", "Import Snippets (.snippet)…", "Snippets", Ui(shell.ImportVisualStudioSnippetsAsync));
         Add("editor.action.peekDefinition", "Peek Definition", "Editor", Ui(shell.PeekDefinitionAsync), Editor);
         Add("editor.action.showCallHierarchy", "Show Call Hierarchy", "Editor", Ui(shell.ShowCallHierarchyAsync), Editor);
@@ -265,6 +296,8 @@ internal static partial class BuiltIns
         Add("file.saveAll", "Save All", "File", Ui(shell.SaveAllAsync));
         Add("workbench.navigateBack", "Navigate Backward", "View", Ui(shell.NavigateBackAsync));
         Add("workbench.navigateForward", "Navigate Forward", "View", Ui(shell.NavigateForwardAsync));
+        Add("workbench.switchDocument", "Switch Document", "Window", Ui(() => shell.SwitchDocument(+1)), "activeDocumentKind");
+        Add("workbench.switchDocumentBack", "Switch Document Back", "Window", Ui(() => shell.SwitchDocument(-1)), "activeDocumentKind");
         Add("workbench.nextDocument", "Next Document", "Window", Ui(() => shell.CycleDocument(+1)), "activeDocumentKind");
         Add("workbench.previousDocument", "Previous Document", "Window", Ui(() => shell.CycleDocument(-1)), "activeDocumentKind");
         Add("workbench.showOpenDocuments", "Open Documents…", "Window", Ui(shell.ShowOpenDocumentsAsync), "activeDocumentKind");

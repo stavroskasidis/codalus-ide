@@ -41,6 +41,56 @@ public sealed record SourceGeneratedTextParams(TextDocumentIdentifier TextDocume
 
 public sealed record SourceGeneratedText(string Text, string HintName, string GeneratorName);
 
+/// <summary><c>codalus/generatedDocuments</c>: the source-generated files of a project (by its project file).</summary>
+public sealed record GeneratedDocumentsParams(string Project);
+
+/// <summary>
+/// One generated file: its <c>codalus-generated</c> URI (its text through <c>codalus/sourceGeneratedText</c>), hint
+/// name, and the generator's assembly (its file name without the extension, as the Solution Explorer lists analyzers)
+/// and type.
+/// </summary>
+public sealed record GeneratedDocumentInfo(string Uri, string HintName, string Assembly, string Generator);
+
+public sealed record GeneratedDocumentsResult(GeneratedDocumentInfo[] Documents);
+
+/// <summary>
+/// <c>codalus/browse</c> (Class View and the Object Browser): the children of <see cref="Parent"/> in a project (its
+/// project file), or the roots: the namespaces of its source, or with <see cref="References"/> the assemblies it compiles
+/// against. With <see cref="Query"/>, the types and members whose names contain it instead, as a flat list.
+/// </summary>
+public sealed record BrowseParams(string Project, string? Parent, bool References)
+{
+    public string? Query { get; init; }
+}
+
+/// <summary>
+/// An item: <see cref="Id"/> names it in later requests (a documentation comment id, <c>A:assembly</c>, or
+/// <c>A:assembly|N:namespace</c>), <see cref="Kind"/> is an LSP symbol kind (an assembly is a package).
+/// </summary>
+public sealed record BrowseItem(string Id, string Name, int Kind, bool HasChildren)
+{
+    /// <summary>A member's signature; in search results, the containing symbol.</summary>
+    public string? Detail { get; init; }
+
+    /// <summary>Declared in the project's source (else in a referenced assembly).</summary>
+    public bool IsSource { get; init; }
+}
+
+public sealed record BrowseResult(BrowseItem[] Items);
+
+public sealed record BrowseDescribeParams(string Project, string Id);
+
+/// <summary>An item's declaration, where it is (in source, or a read-only <c>codalus-metadata</c> document) and its summary.</summary>
+public sealed record BrowseDescription(string Declaration, Location? Location)
+{
+    public string? Summary { get; init; }
+
+    /// <summary>"Member of Namespace.Type".</summary>
+    public string? Container { get; init; }
+
+    public string? Assembly { get; init; }
+}
+
 /// <summary>
 /// The source of a type from a referenced assembly (URIs with the <c>codalus-metadata</c> scheme): the original source
 /// when the assembly's PDB embeds it or Source Link can fetch it, otherwise decompiled C#.
@@ -184,6 +234,13 @@ public sealed record DocCommentTemplate(TextEdit Edit, Position Caret);
 /// profile), then sorting usings and formatting (both on unless false). The result is a <see cref="WorkspaceEdit"/>.
 /// </summary>
 public sealed record CodeCleanupParams(TextDocumentIdentifier TextDocument, string[]? Fixes, bool? SortUsings, bool? Format);
+
+/// <summary>
+/// <c>codalus/pasteImports</c>: the usings (VB: Imports) that the code just pasted at <see cref="Range"/> needs, as a
+/// workspace edit, or null. <see cref="Namespaces"/> are the ones the code was copied under, preferred when a name has
+/// several candidates.
+/// </summary>
+public sealed record PasteImportsParams(TextDocumentIdentifier TextDocument, Range Range, string[]? Namespaces);
 
 /// <summary>A choice of a refactoring's options dialog: a member, a parameter or a flag.</summary>
 public sealed record OptionItem(string Id, string Label, bool Checked)

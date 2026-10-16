@@ -27,6 +27,9 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
 {
     public static bool Handles(string languageId) => languageId is "xml" or "msbuild";
 
+    /// <summary>XSD validation of plain XML documents (not MSBuild files).</summary>
+    public XsdValidation Schemas { get; } = new();
+
     private static bool IsMsBuild(TextDocument document) => document.LanguageId == "msbuild";
 
     public List<Diagnostic> Diagnostics(TextDocument document)
@@ -47,7 +50,11 @@ internal sealed partial class XmlLanguage(Func<string, string, CancellationToken
             return diagnostics;
         }
 
-        if (IsMsBuild(document))
+        if (!IsMsBuild(document))
+        {
+            diagnostics.AddRange(Schemas.Validate(document));
+        }
+        else
         {
             // Values of well-known properties that are choices.
             foreach (Match match in PropertyElement().Matches(document.Text))

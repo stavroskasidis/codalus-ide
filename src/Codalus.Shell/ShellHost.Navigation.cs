@@ -22,11 +22,71 @@ public sealed partial class ShellHost
 
     public CodeDefinitionViewModel CodeDefinition { get; private set; } = null!;
 
+    /// <summary>Class View (deferred from M12a): the solution's namespaces, types and members.</summary>
+    public SymbolBrowserViewModel ClassView { get; private set; } = null!;
+
+    private bool _classViewShown;
+    private bool _symbolBrowsersQueued;
+
     private void InitializeNavigation()
     {
         Hierarchy = new HierarchyViewModel(OpenLocationWithHistoryAsync);
         CodeDefinition = new CodeDefinitionViewModel(OpenLocationWithHistoryAsync, this, EditorFont);
+        ClassView = new SymbolBrowserViewModel(false, () => Languages.RunningClient(CSharpLanguageId), Solutions, OpenLocationWithHistoryAsync);
+        Solutions.SolutionChanged += (_, _) => QueueSymbolBrowsers();
+        Solutions.ProjectChanged += (_, _) => QueueSymbolBrowsers();
         InitializeAnalysis();
+    }
+
+    /// <summary>Class View's content, filled when it is first shown.</summary>
+    private SymbolBrowserViewModel ShowClassView()
+    {
+        if (!_classViewShown)
+        {
+            _classViewShown = true;
+            _ = ClassView.RefreshAsync();
+        }
+
+        return ClassView;
+    }
+
+    /// <summary>The projects changed: Class View and an open Object Browser list them again.</summary>
+    private void QueueSymbolBrowsers()
+    {
+        if (_symbolBrowsersQueued)
+        {
+            return;
+        }
+
+        _symbolBrowsersQueued = true;
+        Ui.Post(() =>
+        {
+            _symbolBrowsersQueued = false;
+            if (_classViewShown)
+            {
+                _ = ClassView.RefreshAsync();
+            }
+
+            if (Layout?.FindDocument<PageDocument>(SymbolBrowserViewModel.ObjectBrowserId) is { ViewModel: SymbolBrowserViewModel browser })
+            {
+                _ = browser.RefreshAsync();
+            }
+        });
+    }
+
+    /// <summary>View → Object Browser (deferred from M12a): a project's assemblies, its own first, down to their members.</summary>
+    public SymbolBrowserViewModel OpenObjectBrowser()
+    {
+        if (Layout.FindDocument<PageDocument>(SymbolBrowserViewModel.ObjectBrowserId) is { ViewModel: SymbolBrowserViewModel existing } open)
+        {
+            Layout.OpenDocument(open, focus: true);
+            return existing;
+        }
+
+        var viewModel = new SymbolBrowserViewModel(true, () => Languages.RunningClient(CSharpLanguageId), Solutions, OpenLocationWithHistoryAsync);
+        Layout.OpenDocument(new PageDocument(SymbolBrowserViewModel.ObjectBrowserId, viewModel.Title, SymbolBrowserViewModel.ObjectBrowserId, viewModel), focus: true);
+        _ = viewModel.RefreshAsync();
+        return viewModel;
     }
 
     private Task OpenLocationWithHistoryAsync(Location location)

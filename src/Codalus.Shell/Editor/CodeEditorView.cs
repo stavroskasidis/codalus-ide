@@ -166,7 +166,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _editors.RowDefinitions = new RowDefinitions("0,0,*");
         _editors.Children.Add(Row(_primary, 2, _lightbulb));
         _primary.Controller.LightbulbChanged += OnLightbulbChanged;
-        _navigationBar.Enabled = _services.Options.NavigationBar;
+        _navigationBar.Enabled = Options.NavigationBar;
         _navigationBar.Attach(_primary.Controller);
         _services.Diagnostics.Changed += OnDiagnosticsChanged;
         _services.Options.PropertyChanged += OnOptionsChanged;
@@ -239,12 +239,12 @@ public sealed class CodeEditorView : UserControl, IPaneView
             editor.FontSize = _font.Size * controller.Zoom;
             _services.ShowMessage($"Zoom {controller.Zoom:P0}");
         };
-        var minimap = new Minimap(editor, controller.Colorizer) { IsVisible = _services.Options.Minimap };
+        var minimap = new Minimap(editor, controller.Colorizer) { IsVisible = Options.Minimap };
         minimap.Bind(BackgroundProperty, this.GetResourceObservable("Shell.Editor.Background"));
         minimap.Bind(Minimap.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
-        var sticky = new StickyScroll(editor, () => controller.Insights.Symbols, () => controller.Folding) { Enabled = _services.Options.StickyScroll };
+        var sticky = new StickyScroll(editor, () => controller.Insights.Symbols, () => controller.Folding) { Enabled = Options.StickyScroll };
         controller.Insights.SymbolsChanged += (_, _) => sticky.Update();
-        var ruler = new OverviewRuler(editor, _services, () => _document.Model.Path, () => controller.GitChanges, () => controller.Search) { IsVisible = _services.Options.OverviewRuler };
+        var ruler = new OverviewRuler(editor, _services, () => _document.Model.Path, () => controller.GitChanges, () => controller.Search) { IsVisible = Options.OverviewRuler };
         return new EditorParts(editor, controller, minimap, sticky, ruler);
     }
 
@@ -295,19 +295,22 @@ public sealed class CodeEditorView : UserControl, IPaneView
         editor.CaretOffset = primary.Editor.CaretOffset;
     }
 
+    /// <summary>The editor options of the document's language.</summary>
+    private EditorOptions Options => _services.Options.For(_document.Model.LanguageId);
+
     private void OnOptionsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         foreach (var parts in new[] { _primary, _split }.OfType<EditorParts>())
         {
-            parts.Minimap.IsVisible = _services.Options.Minimap;
-            parts.Ruler.IsVisible = _services.Options.OverviewRuler;
-            parts.Sticky.Enabled = _services.Options.StickyScroll;
+            parts.Minimap.IsVisible = Options.Minimap;
+            parts.Ruler.IsVisible = Options.OverviewRuler;
+            parts.Sticky.Enabled = Options.StickyScroll;
             parts.Sticky.Update();
         }
 
-        if (_primary is { } primary && _navigationBar.Enabled != _services.Options.NavigationBar)
+        if (_primary is { } primary && _navigationBar.Enabled != Options.NavigationBar)
         {
-            _navigationBar.Enabled = _services.Options.NavigationBar;
+            _navigationBar.Enabled = Options.NavigationBar;
             _navigationBar.Attach(primary.Controller);
         }
     }

@@ -43,7 +43,7 @@ public class LanguageFixture : IAsyncLifetime
         var policy = new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) };
         Solutions = new SolutionService(() => RepoPaths.BuildHostAssembly, policy);
         var registry = new LanguageServiceRegistry();
-        registry.Register(new LanguageServiceDescriptor("csharp", "C#", [".cs"], "C#", () => ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly)) { Languages = ["csharp", "razor", "axaml"] });
+        registry.Register(new LanguageServiceDescriptor("csharp", "C#", [".cs"], "C#", () => ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly)) { Languages = ["csharp", "razor", "axaml", "xaml", "vb"], MoreProjectLanguages = ["VB"] });
         Languages = new LanguageService(registry, Solutions, policy);
         Solutions.Log += (_, line) => Record("[build] " + line);
         Languages.Log += (_, line) => Record("[lang] " + line);
@@ -53,8 +53,17 @@ public class LanguageFixture : IAsyncLifetime
         if (Trusted)
         {
             var projects = Sample.Projects;
-            await WaitUntilAsync(() => Solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) == projects
-                                       && Languages.Status("csharp") is { State: WorkspaceStates.Ready } status && status.Projects == projects);
+            try
+            {
+                await WaitUntilAsync(() => Solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) == projects
+                                           && Languages.Status("csharp") is { State: WorkspaceStates.Ready } status && status.Projects == projects);
+            }
+            catch (Xunit.Sdk.XunitException)
+            {
+                Assert.Fail($"The {Sample.Sample} fixture didn't load: language status {Languages.Status("csharp")}; design-time builds: "
+                    + string.Join("; ", Solutions.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)} {i.Value.Language} {i.Value.State} {i.Value.Error}"))
+                    + "\n" + string.Join('\n', Log.TakeLast(40)));
+            }
             await ReadyAsync();
         }
         else
@@ -104,6 +113,8 @@ public class LanguageFixture : IAsyncLifetime
     {
         var languageId = path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase) ? "razor"
             : path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) ? "axaml"
+            : path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase) ? "xaml"
+            : path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase) ? "vb"
             : "csharp";
         var text = await System.IO.File.ReadAllTextAsync(path);
         lock (_texts)

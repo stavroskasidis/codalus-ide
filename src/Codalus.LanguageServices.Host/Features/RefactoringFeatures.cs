@@ -97,7 +97,8 @@ internal static class RenameFeature
 /// <summary>Formatting with Roslyn's formatter, which follows the project's <c>.editorconfig</c>.</summary>
 internal static class FormattingFeature
 {
-    public static DocumentOnTypeFormattingOptions OnTypeOptions => new("}", [";"]);
+    /// <summary>C#'s <c>}</c> and <c>;</c>; Visual Basic's Enter and <c>&gt;</c> (M35, <see cref="VisualBasicPrettyListing"/>).</summary>
+    public static DocumentOnTypeFormattingOptions OnTypeOptions => new("}", [";", "\n", ">"]);
 
     public static async Task<Protocol.TextEdit[]> FormatAsync(Document document, TextSpan? span, CancellationToken cancellationToken)
     {
@@ -112,6 +113,11 @@ internal static class FormattingFeature
     /// <summary>After <c>}</c>: the block it closes; after <c>;</c>: the statement or member it ends.</summary>
     public static async Task<Protocol.TextEdit[]> OnTypeAsync(Document document, int position, string ch, CancellationToken cancellationToken)
     {
+        if (document.Project.Language == LanguageNames.VisualBasic)
+        {
+            return await VisualBasicPrettyListing.OnTypeAsync(document, position, ch, cancellationToken).ConfigureAwait(false);
+        }
+
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         if (root is null || position == 0)
         {

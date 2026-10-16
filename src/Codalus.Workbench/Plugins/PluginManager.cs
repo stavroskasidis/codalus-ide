@@ -192,6 +192,14 @@ public sealed class PluginManager : IAsyncDisposable
     /// <summary>Receives hosting providers (ADR 0031).</summary>
     public IHostingSink? HostingSink { get; set; }
 
+    /// <summary>Receives language model providers (ADR 0062).</summary>
+    public ILanguageModelSink? LanguageModelSink { get; set; }
+
+    /// <summary>The language model providers the usable plugins declare (<c>contributes.languageModelProviders</c>), with their plugin.</summary>
+    public IReadOnlyList<(PluginDescription Plugin, ManifestLanguageModelProvider Provider)> LanguageModelProviderDeclarations =>
+        [.. Plugins.Where(p => p.IsUsable && !p.IsDeclarative)
+            .SelectMany(p => (p.Manifest!.Contributes?.LanguageModelProviders ?? []).Where(m => p.ActivationEvents.Contains("onLanguageModelProvider:" + m.Id)).Select(m => (p, m)))];
+
     /// <summary>Where plugins' secrets go (the OS credential store); without it, secret requests fail.</summary>
     public Secrets.SecretStorage? Secrets { get; set; }
 
@@ -742,10 +750,9 @@ public sealed class PluginManager : IAsyncDisposable
     {
         foreach (var (scheme, entry) in _fileSystems.Where(f => which(f.Key, f.Value.PluginId)).ToList())
         {
-            if (_fileSystems.TryRemove(new KeyValuePair<string, (string, PluginFileSystem, IDisposable)>(scheme, entry)))
-            {
-                entry.Mount.Dispose();
-            }
+            // The mount goes first: once FileSystems no longer lists it, its root is the local disk again.
+            entry.Mount.Dispose();
+            _fileSystems.TryRemove(new KeyValuePair<string, (string, PluginFileSystem, IDisposable)>(scheme, entry));
         }
 
         FileSystemsChanged?.Invoke(this, EventArgs.Empty);
@@ -1118,6 +1125,9 @@ public sealed class PluginManager : IAsyncDisposable
         // Hosting providers registered by this host's plugins (unregistered when the host crashes).
         private readonly ConcurrentDictionary<string, byte> _providers = new(StringComparer.Ordinal);
 
+        // Language model providers registered by this host's plugins (unregistered when the host crashes).
+        private readonly ConcurrentDictionary<string, byte> _modelProviders = new(StringComparer.Ordinal);
+
         public HostConnection(PluginManager manager, string group, ProcessLaunchInfo launch)
         {
             _manager = manager;
@@ -1282,6 +1292,12 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 _providers.TryRemove(provider, out _);
                 _manager.HostingSink?.ProviderUnregistered(provider);
+            }
+
+            foreach (var provider in _modelProviders.Keys)
+            {
+                _modelProviders.TryRemove(provider, out _);
+                _manager.LanguageModelSink?.ProviderUnregistered(provider);
             }
 
             foreach (var visualizer in _visualizers.Keys)
@@ -1525,6 +1541,19 @@ public sealed class PluginManager : IAsyncDisposable
                 _manager.HostingSink?.ProviderUnregistered(p.ProviderId);
             });
             connection.OnNotification(HostingMethods.DeviceCode, json.HostingDeviceCodeParams, p => _manager.HostingSink?.DeviceCodeReceived(p));
+
+            // Language model providers (proposed, ADR 0062).
+            connection.OnNotification(LanguageModelMethods.RegisterProvider, json.LanguageModelProviderParams, p =>
+            {
+                _modelProviders[p.ProviderId] = 0;
+                _manager.LanguageModelSink?.ProviderRegistered(p.PluginId, p.ProviderId, new HostingConnection(this));
+            });
+            connection.OnNotification(LanguageModelMethods.UnregisterProvider, json.LanguageModelProviderParams, p =>
+            {
+                _modelProviders.TryRemove(p.ProviderId, out _);
+                _manager.LanguageModelSink?.ProviderUnregistered(p.ProviderId);
+            });
+            connection.OnNotification(LanguageModelMethods.ChatPart, json.ChatPartParams, p => _manager.LanguageModelSink?.ChatPart(p));
             connection.OnRequest(HostingMethods.SecretsGet, json.SecretParams, json.SecretResult, async (p, ct) =>
                 new SecretResult(await Secrets.GetAsync(p.PluginId, p.Key, ct).ConfigureAwait(false)));
             connection.OnRequest(HostingMethods.SecretsStore, json.SecretParams, json.EmptyResult, async (p, ct) =>

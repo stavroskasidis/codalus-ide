@@ -249,6 +249,7 @@ public sealed class AspireTests : IAsyncLifetime
             stopped = "the stop command didn't finish";
         }
 
+        log.Enqueue("[test] The stop command answered.");
         Assert.True(stopped is null, stopped + "\n" + Log());
         deadline.Restart();
         while (requests.Count < 3 && deadline.Elapsed < TimeSpan.FromSeconds(1))
@@ -257,6 +258,7 @@ public sealed class AspireTests : IAsyncLifetime
         }
 
         Assert.Contains("Stopping run session", Log(), StringComparison.Ordinal);
+        log.Enqueue("[test] Done: disposing the resource client and the IDE server.");
     }
 }
 
@@ -323,6 +325,22 @@ internal static class AspireRuntime
             {
                 return DateTime.MinValue;
             }
+        }
+    }
+}
+/// <summary>The AppHost environment's parts that need no container runtime.</summary>
+public sealed class AspireEnvironmentTests
+{
+    [Fact]
+    public async Task The_apphost_points_at_the_ide_and_gets_a_longer_orchestrator_check()
+    {
+        await using var server = new IdeExecutionServer((_, _) => throw new InvalidOperationException("No runs here."));
+        var environment = server.AppHostEnvironment(debug: true);
+        Assert.Equal("Debug", environment["DEBUG_SESSION_RUN_MODE"]);
+        Assert.Equal(server.Token, environment["DEBUG_SESSION_TOKEN"]);
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(IdeExecutionServer.DependencyCheckTimeoutVariable)))
+        {
+            Assert.Equal("120", environment[IdeExecutionServer.DependencyCheckTimeoutVariable]);
         }
     }
 }

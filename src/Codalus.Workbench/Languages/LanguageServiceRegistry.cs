@@ -37,10 +37,25 @@ public sealed record LanguageServiceDescriptor(
     /// <summary>Settings by section and document (<c>scopeUri</c>), for servers whose settings depend on the file.</summary>
     public Func<string?, string?, System.Text.Json.JsonElement?>? ScopedConfiguration { get; init; }
 
+    /// <summary>
+    /// The server's own settings (<c>workspace/didChangeConfiguration</c>), sent instead of the shared ones: FsAutoComplete
+    /// reads an <c>FSharp</c> section (M36). Read again each time the settings are sent.
+    /// </summary>
+    public Func<System.Text.Json.JsonElement>? Settings { get; init; }
+
     /// <summary>The server's own requests the client answers with null.</summary>
     public IReadOnlyList<string> AcceptedRequests { get; init; } = [];
 
     public bool Serves(string languageId) => (Languages ?? [LanguageId]).Contains(languageId, StringComparer.Ordinal);
+
+    /// <summary>
+    /// More design-time build languages whose projects it receives, beside <see cref="ProjectLanguage"/>: the C# host
+    /// takes Visual Basic's too (M35), so references between C# and VB projects are within one workspace.
+    /// </summary>
+    public IReadOnlyList<string> MoreProjectLanguages { get; init; } = [];
+
+    /// <summary>Whether it receives the projects of design-time build language <paramref name="language"/>.</summary>
+    public bool TakesProjects(string language) => ProjectLanguage == language || MoreProjectLanguages.Contains(language, StringComparer.Ordinal);
 }
 
 /// <summary>
@@ -112,7 +127,7 @@ public sealed class LanguageServiceRegistry
     {
         lock (_gate)
         {
-            return _services.FirstOrDefault(s => s.ProjectLanguage == language);
+            return _services.FirstOrDefault(s => s.TakesProjects(language));
         }
     }
 

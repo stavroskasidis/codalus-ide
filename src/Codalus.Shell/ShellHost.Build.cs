@@ -40,9 +40,25 @@ public sealed partial class ShellHost
         Builds.Started += (_, request) => Ui.Post(() => OnBuildStarted(request));
         Builds.Finished += (_, completed) => Ui.Post(() => OnBuildFinished(completed));
         Runs.RunningChanged += (_, _) => Ui.Post(UpdateRunState);
-        Runs.StartupChanged += (_, _) => Ui.Post(UpdateRunState);
-        Solutions.SolutionChanged += (_, _) => Ui.Post(UpdateRunState);
-        Solutions.ProjectChanged += (_, _) => Ui.Post(UpdateRunState);
+        Runs.StartupChanged += (_, _) => Ui.Post(() =>
+        {
+            UpdateRunState();
+            FollowAnalysisProject();
+        });
+        Solutions.SolutionChanged += (_, _) => Ui.Post(() =>
+        {
+            UpdateRunState();
+            FollowAnalysisProject();
+            if (Workbench.Settings.IsModified(XmlSchemasSetting))
+            {
+                _ = ConfigureLanguagesAsync(); // relative XML schema paths are from the solution's folder
+            }
+        });
+        Solutions.ProjectChanged += (_, _) => Ui.Post(() =>
+        {
+            UpdateRunState();
+            FollowAnalysisProject();
+        });
         UpdateRunState();
     }
 
@@ -213,6 +229,13 @@ public sealed partial class ShellHost
 
         hotReload |= hotReloadSetting;
 
+        if (Remote is null && IsMobileProject(project))
+        {
+            // A .NET MAUI or mobile app (M20a): the platform SDK's Run target builds, deploys and starts it on its device.
+            await StartOnDeviceAsync(project, debug: false).ConfigureAwait(true);
+            return;
+        }
+
         if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
         {
             if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
@@ -359,6 +382,7 @@ public sealed partial class ShellHost
         var startup = Runs.StartupProject;
         Workbench.Context.Set("hasStartupProject", startup is not null);
         Workbench.Context.Set("hotReloadSupported", HotReloadUnsupportedReason(startup) is null);
+        UpdateToolbarHotReload();
         Toolbar?.SetDebugState(Debugger?.State is { } debug && debug != Codalus.Workbench.Debugging.DebugState.Idle, Debugger?.State == Codalus.Workbench.Debugging.DebugState.Stopped, running.Count > 0);
         UpdateToolbarStartup();
         Explorer.SetStartupProject(startup);

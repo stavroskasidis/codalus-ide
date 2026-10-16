@@ -16,7 +16,8 @@ public sealed class VsCodeImportTests
           "workbench.colorCustomizations": { "editor.selectionBackground": "#26496980" },
           "editor.tokenColorCustomizations": { "comments": "#6A9955" },
           "python.defaultInterpreterPath": "/usr/bin/python3",
-          "[csharp]": { "editor.tabSize": 4 },
+          "[csharp]": { "editor.tabSize": 2, "csharp.format.enable": true },
+          "[makefile]": { "csharp.format.enable": true },
         }
         """;
 
@@ -54,7 +55,9 @@ public sealed class VsCodeImportTests
 
         var log = f.Shell.Workbench.Log.GetText();
         Assert.Contains("Skipped python.defaultInterpreterPath: not a Codalus IDE setting", log, StringComparison.Ordinal);
-        Assert.Contains("Skipped [csharp]: language-specific settings", log, StringComparison.Ordinal);
+        Assert.Equal(2, settings.ForLanguage("csharp").GetInt32("editor.tabSize")); // language-specific settings come over too
+        Assert.Contains("Skipped [csharp] csharp.format.enable: not a Codalus IDE setting", log, StringComparison.Ordinal);
+        Assert.Null(settings.GetLayerValue("[makefile]", Workbench.Settings.SettingScope.User)); // nothing of ours in it
         Assert.Contains("Skipped editor.tabSize", log, StringComparison.Ordinal);
         Assert.Contains("Skipped python.execInTerminal: no such command here", log, StringComparison.Ordinal);
     }

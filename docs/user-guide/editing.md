@@ -2,7 +2,7 @@
 
 ## The editor
 
-- **Tabs and splits**: Window → Split Right (`Ctrl+\`) or Split Down opens another editor group. Window → Split shows two views of the same file. `Ctrl+Tab` switches documents.
+- **Tabs and splits**: Window → Split Right (`Ctrl+\`) or Split Down opens another editor group. Window → Split shows two views of the same file. `Ctrl+Tab` switches documents: hold `Ctrl`, and each `Tab` (`Shift+Tab` back, or the arrow keys) moves through the open documents in the order you last used them; release `Ctrl` to switch (`Esc` stays). A quick `Ctrl+Tab` goes back to the document you used before. Next Document and Previous Document (`Ctrl+Alt+PageDown`, `Ctrl+Alt+PageUp`) go through them in tab order.
 - **Multiple carets**: `Ctrl+Alt+Click`, `Ctrl+Alt+Up/Down`, or `Shift+Alt+.` (next occurrence of the selection). `Shift+Alt`+drag selects a box.
 - **Folding**: regions, members, usings and comments fold from the margin, or with `Ctrl+M Ctrl+M`.
 - **The minimap** on the right shows the whole file; click or drag to scroll (setting **Text Editor → Minimap**).
@@ -17,7 +17,9 @@ Codalus IDE uses Roslyn, with your projects' analyzers and source generators:
 - **Completion** (`Ctrl+Space`, and while you type). It can add the `using` an item needs.
 - **Parameter info** (`Ctrl+Shift+Space`) and **Quick Info** on hover (`Ctrl+K Ctrl+I`).
 - **Live diagnostics**: squiggles as you type, and the **Error List** (View → Error List). The Error List filters by severity, by source (Build, IntelliSense or both) and by document; double-click an entry to go to it.
-- **Quick actions** (`Ctrl+.` or the lightbulb): code fixes and refactorings, each previewed before it applies.
+  - **Group By** groups the entries by project, file, severity, code or source. Click a group's header (or press Enter on it) to collapse or expand it. The choice is the `errorList.groupBy` setting.
+  - **Analysis Scope** sets where analyzers (warnings such as `CA2200`) run in the background: **open documents** (the default), the **current project**, or the whole **solution**. The current project is the active document's project, or the startup project when no document is open. Compiler errors are always reported for the whole solution. The choice is the `languageServices.analysisScope` setting.
+- **Quick actions** (`Ctrl+.` or the lightbulb): code fixes and refactorings, each previewed before it applies. Those that rename or delete files (Rename File to Match Type, Move Type to File) do it through the project, so its items follow; an open file is saved and reopened under its new name.
 - **Rename** (`F2`): previewed across the solution.
 - **Format Document** (`Ctrl+K Ctrl+D`) and **Format Selection**, following `.editorconfig`, and formatting as you type (`;`, `}`).
 
@@ -35,7 +37,8 @@ Every file type gets the basics, and many get more:
 - **MSBuild** (`.csproj`, `.props`, `.targets` and friends): completion of elements, properties, items, metadata and values (target frameworks, runtime identifiers, choices), and warnings for unknown values. Hovering a property shows its **evaluated value and where it is set**, when the folder is trusted.
 - **JSON**: syntax errors, and completion, hover and validation from a schema. Schemas come from `$schema`, from built-in schemas (`global.json`, `launchSettings.json`, `appsettings*.json`, `dotnet-tools.json`, `runtimeconfig.template.json`, `codalus-plugin.json`), or from the SchemaStore catalog (setting **JSON → Schema Download**, on by default; schemas are cached for a week).
 - **YAML**: syntax errors, and validation and hover from a schema.
-- **`.editorconfig`**: completion and hover for EditorConfig and .NET options, and warnings for invalid values.
+- **XML**: syntax errors, and validation against XSD schemas. A file names its schemas with `xsi:noNamespaceSchemaLocation` or `xsi:schemaLocation` (paths relative to the file). The setting **XML → XML Schemas** (`xml.schemas`) also associates schemas by path: `{ "**/*.config": "schemas/config.xsd" }`, with relative schema paths from the solution's folder. Only local schema files are used: nothing is downloaded.
+- **`.editorconfig`**: completion and hover for EditorConfig and .NET options, and warnings for invalid values. **EditorConfig Settings** (on an `.editorconfig` file's context menu in the Solution Explorer, or in the command palette) shows the file as a page of options: pick a section (`[*]`, `[*.cs]`…), search, and choose each option's value or clear it. Saving changes only those lines, so comments, order and keys the page doesn't know stay as they were; with no `.editorconfig` yet, saving creates one next to the solution. **View Code** opens the file as text.
 - **Markdown**: Open Preview to the Side (`Ctrl+K V`) shows a live preview that follows your edits.
 
 Plugins can add languages, grammars and language servers ([plugins.md](../plugins.md#languages-grammars-and-language-servers)).
@@ -62,6 +65,8 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 - **Document Outline**: the document's types and members. It follows the caret; click a symbol to go there, or type to filter.
 - **Code Definition**: the definition of the symbol at the caret, read-only, updated as the caret moves.
 - **Hierarchy**: Call Hierarchy and Type Hierarchy results.
+- **Class View** (View → Other Windows): each C# and Visual Basic project's namespaces, types and members, with their signatures. Select one to see its declaration and summary at the bottom; double-click it, or press Enter, to go to it. The search box lists the types and members whose names contain what you type.
+- **Object Browser** (View → Other Windows → Object Browser): the assemblies a project compiles against, its own first, down to their namespaces, types and members. Pick the project at the top. Library code opens read-only, from its PDB's source or decompiled, as Go to Definition does. Search looks through them all.
 
 ## Find and Replace in files
 
@@ -81,6 +86,9 @@ Settings under **Text Editor** turn each of these on or off.
 
 - **Inlay hints**: parameter names before literal and `new` arguments (`radius: 2`), and optionally the inferred types of `var` declarations and lambda parameters (**Inlay Hints: Types**, off by default). The caret moves over a hint in one step.
 - **CodeLens**: reference and implementation counts at the end of each declaration's line. Click a count to find the references or go to the implementations.
+  - In a Git repository, each member's history from blame follows: who changed it last and when, and how many authors and changes it has (`Ada, 3 days ago  |  2 authors, 5 changes`). Saved files are blamed again on save, and edited ones every few seconds with their unsaved text.
+  - Tests show their last outcome (`✓ Passed (12 ms)`, `✗ Failed`, `Not run`), and test classes how many of their tests pass (`✓ 4/4 passing`).
+  - Turn these off with Text Editor → CodeLens: Git History (`editor.gitCodeLens`) and CodeLens: Test Status (`editor.testCodeLens`).
 - **Inheritance margin**: arrows in the margin of members and types that implement, override or are overridden. Click an arrow to see and open the related symbols.
 - **Navigation bar**: above the editor, the document's types and the members of the type at the caret.
 - **Sticky scroll**: the lines of the enclosing namespace, type and member stay at the top while you scroll. Click one to go there.
@@ -98,7 +106,9 @@ Language services from plugins provide the outline, navigation bar, sticky scrol
 | Move Line Up and Down | `Alt+Up`, `Alt+Down` | The selected lines. |
 | Expand and Shrink Selection | `Shift+Alt+=`, `Shift+Alt+-` | Word, expression, statement, block… from the language service. |
 | Paste from Clipboard Ring | `Ctrl+Shift+V` | The last 15 copies and cuts. |
+| Paste with automatic usings | `Ctrl+V` | C# and Visual Basic code you paste gets the `using` (`Imports`) directives it needs. A name is imported when it has one possible namespace, or when it's one of the namespaces of the file you copied it from; other names are left for the lightbulb. The status bar shows what was added, and Undo removes it. Turn it off with Text Editor → Add Missing Usings on Paste (`editor.pasteAddsImports`). |
 | Paste JSON as Classes | (Edit menu) | C# classes for the JSON on the clipboard. |
+| Paste XML as Classes | (Edit menu) | C# classes for the XML on the clipboard, with `XmlSerializer`'s attributes: attributes and child elements become properties (a list when an element repeats), and values get the narrowest type that fits them all. |
 | Zoom In, Out and Reset | `Ctrl+Shift+.`, `Ctrl+Shift+,`, `Ctrl+Wheel` | Per editor. |
 | XML documentation comment | type `///` | Above a member: the comment with its `param` and `returns` tags. |
 | Code Cleanup | `Ctrl+K Ctrl+E` | Removes unnecessary usings, applies the code style fixes, sorts usings and formats. Settings: **Code Cleanup → Fixes** (diagnostic ids) and **Code Cleanup → On Save**. |
@@ -107,9 +117,10 @@ Language services from plugins provide the outline, navigation bar, sticky scrol
 
 ## Snippets
 
-- Type a snippet's prefix (`prop`, `ctor`, `for`, `try`…) and pick it in completion, or use **Insert Snippet** (`Ctrl+K Ctrl+X`). `Tab` moves between the placeholders; linked placeholders change together.
+- Type a snippet's prefix (`prop`, `ctor`, `for`, `try`…) and pick it in completion, or use **Insert Snippet** (`Ctrl+K Ctrl+X`). `Tab` moves between the placeholders in the order of their numbers (`$1`, `$2`…, then `$0`, where the snippet ends), whatever their place in the text; `Shift+Tab` goes back, and linked placeholders change together. A placeholder with choices (`${1|public,private|}`) lists them when you reach it: pick one, or type.
 - **Surround With** (`Ctrl+K Ctrl+S`, or `Ctrl+K Ctrl+Shift+S` in either keyboard scheme) wraps the selection (`if`, `try`, `#region`, `using`…).
 - **Configure User Snippets** opens your snippets for the current language, in VS Code's JSON format. Yours replace built-in snippets with the same name.
+- **Tools → Code Snippets Manager…** (`Ctrl+K Ctrl+B`) lists every language's snippets, built in, from plugins and yours, with their prefixes and bodies. **Copy to Your Snippets** makes a snippet yours to change, **Remove** deletes one of yours, and **Open Your Snippets** and **Import .snippet Files…** are there too.
 - **Import Snippets (.snippet)…** converts Visual Studio `.snippet` files into your snippets.
 - Plugins can contribute snippets ([plugins.md](../plugins.md#snippets)).
 
@@ -143,3 +154,4 @@ The light bulb also offers, for each diagnostic, **Suppress with #pragma** and *
 - **Compare Files…** and **Compare Active File With…** (File menu) open two files in the diff viewer.
 - **Close All to the Right** and **Close All But This** (Window menu, and the tab's context menu).
 - **Images** (PNG, JPEG, GIF, BMP, ICO, WebP) open in an image viewer: zoom with `Ctrl+Wheel`, `Ctrl+=` and `Ctrl+-`, `Ctrl+0` for the actual size, or **Fit**. SVG files open as XML.
+- **Binary files** (a `.dll`, a database, any file with NUL bytes and no byte order mark) open in the **hex viewer**: each row shows the offset, 16 bytes in hex and their printable characters. Click a byte, or move with the arrows, `Page Up`/`Page Down`, `Home` and `End` (`Ctrl+Home`, `Ctrl+End` for the whole file); the bar below shows its offset and value. Large files open at once: only the rows on screen are read. **Open With Hex Viewer** (a file's context menu in Solution Explorer, or the command palette for the active file) shows any file this way, and **Reopen With Text Editor** goes back. The hex viewer doesn't edit.

@@ -155,7 +155,16 @@ public sealed class WorkbenchProposedApi : IProposedApiHost, IDisposable
         {
             if (group.Key is { } languageId && await _languages.ClientAsync(languageId).ConfigureAwait(false) is { } client)
             {
-                var found = await client.TestCandidatesAsync([.. group], cancellationToken).ConfigureAwait(false);
+                LanguageServices.Protocol.TestCandidatesResult found;
+                try
+                {
+                    found = await client.TestCandidatesAsync([.. group], cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or System.Text.Json.JsonException or InvalidOperationException)
+                {
+                    continue; // a server without codalus/testCandidates (FsAutoComplete): its tests come from discovery after a build
+                }
+
                 foreach (var document in found.Documents)
                 {
                     results[document.Uri] = new DocumentTestCandidatesDto(document.Uri, [.. document.Candidates.Select(c =>

@@ -9,7 +9,7 @@ internal enum XamlMemberKind
     /// <summary>A CLR property.</summary>
     Property,
 
-    /// <summary>An Avalonia property without a CLR wrapper (<c>XxxProperty</c> field).</summary>
+    /// <summary>An Avalonia property (or a MAUI bindable property) without a CLR wrapper (<c>XxxProperty</c> field).</summary>
     AvaloniaProperty,
 
     /// <summary>An attached property (<c>Owner.Xxx</c>).</summary>
@@ -26,7 +26,7 @@ internal sealed record XamlMember(string Name, ITypeSymbol? ValueType, XamlMembe
 }
 
 /// <summary>
-/// XAML's view of a Roslyn compilation (ADR 0047): XML namespaces to CLR namespaces through Avalonia's
+/// XAML's view of a Roslyn compilation (ADR 0047): XML namespaces to CLR namespaces through Avalonia's and .NET MAUI's
 /// <c>[XmlnsDefinition]</c> attributes and <c>using:</c>/<c>clr-namespace:</c>, the types an element can name, the
 /// members an attribute can set (CLR properties, Avalonia properties, attached properties, events), content
 /// properties, pseudo-classes. Types come from source and from metadata alike, so the project's own controls and view
@@ -55,6 +55,15 @@ internal sealed class XamlTypeSystem
 
     /// <summary>Whether Avalonia is referenced at all.</summary>
     public bool IsAvalonia => Type("Avalonia.AvaloniaObject") is not null;
+
+    /// <summary>Whether .NET MAUI's controls are referenced (M20a): the MAUI dialect (bindable properties, <c>[ContentProperty]</c>).</summary>
+    public bool IsMaui => Type(MauiBindableObject) is not null;
+
+    /// <summary>Whether the compilation has a XAML dialect this engine knows.</summary>
+    public bool HasDialect => IsAvalonia || IsMaui;
+
+    private const string MauiBindableObject = "Microsoft.Maui.Controls.BindableObject";
+    private const string MauiBindableProperty = "Microsoft.Maui.Controls.BindableProperty";
 
     // ------------------------------------------------------------------ namespaces
 
@@ -232,7 +241,8 @@ internal sealed class XamlTypeSystem
         && (type.TypeKind == TypeKind.Struct || type.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public));
 
     public bool IsMarkupExtension(INamedTypeSymbol type) =>
-        type.Name.EndsWith("Extension", StringComparison.Ordinal) || DerivesFrom(type, "Avalonia.Data.BindingBase") || DerivesFrom(type, "Avalonia.Markup.Xaml.MarkupExtension");
+        type.Name.EndsWith("Extension", StringComparison.Ordinal) || DerivesFrom(type, "Avalonia.Data.BindingBase") || DerivesFrom(type, "Avalonia.Markup.Xaml.MarkupExtension")
+        || DerivesFrom(type, "Microsoft.Maui.Controls.BindingBase") || DerivesFrom(type, "Microsoft.Maui.Controls.Xaml.IMarkupExtension");
 
     public static bool DerivesFrom(ITypeSymbol? type, string metadataName)
     {
@@ -247,7 +257,7 @@ internal sealed class XamlTypeSystem
         return type?.AllInterfaces.Any(i => i.ToDisplayString() == metadataName) == true;
     }
 
-    public static bool IsControl(ITypeSymbol? type) => DerivesFrom(type, "Avalonia.Controls.Control");
+    public static bool IsControl(ITypeSymbol? type) => DerivesFrom(type, "Avalonia.Controls.Control") || DerivesFrom(type, "Microsoft.Maui.Controls.VisualElement");
 
     // ------------------------------------------------------------------ members
 
@@ -281,6 +291,13 @@ internal sealed class XamlTypeSystem
                         }
 
                         break;
+                    case IFieldSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public } bindable
+                        when bindable.Name.EndsWith("Property", StringComparison.Ordinal) && bindable.Name.Length > 8 && IsBindableProperty(bindable.Type)
+                             && !result.ContainsKey(bindable.Name[..^8]) && MauiAttachedGetter(current, bindable.Name[..^8]) is null
+                             && current.GetMembers(bindable.Name[..^8]).IsEmpty:
+                        // A MAUI bindable property without a CLR wrapper (the wrapper, when there is one, is the property above).
+                        result[bindable.Name[..^8]] = new XamlMember(bindable.Name[..^8], null, XamlMemberKind.AvaloniaProperty, bindable, current);
+                        break;
                 }
             }
         }
@@ -303,6 +320,13 @@ internal sealed class XamlTypeSystem
                 {
                     result.TryAdd(field.Name[..^8], new XamlMember(field.Name[..^8], ValueType(field.Type), XamlMemberKind.Attached, field, current));
                 }
+                else if (member is IFieldSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public } bindable
+                         && bindable.Name.EndsWith("Property", StringComparison.Ordinal) && bindable.Name.Length > 8 && IsBindableProperty(bindable.Type)
+                         && MauiAttachedGetter(current, bindable.Name[..^8]) is { } getter)
+                {
+                    // MAUI's attached properties: a BindableProperty field with a static GetXxx (Grid.Row, Shell.NavBarIsVisible).
+                    result.TryAdd(bindable.Name[..^8], new XamlMember(bindable.Name[..^8], getter.ReturnType, XamlMemberKind.Attached, bindable, current));
+                }
                 else if (member is IMethodSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public, Parameters.Length: 2 } method
                          && method.Name.StartsWith("Set", StringComparison.Ordinal) && method.Name.Length > 3 && current.ContainingNamespace?.ToDisplayString().StartsWith("Avalonia", StringComparison.Ordinal) != true)
                 {
@@ -315,6 +339,12 @@ internal sealed class XamlTypeSystem
     });
 
     private static bool IsAvaloniaProperty(ITypeSymbol type) => DerivesFrom(type, "Avalonia.AvaloniaProperty");
+
+    private static bool IsBindableProperty(ITypeSymbol type) => type.ToDisplayString() == MauiBindableProperty;
+
+    /// <summary>A MAUI attached property's static <c>GetXxx(BindableObject)</c>, when <paramref name="owner"/> declares one.</summary>
+    private static IMethodSymbol? MauiAttachedGetter(INamedTypeSymbol owner, string name) =>
+        owner.GetMembers("Get" + name).OfType<IMethodSymbol>().FirstOrDefault(m => m is { IsStatic: true, DeclaredAccessibility: Accessibility.Public, Parameters.Length: 1, ReturnsVoid: false });
 
     private static bool IsAttached(ITypeSymbol type) => type is INamedTypeSymbol { Name: "AttachedProperty" };
 
@@ -337,6 +367,12 @@ internal sealed class XamlTypeSystem
     {
         for (var current = type; current is not null; current = current.BaseType)
         {
+            // MAUI names it on the class: [ContentProperty("Content")].
+            if (current.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == "ContentPropertyAttribute") is { ConstructorArguments: [{ Value: string named }, ..] })
+            {
+                return Member(type, named);
+            }
+
             foreach (var property in current.GetMembers().OfType<IPropertySymbol>())
             {
                 if (property.GetAttributes().Any(a => a.AttributeClass?.Name == "ContentAttribute"))
@@ -382,7 +418,8 @@ internal sealed class XamlTypeSystem
 
     /// <summary>The types that declare attached properties among an XML namespace's types (<c>Grid</c>, <c>DockPanel</c>…).</summary>
     public IReadOnlyList<INamedTypeSymbol> AttachedOwners(string? xmlns) =>
-        [.. TypesIn(xmlns).Where(t => t.GetMembers().OfType<IFieldSymbol>().Any(f => f.IsStatic && IsAttached(f.Type)))];
+        [.. TypesIn(xmlns).Where(t => t.GetMembers().OfType<IFieldSymbol>().Any(f => f.IsStatic
+            && (IsAttached(f.Type) || (IsBindableProperty(f.Type) && f.Name.Length > 8 && MauiAttachedGetter(t, f.Name[..^8]) is not null))))];
 
     // ------------------------------------------------------------------ values
 
@@ -415,6 +452,13 @@ internal sealed class XamlTypeSystem
         {
             var colors = Type("Avalonia.Media.Colors");
             return colors is null ? [] : [.. colors.GetMembers().OfType<IPropertySymbol>().Where(p => p.IsStatic).Select(p => (p.Name, (ISymbol?)p))];
+        }
+
+        if (name is "Microsoft.Maui.Graphics.Color" or "Microsoft.Maui.Controls.Brush" or "Microsoft.Maui.Controls.SolidColorBrush")
+        {
+            // MAUI's named colors are Colors' static fields.
+            var colors = Type("Microsoft.Maui.Graphics.Colors");
+            return colors is null ? [] : [.. colors.GetMembers().OfType<IFieldSymbol>().Where(f => f.IsStatic && f.DeclaredAccessibility == Accessibility.Public).Select(f => (f.Name, (ISymbol?)f))];
         }
 
         // Types with static instances of themselves (ThemeVariant.Dark, FontFamily.Default, Cursor…).

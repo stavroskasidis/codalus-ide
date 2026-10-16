@@ -368,6 +368,7 @@ public sealed partial class ShellHost
             _ = Languages.ClientAsync(CSharpLanguageId);
         }
 
+        OnFSharpSolutionChanged(solution);
         UpdateSolutionStatus();
     }
 

@@ -135,6 +135,32 @@ internal static class DesignTimeCache
     /// </summary>
     internal static bool InputsExist(CompilerInputsInfo inputs, string solutionDirectory) => MissingInput(inputs, solutionDirectory) is null;
 
+    /// <summary>
+    /// The files of a <c>/reference:</c> or <c>/analyzer:</c> value: the compilers take a comma-separated list (vbc's
+    /// command lines always use one), commas inside quotes being part of a path.
+    /// </summary>
+    internal static IEnumerable<string> List(string value)
+    {
+        var start = 0;
+        var quoted = false;
+        for (var i = 0; i <= value.Length; i++)
+        {
+            if (i == value.Length || (value[i] == ',' && !quoted))
+            {
+                if (value[start..i].Trim() is { Length: > 0 } item)
+                {
+                    yield return item;
+                }
+
+                start = i + 1;
+            }
+            else if (value[i] == '"')
+            {
+                quoted = !quoted;
+            }
+        }
+    }
+
     /// <summary>The first file of <see cref="InputsExist"/> that is missing, or null.</summary>
     private static string? MissingInput(CompilerInputsInfo inputs, string solutionDirectory)
     {
@@ -146,17 +172,20 @@ internal static class DesignTimeCache
             if (Option(argument) is { } option)
             {
                 var (name, value) = option;
-                if (name is "analyzer" or "a" && !File.Exists(Full(value)))
+                if (name is "analyzer" or "a" && List(value).Select(Full).FirstOrDefault(f => !File.Exists(f)) is { } analyzer)
                 {
-                    return Full(value);
+                    return analyzer;
                 }
 
                 if (name is "reference" or "r")
                 {
-                    var file = Full(value[(value.IndexOf('=', StringComparison.Ordinal) + 1)..]);
-                    if (!Under(file, solutionDirectory) && !File.Exists(file))
+                    foreach (var reference in List(value))
                     {
-                        return file;
+                        var file = Full(reference[(reference.IndexOf('=', StringComparison.Ordinal) + 1)..]);
+                        if (!Under(file, solutionDirectory) && !File.Exists(file))
+                        {
+                            return file;
+                        }
                     }
                 }
             }

@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="CsLibrary/CsLibrary.csproj" />
+  <Project Path="VbConsole/VbConsole.vbproj" />
+  <Project Path="VbLibrary/VbLibrary.vbproj" />
+  <Project Path="VbTests/VbTests.vbproj" />
+</Solution>

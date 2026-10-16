@@ -71,6 +71,9 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
     /// <summary>The launch profile chosen per project path.</summary>
     public Dictionary<string, string>? LaunchProfiles { get; init; }
 
+    /// <summary>The device each mobile platform's runs go to (M20a): platform → device id (an emulator as <c>avd:&lt;name&gt;</c>).</summary>
+    public Dictionary<string, string>? MobileDevices { get; init; }
+
     public IReadOnlyList<SessionBreakpoint>? Breakpoints { get; init; }
 
     public IReadOnlyList<SessionFunctionBreakpoint>? FunctionBreakpoints { get; init; }

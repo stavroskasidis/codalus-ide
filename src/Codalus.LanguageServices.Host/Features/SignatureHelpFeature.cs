@@ -3,6 +3,7 @@ using Codalus.LanguageServices.Protocol;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using VB = Microsoft.CodeAnalysis.VisualBasic.Syntax;
 
 namespace Codalus.LanguageServices.Host.Features;
 
@@ -46,7 +47,12 @@ internal static class SignatureHelpFeature
             }
 
             var argumentIndex = target.Separators.Count(s => s.SpanStart < position);
-            var name = target.Arguments.ElementAtOrDefault(argumentIndex) is ArgumentSyntax { NameColon.Name.Identifier.ValueText: var n } ? n : null;
+            var name = target.Arguments.ElementAtOrDefault(argumentIndex) switch
+            {
+                ArgumentSyntax { NameColon.Name.Identifier.ValueText: var n } => n,
+                VB.SimpleArgumentSyntax { NameColonEquals.Name.Identifier.ValueText: var vbName } => vbName,
+                _ => null,
+            };
             var chosen = model.GetSymbolInfo(target.Node, cancellationToken).Symbol;
             var argumentCount = Math.Max(target.Arguments.Count, argumentIndex + 1);
             var active = chosen is not null ? candidates.FindIndex(c => SymbolEqualityComparer.Default.Equals(c, chosen.OriginalDefinition) || SymbolEqualityComparer.Default.Equals(c, chosen)) : -1;
@@ -84,6 +90,14 @@ internal static class SignatureHelpFeature
                 new ArgumentTarget(node, list.Arguments, list.Arguments.GetSeparators().ToList()),
             AttributeSyntax { ArgumentList: { } list } when Inside(list.OpenParenToken, list.CloseParenToken, position) =>
                 new ArgumentTarget(node, list.Arguments, list.Arguments.GetSeparators().ToList()),
+
+            // Visual Basic (M35): calls, New and attributes.
+            VB.InvocationExpressionSyntax { ArgumentList: { } list } when Inside(list.OpenParenToken, list.CloseParenToken, position) =>
+                new ArgumentTarget(node, list.Arguments, list.Arguments.GetSeparators().ToList()),
+            VB.ObjectCreationExpressionSyntax { ArgumentList: { } list } when Inside(list.OpenParenToken, list.CloseParenToken, position) =>
+                new ArgumentTarget(node, list.Arguments, list.Arguments.GetSeparators().ToList()),
+            VB.AttributeSyntax { ArgumentList: { } list } when Inside(list.OpenParenToken, list.CloseParenToken, position) =>
+                new ArgumentTarget(node, list.Arguments, list.Arguments.GetSeparators().ToList()),
             _ => null,
         };
     }
@@ -99,6 +113,9 @@ internal static class SignatureHelpFeature
             ElementAccessExpressionSyntax access => model.GetTypeInfo(access.Expression, cancellationToken).Type?.GetMembers()
                 .OfType<IPropertySymbol>().Where(p => p.IsIndexer).Select(p => p.GetMethod).OfType<IMethodSymbol>() ?? [],
             AttributeSyntax attribute => (model.GetTypeInfo(attribute, cancellationToken).Type as INamedTypeSymbol)?.InstanceConstructors ?? [],
+            VB.InvocationExpressionSyntax { Expression: { } expression } => model.GetMemberGroup(expression, cancellationToken),
+            VB.ObjectCreationExpressionSyntax creation => (model.GetTypeInfo(creation.Type, cancellationToken).Type as INamedTypeSymbol)?.InstanceConstructors ?? [],
+            VB.AttributeSyntax attribute => (model.GetTypeInfo(attribute.Name, cancellationToken).Type as INamedTypeSymbol)?.InstanceConstructors ?? [],
             _ => [],
         };
 
@@ -138,7 +155,14 @@ internal static class SignatureHelpFeature
         }
         else if (method.MethodKind == MethodKind.Constructor)
         {
-            prefix = method.ContainingType.ToMinimalDisplayString(model, position, s_typeFormat) + "(";
+            prefix = model.Language == LanguageNames.VisualBasic
+                ? "Sub New("
+                : method.ContainingType.ToMinimalDisplayString(model, position, s_typeFormat) + "(";
+        }
+        else if (model.Language == LanguageNames.VisualBasic)
+        {
+            // Sub Name(…) or Function Name(…) As T, as Visual Basic writes it.
+            prefix = (method.ReturnsVoid ? "Sub " : "Function ") + method.ContainingType.ToMinimalDisplayString(model, position, s_typeFormat) + "." + method.Name + "(";
         }
         else
         {
@@ -153,7 +177,8 @@ internal static class SignatureHelpFeature
         var parameters = method.Parameters
             .Select(p => new ParameterInformation(p.ToMinimalDisplayString(model, position, s_parameterFormat), docs.Parameters.TryGetValue(p.Name, out var doc) ? MarkupContent.Markdown(Markdown.Escape(doc)) : null))
             .ToArray();
-        var label = prefix + string.Join(", ", parameters.Select(p => p.Label)) + (indexer is not null ? "]" : ")");
+        var label = prefix + string.Join(", ", parameters.Select(p => p.Label)) + (indexer is not null ? "]" : ")")
+            + (model.Language == LanguageNames.VisualBasic && !method.ReturnsVoid && method.MethodKind != MethodKind.Constructor ? " As " + method.ReturnType.ToMinimalDisplayString(model, position, s_typeFormat) : string.Empty);
         return new SignatureInformation(label, docs.Summary is { } summary ? MarkupContent.Markdown(Markdown.Escape(summary)) : null, parameters)
         {
             ActiveParameter = parameters.Length == 0 ? null : Math.Min(activeParameter, parameters.Length - 1),

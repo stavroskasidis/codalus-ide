@@ -680,6 +680,11 @@ public sealed partial class ProfilingReportViewModel : ObservableObject, ILoadab
     private CancellationTokenSource _refresh = new();
     private Task? _load;
 
+    /// <summary>Summarizes the CPU profile in AI Chat (M28b), set by the shell.</summary>
+    public Func<ProfilingReportViewModel, Task>? SummarizeWithAi { get; set; }
+
+    public System.Windows.Input.ICommand SummarizeWithAiCommand => new RelayCommand(() => _ = SummarizeWithAi?.Invoke(this));
+
     public ProfilingReportViewModel(DiagnosticsService diagnostics, ProfilerSession session, Func<string, int, Task> openFile)
     {
         _diagnostics = diagnostics;

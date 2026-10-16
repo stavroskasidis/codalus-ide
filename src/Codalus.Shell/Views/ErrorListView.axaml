@@ -34,6 +34,19 @@
           <TextBlock Text="{Binding MessagesLabel}" />
         </StackPanel>
       </ToggleButton>
+      <ComboBox SelectedIndex="{Binding GroupBy}" MinWidth="110" AutomationProperties.Name="{l:T errorList.groupBy}" ToolTip.Tip="{l:T errorList.groupBy}">
+        <ComboBoxItem Content="{l:T errorList.noGrouping}" />
+        <ComboBoxItem Content="{l:T errorList.groupProject}" />
+        <ComboBoxItem Content="{l:T errorList.groupFile}" />
+        <ComboBoxItem Content="{l:T errorList.groupSeverity}" />
+        <ComboBoxItem Content="{l:T errorList.groupCode}" />
+        <ComboBoxItem Content="{l:T errorList.groupSource}" />
+      </ComboBox>
+      <ComboBox SelectedIndex="{Binding AnalysisScope}" MinWidth="130" AutomationProperties.Name="{l:T errorList.analysisScope}" ToolTip.Tip="{l:T errorList.analysisScopeTip}">
+        <ComboBoxItem Content="{l:T errorList.analyzeOpenDocuments}" />
+        <ComboBoxItem Content="{l:T errorList.analyzeCurrentProject}" />
+        <ComboBoxItem Content="{l:T errorList.analyzeSolution}" />
+      </ComboBox>
       <TextBox Text="{Binding Filter}" PlaceholderText="{l:T errorList.searchErrorList}" MinWidth="120" AutomationProperties.Name="{l:T errorList.searchErrorList}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T errorList.noProblems}" IsVisible="{Binding IsEmpty}" />
@@ -47,16 +60,21 @@
           <TextBlock Grid.Column="4" Classes="muted" Text="{l:T errorList.file}" />
           <TextBlock Grid.Column="5" Classes="muted" Text="{l:T errorList.source}" />
         </Grid>
-        <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T errorList.errorList}">
+        <ListBox x:Name="List" ItemsSource="{Binding Items}" Background="Transparent" AutomationProperties.Name="{l:T errorList.errorList}">
           <ListBox.Styles>
-            <Style Selector="ListBoxItem" x:DataType="vm:ErrorListRow">
+            <Style Selector="ListBoxItem">
               <Setter Property="Padding" Value="2" />
-              <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
             </Style>
           </ListBox.Styles>
-          <ListBox.ItemTemplate>
+          <ListBox.DataTemplates>
+            <DataTemplate x:DataType="vm:ErrorListGroup">
+              <StackPanel Orientation="Horizontal" Spacing="4" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
+                <controls:Icon Kind="{Binding Chevron}" />
+                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+              </StackPanel>
+            </DataTemplate>
             <DataTemplate x:DataType="vm:ErrorListRow">
-              <Grid ColumnDefinitions="28,90,*,140,200,130">
+              <Grid ColumnDefinitions="28,90,*,140,200,130" AutomationProperties.Name="{Binding AccessibleName}">
                 <controls:Icon Kind="{Binding Icon}" Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
                 <TextBlock Grid.Column="1" Text="{Binding Code}" />
                 <TextBlock Grid.Column="2" Text="{Binding Description}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
@@ -65,7 +83,7 @@
                 <TextBlock Grid.Column="5" Text="{Binding Source}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Source}" Classes="muted" />
               </Grid>
             </DataTemplate>
-          </ListBox.ItemTemplate>
+          </ListBox.DataTemplates>
         </ListBox>
       </DockPanel>
     </ScrollViewer>

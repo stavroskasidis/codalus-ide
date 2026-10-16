@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="MauiViews/MauiViews.csproj" />
+  <Project Path="TodoApp/TodoApp.csproj" />
+</Solution>

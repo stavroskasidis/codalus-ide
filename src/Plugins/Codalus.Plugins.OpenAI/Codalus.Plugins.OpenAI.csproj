@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Built-in language model providers for OpenAI's chat completions API (ADR 0062): OpenAI and any compatible endpoint, and Ollama on this machine. Inactive until the user picks one.</Description>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The plugin host provides the API at runtime, so it is not copied next to the plugin. -->
+    <ProjectReference Include="..\..\Codalus.Plugins.Abstractions\Codalus.Plugins.Abstractions.csproj" Private="false" ExcludeAssets="runtime" />
+    <ProjectReference Include="..\Codalus.Plugins.LanguageModels\Codalus.Plugins.LanguageModels.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="codalus-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Plugins.Tests" />
+  </ItemGroup>
+</Project>

@@ -6,10 +6,10 @@ Codalus IDE opens `.sln` and `.slnx` solutions and SDK-style projects (`.csproj`
 
 The tree shows the solution, its solution folders, projects, project folders and files (nested files, like `Form.Designer.cs`, sit under their parents). Each project also has its **Dependencies**:
 - frameworks
-- packages
+- packages, each with the packages it brings in under it, and theirs under them (once the project is restored)
 - projects
 - assemblies
-- analyzers
+- analyzers, each with the files its source generators made in the project (expand it; click one to read it)
 
 | To | Do |
 |---|---|
@@ -20,6 +20,7 @@ The tree shows the solution, its solution folders, projects, project folders and
 | Delete | Press `Delete`. Files go to the OS trash. |
 | Move or copy | Cut, Copy and Paste, or drag and drop. Moving a file into another project takes its Build Action and metadata along; dragging a linked file moves its link (Ctrl copies). Files dropped from the file manager are copied in. |
 | Add files | **Add New Item** (`Ctrl+Shift+A`), **Add Existing Item** (`Shift+Alt+A`), or **Add Existing Item As Link**. |
+| See what a code file declares | Expand a C# or Visual Basic file: its types, and under each type its members, come from the language service and follow your edits. Click one to go to it. Turn this off with Solution Explorer → Show Members Under Files (`solutionExplorer.showMembers`). |
 | See files that aren't in the project | **Show All Files** on the Solution Explorer's toolbar: files on disk outside the project show dimmed. |
 | Take a file out of the project, or put it back | **Exclude From Project** and **Include In Project** in the context menu. |
 | See and change a file's Build Action, Copy to Output Directory or Custom Tool | **Properties** (`F4`). |

@@ -45,6 +45,55 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Language_blocks_win_over_general_values_for_their_languages()
+    {
+        File.WriteAllText(UserFile, """
+            {
+              "editor.fontSize": 14,
+              "[markdown]": { "editor.fontSize": 18 },
+              "[csharp][vb]": { "editor.fontSize": 12, "unknown.setting": 1 },
+              "[json]": { "editor.fontSize": 500 },
+            }
+            """);
+        Directory.CreateDirectory(Path.GetDirectoryName(WorkspaceFile)!);
+        File.WriteAllText(WorkspaceFile, """{ "editor.fontSize": 16, "[vb]": { "editor.fontSize": 11 } }""");
+        using var settings = new SettingsService(UserFile, WorkspaceFile);
+        settings.Register(Schema());
+
+        Assert.Equal(16, settings.GetInt32("editor.fontSize"));
+        Assert.Equal(18, settings.ForLanguage("markdown").GetInt32("editor.fontSize")); // the user's block beats the workspace's general value
+        Assert.Equal(12, settings.ForLanguage("csharp").GetInt32("editor.fontSize"));
+        Assert.Equal(11, settings.ForLanguage("vb").GetInt32("editor.fontSize")); // the workspace's block beats the user's
+        Assert.Equal(16, settings.ForLanguage("json").GetInt32("editor.fontSize")); // invalid: the general value, with a diagnostic
+        Assert.Contains(settings.Diagnostics, d => d.StartsWith("[json] editor.fontSize", StringComparison.Ordinal));
+        Assert.Equal(16, settings.ForLanguage("python").GetInt32("editor.fontSize"));
+        Assert.Equal(16, settings.ForLanguage(null).GetInt32("editor.fontSize"));
+        Assert.Equal(["csharp", "markdown", "vb"], settings.OverriddenLanguages.Order(StringComparer.Ordinal));
+        Assert.Equal(["csharp", "vb"], SettingsService.LanguageIds("[csharp][vb]"));
+        Assert.Null(SettingsService.LanguageIds("editor.fontSize"));
+
+        // Writing a language's value keeps the rest of the block; a change raises the setting's key.
+        var changed = new List<string>();
+        settings.Changed += (_, e) => changed.AddRange(e.Keys);
+        await settings.SetAsync("editor.fontSize", JsonSerializer.SerializeToElement(20), SettingScope.User, "markdown", TestContext.Current.CancellationToken);
+        Assert.Equal(20, settings.ForLanguage("markdown").GetInt32("editor.fontSize"));
+        Assert.Contains("editor.fontSize", changed);
+        Assert.Contains("[markdown]", changed);
+        Assert.Equal(20, settings.GetLanguageLayerValue("editor.fontSize", "markdown", SettingScope.User)?.GetInt32());
+        await Assert.ThrowsAsync<ArgumentException>(() => settings.SetAsync("editor.fontSize", JsonSerializer.SerializeToElement(500), SettingScope.User, "markdown", TestContext.Current.CancellationToken));
+
+        // Removing the last value removes the block; an empty block can be added for editing.
+        await settings.SetAsync("editor.fontSize", null, SettingScope.User, "markdown", TestContext.Current.CancellationToken);
+        Assert.DoesNotContain("[markdown]", File.ReadAllText(UserFile), StringComparison.Ordinal);
+        Assert.Equal(16, settings.ForLanguage("markdown").GetInt32("editor.fontSize"));
+        await settings.AddLanguageBlockAsync("markdown", SettingScope.User, TestContext.Current.CancellationToken);
+        await settings.AddLanguageBlockAsync("vb", SettingScope.User, TestContext.Current.CancellationToken); // in [csharp][vb] already
+        var text = File.ReadAllText(UserFile);
+        Assert.Contains("\"[markdown]\": {}", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"[vb]\"", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Invalid_values_fall_back_to_defaults_with_a_diagnostic()
     {
         File.WriteAllText(UserFile, """{ "workbench.colorTheme": "neon", "editor.fontSize": 200 }""");

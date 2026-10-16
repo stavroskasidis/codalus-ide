@@ -5,7 +5,7 @@
     <RollForward>Major</RollForward>
     <AssemblyName>codalus-debughost</AssemblyName>
     <RootNamespace>Codalus.Debugging.Host</RootNamespace>
-    <Description>The debug companion host (M14b, ADR 0032): the debuggee's debugger attributes, dumps (ClrMD) and Create Dump, over JSON-RPC on stdio.</Description>
+    <Description>The debug companion host (M14b, ADR 0032): the debuggee's debugger attributes, dumps (ClrMD) and Create Dump, over JSON-RPC on stdio; with --mono-dap, the Mono debugger adapter over DAP (M20b, ADR 0065).</Description>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
@@ -14,6 +14,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
     <ProjectReference Include="..\Codalus.Debugging\Codalus.Debugging.csproj" />
+    <!-- The Mono debugger adapter's protocol client (M20b, ADR 0065; MIT, vendored). -->
+    <ProjectReference Include="..\ThirdParty\Mono.Debugger.Soft\Mono.Debugger.Soft.csproj" />
     <!-- Not used by the host: shipped beside it in debughost/, for programs debugged in the terminal (M14c). -->
     <ProjectReference Include="..\Codalus.Debugging.StartupHook\Codalus.Debugging.StartupHook.csproj" />
     <!-- Likewise: the XAML previewer's agent, loaded into Avalonia's designer host (M19a, ADR 0048). -->

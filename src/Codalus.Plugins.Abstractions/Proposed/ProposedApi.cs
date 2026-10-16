@@ -11,6 +11,8 @@ namespace Codalus.Plugins.Proposed;
 /// </summary>
 public interface IProposedApi
 {
+    /// <summary>Language model providers for AI assistance (M28a, ADR 0062).</summary>
+    ILanguageModels LanguageModels => throw new NotSupportedException("This context has no language models.");
 }
 
 /// <summary>Implemented by plugin contexts that can offer proposed APIs.</summary>

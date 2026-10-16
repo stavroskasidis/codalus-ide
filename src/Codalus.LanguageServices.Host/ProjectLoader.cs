@@ -41,16 +41,26 @@ internal sealed class ProjectLoader
         public string? DocumentationFile { get; init; }
     }
 
-    /// <summary>Parses C# command lines; other languages are not supported by this host (null).</summary>
+    /// <summary>Roslyn's language name of a design-time build's language: C# and Visual Basic (M35); null for others.</summary>
+    public static string? RoslynLanguage(string language) => language switch
+    {
+        "C#" => LanguageNames.CSharp,
+        "VB" => LanguageNames.VisualBasic,
+        _ => null,
+    };
+
+    /// <summary>Parses C# and Visual Basic command lines (<c>csc</c>'s, <c>vbc</c>'s); other languages aren't this host's (null).</summary>
     public Parsed? Parse(ProjectData data)
     {
-        if (data.Language != "C#")
+        if (RoslynLanguage(data.Language) is not { } language)
         {
             return null;
         }
 
         var directory = Path.GetDirectoryName(data.Path)!;
-        var args = CSharpCommandLineParser.Default.Parse(data.Arguments, directory, sdkDirectory: null);
+        CommandLineArguments args = language == LanguageNames.VisualBasic
+            ? Microsoft.CodeAnalysis.VisualBasic.VisualBasicCommandLineParser.Default.Parse(VisualBasicArguments(data.Arguments), directory, sdkDirectory: null)
+            : CSharpCommandLineParser.Default.Parse(data.Arguments, directory, sdkDirectory: null);
         foreach (var error in args.Errors.Where(e => e.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error))
         {
             Log?.Invoke(this, $"{Path.GetFileName(data.Path)}: {error.GetMessage(System.Globalization.CultureInfo.CurrentCulture)}");
@@ -98,6 +108,31 @@ internal sealed class ProjectLoader
             IntermediateRefAssembly = args.OutputRefFilePath is { Length: > 0 } refOutput ? Path.GetFullPath(Path.Combine(directory, refOutput)) : null,
             DocumentationFile = args.DocumentationPath is { Length: > 0 } documentation ? Path.GetFullPath(Path.Combine(directory, documentation)) : null,
         };
+    }
+
+    /// <summary>
+    /// vbc's arguments as its parser expects them. A define keeps the response file's quoting
+    /// (<c>/define:"CONFIG=\"Debug\",…"</c>), which a shell would have removed, so it's split again as a command line;
+    /// MSBuild on Linux and macOS also turns the backslash of <c>\"</c> into a slash (its path normalization of item
+    /// specs), so its <c>/"</c> is put back first. Other arguments are left as they are.
+    /// </summary>
+    internal static IEnumerable<string> VisualBasicArguments(IReadOnlyList<string> arguments)
+    {
+        foreach (var argument in arguments)
+        {
+            if (argument.StartsWith("/define:", StringComparison.OrdinalIgnoreCase) || argument.StartsWith("-define:", StringComparison.OrdinalIgnoreCase)
+                || argument.StartsWith("/d:", StringComparison.OrdinalIgnoreCase) || argument.StartsWith("-d:", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var part in CommandLineParser.SplitCommandLineIntoArguments(argument.Replace("/\"", "\\\"", StringComparison.Ordinal), removeHashComments: false))
+                {
+                    yield return part;
+                }
+            }
+            else
+            {
+                yield return argument;
+            }
+        }
     }
 
     /// <summary>A metadata reference to a file, shared by every project that references it while the file is unchanged.</summary>

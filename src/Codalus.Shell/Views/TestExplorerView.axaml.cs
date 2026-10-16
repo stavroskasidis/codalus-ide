@@ -157,6 +157,10 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
         if (row.Group.Node is { IsLeaf: true, Result: { } result })
         {
             menu.Items.Add(Item("Copy Details", () => Copy(Describe(row.Group.Node, result))));
+            if (shell.Ai.IsEnabled && result.Outcome is not TestOutcome.Passed)
+            {
+                menu.Items.Add(Item("Ask AI Why It Fails", () => _ = shell.ExplainTestWithAiAsync(), "sparkle"));
+            }
         }
 
         menu.Open(List.ContainerFromItem(row) ?? List);

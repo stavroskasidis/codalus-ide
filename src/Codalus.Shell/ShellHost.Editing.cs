@@ -85,10 +85,13 @@ public sealed partial class ShellHost
         controller.InsertSnippet(snippet.Body, surround);
     }
 
-    /// <summary>Opens the user snippet file of the active document's language, creating it with an example first.</summary>
-    public async Task OpenUserSnippetsAsync()
+    /// <summary>
+    /// Opens the user snippet file of <paramref name="forLanguage"/> (by default the active document's language),
+    /// creating it with an example first.
+    /// </summary>
+    public async Task OpenUserSnippetsAsync(string? forLanguage = null)
     {
-        var language = ActiveEditor?.Model.LanguageId is { Length: > 0 } id && id != Codalus.Workbench.Languages.LanguageRegistry.PlainText ? id : "csharp";
+        var language = forLanguage ?? (ActiveEditor?.Model.LanguageId is { Length: > 0 } id && id != Codalus.Workbench.Languages.LanguageRegistry.PlainText ? id : "csharp");
         Directory.CreateDirectory(UserSnippetsDirectory);
         var file = Path.Combine(UserSnippetsDirectory, language + ".json");
         if (!File.Exists(file))
@@ -127,6 +130,34 @@ public sealed partial class ShellHost
 
         ImportSnippets(imported);
         ShowMessage(imported.Count == 1 ? $"Imported the snippet '{imported[0].Name}'." : $"Imported {imported.Count} snippets.");
+    }
+
+    /// <summary>Tools → Code Snippets Manager: every language's snippets, on the active document's language.</summary>
+    public SnippetsManagerViewModel OpenSnippetsManager()
+    {
+        if (Layout.FindDocument<PageDocument>("snippets") is { ViewModel: SnippetsManagerViewModel existing } open)
+        {
+            Layout.OpenDocument(open, focus: true);
+            return existing;
+        }
+
+        var viewModel = new SnippetsManagerViewModel(this, ActiveEditor?.Model.LanguageId);
+        Layout.OpenDocument(new PageDocument("snippets", "Code Snippets Manager", "snippets", viewModel), focus: true);
+        return viewModel;
+    }
+
+    /// <summary>Removes one of the user's snippets from its language's file.</summary>
+    internal void RemoveUserSnippet(Snippet snippet)
+    {
+        var file = Path.Combine(UserSnippetsDirectory, snippet.Language + ".json");
+        if (!File.Exists(file))
+        {
+            return;
+        }
+
+        var remaining = SnippetRegistry.ParseJson(File.ReadAllText(file), snippet.Language, "user").Where(s => s.Name != snippet.Name).ToList();
+        File.WriteAllText(file, SnippetRegistry.ToJson(remaining));
+        LoadUserSnippets();
     }
 
     /// <summary>Merges snippets into the user's snippet files (tests and the import command).</summary>

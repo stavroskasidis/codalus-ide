@@ -7,7 +7,10 @@ using Codalus.Workbench.Settings;
 
 namespace Codalus.Shell.Editor;
 
-/// <summary>The <c>editor.*</c> settings, refreshed on the UI thread when they change.</summary>
+/// <summary>
+/// The <c>editor.*</c> settings, refreshed on the UI thread when they change. <see cref="For"/> gives a language's
+/// options: its <c>"[languageId]"</c> blocks in settings.json over the general values (per-language editor options).
+/// </summary>
 public sealed class EditorOptions : ObservableObject
 {
     public const string TabSizeKey = "editor.tabSize";
@@ -23,6 +26,8 @@ public sealed class EditorOptions : ObservableObject
     public const string InlayParameterNamesKey = "editor.inlayHints.parameterNames";
     public const string InlayTypesKey = "editor.inlayHints.types";
     public const string CodeLensKey = "editor.codeLens";
+    public const string GitCodeLensKey = "editor.gitCodeLens";
+    public const string TestCodeLensKey = "editor.testCodeLens";
     public const string InlineDiagnosticsKey = "editor.inlineDiagnostics";
     public const string InheritanceMarginKey = "editor.inheritanceMargin";
     public const string IndentGuidesKey = "editor.guides.indentation";
@@ -33,6 +38,8 @@ public sealed class EditorOptions : ObservableObject
     public const string PerfTipsKey = "debug.perfTips";
 
     private readonly SettingsService _settings;
+    private readonly string? _languageId;
+    private readonly Dictionary<string, EditorOptions> _languages = new(StringComparer.Ordinal);
 
     public EditorOptions(SettingsService settings)
     {
@@ -44,11 +51,50 @@ public sealed class EditorOptions : ObservableObject
             {
                 Ui.Post(() =>
                 {
+                    // The languages' options first: the general options' listeners read them.
                     Read();
+                    foreach (var options in _languages.Values)
+                    {
+                        options.Read();
+                    }
+
                     OnPropertyChanged(string.Empty);
+                    foreach (var options in _languages.Values)
+                    {
+                        options.OnPropertyChanged(string.Empty);
+                    }
                 });
             }
         };
+    }
+
+    private EditorOptions(SettingsService settings, string languageId)
+    {
+        _settings = settings;
+        _languageId = languageId;
+        Read();
+    }
+
+    /// <summary>The language these options are for; null for the general ones.</summary>
+    public string? LanguageId => _languageId;
+
+    /// <summary>
+    /// The options of documents of <paramref name="languageId"/> (one instance per language, refreshed with these; the
+    /// general options raise <see cref="ObservableObject.PropertyChanged"/> after every language's are read again).
+    /// </summary>
+    public EditorOptions For(string? languageId)
+    {
+        if (_languageId is not null || string.IsNullOrEmpty(languageId))
+        {
+            return this;
+        }
+
+        if (!_languages.TryGetValue(languageId, out var options))
+        {
+            _languages[languageId] = options = new EditorOptions(_settings, languageId);
+        }
+
+        return options;
     }
 
     public int TabSize { get; private set; }
@@ -79,6 +125,12 @@ public sealed class EditorOptions : ObservableObject
 
     public bool CodeLens { get; private set; }
 
+    /// <summary>CodeLens shows each member's last author and its numbers of authors and changes, from Git blame.</summary>
+    public bool GitCodeLens { get; private set; }
+
+    /// <summary>CodeLens shows each test's (and test class's) last outcome.</summary>
+    public bool TestCodeLens { get; private set; }
+
     public bool InlineDiagnostics { get; private set; }
 
     public bool InheritanceMargin { get; private set; }
@@ -98,27 +150,30 @@ public sealed class EditorOptions : ObservableObject
 
     private void Read()
     {
-        InlayParameterNames = _settings.GetBoolean(InlayParameterNamesKey, true);
-        InlayTypes = _settings.GetBoolean(InlayTypesKey, false);
-        CodeLens = _settings.GetBoolean(CodeLensKey, true);
-        InlineDiagnostics = _settings.GetBoolean(InlineDiagnosticsKey, false);
-        InheritanceMargin = _settings.GetBoolean(InheritanceMarginKey, true);
-        IndentGuides = _settings.GetBoolean(IndentGuidesKey, true);
-        BracketPairColorization = _settings.GetBoolean(BracketPairColorizationKey, true);
-        StickyScroll = _settings.GetBoolean(StickyScrollKey, true);
-        OverviewRuler = _settings.GetBoolean(OverviewRulerKey, true);
-        NavigationBar = _settings.GetBoolean(NavigationBarKey, true);
-        PerfTips = _settings.GetBoolean(PerfTipsKey, true);
-        TabSize = Math.Clamp(_settings.GetInt32(TabSizeKey, 4), 1, 16);
-        InsertSpaces = _settings.GetBoolean(InsertSpacesKey, true);
-        WordWrap = _settings.GetBoolean(WordWrapKey);
-        Minimap = _settings.GetBoolean(MinimapKey, true);
-        LineNumbers = _settings.GetBoolean(LineNumbersKey, true);
-        RenderWhitespace = _settings.GetString(RenderWhitespaceKey, "none") == "all";
-        HighlightCurrentLine = _settings.GetBoolean(HighlightCurrentLineKey, true);
-        FormatOnType = _settings.GetBoolean(FormatOnTypeKey, true);
-        AutoClosingBrackets = _settings.GetBoolean(AutoClosingBracketsKey, true);
-        Rulers = [.. _settings.GetStrings(RulersKey).Select(r => int.TryParse(r, NumberStyles.Integer, CultureInfo.InvariantCulture, out var column) ? column : 0).Where(c => c > 0)];
+        var settings = _settings.ForLanguage(_languageId);
+        InlayParameterNames = settings.GetBoolean(InlayParameterNamesKey, true);
+        InlayTypes = settings.GetBoolean(InlayTypesKey, false);
+        CodeLens = settings.GetBoolean(CodeLensKey, true);
+        GitCodeLens = settings.GetBoolean(GitCodeLensKey, true);
+        TestCodeLens = settings.GetBoolean(TestCodeLensKey, true);
+        InlineDiagnostics = settings.GetBoolean(InlineDiagnosticsKey, false);
+        InheritanceMargin = settings.GetBoolean(InheritanceMarginKey, true);
+        IndentGuides = settings.GetBoolean(IndentGuidesKey, true);
+        BracketPairColorization = settings.GetBoolean(BracketPairColorizationKey, true);
+        StickyScroll = settings.GetBoolean(StickyScrollKey, true);
+        OverviewRuler = settings.GetBoolean(OverviewRulerKey, true);
+        NavigationBar = settings.GetBoolean(NavigationBarKey, true);
+        PerfTips = settings.GetBoolean(PerfTipsKey, true);
+        TabSize = Math.Clamp(settings.GetInt32(TabSizeKey, 4), 1, 16);
+        InsertSpaces = settings.GetBoolean(InsertSpacesKey, true);
+        WordWrap = settings.GetBoolean(WordWrapKey);
+        Minimap = settings.GetBoolean(MinimapKey, true);
+        LineNumbers = settings.GetBoolean(LineNumbersKey, true);
+        RenderWhitespace = settings.GetString(RenderWhitespaceKey, "none") == "all";
+        HighlightCurrentLine = settings.GetBoolean(HighlightCurrentLineKey, true);
+        FormatOnType = settings.GetBoolean(FormatOnTypeKey, true);
+        AutoClosingBrackets = settings.GetBoolean(AutoClosingBracketsKey, true);
+        Rulers = [.. settings.GetStrings(RulersKey).Select(r => int.TryParse(r, NumberStyles.Integer, CultureInfo.InvariantCulture, out var column) ? column : 0).Where(c => c > 0)];
     }
 }
 
@@ -131,6 +186,20 @@ public sealed record EmbeddedRequest(LanguageHostClient Client, string Uri);
 /// <summary>What an editor view needs from the shell.</summary>
 public interface IEditorServices
 {
+    /// <summary>AI inline suggestions (M28b), or null where there are none.</summary>
+    Codalus.Workbench.Ai.AiCompletions? AiCompletions => null;
+
+    /// <summary>AI next-edit suggestions (M28b), or null where there are none.</summary>
+    Codalus.Workbench.Ai.AiNextEdit? AiNextEdit => null;
+
+    /// <summary>AI assistance is on: the exception helper offers Ask AI (M28b).</summary>
+    bool CanAskAi => false;
+
+    /// <summary>Asks AI Chat about the exception the debugger stopped on (its description with the stack).</summary>
+    void AskAiAboutException(string description)
+    {
+    }
+
     EditorOptions Options { get; }
 
     EditorTheme Theme { get; }

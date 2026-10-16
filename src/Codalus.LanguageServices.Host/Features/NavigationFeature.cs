@@ -21,6 +21,13 @@ internal static class NavigationFeature
         }
 
         var locations = await LocationsAsync(document.Project.Solution, symbol.Locations, cancellationToken).ConfigureAwait(false);
+        if (locations.Length == 0 && symbol.Locations.All(l => l.IsInMetadata)
+            && await SymbolFinder.FindSourceDefinitionAsync(symbol, document.Project.Solution, cancellationToken).ConfigureAwait(false) is { } source)
+        {
+            // A symbol of a project in another language (C# from VB, M35): the workspace references it as metadata.
+            locations = await LocationsAsync(document.Project.Solution, source.Locations, cancellationToken).ConfigureAwait(false);
+        }
+
         return locations.Length > 0 ? locations : await MetadataFeature.DefinitionAsync(document, symbol, cancellationToken).ConfigureAwait(false);
     }
 

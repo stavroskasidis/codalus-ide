@@ -11,7 +11,7 @@ namespace Codalus.LanguageServices.Client;
 /// given as offsets become substrings, <c>changes</c> become <c>documentChanges</c>, numeric diagnostic codes become
 /// strings, and commands among code actions are dropped. Results already in the narrowed shape pass unchanged.
 /// </summary>
-public static class LspNormalizer
+public static partial class LspNormalizer
 {
     private static readonly string[] BooleanProviders =
     [
@@ -249,14 +249,25 @@ public static class LspNormalizer
             _ => string.Empty,
         };
 
-        return node switch
+        var result = node switch
         {
             null => null,
             JsonObject markup when markup["kind"] is not null => markup,
             JsonArray parts => new JsonObject { ["kind"] = "markdown", ["value"] = string.Join("\n\n", parts.Select(Text).Where(t => t.Length > 0)) },
             _ => new JsonObject { ["kind"] = "markdown", ["value"] = Text(node) },
         };
+
+        // Links that run an editor command (FsAutoComplete's "Open the documentation") lead nowhere here.
+        if (result?["value"] is JsonValue markdown && markdown.TryGetValue<string>(out var text) && text.Contains("command:", StringComparison.Ordinal))
+        {
+            result["value"] = CommandLinks().Replace(text, string.Empty).Trim();
+        }
+
+        return result;
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex("<a\\s+href=['\"]command:[^'\"]*['\"]\\s*>.*?</a>|\\[[^\\]]*\\]\\(command:[^)]*\\)", System.Text.RegularExpressions.RegexOptions.Singleline)]
+    private static partial System.Text.RegularExpressions.Regex CommandLinks();
 
     private static JsonNode? SignatureHelp(JsonNode? node)
     {
@@ -341,12 +352,36 @@ public static class LspNormalizer
         }
 
         var changes = new JsonArray();
+        var operations = edit["resourceOperations"] is JsonArray ours ? (JsonArray)ours.DeepClone() : new JsonArray();
         if (edit["documentChanges"] is JsonArray documentChanges)
         {
-            // TextDocumentEdits; file operations (create, rename, delete) aren't supported yet and are skipped.
-            foreach (var change in documentChanges.OfType<JsonObject>().Where(c => c["textDocument"] is not null))
+            // TextDocumentEdits, and LSP's file operations: a created file is an edit inserting nothing into a new file;
+            // renamed and deleted files are resource operations, applied after the text edits.
+            foreach (var change in documentChanges.OfType<JsonObject>())
             {
-                changes.Add((JsonNode?)change.DeepClone());
+                switch (change["kind"]?.GetValue<string>())
+                {
+                    case null when change["textDocument"] is not null:
+                        changes.Add((JsonNode?)change.DeepClone());
+                        break;
+                    case "create" when change["uri"] is JsonValue created:
+                        changes.Add((JsonNode)new JsonObject
+                        {
+                            ["textDocument"] = new JsonObject { ["uri"] = created.DeepClone(), ["version"] = null },
+                            ["edits"] = new JsonArray(new JsonObject
+                            {
+                                ["range"] = new JsonObject { ["start"] = new JsonObject { ["line"] = 0, ["character"] = 0 }, ["end"] = new JsonObject { ["line"] = 0, ["character"] = 0 } },
+                                ["newText"] = string.Empty,
+                            }),
+                        });
+                        break;
+                    case "rename" when change["oldUri"] is JsonValue from && change["newUri"] is JsonValue to:
+                        operations.Add((JsonNode)new JsonObject { ["kind"] = "rename", ["uri"] = from.DeepClone(), ["newUri"] = to.DeepClone() });
+                        break;
+                    case "delete" when change["uri"] is JsonValue deleted:
+                        operations.Add((JsonNode)new JsonObject { ["kind"] = "delete", ["uri"] = deleted.DeepClone() });
+                        break;
+                }
             }
         }
         else if (edit["changes"] is JsonObject byUri)
@@ -362,7 +397,7 @@ public static class LspNormalizer
             }
         }
 
-        return new JsonObject { ["documentChanges"] = changes };
+        return new JsonObject { ["documentChanges"] = changes, ["resourceOperations"] = operations };
     }
 
     /// <summary>Normalizes a workspace edit a server sends (<c>workspace/applyEdit</c>): <c>changes</c> become <c>documentChanges</c>.</summary>
