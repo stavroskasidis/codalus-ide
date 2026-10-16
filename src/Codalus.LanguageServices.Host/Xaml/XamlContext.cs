@@ -39,6 +39,23 @@ internal sealed class XamlContext
     /// </summary>
     public bool IsWpf => Types is { IsWpf: true, IsAvalonia: false, IsMaui: false } && Path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// A WinUI 3 XAML file (M44, ADR 0074): a <c>.xaml</c> file of a project that references WinUI and not Avalonia, and
+    /// not .NET MAUI unless the file is under <c>Platforms/Windows</c> (MAUI's Windows target's own <c>App.xaml</c>).
+    /// <c>x:Bind</c> compiles against the page's class (errors); <c>{Binding}</c> resolves at run time (warnings, as WPF's).
+    /// </summary>
+    public bool IsWinUI => Types is { IsWinUI: true, IsAvalonia: false } && Path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase)
+        && (!Types.IsMaui || IsUnderMauiWindowsPlatform(Path));
+
+    /// <summary>WPF's and WinUI's shared conventions (M40a, M44): resources through <c>App.xaml</c>, run-time bindings' paths as warnings.</summary>
+    public bool IsWpfStyle => IsWpf || IsWinUI;
+
+    private static bool IsUnderMauiWindowsPlatform(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        return normalized.Contains("/Platforms/Windows/", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Avalonia's <c>.axaml</c> files and <c>.xaml</c> files (.NET MAUI's, M20a, and WPF's, M40a); a file's compilation decides its dialect.</summary>
     public static bool IsXaml(string path) => path.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase);
 
@@ -164,7 +181,7 @@ internal sealed class XamlContext
         {
             if (current.LocalName is "DataTemplate" or "HierarchicalDataTemplate" or "ItemContainerTemplate")
             {
-                return current.Attribute("DataType")?.Value is { } dataType ? ResolveTypeName(current, dataType) : null;
+                return (current.Attribute("DataType") ?? current.Attribute("x:DataType"))?.Value is { } dataType ? ResolveTypeName(current, dataType) : null; // WinUI: x:DataType (M44)
             }
 
             if (current.Parent is { IsPropertyElement: true } holder && (holder.LocalName.EndsWith(".Resources", StringComparison.Ordinal) || holder.LocalName.EndsWith(".Triggers", StringComparison.Ordinal)))
@@ -280,14 +297,14 @@ internal sealed class XamlContext
     /// </summary>
     public bool CompilesBindings(XamlElement element)
     {
-        if (Types is { IsMaui: true, IsAvalonia: false })
+        if (Types is { IsMaui: true, IsAvalonia: false } && !IsWinUI)
         {
             return true;
         }
 
-        if (IsWpf)
+        if (IsWpfStyle)
         {
-            return false; // WPF's bindings resolve at run time (their paths are checked as warnings)
+            return false; // WPF's and WinUI's {Binding}s resolve at run time (their paths are checked as warnings); x:Bind is checked apart
         }
 
         for (var current = element; current is not null; current = current.Parent)
@@ -301,6 +318,32 @@ internal sealed class XamlContext
         return Project?.AnalyzerOptions.AnalyzerConfigOptionsProvider.GlobalOptions
             .TryGetValue("build_property.AvaloniaUseCompiledBindingsByDefault", out var byDefault) == true
             && byDefault.Equals("true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Where a WinUI <c>x:Bind</c> at <paramref name="element"/> starts (M44): the closest data template's
+    /// <c>x:DataType</c>; the page's own class (<c>x:Class</c>) outside data templates. Null in a data template without
+    /// one (the XAML compiler asks for it) and when the class isn't found. <paramref name="isRoot"/>: the page's class,
+    /// whose private members and named elements a path may use.
+    /// </summary>
+    public INamedTypeSymbol? XBindRoot(XamlElement element, out bool isRoot)
+    {
+        isRoot = false;
+        for (var current = ObjectElement(element); current is not null; current = ObjectElement(current.Parent))
+        {
+            if (current.Attribute("x:DataType")?.Value is { Length: > 0 } dataType)
+            {
+                return ResolveTypeName(current, dataType);
+            }
+
+            if (current.LocalName is "DataTemplate" or "ControlTemplate")
+            {
+                return null;
+            }
+        }
+
+        isRoot = true;
+        return CodeBehind;
     }
 
     /// <summary>The code-behind class (<c>x:Class</c> on the root), or null.</summary>
@@ -431,9 +474,12 @@ internal sealed record MarkupExtensionContext(string Name, int NameStart, string
     /// <summary>The extension's name without the x: (or d:) prefix or the Extension suffix.</summary>
     public string Kind => (Name.StartsWith("x:", StringComparison.Ordinal) || Name.StartsWith("d:", StringComparison.Ordinal) ? Name[2..] : Name) is var n && n.EndsWith("Extension", StringComparison.Ordinal) ? n[..^9] : n;
 
-    public bool IsBinding => Kind is "Binding" or "CompiledBinding" or "ReflectionBinding";
+    public bool IsBinding => Kind is "Binding" or "CompiledBinding" or "ReflectionBinding" or "Bind";
 
-    public bool IsResource => Kind is "StaticResource" or "DynamicResource";
+    /// <summary>WinUI's compiled binding, <c>{x:Bind …}</c> (M44).</summary>
+    public bool IsXBind => Kind == "Bind";
+
+    public bool IsResource => Kind is "StaticResource" or "DynamicResource" or "ThemeResource";
 
     /// <summary>A binding's path argument (the first positional one, or <c>Path=</c>).</summary>
     public bool IsPath => IsBinding && (Key == "Path" || (Key is null && Index == 0));

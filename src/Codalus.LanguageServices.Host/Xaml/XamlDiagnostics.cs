@@ -58,7 +58,7 @@ internal sealed class XamlDiagnostics(WorkspaceManager workspace, Func<PublishDi
                     return;
                 }
 
-                var resources = context.IsWpf ? await XamlResources.ScopeAsync(context, token).ConfigureAwait(false) : null;
+                var resources = context.IsWpfStyle ? await XamlResources.ScopeAsync(context, token).ConfigureAwait(false) : null;
                 var diagnostics = XamlAnalysis.Diagnose(context, resources);
                 token.ThrowIfCancellationRequested();
                 await publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), version, diagnostics)).ConfigureAwait(false);
