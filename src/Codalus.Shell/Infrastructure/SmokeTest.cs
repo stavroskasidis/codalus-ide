@@ -2695,6 +2695,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
             await settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+            // The key goes too, like the hosting step's token: on macOS a key left in the Keychain makes the next run
+            // (another build, so another code signature) ask the user for access, which an unattended run can't answer.
+            await shell.Secrets.DeleteAsync("codalus.openai", "apiKey:openai", CancellationToken.None).ConfigureAwait(true);
         }
     }
 
