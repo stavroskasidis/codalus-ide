@@ -130,7 +130,7 @@ public sealed class WcfReferenceIntegrationTests : IAsyncLifetime
         // Update: the options written into ConnectedService.json, then svcutil --update on the folder.
         var updated = await service.UpdateAsync(new WcfReferenceParams(Client, "Calculator2", null, "Client.Calculator", "System.Array", null, Sync: false, ReuseTypes: true), Timeout());
         Assert.Equal(["--update", "Connected Services/Calculator2", "--projectFile", Client, "--noLogo"], Arguments(updated.Output));
-        var options = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "ConnectedService.json"))).RootElement.GetProperty("ExtendedData");
+        var options = JsonElement.Parse(File.ReadAllText(Path.Combine(folder, "ConnectedService.json"))).GetProperty("ExtendedData");
         Assert.Equal("*, Client.Calculator", options.GetProperty("namespaceMappings")[0].GetString());
         Assert.Equal("All", options.GetProperty("typeReuseMode").GetString());
         Assert.False(options.TryGetProperty("sync", out _));
