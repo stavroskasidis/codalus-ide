@@ -1,3 +1,5 @@
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.VisualTree;
@@ -63,6 +65,101 @@ public sealed class LanguageTests
         Assert.Equal(("<!--", "-->"), f.Shell.TextMate.ConfigurationFor("xml")?.BlockComment);
         Assert.Equal("#", f.Shell.TextMate.ConfigurationFor("yaml")?.LineComment);
         Assert.True(f.Shell.TextMate.ConfigurationFor("yaml")?.OffSide);
+    }
+
+    [AvaloniaFact]
+    public async Task Sticky_scroll_draws_its_lines_as_the_editor_colors_them()
+    {
+        // The maintainer's report: the pinned lines were plain text in the default color, unlike the code under them.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var body = string.Concat(Enumerable.Range(0, 80).Select(i => $"\t\tprint({i})\n"));
+        var editor = await OpenAsync(f, "greeter.py", "class Greeter:\n\tdef greet(self, name):\n" + body + "\t\treturn name\n");
+        var view = editor.Editor.TextArea.TextView;
+        var sticky = editor.Editor.FindAncestorOfType<CodeEditorView>()!.StickyScroll;
+
+        // The grammar colors the keywords of the two header lines while they're in view.
+        Color? ColorAt(int line, int column)
+        {
+            view.EnsureVisualLines();
+            return view.GetVisualLine(line)?.Elements.FirstOrDefault(e => e.RelativeTextOffset <= column && column < e.RelativeTextOffset + e.DocumentLength)
+                ?.TextRunProperties.ForegroundBrush is ISolidColorBrush brush ? brush.Color : null;
+        }
+
+        Assert.Equal("source.python", editor.GrammarScope);
+        var foreground = Assert.IsAssignableFrom<ISolidColorBrush>(editor.Editor.Foreground).Color;
+        await ShellFixture.PumpUntil(() => ColorAt(1, 0) is { } color && color != foreground, seconds: 20);
+        var classColor = ColorAt(1, 0);
+        var defColor = ColorAt(2, 1);
+        var nameColor = ColorAt(1, 6);
+
+        // Scrolled into the method: both headers pinned.
+        await ShellFixture.PumpUntil(() => editor.Folding.AllFoldings.Any(), seconds: 20);
+        await ShellFixture.PumpUntil(
+            () =>
+            {
+                editor.Editor.ScrollToLine(50); // again until the view has laid out
+                return sticky.Shown.SequenceEqual([1, 2]);
+            },
+            seconds: 20);
+        ShellFixture.Pump();
+
+        // On screen: each run in the color the editor gives it, the tab as the text view lays it out, in the text column,
+        // with the line numbers.
+        var blocks = sticky.GetVisualDescendants().OfType<TextBlock>().ToList();
+        var code = blocks.Where(b => b.Inlines is { Count: > 0 }).Select(b => b.Inlines!.OfType<Avalonia.Controls.Documents.Run>().ToList()).ToList();
+        Assert.Equal(2, code.Count);
+        Color? Of(Avalonia.Controls.Documents.Run run) => (run.Foreground as ISolidColorBrush)?.Color;
+        Assert.Equal(["class", " ", "Greeter"], code[0].Take(3).Select(r => r.Text));
+        Assert.NotEqual(foreground, classColor);
+        Assert.Equal(classColor, Of(code[0][0]));
+        Assert.Equal(nameColor, Of(code[0][2]));
+        Assert.Equal(defColor, Of(code[1].First(r => r.Text == "def")));
+        Assert.StartsWith(new string(' ', editor.Editor.Options.IndentationSize) + "def", string.Concat(code[1].Select(r => r.Text)), StringComparison.Ordinal);
+        var first = blocks.First(b => b.Inlines is { Count: > 0 });
+        Assert.Equal(editor.Editor.FontFamily, first.FontFamily);
+        var textLeft = view.TranslatePoint(default, editor.Editor.TextArea)!.Value.X;
+        Assert.Equal(textLeft, first.TranslatePoint(default, sticky)!.Value.X, 0.5);
+        Assert.Contains(blocks, b => b.Text == "1" && b.IsEffectivelyVisible);
+        Assert.Contains(blocks, b => b.Text == "2" && b.IsEffectivelyVisible);
+        if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
+        {
+            Directory.CreateDirectory(snapshots);
+            using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(f.Window);
+            frame!.Save(Path.Combine(snapshots, "sticky-scroll.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+
+        // Clicking a pinned line goes to it.
+        var row = sticky.GetVisualDescendants().OfType<Border>().First(b => b.Cursor is not null);
+        row.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(row, new Avalonia.Input.Pointer(1, Avalonia.Input.PointerType.Mouse, true), row, default, 0,
+            new Avalonia.Input.PointerPointProperties(Avalonia.Input.RawInputModifiers.LeftMouseButton, Avalonia.Input.PointerUpdateKind.LeftButtonPressed), Avalonia.Input.KeyModifiers.None));
+        Assert.Equal(1, editor.Editor.TextArea.Caret.Line);
+    }
+
+    [AvaloniaFact]
+    public void Semantic_tokens_of_pinned_lines_outlive_the_window_around_the_viewport()
+    {
+        // Sticky scroll's headers (a namespace, a class) can be far above the window of tokens kept around the viewport.
+        var colorizer = new SemanticColorizer();
+        colorizer.Apply(0, 60, [0, 0, 9, 3, 0]);
+        colorizer.Pin([0]);
+        colorizer.Apply(440, 560, [500, 4, 5, 2, 0]);
+        Assert.Equal(3, colorizer.TokenAt(0, 2));
+        Assert.Equal(2, colorizer.TokenAt(500, 5));
+        Assert.True(colorizer.Knows(0));
+        Assert.True(colorizer.Knows(450)); // in the window, without tokens
+        Assert.False(colorizer.Knows(1));
+
+        // A header's own range request.
+        colorizer.ApplyLine(1, [1, 0, 6, 7, 0]);
+        Assert.Equal(7, colorizer.TokenAt(1, 0));
+
+        // Unpinned, they go with the next window.
+        colorizer.Pin([]);
+        colorizer.Apply(440, 560, [500, 4, 5, 2, 0]);
+        Assert.Equal(-1, colorizer.TokenAt(0, 2));
+        Assert.False(colorizer.Knows(1));
     }
 
     /// <summary>A plugins folder with the sample declarative plugin (samples/plugins/TodoLanguage).</summary>

@@ -12,6 +12,7 @@ In progress on `develop`; nightlies show these notes.
 - **Fixed:** after dragging the bottom tool windows into a group of their own, tool windows such as the Plugin Gallery, Coverage Results and Code Metrics Results opened in a new group stacked above them. A tool window now opens as a tab where it was last closed, or in the group of its usual place.
 - **Fixed:** a tool window dragged among the documents showed its whole content in its tab. It now has a document tab with its title and icon.
 - **Fixed:** the toolbar's Hot Reload button and its arrow were a gray block; they're flat like the buttons beside them.
+- **Fixed:** the lines sticky scroll pins at the top of the editor were plain text in one color. They're drawn as in the editor, with its colors, indentation and line numbers.
 - **Fixed:** opening the first tool window on the left (such as the Start page) could leave the documents area under a third of the window, with the right pane taking over half.
 - **Fixed:** on a Mac whose home folder is on another disk than the app, **Restart to update** started the old version again and offered the same update. The update is now prepared on the app's own disk. A 0.2.1 install on such a Mac can't update past the bug itself: install this release's `.pkg` once.
 
