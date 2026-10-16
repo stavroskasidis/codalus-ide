@@ -2557,7 +2557,22 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             // The first session downloads vscode-js-debug (and Node.js, if M16b's step didn't). A failed build ends the wait.
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), () => "the browser session stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
+            // The dev server's debugging proxy can stall on a loaded runner before the page's .NET runtime is reported
+            // (no Mono.runtimeReady, none of the app's sources: the page runs, no breakpoint binds; seen once on the
+            // linux-arm64 installed app). A user starts debugging again; so does this step, once, and that session must stop.
+            try
+            {
+                await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), "the browser session stops at the breakpoint", 300).ConfigureAwait(true);
+            }
+            catch (SmokeFailure) when (!BuildFailed())
+            {
+                shell.Workbench.Log.AppendLine("[smoke] blazor.wasmDebug: the page didn't stop in 300 s; debugging starts again. Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000));
+                await shell.Debugger.StopAsync().ConfigureAwait(true);
+                await WaitAsync(() => shell.Runs.Running.Count == 0 && shell.Debugger.State == DebugState.Idle, "the first session and its dev server stop", 60).ConfigureAwait(true);
+                shell.Run("debug.start");
+                await WaitAsync(() => shell.Debugger.State == DebugState.Stopped || BuildFailed(), () => "the browser session stops at the breakpoint, on the second start (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 300).ConfigureAwait(true);
+            }
+
             Check(!BuildFailed(), "the build before debugging succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the call stack", 60).ConfigureAwait(true);
             Check(shell.CallStack.Frames[0].Name is var top && (top.Contains("Counter.OnInitialized", StringComparison.Ordinal) || top.Contains("Counter.Tick", StringComparison.Ordinal)),
