@@ -3,7 +3,7 @@ using Codalus.Projects.Protocol;
 namespace Codalus.Workbench.Projects;
 
 /// <summary>
-/// WinForms and WPF projects, and others that target Windows (M40a, ADR 0069, D31): they open, edit and build on
+/// WinForms and WPF projects, and others that target Windows (M40a, ADR 0071, D31): they open, edit and build on
 /// every OS, but run, debug, test and Hot Reload only on Windows, so elsewhere the IDE says so instead of failing.
 /// </summary>
 public static class WindowsDesktopProjects

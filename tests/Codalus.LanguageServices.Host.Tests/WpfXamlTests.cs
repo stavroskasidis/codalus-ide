@@ -48,7 +48,7 @@ public sealed class WpfLanguageFixture : LanguageFixture
 }
 
 /// <summary>
-/// M40a (ADR 0069): WPF XAML in the C# language host, the M19 engine with WPF's dialect: namespaces from
+/// M40a (ADR 0071): WPF XAML in the C# language host, the M19 engine with WPF's dialect: namespaces from
 /// <c>[XmlnsDefinition]</c>, dependency and attached properties by convention, attached events, WPF's markup
 /// extensions, styles, triggers and setters, resources through merged dictionaries and App.xaml, binding paths from
 /// <c>d:DataContext</c> (warnings: WPF's bindings aren't compiled), hover, Go to Definition, <c>x:Name</c> rename and

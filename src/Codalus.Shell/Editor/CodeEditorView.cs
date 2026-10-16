@@ -244,6 +244,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
         minimap.Bind(Minimap.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
         var sticky = new StickyScroll(editor, () => controller.Insights.Symbols, () => controller.Folding) { Enabled = Options.StickyScroll };
         controller.Insights.SymbolsChanged += (_, _) => sticky.Update();
+        sticky.LinesPinned += (_, lines) => controller.KeepTokens(lines);
         var ruler = new OverviewRuler(editor, _services, () => _document.Model.Path, () => controller.GitChanges, () => controller.Search) { IsVisible = Options.OverviewRuler };
         return new EditorParts(editor, controller, minimap, sticky, ruler);
     }

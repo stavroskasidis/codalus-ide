@@ -1,6 +1,6 @@
 namespace Codalus.Projects.Host;
 
-/// <summary>WinForms and WPF projects in the build host (M40a, ADR 0069). No MSBuild types, so the tests compile it in.</summary>
+/// <summary>WinForms and WPF projects in the build host (M40a, ADR 0071). No MSBuild types, so the tests compile it in.</summary>
 internal static class WindowsDesktop
 {
     public const string WindowsTargetingProperty = "EnableWindowsTargeting";

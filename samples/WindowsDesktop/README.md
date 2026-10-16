@@ -1,6 +1,6 @@
 # WinForms and WPF fixture (M40)
 
-A WPF app, a Windows Forms app and a test project for each, on `net11.0-windows`, for loading, running, debugging and testing Windows desktop projects and for WPF XAML editing ([ADR 0069](../../docs/adr/0069-wpf-xaml-language-service.md)). They build on every OS with `EnableWindowsTargeting=true`, which Codalus's build host sets on Linux and macOS; they run on Windows only.
+A WPF app, a Windows Forms app and a test project for each, on `net11.0-windows`, for loading, running, debugging and testing Windows desktop projects and for WPF XAML editing ([ADR 0071](../../docs/adr/0071-wpf-xaml-language-service.md)). They build on every OS with `EnableWindowsTargeting=true`, which Codalus's build host sets on Linux and macOS; they run on Windows only.
 
 | Project | What it has | Used by |
 |---|---|---|

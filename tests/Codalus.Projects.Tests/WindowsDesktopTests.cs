@@ -8,7 +8,7 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Projects.Tests;
 
 /// <summary>
-/// WinForms and WPF projects (M40a, ADR 0069) in the real build host on a copy of samples/WindowsDesktop, on every OS:
+/// WinForms and WPF projects (M40a, ADR 0071) in the real build host on a copy of samples/WindowsDesktop, on every OS:
 /// on Linux and macOS the host sets <c>EnableWindowsTargeting</c>, so they restore, load with their XAML as additional
 /// files, and build, and the WPF markup compiler's errors come back with their file and line.
 /// </summary>

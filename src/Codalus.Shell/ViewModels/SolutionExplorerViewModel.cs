@@ -584,6 +584,28 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         Refresh();
     }
 
+    /// <summary>
+    /// The expansion to keep with the solution (ADR 0070): the expanded nodes, and the solution and solution folders
+    /// the user collapsed (they start expanded). Node ids are stable across sessions: <c>p:</c>, <c>d:</c> and <c>f:</c>
+    /// with the item's path, <c>sf:</c> with the solution folder's id in the solution file.
+    /// </summary>
+    public (IReadOnlyList<string> Expanded, IReadOnlyList<string> Collapsed) CaptureExpansion() =>
+        ([.. _expanded.Order(StringComparer.Ordinal)],
+         [.. _seen.Where(id => (id == "solution" || id.StartsWith("sf:", StringComparison.Ordinal)) && !_expanded.Contains(id)).Order(StringComparer.Ordinal)]);
+
+    /// <summary>
+    /// Restores the expansion kept with the solution (before its tree loads): nodes expand as they appear, so a
+    /// project's folders expand once the project has loaded.
+    /// </summary>
+    public void LoadExpansion(IEnumerable<string>? expanded, IEnumerable<string>? collapsed)
+    {
+        _expanded.Clear();
+        _seen.Clear();
+        _expanded.UnionWith(expanded ?? []);
+        _seen.UnionWith(collapsed ?? []);
+        Refresh();
+    }
+
     /// <summary>Reveals <paramref name="id"/> as soon as the node exists (it may come with the next model update).</summary>
     public void RevealWhenAvailable(string id)
     {

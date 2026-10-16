@@ -5,7 +5,7 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Shell;
 
 /// <summary>
-/// WinForms and WPF projects (M40a, ADR 0069, D31): they open, edit and build on every OS, and run, debug, test and
+/// WinForms and WPF projects (M40a, ADR 0071, D31): they open, edit and build on every OS, and run, debug, test and
 /// Hot Reload only on Windows. On Linux and macOS, Start and Start Without Debugging say so instead of failing.
 /// </summary>
 public sealed partial class ShellHost

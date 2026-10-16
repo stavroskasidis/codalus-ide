@@ -33,7 +33,7 @@ F5 then builds the solution once and starts the projects in that order. Those se
 - each program stops at its own breakpoints, and the others keep running;
 - the session ends when the last program ends.
 
-The choice is saved with the solution (in your user data, not in the solution file).
+The choice is saved with the solution, for you only, in `.codalus/state/` next to it (not in the solution file; see [What a solution reopens with](solutions.md#what-a-solution-reopens-with)).
 
 ### Debugging on other machines
 

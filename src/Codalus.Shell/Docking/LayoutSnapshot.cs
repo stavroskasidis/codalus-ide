@@ -62,7 +62,10 @@ public sealed record WindowPlacement(double Width, double Height, int? X, int? Y
 [JsonSerializable(typeof(Dictionary<string, string[]>))]
 internal sealed partial class ShellJsonContext : JsonSerializerContext;
 
-/// <summary>The documents open in a solution, reopened with it (<c>sessions/&lt;hash&gt;.json</c> in the state folder).</summary>
+/// <summary>
+/// What a solution reopens with: its documents, breakpoints, startup projects, configuration, Solution Explorer's
+/// expansion… (<c>.codalus/state/&lt;solution file name&gt;/session.json</c> next to the solution, ADR 0070).
+/// </summary>
 public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, string? Active)
 {
     /// <summary>The startup project the user chose (null: the default, the first executable project).</summary>
@@ -101,7 +104,31 @@ public sealed record EditorSession(IReadOnlyList<SessionDocument> Documents, str
 
     /// <summary>The startup projects' actions, in start order (M14c).</summary>
     public IReadOnlyList<SessionStartupProject>? StartupProjects { get; init; }
+
+    /// <summary>The active solution configuration (ADR 0070); reopened with it while the solution still has it.</summary>
+    public string? Configuration { get; init; }
+
+    /// <summary>The active solution platform, with <see cref="Configuration"/>.</summary>
+    public string? Platform { get; init; }
+
+    /// <summary>The target framework the editor uses per multi-targeted project (the navigation bar's project list).</summary>
+    public Dictionary<string, string>? ActiveFrameworks { get; init; }
+
+    /// <summary>Solution Explorer's expanded nodes, by node id (ADR 0070).</summary>
+    public IReadOnlyList<string>? ExpandedNodes { get; init; }
+
+    /// <summary>The solution and solution folders the user collapsed (they start expanded).</summary>
+    public IReadOnlyList<string>? CollapsedNodes { get; init; }
+
+    /// <summary>The Error List's filters.</summary>
+    public SessionErrorList? ErrorList { get; init; }
+
+    /// <summary>The Test Explorer's grouping (a <c>TestGrouping</c> name).</summary>
+    public string? TestGrouping { get; init; }
 }
+
+/// <summary>The Error List's filters, kept with the solution: what it shows and from which source (0: build and IntelliSense, 1: build, 2: IntelliSense).</summary>
+public sealed record SessionErrorList(bool ShowErrors = true, bool ShowWarnings = true, bool ShowMessages = true, int Source = 0, bool CurrentDocumentOnly = false);
 
 /// <summary>A project of multiple startup projects: <see cref="Action"/> is <c>Start</c> or <c>StartWithoutDebugging</c>.</summary>
 public sealed record SessionStartupProject(string Path, string Action);

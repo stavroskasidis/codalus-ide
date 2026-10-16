@@ -10,7 +10,7 @@ using Codalus.Workbench.Testing;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// M40a (ADR 0069, D31) in the headless shell on samples/WindowsDesktop: WPF and Windows Forms projects open, edit and
+/// M40a (ADR 0071, D31) in the headless shell on samples/WindowsDesktop: WPF and Windows Forms projects open, edit and
 /// build on every OS (the build host sets EnableWindowsTargeting off Windows), with their XAML served by the C# host,
 /// their files nested and their Add New Item templates; on Linux and macOS, starting or testing them says they're
 /// Windows only. On Windows, the WPF app runs, debugs, and both test projects run.

@@ -5,7 +5,7 @@ using Codalus.Workbench.Projects;
 
 namespace Codalus.Workbench.Tests;
 
-/// <summary>M40a (ADR 0069): which projects run only on Windows, the WPF and Windows Forms item templates, and the markup compiler's errors in their files.</summary>
+/// <summary>M40a (ADR 0071): which projects run only on Windows, the WPF and Windows Forms item templates, and the markup compiler's errors in their files.</summary>
 public sealed class WindowsDesktopTests
 {
     private static ProjectInfo Project(string[] frameworks, bool wpf = false, bool winForms = false) =>

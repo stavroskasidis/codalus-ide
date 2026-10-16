@@ -748,10 +748,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
 
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
-        await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
+        await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source; the solution closed for it keeps its session in .codalus/state", async () =>
         {
             var solution = PrepareTestingFixture();
+            var previousState = shell.SolutionStateDirectory;
             await shell.OpenSolutionAsync(solution).ConfigureAwait(true);
+            if (previousState is not null)
+            {
+                // ADR 0070: closing a solution writes its session next to it, git-ignored by the state folder's own .gitignore.
+                await shell.SolutionState.FlushAsync().ConfigureAwait(true);
+                Check(File.Exists(Path.Combine(previousState, "session.json")), $"the closed solution's session is in {previousState}");
+                Check(File.Exists(Path.Combine(Path.GetDirectoryName(previousState)!, ".gitignore")), "the state folder ignores itself in Git");
+            }
+
             shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId);
             await WaitAsync(() => TestClass("XunitV2Tests") is not null && TestClass("XunitV3Tests") is not null, "both test projects' CalculatorTests are listed", 300).ConfigureAwait(true);
             await WaitAsync(() => shell.TestExplorer.Rows.Any(r => r.Label == "XunitV3Tests"), "the Test Explorer shows them").ConfigureAwait(true);
@@ -1100,10 +1109,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("data.efMigrations", "M27", "EF Core: the Entity Framework window lists a context and its migrations; Update Database shows the SQL, then applies it; Add Migration; the model diagram; reverse engineering", EfStepAsync).ConfigureAwait(true);
 
         await StepAsync("web.scaffolding", "M15", "Add New Scaffolded Item runs dotnet-aspnet-codegenerator (an API controller over a DbContext); a gRPC service reference generates its client at build time", ScaffoldingStepAsync).ConfigureAwait(true);
+        await StepAsync("wcf.testClient", "M42", "samples/Wcf's CoreWCF service runs; the WCF Test Client finds its metadata and calls operations over BasicHttpBinding and WSHttpBinding", WcfStepAsync).ConfigureAwait(true);
         await StepAsync("data.explorer", "M27", "The Database Explorer: a SQLite connection's tables, data edited and committed, a query with results, completion and a plan (the data host)", DataExplorerStepAsync).ConfigureAwait(true);
 
         // M17a: containers (ADR 0042), where an engine runs Linux containers (GitHub's Linux runner; Podman here).
-        const string containerTitle = "A web app runs in a container through its \"Container (Dockerfile)\" profile (fast mode), answers, and the Containers window shows it";
+        const string containerTitle = "A web app runs in a container through its \"Container (Dockerfile)\" profile (fast mode), answers, serves its wwwroot, and the Containers window shows it";
         var engine = shell.ContainerEngine;
         var (engineOs, engineError) = await engine.ServerOsAsync(CancellationToken.None).ConfigureAwait(true);
         if (engineOs != "linux" && !(Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux()))
@@ -1163,7 +1173,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
         await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
 
-        // M40a: WinForms and WPF (ADR 0069, D31: Windows only).
+        // M40a: WinForms and WPF (ADR 0071, D31: Windows only).
         const string desktopTitle = "The WPF app opens, its XAML completes binding paths from d:DataContext, and it builds and runs";
         if (OperatingSystem.IsWindows())
         {
@@ -1736,14 +1746,75 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
     }
     /// <summary>
+    /// WCF (M42, ADR 0069): samples/Wcf's CoreWCF service started with Run; the WCF Test Client finds its metadata from
+    /// the running program, reads it, and calls Add over BasicHttpBinding (SOAP 1.1) and Greet, with a data contract,
+    /// over WSHttpBinding (SOAP 1.2 with WS-Addressing). The screenshot is the website's.
+    /// </summary>
+    private async Task WcfStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
+        Check(File.Exists(Path.Combine(samples, "Wcf", "Wcf.slnx")), $"the samples folder {samples} has Wcf");
+        var target = Path.Combine(Work, "Wcf");
+        Copy(Path.Combine(samples, "Wcf"), target);
+        shell.Trust.Trust(target); // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=wcf.testClient skips it
+        await shell.OpenSolutionAsync(Path.Combine(target, "Wcf.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Wcf solution is open", 300).ConfigureAwait(true);
+        var service = Path.Combine(target, "CalculatorService", "CalculatorService.csproj");
+        shell.SetStartupProject(service);
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        try
+        {
+            // The program's channel stays after it exits, so a service that stops at start says why.
+            string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: CalculatorService")?.GetText() ?? string.Empty;
+            await WaitAsync(() => Output().Contains("Now listening on", StringComparison.Ordinal) || (Output().Length > 0 && shell.Runs.Running.Count == 0), "the CoreWCF service starts", 420).ConfigureAwait(true);
+            Check(Output().Contains("Now listening on", StringComparison.Ordinal), "the CoreWCF service listens:\n" + Tail(Output(), 2000) + "\nThe build output:\n" + Tail(shell.Builds.Channel.GetText(), 1500));
+
+            var client = shell.OpenWcfTestClient();
+            string? Result() => client.ResponseTree.Count > 0 && client.ResponseTree[0].Children.Count > 0 ? client.ResponseTree[0].Children[0].Label : null;
+            var found = await shell.DiscoverWcfServicesAsync().ConfigureAwait(true);
+            Check(found.Count > 0 && found[0].MetadataUrl.EndsWith("/CalculatorService.svc?wsdl", StringComparison.Ordinal), "the running service's metadata is found: " + string.Join(", ", found.Select(d => d.MetadataUrl)) + "\n" + Tail(Output(), 1000));
+            client.Address = found[0].MetadataUrl;
+            await client.LoadAsync().ConfigureAwait(true);
+            Check(client.Error is null && client.Endpoints.Count == 2, "the metadata is read: " + client.Error);
+
+            client.Select("Add", Workbench.Wcf.SoapVersion.Soap11);
+            client.Row("a")!.Value = "2";
+            client.Row("b")!.Value = "3.5";
+            await client.SendAsync().ConfigureAwait(true);
+            Check(client.Error is null && Result() == "AddResult = 5.5", "Add answers over BasicHttpBinding: " + (client.Error ?? client.ResponseText));
+
+            client.Select("Greet", Workbench.Wcf.SoapVersion.Soap12);
+            client.Row("person.Name")!.Value = "Ada";
+            client.Row("person.Age")!.Value = "36";
+            client.Row("person.Mood")!.Value = "Happy";
+            client.Row("person.Tags.string")!.AddCommand.Execute(null);
+            client.Rows[^1].Value = "math";
+            await client.SendAsync().ConfigureAwait(true);
+            Check(client.Error is null && Result() == "GreetResult = Hello Ada, 36 and happy (math)!", "Greet answers over WSHttpBinding: " + (client.Error ?? client.ResponseText));
+            await WaitAsync(() => window.GetVisualDescendants().OfType<WcfTestClientView>().Any(), "the WCF Test Client renders").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("smoke-test-wcf-test-client.png");
+        }
+        finally
+        {
+            shell.StopRunning();
+            foreach (var document in shell.Layout.Documents.OfType<SolutionManagementDocument>().ToList())
+            {
+                shell.Layout.CloseDocument(document);
+            }
+        }
+    }
+
+    /// <summary>
     /// The database explorer (M27b, ADR 0037 and 0038) on a copy of samples/Data's inventory database: a connection
     /// added in the form, the tree, a table's data edited and committed, a query editor with schema completion,
     /// results and an estimated plan, all through the published data host.
     /// </summary>
     /// <summary>
     /// Containers (M17a): samples/Containers' web app with its container profile: Ctrl+F5 builds the Dockerfile's base
-    /// stage, mounts the build output and starts the app through exec; it answers on its published port; the Containers
-    /// window lists the container with its environment; stopping the program removes the container.
+    /// stage, mounts the build output and the static web assets, and starts the app through exec; it answers on its
+    /// published port and serves wwwroot; the Containers window lists the container with its environment; stopping the
+    /// program removes the container.
     /// </summary>
     private async Task ContainerRunStepAsync()
     {
@@ -1767,6 +1838,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(30) };
             var answer = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/")).ConfigureAwait(true);
             Check(answer.StartsWith("Hello from ", StringComparison.Ordinal), "the app answers: " + answer);
+            var asset = await http.GetStringAsync(new Uri($"http://127.0.0.1:{port}/hello.txt")).ConfigureAwait(true);
+            Check(asset.Trim() == "Hello from wwwroot", "the app serves wwwroot, a static web asset of the project folder: " + asset);
 
             await shell.ShowContainersAsync().ConfigureAwait(true);
             var row = shell.ContainersWindow.Containers.FirstOrDefault(c => c.Name == name);

@@ -1,4 +1,4 @@
-# 0069. WPF XAML language service
+# 0071. WPF XAML language service
 
 - **Status:** accepted (M40a, 2026-10-16; the maintainer's standing go-ahead for the milestones, D31)
 - **Date:** 2026-10-16

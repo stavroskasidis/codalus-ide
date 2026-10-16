@@ -145,6 +145,9 @@ public sealed class ContainerRuntimeTests : IAsyncLifetime
 
             Assert.NotNull(answer);
             Assert.StartsWith($"Hello from {details.Id} on ", answer, StringComparison.Ordinal); // the container's host name
+
+            // wwwroot, a static web asset in the project folder (not in the output): mounted with a manifest of its container path.
+            Assert.Equal("Hello from wwwroot", (await http.GetStringAsync($"http://127.0.0.1:{hostPort}/hello.txt", ct)).Trim());
         }
         finally
         {

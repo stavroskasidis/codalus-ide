@@ -6,7 +6,7 @@ namespace Codalus.LanguageServices.Host.Xaml;
 internal sealed record XamlResourceKey(string Key, string Kind, string File);
 
 /// <summary>
-/// The resource keys a WPF XAML file sees (M40a, ADR 0069), and whether that list is complete: when every merged
+/// The resource keys a WPF XAML file sees (M40a, ADR 0071), and whether that list is complete: when every merged
 /// dictionary on the way was found in the solution and the project has an <c>App.xaml</c>, a <c>StaticResource</c> key
 /// outside it is reported; otherwise (a library, a dictionary from another assembly) nothing is.
 /// </summary>

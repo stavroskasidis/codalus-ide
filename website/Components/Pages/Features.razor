@@ -1,7 +1,7 @@
 @page "/features"
 @inject SiteOptions Site
 
-<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF and Windows Forms, Visual Basic, F#, profiling and more." />
+<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF and Windows Forms, Visual Basic, F#, WCF, profiling and more." />
 
 <div class="container">
     <section class="page-intro">
@@ -84,6 +84,7 @@
                     <li>Browse, update and consolidate packages; Central Package Management</li>
                     <li>The Properties window, Show All Files, Add New Item, templates and External Tools</li>
                     <li>Folder mode for a folder without a solution</li>
+                    <li>A solution reopens as you left it: documents, breakpoints, bookmarks, configuration and the Solution Explorer's expansion, kept in a self-ignoring .codalus/state next to it</li>
                     <li>.NET 11 projects with C# 15, every framework from .NET Core 2.0 to .NET 10, and older SDKs in global.json</li>
                     <li>A start window with your recent solutions, pinned and searchable</li>
                     <li>Check Environment: a missing .NET SDK or git offered to install</li>
@@ -215,6 +216,17 @@
                 </ul>
             </div>
             <div>
+                <h3>WCF</h3>
+                <ul>
+                    <li>Add Service Reference with your dotnet-svcutil: from a service's metadata, a WSDL file or a CoreWCF service you run</li>
+                    <li>Namespace, collection types, synchronous operations, type reuse and access; Update and Remove</li>
+                    <li>References kept as Visual Studio keeps them: Connected Services and ConnectedService.json</li>
+                    <li>CoreWCF services from CoreWCF's templates in New Project</li>
+                    <li>A WCF Test Client: operations from the metadata, a form per operation or raw XML, responses as a tree; BasicHttpBinding and WSHttpBinding</li>
+                    <li>system.serviceModel completion, hover and checks in app.config and web.config</li>
+                </ul>
+            </div>
+            <div>
                 <h3>And more</h3>
                 <ul>
                     <li>Remote development over SSH, in WSL and in containers; Dev Containers; reconnecting after a network drop; the Test Explorer and workspace plugins on the remote machine; tests in WSL, Docker or over SSH</li>
@@ -258,6 +270,9 @@
         new("web", "Web APIs", "web-http.png",
             "A .http file with run buttons, the HTTP Response window and the Endpoints Explorer",
             "Send requests from a .http file, read the response, and browse every route in the Endpoints Explorer."),
+        new("wcf", "WCF", "wcf-test-client.png",
+            "The WCF Test Client with a CoreWCF service's operations, the request form of Greet and its response as a tree",
+            "Call a WCF or CoreWCF service from its metadata: a form per operation, the SOAP envelope, and the response as a tree."),
         new("profiling", "Profiling", "profiler.png",
             "A CPU profiling report: the sample timeline above a flame graph of the program's hot methods",
             "Record a CPU trace, scrub the timeline, and find the hot path in the flame graph, with hot lines marked in the editor."),

@@ -83,6 +83,7 @@ public sealed partial class CodeEditorController : IDisposable
     private DocumentOptions? _documentOptions;
     private readonly bool _attached;
     private bool _disposed;
+    private (int Version, HashSet<int> Requested) _pinnedTokens = (0, []);
 
     public CodeEditorController(TextEditor editor, CodeEditorDocument dockable, IEditorServices services, Popup hoverPopup, bool attach = true, Popup? exceptionPopup = null)
     {
@@ -529,6 +530,56 @@ public sealed partial class CodeEditorController : IDisposable
             AfterTokens();
         }
         catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Keeps the semantic tokens of the lines sticky scroll pins (one-based <paramref name="lines"/>), and asks for the
+    /// ones it lacks, a line at a time: a header far above the viewport is outside the window of tokens kept around it.
+    /// </summary>
+    public void KeepTokens(IReadOnlyList<int> lines)
+    {
+        var zeroBased = lines.Select(l => l - 1).ToList();
+        _colorizer.Pin(zeroBased);
+        if (_pinnedTokens.Version != Model.Version)
+        {
+            _pinnedTokens = (Model.Version, []);
+        }
+
+        var missing = zeroBased.Where(l => !_colorizer.Knows(l) && _pinnedTokens.Requested.Add(l)).ToList();
+        if (missing.Count > 0)
+        {
+            _ = PinnedTokensAsync(missing);
+        }
+    }
+
+    private async Task PinnedTokensAsync(List<int> lines)
+    {
+        try
+        {
+            // A server without range requests sends the whole document's tokens, which cover every line.
+            if (Client is not { Capabilities.SemanticTokensProvider: { Range: true } provider } client)
+            {
+                return;
+            }
+
+            var version = Model.Version;
+            foreach (var line in lines)
+            {
+                var range = new LanguageServices.Protocol.Range(new Position(line, 0), new Position(line + 1, 0));
+                var tokens = await client.SemanticTokensAsync(Model.Uri, range, CancellationToken.None).ConfigureAwait(true);
+                if (version != Model.Version || _disposed)
+                {
+                    return;
+                }
+
+                _colorizer.ApplyLine(line, SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes));
+            }
+
+            Editor.TextArea.TextView.Redraw();
+        }
+        catch (Exception ex) when (IsTransient(ex))
         {
         }
     }

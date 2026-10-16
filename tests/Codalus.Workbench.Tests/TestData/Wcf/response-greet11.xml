@@ -1,0 +1,1 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><GreetResponse xmlns="http://samples.codalus.dev/calculator"><GreetResult>Hello Ada, 36 and happy (math)!</GreetResult></GreetResponse></s:Body></s:Envelope>

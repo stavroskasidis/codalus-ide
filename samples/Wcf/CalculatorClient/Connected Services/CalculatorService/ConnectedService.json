@@ -1,0 +1,19 @@
+{
+  "ExtendedData": {
+    "inputs": [
+      "http://localhost:5280/CalculatorService.svc?wsdl"
+    ],
+    "collectionTypes": [
+      "System.Array",
+      "System.Collections.Generic.Dictionary`2"
+    ],
+    "namespaceMappings": [
+      "*, CalculatorClient.Calculator"
+    ],
+    "outputFile": "Reference.cs",
+    "targetFramework": "net10.0",
+    "typeReuseMode": "All"
+  },
+  "ProviderId": "Microsoft.VisualStudio.ConnectedService.Wcf",
+  "Version": "15.0.40203.910"
+}

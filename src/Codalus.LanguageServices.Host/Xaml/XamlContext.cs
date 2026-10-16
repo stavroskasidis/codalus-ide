@@ -33,7 +33,7 @@ internal sealed class XamlContext
     public XamlTypeSystem? Types { get; }
 
     /// <summary>
-    /// A WPF XAML file (M40a, ADR 0069): a <c>.xaml</c> file of a project that references WPF and neither Avalonia nor
+    /// A WPF XAML file (M40a, ADR 0071): a <c>.xaml</c> file of a project that references WPF and neither Avalonia nor
     /// .NET MAUI. Its bindings aren't compiled, so their paths are warnings, from <c>d:DataContext</c>, a
     /// <c>DataContext</c> element or a data template's <c>DataType</c>.
     /// </summary>

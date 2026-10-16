@@ -66,6 +66,18 @@ public class TemplateCatalogTests
         var elsewhere = TemplateCatalog.ForThisOs([templates[2], templates[0], templates[5], templates[1]], windows: false);
         Assert.Equal(["console", "classlib", "wpf", "winforms"], elsewhere.Select(t => t.ShortName));
     }
+
+    [Fact]
+    public void Template_packs_that_are_not_installed_are_offered()
+    {
+        var templates = TemplateCatalog.Parse(Output);
+        Assert.Equal(["Avalonia.Templates", "CoreWCF.Templates"], TemplatePacks.Missing(templates).Select(p => p.Package));
+
+        var withCoreWcf = TemplateCatalog.Parse(Output.Replace("Console App         console ", "CoreWCF Service     corewcf ", StringComparison.Ordinal));
+        Assert.Equal(["Avalonia.Templates"], TemplatePacks.Missing(withCoreWcf).Select(p => p.Package));
+        var coreWcf = withCoreWcf.Single(t => t.ShortName == "corewcf");
+        Assert.Equal(("CoreWCF Service", "CoreWCFService1"), (coreWcf.Name, coreWcf.DefaultName));
+    }
 }
 
 public class TemplateFrameworksTests

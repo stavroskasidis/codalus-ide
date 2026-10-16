@@ -93,8 +93,7 @@ public sealed class LayoutManager : ObservableObject
         }
         else if (!AllDockables().Contains(tool))
         {
-            var pane = EnsurePane(descriptor.Location);
-            Factory.AddDockable(pane, tool);
+            Factory.AddDockable(GroupFor(tool), tool);
             Factory.SetActiveDockable(tool);
         }
         else
@@ -142,6 +141,23 @@ public sealed class LayoutManager : ObservableObject
         new[] { _root.LeftPinnedDockables, _root.RightPinnedDockables, _root.TopPinnedDockables, _root.BottomPinnedDockables }
             .Any(list => list?.Contains(dockable) == true);
 
+    /// <summary>
+    /// The group a tool window that isn't in the layout opens in, as a tab: the group it was in when it closed, if that
+    /// group is still open (Dock leaves a closed dockable's owner set); else the group of its default location.
+    /// </summary>
+    private IDock GroupFor(ToolWindowDockable tool) =>
+        tool.Owner is IDock last and (IToolDock or IDocumentDock) && AllDockables().Contains(last) ? last : EnsurePane(tool.Descriptor.Location);
+
+    /// <summary>
+    /// The main window's group for <paramref name="location"/>: the pane with its id; or, once the user's rearranging
+    /// has emptied and removed that pane, the group that holds most of the location's tool windows, such as one Dock
+    /// made when its tabs were dragged to the window's edge; or else a new pane in its place.
+    /// </summary>
+    /// <remarks>
+    /// Dock's groups have no id of ours, and a floating window's group takes the id of the group it came from, so only
+    /// the main window's groups count, and not by id alone. Looking for the id only opened every tool window not yet
+    /// shown in a new group stacked above the bottom tool windows the user had moved (the maintainer's report).
+    /// </remarks>
     private IToolDock EnsurePane(ToolWindowLocation location)
     {
         var (id, alignment, proportion) = location switch
@@ -151,7 +167,11 @@ public sealed class LayoutManager : ObservableObject
             _ => (BottomId, Alignment.Bottom, 0.28),
         };
 
-        if (Find<IToolDock>(id) is { } existing)
+        var groups = Flatten(_root).OfType<IToolDock>().ToList();
+        var existing = groups.FirstOrDefault(g => g.Id == id)
+            ?? groups.Select(g => (Group: g, Count: (g.VisibleDockables ?? []).OfType<ToolWindowDockable>().Count(t => t.Descriptor.Location == location)))
+                .Where(g => g.Count > 0).OrderByDescending(g => g.Count).Select(g => g.Group).FirstOrDefault();
+        if (existing is not null)
         {
             return existing;
         }

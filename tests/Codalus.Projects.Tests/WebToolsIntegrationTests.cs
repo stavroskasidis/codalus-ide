@@ -223,7 +223,7 @@ public sealed class WebToolsIntegrationTests : IAsyncLifetime
         }
     }
 
-    private static void Copy(string source, string target)
+    internal static void Copy(string source, string target)
     {
         foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
         {

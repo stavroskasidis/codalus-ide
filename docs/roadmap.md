@@ -56,12 +56,13 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M39 | Rename to Codalus IDE | done (no checkpoint of its own; ADR 0056 is the record; the name chosen 2026-10-13; validated on Windows, WSL, the Mac and CI; the repository renamed to `stavroskasidis/codalus-ide`): the clean rename of everything from Daedalus Studio (code, CLI, hosts, protocols, plugins, data folders, installers, repository, site, docs) with `eng/rename.py`, with no compatibility (no users yet); the new mark (violet and ember wings). Reserving the NuGet prefix (`docs/release/nuget-prefix-reservation.md`) and the AUR package (the pipeline's `aur` job, skipped until the `AUR_SSH_PRIVATE_KEY` secret exists) wait for the maintainer |
 | M37 | Environment setup | done (at checkpoint, [m37](checkpoints/m37.md)): a missing or mismatched .NET SDK (a solution's `global.json`), git, Git LFS, Docker, Podman and WSL found, Help → Check Environment, installs with the user's consent (winget, `dotnet-install` into `~/.dotnet`, `xcode-select`, the distribution's packages in the terminal); MAUI's workloads come with M20 |
 | M38 | Start window | done (at checkpoint, [m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
-| M40 | WinForms and WPF projects, WPF XAML and previewer | M40a at checkpoint ([m40a](checkpoints/m40a.md), ADR 0069), 2026-10-16: WinForms and WPF projects open, edit and build on every OS (the build host sets `EnableWindowsTargeting` off Windows), run, debug, test and Hot Reload on Windows and say "Windows only" elsewhere; the WPF and Windows Forms templates in New Project and Add New Item with their code-behind nested; WPF XAML editing on the M19a engine (WPF's dialect, styles, triggers and setters, resources through `App.xaml` and merged dictionaries, binding paths from `d:DataContext` as warnings, the markup compiler's `MC` errors in their files); validated on Linux only (Windows by CI). M40b (the WPF previewer and the Live Visual Tree for WPF) next ([Windows desktop](#proposed-phase-windows-desktop), D31: Windows only) |
+| M40 | WinForms and WPF projects, WPF XAML and previewer | M40a at checkpoint ([m40a](checkpoints/m40a.md), ADR 0071), 2026-10-16: WinForms and WPF projects open, edit and build on every OS (the build host sets `EnableWindowsTargeting` off Windows), run, debug, test and Hot Reload on Windows and say "Windows only" elsewhere; the WPF and Windows Forms templates in New Project and Add New Item with their code-behind nested; WPF XAML editing on the M19a engine (WPF's dialect, styles, triggers and setters, resources through `App.xaml` and merged dictionaries, binding paths from `d:DataContext` as warnings, the markup compiler's `MC` errors in their files); validated on Linux only (Windows by CI). M40b (the WPF previewer and the Live Visual Tree for WPF) next ([Windows desktop](#proposed-phase-windows-desktop), D31: Windows only) |
 | M41 | Windows Forms designer | scheduled (Windows only), after M40 |
-| M42 | WCF | scheduled, after M30b (cross-platform) |
+| M42 | WCF | done (at checkpoint, [m42](checkpoints/m42.md), ADR 0069), 2026-10-16: Add Service Reference for WCF through the user's `dotnet-svcutil` (local or global tool, installed with consent, trusted folders only) into `Connected Services/<name>/` with Visual Studio's `ConnectedService.json`, Update and Remove; the CoreWCF templates in New Project, and running CoreWCF services' metadata found; the WCF Test Client of our own (WSDL and XSD read with `System.Xml.Linq`, SOAP 1.1 and SOAP 1.2 with WS-Addressing over `HttpClient`, a form per operation, raw XML, the response as a tree and XML); the `system.serviceModel` schema for `app.config` and `web.config`. Gaps: message security, duplex, NetTcp and MEX-only metadata in the test client. Validated on Linux; Windows and macOS from CI |
 | M43 | .NET Framework | scheduled (Windows only), last of the phase, after M44; M43b (the desktop-CLR debugger) included |
 | M44 | MAUI on Windows and WinUI 3 | scheduled (Windows only), after M41 |
 | M45 | Theme families | planned (2026-10-16; D32 decided), after M43: Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, from the [designs](design/shell-themes.md) |
+| M47 | Code Search | planned (2026-10-16), after M46, before M34g: Visual Studio's Code Search window (chips, two-line results, an editable preview, Feature Search, the persisted index) in place of Go To All's list |
 | M46 | First-run setup | planned (2026-10-16), after M45: a setup at the first start, with appearance (the theme families), keyboard, settings import and a tools check, before the start window |
 | M35 | Visual Basic | done (at checkpoint, [m35](checkpoints/m35.md), ADR 0066): VB in the C# host's workspace (completion, Quick Info, signature help, live diagnostics, classification with XML literals, navigation, references and rename across C# and VB, code fixes and refactorings, formatting, outline and folding), our own pretty listing (`End` constructs, keyword casing, XML end tags), VB snippets and item templates, New Project in any language, VB property pages, VB tests from source, debugging tested on netcoredbg. Gaps: VB expressions in Watch (netcoredbg reads C#), automatic line continuation, a page for project imports |
 | M36 | F# | done (at checkpoints [m36a](checkpoints/m36a.md) and [m36b](checkpoints/m36b.md), ADR 0067 and 0068), 2026-10-15. M36a: FsAutoComplete (D10) and Fantomas installed with the user's `dotnet tool install` on the first F# file, trusted folders only; completion, Quick Info, diagnostics with FSharpLint, navigation, rename, fixes, inlay hints, CodeLens and formatting through the LSP bridge; the compile order in Solution Explorer (`items/move`, Move Up/Down, Add Above/Below, `.fsi` nesting), F# item templates and property pages. M36b: F# Interactive as `dotnet fsi` in a terminal (send a selection, line, file or project references; reset; run script), scripts with `#load` and `#r "nuget:"`, type providers, F# analyzers, Expecto in the Test Explorer, debugging F# tested. Gaps: F# tests from source, F# expressions in Watch, F# → C# references before a build, remote windows |
@@ -127,7 +128,7 @@ All seven are settled:
 - F1–F4 and F6 are D1–D4 in the [decision register](#decision-register).
 - F5 and F7 are as built:
   - F5: Razor is cohosted in the C# host, F# runs on FsAutoComplete (D10), and the LSP bridge serves the rest.
-  - F7: `.codalus/` sits next to the solution.
+  - F7 ([ADR 0070](adr/0070-per-solution-state.md), the maintainer's decision of 2026-10-16): `.codalus/` sits next to the solution. Shared files (`settings.json`, `tasks.json`, `launch.json`, `playlists/`) sit directly in it. Per-user state sits in `.codalus/state/<solution file name>/` (`folder/` in folder mode): the session (documents, breakpoints, Watch, startup projects, the configuration and platform, Solution Explorer's expansion, the Error List's filters, the Test Explorer's grouping), bookmarks and unloaded projects. The state folder ignores itself in Git through its own `.gitignore` with `*`. When the solution's folder can't be written, the state falls back to the user's state folder. User-local caches stay in the platform data directory or in `obj/`.
 
 ## Phase overview
 
@@ -144,7 +145,7 @@ All seven are settled:
 | 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
 | 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
 | Windows desktop | M42, M40, M41, M44, M43 | WinForms, WPF, WCF, .NET Framework and MAUI's Windows target, on Windows (D31, 2026-10-16); the other OSes are decided later. |
-| 11. Polish | M34, M39, M37, M38, M45, M46 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38); four theme families (M45) and a first-run setup that offers them (M46). |
+| 11. Polish | M34, M39, M37, M38, M45, M46, M47 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38); four theme families (M45) and a first-run setup that offers them (M46). |
 | 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
 Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. After M30a, the maintainer moved M16c ahead of the rest of phase 4 (M31–M33).
@@ -202,6 +203,7 @@ graph LR
   M8 & M11 & M14 --> M22
   M29 & M34 --> M45
   M45 & M37 & M38 --> M46
+  M12 & M29 --> M47
 ```
 
 A dashed edge means "better with", not "blocked by".
@@ -1651,7 +1653,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 | WPF XAML editing (M40a) | The M19a engine | The same, locally | ~1 | WPF's conventions |
 | WPF previewer and Live Visual Tree (M40b) | M19's designs on WPF | Frames from the Windows target | ~1–1.5 | Loading the project's own controls |
 | WinForms designer (M41) | dotnet/winforms' design-time code (MIT) | Frames from the Windows target | ~2–3 | Reading and writing `InitializeComponent` |
-| WCF (M42) | Clients, CoreWCF, `dotnet-svcutil` | The same | ~½–1 | Nothing hard |
+| WCF (M42, done) | Clients, CoreWCF, `dotnet-svcutil` | The same | ~½–1 | Nothing hard |
 | .NET Framework (M43) | Build, run; a desktop-CLR debugger | Edit and build locally; run on Mono or the Windows target | ~3+ | The debugger |
 | MAUI on Windows and WinUI 3 (M44) | CoreCLR: netcoredbg | Only through the Windows target | ~1 | MSIX launch and attach |
 
@@ -1736,6 +1738,8 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 - Commercial control suites that rely on design-time licensing (`licenses.licx`) or on Visual Studio's own services.
 
 ### M42 — WCF
+
+**Status.** Done (at checkpoint, [m42](checkpoints/m42.md), [ADR 0069](adr/0069-wcf-references-and-test-client.md)), 2026-10-16.
 
 **Goal.** Build WCF clients and CoreWCF services on every OS.
 
@@ -1927,7 +1931,7 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 
 **Scope.** M34d–f's checklist (`docs/ui-guidelines.md`) on every view added by M40–M44: tokens, states, overflow, minimum sizes, accessible names, contrast, icons in the palette, translations; the new views in the gallery and the smoke test; the gallery refreshed on three OSes for the maintainer.
 
-**Status.** Scheduled, after M46, so the pass also covers the theme families and the first-run setup.
+**Status.** Scheduled, after M47, so the pass also covers the theme families, the first-run setup and Code Search.
 
 ### M39 — Rename to Codalus IDE
 
@@ -2141,6 +2145,37 @@ The table and the steps below were written before the name was chosen; `<name>` 
 - **Translations:** the window's text is in the catalogue.
 
 **Exit criteria.** On Windows, Linux and macOS, a new user data folder goes through the setup to the start window with the chosen theme, keyboard scheme and imported settings applied.
+
+### M47 — Code Search
+
+**Why.** On 2026-10-16 the maintainer compared our Go To All (`Ctrl+,`, a flat drop-down list under the title row's search: `QuickPickViewModel`, `ShellHost.Refactoring.cs`, the C# host's workspace symbols) with Visual Studio's Code Search and asked for the latter. Visual Studio's is a floating window with:
+- two tabs, Code Search and Feature Search;
+- filter chips under the box, `files (f:)`, `types (t:)`, `members (m:)` and `text (x:)`, which also work typed as prefixes;
+- two-line results: the icon and the name with the match in bold, then where it is ("in `wpControlTypeConstants` (project `wPoseidon.Core`)", or a file's folder), with the file name on the right;
+- a preview of the selected result below the list: a real editor on the file at that line, with the match highlighted, editable, with its line, column and selection in a status line;
+- an "Incomplete results" notice while the index is still being built, and a setting for the scope (the whole solution, the current project, the current document);
+- buttons to keep it open, to dock it as a tool window, and to hide the preview.
+
+**Depends on.** M3's Go To All and workspace symbols, M12's Find in Files (text search) and navigation, M29's title row search (Feature Search: commands, settings and options pages), M34's spacing tokens and checklist.
+
+**Scope.**
+- **The window:** a floating, resizable window over the editor, centered under the title row, opened by `Ctrl+T` and `Ctrl+,` (Code Search) and `Ctrl+Q` (Feature Search); its size, position, pinned state and preview visibility are remembered; Esc closes it; it can be docked as a tool window and back.
+- **Code Search:**
+  - results from files (the solution's files, by name and path), types, members and symbols from every language service that offers workspace symbols (C#, VB, F#, XAML names, the LSP bridge), and text (Find in Files' engine, with a limit);
+  - the chips and prefixes (`f:`, `t:`, `m:`, `x:`, plus `:` for a line in the current file) filter the kinds; camel-case and fuzzy matching with the matched characters in bold; results ranked by kind, match quality, recently opened files and the active project;
+  - each result: icon, name, container ("in Type (project P)"), file name on the right; grouped or interleaved like Visual Studio;
+  - the preview: an editor on the result's file (the same editor and language features as a document), scrolled to and highlighting the match, editable with undo and saved like the document; Enter or a double click opens the document there and closes the window, Ctrl+Enter keeps it open;
+  - the scope picker (entire solution, current project, current document, and "include external items" for metadata and decompiled sources);
+  - "Incomplete results" while projects load or the index builds, then results that refresh.
+- **The index:** the persisted Go To All index from [deferred work](#deferred-work) (Roslyn's own persistent storage first, as M12 planned), so the first search after opening a large solution is fast and complete; file names come from the workspace without waiting for the language host.
+- **Feature Search:** the title row search's commands, settings and options pages in the same window, with keyboard shortcuts shown, so one window serves both (the title row's box opens it).
+- **Keyboard and accessibility:** everything from the keyboard (Tab between the box, chips, list and preview; Alt+the chip's letter), accessible names, high contrast, the text in the catalogue.
+- **Plugins:** search providers already contribute to Go To All through the plugin API; they get the same place in Code Search (no API change unless one is needed, then a proposed API).
+- **Docs and site:** the user guide's navigation page, the Features page and a screenshot from the smoke test.
+
+**Tests.** Headless: the chips and prefixes filter; ranking; the preview opens the right file and line and edits it; Enter navigates; the scope picker; incomplete results turning complete; Feature Search runs a command. The index: a second open of a solution searches before the language host finishes loading. A smoke step `navigation.codeSearch` with a screenshot. A budget: results for a query on the 96-project benchmark solution within 100 ms of typing once indexed.
+
+**Exit criteria.** On Windows, Linux and macOS, Code Search finds files, types, members and text in a large solution with a live preview, as in the maintainer's comparison.
 
 ---
 
@@ -2405,7 +2440,7 @@ The "Codalus" column uses these terms:
 | Shared projects (`.shproj`, `.projitems`) | M9 (low priority) |
 | Project, assembly and analyzer references | M9 |
 | COM references | Non-goal |
-| WCF service references and a WCF test client | Proposed for M42 |
+| WCF service references and a WCF test client | M42 (ADR 0069): `dotnet-svcutil` into `Connected Services` with `ConnectedService.json`; our own test client (BasicHttpBinding, WSHttpBinding without security); message security and duplex are gaps |
 | Connected Services, OpenAPI and gRPC service references | M15c (ADR 0041): `OpenApiReference` with NSwag, `Protobuf` with `Grpc.Tools`; Kiota and other connected services (Azure, databases) are gaps |
 | Custom tools (single-file generators), T4 text templates | M26b |
 | User secrets | M15 |
@@ -2469,7 +2504,7 @@ The "Codalus" column uses these terms:
 
 | Visual Studio feature | Codalus |
 |---|---|
-| Go To All, file, type, member, symbol and line | M3 |
+| Go To All, file, type, member, symbol and line | M3; Visual Studio's Code Search window (chips, preview, Feature Search) M47 |
 | Go to Definition and Implementation, Find All References | M3; grouping, read/write and filters M12 |
 | Peek Definition, Go to Base and Derived | M12 |
 | Call Hierarchy, Type Hierarchy | M12 |
@@ -2666,7 +2701,7 @@ Items deferred with a `TODO(issue)` to a milestone that has since closed without
 
 | Item | Deferred at | Was meant for |
 |---|---|---|
-| Go To All's persistent index | [M12a](checkpoints/m12a.md), [M12b](checkpoints/m12b.md) | M12 |
+| Go To All's persistent index | [M12a](checkpoints/m12a.md), [M12b](checkpoints/m12b.md) | M12; now M47 |
 | A suppression file, spell checking (the EditorConfig settings page was built on 2026-10-15) | [M12b](checkpoints/m12b.md) | M12 |
 | Vertical tabs, persisted floating documents (`LayoutManager.cs`) | [M12b](checkpoints/m12b.md), [M3a](checkpoints/m3a.md) | M12 |
 | SVG and animated GIFs in the image viewer | [M12b](checkpoints/m12b.md) | M12 |
@@ -2923,4 +2958,10 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-16: the maintainer's decisions for the rest of the plan. D31 is decided: M40–M44 move into scope as Windows-only features (the other OSes later), M43 with its debugger. M30b moves forward onto the .NET 11 release candidate. The order is M30b, M42, M40, M41, M44, M43, then M34g, a polish pass over the new designers and previewers; each milestone ends with a nightly and a stable release. The unscheduled candidates (D30) stay for the maintainer's review after that.
 - 2026-10-16: M45 and M46 join the order after M43 and before M34g (the maintainer's choice), so the last polish pass covers the theme families and the first-run setup too: M30b, M42, M40, M41, M44, M43, M45, M46, M34g.
 - 2026-10-16: M30b at checkpoint ([m30b](checkpoints/m30b.md)), on the .NET 11 SDK's second release candidate: Codalus targets `net11.0` (the plugin API stays on `net10.0`), Roslyn 5.12.0-1.26504.105 (the RC2 SDK's compiler, from the public `dotnet-tools` feed until GA) brings C# 15 and the .NET 11 SDK's Razor generator, whose separate declaration documents the Razor mapping now covers. The hosts still roll forward (ADR 0025 amended), so the .NET 11 SDK is the prerequisite: Check Environment, the packages and the website say so. The SDK's optimized Native AOT publish dropped Avalonia's compiled XAML (`UseOptimizedPublish=false`). Validated on Linux; Windows and macOS by CI. Gaps: the GA swap, netcoredbg's missing frame modules on .NET 11 (exception module conditions), and the target framework matrix's run on 11.
-- 2026-10-16: M40a at checkpoint ([m40a](checkpoints/m40a.md), ADR 0069), alongside M42: WinForms and WPF projects load on every OS through `EnableWindowsTargeting` (the build host sets it off Windows), with WPF's `Page` and `ApplicationDefinition` items as additional files of the design-time build; run, debug, tests and Hot Reload are Windows only and say so elsewhere; the WPF and Windows Forms templates in New Project and Add New Item; WPF XAML on the M19a engine. Validated on Linux; Windows (run, debug, tests, the smoke step `windows.desktop`) and macOS by CI. M40b (the WPF previewer and the Live Visual Tree) follows.
+- 2026-10-16: M42 at its checkpoint ([m42](checkpoints/m42.md), ADR 0069), the first milestone of the [Windows desktop](#proposed-phase-windows-desktop) phase, which D31 doesn't gate. Add Service Reference for WCF runs the user's `dotnet-svcutil` (a local or global tool, installed with consent, trusted folders only) and keeps the reference as Visual Studio does, `Connected Services/<name>/Reference.cs` with a `ConnectedService.json` that `dotnet-svcutil --update` also reads; Update and Remove. New Project offers the CoreWCF templates, and the metadata of running CoreWCF services is found from their endpoints and listening addresses. The WCF Test Client is our own, in the workbench (AOT-clean: WSDL and XSD with `System.Xml.Linq`, SOAP over `HttpClient`), for BasicHttpBinding and WSHttpBinding without security. The markup host knows `system.serviceModel` in `app.config` and `web.config`. Fixture `samples/Wcf`; validated on Linux, with Windows and macOS left to CI's runners.
+- 2026-10-16: M47, Code Search, added at the maintainer's request after comparing Go To All with Visual Studio's Code Search window (filter chips, two-line results, an editable preview, Feature Search, an incomplete-results notice); it takes in Go To All's persistent index from the deferred work, and goes after M46 and before M34g. The order: M42, M40, M41, M44, M43, M45, M46, M47, M34g.
+- 2026-10-16: two docking fixes from the maintainer's report on Windows. A tool window opened as a new group stacked above the bottom tool windows once the user had dragged them into a group of Dock's (to the window's edge, say): the layout found its bottom pane by id only, and Dock's groups have none (a floating window's group even copies the id of the group it came from). A tool window that isn't open now goes back to the group it was closed in, if that group is still there, or else joins the main window's group for its location: the pane with its id, or the group holding most of that location's tool windows. And a tool window dragged among the documents had its whole view in its tab: the document tabs' header template was typed to documents, so Avalonia looked further up for one and the view locator, which matches every dockable, built the view there too. The header templates and tab styles of both kinds of group are now typed to `IShellTab`, which documents and tool windows both are, in the main window and in floating ones (`ToolWindowDockingTests`).
+- 2026-10-16: the toolbar's Hot Reload split button is flat like the run buttons beside it (the maintainer's report: it and its arrow were a gray block). Fluent styles a split button's two parts itself, with its gray `SplitButtonBackground` at rest; `SplitButton.toolbar` restates every state on their presenters with the toolbar's tokens (transparent, the hover color and border under the pointer, pressed or with the menu open, a separator on hover, transparent when disabled), in every theme. The button has no checked state: the gray was its resting one (`ChromeTests`).
+- 2026-10-16: sticky scroll draws its pinned lines as the editor draws them (the maintainer's report: one plain text in the default color). Each pinned line takes the runs of its visual line, which the editor's own colorizers (the grammar, semantic tokens, bracket pairs) colored, with its indentation in the text column and its number in the line number margin, now that the sticky header is an adorner of the text area rather than the text view; hover highlights a line, and controls are rebuilt only when a line's runs change. A header far above the viewport is outside the ±60-line window of semantic tokens, so the controller asks for its tokens with a one-line range request and the colorizer keeps the pinned lines' tokens when the window moves (`LanguageTests`).
+- 2026-10-16: F7 as built ([ADR 0070](adr/0070-per-solution-state.md)), at the maintainer's request after opening a solution and finding no `.codalus` folder and their Solution Explorer expansion gone. Per-user, per-solution state now sits next to the solution in `.codalus/state/<solution file name>/`, in a folder that ignores itself in Git. It holds the session that sat in the user's `sessions/<hash>.json`, plus the active configuration and platform, Solution Explorer's expansion, the Error List's filters and the Test Explorer's grouping. Bookmarks are per solution too (the global file keeps those outside any solution), and the unloaded projects moved there from `.codalus/solution.json`. The old files are moved in on open, and a folder that can't be written falls back to the user's state folder.
+- 2026-10-16: M40a at checkpoint ([m40a](checkpoints/m40a.md), ADR 0071), alongside M42: WinForms and WPF projects load on every OS through `EnableWindowsTargeting` (the build host sets it off Windows), with WPF's `Page` and `ApplicationDefinition` items as additional files of the design-time build; run, debug, tests and Hot Reload are Windows only and say so elsewhere; the WPF and Windows Forms templates in New Project and Add New Item; WPF XAML on the M19a engine. Validated on Linux; Windows (run, debug, tests, the smoke step `windows.desktop`) and macOS by CI. M40b (the WPF previewer and the Live Visual Tree) follows.

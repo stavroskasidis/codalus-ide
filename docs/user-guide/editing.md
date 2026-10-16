@@ -96,7 +96,7 @@ Settings under **Text Editor** turn each of these on or off.
   - Turn these off with Text Editor → CodeLens: Git History (`editor.gitCodeLens`) and CodeLens: Test Status (`editor.testCodeLens`).
 - **Inheritance margin**: arrows in the margin of members and types that implement, override or are overridden. Click an arrow to see and open the related symbols.
 - **Navigation bar**: above the editor, the document's types and the members of the type at the caret.
-- **Sticky scroll**: the lines of the enclosing namespace, type and member stay at the top while you scroll. Click one to go there.
+- **Sticky scroll**: the lines of the enclosing namespace, type and member stay at the top while you scroll, drawn as in the editor (colors, indentation, line numbers). Click one to go there.
 - **Indentation guides** and **bracket pair colors**: matching brackets share a color by nesting depth.
 - **Overview ruler**: beside the scroll bar, marks for errors, warnings, Git changes, breakpoints, find results and the caret. Click to scroll there. The square at the top is the document's health (red: errors, yellow: warnings, green: none); click it for the next problem.
 - **Inline diagnostics** (off by default): error and warning messages at the end of their lines.
@@ -146,7 +146,7 @@ The light bulb also offers, for each diagnostic, **Suppress with #pragma** and *
 
 ## Bookmarks and the Task List
 
-- **Bookmarks**: `Ctrl+K Ctrl+K` toggles one on the caret's line; `Ctrl+K Ctrl+N` and `Ctrl+K Ctrl+P` go to the next and previous; `Ctrl+K Ctrl+L` clears them. The Bookmarks window (View menu) lists them with their folder; `F2` names one and `Delete` removes it.
+- **Bookmarks**: `Ctrl+K Ctrl+K` toggles one on the caret's line; `Ctrl+K Ctrl+N` and `Ctrl+K Ctrl+P` go to the next and previous; `Ctrl+K Ctrl+L` clears them. The Bookmarks window (View menu) lists them with their folder; `F2` names one and `Delete` removes it. Bookmarks belong to the open solution and come back with it (in `.codalus/state/`, see [What a solution reopens with](solutions.md#what-a-solution-reopens-with)); bookmarks in files opened without a solution are kept in your user data.
 - **Task List** (View menu): the `TODO`, `HACK` and `UNDONE` comments in the solution's files, unsaved edits included. **Refresh** scans again; type to filter. The tokens are a setting (**Task List → Tokens**).
 
 ## Analysis

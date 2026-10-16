@@ -60,7 +60,7 @@ internal sealed class XamlTypeSystem
     /// <summary>Whether .NET MAUI's controls are referenced (M20a): the MAUI dialect (bindable properties, <c>[ContentProperty]</c>).</summary>
     public bool IsMaui => Type(MauiBindableObject) is not null;
 
-    /// <summary>Whether WPF is referenced (M40a, ADR 0069): the WPF dialect (dependency properties by convention, <c>[ContentProperty]</c>).</summary>
+    /// <summary>Whether WPF is referenced (M40a, ADR 0071): the WPF dialect (dependency properties by convention, <c>[ContentProperty]</c>).</summary>
     public bool IsWpf => Type(WpfDependencyObject) is not null && Type("System.Windows.FrameworkElement") is not null;
 
     /// <summary>Whether the compilation has a XAML dialect this engine knows.</summary>
