@@ -280,8 +280,32 @@ jobs:
           name: packages-${{ matrix.rid }}
           path: artifacts/packages/
           if-no-files-found: error
-      # Self-update end to end (M32): version N and N+1 of the installer, N installed, a tampered feed refused, then N
-      # updated to N+1 through a signed local feed. After the upload, in its own folder.
+
+  # Self-update end to end (M32): version N and N+1 of the installer, N installed, a tampered feed refused, then N
+  # updated to N+1 through a signed local feed. It builds its own test installers (eng/test-update.sh), so it runs
+  # beside the packages instead of after them: the packages job was the release's longest, with it at its end.
+  update:
+    needs: plan
+    if: needs.plan.outputs.kind != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x64 }
+          - { os: macos-latest, rid: osx-arm64 }
+          - { os: ubuntu-latest, rid: linux-x64 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Linux prerequisites (Native AOT, AppImage, rpm, delta packages)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev squashfs-tools rpm zstd
+      - name: macOS prerequisites (delta packages)
+        if: runner.os == 'macOS'
+        run: command -v zstd || brew install zstd
       - name: Self-update test
         shell: bash
         timeout-minutes: 45
@@ -385,11 +409,13 @@ jobs:
     secrets: inherit
 
   publish:
-    needs: [plan, test, smoke, packages, benchmarks, site]
-    # Every gate passed: CI and the packages for both kinds, the benchmarks and the site too for a stable release.
+    needs: [plan, test, smoke, packages, update, benchmarks, site]
+    # Every gate passed: CI, the packages and the self-update for both kinds, the benchmarks and the site too for a
+    # stable release.
     if: >-
       !cancelled() && needs.plan.outputs.publish == 'true'
       && needs.test.result == 'success' && needs.smoke.result == 'success' && needs.packages.result == 'success'
+      && needs.update.result == 'success'
       && (needs.plan.outputs.kind == 'nightly' || (needs.benchmarks.result == 'success' && needs.site.result == 'success'))
     runs-on: ubuntu-latest
     permissions:
