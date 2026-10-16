@@ -1,4 +1,5 @@
 @page "/counter"
+@implements IDisposable
 
 <PageTitle>Counter</PageTitle>
 
@@ -9,6 +10,8 @@
 <button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
 
 @code {
+    private readonly CancellationTokenSource stopping = new();
+    private int ticks;
     private int currentCount = 0;
 
     protected override void OnInitialized()
@@ -17,6 +20,32 @@
     }
 
     private static int Start() => 1;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Interactive only: a tick every half second, where a debugger that attached after OnInitialized ran still stops.
+        if (firstRender)
+        {
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(500, stopping.Token);
+                    Tick();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+    }
+
+    private void Tick()
+    {
+        ticks++; // [tick]
+    }
+
+    public void Dispose() => stopping.Cancel();
 
     private void IncrementCount()
     {
