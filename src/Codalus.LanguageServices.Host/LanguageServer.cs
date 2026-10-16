@@ -332,13 +332,13 @@ internal sealed class LanguageServer : IAsyncDisposable
 
     private readonly HashSet<string> _xamlExplained = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Says once per file and state why a XAML file has no type information (not an additional file of a project, or neither Avalonia nor MAUI in its references).</summary>
+    /// <summary>Says once per file and state why a XAML file has no type information (not an additional file of a project, or neither Avalonia, MAUI nor WPF in its references).</summary>
     private void ExplainXaml(Xaml.XamlContext context, Solution solution)
     {
         string? reason = context.Project is null
             ? $"isn't an additional file of a loaded project ({solution.Projects.Count()} projects, {solution.Projects.Sum(p => p.AdditionalDocuments.Count(d => d.FilePath is { } f && Xaml.XamlContext.IsXaml(f)))} XAML additional files)"
             : context.Types is { HasDialect: false }
-                ? $"is in {context.Project.Name}, whose compilation has neither Avalonia nor .NET MAUI ({context.Project.MetadataReferences.Count} references, {context.Project.MetadataReferences.Count(r => r.Display?.Contains("Avalonia", StringComparison.OrdinalIgnoreCase) == true || r.Display?.Contains("Maui", StringComparison.OrdinalIgnoreCase) == true)} of either)"
+                ? $"is in {context.Project.Name}, whose compilation has neither Avalonia, .NET MAUI nor WPF ({context.Project.MetadataReferences.Count} references, {context.Project.MetadataReferences.Count(r => r.Display?.Contains("Avalonia", StringComparison.OrdinalIgnoreCase) == true || r.Display?.Contains("Maui", StringComparison.OrdinalIgnoreCase) == true || r.Display?.Contains("PresentationFramework", StringComparison.OrdinalIgnoreCase) == true)} of them)"
                 : null;
         lock (_xamlExplained)
         {

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Codalus.LanguageServices.Protocol;
 using Microsoft.CodeAnalysis;
 using Diagnostic = Codalus.LanguageServices.Protocol.Diagnostic;
@@ -11,13 +12,15 @@ namespace Codalus.LanguageServices.Host.Xaml;
 /// <summary>
 /// Live XAML diagnostics, formatting, folding, document symbols and the logical tree (M19a, ADR 0047). Diagnostics are
 /// what the XAML compiler would reject and the parse can see: syntax errors, undeclared prefixes, unknown types,
-/// members and enum values, and compiled bindings' paths that the data type doesn't have.
+/// members and enum values, and compiled bindings' paths that the data type doesn't have. In WPF (M40a, ADR 0069),
+/// bindings aren't compiled: a path the data context lacks is a warning, and so is a <c>StaticResource</c> key the
+/// file can't see (when that list is complete).
 /// </summary>
-internal static class XamlAnalysis
+internal static partial class XamlAnalysis
 {
     public const string Source = "XAML";
 
-    public static Diagnostic[] Diagnose(XamlContext context)
+    public static Diagnostic[] Diagnose(XamlContext context, XamlResourceScope? resources = null)
     {
         var result = new List<Diagnostic>();
         void Report(int start, int end, string code, string message, int severity = DiagnosticSeverity.Error) =>
@@ -81,10 +84,65 @@ internal static class XamlAnalysis
             {
                 CheckAttribute(context, types, element, type, attribute, Ignored, Report);
             }
+
+            if (context.IsWpf)
+            {
+                CheckWpfSetter(context, element, Report);
+            }
+        }
+
+        if (context.IsWpf && resources is { Complete: true })
+        {
+            CheckStaticResources(context, resources, Report);
         }
 
         return [.. result];
     }
+
+    /// <summary>A WPF setter's or trigger's <c>Property</c> must be a member of its target (the style's, the template's or the named element's).</summary>
+    private static void CheckWpfSetter(XamlContext context, XamlElement element, Action<int, int, string, string, int> report)
+    {
+        if (element.LocalName is not ("Setter" or "Trigger" or "Condition") || element.Attribute("Property") is not { Value: { } value } property || value.Trim().Length == 0 || value.TrimStart().StartsWith('{'))
+        {
+            return;
+        }
+
+        var name = value.Trim();
+        var target = context.SetterTargetType(element);
+        if (!name.Contains('.', StringComparison.Ordinal) && target is null)
+        {
+            return; // no target type to check against
+        }
+
+        if (XamlCompletion.Member(context, element, target, name) is null)
+        {
+            report(property.ValueStart, property.ValueEnd, "XAML0004",
+                target is null ? $"'{name}' isn't a property this setter can find." : $"'{target.Name}' has no property '{name[(name.LastIndexOf('.') + 1)..]}'.", DiagnosticSeverity.Error);
+        }
+    }
+
+    /// <summary>WPF's <c>{StaticResource key}</c>: the key must be among the resources the file sees.</summary>
+    private static void CheckStaticResources(XamlContext context, XamlResourceScope resources, Action<int, int, string, string, int> report)
+    {
+        foreach (var element in context.Document.Elements)
+        {
+            foreach (var attribute in element.Attributes.Where(a => a.Value is not null && a.ValueStart >= 0 && a.Value.Contains("StaticResource", StringComparison.Ordinal)))
+            {
+                foreach (Match match in StaticResourceRegex().Matches(attribute.Value!))
+                {
+                    var key = match.Groups["key"];
+                    if (!resources.Contains(key.Value))
+                    {
+                        report(attribute.ValueStart + key.Index, attribute.ValueStart + key.Index + key.Length, "XAML0007",
+                            $"The resource '{key.Value}' isn't defined in this file, App.xaml or the dictionaries they merge: loading the XAML would fail.", DiagnosticSeverity.Warning);
+                    }
+                }
+            }
+        }
+    }
+
+    [GeneratedRegex(@"\{\s*StaticResource\s+(?:ResourceKey\s*=\s*)?(?<key>[^\s{},=]+)\s*\}", RegexOptions.CultureInvariant)]
+    private static partial Regex StaticResourceRegex();
 
     private static void CheckAttribute(
         XamlContext context,
@@ -98,6 +156,13 @@ internal static class XamlAnalysis
         var name = attribute.Name;
         if (name == "xmlns" || name.StartsWith("xmlns:", StringComparison.Ordinal) || name.StartsWith("Classes.", StringComparison.Ordinal) || ignored(attribute.Prefix, element))
         {
+            if (context.IsWpf && attribute.Prefix is { } design && XamlDocument.ResolvePrefix(element, design) == XamlNames.Design && attribute.LocalName == "DataContext"
+                && attribute.Value is { } designValue && XamlContext.DesignInstanceTypeName(designValue) is { } designType && context.ResolveTypeName(element, designType) is null)
+            {
+                var at = designValue.IndexOf(designType, StringComparison.Ordinal);
+                report(attribute.ValueStart + Math.Max(0, at), attribute.ValueStart + Math.Max(0, at) + designType.Length, "XAML0003", $"The type '{designType.Trim()}' isn't found.", DiagnosticSeverity.Warning);
+            }
+
             if (attribute.Prefix is { } p && XamlDocument.ResolvePrefix(element, p) == XamlNames.XamlLanguage && attribute.LocalName == "DataType" && attribute.Value is { } dataType
                 && !dataType.TrimStart().StartsWith('{') && context.ResolveTypeName(element, dataType) is null)
             {
@@ -173,7 +238,10 @@ internal static class XamlAnalysis
         }
     }
 
-    /// <summary>A compiled binding's path: each member must exist on the type before it, from the data type in scope.</summary>
+    /// <summary>
+    /// A compiled binding's path: each member must exist on the type before it, from the data type in scope. A WPF
+    /// binding's path (M40a): the same, as a warning, from the data context or the source the binding names.
+    /// </summary>
     private static void CheckBinding(XamlContext context, XamlElement element, XamlAttribute attribute, Action<int, int, string, string, int> report)
     {
         var value = attribute.Value!;
@@ -184,8 +252,26 @@ internal static class XamlAnalysis
             return;
         }
 
-        var compiled = binding.Kind == "CompiledBinding" || (binding.Kind == "Binding" && context.CompilesBindings(element));
-        if (!compiled || context.DataType(element) is not { } dataType)
+        ITypeSymbol? origin;
+        var wpf = context.IsWpf;
+        if (wpf)
+        {
+            if (binding.Kind != "Binding" || XamlBindingSource.Of(value) is not { } source)
+            {
+                return;
+            }
+
+            origin = source.HasOtherSource ? XamlBindingPaths.SourceType(context, element, source)
+                : attribute.Name == "DataContext" ? (element.Parent is { } parent ? context.WpfDataContext(parent, 0) : null)
+                : context.WpfDataContext(element, 0);
+        }
+        else
+        {
+            var compiled = binding.Kind == "CompiledBinding" || (binding.Kind == "Binding" && context.CompilesBindings(element));
+            origin = compiled ? context.DataType(element) : null;
+        }
+
+        if (origin is not INamedTypeSymbol dataType || (wpf && IsDynamicSource(dataType)))
         {
             return;
         }
@@ -221,7 +307,7 @@ internal static class XamlAnalysis
                     path = trimmed[(equals + 1)..].Trim();
                     pathOffset = start + argument.IndexOf(path, StringComparison.Ordinal);
                 }
-                else if (equals > 0 && trimmed[..equals].Trim() is "ElementName" or "RelativeSource" or "Source")
+                else if (equals > 0 && trimmed[..equals].Trim() is "ElementName" or "RelativeSource" or "Source" && !wpf)
                 {
                     return; // another source than the data context
                 }
@@ -230,7 +316,8 @@ internal static class XamlAnalysis
             }
         }
 
-        if (path is null || path.Length == 0 || path == "." || path.StartsWith('$') || path.StartsWith('#') || path.Contains('(', StringComparison.Ordinal))
+        if (path is null || path.Length == 0 || path == "." || path.StartsWith('$') || path.StartsWith('#') || path.Contains('(', StringComparison.Ordinal)
+            || (wpf && (path.Contains('/', StringComparison.Ordinal) || path.StartsWith('[') || path.StartsWith('\''))))
         {
             return;
         }
@@ -242,11 +329,19 @@ internal static class XamlAnalysis
             var segment = raw.Trim().TrimStart('!');
             var indexer = segment.IndexOf('[', StringComparison.Ordinal);
             var memberName = indexer >= 0 ? segment[..indexer] : segment;
-            var member = XamlTypeSystem.BindableMembers(type!).FirstOrDefault(m => m.Name == memberName);
+            var member = XamlTypeSystem.BindableMembers(type!).FirstOrDefault(m => m.Name == memberName && (!wpf || m is IPropertySymbol));
             if (member is null)
             {
                 var at = attribute.ValueStart + open + 1 + binding.Name.Length + pathOffset + segmentStart;
-                report(at, at + raw.Length, "XAML0006", $"'{memberName}' isn't a property of {type!.Name} (the binding compiles against x:DataType {dataType.Name}).", DiagnosticSeverity.Error);
+                if (wpf)
+                {
+                    report(at, at + raw.Length, "XAML0006", $"'{memberName}' isn't a property of {type!.Name}: the binding would fail at run time (its source here is {dataType.Name}).", DiagnosticSeverity.Warning);
+                }
+                else
+                {
+                    report(at, at + raw.Length, "XAML0006", $"'{memberName}' isn't a property of {type!.Name} (the binding compiles against x:DataType {dataType.Name}).", DiagnosticSeverity.Error);
+                }
+
                 return;
             }
 
@@ -261,7 +356,7 @@ internal static class XamlAnalysis
                 type = XamlTypeSystem.ElementType(type);
             }
 
-            if (type is null || type.TypeKind == TypeKind.TypeParameter || type.SpecialType == SpecialType.System_Object || type.TypeKind == TypeKind.Dynamic)
+            if (type is null || type.TypeKind == TypeKind.TypeParameter || type.SpecialType == SpecialType.System_Object || type.TypeKind == TypeKind.Dynamic || (wpf && IsDynamicSource(type)))
             {
                 return;
             }
@@ -269,6 +364,12 @@ internal static class XamlAnalysis
             segmentStart += raw.Length + 1;
         }
     }
+
+    /// <summary>A WPF source whose properties come at run time (a data row, a custom type descriptor, a dynamic object): its paths aren't checked.</summary>
+    private static bool IsDynamicSource(ITypeSymbol type) =>
+        XamlTypeSystem.DerivesFrom(type, "System.ComponentModel.ICustomTypeDescriptor") || XamlTypeSystem.DerivesFrom(type, "System.ComponentModel.ITypedList")
+        || XamlTypeSystem.DerivesFrom(type, "System.Dynamic.IDynamicMetaObjectProvider") || XamlTypeSystem.DerivesFrom(type, "System.Xml.XmlNode")
+        || type.SpecialType == SpecialType.System_Object || type.TypeKind == TypeKind.Dynamic;
 
     private static int FindClose(string value, int open)
     {
