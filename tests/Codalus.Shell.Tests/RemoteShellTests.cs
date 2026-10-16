@@ -141,8 +141,16 @@ public sealed class RemoteShellTests
         await ShellFixture.PumpUntil(() => f.Shell.Terminals.Sessions.Count > sessions && f.Shell.Terminals.Sessions[^1].ExitCode is not null, seconds: 120);
         var run = f.Shell.Terminals.Sessions[^1];
         Assert.Equal(0, run.ExitCode);
-        Assert.Contains("Hello from Hello", Screen(run), StringComparison.Ordinal);
-        Assert.Contains("args: one two words", Screen(run), StringComparison.Ordinal);
+        // ConPTY (the stand-in server on Windows) repaints its screen from the cursor's home with escape sequences, and
+        // on a busy runner its repaint can land one line up, over the program's first line ("args:" then on row 0):
+        // the launch profile's lines are the run's proof there, as they are everywhere.
+        var screen = Screen(run);
+        Assert.Contains("args: one two words", screen, StringComparison.Ordinal);
+        Assert.Contains("GREETING: from the launch profile", screen, StringComparison.Ordinal);
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Contains("Hello from Hello", screen, StringComparison.Ordinal);
+        }
 
         // A terminal is the user's shell there.
         var shell = f.Shell.ShowTerminal(newTerminal: true);
