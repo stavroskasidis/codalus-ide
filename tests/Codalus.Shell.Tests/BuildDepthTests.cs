@@ -55,7 +55,7 @@ public sealed class BuildDepthTests
         await batch.RunAsync(BuildTargets.Build);
         Assert.All(batch.Rows.Where(r => r.Name == "Hello"), r => Assert.StartsWith("succeeded", r.Status, StringComparison.Ordinal));
         Assert.Null(batch.Rows.First(r => r.Name == "Greetings").Status);
-        Assert.True(File.Exists(Path.Combine(folder, "src", "Hello", "bin", "Release", "net10.0", "Hello.dll")));
+        Assert.True(File.Exists(Path.Combine(folder, "src", "Hello", "bin", "Release", "net11.0", "Hello.dll")));
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<BatchBuildView>().Any());
         NavigationDepthTests.Screenshot(f, "m26b-batch-build");
 

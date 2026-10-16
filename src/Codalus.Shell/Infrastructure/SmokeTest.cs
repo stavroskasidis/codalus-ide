@@ -1518,7 +1518,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// <summary>Remote attach (M14c): the Debuggee waits on the target, the debugger attaches there, stops, and detaches.</summary>
     private async Task DebugRemoteStepAsync(RemoteTarget target)
     {
-        var dll = Path.Combine(Sessions, "Debuggee", "bin", "Debug", "net10.0", "Debuggee.dll");
+        var dll = Path.Combine(Sessions, "Debuggee", "bin", "Debug", "net11.0", "Debuggee.dll");
         Check(File.Exists(dll), "the Debuggee was built by debug.compound");
         var signal = "/tmp/codalus-smoke-" + Guid.NewGuid().ToString("N")[..8];
         Process program;
