@@ -361,6 +361,7 @@ public sealed partial class CodeEditorController : IDisposable
             }
 
             _textMate.SetGrammar(scope);
+            KeepSemanticColorsOverGrammar();
             _insights.KeepColorizerLast();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -370,6 +371,25 @@ public sealed partial class CodeEditorController : IDisposable
             _textMate = null;
             GrammarScope = null;
         }
+    }
+
+    /// <summary>
+    /// Puts the semantic tokens (and the diagnostics' marks) after the grammar's colors, which AvaloniaEdit's TextMate adds
+    /// last: where the language service classified the text (Razor's markup and C#), its colors win.
+    /// </summary>
+    private void KeepSemanticColorsOverGrammar()
+    {
+        var transformers = Editor.TextArea.TextView.LineTransformers;
+        var grammar = transformers.OfType<AvaloniaEdit.TextMate.TextMateColoringTransformer>().FirstOrDefault();
+        if (grammar is null || transformers.IndexOf(_colorizer) > transformers.IndexOf(grammar))
+        {
+            return;
+        }
+
+        transformers.Remove(_colorizer);
+        transformers.Remove(_markers);
+        transformers.Insert(transformers.IndexOf(grammar) + 1, _colorizer);
+        transformers.Insert(transformers.IndexOf(_colorizer) + 1, _markers);
     }
 
     private void ApplyTheme()
