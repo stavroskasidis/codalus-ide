@@ -41,6 +41,9 @@ public sealed record InstallInfo(string Version, InstallKind Kind)
     /// </summary>
     public string DefaultChannel { get; init; } = ChannelOf(Version);
 
+    /// <summary>Applying an update asks for an administrator's password (macOS: an app in /Applications that an older .pkg installed as root).</summary>
+    public bool NeedsAdministrator { get; init; }
+
     public static string ChannelOf(string version) => version.Contains("-nightly.", StringComparison.Ordinal) ? Nightly : Stable;
 
     public static InstallKind KindOf(string version, bool velopackInstalled, bool systemPackage) =>
