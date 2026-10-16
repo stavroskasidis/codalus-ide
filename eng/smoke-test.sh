@@ -71,6 +71,12 @@ test_app() {
     ulimit -c unlimited || true
   fi
 
+  # vscode-js-debug's logs of the browser steps, kept only when the smoke test fails (a breakpoint in the page that
+  # never stopped, once, on the Linux arm64 runner).
+  local jsdebug="$results/js-debug"
+  rm -rf "$jsdebug"
+  [[ -n "${CODALUS_JSDEBUG_TRACE:-}" ]] || cmd=(env "CODALUS_JSDEBUG_TRACE=$jsdebug" "${cmd[@]}")
+
   if [[ "$(uname -s)" == Linux && ( -z "${DISPLAY:-}" || ( "$DISPLAY" == :* && "$x_server" == false ) ) ]]; then
     if ! command -v xvfb-run > /dev/null; then
       echo "error: no X server for DISPLAY='${DISPLAY:-}' ($x_socket is missing) and xvfb-run isn't installed." >&2
@@ -93,6 +99,10 @@ test_app() {
       done
     fi
     rm -f "$cores"/core.* # hundreds of MB: the stacks are what the results keep
+  fi
+
+  if [[ "$status" -eq 0 ]]; then
+    rm -rf "$jsdebug"
   fi
 
   cp "$userdata"/logs/smoke-test* "$results/" 2> /dev/null || true

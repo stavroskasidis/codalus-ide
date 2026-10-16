@@ -45,6 +45,7 @@ public sealed partial class ShellHost
                 _ = ConfigureLanguagesAsync();
             }
         };
+        Solutions.ProjectChanged += (_, project) => Ui.Post(() => OnFSharpProjectChanged(project));
     }
 
     /// <summary>FsAutoComplete, or null: not installed yet, or the solution isn't trusted (it evaluates projects with MSBuild).</summary>
@@ -106,6 +107,50 @@ public sealed partial class ShellHost
     }
 
     private string? _fsharpSolution;
+
+    /// <summary>F# projects seen before their restore; FsAutoComplete may have loaded them without their packages.</summary>
+    private readonly HashSet<string> _fsharpUnrestored = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool _fsharpReloadQueued;
+
+    /// <summary>
+    /// An F# project restored after FsAutoComplete loaded it without its packages (a type provider's assembly, a
+    /// library's): it reloads a project when its assets file changes, but its watcher can miss an <c>obj</c> folder the
+    /// restore creates, which leaves the project without them for the session. It starts again instead, once for the
+    /// projects a restore brings in together.
+    /// </summary>
+    private void OnFSharpProjectChanged(Codalus.Projects.Protocol.ProjectInfo project)
+    {
+        if (!project.Path.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!project.Restored)
+        {
+            _fsharpUnrestored.Add(project.Path);
+            return;
+        }
+
+        if (!_fsharpUnrestored.Remove(project.Path) || _fsharpReloadQueued || Languages.RunningClient(FSharpLanguageId) is null)
+        {
+            return;
+        }
+
+        _fsharpReloadQueued = true;
+        _ = ReloadFSharpAsync();
+    }
+
+    private async Task ReloadFSharpAsync()
+    {
+        await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+        _fsharpReloadQueued = false;
+        if (Languages.RunningClient(FSharpLanguageId) is not null)
+        {
+            LanguageLog.AppendLine("[fsharp] F# projects were restored after FsAutoComplete loaded them: it starts again with their packages.");
+            await Languages.RestartAsync(FSharpLanguageId).ConfigureAwait(true);
+        }
+    }
 
     /// <summary>An F# file opened without a running server: install FsAutoComplete and Fantomas (asking first, per the setting).</summary>
     private async Task OfferFSharpAsync(string languageId)

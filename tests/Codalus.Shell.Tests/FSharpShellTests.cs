@@ -34,6 +34,10 @@ public sealed class FSharpShellTests
             {
                 // not checked yet
             }
+            catch (Exception ex) when (ex is Rpc.JsonRpcConnectionLostException or ObjectDisposedException)
+            {
+                // FsAutoComplete starts again once a project it loaded is restored
+            }
 
             if (info?.Contains(expected, StringComparison.Ordinal) != true)
             {
@@ -43,6 +47,8 @@ public sealed class FSharpShellTests
 
         return info;
     }
+
+    private static string Tail(string text) => text.Length > 6000 ? text[^6000..] : text;
 
     private static IReadOnlyList<string> Names(ShellFixture f, string project) =>
         [.. SolutionTree.Contents(project, f.Shell.Solutions.Projects[project]).Select(n => n.Name)];
@@ -95,21 +101,33 @@ public sealed class FSharpShellTests
         }
 
         // Quick Info from another F# project, with its documentation and without FsAutoComplete's command links.
-        var client = await f.Shell.Languages.ClientAsync(ShellHost.FSharpLanguageId);
-        Assert.NotNull(client);
+        var hover = await QuickInfoAsync(f, path, "(totalA", "The total area of the shapes.");
+        Assert.Contains("val totalArea", hover, StringComparison.Ordinal);
+        Assert.Contains("The total area of the shapes.", hover, StringComparison.Ordinal);
+        Assert.DoesNotContain("command:", hover, StringComparison.Ordinal);
         var uri = DocumentUris.FromPath(path);
-        var line = model.Text.GetLineByOffset(call);
-        var hover = await client!.HoverAsync(uri, new Position(line.LineNumber - 1, call - line.Offset + "(totalA".Length), TestContext.Current.CancellationToken);
-        Assert.Contains("val totalArea", hover?.Contents.Value, StringComparison.Ordinal);
-        Assert.Contains("The total area of the shapes.", hover?.Contents.Value, StringComparison.Ordinal);
-        Assert.DoesNotContain("command:", hover?.Contents.Value, StringComparison.Ordinal);
 
         // Formatting is Fantomas's.
         var greeter = model.Text.Text.IndexOf("let greeter = Greeter(\"Hello\")", StringComparison.Ordinal);
         model.Text.Replace(greeter, "let greeter = Greeter(\"Hello\")".Length, "let greeter   =   Greeter(\"Hello\")");
         await Task.Delay(500, TestContext.Current.CancellationToken); // the change reaches the server
-        var edits = await client.FormatAsync(uri, null, new FormattingOptions(4, true), TestContext.Current.CancellationToken);
-        Assert.Contains(edits, e => e.NewText.Contains("let greeter = Greeter(\"Hello\")", StringComparison.Ordinal));
+        TextEdit[]? edits = null;
+        for (var attempt = 0; attempt < 60 && edits?.Any(e => e.NewText.Contains("let greeter = Greeter(\"Hello\")", StringComparison.Ordinal)) != true; attempt++)
+        {
+            try
+            {
+                var client = await f.Shell.Languages.ClientAsync(ShellHost.FSharpLanguageId);
+                edits = await client!.FormatAsync(uri, null, new FormattingOptions(4, true), TestContext.Current.CancellationToken);
+            }
+            catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or ObjectDisposedException)
+            {
+                // FsAutoComplete starts again once a project it loaded is restored
+            }
+
+            await Task.Delay(edits is null ? 1000 : 0, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Contains(edits ?? [], e => e.NewText.Contains("let greeter = Greeter(\"Hello\")", StringComparison.Ordinal));
         model.Text.Text = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
 
         // A script: what it #loads is known (Helpers.fsx's describe).
@@ -121,7 +139,7 @@ public sealed class FSharpShellTests
         // reloaded the project and run the provider: minutes on a hosted macOS runner).
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects[Path.Combine(folder, "FsData", "FsData.fsproj")].Restored, seconds: 300);
         var provided = await QuickInfoAsync(f, Path.Combine(folder, "FsData", "Weather.fs"), "sample.Days[0].Hi", "property High", seconds: 360);
-        Assert.Contains("property High: decimal", provided, StringComparison.Ordinal);
+        Assert.True(provided?.Contains("property High: decimal", StringComparison.Ordinal) == true, $"Quick Info on the provided property: {provided ?? "none"}\n{Tail(f.Shell.LanguageLog.GetText())}");
 
         // Solution Explorer: the compile order, the signature file under its implementation; Move Up and Move Down.
         var library = Path.Combine(folder, "FsLibrary", "FsLibrary.fsproj");

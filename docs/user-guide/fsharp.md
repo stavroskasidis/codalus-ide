@@ -82,7 +82,7 @@ F# Interactive runs F# code as you send it, in a terminal of the integrated term
 
 ## Type providers
 
-Type providers work as you type: FsAutoComplete runs the provider (once the project's packages are restored), so the types and members it provides (FSharp.Data's `JsonProvider`, for example) complete and show in Quick Info. A type provider is code that runs while you edit, which is why the F# language service runs only in trusted folders.
+Type providers work as you type: FsAutoComplete runs the provider (once the project's packages are restored; when a restore finishes after the language service loaded the project, it starts again to pick the packages up), so the types and members it provides (FSharp.Data's `JsonProvider`, for example) complete and show in Quick Info. A type provider is code that runs while you edit, which is why the F# language service runs only in trusted folders.
 
 ## Analyzers
 
