@@ -49,4 +49,18 @@ public sealed class OlderFrameworksTests
         // (Both are bundled by the plugin's build; DotNetTestCoverageTests run them from the plugin's own folder.)
         Assert.Equal(folder, Path.GetFileName(CoverageTools.CollectorFolder(tfm)));
     }
+
+    [Fact]
+    public void Test_projects_whose_every_framework_targets_windows_run_only_there()
+    {
+        // M40a: net*-windows test projects (WinForms, WPF) say "Windows only" off Windows instead of failing to start.
+        Assert.True(WindowsFrameworks.IsWindows("net11.0-windows"));
+        Assert.True(WindowsFrameworks.IsWindows("net10.0-windows10.0.19041.0"));
+        Assert.False(WindowsFrameworks.IsWindows("net11.0"));
+        Assert.False(WindowsFrameworks.IsWindows("net10.0-android"));
+        Assert.True(WindowsFrameworks.OnlyWindows(["net11.0-windows"], windows: false));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net11.0-windows"], windows: true));
+        Assert.False(WindowsFrameworks.OnlyWindows(["net11.0", "net11.0-windows"], windows: false));
+        Assert.False(WindowsFrameworks.OnlyWindows([], windows: false));
+    }
 }

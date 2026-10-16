@@ -229,12 +229,8 @@ internal sealed class XamlContext
 
         foreach (var argument in XamlBindingSource.Arguments(inner[space..]))
         {
-            if (argument.Key is null or "Type" && argument.Value.Length > 0 && !argument.Value.StartsWith('{'))
-            {
-                return argument.Value;
-            }
-
-            if (argument.Key is null or "Type" && argument.Value.StartsWith("{x:Type", StringComparison.Ordinal))
+            if (argument.Key is null or "Type" && argument.Value.Length > 0
+                && (!argument.Value.StartsWith('{') || argument.Value.StartsWith("{x:Type", StringComparison.Ordinal)))
             {
                 return argument.Value;
             }
