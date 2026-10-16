@@ -1,6 +1,6 @@
-# WinForms and WPF fixture (M40)
+# WinForms, WPF and WinUI 3 fixture (M40, M44)
 
-A WPF app, a Windows Forms app and a test project for each, on `net11.0-windows`, for loading, running, debugging and testing Windows desktop projects and for WPF XAML editing ([ADR 0071](../../docs/adr/0071-wpf-xaml-language-service.md)). They build on every OS with `EnableWindowsTargeting=true`, which Codalus's build host sets on Linux and macOS; they run on Windows only.
+A WPF app, a Windows Forms app and a test project for each, on `net11.0-windows`, for loading, running, debugging and testing Windows desktop projects and for WPF XAML editing ([ADR 0071](../../docs/adr/0071-wpf-xaml-language-service.md)). They build on every OS with `EnableWindowsTargeting=true`, which Codalus's build host sets on Linux and macOS; they run on Windows only. And a WinUI 3 app ([ADR 0074](../../docs/adr/0074-maui-on-windows-and-winui.md)), whose packages restore on every OS but which builds only on Windows (WinUI's XAML compiler is a Windows program).
 
 | Project | What it has | Used by |
 |---|---|---|
@@ -8,5 +8,6 @@ A WPF app, a Windows Forms app and a test project for each, on `net11.0-windows`
 | `WpfApp.Tests` | xUnit v3 (Microsoft.Testing.Platform) tests of the view model | Test runs on Windows; "Windows only" elsewhere |
 | `WinFormsApp` | A form (`MainForm.cs`, `.Designer.cs`, `.resx`), a user control (`Controls/CounterControl.cs`, `.Designer.cs`, `.resx`), strongly typed resources (`Properties/Resources.resx` and `Resources.Designer.cs`), and `Counter.cs`, the logic the tests use | Loading, nesting in Solution Explorer, builds; running on Windows |
 | `WinFormsApp.Tests` | MSTest (`MSTest.Sdk`) tests of `Counter` | Test runs on Windows |
+| `WinUIApp` | A WinUI 3 app (Windows App SDK 1.8, the version MAUI 10.0.110 uses; `net11.0-windows10.0.19041.0`): `App.xaml` merging `XamlControlsResources` and `ms-appx:///Themes/Colors.xaml` (theme dictionaries, styles), `MainWindow.xaml` hosting `MainPage.xaml` (`x:Bind` from the page's `ViewModel` property with modes, a function binding, a named element and `x:Load`; `x:DefaultBindMode`; a data template with `x:DataType`; `ThemeResource` and `StaticResource`; `Grid.Row` and `ToolTipService.ToolTip`; an event handler), `Controls/RatingControl.xaml` (a user control with two dependency properties bound with `x:Bind`), `Package.appxmanifest`. Unpackaged and self-contained by default; `WinUIAppPackaged=true` (a property in the project, or `-p:`) makes it packaged (MSIX), started as `Codalus.Samples.WinUIApp_b1n3b429t8b64!App` | WinUI XAML completion, diagnostics and navigation (the C# host's tests, on every OS); loading off Windows; building, running, debugging and packaged deployment on Windows; the smoke step `maui.windows` |
 
-`WindowsDesktop.slnx` has all four; `WpfApp.slnx` has the WPF app alone, for the C# host's tests.
+`WindowsDesktop.slnx` has the WPF and Windows Forms projects; `WpfApp.slnx` has the WPF app alone, for the C# host's tests; `WinUIApp.slnx` has the WinUI app alone.

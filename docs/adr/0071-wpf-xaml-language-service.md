@@ -37,3 +37,4 @@ D31 moved WinForms and WPF into scope as Windows-only features: they run, debug 
 - The markup compiler's generated fields follow the XAML on disk: a field added or renamed in the editor reaches the code-behind's IntelliSense after a save and the next design-time build.
 - Binding paths with no data context the editor can see (set in code) aren't completed or checked; resource keys of a library or behind another assembly's dictionary aren't checked. Both are warnings when they are, never errors.
 - The WPF previewer and the Live Visual Tree for WPF are M40b ([ADR 0072](0072-wpf-previewer-hosting.md), "WPF previewer hosting").
+- WinUI 3's XAML dialect, in the same engine, is M44's ([ADR 0074](0074-maui-on-windows-and-winui.md)): `XamlContext` tells WPF's, WinUI's, MAUI's and Avalonia's files apart.

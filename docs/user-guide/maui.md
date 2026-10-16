@@ -1,12 +1,13 @@
 # .NET MAUI: devices, emulators and XAML
 
-Codalus IDE builds and runs .NET MAUI apps on Android devices and emulators on Windows, Linux and macOS, and on iOS simulators, iPhones and iPads and this Mac (Mac Catalyst) on macOS. MAUI's Windows target uses WinUI, which isn't supported.
+Codalus IDE builds and runs .NET MAUI apps on Android devices and emulators on Windows, Linux and macOS, on iOS simulators, iPhones and iPads and this Mac (Mac Catalyst) on macOS, and on this PC ("Windows Machine", MAUI's Windows target) on Windows.
 
 ## What you need
 
 | For | You need |
 |---|---|
-| Any MAUI project | The MAUI workload for each platform: `maui-android`, `maui-ios`, `maui-maccatalyst` (`dotnet workload install maui-android`, or `maui` for all of them) |
+| Any MAUI project | The MAUI workload for each platform: `maui-android`, `maui-ios`, `maui-maccatalyst`, `maui-windows` (`dotnet workload install maui-android`, or `maui` for all of them) |
+| Windows | Windows 10 version 1809 or later. Packaged (MSIX) apps also need Developer Mode |
 | Android | The Android SDK and a JDK (17 or later). To run on an emulator, also the SDK's emulator and a virtual device |
 | iOS and Mac Catalyst | A Mac with the Xcode version the workload asks for |
 
@@ -27,6 +28,7 @@ When the startup project is a MAUI app, the toolbar shows a **device** next to i
 - **Android:** connected phones and tablets (with USB debugging on), running emulators, and the virtual devices you've created. A virtual device that isn't running starts when you run the app on it.
 - **iOS** (on a Mac): simulators and connected iPhones and iPads.
 - **This Mac:** Mac Catalyst.
+- **Windows Machine** (on Windows): the Windows target, as a desktop app. On Windows it's where runs go until you choose another device. On Linux and macOS a project that targets Windows lists it as Windows only: running it from there comes later.
 
 Choosing a device of another platform switches the project to that platform's framework (`net10.0-android`, `net10.0-ios`…). Each solution remembers its choices.
 
@@ -50,6 +52,14 @@ A device that can't be used yet says why:
 **Stop** ends the app. Debugging on an iPhone or iPad isn't available yet (debug in a simulator, or run on the device with `Ctrl+F5`). Neither are conditional breakpoints, changing values, or evaluating calls and operators.
 
 .NET 11 runs MAUI apps on CoreCLR, which has no open-source debugger for mobile yet. To debug a .NET 11 MAUI app, set `<UseMonoRuntime>true</UseMonoRuntime>` in its project, as Microsoft's release notes suggest.
+
+## Running on Windows
+
+On Windows, MAUI's templates add a Windows framework (`net10.0-windows10.0.19041.0`), which runs on **Windows Machine**. It's a WinUI 3 app on .NET's own runtime (CoreCLR), so it runs and debugs like any desktop program, the way [WinUI 3 apps](windows-desktop.md#winui-3) do:
+- **Unpackaged** (`<WindowsPackageType>None</WindowsPackageType>`, as the templates have it): Codalus IDE builds the Windows framework alone (the other platforms' workloads aren't needed for it), then **Start Without Debugging** runs it, **Start** (`F5`) debugs it with netcoredbg (breakpoints, stepping, Locals, Watch: everything a .NET program gets), and **Start with Hot Reload** runs it under `dotnet watch`.
+- **Packaged** (MSIX): Codalus IDE builds it, registers the build's layout with Windows (`Add-AppxPackage -Register`), and starts it the way Windows starts packaged apps; **Start** attaches the debugger to it. Registering needs [Developer Mode](windows-desktop.md#packaged-apps-and-developer-mode). Hot Reload isn't available for packaged apps.
+
+Help → Check Environment lists the `maui-windows` workload, the Windows App SDK runtime, and Developer Mode when an app is packaged.
 
 ## The Devices window
 
@@ -79,3 +89,4 @@ With the MAUI workload installed, File → New Project lists **.NET MAUI App**, 
 - Debugging on iPhones and iPads, and debugging .NET 11 apps on CoreCLR.
 - A XAML previewer and XAML Hot Reload for MAUI: no open-source ones exist.
 - Creating virtual devices and managing SDK packages from the IDE. Use the SDK's `avdmanager` and `sdkmanager`, or Android Studio.
+- Running the Windows target from Linux and macOS (through a Windows machine), and breakpoints in a packaged Windows app's start-up code.
