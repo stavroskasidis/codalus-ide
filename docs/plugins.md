@@ -365,6 +365,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 
 ## Changelog
 
+### Razor colors (no API version change)
+
+Color themes can color Razor files: `semanticTokenColors` takes Razor's token types (`razorComponentElement`, `razorDirective`, `markupElement`… listed in [the protocol](protocol.md#semantic-token-legend)), and `tokenColors` reach them through their TextMate scopes (`entity.name.tag`, `entity.other.attribute-name`, `punctuation.definition.tag`, `keyword.control.razor`, `comment`, `string`). The API didn't change.
+
 ### M30b (no API version change)
 
 Codalus and its plugin host moved to .NET 11. `Codalus.Plugins.Abstractions`, `Codalus.Plugins.Testing` and the `codalus-plugin` template stay on `net10.0`: plugins built for .NET 10 load into the .NET 11 host unchanged, and keep building with the .NET 10 SDK. A plugin may target `net11.0` instead, to use .NET 11's libraries. The API didn't change.
