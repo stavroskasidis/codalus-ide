@@ -1184,6 +1184,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("windows.desktop", "M40a", desktopTitle, "skipped", 0, "WinForms and WPF apps run on Windows only (D31); their editing is covered by the tests on every OS.");
         }
 
+        // M40b: the WPF previewer (ADR 0072, D31: Windows only).
+        const string wpfPreviewTitle = "The XAML Previewer renders the WPF app's MainWindow.xaml at its design size with its design-time data, follows an edit and selects in the XAML what is clicked";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("wpf.preview", "M40b", wpfPreviewTitle, WpfPreviewStepAsync, "windows.desktop").ConfigureAwait(true);
+        }
+        else
+        {
+            Report("wpf.preview", "M40b", wpfPreviewTitle, "skipped", 0, "The WPF previewer runs on Windows only (D31); off Windows it says so, which the tests cover on every OS.");
+        }
+
         await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.interactive", "M36", "A selection in an F# script runs in F# Interactive (dotnet fsi in a terminal), which shows the values defined", FSharpInteractiveStepAsync, "projects.open").ConfigureAwait(true);
@@ -2143,6 +2154,50 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("fsharp-interactive.png");
         shell.Terminals.Close(session!);
+    }
+
+    /// <summary>The WPF previewer in the shipped app (M40b): the solution windows.desktop opened, its MainWindow.xaml previewed.</summary>
+    private async Task WpfPreviewStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var path = Path.Combine(Work, "WindowsDesktop", "WpfApp", "MainWindow.xaml");
+        Check(shell.Solutions.Projects.Values.Any(p => p.UsesWpf), "the WindowsDesktop solution is still open");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        var original = editor.Model.Text.Text;
+
+        var started = Stopwatch.StartNew();
+        shell.ShowXamlPreview();
+        var preview = shell.XamlPreview;
+        await WaitAsync(() => preview.FrameCount > 0 || preview.HasError, "the WPF previewer builds the app and shows its first frame: " + preview.Status, 600).ConfigureAwait(true);
+        Check(preview.FrameCount > 0, "the preview rendered: " + preview.Error + "\n" + Tail(shell.PreviewerLog.GetText(), 2000));
+        Check(preview.Frame is { } frame && frame.Width / frame.Scale == 480 && frame.Height / frame.Scale == 360, $"the window renders at its design size (d:DesignWidth/Height): {preview.Frame?.Width}×{preview.Frame?.Height}");
+        Check(!preview.SupportsThemes, "WPF has no theme variants: the picker is hidden");
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  first frame (build included) in {started.Elapsed.TotalSeconds:0.0} s, {preview.ImageWidth}×{preview.ImageHeight}"));
+
+        var session = shell.Previewer.Session;
+        Check(session is not null, "the WPF previewer runs");
+        Workbench.Previewer.PreviewPathStep[] remaining = [new("MainWindow", 0), new("Grid", 0), new("StackPanel", 0), new("TextBlock", 0)];
+        var text = await session!.BoundsAsync(remaining, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(text is { Width: > 0 }, "the design-time view model (d:DesignInstance) shows its remaining count");
+
+        var before = preview.Frame!;
+        var edit = Stopwatch.StartNew();
+        var add = editor.Model.Text.Text.IndexOf("Content=\"Add\"", StringComparison.Ordinal);
+        Check(add >= 0, "the button's content is in the XAML");
+        editor.Model.Text.Replace(add, "Content=\"Add\"".Length, "Content=\"Add a to-do\"");
+        await WaitAsync(() => preview.Frame is { } shown && shown != before && !shown.Data.AsSpan().SequenceEqual(before.Data), "the edit shows in the preview", 60).ConfigureAwait(true);
+        Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  edit to the frame showing it: {edit.Elapsed.TotalMilliseconds:0} ms (the editor waits 150 ms after the last keystroke)"));
+
+        Workbench.Previewer.PreviewPathStep[] button = [new("MainWindow", 0), new("Grid", 0), new("DockPanel", 0), new("Button", 0)];
+        var bounds = await session.BoundsAsync(button, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(bounds is { Width: > 0 }, "the WPF previewer finds the button");
+        await shell.SelectFromPreviewAsync(bounds!.Value.X + bounds.Value.Width / 2, bounds.Value.Y + bounds.Value.Height / 2).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+        Check(editor.Editor.SelectedText.StartsWith("<Button DockPanel.Dock=\"Right\"", StringComparison.Ordinal), "a click selects the button in the XAML: " + editor.Editor.SelectedText);
+        await RenderedAsync().ConfigureAwait(true);
+        Screenshot("wpf-previewer.png");
+        shell.Layout.CloseToolWindow(ViewModels.XamlPreviewViewModel.ToolWindowId);
+        Restore(editor, original);
+        await shell.Previewer.InvalidateAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
     }
 
     private async Task XamlPreviewStepAsync()

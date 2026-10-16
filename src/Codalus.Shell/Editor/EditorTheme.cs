@@ -131,6 +131,15 @@ public sealed class EditorTheme
             ["number"] = 0xFFB5CEA8, ["regexp"] = 0xFFD16969,
             ["operator"] = 0xFFD4D4D4, ["punctuation"] = 0xFFD4D4D4,
             ["preprocessor"] = 0xFF9B9B9B, ["excludedCode"] = 0xFF767676, ["label"] = 0xFFC8C8C8,
+
+            // Razor and its markup, as Visual Studio's Dark theme colors them.
+            ["razorTransition"] = 0xFFA699E6, ["razorDirective"] = 0xFFA699E6, ["razorDirectiveAttribute"] = 0xFFA699E6, ["razorDirectiveColon"] = 0xFFA699E6,
+            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFF9CDCFE,
+            ["razorTagHelperElement"] = 0xFF4EC9B0, ["razorTagHelperAttribute"] = 0xFF9CDCFE,
+            ["razorComment"] = 0xFF6A9955, ["razorCommentTransition"] = 0xFF6A9955, ["razorCommentStar"] = 0xFF6A9955,
+            ["markupTagDelimiter"] = 0xFF808080, ["markupElement"] = 0xFF569CD6, ["markupAttribute"] = 0xFF9CDCFE,
+            ["markupAttributeQuote"] = 0xFFCE9178, ["markupAttributeValue"] = 0xFFCE9178, ["markupOperator"] = 0xFFD4D4D4,
+            ["markupComment"] = 0xFF6A9955, ["markupCommentPunctuation"] = 0xFF6A9955,
         },
         selection: 0xFF264F78, currentLine: 0x12FFFFFF, highlightRead: 0x48575757, highlightWrite: 0x48004972,
         bracket: 0x500064C8, error: 0xFFF14C4C, warning: 0xFFCCA700, info: 0xFF3794FF, hint: 0xA0A0A0A0, findMatch: 0x80623315);
@@ -153,6 +162,15 @@ public sealed class EditorTheme
             ["number"] = 0xFF098658, ["regexp"] = 0xFF811F3F,
             ["operator"] = 0xFF1E1E1E, ["punctuation"] = 0xFF1E1E1E,
             ["preprocessor"] = 0xFF808080, ["excludedCode"] = 0xFF9E9E9E, ["label"] = 0xFF1E1E1E,
+
+            // Razor and its markup, as Visual Studio's Light (and Blue) theme colors them.
+            ["razorTransition"] = 0xFF826EE6, ["razorDirective"] = 0xFF826EE6, ["razorDirectiveAttribute"] = 0xFF826EE6, ["razorDirectiveColon"] = 0xFF826EE6,
+            ["razorComponentElement"] = 0xFF0B7F7F, ["razorComponentAttribute"] = 0xFFFF0000,
+            ["razorTagHelperElement"] = 0xFF800080, ["razorTagHelperAttribute"] = 0xFF800080,
+            ["razorComment"] = 0xFF008000, ["razorCommentTransition"] = 0xFF008000, ["razorCommentStar"] = 0xFF008000,
+            ["markupTagDelimiter"] = 0xFF0000FF, ["markupElement"] = 0xFF800000, ["markupAttribute"] = 0xFFFF0000,
+            ["markupAttributeQuote"] = 0xFF0000FF, ["markupAttributeValue"] = 0xFF0000FF, ["markupOperator"] = 0xFF0000FF,
+            ["markupComment"] = 0xFF008000, ["markupCommentPunctuation"] = 0xFF008000,
         },
         selection: 0xFFADD6FF, currentLine: 0x0F000000, highlightRead: 0x40B4B4B4, highlightWrite: 0x40A8CEFF,
         bracket: 0x400064C8, error: 0xFFE51400, warning: 0xFFBF8803, info: 0xFF1A85FF, hint: 0xA0808080, findMatch: 0x80F8C9AB);
@@ -175,6 +193,15 @@ public sealed class EditorTheme
             ["number"] = 0xFFB5CEA8, ["regexp"] = 0xFFD16969,
             ["operator"] = 0xFFFFFFFF, ["punctuation"] = 0xFFFFFFFF,
             ["preprocessor"] = 0xFFFFFFFF, ["excludedCode"] = 0xFFA0A0A0, ["label"] = 0xFFFFFFFF,
+
+            // Razor and its markup.
+            ["razorTransition"] = 0xFFFFFF00, ["razorDirective"] = 0xFFFFFF00, ["razorDirectiveAttribute"] = 0xFFFFFF00, ["razorDirectiveColon"] = 0xFFFFFF00,
+            ["razorComponentElement"] = 0xFF4EC9B0, ["razorComponentAttribute"] = 0xFF9CDCFE,
+            ["razorTagHelperElement"] = 0xFF4EC9B0, ["razorTagHelperAttribute"] = 0xFF9CDCFE,
+            ["razorComment"] = 0xFF7CA668, ["razorCommentTransition"] = 0xFF7CA668, ["razorCommentStar"] = 0xFF7CA668,
+            ["markupTagDelimiter"] = 0xFFFFFFFF, ["markupElement"] = 0xFF569CD6, ["markupAttribute"] = 0xFF9CDCFE,
+            ["markupAttributeQuote"] = 0xFFCE9178, ["markupAttributeValue"] = 0xFFCE9178, ["markupOperator"] = 0xFFFFFFFF,
+            ["markupComment"] = 0xFF7CA668, ["markupCommentPunctuation"] = 0xFF7CA668,
         },
         selection: 0xFF0F4A85, currentLine: 0x00000000, highlightRead: 0x60F38518, highlightWrite: 0x80F38518,
         bracket: 0x6000FFFF, error: 0xFFF48771, warning: 0xFFFFD700, info: 0xFF00FFFF, hint: 0xFFFFFFFF, findMatch: 0x80F38518);

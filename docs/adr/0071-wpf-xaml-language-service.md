@@ -36,4 +36,4 @@ D31 moved WinForms and WPF into scope as Windows-only features: they run, debug 
 - Builds on Linux and macOS succeed where a plain `dotnet build` fails with NETSDK1100; the user guide says to pass `-p:EnableWindowsTargeting=true` outside the IDE.
 - The markup compiler's generated fields follow the XAML on disk: a field added or renamed in the editor reaches the code-behind's IntelliSense after a save and the next design-time build.
 - Binding paths with no data context the editor can see (set in code) aren't completed or checked; resource keys of a library or behind another assembly's dictionary aren't checked. Both are warnings when they are, never errors.
-- The WPF previewer and the Live Visual Tree for WPF are M40b ("WPF previewer hosting", a new ADR then).
+- The WPF previewer and the Live Visual Tree for WPF are M40b ([ADR 0072](0072-wpf-previewer-hosting.md), "WPF previewer hosting").

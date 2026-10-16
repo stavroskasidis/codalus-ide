@@ -19,6 +19,7 @@
     <Project Path="src/Codalus.Debugging.Host/Codalus.Debugging.Host.csproj" />
     <Project Path="src/Codalus.Debugging.StartupHook/Codalus.Debugging.StartupHook.csproj" />
     <Project Path="src/Codalus.Previewer.Agent/Codalus.Previewer.Agent.csproj" />
+    <Project Path="src/Codalus.Previewer.Wpf/Codalus.Previewer.Wpf.csproj" />
     <Project Path="src/Codalus.Diagnostics.BenchEvents/Codalus.Diagnostics.BenchEvents.csproj" />
     <Project Path="src/Codalus.Diagnostics.Host/Codalus.Diagnostics.Host.csproj" />
     <Project Path="src/Codalus.Diagnostics.Protocol/Codalus.Diagnostics.Protocol.csproj" />

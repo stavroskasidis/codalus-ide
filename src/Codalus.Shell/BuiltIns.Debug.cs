@@ -60,9 +60,9 @@ internal static partial class BuiltIns
     [
         SettingDescriptor.Create(ShellHost.LiveVisualTreeSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
         {
-            Title = "Live Visual Tree for Avalonia apps",
+            Title = "Live Visual Tree for Avalonia and WPF apps",
             Category = "Debugging",
-            Description = "Running or debugging an Avalonia app loads Codalus IDE's agent into it (a .NET startup hook), for the Live Visual Tree and Live Property Explorer.",
+            Description = "Running or debugging an Avalonia app, or a WPF app on Windows, loads Codalus IDE's agent into it (a .NET startup hook), for the Live Visual Tree and Live Property Explorer.",
             Order = 30,
         },
         SettingDescriptor.Create(ShellHost.JustMyCodeSetting, "true", SettingType.Boolean, ContributionSource.Shell) with

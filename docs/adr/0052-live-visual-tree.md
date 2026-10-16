@@ -3,6 +3,7 @@
 - **Status:** accepted (M19b, 2026-10-13)
 - **Date:** 2026-10-13
 - **Deciders:** maintainer
+- **Extended by:** [ADR 0072](0072-wpf-previewer-hosting.md) (WPF, M40b)
 
 ## Context
 

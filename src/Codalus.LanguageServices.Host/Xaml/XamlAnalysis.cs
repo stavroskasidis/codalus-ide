@@ -551,6 +551,9 @@ internal static partial class XamlAnalysis
         "Resources", "Styles", "DataTemplates", "Template", "ItemTemplate", "ItemsPanel", "ContentTemplate", "HeaderTemplate",
         "KeyBindings", "Transitions", "Flyout", "ContextFlyout", "ContextMenu", "Tip", "Theme", "ItemContainerTheme", "DataContext",
         "PreviewWith", "Effect", "RenderTransform", "OpacityMask", "Clip", "FocusAdorner", "Interactions", "Behaviors",
+
+        // WPF's (M40b): a tooltip, styles, triggers and transforms aren't the element's logical children.
+        "ToolTip", "Style", "Triggers", "LayoutTransform", "InputBindings", "CommandBindings", "ItemContainerStyle", "FocusVisualStyle",
     };
 
     /// <summary>

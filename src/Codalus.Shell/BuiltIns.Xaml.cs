@@ -6,12 +6,12 @@ using Codalus.Workbench.ToolWindows;
 
 namespace Codalus.Shell;
 
-/// <summary>Avalonia XAML (M19a, ADR 0047 and 0048): the XAML Previewer's tool window, commands, menus and key binding.</summary>
+/// <summary>Avalonia and WPF XAML (M19a, M40b; ADR 0048, 0072): the XAML Previewer's tool window, commands, menus and key binding.</summary>
 internal static partial class BuiltIns
 {
     public const string XamlKeybindings = """
         [
-          { "key": "shift+f7", "command": "xaml.showPreview", "when": "editorLanguageId == axaml" }
+          { "key": "shift+f7", "command": "xaml.showPreview", "when": "editorLanguageId == axaml || editorLanguageId == xaml" }
         ]
         """;
 
@@ -46,7 +46,7 @@ internal static partial class BuiltIns
         menus.Add(
         [
             new MenuItemRule(OtherWindowsMenu, "xaml.showPreview", shell) { Group = "windows", Order = AlphabeticalOrder("XAML Previewer") },
-            new MenuItemRule(MenuLocations.EditorContext, "xaml.showPreview", shell) { Group = "2-navigation", Order = 20, When = WhenClause.Parse("editorLanguageId == axaml") },
+            new MenuItemRule(MenuLocations.EditorContext, "xaml.showPreview", shell) { Group = "2-navigation", Order = 20, When = WhenClause.Parse("editorLanguageId == axaml || editorLanguageId == xaml") },
         ]);
     }
 }

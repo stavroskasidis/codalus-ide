@@ -175,9 +175,11 @@ internal sealed class LanguageServer : IAsyncDisposable
             async (document, _, ct) => await FoldingFeature.FoldingRangesAsync(document, ct).ConfigureAwait(false), [],
             (xaml, _, _) => Task.FromResult<FoldingRange[]?>(Xaml.XamlAnalysis.Folding(xaml)));
         OnDocument(Methods.SemanticTokensFull, json.SemanticTokensParams, json.SemanticTokens, p => p.TextDocument,
-            async (document, _, ct) => await SemanticTokensFeature.TokensAsync(document, null, ct).ConfigureAwait(false), new SemanticTokens([]), semantics: Semantics.Analysis);
+            async (document, _, ct) => await SemanticTokensFeature.TokensAsync(document, null, ct).ConfigureAwait(false), new SemanticTokens([]),
+            razor: async (mapping, _, ct) => await Razor.RazorClassifier.TokensAsync(mapping, null, ct).ConfigureAwait(false), semantics: Semantics.Analysis);
         OnDocument(Methods.SemanticTokensRange, json.SemanticTokensRangeParams, json.SemanticTokens, p => p.TextDocument,
-            async (document, p, ct) => await SemanticTokensFeature.TokensAsync(document, p.Range, ct).ConfigureAwait(false), new SemanticTokens([]), semantics: Semantics.Analysis);
+            async (document, p, ct) => await SemanticTokensFeature.TokensAsync(document, p.Range, ct).ConfigureAwait(false), new SemanticTokens([]),
+            razor: async (mapping, p, ct) => await Razor.RazorClassifier.TokensAsync(mapping, p.Range, ct).ConfigureAwait(false), semantics: Semantics.Analysis);
         OnDocument(Methods.DocumentOptions, json.DocumentOptionsParams, json.DocumentOptions, p => p.TextDocument,
             DocumentOptionsAsync, new DocumentOptions(true, 4, 4, null));
         OnPosition(Methods.References, json.ReferenceParams, json.LocationArray, p => (p.TextDocument, p.Position),
@@ -421,6 +423,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         Func<Document, TParams, CancellationToken, Task<TResult?>> handler,
         TResult? empty,
         Func<Xaml.XamlContext, TParams, CancellationToken, Task<TResult?>>? xaml = null,
+        Func<Razor.RazorMapping, TParams, CancellationToken, Task<TResult?>>? razor = null,
         Semantics semantics = Semantics.Workspace)
     {
         _connection.OnRequest(method, paramsInfo, resultInfo, async (p, ct) =>
@@ -430,6 +433,14 @@ internal sealed class LanguageServer : IAsyncDisposable
             {
                 return xaml is not null && await Xaml.XamlContext.CreateAsync(solution, xamlPath, _workspace.OpenText(xamlPath), ct).ConfigureAwait(false) is { } context
                     ? await xaml(context, p, ct).ConfigureAwait(false) ?? empty!
+                    : empty!;
+            }
+
+            // A Razor file (ADR 0023) with its mapping to the generated C#; outside a project, nothing (its grammar colors it).
+            if (razor is not null && DocumentUris.ToPath(where(p).Uri) is { } razorPath && Razor.RazorFiles.IsRazor(razorPath))
+            {
+                return await Razor.RazorMapping.CreateAsync(solution, razorPath, ct).ConfigureAwait(false) is { } mapping
+                    ? await razor(mapping, p, ct).ConfigureAwait(false) ?? empty!
                     : empty!;
             }
 

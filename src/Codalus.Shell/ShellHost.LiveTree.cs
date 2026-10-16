@@ -9,13 +9,14 @@ using Codalus.Workbench.Localization;
 namespace Codalus.Shell;
 
 /// <summary>
-/// The Live Visual Tree and Live Property Explorer (M19b, ADR 0052): an Avalonia app run or debugged from here gets the
-/// live agent (a startup hook) and a <see cref="LiveSession"/> it connects to; the two tool windows show its elements and
-/// their properties, highlight the selection in the app, pick an element by clicking it, set values and go to the XAML.
+/// The Live Visual Tree and Live Property Explorer (M19b, ADR 0052; WPF in M40b, ADR 0072): an Avalonia or WPF app run
+/// or debugged from here gets its live agent (a startup hook: Avalonia's, or the WPF previewer's on Windows) and a
+/// <see cref="LiveSession"/> it connects to; the two tool windows show its elements and their properties, highlight the
+/// selection in the app, pick an element by clicking it, set values and go to the XAML.
 /// </summary>
 public sealed partial class ShellHost
 {
-    /// <summary>Whether running and debugging an Avalonia app adds the live agent (on by default).</summary>
+    /// <summary>Whether running and debugging an Avalonia or WPF app adds the live agent (on by default).</summary>
     public const string LiveVisualTreeSetting = "debug.liveVisualTree";
 
     public LiveTreeViewModel LiveTree { get; private set; } = null!;
@@ -38,16 +39,33 @@ public sealed partial class ShellHost
         Solutions.Projects.TryGetValue(projectPath, out var project)
         && project.References.Any(r => r.Kind == ReferenceKinds.Package && r.Name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>An Avalonia app's plan gets the live agent and a new session for this run (any thread).</summary>
+    /// <summary>
+    /// The live agent for a project's app: Avalonia's for an Avalonia app; for a WPF app on Windows (D31) the WPF
+    /// previewer's, when its .NET is one the agent loads into; else none.
+    /// </summary>
+    internal string? LiveAgentFor(string projectPath)
+    {
+        if (IsAvaloniaApp(projectPath))
+        {
+            return PreviewService.ResolveAgent();
+        }
+
+        return OperatingSystem.IsWindows() && Solutions.Projects.TryGetValue(projectPath, out var project) && project.UsesWpf
+            && PreviewService.WpfFrameworkProblem(project) is null
+            ? PreviewService.ResolveWpfPreviewer()
+            : null;
+    }
+
+    /// <summary>An Avalonia or WPF app's plan gets its live agent and a new session for this run (any thread).</summary>
     private LaunchPlan AddLiveAgent(RunInfo info, LaunchPlan plan)
     {
-        if (!Workbench.Settings.GetBoolean(LiveVisualTreeSetting, true) || !IsAvaloniaApp(info.Path))
+        if (!Workbench.Settings.GetBoolean(LiveVisualTreeSetting, true) || LiveAgentFor(info.Path) is not { } agent)
         {
             return plan;
         }
 
         var previous = Live;
-        if (LiveSession.Start() is not { } session)
+        if (LiveSession.Start(agent) is not { } session)
         {
             return plan;
         }
@@ -102,7 +120,7 @@ public sealed partial class ShellHost
             }
 
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var client = await Languages.ClientAsync(AxamlLanguageId).ConfigureAwait(true);
+            var client = await Languages.ClientAsync(editor.Model.LanguageId ?? XamlLanguageId).ConfigureAwait(true);
             var tree = client is null ? null : await client.XamlLogicalTreeAsync(editor.Model.Uri, timeout.Token).ConfigureAwait(true);
             if (tree is null || PreviewSelection.NodeFor(tree.Nodes, path.Steps) is not { } xaml || editor.Controller is not { } controller)
             {
@@ -121,12 +139,13 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>The .axaml file of the solution whose root's <c>x:Class</c> is <paramref name="type"/>.</summary>
+    /// <summary>The .axaml or .xaml file of the solution whose root's <c>x:Class</c> is <paramref name="type"/>.</summary>
     private string? XamlFileOf(string type)
     {
         var needle = "x:Class=\"" + type + "\"";
         foreach (var path in Solutions.Projects.Values.SelectMany(p => p.Items).Select(i => i.Path)
-                     .Where(p => p.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase)).Distinct(SolutionService.PathComparer))
+                     .Where(p => p.EndsWith(".axaml", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
+                     .Distinct(SolutionService.PathComparer))
         {
             try
             {
