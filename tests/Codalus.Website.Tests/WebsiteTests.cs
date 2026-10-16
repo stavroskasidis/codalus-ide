@@ -41,6 +41,20 @@ public sealed class WebsiteTests : IDisposable
     }
 
     [Fact]
+    public async Task Every_page_carries_the_products_name_and_never_the_old_one()
+    {
+        var outDir = Path.Combine(_temp, "site");
+        var files = await SiteHost.ExportAsync(Options(), outDir);
+
+        foreach (var page in files.Where(f => f.EndsWith(".html", StringComparison.Ordinal)))
+        {
+            var html = File.ReadAllText(Path.Combine(outDir, page));
+            Assert.Contains("<span>Codalus <span class=\"brand-sub\">IDE</span></span>", html, StringComparison.Ordinal);
+            Assert.DoesNotMatch(@"(?i)(Codalus|Daedalus)(\s|<[^>]*>)*Studio", html);
+        }
+    }
+
+    [Fact]
     public async Task The_export_leaves_the_linux_repositories_alone()
     {
         var outDir = Path.Combine(_temp, "site");
