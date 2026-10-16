@@ -974,6 +974,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         await Plugins.DisposeAsync().ConfigureAwait(false);
+        Tests.Dispose(); // after the test plugin: its last results can't schedule a notification any more
         Workbench.Dispose();
         RestartIfRequested(openSolution);
     }

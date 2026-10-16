@@ -52,6 +52,19 @@ public sealed class TestingTests : IDisposable
     }
 
     [Fact]
+    public async Task A_disposed_service_raises_no_more_changes()
+    {
+        var service = new TestService();
+        var raised = 0;
+        service.Changed += (_, _) => Interlocked.Increment(ref raised);
+        service.ControllerCreated(new TestControllerParams("x", Controller, ".NET"), _connection); // schedules a notification
+        service.Dispose();
+        service.ControllerDisposed(Controller); // and so would this, after the window closed
+        await Task.Delay(TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken);
+        Assert.Equal(0, Volatile.Read(ref raised));
+    }
+
+    [Fact]
     public void Items_form_a_tree_and_can_be_moved_and_removed()
     {
         var roots = _service.Read(r => r.Select(n => n.Label).ToList());

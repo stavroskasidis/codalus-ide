@@ -582,9 +582,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == cwdLine, $"Run to Cursor stops at line {cwdLine}", 60).ConfigureAwait(true);
             Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
 
+            // The stop refreshes the window too: a refresh that starts later wins, and the earlier one leaves the rows to it.
             shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
             await shell.ThreadList.RefreshAsync().ConfigureAwait(true);
-            Check(shell.ThreadList.Rows.Any(r => r.IsCurrent), "the Threads window marks the current thread");
+            await WaitAsync(() => shell.ThreadList.Rows.Any(r => r.IsCurrent), "the Threads window marks the current thread", 30).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(ModulesViewModel.ToolWindowId);
             await WaitAsync(() => shell.ModuleList.Rows.Any(r => r.Name == "Hello.dll"), "the Modules window lists Hello.dll").ConfigureAwait(true);
             shell.Run("debug.exceptionSettings");
@@ -2874,6 +2875,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
                 PrintHostDiagnostics();
                 Console.Out.Flush();
+            }
+
+            // A failed step leaves no debug session behind: the next one would find it instead of starting its own.
+            if (shell.Debugger.IsActive)
+            {
+                try
+                {
+                    await shell.Debugger.StopAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+                }
+                catch (Exception stop)
+                {
+                    Console.Out.WriteLine($"  (the debug session didn't stop: {stop.Message})");
+                }
             }
         }
         finally
