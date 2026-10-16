@@ -18,11 +18,16 @@
     <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
   </Style>
 
-  <!-- Dock tab headers show the dockable title; preview tabs in italics, pinned tabs with a pin (M34d). -->
+  <!--
+    Dock tab headers show the dockable title; preview tabs in italics, pinned tabs with a pin (M34d). The header
+    templates and tab styles are typed to IShellTab, which documents and tool windows both are, since either can be
+    dragged into the other kind of group or a floating window: a template typed to one kind didn't match the other, and
+    Avalonia's search for another found the view locator, which put the whole view in the tab.
+  -->
   <Style Selector="DocumentControl">
     <Setter Property="HeaderTemplate">
-      <DataTemplate DataType="docking:ShellDocument">
-        <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding FilePath}">
+      <DataTemplate DataType="docking:IShellTab">
+        <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding TabToolTip}">
           <controls:Icon Kind="{Binding TabIcon}" IsVisible="{Binding HasTabIcon}" Width="14" Height="14" VerticalAlignment="Center" />
           <TextBlock Text="{Binding Title}" FontStyle="{Binding TitleFontStyle}" VerticalAlignment="Center" Padding="2" />
           <controls:Icon Kind="pin" IsVisible="{Binding IsPinned}" Width="12" Height="12" VerticalAlignment="Center" AutomationProperties.Name="{l:T shellStyles.pinned}" />
@@ -36,7 +41,7 @@
   -->
   <Style Selector="ToolControl">
     <Setter Property="HeaderTemplate">
-      <DataTemplate DataType="docking:ToolWindowDockable">
+      <DataTemplate DataType="docking:IShellTab">
         <StackPanel Orientation="Horizontal" ToolTip.Tip="{Binding Title}">
           <controls:Icon Classes="tabIcon" Kind="{Binding TabIcon}" Width="14" Height="14" VerticalAlignment="Center"
                          IsVisible="{Binding $parent[ToolTabStripItem].(controls:FittingTabPanel.IconOnly)}" />
@@ -66,7 +71,7 @@
     A tab colored by project has a stripe along its bottom edge. Styles outrank the control theme in any state, so
     every state is restated here, in order.
   -->
-  <Style Selector="DocumentTabStripItem" x:DataType="docking:ShellDocument">
+  <Style Selector="DocumentTabStripItem" x:DataType="docking:IShellTab">
     <Setter Property="Background" Value="{DynamicResource Shell.Tab.Inactive}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Inactive.Foreground}" />
     <Setter Property="(controls:DocumentTab.IsPreview)" Value="{Binding IsPreview}" />
