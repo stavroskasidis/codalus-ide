@@ -555,7 +555,8 @@ internal sealed class DesignerSession : IDisposable
         var component = Host.CreateComponent(type, parameters.Name);
         if (Host.GetDesigner(component) is IComponentInitializer initializer)
         {
-            initializer.InitializeNewComponent(null);
+            // As the Toolbox's creation does: the designer sets its defaults (a button's Text is its name).
+            initializer.InitializeNewComponent(new Hashtable());
         }
 
         string? parentComponent = null;
