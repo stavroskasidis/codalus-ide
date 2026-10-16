@@ -304,6 +304,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var context = EvaluationContext.Create(EvaluationContext.SharingPolicy.Shared);
         var done = 0;
         var progressGate = new Lock();
+        var reprinted = new ConcurrentBag<string>();
         await _events.ProgressAsync(new EvaluationProgressParams(0, projects.Count, projects.Count == 0)).ConfigureAwait(false);
         await Parallel.ForEachAsync(
             projects,
@@ -320,6 +321,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 }
                 var before = _evaluated.GetValueOrDefault(project);
                 _evaluated[project] = result;
+                if (!string.Equals(before?.Fingerprint, result.Fingerprint, StringComparison.Ordinal))
+                {
+                    reprinted.Add(project);
+                }
 
                 // An unchanged project isn't sent again (a restore that changed nothing, a watcher event): every one
                 // costs the shell a refresh of the views that follow projects (M34b).
@@ -337,9 +342,22 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             }).ConfigureAwait(false);
         _watcher?.SetImports(_evaluated.Values.SelectMany(e => e.Imports));
         await _events.LogAsync("info", $"Evaluated {projects.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms ({Active.Name}).").ConfigureAwait(false);
-        ScheduleDesignTimeBuilds(designTime == DesignTimeMode.Always
+        IReadOnlyCollection<string> changed = designTime == DesignTimeMode.Always
             ? projects
-            : WithDependents([.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]));
+            : WithDependents([.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]);
+
+        // A project whose fingerprint changed changes the cache key of every project that references it, evaluated now
+        // or not: those are checked again too, or their cache entries keep keys the next open never matches (the Linux
+        // runner, where the watcher evaluated Core again after the restore: App and Core built again, Core.Tests didn't).
+        ScheduleDesignTimeBuilds([.. changed, .. Dependents([.. reprinted.Distinct(s_pathComparer)])]);
+    }
+
+    /// <summary>The loaded projects that reference <paramref name="projects"/>, directly or not (a project among them that references another one included).</summary>
+    private IEnumerable<string> Dependents(IReadOnlyCollection<string> projects)
+    {
+        var closure = new HashSet<string>(WithDependents(projects), s_pathComparer);
+        return closure.Where(p => _evaluated.TryGetValue(p, out var evaluated)
+                                  && evaluated.Info.References.Any(r => r.Kind == ReferenceKinds.Project && r.Path is not null && !s_pathComparer.Equals(r.Path, p) && closure.Contains(r.Path)));
     }
 
     /// <summary>
