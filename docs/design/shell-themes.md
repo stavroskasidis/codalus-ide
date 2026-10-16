@@ -1,6 +1,6 @@
 # Shell themes: Harbor, Graphite, Daylight and Ember
 
-Four theme families for the shell. Each comes in Light, Dark and High contrast. They keep a classic IDE's layout and the icon palette, but each has its own colors and some layout differences. The maintainer asked for them on 2026-10-16 ("close to Visual Studio style but original too") and wants every one shipped, so users pick one. Nothing here is built yet: [M45](../roadmap.md#m45--theme-families) implements the families, and [M46](../roadmap.md#m46--first-run-setup) adds the first-run setup that offers them. [D32](../roadmap.md#decision-register) holds the open questions.
+Four theme families for the shell. Each comes in Light, Dark and High contrast. They keep a classic IDE's layout and the icon palette, but each has its own colors and some layout differences. The maintainer asked for them on 2026-10-16 ("close to Visual Studio style but original too") and wants every one shipped, so users pick one. Nothing here is built yet: [M45](../roadmap.md#m45--theme-families) implements the families, and [M46](../roadmap.md#m46--first-run-setup) adds the first-run setup that offers them. [D32](../roadmap.md#decision-register) settled the rest on 2026-10-16: Harbor with Follow System is the default for new installs, today's Blue, Light, Dark and High Contrast stay as a Classic family, and `workbench.colorTheme` takes `<family>` or `<family>.<light|dark|highContrast>`.
 
 | | Light | Dark | High contrast |
 |---|---|---|---|
@@ -34,7 +34,7 @@ The mockups use web fonts (IBM Plex, Instrument Sans, Public Sans, Geist, with t
 
 ### Harbor
 
-The closest to the classic IDE, and the default proposed in D32.
+The closest to the classic IDE, and the default for new installs (D32).
 
 - **Title bar:** deep navy (Light), with the menu, the search box and the solution name on a chip.
 - **Tool windows:** docked with 6 px gutters between them. The focused tool window has an accent caption. Tab strips sit at the bottom of a tool window group.

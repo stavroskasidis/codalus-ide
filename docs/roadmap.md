@@ -10,7 +10,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 
 1. Read `CLAUDE.md`, then the latest checkpoint summary, then this document's [status table](#status).
 2. Pick the next milestone allowed by the [dependency graph](#dependency-graph) and the maintainer's instructions. The numbers are identifiers, not a strict order. The maintainer may reorder phases.
-3. Check the milestone's **Decisions** entries against the [decision register](#decision-register). Every decision there is closed as of 2026-10-10, except D31 (2026-10-13) and D32 (2026-10-16). If a new question comes up, don't start work that depends on it. Add it to the register and raise it with the maintainer.
+3. Check the milestone's **Decisions** entries against the [decision register](#decision-register). Every decision there is closed as of 2026-10-10, except D31 (2026-10-13). If a new question comes up, don't start work that depends on it. Add it to the register and raise it with the maintainer.
 4. Follow the milestone workflow:
    - plan mode
    - ADRs before code
@@ -61,7 +61,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M42 | WCF | proposed, unscheduled (cross-platform, so it doesn't wait for D31) |
 | M43 | .NET Framework | proposed, waits for D31 and a spike on debugging the desktop CLR |
 | M44 | MAUI on Windows and WinUI 3 | proposed, waits for D31 and M20 |
-| M45 | Theme families | planned (2026-10-16), waits for D32: Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, from the [designs](design/shell-themes.md) |
+| M45 | Theme families | planned (2026-10-16; D32 decided): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, from the [designs](design/shell-themes.md) |
 | M46 | First-run setup | planned (2026-10-16), after M45: a setup at the first start, with appearance (the theme families), keyboard, settings import and a tools check, before the start window |
 | M35 | Visual Basic | done (at checkpoint, [m35](checkpoints/m35.md), ADR 0066): VB in the C# host's workspace (completion, Quick Info, signature help, live diagnostics, classification with XML literals, navigation, references and rename across C# and VB, code fixes and refactorings, formatting, outline and folding), our own pretty listing (`End` constructs, keyword casing, XML end tags), VB snippets and item templates, New Project in any language, VB property pages, VB tests from source, debugging tested on netcoredbg. Gaps: VB expressions in Watch (netcoredbg reads C#), automatic line continuation, a page for project imports |
 | M36 | F# | done (at checkpoints [m36a](checkpoints/m36a.md) and [m36b](checkpoints/m36b.md), ADR 0067 and 0068), 2026-10-15. M36a: FsAutoComplete (D10) and Fantomas installed with the user's `dotnet tool install` on the first F# file, trusted folders only; completion, Quick Info, diagnostics with FSharpLint, navigation, rename, fixes, inlay hints, CodeLens and formatting through the LSP bridge; the compile order in Solution Explorer (`items/move`, Move Up/Down, Add Above/Below, `.fsi` nesting), F# item templates and property pages. M36b: F# Interactive as `dotnet fsi` in a terminal (send a selection, line, file or project references; reset; run script), scripts with `#load` and `#r "nuget:"`, type providers, F# analyzers, Expecto in the Test Explorer, debugging F# tested. Gaps: F# tests from source, F# expressions in Watch, F# → C# references before a build, remote windows |
@@ -2029,7 +2029,11 @@ The table and the steps below were written before the name was chosen; `<name>` 
 - M23a: Fonts and Colors over the theme.
 
 **Decisions.**
-- D32: the names, the default, what happens to today's themes, and the setting's shape.
+- D32 (decided 2026-10-16, as recommended):
+  - the names are Harbor, Graphite, Daylight and Ember;
+  - new installs default to Harbor with Follow System;
+  - today's four themes stay, as a Classic family;
+  - `workbench.colorTheme` takes `<family>` (follows the system) or `<family>.<light|dark|highContrast>`, and today's values read as Classic.
 - An ADR before code on how a family's shapes become tokens and style classes, so that views don't change.
 
 **Scope.**
@@ -2046,13 +2050,13 @@ The table and the steps below were written before the name was chosen; `<name>` 
   Views don't change. Each shape must work at every size `PolishTests` walks.
 - **Editor colors:** for each family and variant, the C# classification colors, the terminal's palette and the inline markers (breakpoint, current statement, current line). Fonts and Colors (M23a) still overrides them.
 - **Choosing a theme:**
-  - The setting takes a family and a mode (Light, Dark, High contrast, Follow System), in the shape D32 decides. Follow System picks the variant within the family.
+  - The setting takes a family and a mode (Light, Dark, High contrast, Follow System), as D32 decided: `harbor` follows the system and picks the variant within the family, and `harbor.dark` doesn't follow it. Today's values (`blue`, `light`, `dark`, `highContrast`, `followSystem`) read as Classic, so a saved setting keeps its look.
   - Tools → Options → Environment gets a family picker with pictures and a mode.
   - Color Theme (the quick pick) lists all twelve.
   - Switching stays live and previews before it saves (`ThemeService.Preview`).
   - The resolved family becomes a `themeFamily` context key for plugins' `when` clauses (noted in `docs/plugins.md`).
-- **Today's themes:** kept or folded in as D32 decides. The recommendation is a Classic family (Blue, Light, Dark and High Contrast), so a saved setting keeps its look.
-- **Plugins:** a contributed color theme still applies over its `uiTheme` base, on Classic or on the family in use, as D32 decides.
+- **Today's themes:** kept as the Classic family (D32): Blue, Light, Dark and High Contrast. A new install that skips the setup gets Harbor with Follow System.
+- **Plugins:** a contributed color theme still applies over its `uiTheme` base, on Classic's variant for that base, as it does today.
 - **Docs and site:**
   - the user guide's settings page on appearance;
   - [`ui-guidelines.md`](ui-guidelines.md): the checklist's theme line covers every family;
@@ -2087,7 +2091,7 @@ The table and the steps below were written before the name was chosen; `<name>` 
 - M37: the environment checks and consented installs.
 - M38: the start window, which opens after the setup.
 
-**Decisions.** D32's default family. Its own ADR only if the setup's state needs a new store.
+**Decisions.** D32 (decided 2026-10-16): Harbor with Match system is preselected. Its own ADR only if the setup's state needs a new store.
 
 **Scope.**
 - **When it runs:** the first time the IDE starts for a user data folder, before the start window. A `workbench.setupCompleted` setting records that it ran.
@@ -2107,7 +2111,7 @@ The table and the steps below were written before the name was chosen; `<name>` 
   3. **Your settings:** import from VS Code or a `.vssettings` file (M23a), or turn on settings sync from a folder or a Git repository (M23b).
   4. **Tools:** M37's environment check. The .NET SDK and git are found or offered, with exactly what would run, and nothing installs without the user's yes.
 
-  Done opens the start window. Skip setup keeps the defaults (D32's family, Match system) and records that setup ran.
+  Done opens the start window. Skip setup keeps the defaults (Harbor, Match system) and records that setup ran.
 - **Get Started:** the Start page's Get Started list (M23a) folds into the setup. Help → Get Started opens the setup, which closes M38's Get Started gap. Tips stay on the Start page.
 - **AI:** stays off, and the setup doesn't ask about it (ADR 0062).
 - **Docs and site:**
@@ -2703,7 +2707,7 @@ Restated from the original project brief, plus what follows from it for the area
 
 ## Decision register
 
-These are the maintainer decisions this plan depends on. Update the status column at each checkpoint. As of 2026-10-10 every decision here is closed; D31 is open (2026-10-13), and D32 (2026-10-16). Last reviewed 2026-10-14. New questions get the next free number.
+These are the maintainer decisions this plan depends on. Update the status column at each checkpoint. As of 2026-10-10 every decision here is closed; D31 is open (2026-10-13). Last reviewed 2026-10-14. New questions get the next free number.
 
 | ID | Question | Needed by | Recommendation | Status |
 |---|---|---|---|---|
@@ -2738,7 +2742,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D29 | When the repository goes public | M32 | After M32 | decided 2026-10-10: after M32's checkpoint, through the go-public checklist. Changing the visibility stays the maintainer's action. Done 2026-10-11. |
 | D30 | The unscheduled candidates | After M36 | Review them after the last milestone | decided 2026-10-10: as recommended. Managed settings for organizations (from M23) and the instrumentation profiler (from M18) join the candidates. |
 | D31 | Windows desktop: move WinForms, WPF, MAUI's Windows target and .NET Framework from the non-goals into scope ([proposed phase](#proposed-phase-windows-desktop))? | Before any of M40, M41, M43, M44 | Yes for M40, M41 and M44, with the other OSes served through a Windows machine as a remote target; M43 only after a spike shows a desktop-CLR port of netcoredbg works, and Build Tools only after a licence check. M42 (WCF) needs no decision. | open (2026-10-13) |
-| D32 | Theme families ([M45](#m45--theme-families), [design](design/shell-themes.md)): their names, the default for new installs, what happens to today's Blue, Light, Dark and High Contrast, and the setting's shape | M45 | Harbor, Graphite, Daylight and Ember as designed; Harbor with Follow System for new installs (offered by M46's setup); today's four themes kept as a Classic family, so a saved setting keeps its look; `workbench.colorTheme` takes `<family>` (follows the system) or `<family>.<light\|dark\|highContrast>`, with today's values read as Classic | open (2026-10-16) |
+| D32 | Theme families ([M45](#m45--theme-families), [design](design/shell-themes.md)): their names, the default for new installs, what happens to today's Blue, Light, Dark and High Contrast, and the setting's shape | M45 | Harbor, Graphite, Daylight and Ember as designed; Harbor with Follow System for new installs (offered by M46's setup); today's four themes kept as a Classic family, so a saved setting keeps its look; `workbench.colorTheme` takes `<family>` (follows the system) or `<family>.<light\|dark\|highContrast>`, with today's values read as Classic | decided 2026-10-16: as recommended |
 
 ## Change log
 
@@ -2903,3 +2907,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-16: the smoke step `blazor.wasmDebug` starts debugging again once when the first session's page never stops: on the linux-arm64 installed app the dev server's debugging proxy stalled before reporting the page's .NET runtime (js-debug's log: no `Mono.runtimeReady`, none of the app's sources, the page ran), and no breakpoint bound for 10 minutes; the second session must stop. A page reload in the same session doesn't recover it (tried: the proxy reported the runtime after the reload but not the sources). TODO(issue): find why the proxy stalls (BrowserDebugHost on a loaded runner) and recover in the session itself.
 - 2026-10-16: CpuBound's batches count the primes below a million (0.1 to 0.2 s) instead of below 20,000 (0.7 ms on a Windows runner). On some Windows runners the sampler's interruption of a running thread comes late, and the thread stops at its next safe point, which in CpuBound was the GC poll after `Stopwatch`'s clock read at each batch's end: `Stopwatch.get_Elapsed` held 71% of the samples, `Primes.Count` 5%, and the profiler test and smoke step `profiler.cpu` failed (another runner of the same image showed nearly every sample in `Primes.IsPrime`). The poll was never in IsPrime's loop: folding `Thread.PollGC` into its caller (above) had moved those samples to `Stopwatch` rather than to the loop. With long batches a late stop still lands in the loop.
 - 2026-10-16: four theme families designed at the maintainer's request ("close to Visual Studio style but original too"): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with the mockups, previews and every color in [`design/shell-themes.md`](design/shell-themes.md). The maintainer wants all four as real themes. New milestones in Phase 11: M45 (theme families) and M46 (a first-run setup with the theme chooser; no milestone recorded a setup wizard: M23a's onboarding is the Start page's Get Started list). New decision D32 (names, default, today's themes, the setting). The parity matrix gains the first-launch row.
+- 2026-10-16: D32 decided as recommended: the families are Harbor, Graphite, Daylight and Ember; new installs default to Harbor with Follow System; Blue, Light, Dark and High Contrast stay as the Classic family; `workbench.colorTheme` takes `<family>` or `<family>.<light|dark|highContrast>`, with today's values read as Classic. M45 no longer waits on a decision.
