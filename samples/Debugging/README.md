@@ -10,3 +10,5 @@ A console app for the debugger tests (ADR 0007): a loop, a method call, a record
 `Debugging.slnx` has the Debuggee alone. `Sessions.slnx` (M14c, ADR 0039) adds:
 - `Partner`, a second console program for multiple startup projects (it returns its arguments' length);
 - `Generator`, a source generator with a `DebugRoslynComponent` launch profile, and `GeneratorTarget`, the project it runs on.
+
+`MonoDebuggee` (M20b, ADR 0065) is a console app on the Mono runtime: .NET 8's desktop Mono runtime pack, self-contained for this machine, started with the soft debugger's agent in `MONO_ENV_OPTIONS`. It tests the Mono debugger adapter without a device. Its markers are `[mono-…]`: a loop, a method call, auto-properties, a list, and a caught exception.

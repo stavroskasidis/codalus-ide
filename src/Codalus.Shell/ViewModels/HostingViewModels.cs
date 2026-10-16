@@ -594,6 +594,7 @@ public sealed class CreatePullRequestViewModel : ObservableObject
         _create = create;
         _title = TitleFromBranch(sourceBranch);
         CreateCommand = new RelayCommand(() => _ = CreateAsync());
+        WriteWithAiCommand = new RelayCommand(() => _ = WriteWithAi?.Invoke(this));
     }
 
     public string ProviderLabel { get; }
@@ -605,6 +606,11 @@ public sealed class CreatePullRequestViewModel : ObservableObject
     public IReadOnlyList<string> Targets { get; }
 
     public string Header => $"Create a pull request on {ProviderLabel}: {Repository}";
+
+    /// <summary>Writes the title and description with AI (M28b), set by the shell.</summary>
+    public Func<CreatePullRequestViewModel, Task>? WriteWithAi { get; set; }
+
+    public ICommand WriteWithAiCommand { get; }
 
     public string Title
     {

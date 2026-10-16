@@ -73,6 +73,9 @@ internal sealed class ProjectItems : IDisposable
 
     public bool Changed => Xml.RawXml != _before;
 
+    /// <summary>Whether the order of <c>Compile</c> items is the compile order (F#, M36).</summary>
+    public bool IsOrdered => _project.GetPropertyValue("DefaultLanguageSourceExtension").Equals(".fs", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Opens a project file for item edits, evaluated with <paramref name="globals"/> (the active configuration).</summary>
     public static ProjectItems Open(string projectPath, IReadOnlyDictionary<string, string> globals) => new(projectPath, globals);
 
@@ -428,6 +431,11 @@ internal sealed class ProjectItems : IDisposable
     private string DefaultItemType(string file)
     {
         var extension = System.IO.Path.GetExtension(file);
+        if (IsOrdered && extension.Equals(".fsi", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Compile"; // F# signature files compile, before their implementation
+        }
+
         if (extension.Equals(_project.GetPropertyValue("DefaultLanguageSourceExtension"), StringComparison.OrdinalIgnoreCase)
             || (extension.Length > 0 && _project.GetPropertyValue("DefaultLanguageSourceExtension").Length == 0 && extension.Equals(".cs", StringComparison.OrdinalIgnoreCase)))
         {
@@ -471,6 +479,44 @@ internal sealed class ProjectItems : IDisposable
             yield return "None";
         }
     }
+
+    // ------------------------------------------------------------------ compile order
+
+    /// <summary>
+    /// F#'s compile order (M36): moves the file's <c>Compile</c> include before or after <paramref name="target"/>'s.
+    /// Both must be explicit includes in the project file, as F# projects write them.
+    /// </summary>
+    public void Move(string file, string target, bool after)
+    {
+        var element = CompileInclude(Normalize(file));
+        var anchor = CompileInclude(Normalize(target));
+        if (element == anchor)
+        {
+            return;
+        }
+
+        var group = element.Parent;
+        group.RemoveChild(element);
+        if (after)
+        {
+            anchor.Parent.InsertAfterChild(element, anchor);
+        }
+        else
+        {
+            anchor.Parent.InsertBeforeChild(element, anchor);
+        }
+
+        if (group.Count == 0)
+        {
+            group.Parent.RemoveChild(group);
+        }
+
+        Reevaluate();
+    }
+
+    private ProjectItemElement CompileInclude(string file) =>
+        ExactElements(Xml, file, "Compile").FirstOrDefault(e => e.Include.Length > 0)
+        ?? throw new InvalidOperationException($"{System.IO.Path.GetFileName(file)} has no Compile item of its own in {System.IO.Path.GetFileName(Path)}, so it has no place in the compile order.");
 
     // ------------------------------------------------------------------ moves between projects
 
@@ -523,6 +569,23 @@ internal sealed class ProjectItems : IDisposable
 
         if (operation == ItemOperations.Include)
         {
+            if (IsOrdered && type.Equals("Compile", StringComparison.OrdinalIgnoreCase) && group.Items.Where(i => i.ItemType.Equals(type, StringComparison.OrdinalIgnoreCase) && i.Include.Length > 0).ToList() is [_, ..] compiled)
+            {
+                // F#: the compile order. A new file goes last, or before the last file of a program (its entry point).
+                var include = Xml.CreateItemElement(type, value);
+                var isProgram = _project.GetPropertyValue("OutputType").Trim().ToLowerInvariant() is "exe" or "winexe";
+                if (isProgram)
+                {
+                    group.InsertBeforeChild(include, compiled[^1]);
+                }
+                else
+                {
+                    group.InsertAfterChild(include, compiled[^1]);
+                }
+
+                return include;
+            }
+
             return group.AddItem(type, value);
         }
 

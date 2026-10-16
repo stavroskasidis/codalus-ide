@@ -14,6 +14,12 @@ public enum ExplorerNodeKind
     DependencyGroup,
     Dependency,
     Message,
+
+    /// <summary>A type or member declared in a code file (under the file, from its language service's symbols).</summary>
+    Member,
+
+    /// <summary>A file a source generator made (under its analyzer); <see cref="ExplorerNode.Path"/> is its <c>codalus-generated</c> URI.</summary>
+    GeneratedFile,
 }
 
 /// <summary>
@@ -48,6 +54,9 @@ public sealed record ExplorerNode(string Id, ExplorerNodeKind Kind, string Name)
     public bool IsExcluded { get; init; }
 
     public IReadOnlyList<ExplorerNode> Children { get; init; } = [];
+
+    /// <summary>For <see cref="ExplorerNodeKind.Member"/>: where it is declared (zero-based line and character).</summary>
+    public (int Line, int Character)? Position { get; init; }
 }
 
 /// <summary>
@@ -185,6 +194,10 @@ public static class SolutionTree
     public static bool IsProjectFile(string path) =>
         System.IO.Path.GetExtension(path).ToLowerInvariant() is ".csproj" or ".fsproj" or ".vbproj";
 
+    /// <summary>A file that opens as a solution: a solution (<c>.sln</c>, <c>.slnx</c>, <c>.slnf</c>) or a project.</summary>
+    public static bool IsSolutionOrProjectFile(string path) =>
+        IsProjectFile(path) || System.IO.Path.GetExtension(path).ToLowerInvariant() is ".sln" or ".slnx" or ".slnf" or ".sqlproj" or ".dcproj";
+
     public static ExplorerNode Project(SolutionProjectInfo entry, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs = null, IReadOnlyList<DirectoryEntry>? disk = null)
     {
         var node = new ExplorerNode("p:" + entry.Path, ExplorerNodeKind.Project, entry.Name)
@@ -243,9 +256,15 @@ public static class SolutionTree
         public Dictionary<string, FolderBuilder> Folders { get; } = new(s_names);
 
         public List<FileEntry> Files { get; } = [];
+
+        /// <summary>F# projects: the compile order of its first compiled file (<see cref="int.MaxValue"/>: none).</summary>
+        public int Order { get; set; } = int.MaxValue;
     }
 
-    private sealed record FileEntry(string Name, string FullPath, string? DependentUpon, bool Linked, bool Excluded = false);
+    private sealed record FileEntry(string Name, string FullPath, string? DependentUpon, bool Linked, bool Excluded = false, int Order = int.MaxValue);
+
+    /// <summary>Whether a project's items show in their compile order rather than by name (F#, M36).</summary>
+    public static bool IsOrdered(string projectPath) => projectPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Folders and files of a project, with nesting applied. With <paramref name="disk"/> (Show All Files), files and
@@ -256,8 +275,11 @@ public static class SolutionTree
         var projectDirectory = System.IO.Path.GetDirectoryName(projectPath)!;
         var root = new FolderBuilder(projectDirectory, string.Empty);
         var seen = new HashSet<string>(SolutionService.PathComparer);
+        var ordered = IsOrdered(projectPath);
+        var index = -1;
         foreach (var item in info.Items)
         {
+            index++;
             if (SolutionService.PathComparer.Equals(item.Path, projectPath))
             {
                 continue;
@@ -274,6 +296,8 @@ public static class SolutionTree
             var folder = root;
             var isFolderItem = item.Kind.Equals("Folder", StringComparison.OrdinalIgnoreCase);
             var folderSegments = isFolderItem ? segments.Length : segments.Length - 1;
+            // F#: compiled files keep the project's order (the compile order); folders sit where their first one does.
+            var order = ordered && item.Kind.Equals("Compile", StringComparison.OrdinalIgnoreCase) ? index : int.MaxValue;
             for (var i = 0; i < folderSegments; i++)
             {
                 if (!folder.Folders.TryGetValue(segments[i], out var child))
@@ -283,11 +307,12 @@ public static class SolutionTree
                 }
 
                 folder = child;
+                folder.Order = Math.Min(folder.Order, order);
             }
 
             if (!isFolderItem && seen.Add(item.Path))
             {
-                folder.Files.Add(new FileEntry(segments[^1], item.Path, item.DependentUpon, !inside || item.Link is not null));
+                folder.Files.Add(new FileEntry(segments[^1], item.Path, item.DependentUpon, !inside || item.Link is not null, Order: order));
             }
         }
 
@@ -322,17 +347,17 @@ public static class SolutionTree
 
     private static List<ExplorerNode> Build(FolderBuilder folder, string projectPath)
     {
-        var nodes = new List<ExplorerNode>();
+        var nodes = new List<(int Order, ExplorerNode Node)>();
         foreach (var child in folder.Folders.Values.OrderBy(f => f.Name, s_names))
         {
-            nodes.Add(new ExplorerNode("d:" + child.Path, ExplorerNodeKind.Folder, child.Name)
+            nodes.Add((child.Order, new ExplorerNode("d:" + child.Path, ExplorerNodeKind.Folder, child.Name)
             {
                 Path = child.Path,
                 ProjectPath = projectPath,
                 Icon = "folder",
                 IsExcluded = child.Excluded,
                 Children = Build(child, projectPath),
-            });
+            }));
         }
 
         // Nesting: each file finds its parent among its siblings; files without a parent are roots.
@@ -352,8 +377,11 @@ public static class SolutionTree
                     .Select(File)],
             };
 
-        nodes.AddRange(folder.Files.Where(f => parentOf[f.Name] is null).OrderBy(f => f.Name, s_names).Select(File));
-        return nodes;
+        nodes.AddRange(folder.Files.Where(f => parentOf[f.Name] is null).OrderBy(f => f.Name, s_names).Select(f => (f.Order, File(f))));
+
+        // By name, folders first; in an F# project, compiled files and the folders holding them first, in compile order.
+        // (OrderBy is stable, so the rest keep their order by name.)
+        return [.. nodes.OrderBy(n => n.Order).ThenBy(n => n.Order == int.MaxValue && n.Node.Kind != ExplorerNodeKind.Folder ? 1 : 0).Select(n => n.Node)];
     }
 
     /// <summary>
@@ -369,8 +397,14 @@ public static class SolutionTree
             return !s_names.Equals(parent, name) && siblings.Contains(parent) ? parent : null;
         }
 
-        // Added extension: strip the last extension.
+        // An F# signature file nests under its implementation (Shapes.fsi → Shapes.fs).
         var withoutLast = System.IO.Path.GetFileNameWithoutExtension(name);
+        if (System.IO.Path.GetExtension(name).Equals(".fsi", StringComparison.OrdinalIgnoreCase) && siblings.Contains(withoutLast + ".fs"))
+        {
+            return withoutLast + ".fs";
+        }
+
+        // Added extension: strip the last extension.
         if (System.IO.Path.HasExtension(withoutLast) && siblings.Contains(withoutLast))
         {
             return withoutLast;
@@ -393,7 +427,7 @@ public static class SolutionTree
 
     private static string FileIcon(string name) => System.IO.Path.GetExtension(name).ToLowerInvariant() switch
     {
-        ".cs" or ".fs" or ".vb" or ".razor" or ".xaml" or ".axaml" or ".cshtml" or ".ts" or ".js" => "file-code",
+        ".cs" or ".fs" or ".fsi" or ".fsx" or ".vb" or ".razor" or ".xaml" or ".axaml" or ".cshtml" or ".ts" or ".js" => "file-code",
         ".json" or ".xml" or ".resx" or ".config" or ".props" or ".targets" or ".yml" or ".yaml" => "file-data",
         _ => "file",
     };
@@ -412,9 +446,13 @@ public static class SolutionTree
 
     // ------------------------------------------------------------------ dependencies
 
+    /// <summary>The most nodes of transitive packages a project's Dependencies node holds (a package graph can be large).</summary>
+    public const int TransitiveLimit = 2000;
+
     /// <summary>
-    /// The Dependencies node. Analyzers come from the design-time build of the active target framework.
-    /// TODO(issue): transitive packages (from the assets file).
+    /// The Dependencies node. Analyzers come from the design-time build of the active target framework. A package shows
+    /// the packages it depends on under it, and theirs under them (from the assets file, <see cref="ProjectInfo.Packages"/>),
+    /// up to <see cref="TransitiveLimit"/> nodes for the project.
     /// </summary>
     private static ExplorerNode? Dependencies(string projectPath, ProjectInfo info, CompilerInputsInfo? inputs)
     {
@@ -425,6 +463,44 @@ public static class SolutionTree
 
         var id = "deps:" + projectPath;
         var analyzers = inputs is { State: CompilerInputStates.Ok } ? AnalyzerPaths(inputs.Arguments) : [];
+        var graph = info.Packages
+            .GroupBy(p => (p.TargetFramework, p.Name.ToLowerInvariant()))
+            .ToDictionary(g => g.Key, g => g.First());
+        var budget = TransitiveLimit;
+        IReadOnlyList<ExplorerNode> Transitive(string parentId, string framework, string package, PackageChain ancestors)
+        {
+            if (!graph.TryGetValue((framework, package.ToLowerInvariant()), out var node) || node.Dependencies.Length == 0)
+            {
+                return [];
+            }
+
+            var children = new List<ExplorerNode>();
+            foreach (var dependency in node.Dependencies.Order(s_names))
+            {
+                if (ancestors.Contains(dependency))
+                {
+                    continue; // a cycle
+                }
+
+                if (budget-- <= 0)
+                {
+                    break;
+                }
+
+                var version = graph.TryGetValue((framework, dependency.ToLowerInvariant()), out var resolved) ? resolved.Version : null;
+                var childId = parentId + "|" + dependency;
+                children.Add(new ExplorerNode(childId, ExplorerNodeKind.Dependency, dependency)
+                {
+                    ProjectPath = projectPath,
+                    Icon = "package",
+                    Detail = version is null ? null : $"({version})",
+                    Children = Transitive(childId, framework, dependency, ancestors.With(dependency)),
+                });
+            }
+
+            return children;
+        }
+
         IReadOnlyList<ExplorerNode> Groups(string prefix, IEnumerable<ReferenceInfo> references, bool withAnalyzers)
         {
             var list = references.ToList();
@@ -462,6 +538,7 @@ public static class SolutionTree
                         Icon = icon,
                         Detail = m.Version is null ? null : $"({m.Version})",
                         IsWarning = !m.Resolved,
+                        Children = kind == ReferenceKinds.Package ? Transitive($"{prefix}|{kind}|{m.Name}", m.TargetFramework, m.Name, PackageChain.Of(m.Name)) : [],
                     })],
                 });
             }
@@ -487,4 +564,14 @@ public static class SolutionTree
             Children = children,
         };
     }
+}
+
+/// <summary>The packages on the way to a transitive package (a cycle guard): small, so a list.</summary>
+internal readonly record struct PackageChain(IReadOnlyList<string> Items)
+{
+    public static PackageChain Of(string item) => new([item]);
+
+    public bool Contains(string item) => Items.Contains(item, StringComparer.OrdinalIgnoreCase);
+
+    public PackageChain With(string item) => new([.. Items, item]);
 }

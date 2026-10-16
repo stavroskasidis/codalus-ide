@@ -207,7 +207,9 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
         Assert.Contains(threads.Threads, t => t.Running > 0);
         Assert.Contains(threads.Threads, t => t.Contention > 0);
         Assert.Contains(threads.Threads, t => t.States.Contains('W'));
-        if (threads.Threads.Max(t => t.Contention) > threads.BucketMilliseconds * 5)
+        // A bucket shows C when a third of it is spent blocked: only a thread blocked for a third of the whole trace is
+        // sure to have one (more contention spread thinly, as on a busy Windows runner, may never fill a third of a bucket).
+        if (threads.Threads.Max(t => t.Contention) >= threads.BucketMilliseconds * 100 / 3)
         {
             Assert.Contains(threads.Threads, t => t.States.Contains('C'));
         }

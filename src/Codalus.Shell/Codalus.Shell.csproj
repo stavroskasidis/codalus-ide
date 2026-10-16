@@ -48,6 +48,8 @@
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" PluginId="codalus.github" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" PluginId="codalus.azuredevops" />
     <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitLab\Codalus.Plugins.GitLab.csproj" PluginId="codalus.gitlab" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.OpenAI\Codalus.Plugins.OpenAI.csproj" PluginId="codalus.openai" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Anthropic\Codalus.Plugins.Anthropic.csproj" PluginId="codalus.anthropic" />
     <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
   </ItemGroup>
 
@@ -70,10 +72,11 @@
   <!-- Icons (D24, M34a): Icons/Fluent and Icons/Material SVGs compiled into geometries at build time. -->
   <Import Project="..\..\eng\icons\Icons.targets" />
 
-  <!-- The smoke test's mock GitHub (M13b): the same source as the tests' mock servers, so nothing reaches GitHub. -->
+  <!-- The smoke test's mock GitHub (M13b) and model servers (M28a): the same source as the tests' mock servers, so nothing reaches GitHub. -->
   <ItemGroup>
     <Compile Include="..\..\tests\Shared\MockHttpServer.cs" Link="Infrastructure\Mocks\MockHttpServer.cs" />
     <Compile Include="..\..\tests\Shared\MockGitHub.cs" Link="Infrastructure\Mocks\MockGitHub.cs" />
+    <Compile Include="..\..\tests\Shared\MockModelServers.cs" Link="Infrastructure\Mocks\MockModelServers.cs" />
   </ItemGroup>
 
   <ItemGroup>

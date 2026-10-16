@@ -68,6 +68,10 @@ internal sealed partial class SolutionSession
             }
         });
 
+    /// <summary>F# compile order (M36): moves a <c>Compile</c> item before or after another in the project file.</summary>
+    public Task<ItemEditResult> MoveItemAsync(MoveItemParams parameters) =>
+        EditItemsAsync(parameters.Project, items => items.Move(parameters.Path, parameters.Target, parameters.After));
+
     /// <summary>Add Existing Item: copies the files into the folder (or links them), and makes sure they are items.</summary>
     public async Task<FileOperationResult> AddExistingAsync(AddExistingItemsParams parameters)
     {

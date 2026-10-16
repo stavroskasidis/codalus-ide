@@ -11,6 +11,7 @@ internal static class HoverFeature
     public static async Task<Hover?> HoverAsync(Document document, int position, CancellationToken cancellationToken)
     {
         if (QuickInfoService.GetService(document) is not { } service
+            || await FrameworkGuard.IsMissingAsync(document, cancellationToken).ConfigureAwait(false)
             || await service.GetQuickInfoAsync(document, position, cancellationToken).ConfigureAwait(false) is not { } info
             || info.Sections.IsEmpty)
         {
@@ -33,8 +34,8 @@ internal static class HoverFeature
 
             builder.Append(section.Kind switch
             {
-                QuickInfoSectionKinds.Description => Markdown.Code(text),
-                QuickInfoSectionKinds.TypeParameters or QuickInfoSectionKinds.AnonymousTypes => Markdown.Code(text),
+                QuickInfoSectionKinds.Description => Markdown.Code(text, Markdown.Fence(document)),
+                QuickInfoSectionKinds.TypeParameters or QuickInfoSectionKinds.AnonymousTypes => Markdown.Code(text, Markdown.Fence(document)),
                 QuickInfoSectionKinds.ReturnsDocumentationComments => "**Returns:** " + Markdown.Escape(text),
                 QuickInfoSectionKinds.ValueDocumentationComments => "**Value:** " + Markdown.Escape(text),
                 QuickInfoSectionKinds.Exception => "**Exceptions:** " + Markdown.Escape(text),

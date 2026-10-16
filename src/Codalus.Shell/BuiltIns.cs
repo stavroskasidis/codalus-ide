@@ -195,6 +195,7 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(ViewModels.ErrorListViewModel.ToolWindowId, "Error List", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "error", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(ViewModels.FindResultsViewModel.ToolWindowId, "Find Results", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
         yield return new ToolWindowDescriptor(ViewModels.DocumentOutlineViewModel.ToolWindowId, "Document Outline", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "document-text" };
+        yield return new ToolWindowDescriptor(ViewModels.SymbolBrowserViewModel.ClassViewId, "Class View", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "class" };
         yield return new ToolWindowDescriptor(ViewModels.HierarchyViewModel.ToolWindowId, "Hierarchy", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "method" };
         yield return new ToolWindowDescriptor(ViewModels.CodeDefinitionViewModel.ToolWindowId, "Code Definition", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "file-code" };
         yield return new ToolWindowDescriptor(ViewModels.BookmarksViewModel.ToolWindowId, "Bookmarks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "star" };
@@ -221,6 +222,8 @@ internal static partial class BuiltIns
         Add("workbench.openSettings", "Open Settings", "Preferences", Ui(shell.OpenSettings));
         Add("workbench.openOptions", "Options…", string.Empty, Ui(shell.OpenSettings), palette: false);
         Add("workbench.openSettingsJson", "Open User Settings (JSON)", "Preferences", Ui(shell.OpenSettingsJsonAsync));
+        Add("workbench.view.objectBrowser", "Object Browser", "View", Ui(() => shell.OpenObjectBrowser()), "solutionOpen");
+        Add("workbench.action.configureLanguageBasedSettings", "Configure Language-Specific Settings…", "Preferences", Ui(() => shell.ConfigureLanguageSettingsAsync()));
         Add("workbench.openKeyboardShortcuts", "Open Keyboard Shortcuts", "Preferences", Ui(shell.OpenKeyboardShortcuts));
         Add("workbench.openFontsAndColors", "Fonts and Colors", "Preferences", Ui(shell.OpenFontsAndColors));
         Add("workbench.customize", "Customize…", "Preferences", Ui(shell.OpenCustomize));
@@ -298,7 +301,7 @@ internal static partial class BuiltIns
         ["solutionExplorer", "git.changes", "testExplorer", "bookmarks", "codeDefinition", "errorList", "output", "taskList", "terminal", "notifications", "properties"];
 
     /// <summary>Tool windows whose menu entry is contributed explicitly (with a command that does more than show them).</summary>
-    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId, XamlPreviewViewModel.ToolWindowId };
+    private static readonly HashSet<string> s_explicitViewEntries = new(StringComparer.Ordinal) { "interactive", "web.endpoints", "web.taskRunner", "containers", "aspire", AiChatViewModel.ToolWindowId, DiagnosticToolsViewModel.ToolWindowId, CountersViewModel.ToolWindowId, XamlPreviewViewModel.ToolWindowId };
 
     /// <summary>Where a tool window's <c>workbench.view.*</c> entry goes, or null when it has an explicit one.</summary>
     public static MenuItemRule? ViewMenuEntry(string windowId, string title, string command, ContributionSource source)
@@ -369,6 +372,8 @@ internal static partial class BuiltIns
         .. KeybindingService.ParseRules(DataKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(ProfilingKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(XamlKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+        .. KeybindingService.ParseRules(AiKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
+        .. KeybindingService.ParseRules(FSharpKeybindings, KeybindingSource.Default, platform, null, diagnostics: null),
         .. KeybindingService.ParseRules(SchemeKeybindings, KeybindingSource.Default, platform, null, diagnostics: null)
             .Where(r => r.When.Text.Contains($"keyboardScheme == {scheme}", StringComparison.Ordinal)),
         ];

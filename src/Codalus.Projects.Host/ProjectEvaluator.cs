@@ -33,6 +33,8 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
     {
         "Compile", "None", "Content", "EmbeddedResource", "Folder", "Page", "ApplicationDefinition", "Resource",
         "AdditionalFiles", "AvaloniaResource", "AvaloniaXaml", "Protobuf", "TypeScriptCompile",
+        "MauiXaml", "MauiCss", "MauiImage", "MauiIcon", "MauiSplashScreen", "MauiFont", "MauiAsset", // .NET MAUI (M20a)
+        "AndroidResource", "AndroidAsset", "BundleResource", "ImageAsset", "InterfaceDefinition",
         "Build", "PreDeploy", "PostDeploy", "RefactorLog", "SqlCmdVariable", // SQL database projects (Microsoft.Build.Sql)
     };
 
@@ -86,6 +88,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             var items = new List<ProjectItemInfo>();
             var test = TestProperties.None;
             var fingerprint = new Fingerprint(path, global, outer);
+            var missingPacks = new SortedSet<string>(MissingWorkloadPacks(outer), StringComparer.OrdinalIgnoreCase);
 
             if (frameworks.Length <= 1)
             {
@@ -109,6 +112,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
 
                         // Package props (Microsoft.NET.Test.Sdk, the testing platform) are imported per framework.
                         test = test.Or(TestProperties.Of(inner));
+                        missingPacks.UnionWith(MissingWorkloadPacks(inner));
                     }
                     finally
                     {
@@ -132,6 +136,9 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
                 test.Platform)
             {
                 IsAspireHost = string.Equals(outer.GetPropertyValue("IsAspireHost").Trim(), "true", StringComparison.OrdinalIgnoreCase),
+                UsesMaui = string.Equals(outer.GetPropertyValue("UseMaui").Trim(), "true", StringComparison.OrdinalIgnoreCase),
+                MissingWorkloadPacks = [.. missingPacks],
+                Packages = assets is null ? [] : [.. frameworks.SelectMany(assets.Graph)],
             };
             var distinctImports = imports.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var assetsFile = NullIfEmpty(outer.GetPropertyValue("ProjectAssetsFile"));
@@ -154,6 +161,10 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             collection.UnloadProject(outer);
         }
     }
+
+    /// <summary>The workload packs the SDK's workload resolver found missing for this evaluation (M20a).</summary>
+    private static IEnumerable<string> MissingWorkloadPacks(Project project) =>
+        project.GetItems("MissingWorkloadPack").Select(i => i.EvaluatedInclude).Where(i => i.Length > 0);
 
     /// <summary>
     /// Whether a project is a test project, and on which platform (ADR 0010). xUnit v3 and MSTest.Sdk projects set only

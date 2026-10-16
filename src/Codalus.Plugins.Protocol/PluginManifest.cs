@@ -107,6 +107,20 @@ public sealed record ManifestContributions
 
     /// <summary>Git hosting providers (API 0.2.6, ADR 0031): known to the shell before the plugin runs.</summary>
     public ManifestHostingProvider[]? HostingProviders { get; init; }
+
+    /// <summary>Language model providers (proposed, M28a, ADR 0062): activated only when the user picks one.</summary>
+    public ManifestLanguageModelProvider[]? LanguageModelProviders { get; init; }
+}
+
+/// <summary>
+/// A language model provider: <see cref="Id"/> (activation event <c>onLanguageModelProvider:&lt;id&gt;</c>), the name users
+/// see, and whether its models run on this machine (<see cref="Local"/>: nothing leaves it).
+/// </summary>
+public sealed record ManifestLanguageModelProvider(string Id, string Label)
+{
+    public string? Description { get; init; }
+
+    public bool Local { get; init; }
 }
 
 /// <summary>
@@ -410,5 +424,12 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(HostingOwnersResult))]
 [JsonSerializable(typeof(HostingPublishParams))]
 [JsonSerializable(typeof(PublishedRepositoryDto))]
+[JsonSerializable(typeof(LanguageModelProviderParams))]
+[JsonSerializable(typeof(LanguageModelProviderIdParams))]
+[JsonSerializable(typeof(LanguageModelsResult))]
+[JsonSerializable(typeof(LanguageModelStatusDto))]
+[JsonSerializable(typeof(ChatParams))]
+[JsonSerializable(typeof(ChatPartParams))]
+[JsonSerializable(typeof(ChatResultDto))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 public sealed partial class PluginJsonContext : JsonSerializerContext;

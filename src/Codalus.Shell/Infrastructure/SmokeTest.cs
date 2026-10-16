@@ -230,10 +230,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Recent.Add(Path.Combine(samples, "BuildAndRun", "BuildAndRun.slnx"));
             shell.ShowStartWindow();
             await WaitAsync(() => shell.IsStartWindowOpen && shell.StartWindowModel is { IsEmpty: false }, "the start window opens with its recent list").ConfigureAwait(true);
-            await RenderedAsync().ConfigureAwait(true);
-            Screenshot("start-window.png", Avalonia.Controls.TopLevel.GetTopLevel(Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+            // Its own frames, not the main window's: the screenshot renders the start window once it has drawn itself.
+            var start = Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
                 ? desktop.Windows.OfType<Views.StartWindow>().FirstOrDefault()
-                : null));
+                : null;
+            await RenderedAsync(start).ConfigureAwait(true);
+            Screenshot("start-window.png", start);
             shell.StartWindowModel!.ContinueCommand.Execute(null);
             await WaitAsync(() => !shell.IsStartWindowOpen, "Continue without code closes it").ConfigureAwait(true);
         }).ConfigureAwait(true);
@@ -742,6 +744,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
 
+        await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
+
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source", async () =>
         {
@@ -1044,7 +1048,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(shell.Builds.LastBuild!.Result.Succeeded, "the build succeeded:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
             shell.Run("run.startWithoutDebugging");
             string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: App")?.GetText() ?? string.Empty;
-            await WaitAsync(() => Output().Contains("has exited with code 0", StringComparison.Ordinal), "App runs and exits with 0", 300).ConfigureAwait(true);
+            await WaitAsync(() => Output().Contains("has exited with code 0", StringComparison.Ordinal), () => "App runs and exits with 0; its output:\n" + Tail(Output(), 2000) + "\nThe build's:\n" + Tail(shell.Builds.Channel.GetText(), 1500), 300).ConfigureAwait(true);
             Check(Output().Contains("runtime=11 library=net11.0", StringComparison.Ordinal), "App ran on .NET 11 with the net11.0 build of its library:\n" + Tail(Output(), 1000));
         }).ConfigureAwait(true);
 
@@ -1156,6 +1160,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
+        await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
+        await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
+        await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
+        await StepAsync("fsharp.interactive", "M36", "A selection in an F# script runs in F# Interactive (dotnet fsi in a terminal), which shows the values defined", FSharpInteractiveStepAsync, "projects.open").ConfigureAwait(true);
 
         await StepAsync("update.restart", "M32", "A downloaded update offers Restart to update, and What's New shows its notes", async () =>
         {
@@ -1493,6 +1501,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return null;
         }
 
+        if (_work.Length == 0)
+        {
+            return null; // no fixture folder: CODALUS_SMOKE_ONLY left out the steps that make it
+        }
+
         Directory.CreateDirectory(_work);
         var ssh = Path.Combine(_work, "stand-in-ssh");
         await File.WriteAllTextAsync(ssh, "#!/bin/sh\n# A stand-in for ssh: skip the options and the destination, run the command here.\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -T) shift ;;\n    -o|-p|-i|-l) shift 2 ;;\n    *) break ;;\n  esac\ndone\nshift\nexec sh -c \"$*\"\n").ConfigureAwait(true);
@@ -1785,7 +1798,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var window = shell.AspireWindow;
             await WaitAsync(
                 () => window.Resources.Count(r => r.Resource.Type == "Project" && r.Resource.State == "Running") == 2 && window.Resources.Any(r => r.Name == "cache"),
-                "the api and the frontend run, and the cache is listed:\n" + Tail(shell.AspireLog.GetText(), 2000),
+                () => "the api and the frontend run, and the cache is listed:\n" + Tail(shell.AspireLog.GetText(), 2000),
                 420).ConfigureAwait(true);
             await WaitAsync(() => window.HasDashboard, "the dashboard's address is known", 60).ConfigureAwait(true);
             var url = window.Resources.Single(r => r.Name == "frontend").Resource.Urls.First(u => !u.IsInternal).Url;
@@ -1803,6 +1816,189 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.StopRunning();
             await WaitAsync(() => !shell.AspireWindow.IsRunning && shell.Runs.Running.Count == 0, "stopping the AppHost ends its projects", 60).ConfigureAwait(true);
         }
+    }
+
+    private async Task MauiStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "Maui");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "Maui"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "Maui.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the MAUI solution is open (its packages restored)", 600).ConfigureAwait(true);
+        var app = Path.Combine(target, "TodoApp", "TodoApp.csproj");
+        Check(shell.Solutions.Projects.TryGetValue(app, out var info) && info.UsesMaui, "TodoApp is a .NET MAUI project");
+        shell.SetStartupProject(app);
+        await WaitAsync(() => shell.Toolbar.HasDevice, "the toolbar shows the device picker").ConfigureAwait(true);
+
+        var path = Path.Combine(target, "MauiViews", "Views", "TodoPage.xaml");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.XamlLanguageId, "the file is XAML for the C# host: " + editor.Model.LanguageId);
+        MoveCaret(editor, "Text=\"{Binding NewTitle}\"", "Text=\"{Binding ".Length);
+        var asked = Stopwatch.StartNew();
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "AddCommand"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                MoveCaret(editor, "Text=\"{Binding NewTitle}\"", "Text=\"{Binding ".Length);
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "the binding path completes the view model's members (x:DataType)", 360).ConfigureAwait(true);
+        editor.CompletionWindow!.Close();
+
+        shell.ShowDevices();
+        await WaitAsync(() => shell.DevicesWindow.Toolchain.Length > 0, "the Devices window shows the Android toolchain").ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("maui-devices.png");
+    }
+
+    private async Task VisualBasicStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "VisualBasic");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "VisualBasic"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "VisualBasic.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true }, "the Visual Basic solution is open (its packages restored)", 600).ConfigureAwait(true);
+        await WaitAsync(() => shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: LanguageServices.Protocol.WorkspaceStates.Ready, Projects: 4 }, "the C# host has loaded the VB and C# projects", 300).ConfigureAwait(true);
+
+        var path = Path.Combine(target, "VbConsole", "Program.vb");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.VisualBasicLanguageId, "the file is Visual Basic: " + editor.Model.LanguageId);
+
+        // formatter. completes PriceFormatter's members: a C# class in another project.
+        var loop = editor.Model.Text.Text.IndexOf("Console.WriteLine(formatter.Format(", StringComparison.Ordinal);
+        var dot = loop + "Console.WriteLine(formatter.".Length;
+        var asked = Stopwatch.StartNew();
+        editor.Editor.CaretOffset = dot;
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "Currency"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                editor.Editor.CaretOffset = dot;
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "formatter. completes the C# library's members", 300).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("visual-basic.png");
+        editor.CompletionWindow!.Close();
+
+        // Enter after an If … Then adds End If (our pretty listing, through on-type formatting).
+        var main = editor.Model.Text.Text.IndexOf("Dim inventory As New Inventory()", StringComparison.Ordinal);
+        var original = editor.Model.Text.Text;
+        try
+        {
+            editor.Model.Text.Insert(main, "If args.Length > 0 Then\n        ");
+            editor.Editor.CaretOffset = main + "If args.Length > 0 Then".Length;
+            editor.Editor.TextArea.PerformTextInput("\n");
+            await WaitAsync(() => editor.Model.Text.Text.Contains("End If", StringComparison.Ordinal), "End If follows the If block").ConfigureAwait(true);
+        }
+        finally
+        {
+            editor.Model.Text.Text = original;
+        }
+    }
+
+    private async Task FSharpStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(_work, "FSharp");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "FSharp"), target);
+        }
+
+        await shell.InstallFSharpAsync().ConfigureAwait(true);
+        Check(shell.FSharp.IsInstalled, "FsAutoComplete and Fantomas are installed:\n" + Tail(shell.LanguageLog.GetText(), 2000));
+        await shell.OpenSolutionAsync(Path.Combine(target, "FSharp.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 5 && shell.Solutions.Progress is { Completed: true }, "the F# solution is open", 600).ConfigureAwait(true);
+
+        var library = Path.Combine(target, "FsLibrary", "FsLibrary.fsproj");
+        var tree = Workbench.Projects.SolutionTree.Contents(library, shell.Solutions.Projects[library]);
+        Check(tree.Select(n => n.Name).SequenceEqual(["Shapes.fs", "Geometry.fs"]) && tree[0].Children.Single().Name == "Shapes.fsi",
+            "Solution Explorer shows the compile order with Shapes.fsi under Shapes.fs: " + string.Join(", ", tree.Select(n => n.Name)));
+
+        // Quick Info on Shapes.area, from the file before Geometry.fs in the compile order.
+        var path = Path.Combine(target, "FsLibrary", "Geometry.fs");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.FSharpLanguageId, "the file is F#: " + editor.Model.LanguageId);
+        var uri = LanguageServices.Protocol.DocumentUris.FromPath(path);
+        var offset = editor.Model.Text.Text.IndexOf("List.sumBy area", StringComparison.Ordinal) + "List.sumBy ar".Length;
+        var line = editor.Model.Text.GetLineByOffset(offset);
+        // FsAutoComplete loads the solution's projects first: ask again until it answers.
+        var client = await shell.Languages.ClientAsync(ShellHost.FSharpLanguageId).ConfigureAwait(true);
+        Check(client is not null, "FsAutoComplete starts:\n" + Tail(shell.LanguageLog.GetText(), 2000));
+        string? info = null;
+        var asked = Stopwatch.StartNew();
+        while (info?.Contains("val area", StringComparison.Ordinal) != true && asked.Elapsed < TimeSpan.FromSeconds(300))
+        {
+            try
+            {
+                info = (await client!.HoverAsync(uri, new LanguageServices.Protocol.Position(line.LineNumber - 1, offset - line.Offset), CancellationToken.None).ConfigureAwait(true))?.Contents.Value;
+            }
+            catch (Rpc.JsonRpcRemoteException)
+            {
+                // not loaded yet
+            }
+
+            if (info?.Contains("val area", StringComparison.Ordinal) != true)
+            {
+                await Task.Delay(1000).ConfigureAwait(true);
+            }
+        }
+
+        Check(info?.Contains("val area", StringComparison.Ordinal) == true, "Quick Info on area shows its signature: " + info);
+        shell.Explorer.Reveal("f:" + path);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("fsharp.png");
+    }
+
+    private async Task FSharpInteractiveStepAsync()
+    {
+        var target = Path.Combine(_work, "FSharp");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "FSharp"), target);
+        }
+
+        var editor = await OpenAsync(Path.Combine(target, "Scripts", "Explore.fsx")).ConfigureAwait(true);
+        var start = editor.Model.Text.Text.IndexOf("let square", StringComparison.Ordinal);
+        var end = editor.Model.Text.Text.IndexOf("// [fsi-end]", StringComparison.Ordinal);
+        editor.Editor.Select(start, end - start);
+        shell.SendToFSharpInteractive();
+        var session = shell.FSharpInteractive;
+        Check(session is not null, "F# Interactive started");
+        string Screen() => string.Join('\n', Enumerable.Range(0, session!.Terminal.TotalRows).Select(i => session.Terminal.GetRow(i).GetText()));
+        await WaitAsync(() => Screen().Contains("val squares: int list = [1; 4; 9]", StringComparison.Ordinal), "F# Interactive shows val squares", 180).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("fsharp-interactive.png");
+        shell.Terminals.Close(session!);
     }
 
     private async Task XamlPreviewStepAsync()
@@ -2200,6 +2396,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.ProjectItems.SetAsync(greetings, template, null, new Dictionary<string, string?> { [Projects.Protocol.ItemMetadataNames.Generator] = "TextTemplatingFileGenerator" }, CancellationToken.None).ConfigureAwait(true);
             var strings = await shell.RunCustomToolAsync(resx).ConfigureAwait(true);
             Check(strings?.Succeeded == true && ReadText(created[2]).Contains("internal static string SmokeGreeting", StringComparison.Ordinal), "the ResX generator writes SmokeStrings.Designer.cs");
+            var resources = shell.OpenResx(resx);
+            await resources.LoadAsync().ConfigureAwait(true);
+            Check(resources.Rows.Any(r => r is { Name: "SmokeGreeting", Value: "Hello from a resource" }), "the resource editor lists SmokeStrings.resx's strings");
+            shell.Layout.CloseDocument(resources);
             var numbers = await shell.RunCustomToolAsync(template).ConfigureAwait(true);
             Check(numbers?.Succeeded == true && ReadText(created[3]).Contains("public const int N3 = 9;", StringComparison.Ordinal),
                 "the T4 host transforms SmokeNumbers.tt: " + string.Join("; ", numbers?.Diagnostics.Select(d => d.Message) ?? ["no result"]));
@@ -2427,6 +2627,59 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// to the OS credential store under this profile's own service; the pull request checked out with its review comment
     /// in the editor and its checks; <c>#</c> completion; askpass for an HTTPS remote; a worktree; then sign-out.
     /// </summary>
+    /// <summary>
+    /// AI assistance (M28a, ADR 0062) against <see cref="Tests.MockModelServers"/>: the OpenAI-compatible plugin stays
+    /// unloaded while AI is off, then a question about a selection streams into AI Chat and its code is applied.
+    /// </summary>
+    private async Task AiChatStepAsync()
+    {
+        const string Reply = "This adds two numbers. A shorter version:\n\n```csharp\nstatic int Add(int a, int b) => a + b;\n```\n\nThe expression body returns the same value.";
+        await using var server = Tests.MockModelServers.OpenAI(Reply);
+        var settings = shell.Workbench.Settings;
+        Check(shell.Ai.State == Workbench.Ai.AiState.Off, "AI assistance is off by default");
+        Check(shell.Plugins.Plugins.Any(p => p.Id == "codalus.openai" && p.State == PluginState.Ready), "the OpenAI-compatible plugin is installed and not loaded");
+        try
+        {
+            await settings.SetAsync("ai.openai.endpoint", server.BaseUrl + "/v1", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, "openai", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.ModelSetting, "gpt-test", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await shell.Secrets.StoreAsync("codalus.openai", "apiKey:openai", Tests.MockModelServers.Key, CancellationToken.None).ConfigureAwait(true);
+
+            var path = Path.Combine(_work, "Calculator.cs");
+            await File.WriteAllTextAsync(path, "namespace Samples;\n\npublic static class Calculator\n{\n    static int Add(int a, int b)\n    {\n        return a + b;\n    }\n}\n").ConfigureAwait(true);
+            var editor = await OpenAsync(path).ConfigureAwait(true);
+            var method = "    static int Add(int a, int b)\n    {\n        return a + b;\n    }\n";
+            editor.Editor.Select(editor.Model.Text.Text.IndexOf(method, StringComparison.Ordinal), method.Length);
+
+            shell.ShowAiChat();
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(), "AI Chat opens").ConfigureAwait(true);
+            shell.AiChat.Input = "What does this do? Can it be shorter?";
+            await shell.AiChat.SendAsync().ConfigureAwait(true);
+            var turns = shell.AiChat.Chat.Turns;
+            var turn = turns.Count > 0 ? turns[^1] : throw new SmokeFailure("The question wasn't asked.");
+            await WaitAsync(() => !turn.IsStreaming, "the answer streams in", 60).ConfigureAwait(true);
+            Check(turn.Error is null && turn.Answer == Reply, $"the answer arrived ({turn.Error ?? turn.Answer})");
+            Check(AiChatViewModel.ContextSummary(turn).Contains("Calculator.cs", StringComparison.Ordinal), "the selection went with the question");
+            await WaitAsync(() => window.GetVisualDescendants().OfType<Button>().Any(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Apply the code after a preview"), "the code block offers Apply").ConfigureAwait(true);
+            Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.ai"), "the status bar shows AI is on");
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("ai-chat.png");
+
+            var applying = shell.AiChat.ApplyAsync(turn, Workbench.Ai.AiCodeBlocks.Parse(turn.Answer)[0]);
+            await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.HasDetails, "the preview shows the change").ConfigureAwait(true);
+            shell.Dialogs.Accept();
+            await applying.ConfigureAwait(true);
+            Check(editor.Model.Text.Text.Contains("    static int Add(int a, int b) => a + b;\n}", StringComparison.Ordinal), "Apply replaced the selection");
+            Check(!shell.Workbench.Output.GetOrCreate(Workbench.Ai.AiService.OutputChannelId).GetText().Contains("return a + b", StringComparison.Ordinal), "the request log has no content");
+        }
+        finally
+        {
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.ProviderSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
     private async Task HostingStepAsync()
     {
         await using var github = new Tests.MockGitHub("codalus-samples", "BuildAndRun");
@@ -2861,10 +3114,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private string RunOutput() =>
         shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Hello")?.GetText() ?? string.Empty;
 
-    private async Task RenderedAsync()
+    /// <summary>Two frames of <paramref name="of"/> (the main window by default) have been rendered.</summary>
+    private async Task RenderedAsync(Avalonia.Controls.TopLevel? of = null)
     {
+        var target = of ?? window;
         var rendered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        window.RequestAnimationFrame(_ => window.RequestAnimationFrame(_ => rendered.TrySetResult()));
+        target.RequestAnimationFrame(_ => target.RequestAnimationFrame(_ => rendered.TrySetResult()));
         await rendered.Task.ConfigureAwait(true);
     }
 

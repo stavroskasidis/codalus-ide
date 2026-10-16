@@ -18,6 +18,17 @@ Tools → Options… lists every setting in a tree of groups (Environment, Text 
   - Linux: `~/.config/codalus`
 - **Solution settings** live in `.codalus/settings.json` next to the solution and override the user settings for that solution.
 - **Editing the JSON**: open it with "Open User Settings (JSON)" in the command palette.
+- **Settings for one language**: as in VS Code, a `"[languageId]"` block in either file sets values for that language's documents only, and wins over the general value in any file:
+
+  ```jsonc
+  {
+    "editor.tabSize": 4,
+    "[markdown]": { "editor.wordWrap": true, "editor.tabSize": 2 },
+    "[csharp][vb]": { "editor.formatOnSave": true }
+  }
+  ```
+
+  "Configure Language-Specific Settings…" in the command palette picks a language (the active document's first), adds its block to your settings and opens the file there. The `editor.*` settings, Format on Save and Code Cleanup on Save follow the block; an `.editorconfig` file still overrides the tab size and indentation.
 
 Settings you may want first:
 
@@ -25,7 +36,7 @@ Settings you may want first:
 |---|---|
 | Text Editor → Font Family, Font Size, Word Wrap, Minimap, Rulers, Render Whitespace | The editor's look. |
 | Text Editor → Format on Type | Formats statements and blocks as you type `;` and `}`. |
-| Language Services → Analysis Scope | `openDocuments` (default) or `solution` (also runs analyzers on closed files). |
+| Language Services → Analysis Scope | `openDocuments` (default), `currentProject` or `solution` (also runs analyzers on closed files). Also in the Error List's toolbar. |
 | Projects → Restore on Open | Restore packages when a trusted solution opens. |
 | Build and Run → Save All Before Build, Run Console Apps in an External Console | |
 | Debugging → Just My Code | Step and break only in your own code. |
@@ -50,7 +61,7 @@ Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme**
 ## Moving your settings
 
 - **From VS Code** (Tools → Import Settings from VS Code): its user `settings.json` and `keybindings.json` (VS Code, Insiders or VSCodium; the first one found).
-  - Settings that are also ours come over with their values, including the two color settings. Its built-in themes become ours.
+  - Settings that are also ours come over with their values, including the two color settings and the ones in language blocks (`"[markdown]": { … }`). Its built-in themes become ours.
   - Key bindings whose commands exist here come over too.
   - You confirm first. The Codalus IDE log (Help → Show Logs) lists each skipped setting and why.
 - **From a classic IDE** (Tools → Import a .vssettings File): a file exported with that IDE's Import and Export Settings.
@@ -122,7 +133,7 @@ The Plugins window lists the installed plugins. **Turn Off** keeps a plugin from
 
 ## Components
 
-Some tools are downloaded the first time a feature needs them: Node.js, the web language servers, the browser debugger, netcoredbg for remote machines, and converted icon themes. **Tools → Components…** lists them with their version, size and licence. **Download Now** gets one ahead of time, and **Remove** frees its space; it comes back when a feature needs it.
+Some tools are downloaded the first time a feature needs them: Node.js, the web language servers, the F# language service (FsAutoComplete and Fantomas), the browser debugger, netcoredbg for remote machines, and converted icon themes. **Tools → Components…** lists them with their version, size and licence. **Download Now** gets one ahead of time, and **Remove** frees its space; it comes back when a feature needs it.
 
 **Offline layout**: on a machine with internet access, **Export Offline Layout…** copies the downloaded components to a folder. On a machine without it, **Import Offline Layout…** copies them in, so no feature tries to download anything. The .NET SDK has its own offline installer, and the layout doesn't include it.
 

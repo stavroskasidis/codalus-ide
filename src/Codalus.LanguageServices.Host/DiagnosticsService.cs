@@ -20,6 +20,7 @@ internal sealed class DiagnosticsService : IDisposable
 {
     public const string ScopeOpenDocuments = "openDocuments";
     public const string ScopeSolution = "solution";
+    public const string ScopeCurrentProject = "currentProject";
 
     private static readonly TimeSpan s_documentDelay = TimeSpan.FromMilliseconds(250);
 
@@ -49,8 +50,24 @@ internal sealed class DiagnosticsService : IDisposable
         _log = log;
     }
 
-    /// <summary><see cref="ScopeOpenDocuments"/> (default) or <see cref="ScopeSolution"/>: where analyzers run.</summary>
+    /// <summary>
+    /// <see cref="ScopeOpenDocuments"/> (default), <see cref="ScopeCurrentProject"/> (the project at
+    /// <see cref="AnalysisProject"/>) or <see cref="ScopeSolution"/>: where analyzers run.
+    /// </summary>
     public string AnalysisScope { get; set; } = ScopeOpenDocuments;
+
+    /// <summary>The project file whose analyzers run in every document with the <see cref="ScopeCurrentProject"/> scope.</summary>
+    public string? AnalysisProject { get; set; }
+
+    /// <summary>
+    /// The scope one project is analyzed with: <see cref="ScopeSolution"/> for every project, or for the current one with
+    /// <see cref="ScopeCurrentProject"/>; otherwise <see cref="ScopeOpenDocuments"/>. The background pass keeps a project's
+    /// results by it, so switching the current project analyzes only the two projects involved again.
+    /// </summary>
+    internal static string ScopeOf(string scope, string? analysisProject, string? projectPath) =>
+        scope == ScopeSolution || scope == ScopeCurrentProject && analysisProject is not null && projectPath is not null && Paths.Comparer.Equals(analysisProject, projectPath)
+            ? ScopeSolution
+            : ScopeOpenDocuments;
 
     /// <summary>
     /// Raised after a background pass over every project completes: (projects, documents, whether the solution had
@@ -317,7 +334,8 @@ internal sealed class DiagnosticsService : IDisposable
             return;
         }
 
-        var scope = AnalysisScope;
+        var (requested, current) = (AnalysisScope, AnalysisProject);
+        string ScopeFor(Project project) => ScopeOf(requested, current, project.FilePath);
         var included = solution.Projects
             .Where(p => p.Id != _workspace.MiscellaneousProjectId)
             .Select(p => p.Id)
@@ -341,6 +359,7 @@ internal sealed class DiagnosticsService : IDisposable
         await Parallel.ForEachAsync(projects, parallel, async (project, token) =>
         {
             var version = versions[project.Id] = await project.GetDependentVersionAsync(token).ConfigureAwait(false);
+            var scope = ScopeFor(project);
             if (previous.TryGetValue(project.Id, out var cached) && cached.Version == version && cached.Scope == scope
                 && cached.References.SequenceEqual(project.MetadataReferences) && cached.Analyzers.SequenceEqual(project.AnalyzerReferences))
             {
@@ -384,6 +403,7 @@ internal sealed class DiagnosticsService : IDisposable
                 return;
             }
 
+            var scope = ScopeFor(project);
             var diagnostics = compilation.GetDiagnostics(token).Where(d => !BuildDivergence.IsCompilationReferenceArtifact(d, compilation, token)).ToList();
             if (scope == ScopeSolution && Analyzers(project, compilation, includeProject: true, includeIde: false) is { } analyzers)
             {
@@ -545,7 +565,7 @@ internal sealed class DiagnosticsService : IDisposable
     private CompilationWithAnalyzers? Analyzers(Project project, Compilation compilation, bool includeProject, bool includeIde)
     {
         var analyzers = (includeProject ? project.AnalyzerReferences.SelectMany(r => r.GetAnalyzers(project.Language)) : [])
-            .Concat(includeIde ? Features.ProviderCatalog.IdeAnalyzers : [])
+            .Concat(includeIde ? Features.ProviderCatalog.IdeAnalyzers(project.Language) : [])
             .ToImmutableArray();
         if (analyzers.IsEmpty)
         {

@@ -24,6 +24,9 @@ namespace Codalus.Shell.Editor;
 /// <summary>Caret position and selection, for the status bar.</summary>
 public sealed record CaretInfo(int Line, int Column, int SelectionLength, int Carets);
 
+/// <summary>Text pasted into an editor: where it went in the document, and the clipboard's text.</summary>
+public sealed record PastedText(int Offset, int Length, string Text);
+
 /// <summary>
 /// Everything one editor view does on top of AvaloniaEdit: options and theme, semantic highlighting of the visible
 /// range, squiggles, folding, completion, signature help, Quick Info, reference and bracket highlights, multiple
@@ -73,6 +76,8 @@ public sealed partial class CodeEditorController : IDisposable
     private CancellationTokenSource? _signatureCts;
     private CancellationTokenSource? _hoverCts;
     private CompletionWindow? _completion;
+    private readonly InlineSuggestions _inline;
+    private readonly NextEditSuggestions _nextEdit;
     private OverloadInsightWindow? _signature;
     private Point _hoverPoint;
     private DocumentOptions? _documentOptions;
@@ -134,12 +139,15 @@ public sealed partial class CodeEditorController : IDisposable
         _folding = FoldingManager.Install(editor.TextArea);
         _search = SearchPanel.Install(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
+        _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush);
+        _nextEdit = new NextEditSuggestions(editor, () => Model, () => services.AiNextEdit, () => _completion is not null || _inline.IsVisible, () => ResourceBrush("Shell.Info"));
         _hoverTimer = new DispatcherTimer { Interval = s_hoverDelay };
         _hoverTimer.Tick += OnHoverTimer;
 
         ApplyOptions();
         ApplyTheme();
         _services.Options.PropertyChanged += OnOptionsChanged;
+        editor.TextArea.TextPasted += OnTextPasted;
         _services.ThemeChanged += OnThemeChanged;
         _services.Diagnostics.Changed += OnDiagnosticsChanged;
         Model.ContentChanged += OnContentChanged;
@@ -196,6 +204,17 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>Inlay hints, CodeLens, the inheritance margin, guides and bracket colors (M12a).</summary>
     public EditorInsights Insights => _insights;
+
+    /// <summary>AI inline suggestions (M28b).</summary>
+    public InlineSuggestions InlineSuggestions => _inline;
+
+    /// <summary>AI next-edit suggestions (M28b).</summary>
+    public NextEditSuggestions NextEditSuggestions => _nextEdit;
+
+    private Avalonia.Media.IBrush InlineSuggestionBrush() => ResourceBrush("Shell.Editor.InlayHint.Foreground");
+
+    private Avalonia.Media.IBrush ResourceBrush(string key) =>
+        Editor.TryFindResource(key, Editor.ActualThemeVariant, out var value) && value is Avalonia.Media.IBrush brush ? brush : Avalonia.Media.Brushes.Gray;
 
     private void OnContextRequested(object? sender, ContextRequestedEventArgs e)
     {
@@ -265,9 +284,12 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnOptionsChanged(object? sender, PropertyChangedEventArgs e) => ApplyOptions();
 
+    /// <summary>The editor options of the document's language (its <c>"[languageId]"</c> settings over the general ones).</summary>
+    private EditorOptions Options => _services.Options.For(Model.LanguageId);
+
     private void ApplyOptions()
     {
-        var options = _services.Options;
+        var options = Options;
         var editorOptions = Editor.Options;
         editorOptions.IndentationSize = _documentOptions?.IndentSize ?? options.TabSize;
         editorOptions.ConvertTabsToSpaces = _documentOptions?.InsertSpaces ?? options.InsertSpaces;
@@ -385,6 +407,7 @@ public sealed partial class CodeEditorController : IDisposable
     {
         if (e.PropertyName == nameof(CodeDocument.LanguageId))
         {
+            ApplyOptions();
             UpdateGrammar();
             RefreshAll();
             _httpMargin.Refresh();
@@ -414,7 +437,8 @@ public sealed partial class CodeEditorController : IDisposable
 
     private async Task LoadDocumentOptionsAsync()
     {
-        if (Client is not { } client)
+        // codalus/documentOptions is our hosts' extension; FsAutoComplete and the web servers don't have it.
+        if (Client is not { } client || Model.LanguageId == ShellHost.FSharpLanguageId || ShellHost.IsWebLanguage(Model.LanguageId ?? string.Empty))
         {
             return;
         }
@@ -695,7 +719,7 @@ public sealed partial class CodeEditorController : IDisposable
         }
 
         // Typing the closing character of an auto-closed pair moves over it.
-        if (e.Text is { Length: 1 } typed && _services.Options.AutoClosingBrackets && Editor.SelectionLength == 0
+        if (e.Text is { Length: 1 } typed && Options.AutoClosingBrackets && Editor.SelectionLength == 0
             && Editor.CaretOffset < Model.Text.TextLength && Model.Text.GetCharAt(Editor.CaretOffset) == typed[0]
             && Configuration?.AutoClosingPairs.Any(p => p.Close == typed && (p.Open != p.Close || _autoClosed?.Offset == Editor.CaretOffset)) == true)
         {
@@ -714,7 +738,7 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>After an opening character of an auto-closing pair, inserts its closing one (VS Code's "languageDefined").</summary>
     private void AutoClose(string text)
     {
-        if (!_services.Options.AutoClosingBrackets || _multiCaret.ExtraCarets.Count > 0 || Configuration is not { } configuration
+        if (!Options.AutoClosingBrackets || _multiCaret.ExtraCarets.Count > 0 || Configuration is not { } configuration
             || configuration.AutoClosingPairs.FirstOrDefault(p => p.Open.Length == 1 && p.Open == text) is not { } pair)
         {
             return;
@@ -891,7 +915,9 @@ public sealed partial class CodeEditorController : IDisposable
             }
         }
 
-        if (e.Text is not { Length: 1 } text || Client is not { Capabilities: { } capabilities })
+        // Enter is "\n" whatever the document's line ends (on-type formatting's trigger, M35).
+        var typed = e.Text == "\r\n" ? "\n" : e.Text;
+        if (typed is not { Length: 1 } text || Client is not { Capabilities: { } capabilities })
         {
             return;
         }
@@ -909,7 +935,7 @@ public sealed partial class CodeEditorController : IDisposable
             }
         }
 
-        if (_services.Options.FormatOnType && !Model.IsReadOnly && _multiCaret.ExtraCarets.Count == 0
+        if (Options.FormatOnType && !Model.IsReadOnly && _multiCaret.ExtraCarets.Count == 0
             && capabilities.DocumentOnTypeFormattingProvider is { } onType
             && (onType.FirstTriggerCharacter == text || onType.MoreTriggerCharacter?.Contains(text) == true))
         {
@@ -919,7 +945,7 @@ public sealed partial class CodeEditorController : IDisposable
         if (capabilities.CompletionProvider is { } completion)
         {
             var isTrigger = completion.TriggerCharacters.Contains(text) || (Model.LanguageId == ShellHost.RazorLanguageId && text is "<" or "\"" or "/" or "=")
-                || (Model.LanguageId == ShellHost.AxamlLanguageId && text is "{" or "/" or "=" or "|");
+                || (Model.LanguageId is ShellHost.AxamlLanguageId or ShellHost.XamlLanguageId && text is "{" or "/" or "=" or "|");
             if (_completion is null && isTrigger)
             {
                 ShowCompletion(text);
@@ -962,7 +988,14 @@ public sealed partial class CodeEditorController : IDisposable
             var edits = await client.FormatOnTypeAsync(Model.Uri, Model.PositionAt(Editor.CaretOffset), ch, options, CancellationToken.None).ConfigureAwait(true);
             if (edits.Length > 0 && version == Model.Version && !_disposed && _completion is null)
             {
+                // Text the server adds at the caret (an XML end tag, M35) goes after it: the caret stays where the user typed.
+                var caret = Model.Text.CreateAnchor(Editor.CaretOffset);
+                caret.MovementType = AvaloniaEdit.Document.AnchorMovementType.BeforeInsertion;
                 Model.ApplyEdits(edits);
+                if (!caret.IsDeleted)
+                {
+                    Editor.CaretOffset = caret.Offset;
+                }
             }
         }
         catch (Exception ex) when (IsTransient(ex))
@@ -1292,6 +1325,18 @@ public sealed partial class CodeEditorController : IDisposable
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         TrackCopy(e);
+        if (SnippetEngine.HandleKey(Editor.TextArea, e))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (_inline.HandleKey(e) || _nextEdit.HandleKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape)
         {
             if (_hoverPopup.IsOpen)
@@ -1760,6 +1805,8 @@ public sealed partial class CodeEditorController : IDisposable
         _disposed = true;
         _textMate?.Dispose();
         _insights.Dispose();
+        _inline.Dispose();
+        _nextEdit.Dispose();
         _gitTimer.Stop();
         _gitCts?.Cancel();
         _gitCts?.Dispose();
@@ -1785,6 +1832,7 @@ public sealed partial class CodeEditorController : IDisposable
         _completion?.Close();
         _signature?.Close();
         _services.Options.PropertyChanged -= OnOptionsChanged;
+        Editor.TextArea.TextPasted -= OnTextPasted;
         _services.ThemeChanged -= OnThemeChanged;
         _services.Diagnostics.Changed -= OnDiagnosticsChanged;
         Model.ContentChanged -= OnContentChanged;

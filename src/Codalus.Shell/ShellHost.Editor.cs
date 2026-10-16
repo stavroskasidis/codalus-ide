@@ -29,6 +29,12 @@ public sealed partial class ShellHost : IEditorServices
 
     /// <summary>Avalonia XAML (M19a, ADR 0047), served by the C# host.</summary>
     public const string AxamlLanguageId = "axaml";
+
+    /// <summary><c>.xaml</c> files (.NET MAUI's, M20a): the C# host serves them with MAUI's dialect when their project references MAUI.</summary>
+    public const string XamlLanguageId = "xaml";
+
+    /// <summary>Visual Basic (M35): served by the C# host, on Roslyn's VB services.</summary>
+    public const string VisualBasicLanguageId = "vb";
     private const string StatusSource = "codalus.editor";
 
     private readonly Dictionary<string, CodeDocument> _models = new(SolutionPaths.Comparer);
@@ -71,12 +77,16 @@ public sealed partial class ShellHost : IEditorServices
         {
             // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023), and so
             // does Avalonia XAML, on the same projects' type information (ADR 0047).
-            Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId],
+            Languages = [CSharpLanguageId, RazorLanguageId, AxamlLanguageId, XamlLanguageId, VisualBasicLanguageId],
+
+            // Visual Basic's projects too (M35): one workspace, so C# and VB projects reference each other.
+            MoreProjectLanguages = ["VB"],
         });
         registry.Register(new LanguageServiceDescriptor("markup", "JSON, XML and YAML", [], null, MarkupHostLaunch.Resolve)
         {
             Languages = MarkupHostLaunch.Languages,
             InitializationOptions = MarkupOptions(),
+            Settings = MarkupOptions,
         });
         BuiltInLanguages.Register(Workbench.LanguageDefinitions);
         TextMate = new TextMateSupport(Workbench.LanguageDefinitions) { Log = line => LanguageLog.AppendLine(line) };
@@ -86,22 +96,44 @@ public sealed partial class ShellHost : IEditorServices
             PropertyEvaluator = EvaluatePropertyAsync,
             ApplyEditHandler = edit => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ApplyWorkspaceEditAsync(edit)),
         };
-        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position));
+        Languages.DocumentChanged += (_, path) => Ui.Post(() => Explorer.OnFileChanged(path)); // members under files
+        ErrorList = new ErrorListViewModel(Languages.Diagnostics, Builds, Solutions, () => Layout is null ? null : ActiveEditor?.Model.Path, (path, position) => OpenFileAsync(path, preview: false, position), Workbench.Settings);
     }
 
-    /// <summary>The markup host's options: schema downloads (setting <c>json.schemaDownload</c>) and their cache folder.</summary>
+    /// <summary>
+    /// The markup host's options: schema downloads (setting <c>json.schemaDownload</c>), their cache folder, and the XML
+    /// schema associations (setting <c>xml.schemas</c>: a glob over file paths → an XSD, relative to the solution's folder).
+    /// </summary>
     private System.Text.Json.JsonElement MarkupOptions()
     {
+        var associations = new System.Text.Json.Nodes.JsonArray();
+        var root = Solutions?.Solution?.Path is { } solution ? Path.GetDirectoryName(solution) : null;
+        if (Workbench.Settings.GetValue(XmlSchemasSetting) is { ValueKind: System.Text.Json.JsonValueKind.Object } schemas)
+        {
+            foreach (var association in schemas.EnumerateObject().Where(a => a.Value.ValueKind == System.Text.Json.JsonValueKind.String))
+            {
+                var schema = association.Value.GetString()!;
+                associations.Add((System.Text.Json.Nodes.JsonNode)new System.Text.Json.Nodes.JsonObject
+                {
+                    ["pattern"] = association.Name,
+                    ["schema"] = Path.IsPathRooted(schema) || root is null ? schema : Path.GetFullPath(Path.Combine(root, schema)),
+                });
+            }
+        }
+
         var options = new System.Text.Json.Nodes.JsonObject
         {
             ["schemaDownload"] = Workbench.Settings.GetBoolean(SchemaDownloadSetting, true),
             ["schemaCache"] = Path.Combine(Paths.Cache, "schemas"),
+            ["xmlSchemas"] = associations,
         };
         using var document = System.Text.Json.JsonDocument.Parse(options.ToJsonString());
         return document.RootElement.Clone();
     }
 
     public const string SchemaDownloadSetting = "json.schemaDownload";
+
+    public const string XmlSchemasSetting = "xml.schemas";
 
     /// <summary>A project's evaluated property and where it is set, for MSBuild hover (from the build host, M9b).</summary>
     private async Task<(string? Value, string? Origin)?> EvaluatePropertyAsync(string project, string name, CancellationToken cancellationToken)
@@ -157,19 +189,44 @@ public sealed partial class ShellHost : IEditorServices
         Theme.Changed += (_, _) => ThemeChanged?.Invoke(this, EventArgs.Empty);
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
+        Layout.ActiveDocumentChanged += (_, _) => RememberActiveDocument();
+        Switcher.Chosen += (_, document) => Layout.OpenDocument(document, focus: true);
         _ = ConfigureLanguagesAsync();
     }
 
     public Workbench.Output.OutputChannel LanguageLog => Workbench.Output.GetOrCreate("codalus.languages", "Language Services");
 
-    private Task ConfigureLanguagesAsync() =>
-        Languages.ConfigureAsync(JsonSerializer.SerializeToElement(
+    private string? _analysisProject;
+
+    private Task ConfigureLanguagesAsync()
+    {
+        var scope = Workbench.Settings.GetString("languageServices.analysisScope", "openDocuments");
+        _analysisProject = scope == "currentProject" ? CurrentAnalysisProject() : null;
+        return Languages.ConfigureAsync(JsonSerializer.SerializeToElement(
             new Dictionary<string, string>
             {
-                ["analysisScope"] = Workbench.Settings.GetString("languageServices.analysisScope", "openDocuments"),
+                ["analysisScope"] = scope,
+                ["analysisProject"] = _analysisProject ?? string.Empty,
                 ["sourceLink"] = Workbench.Settings.GetBoolean("navigation.sourceLink") ? "true" : "false",
             },
             Docking.ShellJsonContext.Default.DictionaryStringString));
+    }
+
+    /// <summary>The current project of the <c>currentProject</c> analysis scope: the active document's, else the startup project.</summary>
+    public string? CurrentAnalysisProject() =>
+        (Layout is null ? null : ActiveEditor?.Model.Path) is { } path && ErrorListViewModel.ProjectOf(Solutions.Projects.Values, path) is { } project
+            ? project.Path
+            : Runs.StartupProject;
+
+    /// <summary>With the <c>currentProject</c> scope, a document of another project (or a new startup project) moves the analysis there.</summary>
+    private void FollowAnalysisProject()
+    {
+        if (Workbench.Settings.GetString("languageServices.analysisScope", "openDocuments") == "currentProject"
+            && !string.Equals(CurrentAnalysisProject(), _analysisProject, StringComparison.Ordinal))
+        {
+            _ = ConfigureLanguagesAsync();
+        }
+    }
 
     // ------------------------------------------------------------------ opening
 
@@ -183,6 +240,20 @@ public sealed partial class ShellHost : IEditorServices
         if (initialContent is null && Views.ImageDocument.IsImage(path) && File.Exists(path))
         {
             OpenImage(path, preview);
+            return null;
+        }
+
+        // A binary file opens in the hex viewer, unless the text editor was asked for.
+        if (initialContent is null && !textEditor && !_models.ContainsKey(path) && File.Exists(path) && Views.HexDocument.LooksBinary(path))
+        {
+            OpenHex(path, preview);
+            return null;
+        }
+
+        // A .resx file opens in the resource editor, unless the text editor was asked for or has it open.
+        if (initialContent is null && !textEditor && at is null && Views.ResxEditorDocument.IsResx(path) && !_models.ContainsKey(path) && File.Exists(path))
+        {
+            OpenResx(path, preview);
             return null;
         }
 
@@ -359,6 +430,7 @@ public sealed partial class ShellHost : IEditorServices
         else
         {
             await OfferWebLanguagesAsync(languageId).ConfigureAwait(true);
+            await OfferFSharpAsync(languageId).ConfigureAwait(true);
         }
     }
 
@@ -560,7 +632,7 @@ public sealed partial class ShellHost : IEditorServices
             if (choice == "Save")
             {
                 if ((document is CodeEditorDocument code && await SaveAsync(code.Model).ConfigureAwait(true))
-                    || (document is Views.CustomEditorDocument custom && await SaveCustomEditorAsync(custom).ConfigureAwait(true)))
+                    || (document is Views.ISavableDocument savable && await SaveDocumentAsync(document, savable).ConfigureAwait(true)))
                 {
                     document.CloseConfirmed();
                 }
@@ -578,9 +650,9 @@ public sealed partial class ShellHost : IEditorServices
         {
             await SaveAsync(editor.Model).ConfigureAwait(true);
         }
-        else if (Layout.ActiveDocument is Views.CustomEditorDocument custom)
+        else if (Layout.ActiveDocument is Views.ISavableDocument savable)
         {
-            await SaveCustomEditorAsync(custom).ConfigureAwait(true);
+            await SaveDocumentAsync(Layout.ActiveDocument, savable).ConfigureAwait(true);
         }
     }
 
@@ -591,9 +663,9 @@ public sealed partial class ShellHost : IEditorServices
             await SaveAsync(model).ConfigureAwait(true);
         }
 
-        foreach (var custom in Layout.Documents.OfType<Views.CustomEditorDocument>().Where(d => d.IsModified).ToList())
+        foreach (var document in Layout.Documents.Where(d => d.IsModified && d is Views.ISavableDocument).ToList())
         {
-            await SaveCustomEditorAsync(custom).ConfigureAwait(true);
+            await SaveDocumentAsync(document, (Views.ISavableDocument)document).ConfigureAwait(true);
         }
     }
 
@@ -740,6 +812,7 @@ public sealed partial class ShellHost : IEditorServices
             Watches = Watch.Expressions.Count == 0 ? null : Watch.Expressions,
             DataTips = Debugger.PinnedTips.All is { Count: > 0 } tips ? [.. tips.Select(t => new Docking.SessionDataTip(t.Path, t.Line, t.Expression, t.Comment))] : null,
             LaunchProfiles = Runs.ChosenProfiles.Count == 0 ? null : new Dictionary<string, string>(Runs.ChosenProfiles),
+            MobileDevices = Mobile.Selections.Count == 0 ? null : new Dictionary<string, string>(Mobile.Selections),
             MultipleStartupProjects = Runs.MultipleStartup ? true : null,
             StartupProjects = Runs.StartupEntries is { Count: > 0 } entries ? [.. entries.Select(e => new Docking.SessionStartupProject(e.Project, e.Action.ToString()))] : null,
         }, Docking.ShellJsonContext.Default.EditorSession);
@@ -751,6 +824,7 @@ public sealed partial class ShellHost : IEditorServices
         if (SessionFile(solutionPath) is not { } file || ReadJson(file, Docking.ShellJsonContext.Default.EditorSession) is not { } session)
         {
             Runs.Load(null, null);
+            Mobile.LoadSelections(null);
             Debugger.Breakpoints.Clear();
             Debugger.ExceptionSettings.Reset();
             Runs.EnvironmentOverride = null;
@@ -764,6 +838,7 @@ public sealed partial class ShellHost : IEditorServices
             session.LaunchProfiles,
             session.MultipleStartupProjects == true,
             [.. (session.StartupProjects ?? []).Select(p => new StartupEntry(p.Path, Enum.TryParse<StartupAction>(p.Action, out var action) ? action : StartupAction.None))]);
+        Mobile.LoadSelections(session.MobileDevices);
         Debugger.Breakpoints.Load((session.Breakpoints ?? []).Select(FromSession), (session.FunctionBreakpoints ?? []).Select(FromSession));
         Debugger.ExceptionSettings.Load(session.BreakOnOtherExceptions ?? false, session.ExceptionTypes, session.ExceptionConditions);
         Runs.EnvironmentOverride = session.AspNetEnvironment;
@@ -842,6 +917,50 @@ public sealed partial class ShellHost : IEditorServices
     }
 
     /// <summary>Ctrl+Tab: activates the next (or previous) document tab, wrapping around.</summary>
+    /// <summary>Open documents, the most recently active first (the Ctrl+Tab switcher's order).</summary>
+    private readonly List<Docking.ShellDocument> _recentDocuments = [];
+
+    private void RememberActiveDocument()
+    {
+        if (Layout.ActiveDocument is { } active)
+        {
+            _recentDocuments.Remove(active);
+            _recentDocuments.Insert(0, active);
+        }
+    }
+
+    /// <summary>The open documents, the most recently active first; documents never active follow in tab order.</summary>
+    public IReadOnlyList<Docking.ShellDocument> RecentDocuments
+    {
+        get
+        {
+            var open = Layout.Documents.ToList();
+            _recentDocuments.RemoveAll(d => !open.Contains(d));
+            return [.. _recentDocuments, .. open.Where(d => !_recentDocuments.Contains(d))];
+        }
+    }
+
+    /// <summary>
+    /// Ctrl+Tab (Ctrl+Shift+Tab back): opens the switcher on the document used before the active one, or moves its
+    /// selection while it's open. Releasing Ctrl switches (<see cref="Views.MainWindow"/>).
+    /// </summary>
+    public void SwitchDocument(int direction)
+    {
+        if (Switcher.IsOpen)
+        {
+            Switcher.Move(direction);
+            return;
+        }
+
+        var documents = RecentDocuments;
+        if (documents.Count < 2)
+        {
+            return;
+        }
+
+        Switcher.Open([.. documents.Select(d => new DocumentSwitcherItem(d, d.Title, d.FilePath is { } path ? Path.GetDirectoryName(path) : null, d.HasTabIcon ? d.TabIcon : null))], direction);
+    }
+
     public void CycleDocument(int direction)
     {
         var documents = Layout.Documents.ToList();
@@ -909,9 +1028,11 @@ public sealed partial class ShellHost : IEditorServices
     private void OnActiveEditorChanged()
     {
         ErrorList.OnActiveDocumentChanged();
+        FollowAnalysisProject();
         OnNavigationEditorChanged();
         TrackCopies(ActiveEditor?.Controller);
         Workbench.Context.Set("editorLanguageId", ActiveEditor?.Model.LanguageId);
+        Workbench.Context.Set("editorExtension", ActiveEditor?.Model.Path is { } activePath ? Path.GetExtension(activePath).ToLowerInvariant() : null);
         FollowXamlEditor();
         if (ActiveEditor is { Controller: { } controller } editor)
         {

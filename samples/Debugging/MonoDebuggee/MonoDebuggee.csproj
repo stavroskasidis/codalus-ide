@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A console app on the Mono runtime (M20b): .NET 8's desktop Mono runtime pack, self-contained for this machine,
+       so the Mono debugger adapter is tested against the same soft-debugger agent as .NET 8 to 10 apps on Android and
+       iOS, without a device. Started with the debugger agent in MONO_ENV_OPTIONS; .NET 9 and later ship no desktop Mono. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <UseMonoRuntime>true</UseMonoRuntime>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>

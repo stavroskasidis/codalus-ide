@@ -123,6 +123,10 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
         {
             "decorator" => "macro",
             "typeParameter" => "typeParameter",
+            // FsAutoComplete's own types (M36): members as methods, modules as types, computation expressions as keywords.
+            "member" => "method",
+            "module" => "class",
+            "cexpr" => "keyword",
             _ => name,
         }))];
         (s_lastLegend, s_lastMap) = (legend, map);

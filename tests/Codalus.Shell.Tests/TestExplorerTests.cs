@@ -91,6 +91,7 @@ public sealed class TestExplorerTests
         var glyph = margin.Glyphs.Single(g => g.Value.Label == "Fails");
         Assert.InRange(glyph.Key, failsLine - 1, failsLine + 1);
         Assert.Equal(TestOutcome.Failed, glyph.Value.Outcome);
+        await ShellFixture.PumpUntil(() => editor.Controller.Insights.EndOfLineText(glyph.Key)?.Contains("✗ Failed", StringComparison.Ordinal) == true); // CodeLens too
 
         // Run at cursor finds the test around the caret.
         Assert.Equal("Fails", f.Shell.Tests.FindAt(DocumentUris.FromPath(file), glyph.Key - 1)?.Label); // glyphs are by one-based line

@@ -21,7 +21,11 @@ Codalus IDE is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linu
 17. [Keyboard shortcuts on each operating system: completion keys, and the shortcuts Windows, Linux and macOS keep](keyboard.md)
 18. [Avalonia: XAML editing, the XAML Previewer, the Live Visual Tree and Live Property Explorer, new Avalonia projects](avalonia.md)
 19. [Remote development: SSH, WSL, containers and Dev Containers](remote.md)
-20. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
+20. [AI assistance: AI Chat with the provider you choose, inline and next edit suggestions, AI actions, agent mode, MCP, and what is never sent](ai.md)
+21. [.NET MAUI: devices, emulators and simulators, running and debugging on Android and iOS, the workloads and the Android SDK, MAUI XAML](maui.md)
+22. [Visual Basic: editing, mixed C# and VB solutions, what the editor adds as you type, project options, tests and debugging](visual-basic.md)
+23. [F#: editing with FsAutoComplete and Fantomas, the compile order, F# Interactive, scripts, type providers, analyzers, Expecto tests and debugging](fsharp.md)
+24. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md), with the [API reference](plugin-api.md).
 
@@ -33,6 +37,7 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 |---|---|---|
 | General | `Ctrl+Q` | Search commands, settings, files and code |
 | | `Ctrl+Shift+P` | Command palette |
+| | `Ctrl+Alt+I` | AI Chat |
 | | `Ctrl+,` | Go to all |
 | | `Alt+F6`, `Alt+Shift+F6` | Move focus between panes |
 | | `Ctrl+Alt+L`, `Ctrl+;` | Solution Explorer, search it |

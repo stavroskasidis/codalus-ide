@@ -15,6 +15,8 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
     internal static string RepoRoot => Metadata("CodalusRepoRoot");
 
+    internal static string Configuration => Metadata("CodalusConfiguration");
+
     /// <summary>The build host the build tests use: <c>CODALUS_BUILDHOST</c> (e.g. a published one), else the built one.</summary>
     internal static string HostAssemblyPath => Environment.GetEnvironmentVariable("CODALUS_BUILDHOST") is { Length: > 0 } host ? host : HostAssembly;
 
@@ -346,6 +348,43 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         await WaitUntilAsync(() => { lock (states) { return states.Any(s => s.StartsWith("succeeded", StringComparison.Ordinal) || s.StartsWith("failed", StringComparison.Ordinal)); } }, TimeSpan.FromMinutes(4));
         Assert.Contains("succeeded", states);
         await WaitForProjectAsync(AppProject, p => p.Restored && p.References.Any(r => r is { Name: "Microsoft.Build.Locator", Resolved: true }));
+    }
+
+    [Fact]
+    public async Task A_project_that_cant_restore_leaves_the_others_restored()
+    {
+        // As a MAUI app without its workload does: an error while the restore reads it, which fails the whole
+        // solution's restore before any assets file is written.
+        var bad = Path.Combine(Fixture, "src", "Bad", "Bad.csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(bad)!);
+        File.WriteAllText(bad, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <Target Name="NeedsAWorkload" BeforeTargets="_GenerateRestoreProjectSpec"><Error Text="This project needs a workload." /></Target>
+            </Project>
+            """);
+        var broken = Path.Combine(Fixture, "Broken.slnx");
+        File.WriteAllText(broken, """
+            <Solution>
+              <Project Path="src/App/App.csproj" />
+              <Project Path="src/Bad/Bad.csproj" />
+            </Solution>
+            """);
+        var states = new List<string>();
+        _service.RestoreStateChanged += (_, e) =>
+        {
+            lock (states)
+            {
+                states.Add(e.Message is null ? e.State : $"{e.State}: {e.Message}");
+            }
+        };
+
+        await _service.OpenAsync(broken, trusted: true, restore: true, Timeout());
+
+        await WaitUntilAsync(() => { lock (states) { return states.Any(s => s.StartsWith("failed", StringComparison.Ordinal)); } }, TimeSpan.FromMinutes(4));
+        Assert.Contains(states, s => s.Contains("1 project(s) restored on their own", StringComparison.Ordinal));
+        await WaitForProjectAsync(AppProject, p => p.Restored && p.References.Any(r => r is { Name: "Microsoft.Build.Locator", Resolved: true }));
+        Assert.False(Project(bad).Restored);
     }
 
     // ------------------------------------------------------------------ design-time builds

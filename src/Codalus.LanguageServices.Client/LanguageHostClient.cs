@@ -136,7 +136,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
     /// <summary>What this client supports, so servers built for any LSP client send results it can use.</summary>
     private const string ClientCapabilities = """
         {
-          "workspace": { "configuration": true, "workspaceFolders": true, "symbol": {}, "workspaceEdit": { "documentChanges": true }, "applyEdit": true, "executeCommand": {} },
+          "workspace": { "configuration": true, "workspaceFolders": true, "symbol": {}, "workspaceEdit": { "documentChanges": true, "resourceOperations": ["create", "rename", "delete"] }, "applyEdit": true, "executeCommand": {} },
           "textDocument": {
             "synchronization": { "didSave": true, "dynamicRegistration": false },
             "completion": { "completionItem": { "snippetSupport": true, "documentationFormat": ["markdown", "plaintext"], "resolveSupport": { "properties": ["documentation", "detail", "textEdit", "additionalTextEdits"] }, "insertReplaceSupport": false }, "contextSupport": true },
@@ -369,6 +369,18 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<DocumentOptions?> DocumentOptionsAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.DocumentOptions, new DocumentOptionsParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.DocumentOptionsParams, ProtocolJsonContext.Default.DocumentOptions, cancellationToken);
 
+    /// <summary><c>codalus/generatedDocuments</c>: a project's source-generated files.</summary>
+    public Task<GeneratedDocumentsResult> GeneratedDocumentsAsync(string project, CancellationToken cancellationToken) =>
+        Invoke(Methods.GeneratedDocuments, new GeneratedDocumentsParams(project), ProtocolJsonContext.Default.GeneratedDocumentsParams, ProtocolJsonContext.Default.GeneratedDocumentsResult, cancellationToken);
+
+    /// <summary><c>codalus/browse</c>: Class View's and the Object Browser's items, a level at a time.</summary>
+    public Task<BrowseResult> BrowseAsync(BrowseParams parameters, CancellationToken cancellationToken) =>
+        Invoke(Methods.Browse, parameters, ProtocolJsonContext.Default.BrowseParams, ProtocolJsonContext.Default.BrowseResult, cancellationToken);
+
+    /// <summary><c>codalus/browse/describe</c>: an item's declaration, location and summary (null: not found).</summary>
+    public Task<BrowseDescription?> DescribeAsync(string project, string id, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.BrowseDescribe, new BrowseDescribeParams(project, id), ProtocolJsonContext.Default.BrowseDescribeParams, ProtocolJsonContext.Default.BrowseDescription, cancellationToken);
+
     public Task<SourceGeneratedText?> SourceGeneratedTextAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.SourceGeneratedText, new SourceGeneratedTextParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.SourceGeneratedTextParams, ProtocolJsonContext.Default.SourceGeneratedText, cancellationToken);
 
@@ -484,6 +496,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
         InvokeNullable(Methods.CodeMetrics, new CodeMetricsParams(uri is null ? null : new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.CodeMetricsParams, ProtocolJsonContext.Default.CodeMetricsResult, cancellationToken);
 
     /// <summary>Code Cleanup of a document (our C# host only): the edit, or null.</summary>
+    /// <summary><c>codalus/pasteImports</c>: the usings pasted code needs (null: none, or not a C#/VB document).</summary>
+    public Task<WorkspaceEdit?> PasteImportsAsync(string uri, Protocol.Range range, string[]? namespaces, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.PasteImports, new PasteImportsParams(new TextDocumentIdentifier(uri), range, namespaces), ProtocolJsonContext.Default.PasteImportsParams, ProtocolJsonContext.Default.WorkspaceEdit, cancellationToken);
+
     public Task<WorkspaceEdit?> CodeCleanupAsync(string uri, string[]? fixes, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.CodeCleanup, new CodeCleanupParams(new TextDocumentIdentifier(uri), fixes, null, null), ProtocolJsonContext.Default.CodeCleanupParams, ProtocolJsonContext.Default.WorkspaceEdit, cancellationToken);
 

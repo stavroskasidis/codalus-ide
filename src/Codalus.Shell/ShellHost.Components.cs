@@ -60,6 +60,12 @@ public sealed partial class ShellHost
             },
             new()
             {
+                Id = "fsharp", Name = "F# language service", Version = $"{Codalus.Workbench.FSharp.FSharpTools.FsAutoCompleteVersion}, {Codalus.Workbench.FSharp.FSharpTools.FantomasVersion}", License = "Apache-2.0",
+                Description = "F# editing and formatting (FsAutoComplete and Fantomas, installed with dotnet tool install).",
+                Folders = () => [Relative(FSharp.FsAutoCompleteFolder), Relative(FSharp.FantomasFolder)], IsInstalled = () => FSharp.IsInstalled, Install = FSharp.EnsureAsync,
+            },
+            new()
+            {
                 Id = "netcoredbg-remote", Name = "netcoredbg for remote targets", Version = Codalus.Workbench.Debugging.Remote.RemoteDebuggers.Version, License = "MIT",
                 Description = "Copied to SSH machines, containers and WSL to debug there (one download per platform, on first use).",
                 Folders = () => [Path.Combine("netcoredbg", Codalus.Workbench.Debugging.Remote.RemoteDebuggers.Version)],

@@ -80,10 +80,122 @@ public sealed partial class ShellHost
             Workbench.Notifications,
             url => ShellIntegration.OpenUrl(new Uri(url)),
             OpenPackageSources,
-            () => Workbench.Output.Show(RestoreLog));
+            () => Workbench.Output.Show(RestoreLog))
+        {
+            SignIn = SignInToPackageSourceAsync,
+        };
         var viewModel = new PackageManagerViewModel(Packages, Solutions, project, context);
         Layout.OpenDocument(new PackageManagerDocument(viewModel), focus: true);
         return viewModel;
+    }
+
+    /// <summary>
+    /// Signs in to a package source through NuGet's credential providers (deferred from M9a): the provider's device code
+    /// shows in a notification that copies it and opens the page. <paramref name="source"/> null: pick one.
+    /// </summary>
+    public async Task<bool> SignInToPackageSourceAsync(string? source)
+    {
+        if (!RequireTrustedSolution("Package source sign-in"))
+        {
+            return false;
+        }
+
+        if (source is null)
+        {
+            var sources = (await Packages.SourcesAsync(CancellationToken.None).ConfigureAwait(true)).Sources
+                .Where(s => s.Enabled && Uri.TryCreate(s.Url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
+                .ToList();
+            if (sources.Count == 0)
+            {
+                Workbench.Notifications.Info(Localizer.Get("msg.packages.noOnlineSources", "The solution has no online package sources to sign in to."));
+                return false;
+            }
+
+            var items = sources.Select(s => new QuickPickItem(s.Name) { Tag = s.Name, Detail = s.Url }).ToList();
+            if (await Palette.ShowAsync(items, Localizer.Get("msg.packages.signInWhichSource", "Sign in to which package source?")).ConfigureAwait(true) is not { Tag: string picked })
+            {
+                return false;
+            }
+
+            source = picked;
+        }
+
+        Codalus.Workbench.Notifications.Notification? code = null;
+        void OnMessage(object? sender, PackageSignInMessage message) => Ui.Post(() =>
+        {
+            if (message.Source != source)
+            {
+                return;
+            }
+
+            RestoreLog.AppendLine($"[sign-in] {message.Source}: {message.Message}");
+            if (DeviceCode(message.Message) is { } device)
+            {
+                if (code is not null)
+                {
+                    Workbench.Notifications.Dismiss(code);
+                }
+
+                var shown = code = Workbench.Notifications.Info(message.Message, Localizer.Get("accounts.copyCodeAndOpenBrowser", "Copy Code and Open Browser"));
+                _ = shown.Result.ContinueWith(t =>
+                {
+                    if (t.Result is not null)
+                    {
+                        Ui.Post(() => _ = CopyCodeAndOpenAsync(device.Code, device.Url));
+                    }
+                }, TaskScheduler.Default);
+            }
+        });
+
+        Packages.SignInMessage += OnMessage;
+        StatusBar.ShowMessage(Localizer.Format("msg.packages.signingIn", "Signing in to {0}…", source), TimeSpan.FromSeconds(10));
+        try
+        {
+            var result = await Packages.SignInAsync(source, CancellationToken.None).ConfigureAwait(true);
+            if (result.SignedIn)
+            {
+                StatusBar.ShowMessage(result.Message, TimeSpan.FromSeconds(5));
+            }
+            else
+            {
+                Workbench.Notifications.Warning(result.Message);
+            }
+
+            return result.SignedIn;
+        }
+        catch (Exception ex) when (PackageManagerViewModel.IsExpected(ex))
+        {
+            Workbench.Notifications.Warning(Localizer.Format("msg.packages.signInFailed", "Couldn't sign in to {0}: {1}", source, ex.Message));
+            return false;
+        }
+        finally
+        {
+            Packages.SignInMessage -= OnMessage;
+            if (code is not null)
+            {
+                Workbench.Notifications.Dismiss(code);
+            }
+        }
+    }
+
+    /// <summary>The page and code of a device-code sign-in message ("open the page https://… and enter the code ABCD-1234"), or null.</summary>
+    internal static (string Url, string Code)? DeviceCode(string message) =>
+        DeviceCodePattern().Match(message) is { Success: true } match ? (match.Groups["url"].Value.TrimEnd('.', ','), match.Groups["code"].Value) : null;
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"(?<url>https?://\S+).*?\bcode\s+(?<code>[A-Z0-9][A-Z0-9-]{3,})", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline)]
+    private static partial System.Text.RegularExpressions.Regex DeviceCodePattern();
+
+    private async Task CopyCodeAndOpenAsync(string code, string url)
+    {
+        if (Window?.Clipboard is { } clipboard)
+        {
+            await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, code).ConfigureAwait(true);
+        }
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            ShellIntegration.OpenUrl(uri);
+        }
     }
 
     public void OpenPackageSources()

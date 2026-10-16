@@ -75,7 +75,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
         UseUserDotnet();
-        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings()]);
+        Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
         CrashReporter.Install(Paths.Logs, () => Workbench.Settings.GetBoolean(CrashReporter.SettingKey, false), () =>
@@ -84,7 +84,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             return log.Length > 8000 ? log[^8000..] : log;
         });
 
-        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.RemoteToolWindows()))
+        foreach (var window in BuiltIns.ToolWindows().Concat(BuiltIns.DebugToolWindows()).Append(BuiltIns.GitToolWindow()).Append(BuiltIns.TestToolWindow()).Append(BuiltIns.CoverageToolWindow()).Append(BuiltIns.TerminalToolWindow()).Append(BuiltIns.InteractiveToolWindow()).Concat(BuiltIns.WebToolWindows()).Concat(BuiltIns.DataToolWindows()).Concat(BuiltIns.ContainerToolWindows()).Concat(BuiltIns.ProfilingToolWindows()).Concat(BuiltIns.XamlToolWindows()).Concat(BuiltIns.RemoteToolWindows()).Concat(BuiltIns.AiToolWindows()).Concat(BuiltIns.MobileToolWindows()))
         {
             Workbench.ToolWindows.Register(window);
         }
@@ -123,6 +123,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeTesting();
         InitializeWeb();
         InitializeWebLanguages();
+        InitializeFSharp();
         InitializeNpm();
         InitializeHotReload();
         InitializeEntityFramework();
@@ -134,6 +135,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeXaml();
         InitializeUpdates();
         InitializeRemote();
+        InitializeMobile();
         InitializeProgress();
         InitializePluginFiles();
         HookAuthentication();
@@ -143,6 +145,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializePluginBisect();
         InitializePluginPerformance();
         InitializeComponentsPage();
+        InitializeAi();
+        InitializeAgent();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -165,6 +169,9 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterProfilingCommands(this);
         BuiltIns.RegisterXamlCommands(this);
         BuiltIns.RegisterRemoteCommands(this);
+        BuiltIns.RegisterAiCommands(this);
+        BuiltIns.RegisterMobileCommands(this);
+        BuiltIns.RegisterFSharpCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);
         BuiltIns.RegisterPackageCommands(this);
@@ -182,6 +189,9 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterProfilingMenus(Workbench.Menus);
         BuiltIns.RegisterXamlMenus(Workbench.Menus);
         BuiltIns.RegisterRemoteMenus(Workbench.Menus);
+        BuiltIns.RegisterAiMenus(Workbench.Menus);
+        BuiltIns.RegisterMobileMenus(Workbench.Menus);
+        BuiltIns.RegisterFSharpMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
         BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
         BuiltIns.RegisterProjectSystemMenus(Workbench.Menus);
@@ -290,6 +300,9 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public QuickPickViewModel Palette { get; }
 
+    /// <summary>The Ctrl+Tab switcher of open documents.</summary>
+    public DocumentSwitcherViewModel Switcher { get; } = new();
+
     public DialogViewModel Dialogs { get; }
 
     public StatusBarViewModel StatusBar { get; }
@@ -387,6 +400,13 @@ public sealed partial class ShellHost : IAsyncDisposable
                     case { Command: "merge", Arguments: [var local, var remote, var @base, var merged] }:
                         done.TrySetResult(await MergeFilesAsync(local, remote, @base, merged).ConfigureAwait(true));
                         break;
+                    case { Command: "open", Arguments: [var openFile, ..] }:
+                        var at = request.Arguments is [_, var line, var column]
+                            && int.TryParse(line, System.Globalization.CultureInfo.InvariantCulture, out var l) && int.TryParse(column, System.Globalization.CultureInfo.InvariantCulture, out var c)
+                            ? new LanguageServices.Protocol.Position(l, c)
+                            : null;
+                        done.TrySetResult(await OpenFileAsync(openFile, at: at).ConfigureAwait(true) is not null);
+                        break;
                     case { Command: "wait", Arguments: [var file] }:
                         done.TrySetResult(await EditAndWaitAsync(file).ConfigureAwait(true));
                         break;
@@ -453,6 +473,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             FindResultsViewModel.ToolWindowId => FindResults,
             DocumentOutlineViewModel.ToolWindowId => DocumentOutline,
             HierarchyViewModel.ToolWindowId => Hierarchy,
+            SymbolBrowserViewModel.ClassViewId => ShowClassView(),
             CodeDefinitionViewModel.ToolWindowId => CodeDefinition,
             BookmarksViewModel.ToolWindowId => BookmarkList,
             TaskListViewModel.ToolWindowId => TaskList,
@@ -486,12 +507,14 @@ public sealed partial class ShellHost : IAsyncDisposable
             DatabaseExplorerViewModel.ToolWindowId => OpenDatabaseExplorer(),
             QueryResultsViewModel.ToolWindowId => QueryResults,
             ContainersViewModel.ToolWindowId => ContainersWindow,
+            AiChatViewModel.ToolWindowId => AiChat,
             AspireViewModel.ToolWindowId => AspireWindow,
             DiagnosticToolsViewModel.ToolWindowId => DiagnosticTools,
             CountersViewModel.ToolWindowId => CountersWindow,
             BenchmarksViewModel.ToolWindowId => BenchmarksWindow,
             XamlPreviewViewModel.ToolWindowId => XamlPreview,
             RemotePortsViewModel.ToolWindowId => PortsWindow,
+            DevicesViewModel.ToolWindowId => DevicesWindow,
             SourceControlProvidersWindow => SourceControlProviders(),
             PluginGalleryWindow => PluginGallery(),
             ComponentsWindow => ComponentsPage(),
@@ -663,6 +686,45 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public Task OpenSettingsJsonAsync() => OpenTextFileAsync(Paths.SettingsFile, "// Codalus IDE user settings. See File > Settings for every option.\n{\n}\n");
 
+    /// <summary>
+    /// Preferences → Configure Language-Specific Settings: picks a language (the active document's first), adds its
+    /// <c>"[languageId]": { }</c> block to the user settings when there is none, and opens the file there. Settings in
+    /// the block win over the general ones for that language's documents.
+    /// </summary>
+    public async Task ConfigureLanguageSettingsAsync(string? languageId = null)
+    {
+        if (languageId is null)
+        {
+            var active = ActiveEditor?.Model.LanguageId;
+            var languages = Workbench.LanguageDefinitions.Languages.OrderBy(l => l.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            var items = languages
+                .Select(l => new QuickPickItem(l.Name) { Tag = l.Id, Detail = Workbench.Settings.OverriddenLanguages.Contains(l.Id) ? $"{l.Id} · configured" : l.Id })
+                .ToList();
+            var index = Math.Max(0, languages.FindIndex(l => l.Id == active));
+            if (await Palette.ShowAsync(items, Localizer.Get("msg.settings.whichLanguage", "Configure the settings of which language?"), index).ConfigureAwait(true) is not { Tag: string picked })
+            {
+                return;
+            }
+
+            languageId = picked;
+        }
+
+        var key = SettingsService.LanguageKey(languageId);
+        await Workbench.Settings.AddLanguageBlockAsync(languageId, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+        // Inside the block, ready to type a setting.
+        var text = File.Exists(Paths.SettingsFile) ? await File.ReadAllTextAsync(Paths.SettingsFile).ConfigureAwait(true) : string.Empty;
+        LanguageServices.Protocol.Position? at = null;
+        if (text.IndexOf($"\"{key}\"", StringComparison.Ordinal) is var found and >= 0)
+        {
+            var offset = text.IndexOf('{', found) is var brace and >= 0 ? brace + 1 : found;
+            var line = text.AsSpan(0, offset).Count('\n');
+            at = new LanguageServices.Protocol.Position(line, offset - (text.LastIndexOf('\n', Math.Max(0, offset - 1)) + 1));
+        }
+
+        await OpenFileAsync(Paths.SettingsFile, preview: false, at, "// Codalus IDE user settings. See File > Settings for every option.\n{\n}\n").ConfigureAwait(true);
+    }
+
     public Task OpenKeybindingsJsonAsync() => OpenTextFileAsync(Paths.KeybindingsFile, KeybindingsTemplate);
 
     private const string KeybindingsTemplate = "// Codalus IDE key bindings. Entries override the defaults; \"-command\" removes a default binding.\n[\n]\n";
@@ -806,7 +868,12 @@ public sealed partial class ShellHost : IAsyncDisposable
             ApplyKeyboardScheme();
         }
 
-        if (e.Affects("languageServices.analysisScope") || e.Affects("navigation.sourceLink"))
+        if (e.Affects(HotReloadSetting))
+        {
+            UpdateToolbarHotReload();
+        }
+
+        if (e.Affects("languageServices.analysisScope") || e.Affects("navigation.sourceLink") || e.Affects(XmlSchemasSetting))
         {
             _ = ConfigureLanguagesAsync();
         }
@@ -884,6 +951,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         _updateHttp.Dispose();
         await DisposeCompanionAsync().ConfigureAwait(false);
         _instance?.Dispose();
+        _mcpBridge?.Dispose();
+        await McpServers.DisposeAsync().ConfigureAwait(false);
         Askpass?.Dispose();
         Terminals?.Dispose();
         if (Interactive is not null)

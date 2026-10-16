@@ -6,11 +6,13 @@ namespace Codalus.Shell;
 public sealed record ShellOptions
 {
     public const string HelpText = """
-        Usage: codalus [path] [options]
+        Usage: codalus [path[:line[:column]]] [options]
                codalus diff <left> <right> [options]   Compare two files (in the running window, if there is one).
                codalus merge <local> <remote> <base> <merged> [options]
                                                         Resolve a merge (git mergetool); exits when it is accepted.
                codalus --wait <file> [options]         Edit a file and exit when its tab closes (git's core.editor).
+               codalus mcp [options]                   An MCP server on stdio for AI agents, reaching the running IDE
+                                                        (turn on Tools > Options > AI > MCP Server first).
 
           --user-data-dir <dir>   Keep settings, state and plugins under <dir> instead of the OS defaults.
           --locale <name>         The display language for this run (qps-ploc: pseudo-language).
@@ -19,6 +21,10 @@ public sealed record ShellOptions
           --debug-plugin-host <file>  Run the --plugin-dir plugins in a plugin host that writes its process id to <file> and waits for a debugger.
           --dev                   Development mode: shows developer commands.
           --open <file>           Open a file in the editor.
+          --new-window            Open a file in a new window, not in the running one.
+          --list-plugins          Print the installed plugins and exit (--show-versions: with their versions).
+          --install-plugin <id[@version] | file.nupkg>
+                                  Install a plugin from the plugin galleries or a package file, and exit. Repeatable.
           --remote <target>       Open [path] on another machine: ssh:user@host[:port] or wsl:<distribution>.
           --version               Print the version and exit.
           --help                  Print this help and exit.
@@ -57,6 +63,9 @@ public sealed record ShellOptions
     /// </summary>
     public string? ExitOn { get; init; }
 
+    /// <summary><c>codalus mcp</c> (M28c): serve MCP on stdio, relaying to the running IDE.</summary>
+    public bool Mcp { get; init; }
+
     /// <summary><c>codalus diff left right</c>: two files to compare side by side.</summary>
     public (string Left, string Right)? Diff { get; init; }
 
@@ -79,8 +88,23 @@ public sealed record ShellOptions
     /// </summary>
     public string? Remote { get; init; }
 
-    /// <summary>A file to open in the editor (<c>--open</c>).</summary>
+    /// <summary>A file to open in the editor (<c>--open</c>, or a path that is a file other than a solution or project).</summary>
     public string? OpenFile { get; init; }
+
+    /// <summary>Where to put the caret in <see cref="OpenFile"/>: <c>codalus file:line[:column]</c> (zero-based here).</summary>
+    public (int Line, int Column)? OpenAt { get; init; }
+
+    /// <summary><c>--new-window</c>: a file opens in a new window instead of the running one.</summary>
+    public bool NewWindow { get; init; }
+
+    /// <summary><c>--list-plugins</c>: print the installed plugins and exit.</summary>
+    public bool ListPlugins { get; init; }
+
+    /// <summary><c>--show-versions</c>, with <c>--list-plugins</c>.</summary>
+    public bool ShowVersions { get; init; }
+
+    /// <summary><c>--install-plugin</c> (repeatable): plugin ids (with an optional <c>@version</c>) or <c>.nupkg</c> files to install.</summary>
+    public IReadOnlyList<string> InstallPlugins { get; init; } = [];
 
     /// <summary>Benchmarks: a self-driven scenario on <see cref="OpenFile"/> (<c>--bench typing|scroll</c>).</summary>
     public string? Bench { get; init; }
@@ -107,6 +131,7 @@ public sealed record ShellOptions
     {
         var options = new ShellOptions();
         var pluginDirs = new List<string>();
+        var installs = new List<string>();
         var errors = new List<string>();
         var start = 0;
         if (args.Count > 0 && args[0] == "merge")
@@ -121,6 +146,11 @@ public sealed record ShellOptions
                 errors.Add("'merge' needs four files: codalus merge <local> <remote> <base> <merged>.");
                 start = args.Count;
             }
+        }
+        else if (args.Count > 0 && args[0] == "mcp")
+        {
+            options = options with { Mcp = true };
+            start = 1;
         }
         else if (args.Count > 0 && args[0] == "diff")
         {
@@ -192,6 +222,22 @@ public sealed record ShellOptions
                 case "--remote":
                     options = options with { Remote = Value() };
                     break;
+                case "--new-window":
+                    options = options with { NewWindow = true };
+                    break;
+                case "--list-plugins":
+                    options = options with { ListPlugins = true };
+                    break;
+                case "--show-versions":
+                    options = options with { ShowVersions = true };
+                    break;
+                case "--install-plugin":
+                    if (Value() is { } plugin)
+                    {
+                        installs.Add(plugin);
+                    }
+
+                    break;
                 case "--bench":
                     options = options with { Bench = Value() };
                     break;
@@ -208,12 +254,43 @@ public sealed record ShellOptions
                     errors.Add($"Unknown option '{other}'.");
                     break;
                 default:
-                    options = options with { Path = arg };
+                    options = OpenPath(options, arg);
                     break;
             }
         }
 
-        return options with { PluginDirs = pluginDirs, Errors = errors };
+        return options with { PluginDirs = pluginDirs, InstallPlugins = installs, Errors = errors };
+    }
+
+    /// <summary>
+    /// The path argument: a solution, project or folder opens as one; another file opens in the editor, at
+    /// <c>file:line[:column]</c> when that's how it's written (git, compilers and test runners print locations so).
+    /// </summary>
+    private static ShellOptions OpenPath(ShellOptions options, string argument)
+    {
+        if (options.Remote is not null || Directory.Exists(argument) || !File.Exists(argument) && LocationOf(argument) is null)
+        {
+            return options with { Path = argument };
+        }
+
+        var (file, at) = File.Exists(argument) ? (argument, null) : LocationOf(argument)!.Value;
+        return Workbench.Projects.SolutionTree.IsSolutionOrProjectFile(file)
+            ? options with { Path = file }
+            : options with { OpenFile = System.IO.Path.GetFullPath(file), OpenAt = at };
+    }
+
+    /// <summary><c>file:line</c> or <c>file:line:column</c> (1-based) for an existing file, else null.</summary>
+    public static (string File, (int Line, int Column)? At)? LocationOf(string argument)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(argument, @"^(?<file>.+?):(?<line>\d+)(?::(?<column>\d+))?$");
+        if (!match.Success || !File.Exists(match.Groups["file"].Value))
+        {
+            return null;
+        }
+
+        var line = Math.Max(1, int.Parse(match.Groups["line"].Value, System.Globalization.CultureInfo.InvariantCulture));
+        var column = match.Groups["column"].Success ? Math.Max(1, int.Parse(match.Groups["column"].Value, System.Globalization.CultureInfo.InvariantCulture)) : 1;
+        return (match.Groups["file"].Value, (line - 1, column - 1));
     }
 }
 

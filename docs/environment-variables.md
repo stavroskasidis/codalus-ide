@@ -42,7 +42,7 @@ Each host variable takes the path of the host's apphost or its `.dll` (run with 
 | Variable | What it does |
 |---|---|
 | `CODALUS_NETCOREDBG_LOG` | A folder: netcoredbg on this machine starts with `--engineLogging`, writing its DAP traffic to `netcoredbg-<time>-<id>.log` there. `src/Codalus.Debugging/Transport.cs` |
-| `CODALUS_JSDEBUG_TRACE` | A folder: each browser debugging session writes vscode-js-debug's log there (`js-debug-<time>.log`). `src/Codalus.Workbench/Debugging/Browsers.cs` |
+| `CODALUS_JSDEBUG_TRACE` | A folder: each browser debugging session writes vscode-js-debug's log there (`js-debug-<time>.log`); `eng/smoke-test.sh` sets it to `<results>/js-debug`, kept when the smoke test fails. `src/Codalus.Workbench/Debugging/Browsers.cs` |
 | `CODALUS_GENERATOR_TIMINGS` | `1`: after each background pass, the C# host runs the source generators of the projects it compiled once more, one project at a time, and logs each generator's cost. It doubles the generators' work, so it is for measuring only. `src/Codalus.LanguageServices.Host/GeneratorTimings.cs` |
 | `CODALUS_LANGUAGE_CACHE` | `0` turns off the C# host's state between sessions: each project's background diagnostics and reference assembly in `obj/<config>/<tfm>/codalus.language.*`. `src/Codalus.LanguageServices.Host/LanguageStateCache.cs` |
 | `CODALUS_DESIGNTIME_CACHE` | `0` turns off the build host's design-time build cache (`obj/codalus.designtime.json`), so every open runs the design-time builds. `src/Codalus.Projects.Host/DesignTimeCache.cs` |

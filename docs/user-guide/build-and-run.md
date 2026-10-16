@@ -55,6 +55,15 @@ A file whose **Custom Tool** is set (Properties window) generates another file: 
 
 Errors go to Output → Custom Tool.
 
+### Resource files
+
+A `.resx` file opens in the **resource editor**, a table of its resources:
+- **Strings:** edit the name, value and comment in place. **Add Resource** adds one, and **Remove** deletes the selected one.
+- **Other resources** (images, files, typed values) are listed read-only.
+- **Search** filters the rows by name, value or comment.
+- **Saving** (`Ctrl+S`) rewrites only the strings that changed and keeps the rest of the file as it was. Then the file's custom tool runs as after any save, so `Resources.Designer.cs` follows.
+- **View Code** opens the XML in the text editor. **Open With Resource Editor** (Solution Explorer context menu) comes back.
+
 ## Running
 
 **Debug → Start Without Debugging** (`Ctrl+F5`) builds the startup project, then starts it:

@@ -56,6 +56,7 @@ internal static partial class BuiltIns
             shell.OpenPackageSources();
             return Task.CompletedTask;
         }, Trusted);
+        Add("packages.signIn", "Sign In to a Package Source…", _ => shell.SignInToPackageSourceAsync(null), Trusted);
         Add("packages.tools", ".NET Tools…", _ =>
         {
             shell.OpenDotnetTools();

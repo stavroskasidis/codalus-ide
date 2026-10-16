@@ -270,14 +270,16 @@ internal static class XamlCompletion
         var name = attribute.Name;
         if (name is "xmlns" || name.StartsWith("xmlns:", StringComparison.Ordinal))
         {
-            items.Add(Item(XamlNames.Avalonia, CompletionItemKind.Module, whole));
-            items.Add(Item(XamlNames.XamlLanguage, CompletionItemKind.Module, whole));
+            // MAUI writes x: as XAML 2009 and project namespaces as clr-namespace:; Avalonia as XAML 2006 and using:.
+            var maui = types is { IsMaui: true, IsAvalonia: false };
+            items.Add(Item(maui ? XamlNames.Maui : XamlNames.Avalonia, CompletionItemKind.Module, whole));
+            items.Add(Item(maui ? XamlNames.XamlLanguage2009 : XamlNames.XamlLanguage, CompletionItemKind.Module, whole));
             items.Add(Item(XamlNames.Design, CompletionItemKind.Module, whole));
             items.Add(Item(XamlNames.MarkupCompatibility, CompletionItemKind.Module, whole));
             if (types is not null)
             {
-                items.AddRange(types.KnownXmlNamespaces.Select(n => Item(n, CompletionItemKind.Module, whole)));
-                items.AddRange(types.SourceNamespaces().Select(n => Item("using:" + n, CompletionItemKind.Module, whole)));
+                items.AddRange(types.KnownXmlNamespaces.Where(n => n is not (XamlNames.Maui or XamlNames.Avalonia)).Select(n => Item(n, CompletionItemKind.Module, whole)));
+                items.AddRange(types.SourceNamespaces().Select(n => Item((maui ? "clr-namespace:" : "using:") + n, CompletionItemKind.Module, whole)));
             }
 
             return whole;
@@ -494,7 +496,7 @@ internal static class XamlCompletion
 
             switch (extension.Key)
             {
-                case "Mode" when types?.Type("Avalonia.Data.BindingMode") is { } mode:
+                case "Mode" when types is not null && (types.Type("Avalonia.Data.BindingMode") ?? types.Type("Microsoft.Maui.Controls.BindingMode")) is { } mode:
                     ValueItems(types, mode, items, argumentRange);
                     return argumentRange;
                 case "UpdateSourceTrigger" when types?.Type("Avalonia.Data.UpdateSourceTrigger") is { } trigger:

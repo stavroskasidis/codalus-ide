@@ -72,6 +72,75 @@ internal sealed class NuGetClient(string root, Func<string, string, Task> log)
         return sources;
     }
 
+    // ------------------------------------------------------------------ sign-in
+
+    private static readonly SemaphoreSlim s_signIn = new(1, 1);
+
+    /// <summary>
+    /// Signs in to <paramref name="parameters"/>' source: NuGet's credential providers run interactively for one request
+    /// to it (a provider shows its device code through NuGet's log, which goes to <paramref name="message"/>), and the
+    /// repository that signed in answers the session's later requests, with the credentials it got. The providers run
+    /// non-interactively again afterwards; most also keep the sign-in for later sessions themselves.
+    /// </summary>
+    public async Task<PackageSignInResult> SignInAsync(PackageSignInParams parameters, Func<string, Task> message, CancellationToken cancellationToken)
+    {
+        var settings = LoadSettings();
+        var source = Sources(settings, parameters.Source, offline: false).Single();
+        if (source.IsLocal)
+        {
+            return new PackageSignInResult(true, $"{source.Name} is a local source: there is nothing to sign in to.");
+        }
+
+        await s_signIn.WaitAsync(cancellationToken).ConfigureAwait(false);
+        EnsureCredentials(_logger);
+        var logger = new SignInLogger(message, _logger);
+        var previous = HttpHandlerResourceV3.CredentialService;
+        // NuGet sets its credential service once; a sign-in uses one of its own that lets providers interact, with the
+        // same plugins (their messages to this sign-in's log), for a repository made with it.
+        DefaultCredentialServiceUtility.UpdateCredentialServiceDelegatingLogger(logger);
+        var providers = new AsyncLazy<IEnumerable<ICredentialProvider>>(async () =>
+            await new SecurePluginCredentialProviderBuilder(NuGet.Protocol.Plugins.PluginManager.Instance, canShowDialog: true, logger).BuildAllAsync().ConfigureAwait(false));
+        HttpHandlerResourceV3.CredentialService = new Lazy<ICredentialService>(() => new CredentialService(providers, nonInteractive: false, handlesDefaultCredentials: false));
+        try
+        {
+            var repository = NuGet.Protocol.Core.Types.Repository.Factory.GetCoreV3(source);
+            var search = await repository.GetResourceAsync<PackageSearchResource>(cancellationToken).ConfigureAwait(false);
+            await search.SearchAsync(string.Empty, new SearchFilter(includePrerelease: true), 0, 1, logger, cancellationToken).ConfigureAwait(false);
+            _repositories[source.Name + "|" + source.Source] = repository; // it keeps the credentials it got
+            return new PackageSignInResult(true, $"Signed in to {source.Name}.");
+        }
+        catch (Exception ex) when (ex is FatalProtocolException or HttpRequestException or InvalidOperationException or AggregateException)
+        {
+            return new PackageSignInResult(false, $"Couldn't sign in to {source.Name}: {Describe(ex)}");
+        }
+        finally
+        {
+            HttpHandlerResourceV3.CredentialService = previous;
+            DefaultCredentialServiceUtility.UpdateCredentialServiceDelegatingLogger(_logger);
+            s_signIn.Release();
+        }
+    }
+
+    /// <summary>During a sign-in: what providers say at Minimal and above (their device codes), plus the usual log.</summary>
+    private sealed class SignInLogger(Func<string, Task> message, ILogger inner) : LoggerBase
+    {
+        public override void Log(ILogMessage log)
+        {
+            if (log.Level >= LogLevel.Minimal && !string.IsNullOrWhiteSpace(log.Message))
+            {
+                _ = message(log.Message.Trim());
+            }
+
+            inner.Log(log);
+        }
+
+        public override Task LogAsync(ILogMessage log)
+        {
+            Log(log);
+            return Task.CompletedTask;
+        }
+    }
+
     private static SourceCacheContext Cache(bool refresh) => new() { NoCache = refresh, DirectDownload = false };
 
     // ------------------------------------------------------------------ search

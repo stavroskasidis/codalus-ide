@@ -3,9 +3,15 @@ using Codalus.Debugging.Host;
 using Codalus.Rpc;
 
 // Usage: codalus-debughost. The debug companion (M14b, ADR 0032): JSON-RPC on stdio, the requests in CompanionMethods.
+// codalus-debughost --mono-dap: the Mono debugger adapter (M20b, ADR 0065), DAP on stdio.
 var stdin = Console.OpenStandardInput();
 var stdout = Console.OpenStandardOutput();
 Console.SetOut(Console.Error);
+
+if (args.Contains("--mono-dap"))
+{
+    return await Codalus.Debugging.Host.Mono.MonoAdapter.RunAsync(stdin, stdout, Console.Error).ConfigureAwait(false);
+}
 
 using var attributes = new TypeAttributes();
 using var dumps = new Dumps();

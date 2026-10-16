@@ -78,10 +78,19 @@ public sealed partial class ShellHost
         UpdateHotReloadStatus();
     }
 
+    /// <summary>The toolbar's Hot Reload button (deferred from M15b).</summary>
+    private void UpdateToolbarHotReload() =>
+        Toolbar?.SetHotReload(HotReloadUnsupportedReason(Runs.StartupProject) is null, HotReloadProgram is not null, Workbench.Settings.GetBoolean(HotReloadSetting, false));
+
+    /// <summary>The Hot Reload menu's Hot Reload on Start Without Debugging: turns the <c>run.hotReload</c> setting over.</summary>
+    public Task ToggleHotReloadOnStartAsync() =>
+        Workbench.Settings.SetAsync(HotReloadSetting, !Workbench.Settings.GetBoolean(HotReloadSetting, false), Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
+
     private void UpdateHotReloadStatus()
     {
         var program = HotReloadProgram;
         Workbench.Context.Set("hotReloadRunning", program is not null);
+        UpdateToolbarHotReload();
         if (program?.HotReload is not { } session)
         {
             Workbench.StatusBar.Remove(HotReloadStatusItem);

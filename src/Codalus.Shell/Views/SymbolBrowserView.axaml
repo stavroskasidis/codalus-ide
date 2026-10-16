@@ -1,0 +1,46 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:proto="using:Codalus.Projects.Protocol"
+             x:Class="Codalus.Shell.Views.SymbolBrowserView"
+             x:DataType="vm:SymbolBrowserViewModel">
+  <DockPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" Margin="6,4">
+      <ComboBox ItemsSource="{Binding Projects}" SelectedItem="{Binding Project}" IsVisible="{Binding IsObjectBrowser}" MinWidth="160" Margin="0,0,6,0"
+                AutomationProperties.Name="{l:T symbolBrowser.browse}" ToolTip.Tip="{l:T symbolBrowser.browse}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="proto:ProjectInfo">
+            <TextBlock Text="{Binding Name}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <TextBox Grid.Column="1" Text="{Binding Search}" PlaceholderText="{l:T symbolBrowser.search}" AutomationProperties.Name="{l:T symbolBrowser.search}" />
+    </Grid>
+    <Border DockPanel.Dock="Bottom" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Shell.Border}" Padding="8,6" MinHeight="64" IsVisible="{Binding HasDeclaration}">
+      <StackPanel Spacing="4">
+        <SelectableTextBlock Text="{Binding Declaration}" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.Name="{l:T symbolBrowser.declaration}" />
+        <SelectableTextBlock Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" AutomationProperties.Name="{l:T symbolBrowser.description}" />
+      </StackPanel>
+    </Border>
+    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{Binding Title}">
+      <TreeView.Styles>
+        <Style Selector="TreeViewItem" x:DataType="vm:SymbolBrowserNode">
+          <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+          <Setter Property="MinHeight" Value="22" />
+        </Style>
+      </TreeView.Styles>
+      <TreeView.ItemTemplate>
+        <TreeDataTemplate x:DataType="vm:SymbolBrowserNode" ItemsSource="{Binding Children}">
+          <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
+            <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Classes.muted="{Binding IsPlaceholder}" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+          </StackPanel>
+        </TreeDataTemplate>
+      </TreeView.ItemTemplate>
+    </TreeView>
+  </DockPanel>
+</UserControl>

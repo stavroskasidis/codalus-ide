@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="CsLibrary/CsLibrary.csproj" />
+  <Project Path="FsConsole/FsConsole.fsproj" />
+  <Project Path="FsData/FsData.fsproj" />
+  <Project Path="FsLibrary/FsLibrary.fsproj" />
+  <Project Path="FsTests/FsTests.fsproj" />
+</Solution>

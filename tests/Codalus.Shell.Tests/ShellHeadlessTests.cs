@@ -116,7 +116,7 @@ public class ShellHeadlessTests
 
         await ShellFixture.PumpUntil(() => !f.Shell.StatusBar.IsVisible);
         Assert.Contains("\"workbench.statusBar.visible\": false", File.ReadAllText(f.Shell.Paths.SettingsFile), StringComparison.Ordinal);
-        Assert.True(visible.IsModified);
+        await ShellFixture.PumpUntil(() => visible.IsModified); // the row refreshes on the settings' change, posted to the UI
 
         var size = Assert.IsType<TextSettingViewModel>(FindSetting(settings, "editor.fontSize"));
         size.Text = "500";

@@ -44,11 +44,11 @@
       </StackPanel>
     </Border>
 
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,190,220,170" Margin="22,6,22,2">
-      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.command}" />
-      <TextBlock Grid.Column="1" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.keyBinding}" />
-      <TextBlock Grid.Column="2" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.when}" />
-      <TextBlock Grid.Column="3" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.source}" />
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,150,170,120" Margin="22,6,22,2">
+      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.command}" TextTrimming="CharacterEllipsis" />
+      <TextBlock Grid.Column="1" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.keyBinding}" TextTrimming="CharacterEllipsis" />
+      <TextBlock Grid.Column="2" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.when}" TextTrimming="CharacterEllipsis" />
+      <TextBlock Grid.Column="3" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{l:T keyboardShortcuts.source}" TextTrimming="CharacterEllipsis" />
     </Grid>
 
     <ListBox x:Name="List"
@@ -66,14 +66,14 @@
       </ListBox.Styles>
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:KeybindingRowViewModel">
-          <Grid ColumnDefinitions="*,190,220,170">
+          <Grid ColumnDefinitions="*,150,170,120">
             <StackPanel Orientation="Horizontal" Spacing="6">
               <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CommandId}" />
               <controls:Icon Kind="warning" Classes="warning" IsVisible="{Binding HasConflict}" ToolTip.Tip="{l:T keyboardShortcuts.thisKeyBindingConflictsWithAnother}" />
             </StackPanel>
-            <TextBlock Grid.Column="1" Text="{Binding KeyLabel}" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="{Binding KeyLabel}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding KeyLabel}" />
             <TextBlock Grid.Column="2" Classes="muted" Text="{Binding When}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding When}" />
-            <TextBlock Grid.Column="3" Classes="muted" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="3" Classes="muted" Text="{Binding Source}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Source}" />
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>

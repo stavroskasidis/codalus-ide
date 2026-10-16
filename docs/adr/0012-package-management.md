@@ -40,5 +40,5 @@ Constraints:
 - Golden tests pin our edits to the CLI's; when the CLI changes its output, the tests show it.
 - Vulnerability and deprecation data come from each source's metadata (search results and registrations, as nuget.org publishes them); sources without them show no badges.
 - The SDK's NuGet (7.x) doesn't search plain-HTTP feeds, even with `allowInsecureConnections` (`dotnet package search` behaves the same); their metadata and restore still work. Real feeds are HTTPS.
-- `TODO(issue)`: interactive credential prompts inside the IDE (device-code UI), once a sign-in surface exists (M13 brings one for hosting services).
+- Interactive credential prompts inside the IDE (device-code UI): done on 2026-10-15 as `packages/signIn` (see the roadmap's change log).
 - When D2 lands, the manager can move to a plugin; the `packages/*` protocol doesn't change.

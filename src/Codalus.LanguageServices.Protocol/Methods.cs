@@ -57,6 +57,9 @@ public static class Methods
     public const string ProjectsRemove = "codalus/projects/remove";
     public const string DocumentOptions = "codalus/documentOptions";
     public const string SourceGeneratedText = "codalus/sourceGeneratedText";
+    public const string GeneratedDocuments = "codalus/generatedDocuments";
+    public const string Browse = "codalus/browse";
+    public const string BrowseDescribe = "codalus/browse/describe";
     public const string MetadataText = "codalus/metadataText";
     public const string WorkspaceStatus = "codalus/workspaceStatus";
     public const string TestCandidates = "codalus/testCandidates";
@@ -67,6 +70,7 @@ public static class Methods
     public const string SymbolInfo = "codalus/symbolInfo";
     public const string DocCommentTemplate = "codalus/docCommentTemplate";
     public const string CodeCleanup = "codalus/codeCleanup";
+    public const string PasteImports = "codalus/pasteImports";
     public const string CodeActionOptions = "codalus/codeActionOptions";
     public const string SyntaxTree = "codalus/syntaxTree";
     public const string CodeMetrics = "codalus/codeMetrics";

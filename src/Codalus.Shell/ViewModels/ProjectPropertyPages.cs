@@ -151,4 +151,71 @@ public static class ProjectPropertyPages
         new("buildEvents", "Build Events", [], IsBuildEvents: true),
         new("debug", "Debug", [], IsLaunchProfiles: true),
     ];
+
+    private static readonly (string, string)[] s_onOff = [O("On"), O("Off")];
+
+    /// <summary>
+    /// The Visual Basic pages (M35, ADR 0066): C#'s, with VB's options in place of C#'s language settings, and without
+    /// what VB doesn't have (unsafe code, warning levels). Project-level imports are <c>Import</c> items, edited in
+    /// the project file.
+    /// </summary>
+    public static IReadOnlyList<PropertyPage> VisualBasic { get; } =
+    [
+        .. CSharp.Select(page => page with
+        {
+            Sections = [.. page.Sections.Select(section => section.Title == "Language" && page.Id == "application"
+                ? new PropertySection("Options",
+                [
+                    new("OptionExplicit", "Option Explicit", "Variables must be declared before they're used.", PropertyEditor.Choice) { Options = s_onOff },
+                    new("OptionStrict", "Option Strict", "No implicit narrowing conversions and no late binding.", PropertyEditor.Choice) { Options = s_onOff },
+                    new("OptionInfer", "Option Infer", "Local variables' types are inferred from their initializers.", PropertyEditor.Choice) { Options = s_onOff },
+                    new("OptionCompare", "Option Compare", "How strings compare: by their binary value or as text, ignoring case.", PropertyEditor.Choice) { Options = [O("Binary"), O("Text")] },
+                    new("LangVersion", "Language version", "The Visual Basic language version.", PropertyEditor.Choice) { Options = [O("default", "Default"), O("latest", "Latest"), O("16.9", "Visual Basic 16.9"), O("16", "Visual Basic 16"), O("15.5", "Visual Basic 15.5"), O("15.3", "Visual Basic 15.3"), O("15", "Visual Basic 15"), O("14", "Visual Basic 14")] },
+                ])
+                : section with
+                {
+                    Properties = [.. section.Properties
+                        .Where(p => p.Name is not ("AllowUnsafeBlocks" or "WarningLevel"))
+                        .Select(p => p.Name == "DefineConstants"
+                            ? p with { Description = "Constants for #If, separated by commas (DEBUG=-1,TRACE=-1). Keep $(DefineConstants) to add to the SDK's." }
+                            : p),
+                        .. section.Title == "General" && page.Id == "build"
+                            ? [new PropertyDefinition("RemoveIntegerChecks", "Remove integer overflow checks", "Integer arithmetic doesn't check for overflow.", PropertyEditor.Bool, PerConfiguration: true) { Options = s_bool }]
+                            : Array.Empty<PropertyDefinition>()],
+                })],
+        }),
+    ];
+
+    /// <summary>
+    /// The F# pages (M36, ADR 0067): C#'s, with F#'s language settings (nullness checking, the F# version, warnings to
+    /// turn on, other compiler flags) and tail calls, without unsafe code or warning levels.
+    /// </summary>
+    public static IReadOnlyList<PropertyPage> FSharp { get; } =
+    [
+        .. CSharp.Select(page => page with
+        {
+            Sections = [.. page.Sections.Select(section => section.Title == "Language" && page.Id == "application"
+                ? new PropertySection("Language",
+                [
+                    new("Nullable", "Nullable", "Nullness checking (F# 9): reports nulls where the types don't allow them.", PropertyEditor.Choice) { Options = [O("enable", "Enable"), O("disable", "Disable")] },
+                    new("LangVersion", "Language version", "The F# language version.", PropertyEditor.Choice) { Options = [O("default", "Default"), O("latest", "Latest"), O("preview", "Preview"), O("10.0", "F# 10"), O("9.0", "F# 9"), O("8.0", "F# 8"), O("7.0", "F# 7"), O("6.0", "F# 6")] },
+                    new("WarnOn", "Turn on warnings", "Warnings that are off by default to report, separated by semicolons (3390: XML documentation).", PropertyEditor.List),
+                    new("OtherFlags", "Other flags", "More options for the F# compiler (fsc), e.g. --warnon:1182."),
+                ])
+                : section with
+                {
+                    Properties = [.. section.Properties
+                        .Where(p => p.Name is not ("AllowUnsafeBlocks" or "WarningLevel")),
+                        .. section.Title == "General" && page.Id == "build"
+                            ? [new PropertyDefinition("Tailcalls", "Tail calls", "Emits tail calls, so deep recursion doesn't overflow the stack (on in Release by default).", PropertyEditor.Bool, PerConfiguration: true) { Options = s_bool }]
+                            : Array.Empty<PropertyDefinition>()],
+                })],
+        }),
+    ];
+
+    /// <summary>The pages for a project file: Visual Basic's for a <c>.vbproj</c>, F#'s for an <c>.fsproj</c>, C#'s otherwise.</summary>
+    public static IReadOnlyList<PropertyPage> For(string project) =>
+        project.EndsWith(".vbproj", StringComparison.OrdinalIgnoreCase) ? VisualBasic
+        : project.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase) ? FSharp
+        : CSharp;
 }

@@ -74,4 +74,14 @@ public sealed class DesignTimeCacheTests : IDisposable
         // "/home/me/a.cs" is a source file, not an option named "home/me/a.cs".
         Assert.False(DesignTimeCache.InputsExist(Inputs("/" + Guid.NewGuid().ToString("N") + "/Missing.cs"), _root));
     }
+
+    [Fact]
+    public void A_reference_list_is_checked_file_by_file_as_vbc_writes_it()
+    {
+        var existing = typeof(object).Assembly.Location;
+        var other = typeof(DesignTimeCacheTests).Assembly.Location;
+        Assert.True(DesignTimeCache.InputsExist(Inputs($"/reference:{existing},\"{other}\""), _root));
+        Assert.False(DesignTimeCache.InputsExist(Inputs($"/reference:{existing},{Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "Package.dll")}"), _root));
+        Assert.Equal(["a.dll", "\"b,c.dll\"", "d.dll"], DesignTimeCache.List("a.dll,\"b,c.dll\", d.dll"));
+    }
 }

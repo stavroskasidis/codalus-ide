@@ -1,0 +1,34 @@
+{
+  "id": "codalus.anthropic",
+  "version": "0.1.0",
+  "displayName": "Anthropic models",
+  "publisher": "codalus",
+  "description": "AI assistance through Anthropic's Messages API (Claude models). Inactive until you pick it; your key is kept in the OS credential store.",
+  "engines": { "codalus": "^1.0.0" },
+  "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.Anthropic.dll" },
+  "enableProposedApi": true,
+  "permissions": ["network", "secrets"],
+  "contributes": {
+    "languageModelProviders": [
+      { "id": "anthropic", "label": "Anthropic", "description": "Claude models through Anthropic's API, with your key." }
+    ],
+    "settings": {
+      "title": "AI: Anthropic",
+      "properties": {
+        "ai.anthropic.endpoint": {
+          "type": "string",
+          "default": "https://api.anthropic.com",
+          "description": "The base URL of Anthropic's API (or a gateway that serves the Messages API).",
+          "scope": "user"
+        },
+        "ai.anthropic.maxOutputTokens": {
+          "type": "integer",
+          "default": 16000,
+          "minimum": 256,
+          "description": "The most tokens a reply may have, when a feature doesn't ask for fewer.",
+          "scope": "user"
+        }
+      }
+    }
+  }
+}

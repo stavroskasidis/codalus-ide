@@ -176,6 +176,12 @@ internal static partial class BuiltIns
         // From .NET 6 (M33): for an older startup project the command is disabled, and the menu says why.
         Add("run.startWithHotReload", "Start with Hot Reload", "Debug", shell.StartWithHotReloadAsync, Idle + " && hotReloadSupported");
         Add("run.applyCodeChanges", "Apply Code Changes (Hot Reload)", "Debug", _ => shell.ApplyCodeChangesAsync(), "hotReloadRunning");
+        Add("run.toggleHotReloadOnStart", "Toggle Hot Reload on Start Without Debugging", "Debug", _ => shell.ToggleHotReloadOnStartAsync());
+        Add("run.hotReloadSettings", "Hot Reload Settings", "Debug", _ =>
+        {
+            shell.OpenSettings("Hot Reload");
+            return Task.CompletedTask;
+        });
         Add("run.stop", "Stop Running Programs", "Debug", _ =>
         {
             shell.StopRunning();

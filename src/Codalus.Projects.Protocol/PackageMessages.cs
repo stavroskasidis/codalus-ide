@@ -18,6 +18,10 @@ public static class PackageMethods
     public const string Uninstall = "packages/uninstall";
     public const string Sources = "packages/sources";
     public const string SetSources = "packages/setSources";
+    public const string SignIn = "packages/signIn";
+
+    /// <summary>Host → shell during <see cref="SignIn"/>: what the credential provider says (a device code to enter).</summary>
+    public const string SignInMessage = "packages/signInMessage";
 
     public const string Tools = "tools/list";
     public const string ToolCommand = "tools/run";
@@ -50,6 +54,18 @@ public sealed record PackageSummary(
     string Source);
 
 public sealed record PackageSourceError(string Source, string Message);
+
+// ------------------------------------------------------------------ sign-in
+
+/// <summary>
+/// Signs in to a source (by name) through NuGet's credential providers, interactively: a provider may show a device
+/// code through <see cref="PackageMethods.SignInMessage"/>. Afterwards the source answers this session's requests.
+/// </summary>
+public sealed record PackageSignInParams(string Source);
+
+public sealed record PackageSignInResult(bool SignedIn, string Message);
+
+public sealed record PackageSignInMessage(string Source, string Message);
 
 // ------------------------------------------------------------------ details
 
@@ -246,4 +262,7 @@ public sealed record ToolCommandResult(bool Succeeded, string Output);
 [JsonSerializable(typeof(ToolsResult))]
 [JsonSerializable(typeof(ToolCommandParams))]
 [JsonSerializable(typeof(ToolCommandResult))]
+[JsonSerializable(typeof(PackageSignInParams))]
+[JsonSerializable(typeof(PackageSignInResult))]
+[JsonSerializable(typeof(PackageSignInMessage))]
 public sealed partial class PackageJsonContext : JsonSerializerContext;

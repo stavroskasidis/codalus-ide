@@ -69,7 +69,7 @@ internal sealed class CodeActionsFeature(DiagnosticsService diagnostics, Action<
         refactorings.AddRange(await OptionsRefactorings.ForAsync(document, span, cancellationToken).ConfigureAwait(false));
 
         // Refactorings at the caret or selection.
-        foreach (var provider in ProviderCatalog.Refactorings)
+        foreach (var provider in ProviderCatalog.Refactorings(document.Project.Language))
         {
             var context = new CodeRefactoringContext(document, span, action =>
             {
