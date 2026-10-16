@@ -18,7 +18,7 @@ public sealed class AiSuggestionsTests
         : request.Body.Contains("predict a programmer", StringComparison.Ordinal) ? """{"startLine": 5, "endLine": 5, "newText": "        Print(total);"}"""
         : "";
 
-    private static async Task<(ShellFixture F, CodeEditorController Editor)> OpenAsync(MockHttpServer server, string text)
+    private static async Task<(ShellFixture F, CodeEditorController Editor)> OpenAsync(MockHttpServer server, string text, string name = "Calc.cs")
     {
         var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.OpenAI"));
         var settings = f.Shell.Workbench.Settings;
@@ -28,7 +28,7 @@ public sealed class AiSuggestionsTests
         await settings.SetAsync(AiService.ModelSetting, "gpt-test", SettingScope.User, CancellationToken.None);
         await settings.SetAsync(AiCompletions.DelaySetting, 100, SettingScope.User, CancellationToken.None);
         await f.Shell.Secrets.StoreAsync("codalus.openai", "apiKey:openai", MockModelServers.Key, CancellationToken.None);
-        var path = Path.Combine(f.UserData, "Calc.cs");
+        var path = Path.Combine(f.UserData, name);
         File.WriteAllText(path, text);
         var document = await f.Shell.OpenFileAsync(path);
         await ShellFixture.PumpUntil(() => document!.Controller is not null);
@@ -39,7 +39,9 @@ public sealed class AiSuggestionsTests
     public async Task An_inline_suggestion_shows_after_typing_and_Tab_accepts_it()
     {
         await using var server = MockModelServers.OpenAI(Reply);
-        var (f, editor) = await OpenAsync(server, "class Calc\n{\n    int Add(int a, int b)\n    {\n        \n    }\n}\n");
+        // A text file: in C#, "ret" can open the completion list first (when the C# host answers in time), and inline
+        // suggestions wait while it's open.
+        var (f, editor) = await OpenAsync(server, "class Calc\n{\n    int Add(int a, int b)\n    {\n        \n    }\n}\n", "Calc.txt");
         await using var _ = f;
         var inline = editor.InlineSuggestions;
         editor.Editor.Focus();

@@ -3151,7 +3151,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var target = of ?? window;
         var rendered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         target.RequestAnimationFrame(_ => target.RequestAnimationFrame(_ => rendered.TrySetResult()));
-        await rendered.Task.ConfigureAwait(true);
+
+        // macOS can stop drawing a window it considers hidden (behind others, App Nap): the screenshot renders it
+        // itself, so a few seconds without frames go on rather than wait forever.
+        if (await Task.WhenAny(rendered.Task, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(true) != rendered.Task)
+        {
+            shell.Workbench.Log.AppendLine("[smoke] No frame in 5 s: going on without one.");
+        }
     }
 
     // ------------------------------------------------------------------ report
