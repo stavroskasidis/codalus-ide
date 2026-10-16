@@ -401,4 +401,28 @@ public sealed class DiagnosticsToolsUnitTests
         Assert.Equal(Path.Combine("x", "trace.io.json"), IoSampler.SidecarPath(Path.Combine("x", "trace.nettrace")));
         Assert.NotEmpty(IoSampler.SourceDescription);
     }
+
+    /// <summary>
+    /// The fallback when the client library's process list throws (a process ended while it read its
+    /// /proc/&lt;pid&gt;/environ): the diagnostics ports themselves, sockets on Unix and pipes on Windows.
+    /// </summary>
+    [Fact]
+    public void Diagnostics_ports_are_listed_by_their_process_ids()
+    {
+        var folder = Directory.CreateTempSubdirectory("codalus-ports-").FullName;
+        try
+        {
+            foreach (var name in new[] { "dotnet-diagnostic-4321-1234567-socket", "dotnet-diagnostic-17", "dotnet-diagnostic-17-99-socket", "dotnet-diagnostic-x-1-socket", "other-5-socket" })
+            {
+                File.WriteAllText(Path.Combine(folder, name), string.Empty);
+            }
+
+            Assert.Equal([17, 4321], Codalus.Diagnostics.Host.Sessions.DiagnosticsPort.ListedPorts(folder));
+            Assert.Empty(Codalus.Diagnostics.Host.Sessions.DiagnosticsPort.ListedPorts(Path.Combine(folder, "missing")));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
 }
