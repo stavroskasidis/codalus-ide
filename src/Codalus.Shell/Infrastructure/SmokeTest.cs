@@ -1172,6 +1172,18 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
         await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
+
+        // M40a: WinForms and WPF (ADR 0071, D31: Windows only).
+        const string desktopTitle = "The WPF app opens, its XAML completes binding paths from d:DataContext, and it builds and runs";
+        if (OperatingSystem.IsWindows())
+        {
+            await StepAsync("windows.desktop", "M40a", desktopTitle, WindowsDesktopStepAsync).ConfigureAwait(true);
+        }
+        else
+        {
+            Report("windows.desktop", "M40a", desktopTitle, "skipped", 0, "WinForms and WPF apps run on Windows only (D31); their editing is covered by the tests on every OS.");
+        }
+
         await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.interactive", "M36", "A selection in an F# script runs in F# Interactive (dotnet fsi in a terminal), which shows the values defined", FSharpInteractiveStepAsync, "projects.open").ConfigureAwait(true);
@@ -1939,6 +1951,57 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.DevicesWindow.Toolchain.Length > 0, "the Devices window shows the Android toolchain").ConfigureAwait(true);
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("maui-devices.png");
+    }
+
+    private async Task WindowsDesktopStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0, "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "WindowsDesktop");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "WindowsDesktop"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "WindowsDesktop.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true }, "the WindowsDesktop solution is open (its packages restored)", 600).ConfigureAwait(true);
+        var app = Path.Combine(target, "WpfApp", "WpfApp.csproj");
+        Check(shell.Solutions.Projects.TryGetValue(app, out var info) && info.UsesWpf, "WpfApp is a WPF project");
+
+        var path = Path.Combine(target, "WpfApp", "MainWindow.xaml");
+        var editor = await OpenAsync(path).ConfigureAwait(true);
+        Check(editor.Model.LanguageId == ShellHost.XamlLanguageId, "the file is XAML for the C# host: " + editor.Model.LanguageId);
+        MoveCaret(editor, "Text=\"{Binding NewTitle,", "Text=\"{Binding ".Length);
+        var asked = Stopwatch.StartNew();
+        editor.ShowCompletion();
+        await WaitAsync(() =>
+        {
+            if (editor.CompletionWindow is { } w && w.CompletionList.CompletionData.Any(d => d.Text == "AddCommand"))
+            {
+                return true;
+            }
+
+            if (asked.Elapsed > TimeSpan.FromSeconds(10))
+            {
+                editor.CompletionWindow?.Close();
+                MoveCaret(editor, "Text=\"{Binding NewTitle,", "Text=\"{Binding ".Length);
+                editor.ShowCompletion();
+                asked.Restart();
+            }
+
+            return false;
+        }, "the binding path completes the view model's members (d:DataContext)", 360).ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("wpf-xaml.png");
+        editor.CompletionWindow!.Close();
+
+        // Start Without Debugging builds the app and runs it: a WPF window on the desktop, until it's stopped.
+        shell.SetStartupProject(app);
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "WpfApp" && !p.HasExited), "the WPF app is running: " + Tail(shell.Builds.Channel.GetText(), 2000), 300).ConfigureAwait(true);
+        await Task.Delay(3000).ConfigureAwait(true);
+        Check(shell.Runs.Running.Any(p => p.Name == "WpfApp" && !p.HasExited), "the WPF app is still running (its window is up)");
+        shell.StopRunning();
+        await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the WPF app stops", 60).ConfigureAwait(true);
     }
 
     private async Task VisualBasicStepAsync()

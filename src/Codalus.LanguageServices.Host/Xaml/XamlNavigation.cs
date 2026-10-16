@@ -38,6 +38,9 @@ internal static partial class XamlNavigation
         ["d:DesignWidth"] = "The width in the previewer only.",
         ["d:DesignHeight"] = "The height in the previewer only.",
         ["mc:Ignorable"] = "Prefixes the XAML compiler ignores (the design-time `d:` attributes).",
+        ["x:Shared"] = "False: every lookup of the resource makes a new instance (WPF).",
+        ["x:FieldModifier"] = "The access of the named element's field in the code-behind (WPF).",
+        ["x:Uid"] = "The element's localization identifier (WPF).",
     };
 
     // ------------------------------------------------------------------ what is at a position
@@ -112,6 +115,12 @@ internal static partial class XamlNavigation
                 return Task.FromResult(Result(new XamlTarget(absoluteStart, absoluteEnd) { ResourceKey = word }));
             }
 
+            if (extension.Kind == "DesignInstance" && extension.Key is null or "Type")
+            {
+                // d:DesignInstance (WPF, M40a): its type.
+                return Task.FromResult(Result(new XamlTarget(absoluteStart, absoluteEnd) { Symbol = context.ResolveTypeName(element, word) }));
+            }
+
             if (extension.IsPath && !word.StartsWith('$'))
             {
                 if (word.StartsWith('#'))
@@ -139,7 +148,7 @@ internal static partial class XamlNavigation
 
                 var prefix = segmentStart > start ? value[start..(segmentStart - 1)] : string.Empty;
                 var segment = value[segmentStart..segmentEnd].TrimStart('!');
-                if (XamlBindingPaths.Resolve(context, element, prefix) is { } type)
+                if (XamlBindingPaths.Resolve(context, element, prefix, value) is { } type)
                 {
                     var member = XamlTypeSystem.BindableMembers(type).FirstOrDefault(m => m.Name == segment);
                     return Task.FromResult(Result(new XamlTarget(attribute.ValueStart + segmentStart, attribute.ValueStart + segmentEnd) { Symbol = member }));
@@ -213,7 +222,7 @@ internal static partial class XamlNavigation
             });
         }
 
-        if (element.LocalName == "Setter" && attributeName == "Property" && context.TargetType(element) is { } target)
+        if ((element.LocalName == "Setter" || (context.IsWpf && element.LocalName is "Trigger" or "Condition")) && attributeName == "Property" && context.SetterTargetType(element) is { } target)
         {
             return Task.FromResult(Result(new XamlTarget(attribute.ValueStart, attribute.ValueEnd) { Symbol = XamlCompletion.Member(context, element, target, value.Trim())?.Symbol }));
         }
@@ -339,7 +348,10 @@ internal static partial class XamlNavigation
             return [];
         }
 
-        var locations = await NavigationFeature.LocationsAsync(project.Solution, symbol.Locations, cancellationToken).ConfigureAwait(false);
+        // WPF's markup compiler writes the x:Class's other part and the named elements' fields to obj/*.g.cs (M40a):
+        // the user's own declaration comes first, the generated one only when there is no other.
+        var sourceLocations = symbol.Locations.Where(l => l.IsInSource && !IsGenerated(l.SourceTree?.FilePath)).ToList();
+        var locations = await NavigationFeature.LocationsAsync(project.Solution, sourceLocations.Count > 0 ? [.. sourceLocations] : symbol.Locations, cancellationToken).ConfigureAwait(false);
         if (locations.Length > 0)
         {
             return locations;
@@ -411,9 +423,9 @@ internal static partial class XamlNavigation
             var references = await SymbolFinder.FindReferencesAsync(field, project.Solution, cancellationToken).ConfigureAwait(false);
             foreach (var group in references.SelectMany(r => r.Locations).GroupBy(l => l.Document.FilePath))
             {
-                if (group.Key is not { } file || group.First().Document is SourceGeneratedDocument)
+                if (group.Key is not { } file || group.First().Document is SourceGeneratedDocument || IsGenerated(file))
                 {
-                    continue;
+                    continue; // generated from the XAML (Avalonia's and MAUI's generators, WPF's obj/*.g.cs): regenerated from the renamed XAML
                 }
 
                 var text = await group.First().Document.GetTextAsync(cancellationToken).ConfigureAwait(false);
@@ -425,6 +437,10 @@ internal static partial class XamlNavigation
 
         return new WorkspaceEdit([.. changes]);
     }
+
+    /// <summary>WPF's markup compiler output (<c>MainWindow.g.cs</c>, <c>MainWindow.g.i.cs</c>), which follows the XAML.</summary>
+    private static bool IsGenerated(string? path) =>
+        path is not null && (path.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".g.i.cs", StringComparison.OrdinalIgnoreCase));
 
     [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant)]
     private static partial Regex IdentifierRegex();

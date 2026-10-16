@@ -180,6 +180,11 @@ public sealed partial class ShellHost
                 return null;
             }
 
+            if (WarnIfWindowsOnly(project))
+            {
+                return null; // a WinForms or WPF app off Windows (M40a)
+            }
+
             if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
             {
                 StatusBar.ShowMessage(Localizer.Get("msg.profiling.theBuildFailedSoNothingWas", "The build failed, so nothing was profiled."), TimeSpan.FromSeconds(6));

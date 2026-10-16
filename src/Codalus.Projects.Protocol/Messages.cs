@@ -173,6 +173,12 @@ public sealed record ProjectInfo(
     /// <summary>A .NET MAUI project (<c>UseMaui</c>, M20a): its platform frameworks run on devices, emulators and simulators.</summary>
     public bool UsesMaui { get; init; }
 
+    /// <summary>A WPF project (<c>UseWPF</c>, M40a): it runs only on Windows; its <c>.xaml</c> files get WPF's XAML language service.</summary>
+    public bool UsesWpf { get; init; }
+
+    /// <summary>A Windows Forms project (<c>UseWindowsForms</c>, M40a): it runs only on Windows.</summary>
+    public bool UsesWindowsForms { get; init; }
+
     /// <summary>
     /// Workload packs the project needs and the SDK doesn't have (the SDK's <c>MissingWorkloadPack</c> items, M20a), so
     /// it can't build until <c>dotnet workload restore</c> or an install; empty when none is missing.

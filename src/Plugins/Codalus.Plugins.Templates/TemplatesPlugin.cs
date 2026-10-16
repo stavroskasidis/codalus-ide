@@ -28,8 +28,13 @@ public sealed partial class TemplatesPlugin : ICodalusPlugin
     private async Task<object?> NewProjectAsync(CancellationToken cancellationToken)
     {
         _templates ??= TemplateCatalog.LoadAsync(Context.Log, CancellationToken.None);
-        var templates = await _templates.ConfigureAwait(false);
-        var items = templates.Select(t => new QuickPickItem(t.Name) { Description = t.ShortName, Detail = t.Languages, Tag = t }).ToList();
+        var templates = TemplateCatalog.ForThisOs(await _templates.ConfigureAwait(false), OperatingSystem.IsWindows());
+        var items = templates.Select(t => new QuickPickItem(t.Name)
+        {
+            Description = t.ShortName,
+            Detail = t.IsWindowsDesktop && !OperatingSystem.IsWindows() ? t.Languages + " · Windows only: it edits and builds here, and runs on Windows" : t.Languages,
+            Tag = t,
+        }).ToList();
         // Template packs that aren't installed (Avalonia, M19b; CoreWCF, M42): picking one is the consent to
         // dotnet new install it, then the list comes again.
         foreach (var pack in TemplatePacks.Missing(templates))
@@ -239,9 +244,19 @@ internal sealed record ProjectTemplate(string Name, string ShortName, string Lan
         "xunit" or "nunit" or "mstest" => "TestProject1",
         "web" or "webapi" or "mvc" or "webapp" or "blazor" or "grpc" => "WebApplication1",
         "worker" => "WorkerService1",
+        "wpf" => "WpfApp1",
+        "wpflib" => "WpfLibrary1",
+        "wpfusercontrollib" or "wpfcustomcontrollib" => "WpfControlLibrary1",
+        "winforms" => "WinFormsApp1",
+        "winformslib" => "WinFormsLibrary1",
+        "winformscontrollib" => "WinFormsControlLibrary1",
         "corewcf" => "CoreWCFService1",
         _ => "Project1",
     };
+
+    /// <summary>A WPF or Windows Forms template (M40a): its projects run only on Windows.</summary>
+    public bool IsWindowsDesktop =>
+        ShortName.StartsWith("wpf", StringComparison.OrdinalIgnoreCase) || ShortName.StartsWith("winforms", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>A template package New Project offers to install while none of its templates is (<see cref="Prefix"/>).</summary>
@@ -285,9 +300,21 @@ internal static class TemplateCatalog
         ("mauilib", ".NET MAUI Class Library"),
         ("android", "Android Application"),
         ("ios", "iOS Application"),
-        ("wpf", "WPF Application"),
+        ("wpf", "WPF Application"), // M40a: WPF and Windows Forms run on Windows only (D31)
+        ("wpflib", "WPF Class Library"),
+        ("wpfusercontrollib", "WPF User Control Library"),
+        ("wpfcustomcontrollib", "WPF Custom Control Library"),
         ("winforms", "Windows Forms App"),
+        ("winformslib", "Windows Forms Class Library"),
+        ("winformscontrollib", "Windows Forms Control Library"),
     ];
+
+    /// <summary>
+    /// The templates as New Project lists them on this OS: off Windows, the WPF and Windows Forms ones go last (their
+    /// projects edit and build there, but run only on Windows, M40a).
+    /// </summary>
+    public static IReadOnlyList<ProjectTemplate> ForThisOs(IReadOnlyList<ProjectTemplate> templates, bool windows) =>
+        windows ? templates : [.. templates.Where(t => !t.IsWindowsDesktop), .. templates.Where(t => t.IsWindowsDesktop)];
 
     public static async Task<IReadOnlyList<ProjectTemplate>> LoadAsync(IPluginLog log, CancellationToken cancellationToken)
     {

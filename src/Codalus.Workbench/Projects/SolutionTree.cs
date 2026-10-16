@@ -422,6 +422,30 @@ public static class SolutionTree
             }
         }
 
+        // Windows Forms and resources (M40a): a form's Form1.resx under Form1.cs, and a strongly typed resource class
+        // (Resources.Designer.cs) or settings class under the .resx or .settings it comes from.
+        if (extension.Equals(".resx", StringComparison.OrdinalIgnoreCase) && !System.IO.Path.HasExtension(withoutLast))
+        {
+            foreach (var code in new[] { withoutLast + ".cs", withoutLast + ".vb" })
+            {
+                if (siblings.Contains(code))
+                {
+                    return code;
+                }
+            }
+        }
+
+        if (System.IO.Path.GetExtension(withoutLast).Equals(".Designer", StringComparison.OrdinalIgnoreCase) && segmentBase.Length > 0)
+        {
+            foreach (var source in new[] { segmentBase + ".resx", segmentBase + ".settings" })
+            {
+                if (siblings.Contains(source))
+                {
+                    return source;
+                }
+            }
+        }
+
         return null;
     }
 

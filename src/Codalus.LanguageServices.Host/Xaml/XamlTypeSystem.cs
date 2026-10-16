@@ -9,7 +9,7 @@ internal enum XamlMemberKind
     /// <summary>A CLR property.</summary>
     Property,
 
-    /// <summary>An Avalonia property (or a MAUI bindable property) without a CLR wrapper (<c>XxxProperty</c> field).</summary>
+    /// <summary>An Avalonia property (or a MAUI bindable property, or a WPF dependency property) without a CLR wrapper (<c>XxxProperty</c> field).</summary>
     AvaloniaProperty,
 
     /// <summary>An attached property (<c>Owner.Xxx</c>).</summary>
@@ -26,11 +26,12 @@ internal sealed record XamlMember(string Name, ITypeSymbol? ValueType, XamlMembe
 }
 
 /// <summary>
-/// XAML's view of a Roslyn compilation (ADR 0047): XML namespaces to CLR namespaces through Avalonia's and .NET MAUI's
-/// <c>[XmlnsDefinition]</c> attributes and <c>using:</c>/<c>clr-namespace:</c>, the types an element can name, the
-/// members an attribute can set (CLR properties, Avalonia properties, attached properties, events), content
-/// properties, pseudo-classes. Types come from source and from metadata alike, so the project's own controls and view
-/// models are known before it is built. One instance per compilation.
+/// XAML's view of a Roslyn compilation (ADR 0047, 0069): XML namespaces to CLR namespaces through Avalonia's, .NET
+/// MAUI's and WPF's <c>[XmlnsDefinition]</c> attributes and <c>using:</c>/<c>clr-namespace:</c>, the types an element
+/// can name, the members an attribute can set (CLR properties, Avalonia properties, bindable and dependency
+/// properties, attached properties and events), content properties, pseudo-classes. Types come from source and from
+/// metadata alike, so the project's own controls and view models are known before it is built. One instance per
+/// compilation.
 /// </summary>
 internal sealed class XamlTypeSystem
 {
@@ -59,11 +60,16 @@ internal sealed class XamlTypeSystem
     /// <summary>Whether .NET MAUI's controls are referenced (M20a): the MAUI dialect (bindable properties, <c>[ContentProperty]</c>).</summary>
     public bool IsMaui => Type(MauiBindableObject) is not null;
 
+    /// <summary>Whether WPF is referenced (M40a, ADR 0071): the WPF dialect (dependency properties by convention, <c>[ContentProperty]</c>).</summary>
+    public bool IsWpf => Type(WpfDependencyObject) is not null && Type("System.Windows.FrameworkElement") is not null;
+
     /// <summary>Whether the compilation has a XAML dialect this engine knows.</summary>
-    public bool HasDialect => IsAvalonia || IsMaui;
+    public bool HasDialect => IsAvalonia || IsMaui || IsWpf;
 
     private const string MauiBindableObject = "Microsoft.Maui.Controls.BindableObject";
     private const string MauiBindableProperty = "Microsoft.Maui.Controls.BindableProperty";
+    private const string WpfDependencyObject = "System.Windows.DependencyObject";
+    private const string WpfDependencyProperty = "System.Windows.DependencyProperty";
 
     // ------------------------------------------------------------------ namespaces
 
@@ -242,7 +248,8 @@ internal sealed class XamlTypeSystem
 
     public bool IsMarkupExtension(INamedTypeSymbol type) =>
         type.Name.EndsWith("Extension", StringComparison.Ordinal) || DerivesFrom(type, "Avalonia.Data.BindingBase") || DerivesFrom(type, "Avalonia.Markup.Xaml.MarkupExtension")
-        || DerivesFrom(type, "Microsoft.Maui.Controls.BindingBase") || DerivesFrom(type, "Microsoft.Maui.Controls.Xaml.IMarkupExtension");
+        || DerivesFrom(type, "Microsoft.Maui.Controls.BindingBase") || DerivesFrom(type, "Microsoft.Maui.Controls.Xaml.IMarkupExtension")
+        || DerivesFrom(type, "System.Windows.Markup.MarkupExtension");
 
     public static bool DerivesFrom(ITypeSymbol? type, string metadataName)
     {
@@ -257,7 +264,8 @@ internal sealed class XamlTypeSystem
         return type?.AllInterfaces.Any(i => i.ToDisplayString() == metadataName) == true;
     }
 
-    public static bool IsControl(ITypeSymbol? type) => DerivesFrom(type, "Avalonia.Controls.Control") || DerivesFrom(type, "Microsoft.Maui.Controls.VisualElement");
+    public static bool IsControl(ITypeSymbol? type) =>
+        DerivesFrom(type, "Avalonia.Controls.Control") || DerivesFrom(type, "Microsoft.Maui.Controls.VisualElement") || DerivesFrom(type, "System.Windows.FrameworkElement");
 
     // ------------------------------------------------------------------ members
 
@@ -293,10 +301,17 @@ internal sealed class XamlTypeSystem
                         break;
                     case IFieldSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public } bindable
                         when bindable.Name.EndsWith("Property", StringComparison.Ordinal) && bindable.Name.Length > 8 && IsBindableProperty(bindable.Type)
-                             && !result.ContainsKey(bindable.Name[..^8]) && MauiAttachedGetter(current, bindable.Name[..^8]) is null
+                             && !result.ContainsKey(bindable.Name[..^8]) && AttachedGetter(current, bindable.Name[..^8]) is null
                              && current.GetMembers(bindable.Name[..^8]).IsEmpty:
                         // A MAUI bindable property without a CLR wrapper (the wrapper, when there is one, is the property above).
                         result[bindable.Name[..^8]] = new XamlMember(bindable.Name[..^8], null, XamlMemberKind.AvaloniaProperty, bindable, current);
+                        break;
+                    case IFieldSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public } dependency
+                        when dependency.Name.EndsWith("Property", StringComparison.Ordinal) && dependency.Name.Length > 8 && IsDependencyProperty(dependency.Type)
+                             && !result.ContainsKey(dependency.Name[..^8]) && AttachedGetter(current, dependency.Name[..^8]) is null
+                             && current.GetMembers(dependency.Name[..^8]).IsEmpty:
+                        // A WPF dependency property without a CLR wrapper (M40a); with one, it is the property above.
+                        result[dependency.Name[..^8]] = new XamlMember(dependency.Name[..^8], null, XamlMemberKind.AvaloniaProperty, dependency, current);
                         break;
                 }
             }
@@ -321,11 +336,19 @@ internal sealed class XamlTypeSystem
                     result.TryAdd(field.Name[..^8], new XamlMember(field.Name[..^8], ValueType(field.Type), XamlMemberKind.Attached, field, current));
                 }
                 else if (member is IFieldSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public } bindable
-                         && bindable.Name.EndsWith("Property", StringComparison.Ordinal) && bindable.Name.Length > 8 && IsBindableProperty(bindable.Type)
-                         && MauiAttachedGetter(current, bindable.Name[..^8]) is { } getter)
+                         && bindable.Name.EndsWith("Property", StringComparison.Ordinal) && bindable.Name.Length > 8 && (IsBindableProperty(bindable.Type) || IsDependencyProperty(bindable.Type))
+                         && AttachedGetter(current, bindable.Name[..^8]) is { } getter)
                 {
-                    // MAUI's attached properties: a BindableProperty field with a static GetXxx (Grid.Row, Shell.NavBarIsVisible).
+                    // MAUI's and WPF's attached properties: a BindableProperty or DependencyProperty field with a static
+                    // GetXxx (Grid.Row, Shell.NavBarIsVisible, ToolTipService.ShowDuration).
                     result.TryAdd(bindable.Name[..^8], new XamlMember(bindable.Name[..^8], getter.ReturnType, XamlMemberKind.Attached, bindable, current));
+                }
+                else if (member is IMethodSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public, Parameters.Length: 2 } adder
+                         && adder.Name.StartsWith("Add", StringComparison.Ordinal) && adder.Name.EndsWith("Handler", StringComparison.Ordinal) && adder.Name.Length > 10
+                         && adder.Parameters[1].Type.TypeKind == TypeKind.Delegate && DerivesFrom(adder.Parameters[0].Type, WpfDependencyObject))
+                {
+                    // WPF's attached events: a static AddXxxHandler(DependencyObject, handler) (Mouse.MouseDown, Validation.Error).
+                    result.TryAdd(adder.Name[3..^7], new XamlMember(adder.Name[3..^7], adder.Parameters[1].Type, XamlMemberKind.Event, adder, current));
                 }
                 else if (member is IMethodSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public, Parameters.Length: 2 } method
                          && method.Name.StartsWith("Set", StringComparison.Ordinal) && method.Name.Length > 3 && current.ContainingNamespace?.ToDisplayString().StartsWith("Avalonia", StringComparison.Ordinal) != true)
@@ -342,8 +365,10 @@ internal sealed class XamlTypeSystem
 
     private static bool IsBindableProperty(ITypeSymbol type) => type.ToDisplayString() == MauiBindableProperty;
 
-    /// <summary>A MAUI attached property's static <c>GetXxx(BindableObject)</c>, when <paramref name="owner"/> declares one.</summary>
-    private static IMethodSymbol? MauiAttachedGetter(INamedTypeSymbol owner, string name) =>
+    private static bool IsDependencyProperty(ITypeSymbol type) => type.ToDisplayString() == WpfDependencyProperty;
+
+    /// <summary>A MAUI or WPF attached property's static <c>GetXxx(element)</c>, when <paramref name="owner"/> declares one.</summary>
+    private static IMethodSymbol? AttachedGetter(INamedTypeSymbol owner, string name) =>
         owner.GetMembers("Get" + name).OfType<IMethodSymbol>().FirstOrDefault(m => m is { IsStatic: true, DeclaredAccessibility: Accessibility.Public, Parameters.Length: 1, ReturnsVoid: false });
 
     private static bool IsAttached(ITypeSymbol type) => type is INamedTypeSymbol { Name: "AttachedProperty" };
@@ -419,7 +444,7 @@ internal sealed class XamlTypeSystem
     /// <summary>The types that declare attached properties among an XML namespace's types (<c>Grid</c>, <c>DockPanel</c>…).</summary>
     public IReadOnlyList<INamedTypeSymbol> AttachedOwners(string? xmlns) =>
         [.. TypesIn(xmlns).Where(t => t.GetMembers().OfType<IFieldSymbol>().Any(f => f.IsStatic
-            && (IsAttached(f.Type) || (IsBindableProperty(f.Type) && f.Name.Length > 8 && MauiAttachedGetter(t, f.Name[..^8]) is not null))))];
+            && (IsAttached(f.Type) || ((IsBindableProperty(f.Type) || IsDependencyProperty(f.Type)) && f.Name.Length > 8 && AttachedGetter(t, f.Name[..^8]) is not null))))];
 
     // ------------------------------------------------------------------ values
 
@@ -454,6 +479,26 @@ internal sealed class XamlTypeSystem
             return colors is null ? [] : [.. colors.GetMembers().OfType<IPropertySymbol>().Where(p => p.IsStatic).Select(p => (p.Name, (ISymbol?)p))];
         }
 
+        if (name is "System.Windows.Media.Brush" or "System.Windows.Media.SolidColorBrush" or "System.Windows.Media.Color")
+        {
+            // WPF's named colors (M40a): Colors' static properties, which brushes take as well.
+            var colors = Type("System.Windows.Media.Colors");
+            return colors is null ? [] : [.. colors.GetMembers().OfType<IPropertySymbol>().Where(p => p.IsStatic).Select(p => (p.Name, (ISymbol?)p))];
+        }
+
+        if (name.StartsWith("System.Windows.", StringComparison.Ordinal) && type is INamedTypeSymbol wpfType && WpfValueHolder(wpfType) is { } holder)
+        {
+            // WPF's static classes of a type's values: FontWeights for FontWeight, Cursors for Cursor, FontStretches…
+            return [.. holder.GetMembers()
+                .Where(m => m.IsStatic && m.DeclaredAccessibility == Accessibility.Public && m switch
+                {
+                    IPropertySymbol p => DerivesFrom(p.Type, name),
+                    IFieldSymbol f => DerivesFrom(f.Type, name),
+                    _ => false,
+                })
+                .Select(m => (m.Name, (ISymbol?)m))];
+        }
+
         if (name is "Microsoft.Maui.Graphics.Color" or "Microsoft.Maui.Controls.Brush" or "Microsoft.Maui.Controls.SolidColorBrush")
         {
             // MAUI's named colors are Colors' static fields.
@@ -470,6 +515,21 @@ internal sealed class XamlTypeSystem
                 _ => false,
             })
             .Select(m => (m.Name, (ISymbol?)m))];
+    }
+
+    /// <summary>The static class that holds a WPF type's well-known values (<c>FontWeights</c>, <c>Cursors</c>), or null.</summary>
+    private INamedTypeSymbol? WpfValueHolder(INamedTypeSymbol type)
+    {
+        var ns = type.ContainingNamespace?.ToDisplayString();
+        foreach (var candidate in new[] { type.Name + "s", type.Name + "es" })
+        {
+            if (Type(ns + "." + candidate) is { IsStatic: true } holder)
+            {
+                return holder;
+            }
+        }
+
+        return null;
     }
 
     // ------------------------------------------------------------------ binding paths

@@ -1895,6 +1895,8 @@
   "msg.webTools.selectAProjectToManageIts": "Select a project to manage its service references.",
   "msg.webTools.theReferenceSName": "The reference's name",
   "msg.webTools.wcfMetadataAddressOrAWsdlFile": "http://localhost:5000/Service.svc?wsdl, or a WSDL file",
+  "msg.windowsDesktop.windowsOnly": "{0} is a {1} project: it runs, debugs and tests only on Windows. On this OS it opens, edits and builds.",
+  "msg.windowsDesktop.windowsOnlyFramework": "{0} targets Windows ({1}): it runs, debugs and tests only on Windows. On this OS it opens, edits and builds.",
   "notificationCard.dismiss": "Dismiss",
   "notificationCard.dismissNotification": "Dismiss notification",
   "notifications.clearAllNotifications": "Clear All Notifications",
