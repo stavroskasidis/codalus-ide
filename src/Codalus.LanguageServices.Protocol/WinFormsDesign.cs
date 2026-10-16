@@ -82,6 +82,9 @@ public sealed record DesignerValue
         && (Arguments ?? []).Zip(other.Arguments ?? []).All(p => p.First.SameAs(p.Second));
 }
 
+/// <summary>A property and its value (a new component's).</summary>
+public sealed record DesignerPropertyValue(string Name, DesignerValue Value);
+
 /// <summary>The kinds of <see cref="DesignerStatement"/>.</summary>
 public static class DesignerStatementKinds
 {

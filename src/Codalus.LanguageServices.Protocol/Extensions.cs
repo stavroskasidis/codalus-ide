@@ -502,9 +502,6 @@ public sealed record DesignerEdit
     public string[]? HandlerParameters { get; init; }
 }
 
-/// <summary>A property and its value, for a new component.</summary>
-public sealed record DesignerPropertyValue(string Name, DesignerValue Value);
-
 /// <summary><c>codalus/winforms/edit</c>: <see cref="Edits"/> applied in order to the designer file at <see cref="Version"/>.</summary>
 public sealed record WinFormsEditParams(TextDocumentIdentifier TextDocument, DesignerEdit[] Edits)
 {
