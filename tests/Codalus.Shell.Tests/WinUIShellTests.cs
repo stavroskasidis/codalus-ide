@@ -79,6 +79,19 @@ public sealed class WinUIShellTests
             Assert.Same(builds, f.Shell.Builds.LastBuild);
             Assert.Empty(f.Shell.Runs.Running);
         }
+
+        // Add New Item: WinUI's items (built in), a page with its code-behind.
+        var folder = Path.GetDirectoryName(project)!;
+        var add = f.Shell.OpenAddNewItem(project, folder)!;
+        await ShellFixture.PumpUntil(() => add.Templates.Any(t => t.Template.ShortName == "winuipage"), seconds: 60);
+        Assert.Contains(add.Templates, t => t.Template.ShortName == "winuiwindow");
+        Assert.DoesNotContain(add.Templates, t => t.Template.ShortName == "wpfwindow");
+        add.Selected = add.Templates.First(t => t.Template.ShortName == "winuipage");
+        add.Name = "SettingsPage";
+        var created = await add.AddAsync();
+        Assert.Equal(Path.Combine(folder, "SettingsPage.xaml"), created);
+        Assert.Contains("x:Class=\"WinUIApp.SettingsPage\"", File.ReadAllText(created!), StringComparison.Ordinal);
+        Assert.Contains("public sealed partial class SettingsPage : Page", File.ReadAllText(created + ".cs"), StringComparison.Ordinal);
     }
 
     [AvaloniaFact]

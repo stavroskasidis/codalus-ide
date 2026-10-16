@@ -222,6 +222,39 @@ public sealed class WindowsAppsTests : IDisposable
     }
 
     [Fact]
+    public void Winui_items_are_offered_to_winui_projects_with_their_code_behind()
+    {
+        var winUI = new ItemTemplateProject("C#", IsWinUI: true);
+        string[] items = ["winuiwindow", "winuipage", "winuiusercontrol", "winuiresourcedictionary"];
+        foreach (var name in items)
+        {
+            var template = ItemTemplates.BuiltIn.Single(t => t.ShortName == name);
+            Assert.True(ItemTemplates.AppliesTo(template, winUI), name);
+            Assert.False(ItemTemplates.AppliesTo(template, new ItemTemplateProject("C#", IsWpf: true)), name);
+            Assert.False(ItemTemplates.AppliesTo(template, new ItemTemplateProject("C#", IsMaui: true)), name);
+            Assert.False(ItemTemplates.AppliesTo(template, new ItemTemplateProject("C#")), name);
+        }
+
+        // A page: XAML with its x:Class in the folder's namespace (and that namespace as using:), and its code-behind.
+        var page = ItemTemplates.BuiltIn.Single(t => t.ShortName == "winuipage");
+        var context = new ItemTemplateContext("SettingsPage", "WinUIApp.Views");
+        var xaml = System.Xml.Linq.XDocument.Parse(page.Content!(context));
+        Assert.Equal("Page", xaml.Root!.Name.LocalName);
+        Assert.Equal("WinUIApp.Views.SettingsPage", xaml.Root.Attribute(System.Xml.Linq.XName.Get("Class", "http://schemas.microsoft.com/winfx/2006/xaml"))?.Value);
+        Assert.Equal("using:WinUIApp.Views", xaml.Root.Attribute(System.Xml.Linq.XNamespace.Xmlns + "local")?.Value);
+        Assert.Equal(["SettingsPage.xaml.cs"], page.CompanionNames("SettingsPage.xaml"));
+        var codeBehind = page.Companions.Single().Content(context);
+        Assert.StartsWith("using Microsoft.UI.Xaml.Controls;\n\nnamespace WinUIApp.Views;\n", codeBehind, StringComparison.Ordinal);
+        Assert.Contains("public sealed partial class SettingsPage : Page", codeBehind, StringComparison.Ordinal);
+
+        // A window's title; a window's base class from Microsoft.UI.Xaml; a dictionary without code.
+        var window = ItemTemplates.BuiltIn.Single(t => t.ShortName == "winuiwindow");
+        Assert.Equal("AboutWindow", System.Xml.Linq.XDocument.Parse(window.Content!(new ItemTemplateContext("AboutWindow", "WinUIApp"))).Root!.Attribute("Title")?.Value);
+        Assert.StartsWith("using Microsoft.UI.Xaml;\n", window.Companions.Single().Content(context), StringComparison.Ordinal);
+        Assert.Empty(ItemTemplates.BuiltIn.Single(t => t.ShortName == "winuiresourcedictionary").Companions);
+    }
+
+    [Fact]
     public void Hot_reload_runs_one_framework_of_a_multi_targeted_app()
     {
         var output = new OutputService();
