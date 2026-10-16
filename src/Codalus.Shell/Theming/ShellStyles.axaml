@@ -208,6 +208,53 @@
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
   </Style>
+  <!--
+    A split button in a toolbar (the Hot Reload button and its menu's arrow) is flat like the buttons beside it: Fluent's
+    is a gray block. Its two parts are Buttons in its template that Fluent styles itself, so every state is restated on
+    their presenters: transparent, the hover color and border under the pointer or pressed or while the menu is open,
+    and transparent again when disabled. The tokens differ per theme, High Contrast included.
+  -->
+  <Style Selector="SplitButton.toolbar">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="{DynamicResource Shell.Padding.ToolbarButton}" />
+    <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button#PART_PrimaryButton">
+    <Setter Property="MinWidth" Value="{DynamicResource Shell.Size.ToolbarButton}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button#PART_SecondaryButton">
+    <Setter Property="MinWidth" Value="14" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="SplitButton.toolbar:pointerover /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar:flyout-open /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar:pointerover /template/ Border#SeparatorBorder, SplitButton.toolbar:flyout-open /template/ Border#SeparatorBorder">
+    <Setter Property="Background" Value="{DynamicResource Shell.Border}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar /template/ Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
   <Style Selector="ToolTip">
     <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
   </Style>
