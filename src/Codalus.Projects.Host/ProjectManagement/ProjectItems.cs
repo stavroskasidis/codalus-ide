@@ -87,7 +87,7 @@ internal sealed class ProjectItems : IDisposable
             return false;
         }
 
-        Xml.Save();
+        Xml.SaveFile();
         return true;
     }
 
