@@ -35,6 +35,14 @@ public sealed class DiagnosticsToolsUnitTests
         return (p, main, make, text, bytes);
     }
 
+    [Theory]
+    [InlineData("System.Threading.Thread.<PollGC>g__PollGCWorker|70_0()", true)]
+    [InlineData("System.Threading.Thread.PollGC()", true)]
+    [InlineData("System.Threading.Thread.Sleep(int32)", false)]
+    [InlineData("Primes.IsPrime(int32)", false)]
+    public void The_runtimes_gc_poll_is_folded_into_its_caller(string name, bool folded) =>
+        Assert.Equal(folded, NettraceReader.IsSuspensionMethod(name));
+
     [Fact]
     public void Weighted_samples_count_their_weight_in_every_view()
     {
