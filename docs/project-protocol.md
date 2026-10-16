@@ -215,6 +215,21 @@ Scaffolding ([ADR 0041](adr/0041-scaffolding-and-service-references.md)) runs th
 
 Notification (host → shell): **`scaffold/output`** `{level: info | error, line}`, the code generator's output (the command line comes first as `> dotnet aspnet-codegenerator …`).
 
+## WCF references
+
+WCF service references ([ADR 0069](adr/0069-wcf-references-and-test-client.md)) run the user's own `dotnet-svcutil` (a local or global tool; `CODALUS_SVCUTIL` names a stand-in) as a child process of the host, in the project's folder, one at a time, with `DOTNET_SVCUTIL_TELEMETRY_OPTOUT=1`; every request but `list` needs a trusted solution, and cancelling one kills its process tree. A reference lives where Visual Studio puts it: `Connected Services/<name>/Reference.cs` and a `ConnectedService.json` whose `ExtendedData` holds svcutil's options (`inputs` first, then the others alphabetically), with `ProviderId` `Microsoft.VisualStudio.ConnectedService.Wcf` and `Version` `15.0.40203.910`. Contracts are in `WcfMessages.cs`; the shell side is `WcfReferenceService` in `src/Codalus.Workbench/Wcf`.
+
+| Method | Params | Result | Notes |
+|---|---|---|---|
+| `wcfReferences/status` | `{project}` | `{toolAvailable, toolVersion?, toolSource? (local \| global \| CODALUS_SVCUTIL), manifest?, manifestListsTool, message?}` | `dotnet svcutil --help` in the project's folder (its banner has the version), and the tool manifest. |
+| `wcfReferences/install` | `{project, version?}` | as `status` | `dotnet tool restore` when the manifest lists `dotnet-svcutil`, otherwise `dotnet tool install dotnet-svcutil` (a manifest first), the newest stable version unless one is given. |
+| `wcfReferences/list` | `{project}` | `{references: [{name, folder, optionsFile, code?, inputs, namespace?, collectionType?, dictionaryCollectionType?, sync, reuseTypes, internal, targetFramework?}]}` | Each `Connected Services/*/ConnectedService.json` of the WCF provider, and each `dotnet-svcutil.params.json` up to three folders below the project. |
+| `wcfReferences/add` | `{project, name, input, namespace?, collectionType?, dictionaryCollectionType?, sync, reuseTypes, internal}` | `{reference, created, modified, output}` | `dotnet svcutil <input> --projectFile <project> --outputDir "Connected Services/<name>" --outputFile Reference.cs --namespace "*,<namespace or name>" [--collectionType …] [--sync] [--noTypeReuse] [--internal] --noLogo`; then svcutil's `dotnet-svcutil.params.json` becomes `ConnectedService.json`. `input` is a URL or a file (relative to the project). Refused: a name that isn't a folder name, a folder that exists, a missing file. A project file svcutil changed (it adds the `System.ServiceModel.*` packages) is evaluated again and restored. svcutil's failure is its `Error:` lines. |
+| `wcfReferences/update` | as `add`, `input` null to keep it | as `add` | Writes the options into the reference's options file (keeping the rest: references, target framework, serializer), then `dotnet svcutil --update "Connected Services/<name>" --projectFile <project> --noLogo`. |
+| `wcfReferences/remove` | `{project, name}` | as `list` | Sends the reference's folder to the trash. The packages stay. |
+
+Notification (host → shell): **`wcfReferences/output`** `{level: info | error, line}`, svcutil's output (the command line first, as `> dotnet svcutil …`).
+
 ## Errors
 
 | Code | Meaning |

@@ -58,7 +58,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M38 | Start window | done (at checkpoint, [m38](checkpoints/m38.md)): "What would you like to do?" at startup, with recent solutions, projects and folders (search, pinned, grouped by date, missing entries) and Create, Open, Open Folder and Clone; File → Start Window; On Startup chooses it, an empty window or the last solution |
 | M40 | WinForms and WPF projects, WPF XAML and previewer | proposed ([Windows desktop](#proposed-phase-windows-desktop)), waits for D31 |
 | M41 | Windows Forms designer | proposed, waits for D31 |
-| M42 | WCF | proposed, unscheduled (cross-platform, so it doesn't wait for D31) |
+| M42 | WCF | done (at checkpoint, [m42](checkpoints/m42.md), ADR 0069), 2026-10-16: Add Service Reference for WCF through the user's `dotnet-svcutil` (local or global tool, installed with consent, trusted folders only) into `Connected Services/<name>/` with Visual Studio's `ConnectedService.json`, Update and Remove; the CoreWCF templates in New Project, and running CoreWCF services' metadata found; the WCF Test Client of our own (WSDL and XSD read with `System.Xml.Linq`, SOAP 1.1 and SOAP 1.2 with WS-Addressing over `HttpClient`, a form per operation, raw XML, the response as a tree and XML); the `system.serviceModel` schema for `app.config` and `web.config`. Gaps: message security, duplex, NetTcp and MEX-only metadata in the test client. Validated on Linux; Windows and macOS from CI |
 | M43 | .NET Framework | proposed, waits for D31 and a spike on debugging the desktop CLR |
 | M44 | MAUI on Windows and WinUI 3 | proposed, waits for D31 and M20 |
 | M35 | Visual Basic | done (at checkpoint, [m35](checkpoints/m35.md), ADR 0066): VB in the C# host's workspace (completion, Quick Info, signature help, live diagnostics, classification with XML literals, navigation, references and rename across C# and VB, code fixes and refactorings, formatting, outline and folding), our own pretty listing (`End` constructs, keyword casing, XML end tags), VB snippets and item templates, New Project in any language, VB property pages, VB tests from source, debugging tested on netcoredbg. Gaps: VB expressions in Watch (netcoredbg reads C#), automatic line continuation, a page for project imports |
@@ -141,7 +141,7 @@ All seven are settled:
 | 8. Remote | M21 | SSH, WSL, Dev Containers. |
 | 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
 | 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
-| Proposed: Windows desktop | M40–M44 | WinForms, WPF, WCF, .NET Framework and MAUI's Windows target, on Windows and from the other OSes through a Windows machine. Waits for D31; M42 (WCF) doesn't. |
+| Proposed: Windows desktop | M40–M44 | WinForms, WPF, WCF, .NET Framework and MAUI's Windows target, on Windows and from the other OSes through a Windows machine. Waits for D31; M42 (WCF) didn't, and is done ([m42](checkpoints/m42.md)). |
 | 11. Polish | M34, M39, M37, M38 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38). |
 | 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
@@ -1645,7 +1645,7 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 | WPF XAML editing (M40a) | The M19a engine | The same, locally | ~1 | WPF's conventions |
 | WPF previewer and Live Visual Tree (M40b) | M19's designs on WPF | Frames from the Windows target | ~1–1.5 | Loading the project's own controls |
 | WinForms designer (M41) | dotnet/winforms' design-time code (MIT) | Frames from the Windows target | ~2–3 | Reading and writing `InitializeComponent` |
-| WCF (M42) | Clients, CoreWCF, `dotnet-svcutil` | The same | ~½–1 | Nothing hard |
+| WCF (M42, done) | Clients, CoreWCF, `dotnet-svcutil` | The same | ~½–1 | Nothing hard |
 | .NET Framework (M43) | Build, run; a desktop-CLR debugger | Edit and build locally; run on Mono or the Windows target | ~3+ | The debugger |
 | MAUI on Windows and WinUI 3 (M44) | CoreCLR: netcoredbg | Only through the Windows target | ~1 | MSIX launch and attach |
 
@@ -1730,6 +1730,8 @@ Together about 10–14 sub-milestones, plus the Windows target (below).
 - Commercial control suites that rely on design-time licensing (`licenses.licx`) or on Visual Studio's own services.
 
 ### M42 — WCF
+
+**Status.** Done (at checkpoint, [m42](checkpoints/m42.md), [ADR 0069](adr/0069-wcf-references-and-test-client.md)), 2026-10-16.
 
 **Goal.** Build WCF clients and CoreWCF services on every OS.
 
@@ -2276,7 +2278,7 @@ The "Codalus" column uses these terms:
 | Shared projects (`.shproj`, `.projitems`) | M9 (low priority) |
 | Project, assembly and analyzer references | M9 |
 | COM references | Non-goal |
-| WCF service references and a WCF test client | Proposed for M42 |
+| WCF service references and a WCF test client | M42 (ADR 0069): `dotnet-svcutil` into `Connected Services` with `ConnectedService.json`; our own test client (BasicHttpBinding, WSHttpBinding without security); message security and duplex are gaps |
 | Connected Services, OpenAPI and gRPC service references | M15c (ADR 0041): `OpenApiReference` with NSwag, `Protobuf` with `Grpc.Tools`; Kiota and other connected services (Azure, databases) are gaps |
 | Custom tools (single-file generators), T4 text templates | M26b |
 | User secrets | M15 |
@@ -2785,3 +2787,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-16: CPU traces fold the runtime's GC poll (`Thread.PollGC` and its worker) into the calling function: the sampler suspends every thread for each sample, and a loop stopped at its GC poll had its samples counted against the poll, which became the hottest function of a CPU-bound loop on the Windows runners (`DiagnosticsHostTests`, `Two_traces_compare_by_function`).
 - 2026-10-16: the remote window test's run in a terminal checks the launch profile's lines on Windows, not the program's first line: the stand-in server's ConPTY repaints from the cursor's home, and on a busy runner its repaint landed one line up, over that line (the screen started at `args:`). TODO(issue): find whether a remote terminal's size change in flight (the view's resize reaches the server's ConPTY after its first frame) causes it, and size the server's terminal before it starts if so.
 - 2026-10-16: the smoke step `blazor.wasmDebug` starts debugging again once when the first session's page never stops: on the linux-arm64 installed app the dev server's debugging proxy stalled before reporting the page's .NET runtime (js-debug's log: no `Mono.runtimeReady`, none of the app's sources, the page ran), and no breakpoint bound for 10 minutes; the second session must stop. A page reload in the same session doesn't recover it (tried: the proxy reported the runtime after the reload but not the sources). TODO(issue): find why the proxy stalls (BrowserDebugHost on a loaded runner) and recover in the session itself.
+- 2026-10-16: M42 at its checkpoint ([m42](checkpoints/m42.md), ADR 0069), the first milestone of the [Windows desktop](#proposed-phase-windows-desktop) phase, which D31 doesn't gate. Add Service Reference for WCF runs the user's `dotnet-svcutil` (a local or global tool, installed with consent, trusted folders only) and keeps the reference as Visual Studio does, `Connected Services/<name>/Reference.cs` with a `ConnectedService.json` that `dotnet-svcutil --update` also reads; Update and Remove. New Project offers the CoreWCF templates, and the metadata of running CoreWCF services is found from their endpoints and listening addresses. The WCF Test Client is our own, in the workbench (AOT-clean: WSDL and XSD with `System.Xml.Linq`, SOAP over `HttpClient`), for BasicHttpBinding and WSHttpBinding without security. The markup host knows `system.serviceModel` in `app.config` and `web.config`. Fixture `samples/Wcf`; validated on Linux, with Windows and macOS left to CI's runners.
