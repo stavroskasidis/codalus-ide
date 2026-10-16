@@ -598,7 +598,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 misses.Add($"{System.IO.Path.GetFileName(path)}: no cache key (no intermediate folder, or a referenced project has none)");
             }
 
-            requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework));
+            requests.Add(new DesignTimeBuilder.Request(path, configuration, platform, framework) { WinUI = project.Info.UsesWinUI });
         }
 
         var started = Stopwatch.GetTimestamp();
@@ -856,7 +856,12 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             Property("RunCommand"),
             Property("RunArguments"),
             Property("RunWorkingDirectory"),
-            File.Exists(launchSettings) ? launchSettings : null);
+            File.Exists(launchSettings) ? launchSettings : null)
+        {
+            // A Windows App SDK app (M44): MSIX runs as a package, registered from the manifest its build writes.
+            WindowsPackageType = Property("WindowsPackageType"),
+            AppxManifest = Property("FinalAppxManifestName") is { } manifest ? System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, manifest.Replace('\\', System.IO.Path.DirectorySeparatorChar))) : null,
+        };
     }
 
     /// <summary>The properties MSBuild sets when it builds a solution; some projects rely on them.</summary>

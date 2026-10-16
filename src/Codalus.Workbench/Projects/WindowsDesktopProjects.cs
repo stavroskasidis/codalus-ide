@@ -18,13 +18,20 @@ public static class WindowsDesktopProjects
     /// framework targets Windows.
     /// </summary>
     public static bool RunsOnlyOnWindows(ProjectInfo project) =>
-        project.UsesWpf || project.UsesWindowsForms || (project.TargetFrameworks.Length > 0 && project.TargetFrameworks.All(IsWindowsFramework));
+        project.UsesWpf || project.UsesWindowsForms || project.UsesWinUI || (project.TargetFrameworks.Length > 0 && project.TargetFrameworks.All(IsWindowsFramework));
 
-    /// <summary>What the project is, for messages: "WPF", "Windows Forms", or null for another Windows project.</summary>
+    /// <summary>
+    /// Whether the project builds only on Windows: a WinUI 3 project (M44), whose XAML compiler is a Windows program.
+    /// WPF and Windows Forms build everywhere with <c>EnableWindowsTargeting</c>.
+    /// </summary>
+    public static bool BuildsOnlyOnWindows(ProjectInfo project) => project.UsesWinUI;
+
+    /// <summary>What the project is, for messages: "WPF", "Windows Forms", "WinUI 3", or null for another Windows project.</summary>
     public static string? Kind(ProjectInfo project) =>
         project.UsesWpf && project.UsesWindowsForms ? "WPF and Windows Forms"
         : project.UsesWpf ? "WPF"
         : project.UsesWindowsForms ? "Windows Forms"
+        : project.UsesWinUI ? "WinUI 3"
         : null;
 
     /// <summary>Whether a project can't run on this machine: it runs only on Windows, and this isn't Windows.</summary>

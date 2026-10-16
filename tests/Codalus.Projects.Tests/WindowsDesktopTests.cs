@@ -94,6 +94,77 @@ public sealed class WindowsDesktopTests : IAsyncLifetime
     }
 
     [Fact]
+    public void WinUI_design_time_builds_leave_out_the_xaml_compiler_off_windows_only()
+    {
+        Assert.Null(WindowsDesktop.WinUIDesignTimeTargets(windows: true, _root));
+        var targets = WindowsDesktop.WinUIDesignTimeTargets(windows: false, Path.Combine(_root, "targets"));
+        Assert.NotNull(targets);
+        var text = File.ReadAllText(targets);
+        Assert.Contains("<Target Name=\"DesignTimeMarkupCompilation\" />", text, StringComparison.Ordinal);
+        Assert.Equal(targets, WindowsDesktop.WinUIDesignTimeTargets(windows: false, Path.Combine(_root, "targets"))); // written once, then reused
+    }
+
+    /// <summary>
+    /// M44 (ADR 0074): the WinUI 3 fixture restores and loads on every OS (off Windows without the XAML compiler's
+    /// design-time pass), says what it is and how it runs (unpackaged, then packaged once switched), and its XAML joins
+    /// the design-time command line. On Windows it builds, and a WinUI XAML compiler error (WMC…) lands in its file.
+    /// </summary>
+    [Fact]
+    public async Task A_winui_project_loads_everywhere_and_says_how_it_runs()
+    {
+        var project = Path.Combine(Fixture, "WinUIApp", "WinUIApp.csproj");
+        await _solutions.OpenAsync(Path.Combine(Fixture, "WinUIApp.slnx"), trusted: true, restore: true, Timeout());
+        await WaitUntilAsync(
+            () => _solutions.CompilerInputs.TryGetValue(project, out var inputs) && inputs.State == CompilerInputStates.Ok
+                  && inputs.Arguments.Any(a => a.Contains("Microsoft.WinUI.dll", StringComparison.OrdinalIgnoreCase)),
+            () => $"design-time builds: {string.Join("; ", _solutions.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)} {i.Value.State} {i.Value.Error}"))}");
+
+        var info = _solutions.Projects[project];
+        Assert.True(info.UsesWinUI);
+        Assert.False(info.UsesWpf);
+        Assert.Equal("None", info.WindowsPackageType);
+        Assert.Equal(["net11.0-windows10.0.19041.0"], info.TargetFrameworks);
+        Assert.Contains(info.Items, i => i.Kind == "ApplicationDefinition" && i.Path.EndsWith("App.xaml", StringComparison.Ordinal));
+        Assert.Contains(info.Items, i => i.Kind == "Page" && i.Path.EndsWith("MainPage.xaml", StringComparison.Ordinal));
+        var arguments = _solutions.CompilerInputs[project].Arguments;
+        foreach (var xaml in new[] { "App.xaml", "MainPage.xaml", "MainWindow.xaml", Path.Combine("Themes", "Colors.xaml"), Path.Combine("Controls", "RatingControl.xaml") })
+        {
+            Assert.Contains("/additionalfile:" + Path.Combine(Fixture, "WinUIApp", xaml), arguments);
+        }
+
+        var run = await _solutions.GetRunInfoAsync(project, Timeout());
+        Assert.Equal("None", run.WindowsPackageType);
+        Assert.True(WindowsApps.IsWindowsAppSdk(info));
+        Assert.False(WindowsApps.IsPackaged(info.WindowsPackageType));
+
+        if (OperatingSystem.IsWindows())
+        {
+            // The XAML compiler runs here: the app builds, and its errors come back in their .xaml files.
+            var built = await _builds.BuildAsync(BuildTargets.Build, project, Timeout());
+            Assert.True(built.Succeeded, _builds.Channel.GetText());
+            var page = Path.Combine(Fixture, "WinUIApp", "MainPage.xaml");
+            var text = await File.ReadAllTextAsync(page, TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(page, text.Replace("{x:Bind ViewModel.Items}", "{x:Bind ViewModel.NoSuchItems}", StringComparison.Ordinal), TestContext.Current.CancellationToken);
+            built = await _builds.BuildAsync(BuildTargets.Build, project, Timeout());
+            Assert.False(built.Succeeded);
+            var error = Assert.Single(_builds.Diagnostics, d => d.Code?.StartsWith("WMC", StringComparison.Ordinal) == true);
+            Assert.Equal(page, error.File, ignoreCase: true);
+            var squiggles = XamlBuildDiagnostics.ByFile(_builds.Diagnostics);
+            Assert.StartsWith("WMC", Assert.Single(Assert.Single(squiggles, f => string.Equals(f.Key, page, StringComparison.OrdinalIgnoreCase)).Value).Code, StringComparison.Ordinal);
+            await File.WriteAllTextAsync(page, text, TestContext.Current.CancellationToken);
+        }
+
+        // The packaged variant: MSIX, with the manifest its build writes.
+        var csproj = await File.ReadAllTextAsync(project, TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(project, csproj.Replace("<OutputType>WinExe</OutputType>", "<OutputType>WinExe</OutputType>\n    <WinUIAppPackaged>true</WinUIAppPackaged>", StringComparison.Ordinal), TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => _solutions.Projects[project].WindowsPackageType == "MSIX", () => $"WindowsPackageType: {_solutions.Projects[project].WindowsPackageType}");
+        run = await _solutions.GetRunInfoAsync(project, Timeout());
+        Assert.Equal("MSIX", run.WindowsPackageType);
+        Assert.EndsWith("AppxManifest.xml", run.AppxManifest, StringComparison.Ordinal);
+        Assert.True(Path.IsPathFullyQualified(run.AppxManifest!));
+    }
+
+    [Fact]
     public void Wpf_xaml_joins_the_design_time_command_line_once()
     {
         var page = Path.Combine(_root, "MainWindow.xaml");
