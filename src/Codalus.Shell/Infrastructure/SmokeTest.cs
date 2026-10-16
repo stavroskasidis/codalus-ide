@@ -2098,8 +2098,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => Report() is { IsLoading: false, Total: > 0 } r && (r.HotFiles.Count > 0 || r.HasError), "the report shows the trace with its source lines", 300).ConfigureAwait(true);
         var report = Report()!;
         Check(!report.HasError, "the trace was read: " + report.Error);
-        // A busy machine (a CI runner) can put the runtime's GC polling above it: the hot function is among the first.
-        Check(report.Functions.Take(3).Any(f => f.Name.Contains("Primes.IsPrime", StringComparison.Ordinal)), "the hot function is among the first: " + string.Join(", ", report.Functions.Take(3).Select(f => f.Name)));
+        // The hot function is the app's hottest: on a busy machine (a CI runner) the samples land on the runtime's safe
+        // points, so Stopwatch, Sleep and wait frames of the other threads can rank above it overall.
+        var hottest = report.Functions.FirstOrDefault(f => f.Name.StartsWith("CpuBound.", StringComparison.Ordinal));
+        Check(hottest?.Name.Contains("Primes.IsPrime", StringComparison.Ordinal) == true, "the hot function is the app's hottest: " + string.Join(", ", report.Functions.Take(8).Select(f => f.Name)));
         Check(report.CounterSummaries.Count > 0, "the counters were recorded");
         Console.Out.WriteLine($"  {report.Summary}");
 
