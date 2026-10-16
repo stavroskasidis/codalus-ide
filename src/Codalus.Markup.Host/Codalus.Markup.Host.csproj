@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Schemas\*.json" LogicalName="Schemas.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Schemas\*.xsd" LogicalName="Schemas.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
