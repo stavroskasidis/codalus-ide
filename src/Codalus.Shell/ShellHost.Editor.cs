@@ -113,7 +113,7 @@ public sealed partial class ShellHost : IEditorServices
             foreach (var association in schemas.EnumerateObject().Where(a => a.Value.ValueKind == System.Text.Json.JsonValueKind.String))
             {
                 var schema = association.Value.GetString()!;
-                associations.Add(new System.Text.Json.Nodes.JsonObject
+                associations.Add((System.Text.Json.Nodes.JsonNode)new System.Text.Json.Nodes.JsonObject
                 {
                     ["pattern"] = association.Name,
                     ["schema"] = Path.IsPathRooted(schema) || root is null ? schema : Path.GetFullPath(Path.Combine(root, schema)),
