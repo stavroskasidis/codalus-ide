@@ -1,7 +1,7 @@
 name: Older .NET
 
 # The target framework matrix (M33, ADR 0030), by hand: slow to install, so not in every pipeline run.
-# - target-frameworks: .NET Core 2.0 to .NET 9 and older SDKs in .work/dotnet-compat (eng/get-runtimes.sh), and
+# - target-frameworks: .NET Core 2.0 to .NET 10 and older SDKs in .work/dotnet-compat (eng/get-runtimes.sh), and
 #   Codalus.TargetFrameworks.Tests against them (it skips without them; with CODALUS_DOTNET_COMPAT it must pass).
 # - containers: the old runtimes in containers of their distributions (eng/compat-containers.sh).
 on:

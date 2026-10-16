@@ -179,7 +179,7 @@ internal sealed class DiagnosticsService : IDisposable
         _trimmer.WorkDone();
     }
 
-    /// <summary>A Razor file's diagnostics (ADR 0023): its generated document's, where they map into the file.</summary>
+    /// <summary>A Razor file's diagnostics (ADR 0023): its generated documents', where they map into the file.</summary>
     private async Task AnalyzeRazorAsync(Solution solution, string path, int? version, CancellationToken cancellationToken)
     {
         if (await Razor.RazorMapping.CreateAsync(solution, path, cancellationToken).ConfigureAwait(false) is not { } mapping)
@@ -193,7 +193,12 @@ internal sealed class DiagnosticsService : IDisposable
             return;
         }
 
-        var diagnostics = await DiagnosticsInSpanAsync(mapping.Generated, null, cancellationToken).ConfigureAwait(false);
+        var diagnostics = new List<RoslynDiagnostic>();
+        foreach (var part in mapping.Parts)
+        {
+            diagnostics.AddRange(await DiagnosticsInSpanAsync(part.Document, null, cancellationToken).ConfigureAwait(false));
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
         await _publish(new PublishDiagnosticsParams(DocumentUris.FromPath(path), version, ConvertRazor(diagnostics, path))).ConfigureAwait(false);
         _trimmer.WorkDone();
@@ -420,6 +425,16 @@ internal sealed class DiagnosticsService : IDisposable
                 else if (Razor.RazorLocations.IsRazorGenerated(group.Key.FilePath) && Razor.RazorLocations.SourceFile(group.Key) is { } razor && File.Exists(razor))
                 {
                     found.Add((razor, ConvertRazor(group, razor)));
+                }
+                else if (Razor.RazorLocations.IsRazorGenerated(group.Key.FilePath))
+                {
+                    // A declaration document (the .NET 11 SDK's generator, M30b) has no checksum: its diagnostics go to
+                    // the component they map into (not the _Imports file every document maps).
+                    foreach (var file in group.Select(d => d.Location.GetMappedLineSpan()).Where(m => m.HasMappedPath && Razor.RazorFiles.IsRazor(m.Path) && !Razor.RazorLocations.IsImports(m.Path))
+                                 .Select(m => Path.GetFullPath(m.Path)).Distinct(Paths.Comparer).Where(File.Exists))
+                    {
+                        found.Add((file, ConvertRazor(group, file)));
+                    }
                 }
             }
 

@@ -374,7 +374,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => greeter.Insights.EndOfLineText(classLine)?.Contains("reference", StringComparison.Ordinal) == true, "CodeLens counts Greeter's references", 60).ConfigureAwait(true);
             await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 30).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
-            await WaitAsync(() => shell.DocumentOutline.Roots.Any(), "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
+            await WaitAsync(() => shell.DocumentOutline.Roots.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
             shell.Layout.CloseToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId);
         }, "language.ready").ConfigureAwait(true);
 
@@ -1518,7 +1518,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// <summary>Remote attach (M14c): the Debuggee waits on the target, the debugger attaches there, stops, and detaches.</summary>
     private async Task DebugRemoteStepAsync(RemoteTarget target)
     {
-        var dll = Path.Combine(Sessions, "Debuggee", "bin", "Debug", "net10.0", "Debuggee.dll");
+        var dll = Path.Combine(Sessions, "Debuggee", "bin", "Debug", "net11.0", "Debuggee.dll");
         Check(File.Exists(dll), "the Debuggee was built by debug.compound");
         var signal = "/tmp/codalus-smoke-" + Guid.NewGuid().ToString("N")[..8];
         Process program;
@@ -3193,7 +3193,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // macOS can stop drawing a window it considers hidden (behind others, App Nap): the screenshot renders it
         // itself, so a few seconds without frames go on rather than wait forever.
-        if (await Task.WhenAny(rendered.Task, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(true) != rendered.Task)
+        await rendered.Task.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        if (!rendered.Task.IsCompleted)
         {
             shell.Workbench.Log.AppendLine("[smoke] No frame in 5 s: going on without one.");
         }

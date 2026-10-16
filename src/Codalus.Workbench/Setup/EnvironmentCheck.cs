@@ -33,6 +33,9 @@ public sealed record ToolStatus(string Id, string Title, bool Required, ToolStat
     /// <summary>For a mismatched SDK: the version <c>global.json</c> asks for.</summary>
     public string? WantedVersion { get; init; }
 
+    /// <summary>For SDKs whose .NET is older than the hosts' (M30b): the channel to install (<c>11.0</c>).</summary>
+    public string? WantedChannel { get; init; }
+
     public bool NeedsAttention => State != ToolState.Found;
 }
 
@@ -48,6 +51,20 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
 {
     private readonly ProcessRunner _run = run ?? RunProcessAsync;
     private readonly Func<string, bool> _exists = exists ?? File.Exists;
+
+    /// <summary>
+    /// The .NET the hosts need, or later (they roll forward, ADR 0025): the runtime the IDE was built for, a release
+    /// candidate's full version included (<c>11.0.0-rc.2.26504.105</c>), since the hosts are built with the same SDK.
+    /// </summary>
+    public string HostsRuntime { get; init; } = DefaultHostsRuntime();
+
+    /// <summary>The runtime the IDE itself was built for, from its framework description (<c>.NET 11.0.0-rc.2…</c>).</summary>
+    public static string DefaultHostsRuntime()
+    {
+        var description = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
+        var version = description.StartsWith(".NET ", StringComparison.Ordinal) ? description[".NET ".Length..].Split(' ', '+')[0] : string.Empty;
+        return version.Length > 0 && char.IsAsciiDigit(version[0]) ? version : $"{Environment.Version.Major}.{Environment.Version.Minor}.{Environment.Version.Build}";
+    }
 
     /// <summary>Checks everything; <paramref name="solutionFolder"/> also checks its <c>global.json</c>.</summary>
     public async Task<IReadOnlyList<ToolStatus>> CheckAsync(string? solutionFolder, CancellationToken cancellationToken)
@@ -104,6 +121,25 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         }
 
         var newest = sdks[^1];
+
+        // The hosts run on the IDE's .NET or a newer one (M30b): SDKs of older versions alone can't start them.
+        var (runtimesCode, runtimesOutput) = await TryRunAsync(dotnet, ["--list-runtimes"], null, cancellationToken).ConfigureAwait(false);
+        var runtimes = runtimesCode == 0
+            ? runtimesOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(l => l.StartsWith("Microsoft.NETCore.App ", StringComparison.Ordinal)).Select(l => l.Split(' ')[1]).ToList()
+            : [];
+        if (runtimes.Count > 0 && !runtimes.Any(r => CompareVersions(r, HostsRuntime) >= 0))
+        {
+            var major = HostsRuntime.Split('.')[0];
+            return new("dotnet", ".NET SDK", true, ToolState.Mismatch, NeededFor)
+            {
+                Path = dotnet,
+                Version = newest,
+                WantedChannel = major + ".0",
+                Detail = $"Codalus IDE's helper processes need .NET {HostsRuntime} or later, which isn't installed (installed: {string.Join(", ", runtimes)}). Install the .NET {major} SDK.",
+            };
+        }
+
         if (solutionFolder is not null && GlobalJson(solutionFolder) is { } globalJson)
         {
             // dotnet applies global.json's version and roll-forward rules; it fails when no SDK matches.
@@ -123,6 +159,45 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         }
 
         return new("dotnet", ".NET SDK", true, ToolState.Found, NeededFor) { Path = dotnet, Version = newest };
+    }
+
+    /// <summary>
+    /// Orders .NET versions as the host does when it rolls forward: by number, then a release after its previews and
+    /// release candidates, which order by their labels' parts (numbers as numbers): <c>11.0.0-rc.1… &lt; 11.0.0-rc.2… &lt; 11.0.0</c>.
+    /// </summary>
+    public static int CompareVersions(string a, string b)
+    {
+        static (Version Number, string? Label) Split(string v)
+        {
+            var dash = v.IndexOf('-', StringComparison.Ordinal);
+            var number = dash < 0 ? v : v[..dash];
+            return (Version.TryParse(number, out var parsed) ? parsed : new Version(0, 0), dash < 0 ? null : v[(dash + 1)..]);
+        }
+
+        var (numberA, labelA) = Split(a);
+        var (numberB, labelB) = Split(b);
+        if (numberA.CompareTo(numberB) is var byNumber and not 0)
+        {
+            return byNumber;
+        }
+
+        if (labelA is null || labelB is null)
+        {
+            return labelA is null ? (labelB is null ? 0 : 1) : -1;
+        }
+
+        var partsA = labelA.Split('.');
+        var partsB = labelB.Split('.');
+        for (var i = 0; i < Math.Min(partsA.Length, partsB.Length); i++)
+        {
+            var part = long.TryParse(partsA[i], out var x) && long.TryParse(partsB[i], out var y) ? x.CompareTo(y) : string.CompareOrdinal(partsA[i], partsB[i]);
+            if (part != 0)
+            {
+                return part;
+            }
+        }
+
+        return partsA.Length.CompareTo(partsB.Length);
     }
 
     /// <summary><c>dotnet</c>: <c>DOTNET_ROOT</c>, then <c>PATH</c>, then where the installers put it.</summary>

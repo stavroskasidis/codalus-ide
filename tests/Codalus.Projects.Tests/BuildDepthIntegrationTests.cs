@@ -28,11 +28,11 @@ public sealed class BuildDepthIntegrationTests : IAsyncLifetime
 
     private string GreetingsProject => Path.Combine(Fixture, "src", "Greetings", "Greetings.csproj");
 
-    private string HelloOutput => Path.Combine(Fixture, "src", "Hello", "bin", "Debug", "net10.0");
+    private string HelloOutput => Path.Combine(Fixture, "src", "Hello", "bin", "Debug", "net11.0");
 
     private string HelloDll => Path.Combine(HelloOutput, "Hello.dll");
 
-    private string GreetingsDll => Path.Combine(Fixture, "src", "Greetings", "bin", "Debug", "net10.0", "Greetings.dll");
+    private string GreetingsDll => Path.Combine(Fixture, "src", "Greetings", "bin", "Debug", "net11.0", "Greetings.dll");
 
     private static CancellationToken Timeout() =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(s_timeout).Token).Token;
@@ -246,7 +246,7 @@ public sealed class BuildDepthIntegrationTests : IAsyncLifetime
         Assert.True(batch.Succeeded, _builds.Channel.GetText());
         Assert.Equal(2, batch.Entries.Length);
         Assert.True(File.Exists(HelloDll));
-        Assert.True(File.Exists(Path.Combine(Fixture, "src", "Hello", "bin", "Release", "net10.0", "Hello.dll")));
+        Assert.True(File.Exists(Path.Combine(Fixture, "src", "Hello", "bin", "Release", "net11.0", "Hello.dll")));
         await WaitUntilAsync(() => _builds.Channel.GetText().Contains("Batch build: 2 succeeded, 0 failed", StringComparison.OrdinalIgnoreCase));
 
         batch = await _builds.BatchBuildAsync(BuildTargets.Build, [new BatchBuildEntry(HelloProject, "Debug", "AnyCPU"), new BatchBuildEntry(HelloProject, "Release", "AnyCPU")], Timeout());

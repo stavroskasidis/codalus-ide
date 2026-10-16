@@ -48,7 +48,8 @@ public sealed class ProjectManagementTests
         // M30: the fixture's copy pins the repository's SDK; every SDK says how long it is supported.
         var inUse = Assert.Single(sdks.Sdks, s => s.IsResolved);
         Assert.Equal(Path.GetFileName(Path.TrimEndingDirectorySeparator(f.Shell.Solutions.SdkPath!)), inUse.Version);
-        Assert.StartsWith("Supported until ", inUse.Support, StringComparison.Ordinal);
+        // The repository's SDK is supported, or a release candidate (M30b, until .NET 11's GA).
+        Assert.True(inUse.Support.StartsWith("Supported until ", StringComparison.Ordinal) || inUse.Support.StartsWith("Preview of ", StringComparison.Ordinal), inUse.Support);
         Assert.All(sdks.Sdks, s => Assert.NotEmpty(s.Support));
         Assert.All(sdks.Sdks.Where(s => s.IsOutOfSupport), s => Assert.StartsWith("Out of support since ", s.Support, StringComparison.Ordinal));
         Assert.False(sdks.HasWarning);

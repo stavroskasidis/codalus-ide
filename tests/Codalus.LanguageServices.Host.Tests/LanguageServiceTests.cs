@@ -77,6 +77,26 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task CSharp_15_features_show_no_false_errors()
+    {
+        // M30b: the host's Roslyn is the .NET 11 SDK's compiler, so unions, collection expression arguments and labeled
+        // break/continue (CSharp15.cs, net11.0) parse and bind as they build.
+        var path = fixture.File("src", "App", "CSharp15.cs");
+        await fixture.OpenAsync(path);
+
+        // A pass over the file with an error in it, then without: what's left is what the file itself has.
+        await fixture.EditAsync(path, "return set.Count;", "int broken = \"text\"; return set.Count;");
+        await WaitForDiagnosticsAsync(path, d => d.Any(x => x.Code == "CS0029"));
+        await fixture.EditAsync(path, "int broken = \"text\"; ", string.Empty);
+        var diagnostics = await WaitForDiagnosticsAsync(path, d => d.All(x => x.Code != "CS0029"));
+        Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+        var hover = await fixture.Client.HoverAsync(Uri(path), fixture.At(path, "Describe(Pet pet)", "Describe(".Length), Ct);
+        Assert.Contains("Pet", hover?.Contents.Value, StringComparison.Ordinal);
+        await fixture.Languages.CloseAsync(path);
+    }
+
+    [Fact]
     public async Task Test_candidates_use_unsaved_text_and_files_on_disk()
     {
         var path = fixture.File("src", "Lib", "Square.Part.cs");

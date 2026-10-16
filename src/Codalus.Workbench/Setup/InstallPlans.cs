@@ -47,9 +47,19 @@ public static class InstallPlans
     public const string DockerPage = "https://docs.docker.com/get-docker/";
     public const string PodmanPage = "https://podman.io/docs/installation";
 
-    /// <summary>The SDK's version for an install: a pinned one, else the channel of the SDK the IDE runs on.</summary>
-    public static string Channel(string? version, string fallback = "10.0") =>
-        version is { } v && v.Split('.') is [var major, var minor, ..] ? $"{major}.{minor}" : fallback;
+    /// <summary>The channel of the .NET the IDE and its hosts run on (<c>11.0</c>).</summary>
+    public static string HostChannel => $"{Environment.Version.Major}.0";
+
+    /// <summary>The SDK's version for an install: a pinned one, else the channel of the .NET the IDE runs on.</summary>
+    public static string Channel(string? version, string? fallback = null) =>
+        version is { } v && v.Split('.') is [var major, var minor, ..] ? $"{major}.{minor}" : fallback ?? HostChannel;
+
+    /// <summary>
+    /// winget's package of a channel's SDK: <c>Microsoft.DotNet.SDK.11</c>; the preview package for the IDE's own
+    /// channel while the IDE runs on a release candidate (M30b), which winget lists only as the preview SDK.
+    /// </summary>
+    public static string WingetSdk(string channel, string hostsRuntime) =>
+        channel == HostChannel && hostsRuntime.Contains('-', StringComparison.Ordinal) ? "Microsoft.DotNet.SDK.Preview" : $"Microsoft.DotNet.SDK.{channel.Split('.')[0]}";
 
     /// <summary>
     /// The plan for <paramref name="tool"/>, or null when there's nothing to install it with here.
@@ -82,11 +92,11 @@ public static class InstallPlans
     private static InstallPlan Dotnet(ToolStatus tool, PlatformKind platform, string home, bool hasWinget)
     {
         var pinned = tool.State == ToolState.Mismatch ? tool.WantedVersion : null;
-        var channel = Channel(pinned ?? tool.Version);
+        var channel = tool.WantedChannel ?? Channel(pinned ?? tool.Version);
         if (platform == PlatformKind.Windows)
         {
             return hasWinget
-                ? Winget("dotnet", $"Microsoft.DotNet.SDK.{channel.Split('.')[0]}", pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})")
+                ? Winget("dotnet", WingetSdk(channel, EnvironmentCheck.DefaultHostsRuntime()), pinned is null ? $".NET SDK {channel}" : $".NET SDK {channel} (the newest patch; global.json asks for {pinned})")
                 : new("dotnet", InstallKind.OpenPage, "The .NET download page (winget isn't available)", DotnetDownloadPage);
         }
 

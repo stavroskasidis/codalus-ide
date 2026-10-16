@@ -49,7 +49,7 @@ Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs nativ
 - **Profiling**: CPU usage with call trees and flame graphs, .NET Counters, memory snapshots and diffs, allocations, .NET Async, threads, exceptions and file I/O, and BenchmarkDotNet results.
 - **Avalonia**: `.axaml` editing with completion and diagnostics from your types, a XAML Previewer, and the Live Visual Tree and Live Property Explorer for running apps.
 - **Remote development**: remote windows over SSH, in WSL and in containers (Dev Containers), with the build, language services, terminals and the debugger on the far side, port forwarding and reconnecting.
-- **.NET versions**: .NET 11 projects, every target framework from .NET Core 2.0 to .NET 10, and older SDKs pinned in `global.json`.
+- **.NET versions**: Codalus runs on .NET 11; .NET 11 projects with C# 15, every target framework from .NET Core 2.0 to .NET 10, and older SDKs pinned in `global.json`.
 - **Other languages**: highlighting for about forty languages from TextMate grammars; MSBuild editing with evaluated values on hover; JSON and YAML with schemas; `.editorconfig`; a Markdown preview; and any LSP language server through a plugin, without code.
 - **Extensible**: a versioned, out-of-process plugin API, 1.0 since 0.2.0 ([docs/plugins.md](docs/plugins.md)), a Plugin Gallery of NuGet packages, and `dotnet new codalus-plugin`.
 - **Yours**: Fonts and Colors, profiles, settings sync through a folder or a Git repository, customizable menus and toolbars, a start window, Help → Check Environment, and self-update on the stable or nightly channel.
@@ -95,7 +95,7 @@ The UI shell (`codalus`, Native AOT) is kept light and responsive. Heavy service
 
 ## Building
 
-You need the .NET SDK pinned in `global.json` (10.0) and git. For the debugger, run `eng/get-netcoredbg.sh` once.
+You need the .NET SDK pinned in `global.json` (11.0, its second release candidate until GA), the .NET 10 runtime for the fixtures that target `net10.0`, and git. For the debugger, run `eng/get-netcoredbg.sh` once.
 
 ```bash
 dotnet build Codalus.slnx

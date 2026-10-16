@@ -165,7 +165,7 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
 
             // macOS core dumps don't record the process id.
             Assert.Equal(OperatingSystem.IsMacOS() ? null : process.Id, summary.ProcessId);
-            Assert.StartsWith(".NET 10.", summary.Runtime, StringComparison.Ordinal);
+            Assert.StartsWith(".NET 11.", summary.Runtime, StringComparison.Ordinal);
             var main = Assert.Single(summary.Threads, t => t.Frames.Any(f => f.Method.Contains("<Main>$", StringComparison.Ordinal)));
             var frame = main.Frames.First(f => f.Method.Contains("<Main>$", StringComparison.Ordinal));
             Assert.True(

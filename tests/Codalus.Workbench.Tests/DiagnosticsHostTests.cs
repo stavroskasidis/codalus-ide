@@ -14,7 +14,7 @@ public sealed class DiagnosticsFixture : IAsyncLifetime
     internal static string Metadata(string key) =>
         typeof(DiagnosticsFixture).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
 
-    public static string HostPath => Path.Combine(Metadata("CodalusRepoRoot"), "src", "Codalus.Diagnostics.Host", "bin", Metadata("CodalusConfiguration"), "net10.0", "codalus-diaghost.dll");
+    public static string HostPath => Path.Combine(Metadata("CodalusRepoRoot"), "src", "Codalus.Diagnostics.Host", "bin", Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-diaghost.dll");
 
     public string Folder => Path.Combine(_root, "Diagnostics", "CpuBound");
 

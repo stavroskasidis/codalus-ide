@@ -229,7 +229,8 @@ internal static class DotnetProcess
     public static async Task DrainAsync(params Task[] readers)
     {
         var all = Task.WhenAll(readers);
-        if (await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false) == all)
+        await all.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        if (all.IsCompleted)
         {
             await all.ConfigureAwait(false);
         }

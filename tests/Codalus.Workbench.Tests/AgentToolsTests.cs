@@ -32,7 +32,7 @@ public sealed class AgentToolsTests : IDisposable
         var models = new LanguageModelService(new PluginManager(_workbench, _ => Codalus.Rpc.ProcessLaunchInfo.FromPath("none"), "test", new Codalus.Rpc.SupervisionPolicy()));
         var ai = new AiService(_workbench.Settings, models, _workbench.Output, () => _root, () => true);
         var external = new ExternalAgentTool(
-            new ChatToolDto("weather__forecast", "The forecast.", JsonDocument.Parse("""{"type":"object"}""").RootElement),
+            new ChatToolDto("weather__forecast", "The forecast.", JsonElement.Parse("""{"type":"object"}""")),
             "weather",
             (_, _) => Task.FromResult("Sunny, password=hunter2"));
         _tools = new AgentTools(ai, _host, _root, [external]);
@@ -180,7 +180,7 @@ public sealed class AgentToolsTests : IDisposable
         var server = new McpStdioServer(input, output, (tool, _, _) => tool == "build" ? throw new McpException("Codalus IDE isn't running.") : Task.FromResult("Solution: Demo.sln"));
         await server.RunAsync(TestContext.Current.CancellationToken);
 
-        var lines = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => JsonDocument.Parse(l).RootElement).ToList();
+        var lines = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => JsonElement.Parse(l)).ToList();
         Assert.Equal(5, lines.Count);
         Assert.Equal("codalus", lines[0].GetProperty("result").GetProperty("serverInfo").GetProperty("name").GetString());
         Assert.Equal(McpStdioServer.Tools.Select(t => t.Name), lines[1].GetProperty("result").GetProperty("tools").EnumerateArray().Select(t => t.GetProperty("name").GetString()));

@@ -69,7 +69,7 @@ public sealed class AgentShellTests
     public async Task An_external_agent_reaches_the_ide_through_codalus_mcp_only_while_it_is_on()
     {
         await using var f = ShellFixture.Create();
-        var shellDll = Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "bin", ShellFixture.Configuration, "net10.0", "codalus.dll");
+        var shellDll = Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "bin", ShellFixture.Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus.dll");
         var config = new McpServerConfig("dotnet", [shellDll, "mcp", "--user-data-dir", f.UserData], new Dictionary<string, string>());
         Assert.False(f.Shell.IsMcpServerListening);
 

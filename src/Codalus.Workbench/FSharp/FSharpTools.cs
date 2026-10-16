@@ -1,5 +1,7 @@
+using System.Text.RegularExpressions;
 using Codalus.Rpc;
 using Codalus.Workbench.Node;
+using Codalus.Workbench.Projects;
 using Codalus.Workbench.Setup;
 
 namespace Codalus.Workbench.FSharp;
@@ -90,6 +92,9 @@ public sealed class FSharpTools(string cacheFolder, string dotnet, ProcessRunner
     /// <summary>
     /// How FsAutoComplete starts, or null while it isn't installed: with <c>dotnet</c>, Fantomas's tool path at the end
     /// of <c>PATH</c> (a local or global Fantomas wins), and <c>DOTNET_ROOT</c> so the Fantomas command finds the runtime.
+    /// FsAutoComplete loads the MSBuild of the SDK its workspace resolves, which needs that SDK's runtime or a newer one.
+    /// It rolls forward to the newest release runtime by itself; with the SDK of a newer .NET's preview or release
+    /// candidate installed (M30b: .NET 11's, for its <c>net10.0</c> build), it rolls forward to previews too.
     /// </summary>
     public ProcessLaunchInfo? Launch()
     {
@@ -107,6 +112,19 @@ public sealed class FSharpTools(string cacheFolder, string dotnet, ProcessRunner
             environment["DOTNET_ROOT"] = root;
         }
 
+        if ((Path.IsPathRooted(dotnet) ? dotnet : BuildHostRuntime.DotnetExecutable()) is { } executable && Path.GetDirectoryName(executable) is { } dotnetRoot
+            && ToolMajor(dll) is { } toolMajor && BuildHostRuntime.HasNewerSdk(dotnetRoot, toolMajor))
+        {
+            environment[BuildHostRuntime.RollForward] = "LatestMajor";
+            environment[BuildHostRuntime.RollForwardToPrerelease] = "1";
+        }
+
         return new ProcessLaunchInfo(dotnet, [dll]) { Environment = environment };
     }
+
+    /// <summary>The .NET version of the tool's build that <c>dotnet tool install</c> chose (<c>tools/net10.0/any/</c> → 10).</summary>
+    public static int? ToolMajor(string dll) =>
+        Regex.Match(dll.Replace('\\', '/'), @"/tools/net(\d+)\.\d+/", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)) is { Success: true } match
+            ? int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)
+            : null;
 }

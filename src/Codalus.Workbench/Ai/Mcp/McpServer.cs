@@ -211,7 +211,7 @@ public sealed class McpBridge : IDisposable
                 json.WriteStartObject();
                 json.WriteString("tool", tool);
                 json.WritePropertyName("arguments");
-                (arguments.ValueKind == JsonValueKind.Object ? arguments : JsonDocument.Parse("{}").RootElement).WriteTo(json);
+                (arguments.ValueKind == JsonValueKind.Object ? arguments : JsonElement.Parse("{}")).WriteTo(json);
                 json.WriteEndObject();
             }
 

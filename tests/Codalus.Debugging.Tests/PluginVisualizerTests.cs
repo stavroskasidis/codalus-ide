@@ -28,8 +28,8 @@ public sealed class PluginVisualizerTests(DebuggeeFixture debuggee) : IClassFixt
     private static string Metadata(string key) =>
         typeof(PluginVisualizerTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == key).Value!;
 
-    private static string Built(string folder, string project, string file) =>
-        Path.Combine(Metadata("CodalusRepoRoot"), folder, project, "bin", Metadata("CodalusConfiguration"), "net10.0", file);
+    private static string Built(string folder, string project, string file, string? framework = null) =>
+        Path.Combine(Metadata("CodalusRepoRoot"), folder, project, "bin", Metadata("CodalusConfiguration"), framework ?? Codalus.Tests.RepoBuild.TargetFramework, file);
 
     public ValueTask InitializeAsync()
     {
@@ -44,7 +44,7 @@ public sealed class PluginVisualizerTests(DebuggeeFixture debuggee) : IClassFixt
         {
             ProposedApi = _proposed,
         };
-        var plugin = Path.GetDirectoryName(Built(Path.Combine("samples", "plugins"), "DictionaryVisualizer", "DictionaryVisualizer.dll"))!;
+        var plugin = Path.GetDirectoryName(Built(Path.Combine("samples", "plugins"), "DictionaryVisualizer", "DictionaryVisualizer.dll", "net10.0"))!;
         _plugins.AddPlugins(PluginDiscovery.Scan([(plugin, false)], PlatformInfo.Current, allowProposedApi: true));
         return ValueTask.CompletedTask;
     }

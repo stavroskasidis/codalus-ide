@@ -286,7 +286,7 @@ public sealed class ReferenceManagerViewModel : ObservableObject, ILoadable
         }
 
         _solutions.ProjectChanged += OnChanged;
-        await Task.WhenAny(evaluated.Task, Task.Delay(TimeSpan.FromSeconds(10))).ConfigureAwait(true);
+        await evaluated.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
         _solutions.ProjectChanged -= OnChanged;
         await LoadAsync().ConfigureAwait(true);
     }

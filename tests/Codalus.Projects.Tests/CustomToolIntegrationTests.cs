@@ -26,7 +26,7 @@ public sealed class CustomToolIntegrationTests : IAsyncLifetime
 
     internal static string T4HostPath =>
         Environment.GetEnvironmentVariable(TextTemplatingHostLaunch.EnvironmentVariable) is { Length: > 0 } host ? host
-        : Path.Combine(BuildHostIntegrationTests.RepoRoot, "src", "Codalus.TextTemplating.Host", "bin", Configuration, "net10.0", "codalus-t4host.dll");
+        : Path.Combine(BuildHostIntegrationTests.RepoRoot, "src", "Codalus.TextTemplating.Host", "bin", Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-t4host.dll");
 
     private static string Configuration =>
         typeof(CustomToolIntegrationTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusConfiguration").Value!;

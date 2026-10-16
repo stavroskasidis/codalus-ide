@@ -60,7 +60,7 @@ public sealed class PluginCommandLine(string pluginsDirectory, PlatformKind plat
                 {
                     await output.WriteLineAsync(requested is null
                         ? $"No plugin '{id}' was found on {string.Join(", ", Sources())}."
-                        : $"Version {requested} of '{id}' was not found on {string.Join(", ", Sources())}.").ConfigureAwait(false);
+                        : $"Version {requested} of '{id}' was not found on {string.Join(", ", Sources())}.", cancellationToken).ConfigureAwait(false);
                     return 1;
                 }
 
@@ -79,12 +79,12 @@ public sealed class PluginCommandLine(string pluginsDirectory, PlatformKind plat
             var name = $"{package.Plugin.Id} {package.Plugin.Manifest?.Version}".TrimEnd();
             await output.WriteLineAsync(installer.Install(package) is not null
                 ? $"Installed {name}."
-                : $"{name} replaces the installed version when Codalus IDE next starts.").ConfigureAwait(false);
+                : $"{name} replaces the installed version when Codalus IDE next starts.", cancellationToken).ConfigureAwait(false);
             return 0;
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException or HttpRequestException or InvalidOperationException or JsonException or UnauthorizedAccessException)
         {
-            await output.WriteLineAsync($"Could not install {specification}: {ex.Message}").ConfigureAwait(false);
+            await output.WriteLineAsync($"Could not install {specification}: {ex.Message}", cancellationToken).ConfigureAwait(false);
             return 1;
         }
     }

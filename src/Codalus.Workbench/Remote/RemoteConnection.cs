@@ -600,7 +600,8 @@ public sealed class RemoteConnection : IAsyncDisposable
         _resumable?.Close();
         await _multiplexer.DisposeAsync().ConfigureAwait(false);
         var exited = _transport.WaitForExitAsync();
-        if (await Task.WhenAny(exited, Task.Delay(TimeSpan.FromSeconds(3))).ConfigureAwait(false) != exited)
+        await ((Task)exited).WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        if (!exited.IsCompleted)
         {
             Kill(_transport, tree: _resumable is null);
         }

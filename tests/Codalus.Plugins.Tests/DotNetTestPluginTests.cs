@@ -95,7 +95,7 @@ public sealed class DotNetTestPluginTests(DotNetTestFixture fixture)
         Diagnostics();
 
         method = fixture.Node("MultiTargetTests", "MultiTargetTests", "FrameworkTests", "ReportsFramework");
-        Assert.Equal(["net10.0", "net9.0"], method.Children.Select(c => c.Label).Order(StringComparer.Ordinal));
+        Assert.Equal(["net10.0", "net11.0"], method.Children.Select(c => c.Label).Order(StringComparer.Ordinal));
         Assert.All(method.Leaves(), l => Assert.Equal(TestOutcome.Passed, l.Outcome));
     }
 }

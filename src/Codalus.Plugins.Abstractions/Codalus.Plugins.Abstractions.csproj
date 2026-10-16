@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- The plugin API stays on .NET 10 (M30b): plugins built with the .NET 10 SDK load in the .NET 11 plugin host. -->
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Codalus.Plugins</RootNamespace>
     <Description>The Codalus IDE plugin API (ADR 0003). Plugins reference this package and implement ICodalusPlugin.</Description>
     <Version>1.0.0</Version>

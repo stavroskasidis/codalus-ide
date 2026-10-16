@@ -15,7 +15,9 @@ UpgradeBehavior: install
 MinimumOSVersion: 10.0.22000.0
 Dependencies:
   PackageDependencies:
-    - PackageIdentifier: Microsoft.DotNet.SDK.10
+    # The hosts run on .NET 11 or later (M30b, ADR 0025): its release candidate is winget's preview SDK until GA.
+    # TODO(issue): Microsoft.DotNet.SDK.11 at .NET 11 GA.
+    - PackageIdentifier: Microsoft.DotNet.SDK.Preview
     - PackageIdentifier: Git.Git
 Installers:
   - Architecture: x64
