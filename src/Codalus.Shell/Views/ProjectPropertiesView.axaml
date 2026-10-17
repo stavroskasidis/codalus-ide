@@ -39,7 +39,7 @@
       <!-- Properties. -->
       <ScrollViewer Grid.Column="1" IsVisible="{Binding IsPropertiesPage}">
         <StackPanel Margin="16,8,16,16" Spacing="4">
-          <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+          <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
           <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
           <ItemsControl x:Name="Sections" ItemsSource="{Binding Sections}">
             <ItemsControl.ItemTemplate>
@@ -92,7 +92,7 @@
           <StackPanel Margin="16,8,16,16" Spacing="6">
             <TextBlock Classes="subheading" Text="{l:T projectProperties.buildEvents}" />
             <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T projectProperties.commandsThatRunBeforeAndAfter}" />
-            <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+            <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
             <TextBlock FontWeight="SemiBold" Text="{l:T projectProperties.preBuildEventCommandLine}" Margin="0,6,0,0" />
             <TextBox x:Name="PreBuildBox" Text="{Binding PreBuild}" AcceptsReturn="True" MinHeight="80" TextWrapping="NoWrap"
                      FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace" AutomationProperties.Name="{l:T projectProperties.preBuildEventCommandLine}" />
@@ -127,7 +127,7 @@
             <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" Text="{Binding Location}" />
             <Button Grid.Column="1" Classes="link" Content="{l:T projectProperties.openLaunchsettingsJson}" Command="{Binding OpenFileCommand}" />
           </Grid>
-          <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+          <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
           <Button Content="{l:T projectProperties.save}" Command="{Binding SaveCommand}" AutomationProperties.Name="{l:T projectProperties.saveLaunchProfiles}" />

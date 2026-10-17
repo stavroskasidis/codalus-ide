@@ -312,6 +312,24 @@
   <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
   </Style>
+  <!--
+    M34g: secondary text on a selected row (a result's detail, a command's kind) is the selection's text too: the muted
+    gray was 3:1 on Classic's selection and 1:1 on a High contrast family's accent. A tree's selected header takes the
+    selection's text as well (Fluent left it the window's: white on a High contrast family's accent).
+  -->
+  <Style Selector="ListBoxItem:selected TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <Style Selector="TreeViewItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource TreeViewItemForegroundSelected}" />
+  </Style>
+  <!-- Error and warning messages (M34g): the state colors made readable as text (4.5:1, 7:1 in a family's High contrast). -->
+  <Style Selector="TextBlock.error, SelectableTextBlock.error">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Error.Foreground}" />
+  </Style>
+  <Style Selector="TextBlock.warning, SelectableTextBlock.warning">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Warning.Foreground}" />
+  </Style>
 
   <!-- The status bar's color says the state: purple without a solution, the accent with one, orange while debugging. -->
   <Style Selector="Border#StatusBarHost">

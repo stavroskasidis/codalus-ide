@@ -9,7 +9,7 @@
     <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,8">
       <TextBlock Classes="heading" Text="{l:T packageSources.packageSources}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T packageSources.sourcesAreSearchedAndRestoredIn}" />
-      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,8,0,0">
       <StackPanel Orientation="Horizontal" Spacing="6">

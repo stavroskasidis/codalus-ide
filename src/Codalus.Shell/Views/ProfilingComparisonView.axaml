@@ -16,7 +16,7 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:CompareRowViewModel">
               <Grid ColumnDefinitions="70,70,70,150,*" AutomationProperties.Name="{Binding AccessibleName}">
-                <TextBlock Text="{Binding Delta}" TextAlignment="Right" FontWeight="SemiBold" Foreground="{DynamicResource Shell.Error}" IsVisible="{Binding Worse}" />
+                <TextBlock Text="{Binding Delta}" TextAlignment="Right" FontWeight="SemiBold" Foreground="{DynamicResource Shell.Error.Foreground}" IsVisible="{Binding Worse}" />
                 <TextBlock Text="{Binding Delta}" TextAlignment="Right" FontWeight="SemiBold" IsVisible="{Binding !Worse}" />
                 <TextBlock Grid.Column="1" Text="{Binding Baseline}" TextAlignment="Right" Classes="muted" ToolTip.Tip="{l:T profilingComparison.totalInTheBaseline}" />
                 <TextBlock Grid.Column="2" Text="{Binding Current}" TextAlignment="Right" ToolTip.Tip="{l:T profilingComparison.totalNow}" />

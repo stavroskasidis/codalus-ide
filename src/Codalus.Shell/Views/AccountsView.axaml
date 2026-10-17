@@ -56,7 +56,7 @@
                   </StackPanel>
                   <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding ServerHint}" IsVisible="{Binding HasServerHint}" TextWrapping="Wrap" />
                 </StackPanel>
-                <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" />
               </StackPanel>
             </Border>
           </DataTemplate>

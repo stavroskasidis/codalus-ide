@@ -128,3 +128,22 @@ Shell.TabColor.5 Shell.Tab.Inactive 3
 Shell.TabColor.6 Shell.Tab.Inactive 3
 Shell.TabColor.7 Shell.Tab.Inactive 3
 Shell.TabColor.8 Shell.Tab.Inactive 3
+
+# Text in the state colors (M34g): error and warning messages, on the surfaces they're shown on.
+Shell.Error.Foreground Shell.Panel 4.5
+Shell.Error.Foreground Shell.Background 4.5
+Shell.Error.Foreground Shell.Overlay 4.5
+Shell.Error.Foreground Shell.Editor.Background 4.5
+Shell.Warning.Foreground Shell.Panel 4.5
+Shell.Warning.Foreground Shell.Background 4.5
+Shell.Warning.Foreground Shell.Overlay 4.5
+Shell.Warning.Foreground Shell.Editor.Background 4.5
+
+# The new views' other surfaces (M34g): the setup's cards and sections (Shell.Editor.Background), and the
+# outlines in the accent (a chosen card, a chosen chip).
+Shell.Foreground Shell.Editor.Background 4.5
+Shell.Accent Shell.Overlay 3
+Shell.Accent Shell.Editor.Background 3
+
+# A checked toggle button (M34g): Fluent's, set per family.
+ToggleButtonForegroundChecked ToggleButtonBackgroundChecked 4.5

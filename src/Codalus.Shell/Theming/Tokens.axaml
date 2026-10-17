@@ -25,6 +25,13 @@
       <SolidColorBrush x:Key="Shell.Selection" Color="#CCE8FF" />
       <SolidColorBrush x:Key="Shell.Accent" Color="#007ACC" />
       <SolidColorBrush x:Key="Shell.AccentForeground" Color="#FFFFFF" />
+      <!-- A checked toggle button (M34g): the accent with its text (Fluent's blue under white was 4.5:1 at best). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#007ACC" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#007ACC" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#007ACC" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Focus" Color="#007ACC" />
       <SolidColorBrush x:Key="Shell.StatusBar" Color="#007ACC" />
       <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
@@ -36,6 +43,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#9A6A00" />
       <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
       <SolidColorBrush x:Key="Shell.Link" Color="#006AB1" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -157,6 +167,13 @@
       <SolidColorBrush x:Key="Shell.Selection" Color="#3F3F46" />
       <SolidColorBrush x:Key="Shell.Accent" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.AccentForeground" Color="#000000" />
+      <!-- A checked toggle button (M34g): the accent with its text (Fluent's blue under white was 4.5:1 at best). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#3794FF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#3794FF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#3794FF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Focus" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.StatusBar" Color="#007ACC" />
       <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
@@ -168,6 +185,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#4DAAFC" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1E1E1E" />
@@ -289,6 +309,13 @@
       <SolidColorBrush x:Key="Shell.Selection" Color="#C6D0EA" />
       <SolidColorBrush x:Key="Shell.Accent" Color="#0E70C0" />
       <SolidColorBrush x:Key="Shell.AccentForeground" Color="#FFFFFF" />
+      <!-- A checked toggle button (M34g): the accent with its text (Fluent's blue under white was 4.5:1 at best). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#0E70C0" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#0E70C0" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#0E70C0" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
       <SolidColorBrush x:Key="Shell.Focus" Color="#0E70C0" />
       <SolidColorBrush x:Key="Shell.StatusBar" Color="#007ACC" />
       <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
@@ -388,6 +415,13 @@
       <SolidColorBrush x:Key="Shell.Selection" Color="#0E4A7B" />
       <SolidColorBrush x:Key="Shell.Accent" Color="#1AEBFF" />
       <SolidColorBrush x:Key="Shell.AccentForeground" Color="#000000" />
+      <!-- A checked toggle button (M34g): the accent with its text (Fluent's blue under white was 4.5:1 at best). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Focus" Color="#F38518" />
       <SolidColorBrush x:Key="Shell.StatusBar" Color="#000000" />
       <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
@@ -399,6 +433,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#21A6FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
@@ -587,6 +624,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#9A6A00" />
       <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
       <SolidColorBrush x:Key="Shell.Link" Color="#1D49B0" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#2B59C3" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -715,6 +755,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#2B59C3" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#2B59C3" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#2B59C3" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
     </ResourceDictionary>
 
     <!-- Harbor, Dark (M45, docs/design/shell-themes.md). -->
@@ -747,6 +794,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#8DB4FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#6E98FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#141A28" />
@@ -875,6 +925,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#0A1124" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#0A1124" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#0A1124" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#6E98FF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#6E98FF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#6E98FF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#0A1124" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#0A1124" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#0A1124" />
     </ResourceDictionary>
 
     <!-- Harbor, High contrast (M45, docs/design/shell-themes.md). -->
@@ -907,6 +964,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#7CC7FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#6CD2FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
@@ -1035,6 +1095,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#000000" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#000000" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#000000" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#000000" />
       <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFF" />
@@ -1087,6 +1154,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#9A6A00" />
       <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
       <SolidColorBrush x:Key="Shell.Link" Color="#0B5CAD" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#0F7C72" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -1220,6 +1290,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#0F7C72" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#0F7C72" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#0F7C72" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
     </ResourceDictionary>
 
     <!-- Graphite, Dark (M45, docs/design/shell-themes.md). -->
@@ -1252,6 +1329,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#7CC4FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#2BB3A3" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1A1B1F" />
@@ -1385,6 +1465,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#0B1F1C" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#0B1F1C" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#0B1F1C" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#0B1F1C" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#0B1F1C" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#0B1F1C" />
     </ResourceDictionary>
 
     <!-- Graphite, High contrast (M45, docs/design/shell-themes.md). -->
@@ -1417,6 +1504,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#7CC7FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#3FF2D2" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
@@ -1550,6 +1640,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#000000" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#000000" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#000000" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#000000" />
       <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFF" />
@@ -1602,6 +1699,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#9A6A00" />
       <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
       <SolidColorBrush x:Key="Shell.Link" Color="#5A2FB0" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#6B3FC4" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -1730,6 +1830,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
     </ResourceDictionary>
 
     <!-- Daylight, Dark (M45, docs/design/shell-themes.md). -->
@@ -1762,6 +1869,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#C4AEFF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#A98BFF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#222029" />
@@ -1890,6 +2000,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#160A33" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#160A33" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#160A33" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#A98BFF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#A98BFF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#A98BFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#160A33" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#160A33" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#160A33" />
     </ResourceDictionary>
 
     <!-- Daylight, High contrast (M45, docs/design/shell-themes.md). -->
@@ -1922,6 +2039,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#D2B3FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#D2B3FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
@@ -2050,6 +2170,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#000000" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#000000" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#000000" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#000000" />
       <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFF" />
@@ -2102,6 +2229,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#9A6A00" />
       <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
       <SolidColorBrush x:Key="Shell.Link" Color="#A04E10" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#B85A12" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -2230,6 +2360,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#B85A12" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#B85A12" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#B85A12" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#FFFFFF" />
     </ResourceDictionary>
 
     <!-- Ember, Dark (M45, docs/design/shell-themes.md). -->
@@ -2262,6 +2399,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#F2B27A" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#E08A3C" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#171513" />
@@ -2390,6 +2530,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#1A0F05" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#1A0F05" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#1A0F05" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#E08A3C" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#E08A3C" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#E08A3C" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#1A0F05" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#1A0F05" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#1A0F05" />
     </ResourceDictionary>
 
     <!-- Ember, High contrast (M45, docs/design/shell-themes.md). -->
@@ -2422,6 +2569,9 @@
       <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
       <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Link" Color="#7CF0FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#FFB547" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
@@ -2550,6 +2700,13 @@
       <SolidColorBrush x:Key="AccentButtonForeground" Color="#000000" />
       <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#000000" />
       <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#000000" />
+      <!-- A checked toggle button (M34g): the family's accent with its text, as the accent buttons (Classic High Contrast's blue was 4.5:1 under white). -->
+      <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#FFB547" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#FFB547" />
+      <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#FFB547" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="ToggleButtonForegroundCheckedPressed" Color="#000000" />
       <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#FFFFFF" />
       <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFF" />

@@ -47,7 +47,7 @@
         <Button Classes="accent" Content="{l:T efScaffold.generate}" Command="{Binding RunCommand}" IsEnabled="{Binding !IsBusy}" />
         <TextBlock Text="{l:T efScaffold.buildingAndGenerating}" Classes="muted" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
       </StackPanel>
-      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding Result}" IsVisible="{Binding HasResult}" FontWeight="SemiBold" TextWrapping="Wrap" />
     </StackPanel>
   </ScrollViewer>

@@ -34,7 +34,7 @@
             <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{Binding Configuration}" />
             <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="{Binding Platform}" />
             <TextBlock Grid.Column="4" VerticalAlignment="Center" Text="{Binding Status}" Classes.muted="{Binding !Failed}"
-                       Foreground="{DynamicResource Shell.Error}" />
+                       Foreground="{DynamicResource Shell.Error.Foreground}" />
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>

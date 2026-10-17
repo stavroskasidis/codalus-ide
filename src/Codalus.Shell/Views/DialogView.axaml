@@ -57,7 +57,7 @@
           </ItemsControl>
         </ScrollViewer>
       </Border>
-      <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap"
                  AutomationProperties.LiveSetting="Assertive" />
       <ItemsControl ItemsSource="{Binding Buttons}" HorizontalAlignment="Right" Margin="0,6,0,0">
         <ItemsControl.ItemsPanel>

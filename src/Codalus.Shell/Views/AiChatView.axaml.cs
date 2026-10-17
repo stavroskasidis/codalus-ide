@@ -197,7 +197,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
                 };
                 if (step.IsError)
                 {
-                    line.Bind(TextBlock.ForegroundProperty, line.GetResourceObservable("Shell.Warning"));
+                    line.Bind(TextBlock.ForegroundProperty, line.GetResourceObservable("Shell.Warning.Foreground"));
                 }
                 else
                 {
@@ -224,7 +224,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
             else if (_turn.Error is { } error)
             {
                 var text = new TextBlock { Text = error, TextWrapping = TextWrapping.Wrap, MaxWidth = 600 };
-                text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable("Shell.Error"));
+                text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable("Shell.Error.Foreground"));
                 _status.Children.Add(text);
                 if (_turn.NeedsConfiguration)
                 {
