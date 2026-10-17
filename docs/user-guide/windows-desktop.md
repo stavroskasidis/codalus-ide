@@ -1,6 +1,6 @@
 # WPF, Windows Forms and WinUI 3
 
-Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NET (`net8.0-windows` and later) on Windows, Linux and macOS. They run, debug, test and use Hot Reload on Windows, where WPF XAML also gets a previewer and running WPF apps the Live Visual Tree. On Linux and macOS, starting one says that it runs only on Windows. [WinUI 3](#winui-3) apps (the Windows App SDK) open and edit everywhere, and build, run and debug on Windows, packaged or not.
+Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NET (`net8.0-windows` and later) on Windows, Linux and macOS. They run, debug, test and use Hot Reload on Windows, where WPF XAML also gets a previewer, running WPF apps the Live Visual Tree, and forms the Windows Forms designer. On Linux and macOS, starting one says that it runs only on Windows. [WinUI 3](#winui-3) apps (the Windows App SDK) open and edit everywhere, and build, run and debug on Windows, packaged or not.
 
 | | Windows | Linux and macOS |
 |---|---|---|
@@ -9,6 +9,7 @@ Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NE
 | Run, debug, Hot Reload | ✓ | Windows only |
 | Run their tests (`net*-windows` test projects) | ✓ | Windows only |
 | WPF XAML Previewer, Live Visual Tree and Live Property Explorer | ✓ | Windows only |
+| Windows Forms designer and Toolbox | ✓ | Windows only (forms open as code) |
 | WinUI 3: open the project, IntelliSense, WinUI XAML editing | ✓ | ✓ |
 | WinUI 3: build, run, debug, Hot Reload, packaged (MSIX) apps | ✓ | Windows only |
 
@@ -86,6 +87,47 @@ On Windows, run or debug a WPF app (`Ctrl+F5` or `F5`) and open Debug → Window
 
 Running or debugging a WPF app loads a small agent into it (a .NET startup hook). It connects only to this IDE, on this machine, and your app needs no package or code for it. It needs .NET 8 or later. To turn it off, set **Live Visual Tree for Avalonia and WPF apps** off (Settings → Debugging, `debug.liveVisualTree`). While the app is paused in the debugger, the tree can't refresh.
 
+## The Windows Forms designer
+
+On Windows, a form's or user control's `.cs` file opens in the **Windows Forms designer**: double-click it in Solution Explorer (it has a form icon) or open it. **View Code** (`F7`) shows its code, and **View Designer** (`Shift+F7`, or the Solution Explorer's and the editor's context menu) shows the designer again. The `.Designer.cs` file itself opens as code. To open forms as code by default, turn **Open Forms in the Designer** off (Settings → Windows Forms, `windowsForms.openInDesigner`).
+
+The designer draws the form with your app's own .NET and Windows Forms, as Visual Studio's does: the first time it builds the project, your own controls (a user control on the form) show as they're built, and the form's resources apply.
+- **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent, `Ctrl+A` everything on the form.
+- **Move** the selected controls by dragging them; dropped on a panel, a group box, a tab page or a split container's panel, a control moves into it. The arrow keys move them a pixel, `Shift`+arrows resize them.
+- **Resize** the selected control with its grab handles (the form from its right and bottom ones).
+- **Delete**, **Cut** (`Ctrl+X`), **Copy** (`Ctrl+C`), **Paste** (`Ctrl+V`, into the selected container, a little lower and to the right, with new names) and **Duplicate** (`Ctrl+D`). Deleting a container deletes what's inside.
+- **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Y`) are the designer file's own: the designer's changes are edits of `.Designer.cs`, so they undo in the code view too, and the designer loads the form again from the code.
+- **Double-click** a control to go to its default event's handler (a button's `Click`, a form's `Load`), written in the form's code file when it doesn't exist yet.
+- Components that don't show on the form (a timer, a tool tip, a dialog) are listed under it; click one to select it.
+
+**Every change is written as code**, the way Visual Studio's designer writes it, in your file's own style (for .NET, or for .NET Framework with `this.` and full type names): a moved button changes its one `Location` line; a new one adds its field, its creation, its commented section with its properties in Visual Studio's order and its `Controls.Add`. The rest of the file doesn't move, so source control and local history show only what changed. The changes are in the designer file's editor until you save (`Ctrl+S` saves the designer).
+
+**Code the designer can't read** (an `if` or a loop in `InitializeComponent`, a lambda as an event handler, a call to one of the form's own methods, a field that isn't a component) opens as code instead, at that line, and a notification says why, as in Visual Studio. The .NET SDK's `WFO3000` analyzers already flag most of it as errors.
+
+### The Toolbox
+
+View → **Toolbox** (`Ctrl+Alt+X`) lists Windows Forms' controls and components by Visual Studio's categories: **Common Controls**, **Containers**, **Menus & Toolbars**, **Data**, **Components**, **Printing** and **Dialogs**. Your project's own controls and components (and those of the projects it references) come first, under **_Project_ Components**; mark a class `[ToolboxItem(false)]` to leave it out. The search box filters them.
+
+Click an item, then click on the form (it gets its default size) or drag a rectangle (it gets that size); or drag the item onto the form. It's named as in Visual Studio (`button1`, `textBox2`…) and selected; `Esc` or the **Pointer** cancels.
+
+### Properties and events
+
+With the designer active, the **Properties** window (`F4`) shows the selected component's properties, as a classic IDE's property grid:
+- by category or alphabetically (its toolbar), values the code sets in bold, the selected property's description at the bottom;
+- for several selected components, the properties they share, a value they differ in left blank, and a value set on all of them;
+- edited as text (`12, 9` for a point, `Segoe UI, 9pt, style=Bold` for a font, `255, 128, 0` or a name for a color, with a swatch), from a list (enums, `True`/`False`, `Dock`), or with a toggle per flag (`Anchor`'s Top, Bottom, Left and Right);
+- **(Name)** renames the component, in the designer file and wherever the form's code uses it.
+
+**Events** (its toolbar) lists the component's events with their handlers. Type a method's name to hook the event to it; clear it to unhook the event (the method stays). The arrow next to an event goes to its handler, writing `button1_Click` in the code file first when there's none.
+
+### Limits
+
+- **Localizable forms** (`Localizable` set to `True`: their properties in the `.resx`) open and draw, but their localizable properties can't be changed in the designer yet; it says so. Images in the form's resources show but aren't changed.
+- Not yet: snap lines and alignment guides, tab order mode, the component tray's arrangement, smart tags, editing menus and tool strips on the form, data binding, and the component designer (a class that is a component but not a control opens as code).
+- The designer runs your code (your controls' constructors), so it works only in folders you trust.
+
+On Linux and macOS, forms open as code (the status bar says once that the designer is Windows only), View Designer says so, and the code edits, completes and builds as usual.
+
 ## WinUI 3
 
 WinUI 3 apps (`<UseWinUI>true</UseWinUI>`, the Windows App SDK's `Microsoft.WindowsAppSDK` package) open on every OS with IntelliSense for their C# and their XAML. Their packages restore everywhere (Codalus IDE sets `EnableWindowsTargeting`, as for WPF), but WinUI's XAML compiler is a Windows program, so they build, run and debug on Windows. On Linux and macOS, Start, Start Without Debugging, Build and Rebuild say so and build nothing, and the code-behind shows errors for `InitializeComponent` and the named elements' fields (the XAML compiler writes them, on Windows).
@@ -126,6 +168,6 @@ There's no WinUI previewer (Microsoft has none either), and XAML Hot Reload isn'
 - XAML Hot Reload (changes made in the Live Property Explorer stay in the running app).
 - A WinUI 3 previewer, WinUI templates in New Project, and building WinUI apps on Linux and macOS.
 - The WPF previewer and the Live Visual Tree on Linux and macOS (through a Windows machine), and for WPF on .NET Framework.
-- The Windows Forms designer: forms open as code (planned).
+- The Windows Forms designer on Linux and macOS (through a Windows machine), and its later parts (snap lines, tab order, smart tags, menus and tool strips, localizable forms).
 - Running and debugging these apps from Linux and macOS through a Windows machine.
 - WPF and Windows Forms on .NET Framework.
