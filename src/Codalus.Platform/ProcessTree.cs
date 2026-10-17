@@ -108,28 +108,50 @@ public static partial class ProcessTree
             CloseHandle(snapshot);
         }
 
-        // An entry keeps its parent's id after the parent ended, and Windows reuses process ids: a process that started
-        // before this one is an earlier process's child that this one's id was given to (a build server whose build
-        // ended, say), not a program this one started. Process.Kill's tree walk checks the same.
-        if (children.Count > 0 && StartTime(processId) is { } started)
+        // An entry keeps its parent's id after the parent ended, and Windows reuses process ids: a process created before
+        // this one is an earlier process's child that this one's id was given to (a build server whose build ended, say),
+        // not a program this one started. Process.Kill's tree walk checks the same.
+        return StartedSinceParent(CreationTime(processId), children, CreationTime);
+    }
+
+    /// <summary>
+    /// The listed <paramref name="children"/> of a parent created at <paramref name="parentCreated"/> that it can have
+    /// started: those created at or after it. A child created earlier is an earlier holder's of the parent's (reused) id.
+    /// A creation time that can't be read (the process ended, or may not be queried) leaves the child in, and an unknown
+    /// parent creation time leaves every child in: only a process known to be older than its parent is left out.
+    /// </summary>
+    /// <param name="created">A process's creation time, as UTC file time, or null when it can't be read.</param>
+    internal static List<int> StartedSinceParent(long? parentCreated, List<int> children, Func<int, long?> created)
+    {
+        if (parentCreated is not { } parent || children.Count == 0)
         {
-            children.RemoveAll(id => StartTime(id) is { } childStarted && childStarted < started);
+            return children;
         }
 
+        children.RemoveAll(id => created(id) is { } childCreated && childCreated < parent);
         return children;
     }
 
-    /// <summary>When a process started; null when it ended or can't be read.</summary>
-    private static DateTime? StartTime(int processId)
+    /// <summary>
+    /// When a process was created, as the kernel recorded it (UTC file time, from the same clock for every process); null
+    /// when it ended or can't be queried. Read straight from a handle: no <see cref="System.Diagnostics.Process"/>, whose
+    /// lookup by id lists every process when it can't open one, and whose start time is converted to local time.
+    /// </summary>
+    private static long? CreationTime(int processId)
     {
-        try
-        {
-            using var process = System.Diagnostics.Process.GetProcessById(processId);
-            return process.StartTime;
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        var handle = OpenProcess(ProcessQueryLimitedInformation, false, (uint)processId);
+        if (handle == IntPtr.Zero)
         {
             return null;
+        }
+
+        try
+        {
+            return GetProcessTimes(handle, out var creation, out _, out _, out _) ? creation : null;
+        }
+        finally
+        {
+            CloseHandle(handle);
         }
     }
 
@@ -137,6 +159,8 @@ public static partial class ProcessTree
         string.Equals(image, "conhost.exe", StringComparison.OrdinalIgnoreCase) || string.Equals(image, "OpenConsole.exe", StringComparison.OrdinalIgnoreCase);
 
     private const uint SnapProcess = 0x2;
+
+    private const uint ProcessQueryLimitedInformation = 0x1000;
 
     private static readonly IntPtr InvalidHandle = new(-1);
 
@@ -153,6 +177,13 @@ public static partial class ProcessTree
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool Process32NextW(IntPtr snapshot, IntPtr entry);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetProcessTimes(IntPtr process, out long creation, out long exit, out long kernel, out long user);
 
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
