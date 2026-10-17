@@ -2273,7 +2273,22 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         text!.Text = "Smoke test";
         await WaitAsync(() => code.Text.Text.Contains("button1.Text = \"Smoke test\";", StringComparison.Ordinal), "the Text set in the Properties window is in the code", 60).ConfigureAwait(true);
         var added = code.Text.Text.Split('\n').Length - original.Split('\n').Length;
-        Check(added == 12, $"the diff is the button's field, creation, section and Controls.Add: {added} lines");
+        // The lines that weren't there before, in the message: the first Windows run counted 14 with nothing else to go on.
+        var remaining = original.Split('\n').GroupBy(l => l, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+        var newLines = new List<string>();
+        foreach (var line in code.Text.Text.Split('\n'))
+        {
+            if (remaining.TryGetValue(line, out var count) && count > 0)
+            {
+                remaining[line] = count - 1;
+            }
+            else
+            {
+                newLines.Add(line);
+            }
+        }
+
+        Check(added == 12, $"the diff is the button's field, creation, section and Controls.Add: {added} lines:\n{string.Join('\n', newLines)}");
         await RenderedAsync().ConfigureAwait(true);
         Screenshot("winforms-designer.png");
 
