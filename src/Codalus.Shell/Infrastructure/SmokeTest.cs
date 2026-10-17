@@ -2297,10 +2297,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var original = editor.Model.Text.Text;
 
         var started = Stopwatch.StartNew();
-        shell.ShowXamlPreview();
         var preview = shell.XamlPreview;
-        await WaitAsync(() => preview.FrameCount > 0 || preview.HasError, "the WPF previewer builds the app and shows its first frame: " + preview.Status, 600).ConfigureAwait(true);
-        Check(preview.FrameCount > 0, "the preview rendered: " + preview.Error + "\n" + Tail(shell.PreviewerLog.GetText(), 2000));
+        // FrameCount counts every frame the tool window has shown, the Avalonia ones of xaml.preview included (Clear keeps
+        // it), so the WPF file's first frame is one past what was counted before it opened.
+        var shown = preview.FrameCount;
+        shell.ShowXamlPreview();
+        await WaitAsync(() => (preview.FrameCount > shown && preview.Frame is not null) || preview.HasError, "the WPF previewer builds the app and shows its first frame: " + preview.Status, 600).ConfigureAwait(true);
+        Check(preview.FrameCount > shown && preview.Frame is not null, "the preview rendered: " + preview.Error + "\n" + Tail(shell.PreviewerLog.GetText(), 2000));
         Check(preview.Frame is { } frame && frame.Width / frame.Scale == 480 && frame.Height / frame.Scale == 360, $"the window renders at its design size (d:DesignWidth/Height): {preview.Frame?.Width}×{preview.Frame?.Height}");
         Check(!preview.SupportsThemes, "WPF has no theme variants: the picker is hidden");
         Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  first frame (build included) in {started.Elapsed.TotalSeconds:0.0} s, {preview.ImageWidth}×{preview.ImageHeight}"));
