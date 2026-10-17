@@ -225,7 +225,8 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
         var (host, _, _) = await LoadAsync("OrderForm.cs");
         await using var _ = host;
         var properties = (await host.PropertiesAsync(new DesignerComponentsParams(["placeOrderButton"]), Ct)).Properties;
-        DesignerPropertyInfo Property(string name) => properties.Single(p => p.Name == name);
+        // A bindable property (Text) also has its row in (DataBindings) since M41b: these are the properties' own rows.
+        DesignerPropertyInfo Property(string name) => properties.Single(p => p.Name == name && !p.DataBinding);
         Assert.Equal(("placeOrderButton", true), (Property("Name").Value, Property("Name").IsSet));
         Assert.Equal(("&Place order", DesignerEditors.Text, true), (Property("Text").Value, Property("Text").Editor, Property("Text").IsSet));
         Assert.Equal(DesignerEditors.Anchor, Property("Anchor").Editor);
@@ -239,7 +240,7 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
 
         // Two buttons: what they share, their differing values mixed.
         var both = (await host.PropertiesAsync(new DesignerComponentsParams(["placeOrderButton", "cancelButton"]), Ct)).Properties;
-        Assert.True(both.Single(p => p.Name == "Text").Mixed);
+        Assert.True(both.Single(p => p is { Name: "Text", DataBinding: false }).Mixed);
         Assert.True(both.Single(p => p.Name == "Size").Mixed);
         Assert.Equal(("Bottom, Right", false), (both.Single(p => p.Name == "Anchor").Value, both.Single(p => p.Name == "Anchor").Mixed));
 
@@ -263,7 +264,7 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture) : ICl
             Assert.True(render.Errors.Length == 0, string.Join("\n", render.Errors));
             var ok = render.Components.Single(c => c.Name == "okButton");
             Assert.Equal((75d, 23d), (ok.Width, ok.Height)); // from AboutForm.resx through ApplyResources
-            var text = (await about.PropertiesAsync(new DesignerComponentsParams(["okButton"]), Ct)).Properties.Single(p => p.Name == "Text");
+            var text = (await about.PropertiesAsync(new DesignerComponentsParams(["okButton"]), Ct)).Properties.Single(p => p is { Name: "Text", DataBinding: false });
             Assert.Equal("OK", text.Value);
         }
 

@@ -271,7 +271,7 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
         var (french, _, frenchSource) = await LoadAsync("AboutForm.cs", culture: "fr", withResources: true);
         await using (french)
         {
-            var text = (await french.PropertiesAsync(new DesignerComponentsParams(["okButton"]), Ct)).Properties.Single(p => p.Name == "Text");
+            var text = (await french.PropertiesAsync(new DesignerComponentsParams(["okButton"]), Ct)).Properties.Single(p => p is { Name: "Text", DataBinding: false });
             Assert.Equal("Fermer", text.Value);
             var edit = await french.SetPropertiesAsync(new DesignerSetPropertiesParams([new DesignerPropertyEdit("okButton", "Text") { Text = "Fermer la fenêtre" }]), Ct);
             var entry = Assert.Single(edit.Resources);

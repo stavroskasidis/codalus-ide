@@ -2279,8 +2279,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         shell.Layout.ShowToolWindow(ViewModels.PropertiesWindowViewModel.ToolWindowId, focus: false);
         await shell.PropertiesWindow.RefreshAsync().ConfigureAwait(true);
-        var text = shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "Text");
-        Check(text is { Value: "button1" }, "the Properties window shows the new button's Text");
+        // The property's own row: (DataBindings), first in the window, has a Text row too (M41b).
+        var text = shell.PropertiesWindow.Categories.Where(c => c.Title != "(DataBindings)").SelectMany(c => c.Rows).FirstOrDefault(r => r.Name == "Text");
+        Check(text is { Value: "button1" }, "the Properties window shows the new button's Text: " + text?.Value);
         text!.Text = "Smoke test";
         await WaitAsync(() => code.Text.Text.Contains("button1.Text = \"Smoke test\";", StringComparison.Ordinal), "the Text set in the Properties window is in the code", 60).ConfigureAwait(true);
         var added = code.Text.Text.Split('\n').Length - original.Split('\n').Length;
