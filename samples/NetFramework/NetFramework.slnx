@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="ConsoleApp/ConsoleApp.csproj" />
+  <Project Path="Library/Library.csproj" />
+  <Project Path="ConsoleApp.Tests/ConsoleApp.Tests.csproj" />
+  <Project Path="LegacyApp/LegacyApp.csproj" />
+  <Project Path="LegacyWebApp/LegacyWebApp.csproj" />
+  <Project Path="WinFormsApp/WinFormsApp.csproj" />
+</Solution>
