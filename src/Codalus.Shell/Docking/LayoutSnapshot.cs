@@ -168,4 +168,7 @@ public sealed record SessionDocument(string Path, int Line, int Character)
 public sealed record ShellState
 {
     public IReadOnlyList<string>? RecentCommands { get; init; }
+
+    /// <summary>Code Search's window: its size, position, pin, preview and whether it is docked (M47).</summary>
+    public ViewModels.CodeSearchWindowState? CodeSearch { get; init; }
 }

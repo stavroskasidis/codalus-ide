@@ -411,6 +411,14 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public async Task<SymbolInformation[]> WorkspaceSymbolsAsync(string query, CancellationToken cancellationToken) =>
         await InvokeNullable(Methods.WorkspaceSymbol, new WorkspaceSymbolParams(query), ProtocolJsonContext.Default.WorkspaceSymbolParams, ProtocolJsonContext.Default.SymbolInformationArray, cancellationToken).ConfigureAwait(false) ?? [];
 
+    /// <summary>Code Search's index: the declarations of the given documents, or of the whole solution (ADR 0078).</summary>
+    public async Task<SymbolIndexResult> SymbolIndexAsync(string[]? uris, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.SymbolIndex, new SymbolIndexParams(uris), ProtocolJsonContext.Default.SymbolIndexParams, ProtocolJsonContext.Default.SymbolIndexResult, cancellationToken).ConfigureAwait(false) ?? new SymbolIndexResult([]);
+
+    /// <summary>Types of the referenced assemblies matching a query, in <c>codalus-metadata:</c> documents.</summary>
+    public async Task<SymbolInformation[]> ExternalSymbolsAsync(string query, int limit, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.ExternalSymbols, new ExternalSymbolsParams(query, limit), ProtocolJsonContext.Default.ExternalSymbolsParams, ProtocolJsonContext.Default.SymbolInformationArray, cancellationToken).ConfigureAwait(false) ?? [];
+
     public Task<MetadataText?> MetadataTextAsync(string uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.MetadataText, new MetadataTextParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.MetadataTextParams, ProtocolJsonContext.Default.MetadataText, cancellationToken);
 

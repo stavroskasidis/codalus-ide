@@ -167,6 +167,12 @@ internal sealed class ShellFixture : IAsyncDisposable
     public static CancellationToken RequestTimeout(int seconds = 30) =>
         CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken, new CancellationTokenSource(TimeSpan.FromSeconds(seconds)).Token).Token;
 
+    /// <summary>
+    /// The default bindings' <c>primary</c> modifier (<c>Keys.Parse</c>): ⌘ on macOS, Ctrl elsewhere. A test presses
+    /// a <c>primary+…</c> binding with it: on macOS, Ctrl+T matches no binding (Go To All is Cmd+T).
+    /// </summary>
+    public static RawInputModifiers Primary { get; } = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
+
     public void Press(Key key, RawInputModifiers modifiers = RawInputModifiers.None)
     {
         Window.KeyPress(key, modifiers, PhysicalKey.None, null);
