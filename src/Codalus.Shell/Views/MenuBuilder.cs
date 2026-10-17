@@ -43,6 +43,15 @@ internal static class MenuBuilder
         void Rebuild() => Build(menuBar, shell);
         Rebuild();
         menus.Changed += (_, _) => Ui.Post(Rebuild);
+
+        // Menus whose items all depend on the active document (the Windows Forms designer's Format menu) come and go with it.
+        shell.Workbench.Context.Changed += (_, key) =>
+        {
+            if (key == "activeDocumentKind")
+            {
+                Ui.Post(Rebuild);
+            }
+        };
     }
 
     private static void OpenDocumentTabMenu(ShellHost shell, ContextRequestedEventArgs e)
