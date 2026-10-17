@@ -366,8 +366,9 @@ internal sealed class CorDebugTarget : IClrProcess
         {
             Dispatch(e);
         }
-        catch (COMException ex)
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or InvalidCastException or ArgumentException or NullReferenceException)
         {
+            // Never leave the process stopped in a callback nobody will continue.
             _events.Writer.TryWrite(new ClrNotice($"[debugger] {e.Kind}: {ex.Message}") { Continued = true });
             ContinueFromCallback(e);
         }
