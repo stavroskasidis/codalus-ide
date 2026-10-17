@@ -52,6 +52,13 @@
     "floorMs": 5,
     "floorMb": 5,
     "floorSizeMb": 0.1,
-    "baselineRuns": 10
+    "baselineRuns": 10,
+    // ADR 0002, amendment 2026-10-17: latency and memory fail only against this many runs on the same runner CPU, and
+    // latency normalized by VS Code's startup in the same run only warns. Accepted values are in accepted.json.
+    "minComparableRuns": 3,
+    "failNormalized": false,
+    "referenceTarget": "vscode",
+    "referenceScenario": "cold-start",
+    "referenceMetric": "startup_selfreported_ms"
   }
 }
