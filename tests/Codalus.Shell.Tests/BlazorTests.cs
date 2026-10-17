@@ -62,21 +62,34 @@ public sealed class BlazorTests
             Assert.Contains("<h1>Counter</h1>", await http.GetStringAsync("/counter", TestContext.Current.CancellationToken), StringComparison.Ordinal);
             var heading = editor.Model.Text.Text.IndexOf("<h1>Counter</h1>", StringComparison.Ordinal);
             editor.Model.Text.Replace(heading, "<h1>Counter</h1>".Length, "<h1>Clicker</h1>");
+
+            // The app can listen before dotnet watch watches, and dotnet watch drops a change saved before then: Apply
+            // Code Changes saves once it watches.
             f.Shell.Run("run.applyCodeChanges");
             var page = string.Empty;
-            await ShellFixture.PumpUntil(() =>
+            try
             {
-                try
+                await ShellFixture.PumpUntil(() =>
                 {
-                    page = http.GetStringAsync("/counter").GetAwaiter().GetResult();
-                }
-                catch (HttpRequestException)
-                {
-                    // Restarting.
-                }
+                    try
+                    {
+                        page = http.GetStringAsync("/counter").GetAwaiter().GetResult();
+                    }
+                    catch (HttpRequestException)
+                    {
+                        // Restarting.
+                    }
 
-                return page.Contains("<h1>Clicker</h1>", StringComparison.Ordinal);
-            }, seconds: 120);
+                    return page.Contains("<h1>Clicker</h1>", StringComparison.Ordinal);
+                }, seconds: 120);
+            }
+            catch (Xunit.Sdk.TrueException)
+            {
+                // Whether the edit was saved, whether dotnet watch saw it, and what it said.
+                Assert.Fail($"The edited page wasn't served (modified: {editor.Model.IsModified}; file: {(File.ReadAllText(counter).Contains("<h1>Clicker</h1>", StringComparison.Ordinal) ? "edited" : "not edited")}; "
+                    + $"Hot Reload: {program.HotReload?.State}, {program.HotReload?.Applied} applied, {program.HotReload?.Restarts} restarts; page heading: "
+                    + (page.Contains("<h1>Counter</h1>", StringComparison.Ordinal) ? "Counter" : "other") + ")\n" + program.Channel?.GetText());
+            }
         }
         finally
         {

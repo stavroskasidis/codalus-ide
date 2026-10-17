@@ -229,6 +229,8 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
         })!;
         try
         {
+            // In Main: a pause before it shows no stack, as no thread has managed frames yet.
+            Assert.Equal("waiting", await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
             await _debug.AttachAsync(process.Id, TestContext.Current.CancellationToken);
             Assert.Equal(DebugState.Running, _debug.State);
 
@@ -242,6 +244,49 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
             await File.WriteAllTextAsync(signal, "go", TestContext.Current.CancellationToken);
             await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
             Assert.Equal(15, process.ExitCode);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill();
+            }
+
+            File.Delete(signal);
+        }
+    }
+
+    [Fact]
+    public async Task Break_All_shows_a_thread_with_code_when_the_paused_thread_has_no_managed_frames()
+    {
+        // Break All pauses the first thread netcoredbg lists, the lowest thread id, and netcoredbg reports that thread.
+        // On Windows it can be a runtime thread without managed frames (an attached WinUI app's), whose stack is empty.
+        // Here Main has returned: the main thread, the lowest id on Linux, waits in the runtime for the Waiter thread.
+        var signal = Path.Combine(Path.GetTempPath(), "codalus-attach-" + Guid.NewGuid().ToString("N"));
+        using var process = Process.Start(new ProcessStartInfo(DotnetHost, ["exec", debuggee.Dll, "--main-returns", signal])
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+        })!;
+        try
+        {
+            Assert.Equal("main returned", await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
+            await _debug.AttachAsync(process.Id, TestContext.Current.CancellationToken);
+
+            await _debug.PauseAsync();
+            var stop = await NextStopAsync();
+            Assert.Equal("pause", stop.Reason);
+            Assert.Equal(DebugState.Stopped, _debug.State);
+            Assert.NotEmpty(_debug.Frames);
+            Assert.Equal("Waiter", _debug.Threads.Single(t => t.Id == _debug.SelectedThreadId).Name);
+            Assert.Equal(_debug.SelectedThreadId, stop.ThreadId);
+            Assert.Contains(_debug.Frames, f => f.Source?.Path == debuggee.Program && f.Line == Line("waiter"));
+            Assert.Equal(debuggee.Program, _debug.SelectedFrame?.Source?.Path);
+
+            await _debug.DetachAsync();
+            await File.WriteAllTextAsync(signal, "go", TestContext.Current.CancellationToken);
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.Equal(0, process.ExitCode);
         }
         finally
         {
