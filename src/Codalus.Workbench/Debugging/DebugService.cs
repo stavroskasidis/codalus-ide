@@ -279,12 +279,7 @@ public sealed class DebugService : IAsyncDisposable
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
             try
             {
-                var adapter = await part.CreateAsync(linked.Token).ConfigureAwait(false);
-                await session.AddAsync(adapter, part.Name, part.StartAsync, linked.Token).ConfigureAwait(false);
-                if (part.ConfiguredAsync is { } configured)
-                {
-                    await configured().ConfigureAwait(false);
-                }
+                await JoinAsync(session, part, linked.Token).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or InvalidOperationException or OperationCanceledException)
             {
@@ -328,12 +323,7 @@ public sealed class DebugService : IAsyncDisposable
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
         try
         {
-            var adapter = await part.CreateAsync(linked.Token).ConfigureAwait(false);
-            await session.AddAsync(adapter, part.Name, part.StartAsync, linked.Token).ConfigureAwait(false);
-            if (part.ConfiguredAsync is { } configured)
-            {
-                await configured().ConfigureAwait(false);
-            }
+            await JoinAsync(session, part, linked.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or System.ComponentModel.Win32Exception or IOException or OperationCanceledException)
         {
@@ -344,14 +334,59 @@ public sealed class DebugService : IAsyncDisposable
         return part.Index;
     }
 
-    /// <summary>A program of a launch: how its adapter starts, how it starts the program, and what runs once the session is configured.</summary>
+    /// <summary>
+    /// A program of a launch: how its adapter starts, how it starts the program, what runs once the session is
+    /// configured, and what else a start that is made again undoes (a program held in the terminal).
+    /// </summary>
     private sealed record LaunchPart(
         string Name,
         int Index,
         DebugProcess Process,
         Func<CancellationToken, Task<IDebugAdapter>> CreateAsync,
         Func<IDebugAdapter, Task> StartAsync,
-        Func<Task>? ConfiguredAsync = null);
+        Func<Task>? ConfiguredAsync = null,
+        Action? Abandon = null);
+
+    /// <summary>
+    /// A program joins the running multi-program session. A start netcoredbg gave up on (<see cref="IsStartupTimeout"/>)
+    /// is made again in its place, as the session's first program's is: with several programs starting on a loaded
+    /// machine, the later one's runtime can take longer than netcoredbg's 5 seconds too.
+    /// </summary>
+    private async Task JoinAsync(CompoundDebugAdapter session, LaunchPart part, CancellationToken cancellationToken)
+    {
+        await session.AddAsync(part.Name, part.CreateAsync, part.StartAsync, (adapter, ex, attempt) => StartPartAgainAsync(part, adapter, ex, attempt, cancellationToken), cancellationToken).ConfigureAwait(false);
+        if (part.ConfiguredAsync is { } configured)
+        {
+            await configured().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Whether a program's failed start is made again. A start netcoredbg timed out on is undone either way (its adapter
+    /// ended with its program, see <see cref="KillWithProgram"/>), and made again unless it was the last attempt.
+    /// </summary>
+    private async Task<bool> StartPartAgainAsync(LaunchPart part, IDebugAdapter adapter, Exception ex, int attempt, CancellationToken cancellationToken)
+    {
+        if (!IsStartupTimeout(ex) || cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        if (!KillWithProgram(adapter))
+        {
+            await adapter.DisconnectAsync(terminateDebuggee: true, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        part.Abandon?.Invoke();
+        if (attempt >= StartupAttempts)
+        {
+            return false;
+        }
+
+        UpdateProcess(part.Index, p => p with { Id = null });
+        Output?.Invoke(this, new DebugOutput("console", $"[{part.Name}] {StartingAgain(attempt)}"));
+        return true;
+    }
 
     private LaunchPart Part(DebugLaunch launch, int index, CancellationToken cancellationToken)
     {
@@ -397,6 +432,19 @@ public sealed class DebugService : IAsyncDisposable
                         // Once the program's own module is loaded, its breakpoints are bound: let it run.
                         await WaitForModuleAsync(EntryModule(launch.Plan), TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
                         held?.Release();
+                    },
+                    () =>
+                    {
+                        if (held is { } abandoned)
+                        {
+                            held = null;
+                            lock (_gate)
+                            {
+                                _terminalProcesses.Remove(abandoned.ProcessId);
+                            }
+
+                            KillProgram(abandoned.ProcessId);
+                        }
                     });
             }
 
@@ -668,9 +716,12 @@ public sealed class DebugService : IAsyncDisposable
                 return;
             }
 
-            Output?.Invoke(this, new DebugOutput("console", $"The debugger didn't see the program's runtime start within its 5 seconds; starting again ({(attempt + 1).ToString(CultureInfo.InvariantCulture)} of {StartupAttempts.ToString(CultureInfo.InvariantCulture)}).\n"));
+            Output?.Invoke(this, new DebugOutput("console", StartingAgain(attempt)));
         }
     }
+
+    private static string StartingAgain(int attempt) =>
+        $"The debugger didn't see the program's runtime start within its 5 seconds; starting again ({(attempt + 1).ToString(CultureInfo.InvariantCulture)} of {StartupAttempts.ToString(CultureInfo.InvariantCulture)}).\n";
 
     /// <summary>How many times a session starts when netcoredbg gives up waiting for the program's runtime (<see cref="IsStartupTimeout"/>).</summary>
     internal const int StartupAttempts = 3;
@@ -679,8 +730,8 @@ public sealed class DebugService : IAsyncDisposable
     /// netcoredbg's answer to <c>configurationDone</c> when the program's runtime didn't report to it within 5 seconds
     /// of the launch or attach (its fixed <c>startupWaitTimeout</c>; E_FAIL). On a loaded machine the runtime can take
     /// longer (the first Windows runs: a VSTest test host attached to, Visual Basic and F# programs launched); the
-    /// program is ended (or detached from) and the session starts again. TODO(issue): ask Samsung/netcoredbg for a
-    /// configurable wait.
+    /// program is ended (or detached from) and the session starts again; a program joining a multi-program session
+    /// (a later startup project) starts again in its place. TODO(issue): ask Samsung/netcoredbg for a configurable wait.
     /// </summary>
     internal static bool IsStartupTimeout(Exception ex) =>
         ex is DapException { Command: "configurationDone" } && ex.Message.Contains("0x80004005", StringComparison.OrdinalIgnoreCase);
@@ -851,11 +902,13 @@ public sealed class DebugService : IAsyncDisposable
     /// <c>TerminateProcess</c> returns early while unattached), so each abandoned start left its program running; on
     /// Windows one whose runtime had already signalled its start waits for the gone debugger forever (the runtime's
     /// <c>NotifyDebuggerOfStartup</c>), and on a loaded machine the leftovers compete with the next start. The program is
-    /// the adapter's child: killing the adapter's process tree ends both.
+    /// the adapter's child: killing the adapter's process tree ends both. An adapter behind a path mapping is local
+    /// when it has no transport (one on another machine always has).
     /// </summary>
     private static bool KillWithProgram(IDebugAdapter adapter)
     {
-        if ((adapter is CompoundDebugAdapter compound ? compound.Primary : adapter) is DebugAdapter { Transport: null } local)
+        var inner = adapter is CompoundDebugAdapter compound ? compound.Primary : adapter;
+        if ((inner is PathMappingDebugAdapter mapped ? mapped.Inner : inner) is DebugAdapter { Transport: null } local)
         {
             local.Kill();
             return true;
@@ -938,18 +991,24 @@ public sealed class DebugService : IAsyncDisposable
 
         foreach (var pid in programs)
         {
-            try
+            KillProgram(pid);
+        }
+    }
+
+    /// <summary>Ends a program the session started in the terminal, with its child processes.</summary>
+    private static void KillProgram(int pid)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            if (!process.HasExited)
             {
-                using var process = System.Diagnostics.Process.GetProcessById(pid);
-                if (!process.HasExited)
-                {
-                    process.Kill(entireProcessTree: true);
-                }
+                process.Kill(entireProcessTree: true);
             }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)
-            {
-                // Already gone.
-            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)
+        {
+            // Already gone.
         }
     }
 
