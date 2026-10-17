@@ -77,6 +77,51 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_response_can_overtake_the_notifications_before_it_and_when_dispatched_waits_for_them()
+    {
+        var release = new TaskCompletionSource();
+        var received = new List<string>();
+        _a.OnNotification("note", TestJsonContext.Default.Ping, async p =>
+        {
+            await release.Task.WaitAsync(TestContext.Current.CancellationToken);
+            lock (received)
+            {
+                received.Add(p.Text);
+            }
+        });
+        _b.OnRequest("build", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, async (p, ct) =>
+        {
+            await _b.NotifyAsync("note", new Ping("error 1"), TestJsonContext.Default.Ping, ct);
+            await _b.NotifyAsync("note", new Ping("error 2"), TestJsonContext.Default.Ping, ct);
+            return new Pong("failed");
+        });
+        _a.Start();
+        _b.Start();
+
+        // The response is read while the first notification's handler still runs: the call completes first.
+        var result = await _a.InvokeAsync("build", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+        Assert.Equal("failed", result.Text);
+        var dispatched = _a.WhenDispatchedAsync();
+        Assert.False(dispatched.IsCompleted);
+        lock (received)
+        {
+            Assert.Empty(received);
+        }
+
+        release.SetResult();
+        await dispatched.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        lock (received)
+        {
+            Assert.Equal(["error 1", "error 2"], received);
+        }
+
+        // Once the connection has ended, it completes at once.
+        await _bToA.Writer.CompleteAsync();
+        await _a.Completion.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        await _a.WhenDispatchedAsync().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Unknown_methods_and_failing_handlers_return_errors()
     {
         _b.OnRequest("fail", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (_, _) => throw new InvalidOperationException("boom"));

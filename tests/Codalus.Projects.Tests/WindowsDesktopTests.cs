@@ -147,7 +147,7 @@ public sealed class WindowsDesktopTests : IAsyncLifetime
             var text = await File.ReadAllTextAsync(page, TestContext.Current.CancellationToken);
             await File.WriteAllTextAsync(page, text.Replace("{x:Bind ViewModel.Items}", "{x:Bind ViewModel.NoSuchItems}", StringComparison.Ordinal), TestContext.Current.CancellationToken);
             built = await _builds.BuildAsync(BuildTargets.Build, project, Timeout());
-            Assert.False(built.Succeeded);
+            Assert.False(built.Succeeded, _builds.Channel.GetText());
             // On dotnet's MSBuild the Windows App SDK's XAML compiler is XamlCompiler.exe, which can't load its own error
             // messages (it embeds them as Microsoft.Windows.UI.Xaml.Build.Tasks.ErrorMessages.resources and looks them
             // up as Microsoft.UI.Xaml.Markup.Compiler.ErrorMessages): every error, the x:Bind path's WMC1110 too, comes
@@ -155,7 +155,11 @@ public sealed class WindowsDesktopTests : IAsyncLifetime
             // package's targets. So the build fails with it and no squiggle; the editor's own x:Bind check marks the
             // path. TODO(issue): back to the error in MainPage.xaml once a Windows App SDK's XamlCompiler.exe finds its
             // messages (1.8.260528001 through 1.8.260803003 and 2.3.9 don't).
-            var error = Assert.Single(_builds.Diagnostics, d => d.Code?.StartsWith("WMC", StringComparison.Ordinal) == true);
+            var compiler = _builds.Diagnostics.Where(d => d.Code?.StartsWith("WMC", StringComparison.Ordinal) == true).ToList();
+            Assert.True(
+                compiler.Count == 1,
+                $"{compiler.Count} WMC error(s) among the build's diagnostics: [{string.Join("; ", _builds.Diagnostics.Select(d => $"{d.Severity} {d.Code} at {d.File}: {d.Message}"))}]\n{_builds.Channel.GetText()}");
+            var error = compiler[0];
             var where = $"{error.Code} at {error.File}({error.Line},{error.Column}): {error.Message}\n{_builds.Channel.GetText()}";
             Assert.True(error.Code == "WMC9999" && error.Message.Contains("Microsoft.UI.Xaml.Markup.Compiler.ErrorMessages.resources", StringComparison.Ordinal), where);
             Assert.EndsWith("Microsoft.UI.Xaml.Markup.Compiler.interop.targets", error.File, StringComparison.OrdinalIgnoreCase);

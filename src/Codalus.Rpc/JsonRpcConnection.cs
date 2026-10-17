@@ -17,6 +17,8 @@ namespace Codalus.Rpc;
 /// <item>Incoming notifications are dispatched strictly in arrival order; an incoming request starts in
 /// arrival order and may complete concurrently with later messages.</item>
 /// <item>Incoming <c>$/cancelRequest</c> cancels the matching in-flight handler.</item>
+/// <item>A response completes its request as soon as it is read, possibly before the notifications received ahead of
+/// it have been handled; <see cref="WhenDispatchedAsync"/> waits for those.</item>
 /// </list>
 /// Register handlers before calling <see cref="Start"/>.
 /// </summary>
@@ -34,7 +36,8 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     private readonly ConcurrentDictionary<string, IncomingRequest> _incoming = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<JsonElement, CancellationToken, Task<Action<Utf8JsonWriter>?>>> _requestHandlers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<JsonElement, Task>> _notificationHandlers = new(StringComparer.Ordinal);
-    private readonly Channel<byte[]> _inbox = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = true });
+    /// <summary>Messages read and waiting for the dispatch loop, and the markers <see cref="WhenDispatchedAsync"/> queues behind them.</summary>
+    private readonly Channel<Inbound> _inbox = Channel.CreateUnbounded<Inbound>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
     private readonly CancellationTokenSource _shutdown = new();
     private Task _readLoop = Task.CompletedTask;
     private Task _dispatchLoop = Task.CompletedTask;
@@ -267,6 +270,25 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Completes once every message received so far has been dispatched: the notification handlers have run, and the
+    /// requests have started. A response completes its request on the read loop, so it can overtake the notifications
+    /// the peer sent before it (a build's diagnostics before its result); a caller that needs them waits for this after
+    /// the response. Never wait for it in a notification handler of this connection: it would wait for itself.
+    /// </summary>
+    public Task WhenDispatchedAsync()
+    {
+        if (Volatile.Read(ref _started) == 0)
+        {
+            return Task.CompletedTask; // nothing has been read
+        }
+
+        var dispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // A channel completed by the end of the read loop refuses the marker: nothing is left to dispatch then. One
+        // written before that is still read by the dispatch loop, which drains the channel before it ends.
+        return _inbox.Writer.TryWrite(new Inbound(null, dispatched)) ? dispatched.Task : Task.CompletedTask;
+    }
+
     public Task NotifyAsync<TParams>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, CancellationToken cancellationToken) =>
         WriteMessageAsync(writer =>
         {
@@ -354,7 +376,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
                 if (!TryCompleteResponse(payload))
                 {
-                    await _inbox.Writer.WriteAsync(payload, _shutdown.Token).ConfigureAwait(false);
+                    await _inbox.Writer.WriteAsync(new Inbound(payload, null), _shutdown.Token).ConfigureAwait(false);
                 }
             }
         }
@@ -413,13 +435,19 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     private async Task DispatchLoopAsync()
     {
-        await foreach (var payload in _inbox.Reader.ReadAllAsync().ConfigureAwait(false))
+        await foreach (var inbound in _inbox.Reader.ReadAllAsync().ConfigureAwait(false))
         {
+            if (inbound.Dispatched is { } dispatched)
+            {
+                dispatched.TrySetResult();
+                continue;
+            }
+
             // Nothing one message does may stop the loop: the read loop would go on queueing everything after it,
             // and the peer would wait for answers forever without the connection ever being reported lost.
             try
             {
-                await DispatchAsync(payload).ConfigureAwait(false);
+                await DispatchAsync(inbound.Payload!).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -578,6 +606,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         _shutdown.Dispose();
         _writeLock.Dispose();
     }
+
+    /// <summary>A message read from the peer, or (with <paramref name="Dispatched"/>) a marker that completes once the messages ahead of it are dispatched.</summary>
+    private readonly record struct Inbound(byte[]? Payload, TaskCompletionSource? Dispatched);
 
     /// <summary>
     /// An incoming request's cancellation. A <c>$/cancelRequest</c> (or the connection's end) can find the request
