@@ -2,9 +2,17 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:theming="using:Codalus.Shell.Theming">
   <!--
-    Theme tokens. Views use these keys (DynamicResource) instead of literal colors, so Blue, Light, Dark and High
-    Contrast switch at runtime. Blue, Light and Dark follow Visual Studio's themes (M29, ADR 0019). High Contrast follows the Windows "high contrast black" conventions: pure black
-    surfaces, white text, cyan accents, orange focus and selection outlines.
+    Theme tokens. Views use these keys (DynamicResource) instead of literal colors, so the themes switch at runtime.
+    - Classic (M29, ADR 0019): Blue, Light and Dark follow Visual Studio's themes; High Contrast follows the Windows
+      "high contrast black" conventions: pure black surfaces, white text, cyan accents, orange focus and selection
+      outlines.
+    - The theme families (M45, ADR 0077): Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, with
+      every color from docs/design/shell-themes.md. Each variant inherits Classic's of its kind (Light, Dark, High
+      Contrast), so the Fluent controls start from those, but sets every Shell.* token itself. Their shapes are tokens
+      too (Shell.Gutter, Shell.Panel.CornerRadius.*, Shell.Tab.Active.Indicator, Shell.StatusBar.ShowDot, Dock's tab
+      corners), which ShellStyles.axaml applies, so views don't change.
+    A family's token the design leaves out takes its panel colors, or a mix of its own colors that meets the contrast
+    pairs (tests/Codalus.Shell.Tests/TestData/contrast-pairs.txt).
   -->
   <ResourceDictionary.ThemeDictionaries>
     <ResourceDictionary x:Key="Light">
@@ -92,6 +100,36 @@
       <SolidColorBrush x:Key="Shell.TabColor.6" Color="#0B7A75" />
       <SolidColorBrush x:Key="Shell.TabColor.7" Color="#B0306A" />
       <SolidColorBrush x:Key="Shell.TabColor.8" Color="#5B6B7A" />
+      <!-- M45: tokens the theme families brought. In Classic they keep its look: text boxes stay Fluent's (Shell.Input
+           matches them), the status bar's states keep its text and hover, and the debugger's lines are the colors the
+           editor drew before, over its background. -->
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#005A9E" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#005A9E" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#D7D7DA" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#C9DEF5" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#EEEEF2" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#646464" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F0F0F0" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#E51400" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#F9C4BF" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFEEAA" />
+      <!-- Shapes (M45): Dock's splitter, square panels and tabs, no tab indicator, captions in their color without a dot. -->
+      <x:Double x:Key="Shell.Gutter">4</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="Transparent" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
       <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#007ACC" />
       <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#FFFFFF" />
@@ -194,6 +232,36 @@
       <SolidColorBrush x:Key="Shell.TabColor.6" Color="#4EC9B0" />
       <SolidColorBrush x:Key="Shell.TabColor.7" Color="#F28CB8" />
       <SolidColorBrush x:Key="Shell.TabColor.8" Color="#A9B7C6" />
+      <!-- M45: tokens the theme families brought. In Classic they keep its look: text boxes stay Fluent's (Shell.Input
+           matches them), the status bar's states keep its text and hover, and the debugger's lines are the colors the
+           editor drew before, over its background. -->
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#F1F1F1" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#2B2B2B" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#005A9E" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#005A9E" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#353535" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#3E3E40" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#F1F1F1" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#A6A6A6" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#2E2E2E" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#E51400" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#501C16" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#695814" />
+      <!-- Shapes (M45): Dock's splitter, square panels and tabs, no tab indicator, captions in their color without a dot. -->
+      <x:Double x:Key="Shell.Gutter">4</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="Transparent" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
       <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#007ACC" />
       <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#FFFFFF" />
@@ -263,6 +331,36 @@
       <SolidColorBrush x:Key="Shell.TabColor.6" Color="#4EC9B0" />
       <SolidColorBrush x:Key="Shell.TabColor.7" Color="#F28CB8" />
       <SolidColorBrush x:Key="Shell.TabColor.8" Color="#A9B7C6" />
+      <!-- M45: tokens the theme families brought. In Classic they keep its look: text boxes stay Fluent's (Shell.Input
+           matches them), the status bar's states keep its text and hover, and the debugger's lines are the colors the
+           editor drew before, over its background. -->
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#005A9E" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#005A9E" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#B8C0D8" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#FDF4BF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#D6DBE9" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#1E1E1E" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#4D5A73" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F0F0F0" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#E51400" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#F9C4BF" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFEEAA" />
+      <!-- Shapes (M45): Dock's splitter, square panels and tabs, no tab indicator, captions in their color without a dot. -->
+      <x:Double x:Key="Shell.Gutter">4</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="Transparent" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
       <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#F5CC84" />
       <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#1E1E1E" />
@@ -412,6 +510,36 @@
       <SolidColorBrush x:Key="Shell.TabColor.6" Color="#1AEBFF" />
       <SolidColorBrush x:Key="Shell.TabColor.7" Color="#FF69B4" />
       <SolidColorBrush x:Key="Shell.TabColor.8" Color="#FFFFFF" />
+      <!-- M45: tokens the theme families brought. In Classic they keep its look: text boxes stay Fluent's (Shell.Input
+           matches them), the status bar's states keep its text and hover, and the debugger's lines are the colors the
+           editor drew before, over its background. -->
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#0E4A7B" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#E51400" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A0500" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#554400" />
+      <!-- Shapes (M45): Dock's splitter, square panels and tabs, no tab indicator, captions in their color without a dot. -->
+      <x:Double x:Key="Shell.Gutter">4</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="Transparent" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
       <!-- Dock's document well and tool window captions. -->
       <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#1AEBFF" />
       <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#000000" />
@@ -427,6 +555,2021 @@
       <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#000000" />
       <SolidColorBrush x:Key="DockSeparatorBrush" Color="#6FC3DF" />
       <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#6FC3DF" />
+    </ResourceDictionary>
+
+    <!-- Harbor, Light (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.HarborLight}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#D5DDEF" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#1B2645" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#4E5873" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#BCC7E0" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#F4F6FC" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#E0E6F6" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#CCD9F6" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#0E1735" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#2B59C3" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#2B59C3" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#2B59C3" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#2349A0" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#2B59C3" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#56607A" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#454D62" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#B4500F" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#90400C" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#F4F6FC" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#BCC7E0" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#1D49B0" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#9A6A00" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#1D49B0" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#2B59C3" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1B1F2A" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6A7490" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F2F6FE" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCE9EC" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFF1B8" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E0E6F6" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#8A6400" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#6E6E6E" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#4E5873" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#E8EBF4" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#BCC7E0" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#319331" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#7B3814" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#1B2645" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#E8ECF7" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#3C4661" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#343E5A" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#E3E9F6" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#BCC7E0" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#E3E9F6" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#1B2645" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#26335A" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#515C7D" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#B2B8CB" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#0E1735" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#D5DDEF" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#2E3A5C" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#2B59C3" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#F4F6FC" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#1B2645" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#E0E6F6" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#1B2645" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#CCD9F6" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#0E1735" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#F4F6FC" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#1B2645" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#0E70C0" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#9A6700" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#7B4FD0" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#C4380D" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#0B7A75" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#B0306A" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#5B6B7A" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">6</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#D5DDEF" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0,3,0,0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#2B59C3" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#0E1735" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#0E1735" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#0E1735" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#2B59C3" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#D5DDEF" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#D5DDEF" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#D5DDEF" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#F4F6FC" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#2B59C3" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#F4F6FC" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#BCC7E0" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#BCC7E0" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#CCD9F6" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#CCD9F6" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#CCD9F6" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#CCD9F6" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#CCD9F6" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#CCD9F6" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#0E1735" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#0E1735" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#0E1735" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#2B59C3" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#2B59C3" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#2B59C3" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#2B59C3" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#2B59C3" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#2B59C3" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#2B59C3" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#2B59C3" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#2B59C3" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+    </ResourceDictionary>
+
+    <!-- Harbor, Dark (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.HarborDark}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#121827" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#D9DFEE" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#9AA5C2" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#2A3553" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#19202F" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#273350" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#263C6E" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#6E98FF" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#0A1124" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#6E98FF" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#10162A" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#2F5FD0" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#274EAB" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#2F5FD0" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#3B4560" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#535B73" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#A8480C" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#863A0A" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#19202F" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#2A3553" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#8DB4FF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#8DB4FF" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#6E98FF" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#141A28" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#D9DFEE" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#7F8AA8" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#1A2236" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A6E" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1E2A" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3D3514" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#273350" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFCC00" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#C5C5C5" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#9AA5C2" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1C2337" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#2A3553" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#179FFF" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#0B101C" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#E3E8F5" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#2E333F" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#252A36" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#161D2F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#2A3553" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#161D2F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#D9DFEE" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#182036" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#454C60" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#AAB0C0" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#141A28" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#121827" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#B5C0DB" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#3A67D6" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#19202F" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#D9DFEE" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#273350" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#D9DFEE" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#263C6E" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#19202F" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#D9DFEE" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#C5A0F0" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#F37650" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#4EC9B0" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#F28CB8" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#A9B7C6" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">6</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#121827" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0,3,0,0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#6E98FF" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#141A28" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#6E98FF" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#121827" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#121827" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#121827" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#19202F" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#3A67D6" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#19202F" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#141A28" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#2A3553" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#2A3553" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#10162A" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#10162A" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#10162A" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#10162A" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#10162A" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#10162A" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#263C6E" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#263C6E" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#263C6E" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#263C6E" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#263C6E" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#263C6E" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#F1F4FB" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#6E98FF" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#6E98FF" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#6E98FF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#6E98FF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#6E98FF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#6E98FF" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#6E98FF" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#6E98FF" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#6E98FF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#0A1124" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#0A1124" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#0A1124" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#0A1124" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#0A1124" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#0A1124" />
+    </ResourceDictionary>
+
+    <!-- Harbor, High contrast (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.HarborHighContrast}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#AEE6FF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#FFB000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#FFD066" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#7CC7FF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#7CC7FF" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#2E2600" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#87CEFA" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#203F4C" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#1A323D" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#FF8C00" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#FF69B4" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#FFFFFF" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">6</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#000000" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0,3,0,0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#6CD2FF" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Normal</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#FFFFFF" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#000000" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#000000" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="FlyoutBorderThemeBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#1A323D" />
+      <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#1A323D" />
+      <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" Color="#1A323D" />
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#1A323D" />
+      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#1A323D" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#1A323D" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#1A323D" />
+      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#6CD2FF" />
+      <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#6CD2FF" />
+      <Color x:Key="SystemListMediumColor">#1A323D</Color>
+    </ResourceDictionary>
+
+    <!-- Graphite, Light (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.GraphiteLight}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#E9EAED" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#555A63" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#D3D6DB" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#F7F7F8" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#E0EBEB" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#CDEDE8" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#062E2A" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#0F7C72" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#0F7C72" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#0F766E" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#0C615A" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#0F766E" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#5A5F69" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#484C54" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#B4500F" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#90400C" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#F7F7F8" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#D3D6DB" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#0B5CAD" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#9A6A00" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#0B5CAD" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#0F7C72" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6B7079" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F4F5F7" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCE9EA" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFF1B8" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#E0EBEB" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#8A6400" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#6E6E6E" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#555A63" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F0F1F2" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#D3D6DB" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#319331" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#7B3814" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#E9EAED" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#D6D7DA" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#E0EBEB" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#E9EAED" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#D3D6DB" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#E9EAED" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#CECECF" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#555A63" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#0E1013" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#E9EAED" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#4A4F57" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#F7F7F8" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#F7F7F8" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#E0EBEB" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#CDEDE8" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#062E2A" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#F7F7F8" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#1F2226" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#0E70C0" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#9A6700" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#7B4FD0" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#C4380D" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#0B7A75" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#B0306A" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#5B6B7A" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">1</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#D3D6DB" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0,0,0,2</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#0F7C72" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
+      <!-- Graphite's focused tool window: an accent dot before its bold title. -->
+      <DrawingBrush x:Key="Shell.Caption.Active.Marker" Stretch="None" AlignmentX="Left" AlignmentY="Center">
+        <DrawingBrush.Drawing>
+          <GeometryDrawing Brush="#0F7C72" Geometry="M 0,3 A 3,3 0 1 1 6,3 A 3,3 0 1 1 0,3 Z" />
+        </DrawingBrush.Drawing>
+      </DrawingBrush>
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">11,0,0,0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#0E1013" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#0E1013" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#0E1013" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#0F7C72" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#E9EAED" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#E9EAED" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#E9EAED" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#F7F7F8" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#F7F7F8" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#F7F7F8" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#D3D6DB" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#D3D6DB" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#CDEDE8" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#CDEDE8" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#CDEDE8" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#CDEDE8" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#CDEDE8" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#CDEDE8" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#062E2A" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#062E2A" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#062E2A" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#0F7C72" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#0F7C72" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#0F7C72" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#0F7C72" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#0F7C72" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#0F7C72" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#0F7C72" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#0F7C72" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#0F7C72" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+    </ResourceDictionary>
+
+    <!-- Graphite, Dark (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.GraphiteDark}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#141518" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#D5D8DE" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#9A9FAA" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#2A2D34" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#1F2125" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#213839" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#1F3B38" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#E8F4F2" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#0B1F1C" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#0F766E" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#0C615A" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#0F766E" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#3A3D45" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#52545B" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#A8480C" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#863A0A" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#1F2125" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#2A2D34" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#7CC4FF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#7CC4FF" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#D5D8DE" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8A8F9A" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#202227" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A6E" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1E22" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3D3514" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#213839" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFCC00" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#C5C5C5" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#9A9FAA" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#202126" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#2A2D34" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#179FFF" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#141518" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#D5D8DE" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#333438" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#2B2C30" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#141518" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#2A2D34" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#141518" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#D5D8DE" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#1F2125" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#47494E" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#A2A5AA" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#F1F3F6" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#141518" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#AEB3BD" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#1F2125" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#D5D8DE" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#1F2125" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#D5D8DE" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#213839" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#D5D8DE" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#1F3B38" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#E8F4F2" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#1F2125" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#D5D8DE" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#C5A0F0" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#F37650" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#4EC9B0" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#F28CB8" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#A9B7C6" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">1</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#2A2D34" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0,0,0,2</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#2BB3A3" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
+      <!-- Graphite's focused tool window: an accent dot before its bold title. -->
+      <DrawingBrush x:Key="Shell.Caption.Active.Marker" Stretch="None" AlignmentX="Left" AlignmentY="Center">
+        <DrawingBrush.Drawing>
+          <GeometryDrawing Brush="#2BB3A3" Geometry="M 0,3 A 3,3 0 1 1 6,3 A 3,3 0 1 1 0,3 Z" />
+        </DrawingBrush.Drawing>
+      </DrawingBrush>
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">11,0,0,0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#F1F3F6" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#F1F3F6" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#F1F3F6" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#141518" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#141518" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#141518" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#1F2125" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#1F2125" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#1F2125" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#2A2D34" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#2A2D34" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#1A1B1F" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#1F3B38" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#1F3B38" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#1F3B38" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#1F3B38" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#1F3B38" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#1F3B38" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#E8F4F2" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#E8F4F2" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#E8F4F2" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#2BB3A3" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#0B1F1C" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#0B1F1C" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#0B1F1C" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#0B1F1C" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#0B1F1C" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#0B1F1C" />
+    </ResourceDictionary>
+
+    <!-- Graphite, High contrast (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.GraphiteHighContrast}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#95F8E6" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#FFB000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#FFD066" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#7CC7FF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#7CC7FF" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#2E2600" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#87CEFA" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#13493F" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#0F3A32" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#FF8C00" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#FF69B4" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#FFFFFF" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">1</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#FFFFFF" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0,0,0,2</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#3FF2D2" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
+      <!-- Graphite's focused tool window: an accent dot before its bold title. -->
+      <DrawingBrush x:Key="Shell.Caption.Active.Marker" Stretch="None" AlignmentX="Left" AlignmentY="Center">
+        <DrawingBrush.Drawing>
+          <GeometryDrawing Brush="#3FF2D2" Geometry="M 0,3 A 3,3 0 1 1 6,3 A 3,3 0 1 1 0,3 Z" />
+        </DrawingBrush.Drawing>
+      </DrawingBrush>
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">11,0,0,0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">0</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">0</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#FFFFFF" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#000000" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#000000" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="FlyoutBorderThemeBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#0F3A32" />
+      <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#0F3A32" />
+      <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" Color="#0F3A32" />
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#0F3A32" />
+      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#0F3A32" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#0F3A32" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#0F3A32" />
+      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#3FF2D2" />
+      <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#3FF2D2" />
+      <Color x:Key="SystemListMediumColor">#0F3A32</Color>
+    </ResourceDictionary>
+
+    <!-- Daylight, Light (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.DaylightLight}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#5C5C66" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#E0E0E6" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#F0ECF9" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#2A1660" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#5834A1" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#55555F" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#44444C" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#B4500F" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#90400C" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#E0E0E6" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#5A2FB0" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#9A6A00" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#5A2FB0" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#6B6B76" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#F7F5FC" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCEDEC" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFF3BF" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#F0ECF9" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#8A6400" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#6E6E6E" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#5C5C66" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F4F4F6" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#E0E0E6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#319331" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#7B3814" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#E0E0E2" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#F0ECF9" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#E0E0E6" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#CECECF" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#5C5C66" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#2A1660" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#3D3D45" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#F0ECF9" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#2A1660" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#1F1F24" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#0E70C0" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#9A6700" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#7B4FD0" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#C4380D" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#0B7A75" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#B0306A" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#5B6B7A" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">1</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#E0E0E6" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">6</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#2A1660" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#2A1660" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#2A1660" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#E0E0E6" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#E0E0E6" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#F3F3F6" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#EEE8FA" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#2A1660" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#2A1660" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#2A1660" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#6B3FC4" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+    </ResourceDictionary>
+
+    <!-- Daylight, Dark (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.DaylightDark}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#1C1B22" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#E4E2EC" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#A7A3B8" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#34313F" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#222029" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#38314B" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#A98BFF" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#160A33" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#A98BFF" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#2A2834" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#5B3DB8" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#4B3297" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#5B3DB8" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#3C3949" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#53515F" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#A8480C" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#863A0A" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#222029" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#34313F" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#C4AEFF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#C4AEFF" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#A98BFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#222029" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#E4E2EC" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8E8AA0" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#29263A" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A6E" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1E26" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3D3514" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#38314B" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFCC00" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#C5C5C5" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#A7A3B8" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#282631" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#34313F" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#179FFF" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#1C1B22" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#E4E2EC" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#3C3B42" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#34333A" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#25232E" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#34313F" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#A98BFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#160A33" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#160A33" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#25232E" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#4F4D58" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#AFADB7" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#1C1B22" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#C4C0D3" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#222029" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#E4E2EC" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#222029" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#E4E2EC" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#38314B" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#E4E2EC" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#222029" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#E4E2EC" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#C5A0F0" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#F37650" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#4EC9B0" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#F28CB8" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#A9B7C6" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">1</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#34313F" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">6</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#A98BFF" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#1C1B22" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#1C1B22" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#1C1B22" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#222029" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#222029" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#222029" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#222029" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#34313F" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#34313F" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#2A2834" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#2A2834" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#2A2834" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#2A2834" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#2A2834" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#2A2834" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#3A2E5E" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#F1EBFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#A98BFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#A98BFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#A98BFF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#A98BFF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#A98BFF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#A98BFF" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#A98BFF" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#A98BFF" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#A98BFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#160A33" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#160A33" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#160A33" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#160A33" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#160A33" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#160A33" />
+    </ResourceDictionary>
+
+    <!-- Daylight, High contrast (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.DaylightHighContrast}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#E6D5FF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#FFB000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#FFD066" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#2E2600" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#87CEFA" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#3F364C" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#322B3D" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#FF8C00" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#FF69B4" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#FFFFFF" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">1</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#FFFFFF" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">0</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="Transparent" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">False</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">6</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#FFFFFF" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#000000" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#000000" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="FlyoutBorderThemeBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#322B3D" />
+      <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#322B3D" />
+      <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" Color="#322B3D" />
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#322B3D" />
+      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#322B3D" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#322B3D" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#322B3D" />
+      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#D2B3FF" />
+      <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#D2B3FF" />
+      <Color x:Key="SystemListMediumColor">#322B3D</Color>
+    </ResourceDictionary>
+
+    <!-- Ember, Light (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.EmberLight}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#EDE8E3" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#6B5E53" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#DDD5CD" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#F4E9E0" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#4A2508" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#B85A12" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#B85A12" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#EDE8E3" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#5A4D43" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#F4E9E0" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#DDD5CD" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#EDE8E3" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#5A4D43" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#F4E9E0" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#B4500F" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#90400C" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#DDD5CD" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#A04E10" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#1A85FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#9A6A00" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#E51400" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#A04E10" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#B85A12" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#7A6C60" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#FBF5EE" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#C4314B" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#FCE9E7" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#FFF0BF" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#C62828" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#8A8A8A" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#F4E9E0" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#8A6400" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#6E6E6E" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#A1260D" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#8A6320" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#652D90" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#B26B12" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#00539C" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#6B5E53" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#F3F0EE" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#DDD5CD" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#0431FA" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#319331" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#7B3814" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#EDE8E3" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#DAD5D1" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#F4E9E0" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#DDD5CD" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#388A34" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#CDC9C7" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#6B5E53" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#4A2508" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#EDE8E3" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#5A4D43" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#F4E9E0" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#4A2508" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#2A211B" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#0E70C0" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#1E7F34" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#9A6700" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#7B4FD0" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#C4380D" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#0B7A75" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#B0306A" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#5B6B7A" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">8</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#EDE8E3" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">10,10,0,0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0,0,10,10</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">1</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#B85A12" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">True</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">7</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#4A2508" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#4A2508" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#4A2508" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#B85A12" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#EDE8E3" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#EDE8E3" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#EDE8E3" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#DDD5CD" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#DDD5CD" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#FBF9F7" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#F8E1CB" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#4A2508" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#4A2508" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#4A2508" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#B85A12" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#B85A12" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#B85A12" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#B85A12" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#B85A12" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#B85A12" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#B85A12" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#B85A12" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#B85A12" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+    </ResourceDictionary>
+
+    <!-- Ember, Dark (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.EmberDark}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#0F0E0D" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#E6DFD8" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#A39A90" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#2B2724" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#1A1816" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#E08A3C" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#1A0F05" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#E08A3C" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#1A1816" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#0F0E0D" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#B8AFA5" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#272522" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#2B2724" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#0F0E0D" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#B8AFA5" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#272522" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#A8480C" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#863A0A" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#1A1816" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#2B2724" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#F2B27A" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#3794FF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#CCA700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#F2B27A" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#E08A3C" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#171513" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#E6DFD8" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#8F867D" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#211E1B" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#F05A5A" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#3A1C1C" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3B3112" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#F14C4C" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#858585" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFCC00" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#C5C5C5" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#B180D7" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#E8AB53" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#A39A90" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1E1B19" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#2B2724" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#179FFF" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#0F0E0D" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#E6DFD8" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#312F2D" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#292725" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#1A1816" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#2B2724" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#1A1816" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#E6DFD8" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#1A1816" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#474441" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#ADA7A2" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#2B2420" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#0F0E0D" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#B8AFA5" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#1A1816" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#E6DFD8" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#1A1816" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#E6DFD8" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#E6DFD8" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#1A1816" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#E6DFD8" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#89D185" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#DCB67A" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#C5A0F0" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#F37650" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#4EC9B0" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#F28CB8" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#A9B7C6" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">8</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#0F0E0D" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">10,10,0,0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0,0,10,10</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">1</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#E08A3C" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">True</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">7</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#2B2420" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#E08A3C" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#0F0E0D" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#0F0E0D" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#0F0E0D" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#1A1816" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#1A1816" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#1A1816" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#171513" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#2B2724" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#2B2724" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#1A1816" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#1A1816" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#1A1816" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#1A1816" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#1A1816" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#1A1816" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#3A2A1C" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#F7E7D6" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#E08A3C" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#E08A3C" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#E08A3C" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#E08A3C" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#E08A3C" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#E08A3C" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#E08A3C" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#E08A3C" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#E08A3C" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#1A0F05" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#1A0F05" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#1A0F05" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#1A0F05" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#1A0F05" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#1A0F05" />
+    </ResourceDictionary>
+
+    <!-- Ember, High contrast (M45, docs/design/shell-themes.md). -->
+    <ResourceDictionary x:Key="{x:Static theming:ThemeService.EmberHighContrast}">
+      <SolidColorBrush x:Key="Shell.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.MutedForeground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Panel" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Hover" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Selection" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Selection.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Accent" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.AccentForeground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Focus" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Input" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Hover" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Empty.Hover" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging" Color="#FF7A45" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.StatusBar.Debugging.Hover" Color="#FFAF8F" />
+      <SolidColorBrush x:Key="Shell.Overlay" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Overlay.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Match" Color="#7CF0FF" />
+      <SolidColorBrush x:Key="Shell.Info" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.Warning" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Error" Color="#F48771" />
+      <SolidColorBrush x:Key="Shell.Link" Color="#7CF0FF" />
+      <SolidColorBrush x:Key="Shell.Modified" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.LineNumbers" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentLine" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint" Color="#FF5C5C" />
+      <SolidColorBrush x:Key="Shell.Editor.Breakpoint.Line" Color="#4A0010" />
+      <SolidColorBrush x:Key="Shell.Editor.CurrentStatement" Color="#3D3300" />
+      <SolidColorBrush x:Key="Shell.Diff.Added" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed" Color="#FF6B6B" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.Fold.Hover" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Icon.Blue" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Green" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Red" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Orange" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Purple" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Yellow" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Folder" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Outline" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Run" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Stop" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Save" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Open" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Build" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Git" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Test" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Icon.Navigate" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Editor.InlayHint.Background" Color="#1A1A1A" />
+      <SolidColorBrush x:Key="Shell.Editor.Guide" Color="#7F7F7F" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket1" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket2" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.Editor.Bracket3" Color="#87CEFA" />
+      <SolidColorBrush x:Key="Shell.TitleBar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Hover" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.TitleBar.Chip" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Toolbar" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Toolbar.Start.Icon" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Search.Border" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Search.Foreground" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="Shell.Tab.Active" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Tab.Active.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Tab.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Caption.Active" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Active.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected" Color="#4C3615" />
+      <SolidColorBrush x:Key="Shell.Tab.Selected.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover" Color="#3D2B11" />
+      <SolidColorBrush x:Key="Shell.Tab.Hover.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview" Color="#FFB547" />
+      <SolidColorBrush x:Key="Shell.Tab.Preview.Foreground" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.Caption.Inactive.Foreground" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.1" Color="#75BEFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.2" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.TabColor.3" Color="#FFD700" />
+      <SolidColorBrush x:Key="Shell.TabColor.4" Color="#DA70D6" />
+      <SolidColorBrush x:Key="Shell.TabColor.5" Color="#FF8C00" />
+      <SolidColorBrush x:Key="Shell.TabColor.6" Color="#1AEBFF" />
+      <SolidColorBrush x:Key="Shell.TabColor.7" Color="#FF69B4" />
+      <SolidColorBrush x:Key="Shell.TabColor.8" Color="#FFFFFF" />
+      <!-- Shapes (the design's Shapes table). -->
+      <x:Double x:Key="Shell.Gutter">8</x:Double>
+      <SolidColorBrush x:Key="Shell.Gutter.Background" Color="#000000" />
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Top">10,10,0,0</CornerRadius>
+      <CornerRadius x:Key="Shell.Panel.CornerRadius.Bottom">0,0,10,10</CornerRadius>
+      <Thickness x:Key="Shell.Tab.Active.Indicator">1</Thickness>
+      <SolidColorBrush x:Key="Shell.Tab.Active.IndicatorBrush" Color="#FFB547" />
+      <x:Boolean x:Key="Shell.StatusBar.ShowDot">True</x:Boolean>
+      <FontWeight x:Key="Shell.Caption.Active.FontWeight">Bold</FontWeight>
+      <SolidColorBrush x:Key="Shell.Caption.Active.Marker" Color="Transparent" />
+      <Thickness x:Key="Shell.Caption.Active.MarkerPadding">0</Thickness>
+      <CornerRadius x:Key="DockDocumentTabItemCornerRadius">7</CornerRadius>
+      <Thickness x:Key="DockDocumentTabItemMargin">2,3,2,3</Thickness>
+      <!-- Dock's document well and tool window captions. -->
+      <SolidColorBrush x:Key="DockTabActiveBackgroundBrush" Color="#FFB547" />
+      <SolidColorBrush x:Key="DockTabActiveForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabSelectedForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockDocumentTabCloseSelectedForegroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockTabActiveIndicatorBrush" Color="#FFB547" />
+      <SolidColorBrush x:Key="DockDocumentTabStripBackgroundBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceWorkbenchBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceSidebarBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceHeaderActiveBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfacePanelBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSurfaceEditorBrush" Color="#000000" />
+      <SolidColorBrush x:Key="DockSeparatorBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="DockBorderSubtleBrush" Color="#FFFFFF" />
+      <!-- Fluent controls in the family's colors: text boxes, selection, check boxes, toggles and accent buttons. -->
+      <SolidColorBrush x:Key="TextControlBackground" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackground" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#000000" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#000000" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentLowBrush" Color="#FFB547" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentMediumBrush" Color="#FFB547" />
+      <SolidColorBrush x:Key="SystemControlHighlightListAccentHighBrush" Color="#FFB547" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelected" Color="#FFB547" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPointerOver" Color="#FFB547" />
+      <SolidColorBrush x:Key="TreeViewItemBackgroundSelectedPressed" Color="#FFB547" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelected" Color="#000000" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="TreeViewItemForegroundSelectedPressed" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#FFB547" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#FFB547" />
+      <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#FFB547" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#FFB547" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#FFB547" />
+      <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#FFB547" />
+      <SolidColorBrush x:Key="AccentButtonBackground" Color="#FFB547" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#FFB547" />
+      <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#FFB547" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForeground" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#000000" />
+      <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#000000" />
+      <SolidColorBrush x:Key="TextControlBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="FlyoutBorderThemeBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ButtonBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#3D2B11" />
+      <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#3D2B11" />
+      <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" Color="#3D2B11" />
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#3D2B11" />
+      <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#3D2B11" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#3D2B11" />
+      <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#3D2B11" />
+      <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#FFB547" />
+      <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#FFB547" />
+      <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#FFB547" />
+      <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FFB547" />
+      <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#FFB547" />
+      <Color x:Key="SystemListMediumColor">#3D2B11</Color>
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 

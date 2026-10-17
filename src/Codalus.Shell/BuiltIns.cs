@@ -391,15 +391,18 @@ internal static partial class BuiltIns
         return null;
     };
 
-    /// <summary><c>workbench.colorTheme</c>, offering <paramref name="choices"/> (the built-in themes, and plugins' once they're known).</summary>
+    /// <summary>
+    /// <c>workbench.colorTheme</c> (D32), offering <paramref name="choices"/> (the built-in themes, and plugins' once they're
+    /// known) and accepting the values written before the theme families, which read as Classic.
+    /// </summary>
     public static SettingDescriptor ColorThemeSetting(IReadOnlyList<ThemeChoice> choices) =>
-        SettingDescriptor.Create(ThemeService.SettingKey, "\"followSystem\"", SettingType.String, ContributionSource.Shell) with
+        SettingDescriptor.Create(ThemeService.SettingKey, "\"" + ThemeService.DefaultSetting + "\"", SettingType.String, ContributionSource.Shell) with
         {
             Title = "Color Theme",
             Category = "Appearance",
-            Description = "The color theme. Follow System uses the operating system's light, dark or high-contrast setting. Plugins can add themes.",
-            Enum = [.. choices.Select(c => c.Id)],
-            EnumDescriptions = [.. choices.Select(c => c.Title)],
+            Description = "The theme family and its variant: \"harbor\" follows the operating system's light, dark or high-contrast setting, \"harbor.dark\" stays dark. The families are Harbor, Graphite, Daylight and Ember, and Classic (Blue, Light, Dark and High Contrast). Plugins can add themes.",
+            Enum = [.. choices.Select(c => c.Id), .. ThemeService.LegacyChoices.Select(c => c.Id)],
+            EnumDescriptions = [.. choices.Select(c => c.Title), .. ThemeService.LegacyChoices.Select(c => c.Title)],
             Scope = SettingScope.User,
             Order = 1,
         };

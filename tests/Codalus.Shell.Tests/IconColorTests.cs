@@ -67,13 +67,13 @@ public partial class IconColorTests
     public async Task The_palette_is_in_every_theme_and_monochrome_in_High_Contrast()
     {
         await using var f = ShellFixture.Create();
-        foreach (var theme in new[] { ThemeService.Blue, ThemeVariant.Light, ThemeVariant.Dark, ThemeService.HighContrast })
+        foreach (var theme in ThemeService.Themes.Select(t => t.Variant))
         {
             foreach (var color in s_palette)
             {
                 Assert.True(f.Window.TryFindResource("Shell.Icon." + color, theme, out var value) && value is ISolidColorBrush, $"Shell.Icon.{color} in {theme}");
                 var brush = (ISolidColorBrush)value!;
-                if (theme == ThemeService.HighContrast)
+                if (ThemeService.IsHighContrast(theme))
                 {
                     Assert.Equal(Colors.White, brush.Color);
                 }
