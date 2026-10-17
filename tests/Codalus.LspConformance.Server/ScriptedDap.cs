@@ -39,12 +39,15 @@ internal static class ScriptedDap
                     launch = message.TryGetProperty("arguments", out var arguments) ? arguments.Clone() : null;
                     break;
                 case "configurationDone" when FailsToStart(launch):
-                    // As netcoredbg answers when the program's runtime didn't report within its 5 seconds. Like netcoredbg,
-                    // it started the program first, as its child, and doesn't end it on disconnect: its id is listed
-                    // next to the starts file.
-                    StartProgram(StartsFile(launch!.Value) + ".programs");
-                    await FailAsync(output, requestSeq, command, "Failed command 'configurationDone' : 0x80004005");
-                    continue;
+                    {
+                        // As netcoredbg answers when the program's runtime didn't report within its 5 seconds. Like
+                        // netcoredbg, it started the program first, as its child, and doesn't end it on disconnect: its id
+                        // is listed next to the starts file.
+                        var program = StartProgram(StartsFile(launch!.Value) + ".programs");
+                        await FailAsync(output, requestSeq, command, "Failed command 'configurationDone' : 0x80004005");
+                        _ = AfterTimeoutAsync(output, program, Option(launch.Value, "runtimeAfter"), launch.Value.GetRawText());
+                        continue;
+                    }
                 case "configurationDone" when Threads(launch) is not null:
                     // The program runs until a pause.
                     break;
@@ -160,7 +163,57 @@ internal static class ScriptedDap
     private static string StartsFile(JsonElement launch) =>
         (launch.TryGetProperty("env", out var env) && env.ValueKind == JsonValueKind.Object ? env : launch).GetProperty("startsFile").GetString()!;
 
-    private static void StartProgram(string programs)
+    /// <summary>An option of the launch configuration (or of a netcoredbg launch's <c>env</c>), as text.</summary>
+    private static string? Option(JsonElement launch, string name) =>
+        (launch.TryGetProperty("env", out var env) && env.ValueKind == JsonValueKind.Object ? env : launch).TryGetProperty(name, out var value)
+            ? value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText()
+            : null;
+
+    /// <summary>
+    /// What a timed-out start's program does next, by the launch's <c>runtimeAfter</c>: its runtime reports that many
+    /// milliseconds later (netcoredbg then reports its thread and module, and the program runs: it prints and exits
+    /// with 7); <c>never</c>: it runs until it is killed; none: it ends at once, before its runtime started (a host
+    /// that fails).
+    /// </summary>
+    private static async Task AfterTimeoutAsync(Stream output, int program, string? runtimeAfter, string launch)
+    {
+        if (runtimeAfter == "never")
+        {
+            return;
+        }
+
+        if (runtimeAfter is null)
+        {
+            await Task.Delay(200);
+            Kill(program);
+            return;
+        }
+
+        await Task.Delay(int.Parse(runtimeAfter, System.Globalization.CultureInfo.InvariantCulture));
+        await EventAsync(output, "thread", new JsonObject { ["reason"] = "started", ["threadId"] = 1 });
+        await EventAsync(output, "module", new JsonObject { ["reason"] = "new", ["module"] = new JsonObject { ["id"] = "1", ["name"] = "program.dll" } });
+        await Task.Delay(1000);
+        await EventAsync(output, "output", new JsonObject { ["category"] = "console", ["output"] = "scripted adapter: launch " + launch + "\n" });
+        await EventAsync(output, "output", new JsonObject { ["category"] = "stdout", ["output"] = "Hello from the scripted program\n" });
+        Kill(program);
+        await EventAsync(output, "exited", new JsonObject { ["exitCode"] = 7 });
+        await EventAsync(output, "terminated", new JsonObject());
+    }
+
+    private static void Kill(int program)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(program);
+            process.Kill();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Killed already.
+        }
+    }
+
+    private static int StartProgram(string programs)
     {
         var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!)
         {
@@ -177,6 +230,7 @@ internal static class ScriptedDap
         start.ArgumentList.Add("--program");
         using var program = System.Diagnostics.Process.Start(start)!;
         File.AppendAllText(programs, program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n");
+        return program.Id;
     }
 
     private static Task FailAsync(Stream output, int requestSeq, string command, string error) =>
@@ -204,13 +258,25 @@ internal static class ScriptedDap
     private static Task EventAsync(Stream output, string name, JsonNode? body) =>
         WriteAsync(output, new JsonObject { ["seq"] = ++s_seq, ["type"] = "event", ["event"] = name, ["body"] = body ?? new JsonObject() });
 
+    private static readonly SemaphoreSlim s_write = new(1, 1);
+
     private static async Task WriteAsync(Stream output, JsonObject message)
     {
-        var json = Encoding.UTF8.GetBytes(message.ToJsonString());
-        var header = Encoding.ASCII.GetBytes($"Content-Length: {json.Length}\r\n\r\n");
-        await output.WriteAsync(header);
-        await output.WriteAsync(json);
-        await output.FlushAsync();
+        // A timed-out start's program writes its events beside the answers to requests.
+        await s_write.WaitAsync();
+        try
+        {
+            message["seq"] = Interlocked.Increment(ref s_seq);
+            var json = Encoding.UTF8.GetBytes(message.ToJsonString());
+            var header = Encoding.ASCII.GetBytes($"Content-Length: {json.Length}\r\n\r\n");
+            await output.WriteAsync(header);
+            await output.WriteAsync(json);
+            await output.FlushAsync();
+        }
+        finally
+        {
+            s_write.Release();
+        }
     }
 
     private static async Task<JsonElement?> ReadAsync(Stream input)

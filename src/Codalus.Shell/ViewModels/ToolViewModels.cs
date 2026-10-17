@@ -246,11 +246,11 @@ public sealed class TreeToolViewModel : ObservableObject
         var children = await FetchAsync(node.Item!.Handle).ConfigureAwait(true);
         if (generation == _generation)
         {
-            node.SetChildren(children.Select(Create));
+            node.SetChildren((children ?? []).Select(Create));
         }
     }
 
-    private void Refresh(string? handle)
+    internal void Refresh(string? handle)
     {
         if (handle is not null && _byHandle.TryGetValue(handle, out var node))
         {
@@ -286,6 +286,13 @@ public sealed class TreeToolViewModel : ObservableObject
             return;
         }
 
+        if (roots is null)
+        {
+            // A refresh that failed keeps the tree it had, under the failure (FetchAsync's message): a plugin that didn't
+            // answer in time emptied the Start page, and "Nothing to show." replaced the reason.
+            return;
+        }
+
         _byHandle.Clear();
         Roots.Clear();
         foreach (var root in roots)
@@ -307,7 +314,8 @@ public sealed class TreeToolViewModel : ObservableObject
         }
     }
 
-    private async Task<IReadOnlyList<TreeItemDto>> FetchAsync(string? handle)
+    /// <summary>The plugin's items, or null when it failed (and <see cref="Message"/> says why).</summary>
+    private async Task<IReadOnlyList<TreeItemDto>?> FetchAsync(string? handle)
     {
         try
         {
@@ -316,12 +324,12 @@ public sealed class TreeToolViewModel : ObservableObject
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Message = $"Could not load this view: {ex.Message}";
-            return [];
+            return null;
         }
         catch (OperationCanceledException)
         {
             Message = "The plugin did not respond in time.";
-            return [];
+            return null;
         }
     }
 
