@@ -83,13 +83,13 @@ namespace CpuBound
             var value = 17UL;
             while (DateTime.UtcNow < until)
             {
-                for (var i = 0; i < 1_000; i++)
+                for (var i = 0; i < 300; i++)
                 {
                     value = Mix(value);
                 }
 
                 Interlocked.Increment(ref Rounds);
-                Thread.Sleep(1);
+                Thread.Sleep(15);
             }
 
             GC.KeepAlive(value);
@@ -98,8 +98,12 @@ namespace CpuBound
         // The rounds loop inside, without calls, as in Primes.IsPrime: the JIT makes such a method fully interruptible,
         // so a sample stops the thread in it. A one-round Mix had no safe point of its own (a leaf called from Run's
         // loop): where the interruption comes late (some Windows runners), the thread stopped at the call's return or at
-        // Thread.Sleep, Run's frames, and Mix got no samples at all. A round of Run's loop takes a millisecond or two
-        // (0.2 before, against a sleep of up to 15.6 on Windows), so the thread is sampled often enough.
+        // Thread.Sleep, Run's frames, and Mix got no samples at all. A round of Run's loop takes about 2 ms in the Debug
+        // build the tests profile, and sleeps 15 ms, which is a timer tick (15.6 ms) on Windows too: the thread works
+        // about an eighth of the time on every platform, sampled often enough, and stays well behind the main thread, so
+        // IsPrime keeps the most self time and its [hot] line the most of the file's. (A round of 1,000 calls slept 1 ms
+        // on Linux and macOS: the thread worked 85% of the time, nearly as much as the main thread, and Mix's multiply
+        // line was the hottest of Program.cs on a Linux runner.)
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static ulong Mix(ulong value)
         {
