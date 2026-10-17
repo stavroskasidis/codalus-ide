@@ -1,6 +1,6 @@
 # .NET Framework
 
-Codalus IDE opens, edits and builds .NET Framework projects (`net48`, `net472` and the other 4.x versions, and 2.0 to 3.5 as best effort) on Windows, Linux and macOS: SDK-style projects and the older non-SDK-style ("old-style") projects with `packages.config`. They run on Windows, on the .NET Framework itself. On Linux and macOS, starting one says that it runs only on Windows.
+Codalus IDE opens, edits and builds .NET Framework projects (`net48`, `net472` and the other 4.x versions, and 2.0 to 3.5 as best effort) on Windows, Linux and macOS: SDK-style projects and the older non-SDK-style ("old-style") projects with `packages.config`. They run, debug and test on Windows, on the .NET Framework itself, with Codalus IDE's own .NET Framework debugger. On Linux and macOS, starting one says that it runs only on Windows.
 
 | | Windows | Linux and macOS |
 |---|---|---|
@@ -10,7 +10,8 @@ Codalus IDE opens, edits and builds .NET Framework projects (`net48`, `net472` a
 | Build | ✓ | ✓ |
 | Convert to SDK-style | ✓ | ✓ |
 | Start Without Debugging | ✓ | Windows only |
-| Debug (`F5`), run tests | coming in a later release | Windows only |
+| Debug (`F5`), Attach to Process | ✓ | Windows only |
+| Run and debug tests (xUnit 2, NUnit 3, MSTest v2) | ✓ | Windows only |
 | Projects that need Visual Studio's own targets (ASP.NET web applications) | open with IntelliSense, don't build | open with IntelliSense, don't build |
 
 ## Reference assemblies: nothing to install
@@ -54,13 +55,29 @@ After converting, the project restores its packages as package references. Proje
 
 **Start Without Debugging** (`Ctrl+F5`) builds the app and starts its `.exe`, which runs on the .NET Framework installed on Windows (not through `dotnet`); its console output comes to the Output window, or a console window (the `run.console` setting). Help → **Check Environment** shows the installed .NET Framework (from the registry) next to the highest version the solution's projects target, and .NET Framework 3.5 when a project targets 2.0 to 3.5, with the download page.
 
-**Start** (`F5`) says that debugging the .NET Framework's runtime comes in a later release, and offers Start Without Debugging: Codalus's debugger, netcoredbg, debugs .NET (CoreCLR) only. Hot Reload (`dotnet watch`) needs .NET 6 or later.
+Hot Reload (`dotnet watch`) needs .NET 6 or later.
 
 On Linux and macOS, Start, Start Without Debugging and the Performance Profiler say that the app runs only on Windows, and build nothing. Running .NET Framework apps on Mono isn't supported.
 
+## Debugging on Windows
+
+**Start** (`F5`) builds the app and starts it under Codalus IDE's .NET Framework debugger, which drives the debugging API of the .NET Framework installed on Windows (nothing else to install): the same windows, commands and settings as for .NET (see [Debugging](debugging.md)).
+- **Breakpoints**, with conditions (hit counts and log messages too), and function breakpoints (`Method`, `Type.Method`), bound as the app's assemblies load.
+- **Stepping** by line: Step Over, Step Into, Step Out, with **Just My Code** (code without symbols, or marked `[DebuggerNonUserCode]` or `[DebuggerStepThrough]`, is stepped through) and step filtering (property getters and operators are stepped over).
+- **Call Stack, Threads, Locals and Watch:** locals and arguments, `this`, an async method's variables, fields and properties (read through their getters), enums by name, arrays and collections' elements. Change a number, a bool or a character in Locals.
+- **Expressions** in Watch, the Debug Console and data tips: C# literals, names, member access, indexers, method calls (`items.Count`, `name.ToUpper()`, `Math.Max(a, b)`), operators, `?:`, `??`, `?.` and casts to numeric types. Methods run in the app on the stopped thread (with the others paused), for at most 5 seconds. `new`, lambdas, generic methods and assignments aren't supported.
+- **Exceptions:** Exception Settings break when the chosen exceptions are thrown (in your code, with Just My Code) and on unhandled ones; the Exception helper shows the type, message, stack trace and inner exceptions.
+- **The console:** with `debug.console` `externalConsole` (the default on Windows) the app gets a console window of its own; with `internalConsole` its output comes to the Debug Console. The integrated terminal isn't available for .NET Framework apps under the debugger (the Debug Console is used).
+- **Attach to Process** lists .NET Framework processes with the .NET ones ("· .NET Framework"); attaching works the same, and Stop detaches.
+- **Multiple startup projects** debug .NET Framework apps with the others, in one session.
+
+The debugger reads **portable PDBs**. SDK-style projects build them; Codalus IDE builds old-style projects that ask for Windows PDBs (`<DebugType>full</DebugType>`, Visual Studio's old default) with portable ones too, unless the project sets `<CodalusKeepDebugType>true</CodalusKeepDebugType>`. An assembly with a Windows PDB (built elsewhere) shows that in the Modules window, and its code is debugged without source.
+
+The debugger is 64-bit, and debugs 64-bit processes: an app built for x86, or AnyCPU with `<Prefer32Bit>true</Prefer32Bit>` (old Visual Studio templates set it), says so instead of starting; set `Prefer32Bit` to `false` to debug it. Apps for .NET Framework 2.0 to 3.5 debug on the CLR 2 when .NET Framework 3.5 is installed (best effort: not tested by Codalus's CI).
+
 ## Tests
 
-`net4x` test projects (xUnit 2, NUnit 3, MSTest v2 on `Microsoft.NET.Test.Sdk`) open and build everywhere. Running them is coming with the debugger; on Linux and macOS the Test Explorer shows their tests from the source and says on the project that they run only on Windows.
+`net4x` test projects (xUnit 2, NUnit 3 and MSTest v2 on `Microsoft.NET.Test.Sdk`) open and build everywhere. On Windows the Test Explorer discovers, runs and debugs them on VSTest's .NET Framework test hosts, like .NET tests (see [Testing](testing.md)); debugging a test stops at its breakpoints with the .NET Framework debugger. Old-style test projects (Visual Studio's Unit Test Project (.NET Framework), MSTest v2 with `packages.config`) are test projects by their project type (`ProjectTypeGuids`). On Linux and macOS the Test Explorer shows their tests from the source and says on the project that they run only on Windows. Code coverage isn't available for .NET Framework tests yet.
 
 ## New projects
 
@@ -68,7 +85,7 @@ File → New Project lists **.NET Framework Console App** and **.NET Framework C
 
 ## Not supported
 
-- Debugging and running tests (a later release), and running on Mono.
+- Running and debugging on Mono; 32-bit processes under the debugger; mixed-mode (native) debugging, Edit and Continue and Set Next Statement for .NET Framework apps; code coverage of .NET Framework tests; Windows PDBs.
 - Building with Visual Studio's MSBuild or Build Tools; COM references (`ResolveComReference`), ClickOnce publishing, the Entity Framework 6 designer, Web Forms, C++/CLI and VSTO.
 
 - The Windows Forms designer and WPF's previewer with .NET Framework apps haven't been validated yet: their forms and XAML edit as code.
