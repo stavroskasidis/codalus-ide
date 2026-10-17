@@ -95,12 +95,62 @@ The designer draws the form with your app's own .NET and Windows Forms, as Visua
 - **Select** a control with a click; `Ctrl+click` or `Shift+click` adds it to the selection or takes it out; drag on the form's background (or `Alt`+drag on a container) for a rubber band. `Esc` selects the parent, `Ctrl+A` everything on the form.
 - **Move** the selected controls by dragging them; dropped on a panel, a group box, a tab page or a split container's panel, a control moves into it. The arrow keys move them a pixel, `Shift`+arrows resize them.
 - **Resize** the selected control with its grab handles (the form from its right and bottom ones).
-- **Delete**, **Cut** (`Ctrl+X`), **Copy** (`Ctrl+C`), **Paste** (`Ctrl+V`, into the selected container, a little lower and to the right, with new names) and **Duplicate** (`Ctrl+D`). Deleting a container deletes what's inside.
+- **Snap lines** show while you move or resize a control, as in Visual Studio: its edges line up with its neighbours' (blue), its text with theirs (a magenta baseline: a label with its text box), and it keeps their margins and the form's padding (dashed: 12 pixels from the form's edge, 6 between two controls). Hold `Alt` to move freely.
+- **Delete**, **Cut** (`Ctrl+X`), **Copy** (`Ctrl+C`), **Paste** (`Ctrl+V`, into the selected container, a little lower and to the right, with new names) and **Duplicate** (`Ctrl+D`). Deleting a container deletes what's inside. Pasted controls keep their items, tool tips and data bindings; their event handlers stay hooked up when you paste into the same form (in another form the handlers aren't there, so they're left out).
 - **Undo** (`Ctrl+Z`) and **Redo** (`Ctrl+Y`) are the designer file's own: the designer's changes are edits of `.Designer.cs`, so they undo in the code view too, and the designer loads the form again from the code.
 - **Double-click** a control to go to its default event's handler (a button's `Click`, a form's `Load`), written in the form's code file when it doesn't exist yet.
-- Components that don't show on the form (a timer, a tool tip, a dialog) are listed under it; click one to select it.
+- A docked control shows its dock, and an anchored one (other than top and left) lines to the edges it's anchored to.
 
 **Every change is written as code**, the way Visual Studio's designer writes it, in your file's own style (for .NET, or for .NET Framework with `this.` and full type names): a moved button changes its one `Location` line; a new one adds its field, its creation, its commented section with its properties in Visual Studio's order and its `Controls.Add`. The rest of the file doesn't move, so source control and local history show only what changed. The changes are in the designer file's editor until you save (`Ctrl+S` saves the designer).
+
+### The Format menu and tab order
+
+With the designer active, the **Format** menu (and the surface's context menu) lines up the selected controls against the primary selection (the one with white grab handles), as Visual Studio's does:
+- **Align**: Lefts, Centers, Rights, Tops, Middles, Bottoms, and to Grid (8 pixels);
+- **Make Same Size**: Width, Height, both, and Size to Grid;
+- **Horizontal Spacing** and **Vertical Spacing**: Make Equal, Increase, Decrease, Remove;
+- **Center in Form**: Horizontally, Vertically;
+- **Order**: **Bring to Front** and **Send to Back**, which change the order of the parent's `Controls.Add` (its z-order).
+
+View → **Tab Order** numbers every control with its `TabIndex` (a group box's controls as `5.0`, `5.1`…). Click the controls in the order the `Tab` key should visit them: each container counts from 0. `Esc` or View → Tab Order again ends it.
+
+### Smart tags
+
+A control or component with designer tasks shows a small arrow at its top right when it's selected (or press `Shift+Alt+F10`). It opens **_Type_ Tasks**, the tasks its Windows Forms designer offers: a list box's **Edit Items…** and **Use Data Bound Items**, a tab control's **Add Tab** and **Remove Tab**, a panel's **Dock in Parent Container**, a menu strip's **Insert Standard Items**. They run in the designer and what they change is written as code. A task that opens one of Windows Forms' own dialogs opens the IDE's editor instead (a collection's editor, or importing an image), or says it isn't available here.
+
+### Menus and tool strips
+
+Select a menu strip, a tool strip, a status strip or a context menu strip to edit it on the form: **Type Here** at its end adds an item. In a menu, type the item's text (`&File`; a `-` makes a separator); in a tool strip or a status strip, choose the item's type (a button, a label, a combo box, a drop-down button…). Items are named as in Visual Studio (`fileToolStripMenuItem`, `toolStripButton1`).
+- Select a menu item to open its drop-down, with its own **Type Here**; `Enter` or a click on the selected item edits its text in place.
+- `Ctrl`+arrows move the selected item among its siblings; `Delete` deletes it (and its drop-down's items).
+- An item's properties are in the Properties window; its items are also in the **Items** collection editor.
+
+The items are written as Visual Studio writes them: their fields, creations and sections, and the strip's `Items.AddRange(new ToolStripItem[] { … })` in their order.
+
+### The component tray
+
+Components that don't show on the form (a timer, a tool tip, a binding source, an image list, an error provider, and the form's menu and tool strips) are in the **component tray** under it, with their icons. Click one to select it; `F2` (or its context menu's **Rename**) renames it in place; `Delete` deletes it; drag one to move it among the others, or **Line Up Icons** to arrange them in rows. The arrangement is kept in the form's `.resx` (Visual Studio's `TrayLocation`), so both IDEs show the same order.
+
+### Collections
+
+Properties that are collections show **(Collection)** and a **…** button in the Properties window (or the smart tag's **Edit Items…** task), which opens their editor:
+- **items as text**, one a line: a list box's, a combo box's or a domain up-down's `Items`;
+- **members**, added (of a type you choose), removed and moved up and down, each with its properties: a list view's `Columns`, a tab control's `TabPages`, a tool strip's or menu's `Items` and `DropDownItems`, a data grid view's `Columns`;
+- a list view's `Items` (by text, written as `ListViewItem` locals), a table layout panel's `ColumnStyles` and `RowStyles` (size type and size), an image list's `Images`.
+
+The code gets Visual Studio's form for each: `Items.AddRange(new object[] { … })`, `Columns.AddRange(new ColumnHeader[] { … })`, `ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F))`, `Images.SetKeyName(0, "save.png")`.
+
+### Localizable forms and images
+
+Set the form's **Localizable** property to `True` to translate it, as in Visual Studio: its localizable properties (texts, sizes, locations, images…) move from the code to the form's `.resx`, and each control's section starts with `resources.ApplyResources(button1, "button1")`. The form's **Language** property (in the Properties window, with the form selected) chooses the language you design: **(Default)**, or a culture (`fr`, `fr-CA`, `de`…, from the list or typed). In a culture, the form shows its translation, and what you change goes to that culture's file (`OrderForm.fr.resx`, created when needed), only where it differs from the default. Renaming a control renames its resource keys in every culture's file; deleting it removes them. Setting **Localizable** back to `False` moves the values back to the code.
+
+An **image** property (`Image`, `BackgroundImage`, a form's `Icon`) has two buttons in the Properties window: one imports an image file into the form's `.resx` (written as `(Image)resources.GetObject("button1.Image")`), the other copies it into the project's `Resources` folder and adds it to `Properties/Resources.resx` (written as `Properties.Resources.save`).
+
+The `.resx` files are saved with the form (`Ctrl+S`), and undo takes back the code and the resources together.
+
+### Data binding
+
+A form with a `BindingSource` (from the Toolbox's **Data** category, its `DataSource` set to one of your classes, such as `typeof(Customer)`) can bind its controls' properties to the class's members: the Properties window's **(DataBindings)** category lists a control's bindable properties (`Text`, `Checked`, `Tag`…), each with a list of the binding sources' members (`customerBindingSource - Name`). The code gets `textBox1.DataBindings.Add(new Binding("Text", customerBindingSource, "Name", true))`; **(none)** removes it. Visual Studio's Data Sources window isn't there: set the binding source's `DataSource` in the Properties window or the code.
 
 **Code the designer can't read** (an `if` or a loop in `InitializeComponent`, a lambda as an event handler, a call to one of the form's own methods, a field that isn't a component) opens as code instead, at that line, and a notification says why, as in Visual Studio. The .NET SDK's `WFO3000` analyzers already flag most of it as errors.
 
@@ -116,14 +166,16 @@ With the designer active, the **Properties** window (`F4`) shows the selected co
 - by category or alphabetically (its toolbar), values the code sets in bold, the selected property's description at the bottom;
 - for several selected components, the properties they share, a value they differ in left blank, and a value set on all of them;
 - edited as text (`12, 9` for a point, `Segoe UI, 9pt, style=Bold` for a font, `255, 128, 0` or a name for a color, with a swatch), from a list (enums, `True`/`False`, `Dock`), or with a toggle per flag (`Anchor`'s Top, Bottom, Left and Right);
-- **(Name)** renames the component, in the designer file and wherever the form's code uses it.
+- with a picker for **Dock** (a box with the five positions) and **Anchor** (a cross with its four sides to toggle);
+- **(Name)** renames the component, in the designer file and wherever the form's code uses it;
+- **extender properties** that other components give it: a tool tip's **ToolTip on toolTip1** (written as `toolTip1.SetToolTip(button1, "…")`), a help provider's, an error provider's.
 
 **Events** (its toolbar) lists the component's events with their handlers. Type a method's name to hook the event to it; clear it to unhook the event (the method stays). The arrow next to an event goes to its handler, writing `button1_Click` in the code file first when there's none.
 
 ### Limits
 
-- **Localizable forms** (`Localizable` set to `True`: their properties in the `.resx`) open and draw, but their localizable properties can't be changed in the designer yet; it says so. Images in the form's resources show but aren't changed.
-- Not yet: snap lines and alignment guides, tab order mode, the component tray's arrangement, smart tags, editing menus and tool strips on the form, data binding, and the component designer (a class that is a component but not a control opens as code).
+- Not yet: Visual Studio's Data Sources window (bind through a `BindingSource` instead), complex data binding's designer (a grid's `DataSource` is an ordinary property), the component designer (a class that is a component but not a control opens as code), and a design surface for WPF (its XAML Previewer shows the window, and selects both ways).
+- Smart tag tasks and collection items that open one of Windows Forms' own dialogs (a data grid view's **Add Column…**, a binding source's data source wizard) aren't available; set those properties in the Properties window.
 - The designer runs your code (your controls' constructors), so it works only in folders you trust.
 
 On Linux and macOS, forms open as code (the status bar says once that the designer is Windows only), View Designer says so, and the code edits, completes and builds as usual.

@@ -2,8 +2,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
@@ -12,31 +14,45 @@ using Codalus.Workbench.WinForms;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// The Windows Forms designer's view (M41a, ADR 0073): the designer host's frame of the form, and over it the surface's
-/// own adorners and gestures: selection (a click; Ctrl or Shift to add; a rubber band), moving (a drag, into another
-/// container when dropped in one), resizing (the primary selection's eight grab handles), the arrow keys (Shift to
-/// resize), Delete, Ctrl+C, Ctrl+V and Ctrl+D, Ctrl+Z and Ctrl+Y (the designer file's undo), a double-click (the default
-/// event's handler), and the Toolbox (a click or a drag with an item armed, or an item dragged in).
+/// The Windows Forms designer's view (M41a and M41b, ADR 0073): the designer host's frame of the form, and over it the
+/// surface's own adorners and gestures: selection (a click; Ctrl or Shift to add; a rubber band), moving (a drag, into
+/// another container when dropped in one) and resizing (the primary selection's eight grab handles) with Visual
+/// Studio's snap lines (Alt turns them off), the arrow keys (Shift to resize), Delete, Ctrl+C, Ctrl+V and Ctrl+D,
+/// Ctrl+Z and Ctrl+Y (the designer's undo), a double-click (the default event's handler), the Toolbox (a click or a
+/// drag with an item armed, or an item dragged in), tab order mode, smart tags, menus and tool strips edited in place
+/// (Type Here), the component tray, and the collection editors.
 /// </summary>
 public sealed class WinFormsDesignerView : UserControl, IPaneView
 {
     /// <summary>A Toolbox item dragged onto the surface: its type's full name.</summary>
     public static readonly DataFormat<string> ToolboxFormat = DataFormat.CreateInProcessFormat<string>("codalus.toolbox.type");
 
+    /// <summary>A tray component dragged within the tray: its name.</summary>
+    public static readonly DataFormat<string> TrayFormat = DataFormat.CreateInProcessFormat<string>("codalus.winforms.tray");
+
     private readonly WinFormsDesignerDocument _document;
     private readonly DesignerSurface _surface;
     private readonly ScrollViewer _scroll;
+    private readonly Canvas _overlay = new() { ClipToBounds = false };
+    private readonly Border _collectionHost = new() { IsVisible = false, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, BorderThickness = new Thickness(1) };
+    private string? _renaming;
 
     public WinFormsDesignerView(WinFormsDesignerDocument document)
     {
         _document = document;
         DataContext = document;
-        _surface = new DesignerSurface(document);
+        _surface = new DesignerSurface(document, this);
         _scroll = new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Content = new Border { Padding = new Thickness(16), Child = _surface, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top },
+            Content = new Border
+            {
+                Padding = new Thickness(16),
+                Child = new Panel { Children = { _surface, _overlay } },
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+            },
         };
         _scroll.Bind(BackgroundProperty, _scroll.GetResourceObservable("Shell.Editor.Background"));
 
@@ -51,6 +67,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         var status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Classes = { "muted" }, Margin = new Thickness(8, 0) };
         Avalonia.Automation.AutomationProperties.SetLiveSetting(status, Avalonia.Automation.AutomationLiveSetting.Polite);
         var busy = new ProgressBar { IsIndeterminate = true, Width = 60, Height = 2, MinHeight = 2, VerticalAlignment = VerticalAlignment.Center };
+        var language = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0), Classes = { "muted" } };
         var toolbar = new DockPanel
         {
             Margin = new Thickness(6, 4),
@@ -59,10 +76,11 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
                 Tool("code", Localizer.Get("msg.winFormsDesigner.viewCode", "View Code (F7)"), document.ViewCodeCommand),
                 Tool("refresh", Localizer.Get("msg.winFormsDesigner.reload", "Load the form again (and restart the designer)"), document.RefreshCommand),
                 busy,
+                language,
                 status,
             },
         };
-        foreach (var child in toolbar.Children.Take(3))
+        foreach (var child in toolbar.Children.Take(4))
         {
             DockPanel.SetDock((Control)child, Avalonia.Controls.Dock.Left);
         }
@@ -76,21 +94,7 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         problemBar.Bind(Border.BorderBrushProperty, problemBar.GetResourceObservable("Shell.Border"));
         DockPanel.SetDock(problemBar, Avalonia.Controls.Dock.Bottom);
 
-        // The component tray (simple: M41b has the full one): non-visual components, to select them.
-        var tray = new ItemsControl
-        {
-            ItemsSource = document.Tray,
-            ItemsPanel = new Avalonia.Controls.Templates.FuncTemplate<Panel?>(() => new WrapPanel()),
-            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DesignerTrayItem>((item, _) =>
-            {
-                var button = new Button { Content = item?.Name, Command = item?.Select, Classes = { "toolbar" }, Margin = new Thickness(2) };
-                ToolTip.SetTip(button, item?.Type);
-                Avalonia.Automation.AutomationProperties.SetName(button, item?.Name);
-                return button;
-            }),
-            Margin = new Thickness(6, 2),
-        };
-        var trayBar = new Border { Child = tray, BorderThickness = new Thickness(0, 1, 0, 0) };
+        var trayBar = new Border { Child = Tray(), BorderThickness = new Thickness(0, 1, 0, 0), MinHeight = 34 };
         trayBar.Bind(Border.BorderBrushProperty, trayBar.GetResourceObservable("Shell.Border"));
         DockPanel.SetDock(trayBar, Avalonia.Controls.Dock.Bottom);
 
@@ -98,7 +102,9 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
         // the form will be, wrapped (M34g: a failure's reason was one trimmed line in the toolbar).
         var message = new TextBlock { Classes = { "emptyState" }, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Top };
         Avalonia.Automation.AutomationProperties.SetLiveSetting(message, Avalonia.Automation.AutomationLiveSetting.Polite);
-        var surfaceArea = new Panel { Children = { _scroll, message } };
+        _collectionHost.Bind(Border.BackgroundProperty, _collectionHost.GetResourceObservable("Shell.Panel"));
+        _collectionHost.Bind(Border.BorderBrushProperty, _collectionHost.GetResourceObservable("Shell.Border"));
+        var surfaceArea = new Grid { Children = { _scroll, message, _collectionHost } };
 
         Content = new DockPanel { Children = { toolbar, problemBar, trayBar, surfaceArea } };
 
@@ -113,30 +119,548 @@ public sealed class WinFormsDesignerView : UserControl, IPaneView
             problems.Text = document.Problems;
             problemBar.IsVisible = document.HasProblems;
             trayBar.IsVisible = document.HasTray;
+            language.Text = document.IsLocalizable ? Localizer.Format("msg.winFormsDesigner.languageShown", "Language: {0}", document.Culture.Length == 0 ? Localizer.Get("msg.winFormsDesigner.defaultLanguage", "(Default)") : document.Culture) : null;
+            language.IsVisible = document.IsLocalizable;
         }
 
         Update();
-        document.PropertyChanged += (_, _) => Infrastructure.Ui.Post(Update);
+        document.PropertyChanged += (_, e) => Infrastructure.Ui.Post(() =>
+        {
+            Update();
+            if (e.PropertyName == nameof(WinFormsDesignerDocument.ActionPanel))
+            {
+                ShowActions();
+            }
+            else if (e.PropertyName == nameof(WinFormsDesignerDocument.CollectionEditor))
+            {
+                ShowCollectionEditor();
+            }
+        });
         document.SurfaceChanged += (_, _) => Infrastructure.Ui.Post(Update);
         Avalonia.Automation.AutomationProperties.SetName(_surface, document.Title);
+        _surface.ContextRequested += (_, e) =>
+        {
+            if (MenuBuilder.Context(document.Shell, BuiltIns.WinFormsSurfaceMenu) is { } menu)
+            {
+                menu.Open(_surface);
+                e.Handled = true;
+            }
+        };
     }
 
     public DesignerSurface Surface => _surface;
 
     public void FocusPrimary() => _surface.Focus();
+
+    // ------------------------------------------------------------------ the component tray
+
+    private ItemsControl Tray()
+    {
+        var tray = new ItemsControl
+        {
+            ItemsSource = _document.Tray,
+            ItemsPanel = new Avalonia.Controls.Templates.FuncTemplate<Panel?>(() => new WrapPanel()),
+            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DesignerTrayItem>((item, _) => item is null ? null : TrayItem(item)),
+            Margin = new Thickness(6, 2),
+        };
+        Avalonia.Automation.AutomationProperties.SetName(tray, Localizer.Get("msg.winFormsDesigner.tray", "Component tray"));
+        DragDrop.SetAllowDrop(tray, true);
+        DragDrop.AddDragOverHandler(tray, (_, e) =>
+        {
+            e.DragEffects = e.DataTransfer.Contains(TrayFormat) ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        });
+        DragDrop.AddDropHandler(tray, (_, e) =>
+        {
+            if (e.DataTransfer.TryGetValue(TrayFormat) is { Length: > 0 } name)
+            {
+                var before = (e.Source as Control)?.FindAncestorOfType<Button>(includeSelf: true)?.Tag as string;
+                e.Handled = true;
+                _ = _document.MoveTrayItemAsync(name, before == name ? null : before);
+            }
+        });
+        var lineUp = new MenuItem { Header = Localizer.Get("msg.winFormsDesigner.lineUpIcons", "Line Up Icons") };
+        lineUp.Click += (_, _) => _ = _document.LineUpTrayAsync();
+        tray.ContextMenu = new ContextMenu { Items = { lineUp } };
+        return tray;
+    }
+
+    private Control TrayItem(DesignerTrayItem item)
+    {
+        if (_renaming == item.Name)
+        {
+            var box = new TextBox { Text = item.Name, MinWidth = 120, Margin = new Thickness(2) };
+            Avalonia.Automation.AutomationProperties.SetName(box, Localizer.Format("msg.winFormsDesigner.renameTray", "Rename {0}", item.Name));
+            void Commit(bool keep)
+            {
+                if (_renaming != item.Name)
+                {
+                    return;
+                }
+
+                _renaming = null;
+                if (keep && box.Text is { Length: > 0 } name && name != item.Name)
+                {
+                    _ = _document.RenameAsync(item.Name, name.Trim());
+                }
+
+                _document.RefreshTray();
+            }
+
+            box.KeyDown += (_, e) =>
+            {
+                if (e.Key is Key.Enter or Key.Escape)
+                {
+                    Commit(e.Key == Key.Enter);
+                    e.Handled = true;
+                }
+            };
+            box.LostFocus += (_, _) => Commit(keep: true);
+            box.AttachedToVisualTree += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                box.Focus();
+                box.SelectAll();
+            });
+            return box;
+        }
+
+        var button = new Button
+        {
+            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { new Icon { Kind = item.Icon, Width = 16, Height = 16 }, new TextBlock { Text = item.Name, VerticalAlignment = VerticalAlignment.Center } } },
+            Command = item.Select,
+            Classes = { "toolbar" },
+            Margin = new Thickness(2),
+            Tag = item.Name,
+            BorderThickness = new Thickness(1),
+        };
+        if (item.IsSelected)
+        {
+            button.Bind(Button.BorderBrushProperty, button.GetResourceObservable("Shell.Accent"));
+        }
+
+        ToolTip.SetTip(button, $"{item.Name} ({item.ShortType})");
+        Avalonia.Automation.AutomationProperties.SetName(button, item.Name);
+        button.DoubleTapped += (_, _) => _ = _document.DefaultEventOfAsync(item.Name);
+        button.KeyDown += (_, e) =>
+        {
+            switch (e.Key)
+            {
+                case Key.F2:
+                    StartRename(item.Name);
+                    e.Handled = true;
+                    break;
+                case Key.Delete:
+                    item.Select.Execute(null);
+                    _ = _document.DeleteSelectionAsync();
+                    e.Handled = true;
+                    break;
+            }
+        };
+        var rename = new MenuItem { Header = Localizer.Get("msg.winFormsDesigner.rename", "Rename") };
+        rename.Click += (_, _) => StartRename(item.Name);
+        var delete = new MenuItem { Header = Localizer.Get("msg.winFormsDesigner.delete", "Delete") };
+        delete.Click += (_, _) =>
+        {
+            item.Select.Execute(null);
+            _ = _document.DeleteSelectionAsync();
+        };
+        var lineUp = new MenuItem { Header = Localizer.Get("msg.winFormsDesigner.lineUpIcons", "Line Up Icons") };
+        lineUp.Click += (_, _) => _ = _document.LineUpTrayAsync();
+        button.ContextMenu = new ContextMenu { Items = { rename, delete, new Separator(), lineUp } };
+
+        // Dragged before another tray component: the tray's order.
+        PointerPressedEventArgs? pressed = null;
+        button.AddHandler(PointerPressedEvent, (_, e) => pressed = e, RoutingStrategies.Tunnel);
+        button.AddHandler(PointerReleasedEvent, (_, _) => pressed = null, RoutingStrategies.Tunnel);
+        button.AddHandler(PointerMovedEvent, async (_, e) =>
+        {
+            if (pressed is { } start && e.GetCurrentPoint(button).Properties.IsLeftButtonPressed && Point.Distance(start.GetPosition(button), e.GetPosition(button)) > 6)
+            {
+                pressed = null;
+                var data = new DataTransfer();
+                data.Add(DataTransferItem.Create(TrayFormat, item.Name));
+                await DragDrop.DoDragDropAsync(start, data, DragDropEffects.Move);
+            }
+        }, RoutingStrategies.Tunnel);
+        return button;
+    }
+
+    public void StartRename(string name)
+    {
+        _renaming = name;
+        _document.RefreshTray();
+    }
+
+    // ------------------------------------------------------------------ the inline editor (Type Here, an item's text)
+
+    /// <summary>A text box over the surface at <paramref name="bounds"/>: Enter commits, Esc cancels.</summary>
+    public void Edit(DesignerRect bounds, string text, Func<string, Task> commit)
+    {
+        foreach (var old in _overlay.Children.OfType<TextBox>().ToList())
+        {
+            _overlay.Children.Remove(old);
+        }
+
+        var box = new TextBox { Text = text, Width = Math.Max(80, bounds.Width), MinHeight = Math.Max(20, bounds.Height), Padding = new Thickness(4, 1), FontSize = 12 };
+        Avalonia.Automation.AutomationProperties.SetName(box, Localizer.Get("msg.winFormsDesigner.typeHere", "Type Here"));
+        Canvas.SetLeft(box, bounds.X);
+        Canvas.SetTop(box, bounds.Y);
+        var done = false;
+        void Finish(bool keep)
+        {
+            if (done)
+            {
+                return;
+            }
+
+            done = true;
+            _overlay.Children.Remove(box);
+            _surface.Focus();
+            if (keep && box.Text is { Length: > 0 } value)
+            {
+                _ = commit(value);
+            }
+        }
+
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key is Key.Enter or Key.Escape)
+            {
+                Finish(e.Key == Key.Enter);
+                e.Handled = true;
+            }
+        };
+        box.LostFocus += (_, _) => Finish(keep: true);
+        _overlay.Children.Add(box);
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            box.Focus();
+            box.SelectAll();
+        });
+    }
+
+    /// <summary>A Type Here box of a tool strip or status strip: its item types, to pick one.</summary>
+    public void PickItemType(DesignerTypeHere typeHere)
+    {
+        var menu = new ContextMenu();
+        foreach (var type in typeHere.Types)
+        {
+            var item = new MenuItem { Header = type[(type.LastIndexOf('.') + 1)..] };
+            item.Click += (_, _) => _ = _document.AddItemAsync(typeHere, text: null, type);
+            menu.Items.Add(item);
+        }
+
+        menu.Open(_surface);
+    }
+
+    // ------------------------------------------------------------------ smart tags
+
+    private void ShowActions()
+    {
+        foreach (var old in _overlay.Children.Where(c => c.Tag is "actions").ToList())
+        {
+            _overlay.Children.Remove(old);
+        }
+
+        if (_document.ActionPanel is not { } panel || _document.Find(panel.Component) is not { } view)
+        {
+            return;
+        }
+
+        var rows = new StackPanel { Spacing = 4, Margin = new Thickness(10, 8), MinWidth = 200 };
+        var header = new DockPanel { Children = { new TextBlock { Text = panel.Title, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center } } };
+        var close = new Button { Content = new Icon { Kind = "close" }, Classes = { "toolbar" }, Command = panel.CloseCommand };
+        Avalonia.Automation.AutomationProperties.SetName(close, Localizer.Get("msg.winFormsDesigner.closeActions", "Close"));
+        DockPanel.SetDock(close, Avalonia.Controls.Dock.Right);
+        header.Children.Insert(0, close);
+        rows.Children.Add(header);
+        if (panel.IsEmpty)
+        {
+            rows.Children.Add(new TextBlock { Text = Localizer.Get("msg.winFormsDesigner.noActions", "No tasks."), Classes = { "muted" } });
+        }
+
+        foreach (var row in panel.Rows)
+        {
+            rows.Children.Add(ActionRow(row));
+        }
+
+        var border = new Border { Child = rows, BorderThickness = new Thickness(1), Tag = "actions", BoxShadow = BoxShadows.Parse("0 2 8 0 #40000000") };
+        border.Bind(Border.BackgroundProperty, border.GetResourceObservable("Shell.Panel"));
+        border.Bind(Border.BorderBrushProperty, border.GetResourceObservable("Shell.Border"));
+        border.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape)
+            {
+                _document.CloseActions();
+                e.Handled = true;
+            }
+        };
+        Canvas.SetLeft(border, view.X + view.Width + 14);
+        Canvas.SetTop(border, view.Y);
+        _overlay.Children.Add(border);
+    }
+
+    private static Control ActionRow(DesignerActionRowViewModel row)
+    {
+        Control control;
+        if (row.IsHeader)
+        {
+            control = new TextBlock { Text = row.Title, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 6, 0, 0) };
+        }
+        else if (row.IsText)
+        {
+            control = new TextBlock { Text = row.Title, TextWrapping = TextWrapping.Wrap, Classes = { "muted" } };
+        }
+        else if (row.IsMethod)
+        {
+            control = new Button { Content = row.Title, Classes = { "link" }, Command = row.RunCommand, IsEnabled = row.IsAvailable, HorizontalAlignment = HorizontalAlignment.Left };
+        }
+        else if (row.IsBoolean)
+        {
+            var check = new CheckBox { Content = row.Title, IsChecked = row.IsChecked, IsEnabled = row.IsAvailable };
+            check.IsCheckedChanged += (_, _) => row.IsChecked = check.IsChecked == true;
+            control = check;
+        }
+        else
+        {
+            Control editor;
+            if (row.IsChoice)
+            {
+                var combo = new ComboBox { ItemsSource = row.Options, SelectedItem = row.Selected, MinWidth = 120, IsEnabled = row.IsAvailable };
+                combo.SelectionChanged += (_, _) =>
+                {
+                    if (combo.SelectedItem is string value)
+                    {
+                        row.Selected = value;
+                    }
+                };
+                editor = combo;
+            }
+            else
+            {
+                var box = new TextBox { Text = row.Text, MinWidth = 120, IsEnabled = row.IsAvailable };
+                box.LostFocus += (_, _) => row.Text = box.Text ?? string.Empty;
+                editor = box;
+            }
+
+            Avalonia.Automation.AutomationProperties.SetName(editor, row.Title);
+            control = new StackPanel { Spacing = 2, Children = { new TextBlock { Text = row.Title }, editor } };
+        }
+
+        ToolTip.SetTip(control, row.Description);
+        Avalonia.Automation.AutomationProperties.SetName(control, row.Title);
+        return control;
+    }
+
+    // ------------------------------------------------------------------ the collection editor
+
+    private void ShowCollectionEditor()
+    {
+        if (_document.CollectionEditor is not { } editor)
+        {
+            _collectionHost.IsVisible = false;
+            _collectionHost.Child = null;
+            return;
+        }
+
+        _collectionHost.Child = CollectionEditor(editor);
+        _collectionHost.IsVisible = true;
+    }
+
+    private static DockPanel CollectionEditor(DesignerCollectionEditorViewModel editor)
+    {
+        var title = new TextBlock { Text = editor.Title, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 0, 0, 8) };
+        Button Command(string text, System.Windows.Input.ICommand command, bool accent = false)
+        {
+            var button = new Button { Content = text, Command = command, Margin = new Thickness(0, 0, 6, 0) };
+            if (accent)
+            {
+                button.Classes.Add("accent");
+            }
+
+            Avalonia.Automation.AutomationProperties.SetName(button, text);
+            return button;
+        }
+
+        var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
+        if (!editor.IsLive)
+        {
+            footer.Children.Add(Command(Localizer.Get("msg.winFormsDesigner.ok", "OK"), editor.OkCommand, accent: true));
+        }
+
+        footer.Children.Add(Command(editor.IsLive ? Localizer.Get("msg.winFormsDesigner.close", "Close") : Localizer.Get("msg.winFormsDesigner.cancel", "Cancel"), editor.CloseCommand));
+        Control body;
+        if (editor.IsText)
+        {
+            var hint = new TextBlock { Text = Localizer.Get("msg.winFormsDesigner.oneLineEach", "One item a line:"), Classes = { "muted" }, Margin = new Thickness(0, 0, 0, 4) };
+            var box = new TextBox { Text = editor.Text, AcceptsReturn = true, Height = 220, Width = 380, TextWrapping = TextWrapping.NoWrap };
+            box.TextChanged += (_, _) => editor.Text = box.Text ?? string.Empty;
+            Avalonia.Automation.AutomationProperties.SetName(box, editor.Title);
+            editor.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(DesignerCollectionEditorViewModel.Text) && box.Text != editor.Text)
+                {
+                    box.Text = editor.Text;
+                }
+            };
+            body = new StackPanel { Children = { hint, box } };
+        }
+        else
+        {
+            body = ItemsEditor(editor);
+        }
+
+        return new DockPanel
+        {
+            Margin = new Thickness(14),
+            Children =
+            {
+                Docked(title, Avalonia.Controls.Dock.Top),
+                Docked(footer, Avalonia.Controls.Dock.Bottom),
+                body,
+            },
+        };
+    }
+
+    private static Control Docked(Control control, Avalonia.Controls.Dock dock)
+    {
+        DockPanel.SetDock(control, dock);
+        return control;
+    }
+
+    private static StackPanel ItemsEditor(DesignerCollectionEditorViewModel editor)
+    {
+        var list = new ListBox { Width = 240, Height = 260, ItemsSource = editor.Items };
+        list.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<DesignerCollectionItemViewModel>((item, _) => new TextBlock { Text = item?.Display });
+        list.SelectionChanged += (_, _) => editor.Selected = list.SelectedItem as DesignerCollectionItemViewModel;
+        Avalonia.Automation.AutomationProperties.SetName(list, Localizer.Get("msg.winFormsDesigner.members", "Members"));
+        Button Small(string icon, string name, System.Windows.Input.ICommand command)
+        {
+            var button = new Button { Content = new Icon { Kind = icon }, Classes = { "toolbar" }, Command = command };
+            ToolTip.SetTip(button, name);
+            Avalonia.Automation.AutomationProperties.SetName(button, name);
+            return button;
+        }
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(0, 4, 0, 0) };
+        if (editor.HasItemTypes)
+        {
+            var types = new ComboBox { ItemsSource = editor.ItemTypes, SelectedItem = editor.ItemType, MinWidth = 120 };
+            types.SelectionChanged += (_, _) => editor.ItemType = types.SelectedItem as string ?? editor.ItemType;
+            Avalonia.Automation.AutomationProperties.SetName(types, Localizer.Get("msg.winFormsDesigner.itemType", "Item type"));
+            buttons.Children.Add(types);
+        }
+
+        buttons.Children.Add(Small("new", Localizer.Get("msg.winFormsDesigner.add", "Add"), editor.AddCommand));
+        buttons.Children.Add(Small("trash", Localizer.Get("msg.winFormsDesigner.remove", "Remove"), editor.RemoveCommand));
+        buttons.Children.Add(Small("arrow-up", Localizer.Get("msg.winFormsDesigner.moveUp", "Move Up"), editor.MoveUpCommand));
+        buttons.Children.Add(Small("arrow-down", Localizer.Get("msg.winFormsDesigner.moveDown", "Move Down"), editor.MoveDownCommand));
+        var left = new StackPanel { Children = { list, buttons } };
+
+        var details = new StackPanel { Spacing = 4, Width = 300, Margin = new Thickness(12, 0, 0, 0) };
+        void Details()
+        {
+            details.Children.Clear();
+            if (editor.IsStyles && editor.Selected is { } style)
+            {
+                var sizeType = new ComboBox { ItemsSource = DesignerCollectionItemViewModel.SizeTypes, SelectedItem = style.SizeType, MinWidth = 120 };
+                sizeType.SelectionChanged += (_, _) => style.SizeType = sizeType.SelectedItem as string ?? style.SizeType;
+                var size = new TextBox { Text = style.Size, MinWidth = 80 };
+                size.LostFocus += (_, _) => style.Size = size.Text ?? string.Empty;
+                Avalonia.Automation.AutomationProperties.SetName(sizeType, Localizer.Get("msg.winFormsDesigner.sizeType", "Size Type"));
+                Avalonia.Automation.AutomationProperties.SetName(size, Localizer.Get("msg.winFormsDesigner.size", "Size"));
+                details.Children.Add(new TextBlock { Text = Localizer.Get("msg.winFormsDesigner.sizeType", "Size Type") });
+                details.Children.Add(sizeType);
+                details.Children.Add(new TextBlock { Text = Localizer.Get("msg.winFormsDesigner.size", "Size") });
+                details.Children.Add(size);
+                return;
+            }
+
+            foreach (var row in editor.Properties)
+            {
+                details.Children.Add(PropertyRow(row));
+            }
+        }
+
+        editor.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(DesignerCollectionEditorViewModel.Selected))
+            {
+                Infrastructure.Ui.Post(() =>
+                {
+                    if (!ReferenceEquals(list.SelectedItem, editor.Selected))
+                    {
+                        list.SelectedItem = editor.Selected;
+                    }
+
+                    Details();
+                });
+            }
+        };
+        editor.Properties.CollectionChanged += (_, _) => Infrastructure.Ui.Post(Details);
+        list.SelectedItem = editor.Selected;
+        Details();
+        return new StackPanel { Orientation = Orientation.Horizontal, Children = { left, new ScrollViewer { Content = details, MaxHeight = 300 } } };
+    }
+
+    /// <summary>A collection item's property in the editor's grid: its name and its editor (text, choice, flags), or its value.</summary>
+    private static Grid PropertyRow(PropertyRowViewModel row)
+    {
+        Control editor;
+        if (row.IsChoice || row.IsDock)
+        {
+            var combo = new ComboBox { ItemsSource = row.Options.Select(o => o.Label).ToList(), SelectedItem = row.SelectedOption?.Label, HorizontalAlignment = HorizontalAlignment.Stretch };
+            combo.SelectionChanged += (_, _) => row.SelectedOption = row.Options.FirstOrDefault(o => o.Label == combo.SelectedItem as string);
+            editor = combo;
+        }
+        else if (row.IsTextEditor)
+        {
+            var box = new TextBox { Text = row.Text };
+            box.LostFocus += (_, _) => row.Text = box.Text ?? string.Empty;
+            editor = box;
+        }
+        else if (row.IsFlags || row.IsAnchor)
+        {
+            var flags = new WrapPanel();
+            foreach (var flag in row.Flags)
+            {
+                var toggle = new ToggleButton { Content = flag.Name, IsChecked = flag.IsChecked, Classes = { "toolbar" }, Padding = new Thickness(4, 0) };
+                toggle.IsCheckedChanged += (_, _) => flag.IsChecked = toggle.IsChecked == true;
+                flags.Children.Add(toggle);
+            }
+
+            editor = flags;
+        }
+        else
+        {
+            editor = new SelectableTextBlock { Text = row.Value, Margin = new Thickness(4, 3) };
+        }
+
+        Avalonia.Automation.AutomationProperties.SetName(editor, row.Name);
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("110,*") };
+        var name = new TextBlock { Text = row.Name, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = row.IsSet ? FontWeight.SemiBold : FontWeight.Normal };
+        ToolTip.SetTip(name, row.Description);
+        Grid.SetColumn(editor, 1);
+        grid.Children.Add(name);
+        grid.Children.Add(editor);
+        return grid;
+    }
 }
 
 /// <summary>The frame and the adorners over it, and the pointer and keyboard gestures (frame coordinates: one unit a pixel of the form).</summary>
 public sealed class DesignerSurface : Control
 {
     private const double Handle = 6;
+    private const double Glyph = 12;
     private readonly WinFormsDesignerDocument _document;
+    private readonly WinFormsDesignerView _view;
     private Point? _pressed;
     private Mode _mode;
     private int _handle = -1;
     private Point _current;
     private string? _bandContainer;
     private bool _moved;
+    private DesignerSnap? _snap;
 
     private enum Mode
     {
@@ -147,9 +671,10 @@ public sealed class DesignerSurface : Control
         Draw,
     }
 
-    public DesignerSurface(WinFormsDesignerDocument document)
+    public DesignerSurface(WinFormsDesignerDocument document, WinFormsDesignerView view)
     {
         _document = document;
+        _view = view;
         Focusable = true;
         ClipToBounds = false;
         Cursor = new Cursor(StandardCursorType.Arrow);
@@ -175,7 +700,23 @@ public sealed class DesignerSurface : Control
         });
     }
 
-    protected override Size MeasureOverride(Size availableSize) => new(Math.Max(1, _document.FrameWidth), Math.Max(1, _document.FrameHeight));
+    /// <summary>The snap lines of the gesture in progress (tests).</summary>
+    public IReadOnlyList<DesignerSnapLine> SnapLines => _snap?.Lines ?? [];
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var width = Math.Max(1, _document.FrameWidth);
+        var height = Math.Max(1, _document.FrameHeight);
+        foreach (var panel in _document.MenuPanels)
+        {
+            width = Math.Max(width, panel.Bounds.Right + 2);
+            height = Math.Max(height, panel.Bounds.Bottom + 2);
+        }
+
+        return new Size(width, height);
+    }
+
+    private IBrush Resource(string key, IBrush fallback) => (this.TryFindResource(key, ActualThemeVariant, out var found) ? found as IBrush : null) ?? fallback;
 
     public override void Render(DrawingContext context)
     {
@@ -193,31 +734,59 @@ public sealed class DesignerSurface : Control
         var handleFill = Token("Shell.Panel") ?? Brushes.Transparent;
         var thin = new Pen(accent, 1, new DashStyle([2, 2], 0));
         var solid = new Pen(accent, 1);
+        if (_document.IsTabOrderMode)
+        {
+            RenderTabOrder(context, accent);
+            return;
+        }
+
         foreach (var name in _document.Selection)
         {
-            if (_document.Find(name) is not { IsControl: true } view)
+            if (_document.Find(name) is not { } view || !(view.IsControl || (view.IsItem && view.Visible)) || view.Width <= 0)
             {
                 continue;
             }
 
             var rect = Rect(WinFormsDesignerDocument.Bounds(view));
-            if (_mode == Mode.Move && _moved && view != _document.Root)
+            if (_mode == Mode.Move && _moved && view != _document.Root && _snap is not null && _document.Find(_document.PrimarySelection ?? string.Empty) is { } primary)
+            {
+                rect = rect.Translate(new Vector(_snap.Bounds.X - primary.X, _snap.Bounds.Y - primary.Y));
+            }
+            else if (_mode == Mode.Move && _moved && view != _document.Root)
             {
                 rect = rect.Translate(_current - _pressed!.Value);
             }
 
             if (_mode == Mode.Resize && name == _document.PrimarySelection)
             {
-                rect = Rect(Resized(WinFormsDesignerDocument.Bounds(view)));
+                rect = Rect(_snap?.Bounds ?? Resized(WinFormsDesignerDocument.Bounds(view)));
             }
 
             context.DrawRectangle(null, name == _document.PrimarySelection ? solid : thin, rect.Inflate(1));
-            if (name == _document.PrimarySelection)
+            if (name == _document.PrimarySelection && !view.IsItem)
             {
                 foreach (var handle in Handles(rect))
                 {
                     context.DrawRectangle(handleFill, solid, handle);
                 }
+
+                RenderLayoutAdorners(context, view, rect, thin, accent);
+                if (view.HasActions && _mode == Mode.None)
+                {
+                    RenderGlyph(context, GlyphRect(rect), solid, accent);
+                }
+            }
+        }
+
+        RenderMenus(context, thin, solid);
+        if (_snap is { Lines: { Count: > 0 } lines } && _moved)
+        {
+            var edge = new Pen(new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xFF)), 1);
+            var baseline = new Pen(new SolidColorBrush(Color.FromRgb(0xE0, 0x00, 0xE0)), 1);
+            var margin = new Pen(new SolidColorBrush(Color.FromRgb(0x33, 0x99, 0xFF)), 1, new DashStyle([3, 2], 0));
+            foreach (var line in lines)
+            {
+                context.DrawLine(line.Kind switch { DesignerSnapLine.Baseline => baseline, DesignerSnapLine.Margin => margin, _ => edge }, new Point(line.X1, line.Y1), new Point(line.X2, line.Y2));
             }
         }
 
@@ -229,6 +798,137 @@ public sealed class DesignerSurface : Control
     }
 
     private IBrush? Token(string key) => this.TryFindResource(key, ActualThemeVariant, out var found) ? found as IBrush : null;
+
+    /// <summary>Tab order mode: each control's tab index (after its containers', <c>2.1</c>) in a box at its top left, as Visual Studio shows them.</summary>
+    private void RenderTabOrder(DrawingContext context, IBrush accent)
+    {
+        var typeface = new Typeface(FontFamily.Default);
+        foreach (var view in _document.Components.Where(c => c.IsControl && !c.IsPart && c.Visible && c != _document.Root && c.Width > 0))
+        {
+            if (_document.TabOrderLabel(view) is not { } label)
+            {
+                continue;
+            }
+
+            var text = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 11, Brushes.White);
+            var box = new Rect(view.X, view.Y, text.Width + 6, text.Height + 2);
+            context.FillRectangle(accent, box);
+            context.DrawText(text, new Point(box.X + 3, box.Y + 1));
+        }
+    }
+
+    /// <summary>A docked control's dock and an anchored control's (other than top-left) anchors, as lines to its container's edges.</summary>
+    private void RenderLayoutAdorners(DrawingContext context, DesignerComponentView view, Rect rect, Pen thin, IBrush accent)
+    {
+        if (view == _document.Root || view.Parent is not { } parentName || _document.Find(parentName) is not { } parent)
+        {
+            return;
+        }
+
+        if (view.Dock is { } dock && dock != "None")
+        {
+            var text = new FormattedText(Localizer.Format("msg.winFormsDesigner.docked", "Dock: {0}", dock), System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface(FontFamily.Default), 10, accent);
+            context.DrawText(text, new Point(rect.X + 2, rect.Bottom - text.Height - 1));
+            return;
+        }
+
+        if (view.Anchor is not { } anchor || anchor.Replace(" ", string.Empty, StringComparison.Ordinal) is "Top,Left")
+        {
+            return;
+        }
+
+        var client = DesignerSnapping.ClientOf(parent);
+        foreach (var side in anchor.Split(',', StringSplitOptions.TrimEntries))
+        {
+            var (from, to) = side switch
+            {
+                "Top" => (new Point(rect.Center.X, rect.Top), new Point(rect.Center.X, client.Y)),
+                "Bottom" => (new Point(rect.Center.X, rect.Bottom), new Point(rect.Center.X, client.Bottom)),
+                "Left" => (new Point(rect.Left, rect.Center.Y), new Point(client.X, rect.Center.Y)),
+                "Right" => (new Point(rect.Right, rect.Center.Y), new Point(client.Right, rect.Center.Y)),
+                _ => (default(Point), default(Point)),
+            };
+            if (from != to)
+            {
+                context.DrawLine(thin, from, to);
+            }
+        }
+    }
+
+    private static Rect GlyphRect(Rect rect) => new(rect.Right + 4, rect.Top - 2, Glyph, Glyph);
+
+    /// <summary>The smart tag's glyph: a small box with an arrow, at the selected component's top right.</summary>
+    private static void RenderGlyph(DrawingContext context, Rect glyph, Pen pen, IBrush accent)
+    {
+        context.DrawRectangle(Brushes.White, pen, glyph);
+        var geometry = new StreamGeometry();
+        using (var g = geometry.Open())
+        {
+            g.BeginFigure(new Point(glyph.X + 4, glyph.Y + 3), isFilled: true);
+            g.LineTo(new Point(glyph.Right - 3, glyph.Center.Y));
+            g.LineTo(new Point(glyph.X + 4, glyph.Bottom - 3));
+            g.EndFigure(isClosed: true);
+        }
+
+        context.DrawGeometry(accent, null, geometry);
+    }
+
+    /// <summary>The menus edited in place: a strip's Type Here, and the open drop-downs with their rows and Type Here.</summary>
+    private void RenderMenus(DrawingContext context, Pen thin, Pen solid)
+    {
+        var typeface = new Typeface(FontFamily.Default);
+        var background = Resource("Shell.Panel", Brushes.White);
+        var foreground = Resource("Shell.Foreground", Brushes.Black);
+        var muted = Resource("Shell.MutedForeground", Brushes.Gray);
+        var typeHereText = Localizer.Get("msg.winFormsDesigner.typeHere", "Type Here");
+        void TypeHere(DesignerTypeHere typeHere)
+        {
+            var rect = Rect(typeHere.Bounds);
+            context.DrawRectangle(background, thin, rect);
+            var text = new FormattedText(typeHere.CanType ? typeHereText : "▾ " + typeHereText, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 11, muted);
+            context.DrawText(text, new Point(rect.X + 4, rect.Y + ((rect.Height - text.Height) / 2)));
+        }
+
+        if (_document.StripTypeHere is { } strip)
+        {
+            TypeHere(strip);
+        }
+
+        foreach (var panel in _document.MenuPanels)
+        {
+            var bounds = Rect(panel.Bounds);
+            context.DrawRectangle(background, new Pen(Resource("Shell.Border", Brushes.Gray), 1), bounds);
+            if (panel.Header is { } header)
+            {
+                var text = new FormattedText(header, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 11, muted);
+                context.DrawText(text, new Point(bounds.X + 6, bounds.Y + 4));
+            }
+
+            foreach (var row in panel.Rows)
+            {
+                var rect = Rect(row.Bounds);
+                if (_document.Selection.Contains(row.Item))
+                {
+                    context.DrawRectangle(new SolidColorBrush(Colors.DodgerBlue, 0.15), solid, rect.Deflate(1));
+                }
+
+                if (row.IsSeparator)
+                {
+                    context.DrawLine(new Pen(muted, 1), new Point(rect.X + 24, rect.Center.Y), new Point(rect.Right - 4, rect.Center.Y));
+                    continue;
+                }
+
+                var text = new FormattedText(row.Text.Replace("&", string.Empty, StringComparison.Ordinal), System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 12, foreground);
+                context.DrawText(text, new Point(rect.X + 24, rect.Y + ((rect.Height - text.Height) / 2)));
+                if (row.HasDropDown)
+                {
+                    context.DrawText(new FormattedText("›", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 12, foreground), new Point(rect.Right - 12, rect.Y + 3));
+                }
+            }
+
+            TypeHere(panel.TypeHere);
+        }
+    }
 
     private static Rect Rect(DesignerRect r) => new(r.X, r.Y, r.Width, r.Height);
 
@@ -286,14 +986,118 @@ public sealed class DesignerSurface : Control
         return -1;
     }
 
+    /// <summary>The snapped bounds of the moving primary selection (Alt turns snap lines off).</summary>
+    private void Snap(KeyModifiers modifiers)
+    {
+        _snap = null;
+        if (modifiers.HasFlag(KeyModifiers.Alt) || _pressed is not { } pressed || _document.PrimarySelection is not { } primary || _document.Find(primary) is not { } view)
+        {
+            return;
+        }
+
+        if (_mode == Mode.Move && view.IsControl && view != _document.Root && !view.IsPart)
+        {
+            var moving = new HashSet<string>(_document.Selection, StringComparer.Ordinal);
+            var bounds = WinFormsDesignerDocument.Bounds(view);
+            _snap = DesignerSnapping.Move(_document, view, bounds with { X = bounds.X + _current.X - pressed.X, Y = bounds.Y + _current.Y - pressed.Y }, moving);
+        }
+        else if (_mode == Mode.Resize)
+        {
+            _snap = DesignerSnapping.Resize(_document, view, Resized(WinFormsDesignerDocument.Bounds(view)), _handle);
+        }
+    }
+
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
         Focus();
         var point = e.GetPosition(this);
         var properties = e.GetCurrentPoint(this).Properties;
+        if (properties.IsRightButtonPressed && !_document.IsTabOrderMode && _document.HitTest(point.X, point.Y) is { } target && !_document.Selection.Contains(target.Name))
+        {
+            // A right-click selects what it's on first, for the context menu.
+            _document.Click(point.X, point.Y, toggle: false);
+        }
+
         if (!properties.IsLeftButtonPressed)
         {
+            return;
+        }
+
+        if (_document.IsTabOrderMode)
+        {
+            _ = _document.TabOrderClickAsync(point.X, point.Y);
+            e.Handled = true;
+            return;
+        }
+
+        // The smart tag's glyph.
+        if (_document.PrimarySelection is { } selected && _document.Find(selected) is { HasActions: true, IsItem: false } tagged && tagged.Width > 0
+            && GlyphRect(Rect(WinFormsDesignerDocument.Bounds(tagged))).Inflate(2).Contains(point))
+        {
+            if (_document.ActionPanel?.Component == selected)
+            {
+                _document.CloseActions();
+            }
+            else
+            {
+                _ = _document.OpenActionsAsync(selected);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (_document.ActionPanel is not null)
+        {
+            _document.CloseActions();
+        }
+
+        // The menus edited in place.
+        var (item, typeHere) = _document.MenuHitTest(point.X, point.Y);
+        if (typeHere is { } box)
+        {
+            if (box.CanType)
+            {
+                _view.Edit(box.Bounds, string.Empty, text => _document.AddItemAsync(box, text));
+            }
+            else
+            {
+                _view.PickItemType(box);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (item is not null)
+        {
+            if (e.ClickCount == 2 || _document.PrimarySelection == item)
+            {
+                EditItem(item);
+            }
+            else
+            {
+                _document.SetSelection([item], notify: true);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        // A tool strip's item on the form: selected (a second click edits its text).
+        if (_document.Components.FirstOrDefault(c => c.IsItem && c.Visible && WinFormsDesignerDocument.Bounds(c).Contains(point.X, point.Y)) is { } stripItem)
+        {
+            if (e.ClickCount == 2 || _document.PrimarySelection == stripItem.Name)
+            {
+                EditItem(stripItem.Name);
+            }
+            else
+            {
+                _document.SetSelection([stripItem.Name], notify: true);
+            }
+
+            e.Handled = true;
             return;
         }
 
@@ -309,6 +1113,7 @@ public sealed class DesignerSurface : Control
         _pressed = point;
         _current = point;
         _moved = false;
+        _snap = null;
         if (Toolbox.Armed is not null)
         {
             _mode = Mode.Draw;
@@ -342,6 +1147,20 @@ public sealed class DesignerSurface : Control
         InvalidateVisual();
     }
 
+    /// <summary>An item's text edited in place, over its row or its place on the strip.</summary>
+    private void EditItem(string item)
+    {
+        var view = _document.Find(item);
+        var row = _document.MenuPanels.SelectMany(p => p.Rows).FirstOrDefault(r => r.Item == item);
+        if (view is null || row is { IsSeparator: true } || (row is null && !view.Visible))
+        {
+            return;
+        }
+
+        var bounds = row?.Bounds ?? WinFormsDesignerDocument.Bounds(view);
+        _view.Edit(bounds, view.Text ?? string.Empty, text => _document.SetItemTextAsync(item, text));
+    }
+
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
@@ -350,6 +1169,11 @@ public sealed class DesignerSurface : Control
         {
             _current = point;
             _moved |= Math.Abs(point.X - pressed.X) >= 3 || Math.Abs(point.Y - pressed.Y) >= 3;
+            if (_moved && _mode is Mode.Move or Mode.Resize)
+            {
+                Snap(e.KeyModifiers);
+            }
+
             InvalidateVisual();
             return;
         }
@@ -361,7 +1185,7 @@ public sealed class DesignerSurface : Control
             2 or 6 => StandardCursorType.TopRightCorner,
             1 or 5 => StandardCursorType.SizeNorthSouth,
             3 or 7 => StandardCursorType.SizeWestEast,
-            _ => Toolbox.Armed is not null ? StandardCursorType.Cross : StandardCursorType.Arrow,
+            _ => Toolbox.Armed is not null ? StandardCursorType.Cross : _document.IsTabOrderMode ? StandardCursorType.Hand : StandardCursorType.Arrow,
         });
     }
 
@@ -375,8 +1199,10 @@ public sealed class DesignerSurface : Control
 
         var point = e.GetPosition(this);
         var mode = _mode;
+        var snap = _snap;
         _pressed = null;
         _mode = Mode.None;
+        _snap = null;
         e.Pointer.Capture(null);
         e.Handled = true;
         switch (mode)
@@ -394,14 +1220,24 @@ public sealed class DesignerSurface : Control
 
                 break;
             case Mode.Move when _moved:
-                _ = _document.MoveSelectionAsync(point.X - pressed.X, point.Y - pressed.Y, point.X, point.Y);
+                if (snap is not null && _document.Find(_document.PrimarySelection ?? string.Empty) is { } primary)
+                {
+                    var dx = snap.Bounds.X - primary.X;
+                    var dy = snap.Bounds.Y - primary.Y;
+                    _ = _document.MoveSelectionAsync(dx, dy, point.X, point.Y);
+                }
+                else
+                {
+                    _ = _document.MoveSelectionAsync(point.X - pressed.X, point.Y - pressed.Y, point.X, point.Y);
+                }
+
                 break;
-            case Mode.Resize when _moved && _document.PrimarySelection is { } primary && _document.Find(primary) is { } view:
+            case Mode.Resize when _moved && _document.PrimarySelection is { } resized && _document.Find(resized) is { } view:
                 _current = point;
                 _pressed = pressed;
-                var bounds = Resized(WinFormsDesignerDocument.Bounds(view));
+                var bounds = snap?.Bounds ?? Resized(WinFormsDesignerDocument.Bounds(view));
                 _pressed = null;
-                _ = _document.ResizeAsync(primary, bounds);
+                _ = _document.ResizeAsync(resized, bounds);
                 break;
             case Mode.Band when _moved && _bandContainer is { } container:
                 _document.SelectInRectangle(DesignerRect.Between(pressed.X, pressed.Y, point.X, point.Y), container, add: (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift)) != 0);
@@ -416,8 +1252,16 @@ public sealed class DesignerSurface : Control
         base.OnKeyDown(e);
         var primary = (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0;
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        var item = _document.PrimarySelection is { } selected && _document.Find(selected) is { IsItem: true } itemView ? itemView : null;
         switch (e.Key)
         {
+            case Key.Up or Key.Down or Key.Left or Key.Right when item is not null && primary:
+                // An item moved among its owner's items.
+                _ = _document.MoveItemAsync(item.Name, e.Key is Key.Up or Key.Left ? -1 : 1);
+                break;
+            case Key.Enter when item is not null:
+                EditItem(item.Name);
+                break;
             case Key.Left or Key.Right or Key.Up or Key.Down:
                 var dx = e.Key == Key.Left ? -1 : e.Key == Key.Right ? 1 : 0;
                 var dy = e.Key == Key.Up ? -1 : e.Key == Key.Down ? 1 : 0;
@@ -427,11 +1271,19 @@ public sealed class DesignerSurface : Control
                 _ = _document.DeleteSelectionAsync();
                 break;
             case Key.Escape:
-                if (Toolbox.Armed is not null)
+                if (_document.IsTabOrderMode)
+                {
+                    _document.IsTabOrderMode = false;
+                }
+                else if (_document.ActionPanel is not null)
+                {
+                    _document.CloseActions();
+                }
+                else if (Toolbox.Armed is not null)
                 {
                     Toolbox.Disarm();
                 }
-                else if (_document.PrimarySelection is { } selected && _document.Find(selected)?.Parent is { } parent)
+                else if (_document.PrimarySelection is { } current && _document.Find(current) is { } view && (view.Owner ?? view.Parent) is { } parent)
                 {
                     _document.SetSelection([parent], notify: true);
                 }

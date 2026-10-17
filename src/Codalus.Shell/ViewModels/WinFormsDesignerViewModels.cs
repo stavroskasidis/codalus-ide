@@ -25,11 +25,38 @@ public readonly record struct DesignerRect(double X, double Y, double Width, dou
     public static DesignerRect Between(double x1, double y1, double x2, double y2) => new(Math.Min(x1, x2), Math.Min(y1, y2), Math.Abs(x2 - x1), Math.Abs(y2 - y1));
 }
 
-/// <summary>A non-visual component (a timer, a tool tip) shown under the surface, to select it.</summary>
-public sealed record DesignerTrayItem(string Name, string Type, ICommand Select);
+/// <summary>
+/// A component of the tray under the surface (M41b): a non-visual component (a timer, a tool tip, a binding source), a
+/// context menu, a menu or tool strip; selected with the surface's selection, renamed, deleted, arranged.
+/// </summary>
+public sealed class DesignerTrayItem(string name, string type, string icon, bool isSelected, ICommand select) : ObservableObject
+{
+    public string Name { get; } = name;
 
-/// <summary>Components copied in the designer (their statements from the code), for Paste.</summary>
-internal sealed record DesignerClipboardEntry(string Name, string Type, DesignerValue[] CreationArguments, string? Parent, string? ParentPath, int[]? Cell, DesignerPropertyValue[] Properties, bool SupportsInitialize);
+    public string Type { get; } = type;
+
+    public string ShortType => Type[(Type.LastIndexOf('.') + 1)..];
+
+    public string Icon { get; } = icon;
+
+    public bool IsSelected { get; } = isSelected;
+
+    public ICommand Select { get; } = select;
+}
+
+/// <summary>Components copied in the designer (their statements from the code), for Paste: their properties, and their extender properties, data bindings, collections and event hookups.</summary>
+internal sealed record DesignerClipboardEntry(string Name, string Type, DesignerValue[] CreationArguments, string? Parent, string? ParentPath, int[]? Cell, DesignerPropertyValue[] Properties, bool SupportsInitialize)
+{
+    public DesignerStatement[] Calls { get; init; } = [];
+
+    public DesignerStatement[] Events { get; init; } = [];
+
+    /// <summary>A local the copied collections hold (a list view's item): its creation.</summary>
+    public DesignerValue? LocalValue { get; init; }
+
+    /// <summary>The designer file it was copied from: hookups are kept only when pasting into the same form (ADR 0073).</summary>
+    public string Source { get; init; } = string.Empty;
+}
 
 /// <summary>
 /// A form or user control in the Windows Forms designer (M41a, ADR 0073): the document over its code file. The C#
@@ -38,7 +65,7 @@ internal sealed record DesignerClipboardEntry(string Name, string Type, Designer
 /// designer file's own undo stack is the designer's (undo and redo reload the form from the code). The code is the
 /// only state: when it changes otherwise (typed in the code view, undone), the form is loaded again from it.
 /// </summary>
-public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocument, IDesignerPropertySource, IDisposable
+public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocument, IDesignerPropertySource, IDisposable
 {
     public const string DocumentKind = "winformsDesigner";
 
@@ -46,7 +73,10 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
 
     private readonly ShellHost _shell;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly HashSet<string> _warnedLocalized = new(StringComparer.Ordinal);
+    private readonly List<CodeDocument> _resourceModels = [];
+    private readonly Dictionary<CodeDocument, int> _expectedResources = [];
+    private readonly List<(CodeDocument Model, int Version)[]> _undo = [];
+    private readonly List<(CodeDocument Model, int Version)[]> _redo = [];
     private CodeDocument? _designerCode;
     private IWinFormsDesignerHost? _host;
     private WinFormsDesignerTarget? _target;
@@ -182,7 +212,8 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
             _designerCode = await _shell.AcquireModelAsync(DesignerPath).ConfigureAwait(true);
             _designerCode.ContentChanged += OnDesignerCodeChanged;
             _designerCode.PropertyChanged += OnDesignerCodePropertyChanged;
-            IsModified = _designerCode.IsModified;
+            await HoldResourcesAsync().ConfigureAwait(true);
+            IsModified = _designerCode.IsModified || _resourceModels.Any(m => m.IsModified);
             if (!await ReadAsync(closeOnProblem: true).ConfigureAwait(true))
             {
                 return;
@@ -212,7 +243,7 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
         var client = await _shell.Languages.ClientAsync(ShellHost.CSharpLanguageId).ConfigureAwait(true)
             ?? throw new PreviewerException(Localizer.Get("msg.winFormsDesigner.noCSharp", "The C# language service isn't available: the designer reads the form through it."));
         var version = _designerCode!.Version;
-        var read = await client.WinFormsReadAsync(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(CodePath), CancellationToken.None).ConfigureAwait(true)
+        var read = await client.WinFormsReadAsync(new WinFormsReadParams(new TextDocumentIdentifier(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(CodePath))) { ResourceFiles = HeldResourceFiles() }, CancellationToken.None).ConfigureAwait(true)
             ?? throw new PreviewerException(Localizer.Get("msg.winFormsDesigner.noAnswer", "The C# language service didn't read the form."));
         _read = read;
         if (read.Model is not { } model)
@@ -230,6 +261,12 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
 
         _model = model;
         _expectedVersion = version;
+        if (!read.IsLocalizable)
+        {
+            // Only a localizable form has languages.
+            _culture = string.Empty;
+        }
+
         UpdateTray();
         return true;
     }
@@ -259,7 +296,13 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
         }
 
         Status = Localizer.Format("msg.winFormsDesigner.loading", "Loading {0}…", _model.ClassName);
-        var render = await _host.LoadAsync(WinFormsDesignerService.LoadParams(_target, _model, _read?.ClassFullName), CancellationToken.None).ConfigureAwait(true);
+        await HoldResourcesAsync().ConfigureAwait(true);
+        var render = await _host.LoadAsync(WinFormsDesignerService.LoadParams(_target, _model, _read?.ClassFullName) with
+        {
+            Resources = [.. _resourceModels.Select(m => new DesignerResourceText(CultureOf(m.Path), m.Text.Text))],
+            Culture = _culture.Length == 0 ? null : _culture,
+            Localizable = _read?.IsLocalizable ?? false,
+        }, CancellationToken.None).ConfigureAwait(true);
         Show(render);
         SetSelection([.. _selection.Where(s => _components.Any(c => c.Name == s))], notify: true);
         Status = Localizer.Format("msg.winFormsDesigner.ready", "{0}: drag from the Toolbox, select, move and resize; F7 shows the code.", _model.ClassName);
@@ -333,6 +376,12 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
             return;
         }
 
+        ScheduleReload();
+    }
+
+    /// <summary>The code changed otherwise: the form loads again from it (a moment later, after more typing).</summary>
+    private void ScheduleReload()
+    {
         _reload?.Cancel();
         var reload = _reload = new CancellationTokenSource();
         _ = Task.Run(async () =>
@@ -340,7 +389,7 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
             try
             {
                 await Task.Delay(300, reload.Token).ConfigureAwait(false);
-                await Ui.RunAsync(() => _designerCode?.Version == _expectedVersion ? Task.CompletedTask : ReloadAsync(restartHost: false)).ConfigureAwait(false);
+                await Ui.RunAsync(() => ReloadAsync(restartHost: false)).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -352,7 +401,7 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
     {
         if (e.PropertyName == nameof(CodeDocument.IsModified))
         {
-            IsModified = _designerCode?.IsModified ?? false;
+            IsModified = (_designerCode?.IsModified ?? false) || _resourceModels.Any(m => m.IsModified);
         }
     }
 
@@ -378,10 +427,13 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
     private void UpdateTray()
     {
         Tray.Clear();
-        foreach (var component in _components.Where(c => !c.IsControl))
+        var order = _read?.TrayOrder ?? [];
+        var tray = _components.Where(c => c.InTray || (!c.IsControl && !c.IsItem))
+            .OrderBy(c => Array.IndexOf(order, c.Name) is var at and >= 0 ? at : int.MaxValue).ToList();
+        foreach (var component in tray)
         {
             var name = component.Name;
-            Tray.Add(new DesignerTrayItem(name, component.Type, new RelayCommand(() => SetSelection([name], notify: true))));
+            Tray.Add(new DesignerTrayItem(name, component.Type, TrayIcon(component.Type), _selection.Contains(name), new RelayCommand(() => SetSelection([name], notify: true))));
         }
 
         OnPropertyChanged(nameof(HasTray));
@@ -432,6 +484,8 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
         _selection = distinct;
         OnPropertyChanged(nameof(Selection));
         OnPropertyChanged(nameof(PrimarySelection));
+        UpdateTray();
+        UpdateMenus();
         SurfaceChanged?.Invoke(this, EventArgs.Empty);
         if (notify)
         {
@@ -490,25 +544,6 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
     private List<DesignerComponentView> Movable() =>
         [.. _selection.Select(Find).OfType<DesignerComponentView>().Where(c => c.IsControl && c != Root && !c.IsPart)];
 
-    /// <summary>A component whose properties are in the resources (a localizable form): this version doesn't change them; says so.</summary>
-    private bool IsLocalized(string component)
-    {
-        var name = component == _model?.ClassName ? string.Empty : component;
-        return _model?.Statements.Any(s => s.Kind == DesignerStatementKinds.ApplyResources && s.Target == name) == true;
-    }
-
-    private bool RefuseLocalized(IEnumerable<string> components)
-    {
-        var localized = components.Where(IsLocalized).ToList();
-        if (localized.Count == 0)
-        {
-            return false;
-        }
-
-        Status = Localizer.Format("msg.winFormsDesigner.localized", "{0} is localizable: its properties are in the form's .resx, which the designer doesn't edit yet. Edit them in the resource editor, or set Localizable off.", localized[0]);
-        return true;
-    }
-
     private static string Invariant(double value) => Math.Round(value).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private string ComponentOf(string name) => name == _model?.ClassName ? string.Empty : name;
@@ -517,7 +552,7 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
     public Task MoveSelectionAsync(double dx, double dy, double dropX, double dropY)
     {
         var moving = Movable();
-        if (moving.Count == 0 || (Math.Abs(dx) < 1 && Math.Abs(dy) < 1) || RefuseLocalized(moving.Select(m => m.Name)))
+        if (moving.Count == 0 || (Math.Abs(dx) < 1 && Math.Abs(dy) < 1))
         {
             return Task.CompletedTask;
         }
@@ -542,7 +577,7 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
     /// <summary>Resizes the primary selection to <paramref name="bounds"/> (frame coordinates), from a grab handle.</summary>
     public Task ResizeAsync(string name, DesignerRect bounds)
     {
-        if (Find(name) is not { } view || RefuseLocalized([name]))
+        if (Find(name) is not { } view)
         {
             return Task.CompletedTask;
         }
@@ -573,7 +608,7 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
     public Task NudgeAsync(int dx, int dy, bool resize)
     {
         var moving = Movable();
-        if (moving.Count == 0 || RefuseLocalized(moving.Select(m => m.Name)))
+        if (moving.Count == 0)
         {
             return Task.CompletedTask;
         }
@@ -612,10 +647,6 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
 
         var name = NewName(type);
         var container = HitTest(x, y, containersOnly: true);
-        if (container is not null && RefuseLocalized([container.Name]))
-        {
-            return;
-        }
 
         await RunAsync(host => host.CreateAsync(new DesignerCreateParams(type, name, container is null || container == Root ? null : container.Name, x, y) { Width = width, Height = height }, CancellationToken.None),
             after: () => SetSelection([name], notify: true)).ConfigureAwait(true);
@@ -693,53 +724,128 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
         }
     }
 
-    /// <summary>The C# host's edits for what the designer host did. Changes to a localizable component's properties stay out (they belong in its .resx).</summary>
-    private List<DesignerEdit> EditsFor(DesignerChangeResult result)
+    /// <summary>
+    /// The C# host's edits for what the designer host did, in the order the code needs them: the new components, the
+    /// controls that moved, the collections (and the locals they hold), the components that went, the controls' new
+    /// order, the properties (extender properties and data bindings among them), the components that now get their
+    /// properties from the resources, and the resources' keys.
+    /// </summary>
+    internal List<DesignerEdit> EditsFor(DesignerChangeResult result)
     {
         var edits = new List<DesignerEdit>();
-        if (result.Created is { } created)
+        var model = _model;
+        var created = new HashSet<string>(StringComparer.Ordinal);
+        bool Known(string name) => name.Length == 0 || created.Contains(name) || (model?.Components.Any(c => c.Name == name) ?? false);
+        foreach (var component in (result.Created is { } main ? [main] : Array.Empty<DesignerCreated>()).Concat(result.Added))
         {
+            if (Known(component.Name))
+            {
+                continue;
+            }
+
+            created.Add(component.Name);
             edits.Add(new DesignerEdit
             {
                 Kind = DesignerEditKinds.AddComponent,
-                Component = created.Name,
-                Type = created.Type,
-                CreationArguments = created.CreationArguments,
-                Parent = created.IsControl ? created.Parent ?? string.Empty : null,
-                ParentPath = created.ParentPath,
-                Cell = created.Cell,
-                Index = 0,
-                Properties = created.Properties,
-                SupportsInitialize = created.SupportsInitialize,
+                Component = component.Name,
+                Type = component.Type,
+                CreationArguments = component.CreationArguments,
+                Parent = component.IsControl ? ComponentOf(component.Parent ?? string.Empty) : null,
+                ParentPath = component.ParentPath,
+                Cell = component.Cell,
+                Index = component.IsControl ? component.Index : 0,
+                Properties = component.Properties,
+                SupportsInitialize = component.SupportsInitialize,
             });
         }
 
-        if (result.Reparented is { } moved)
+        foreach (var moved in (result.Reparented is { } reparented ? [reparented] : Array.Empty<DesignerReparented>()).Concat(result.Moved))
         {
-            edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetParent, Component = moved.Component, Parent = moved.Parent ?? string.Empty, ParentPath = moved.ParentPath, Cell = moved.Cell, Index = 0 });
+            edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetParent, Component = moved.Component, Parent = ComponentOf(moved.Parent ?? string.Empty), ParentPath = moved.ParentPath, Cell = moved.Cell, Index = 0 });
+        }
+
+        foreach (var collection in result.Collections)
+        {
+            if (!Known(ComponentOf(collection.Component)))
+            {
+                continue;
+            }
+
+            foreach (var local in collection.Locals)
+            {
+                if (Known(local.Name))
+                {
+                    edits.Add(new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = local.Name });
+                }
+
+                edits.Add(new DesignerEdit { Kind = DesignerEditKinds.AddLocal, Component = local.Name, Value = local.Value });
+                created.Add(local.Name);
+            }
+
+            edits.Add(new DesignerEdit
+            {
+                Kind = DesignerEditKinds.SetCollection,
+                Component = ComponentOf(collection.Component),
+                Property = collection.Property,
+                Method = collection.Method,
+                Type = collection.ElementType,
+                Items = collection.Items,
+            });
         }
 
         foreach (var removed in result.Removed)
         {
-            edits.Add(new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = removed });
+            if (Known(removed) && removed.Length > 0 && !created.Contains(removed))
+            {
+                edits.Add(new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = removed });
+            }
+        }
+
+        foreach (var order in result.Reordered)
+        {
+            for (var i = 0; i < order.Children.Length; i++)
+            {
+                if (Known(order.Children[i]))
+                {
+                    edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetChildIndex, Component = order.Children[i], Index = i });
+                }
+            }
         }
 
         foreach (var change in result.Changes)
         {
             var component = ComponentOf(change.Component);
-            if (IsLocalized(change.Component) || (component.Length > 0 && !(_model?.Components.Any(c => c.Name == component) ?? false) && result.Created?.Name != component))
+            if (!Known(component) || (result.Created?.Name == component && change.Provider is null && !change.DataBinding))
             {
                 continue;
             }
 
-            edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetProperty, Component = component, Property = change.Property, Value = change.Value });
+            edits.Add(change switch
+            {
+                { Provider: { } provider } => new DesignerEdit { Kind = DesignerEditKinds.SetExtender, Component = component, Provider = provider, Property = change.Property, Value = change.Value },
+                { DataBinding: true } => new DesignerEdit { Kind = DesignerEditKinds.SetDataBinding, Component = component, Property = change.Property, Value = change.Value },
+                _ => new DesignerEdit { Kind = DesignerEditKinds.SetProperty, Component = component, Property = change.Property, Value = change.Value },
+            });
+        }
+
+        foreach (var localized in result.Localized)
+        {
+            if (Known(ComponentOf(localized.Component)))
+            {
+                edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetLocalized, Component = ComponentOf(localized.Component), Localized = localized.Localized });
+            }
+        }
+
+        foreach (var resource in result.Resources)
+        {
+            edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetResource, Key = resource.Key, Culture = resource.Culture, Resource = resource.Resource, Metadata = resource.Metadata });
         }
 
         return edits;
     }
 
     /// <summary>Writes edits through the C# host into the designer file (and the code file for handlers); false when the code didn't take them.</summary>
-    private async Task<bool> WriteAsync(IReadOnlyList<DesignerEdit> edits, bool reloadAfter = false)
+    private async Task<bool> WriteAsync(IReadOnlyList<DesignerEdit> edits, bool reloadAfter = false, bool showHandler = true)
     {
         var client = _shell.Languages.RunningClient(ShellHost.CSharpLanguageId);
         if (client is null || _designerCode is null)
@@ -748,17 +854,23 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
             return false;
         }
 
-        var result = await client.WinFormsEditAsync(new WinFormsEditParams(new TextDocumentIdentifier(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(DesignerPath)), [.. edits]) { Version = _designerCode.Version }, CancellationToken.None).ConfigureAwait(true);
+        var result = await client.WinFormsEditAsync(new WinFormsEditParams(new TextDocumentIdentifier(Codalus.LanguageServices.Protocol.DocumentUris.FromPath(DesignerPath)), [.. edits]) { Version = _designerCode.Version, ResourceFiles = HeldResourceFiles() }, CancellationToken.None).ConfigureAwait(true);
         if (result is null || result.Error is { } error)
         {
             Status = result?.Error ?? Localizer.Get("msg.winFormsDesigner.noAnswer", "The C# language service didn't read the form.");
             return false;
         }
 
+        var touched = TouchedModels(result.Edit);
         if (!reloadAfter)
         {
             // The designer host already shows this: the edit's own change of the text doesn't load the form again.
-            _expectedVersion = _designerCode.Version + 1;
+            _expectedVersion = result.Edit.DocumentChanges.Any(d => SolutionPaths.Comparer.Equals(Codalus.LanguageServices.Protocol.DocumentUris.ToPath(d.TextDocument.Uri), DesignerPath))
+                ? _designerCode.Version + 1 : _designerCode.Version;
+            foreach (var model in touched.Where(m => m != _designerCode))
+            {
+                _expectedResources[model] = model.Version + 1;
+            }
         }
 
         if (!await _shell.ApplyWorkspaceEditAsync(result.Edit, quiet: true).ConfigureAwait(true))
@@ -769,10 +881,22 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
         if (!reloadAfter)
         {
             _expectedVersion = _designerCode.Version;
+            foreach (var model in touched.Where(m => m != _designerCode))
+            {
+                _expectedResources[model] = model.Version;
+            }
+
             _model = result.Model ?? _model;
         }
 
-        if (result.Handler is { } handler && Codalus.LanguageServices.Protocol.DocumentUris.ToPath(handler.Uri) is { } file)
+        RecordUndo(touched);
+        if (result.Edit.DocumentChanges.Any(d => d.TextDocument.Version is null && Codalus.LanguageServices.Protocol.DocumentUris.ToPath(d.TextDocument.Uri) is { } path && path.EndsWith(".resx", StringComparison.OrdinalIgnoreCase)))
+        {
+            // A new culture's resources: held from now on.
+            await HoldResourcesAsync().ConfigureAwait(true);
+        }
+
+        if (showHandler && result.Handler is { } handler && Codalus.LanguageServices.Protocol.DocumentUris.ToPath(handler.Uri) is { } file)
         {
             await _shell.OpenFileAsync(file, preview: false, at: handler.Range.Start, textEditor: true).ConfigureAwait(true);
         }
@@ -783,11 +907,6 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
     /// <summary>A property set in the Properties window (as text, converted by the property's type converter), or reset to its default (null).</summary>
     public Task SetPropertyAsync(IReadOnlyList<string> components, string property, string? text)
     {
-        if (RefuseLocalized(components))
-        {
-            return Task.CompletedTask;
-        }
-
         return RunAsync(host => host.SetPropertiesAsync(new DesignerSetPropertiesParams([.. components.Select(c => text is null
             ? new DesignerPropertyEdit(ComponentOf(c), property) { Reset = true }
             : new DesignerPropertyEdit(ComponentOf(c), property) { Text = text })]), CancellationToken.None));
@@ -889,6 +1008,11 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
 
     public void Undo()
     {
+        if (Step(_undo, _redo, undo: true))
+        {
+            return;
+        }
+
         if (_designerCode?.Text.UndoStack is { CanUndo: true } stack)
         {
             stack.Undo();
@@ -897,13 +1021,22 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
 
     public void Redo()
     {
+        if (Step(_redo, _undo, undo: false))
+        {
+            return;
+        }
+
         if (_designerCode?.Text.UndoStack is { CanRedo: true } stack)
         {
             stack.Redo();
         }
     }
 
-    /// <summary>Copy: the selected components and the controls inside them, as their code says them.</summary>
+    /// <summary>
+    /// Copy: the selected components, the controls inside them and the items of their collections (a menu's items, a list
+    /// view's columns and items), as their code says them: their properties, extender properties, data bindings,
+    /// collections and event hookups.
+    /// </summary>
     public void Copy()
     {
         if (_model is not { } model)
@@ -912,19 +1045,23 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
         }
 
         var names = new List<string>();
+        var locals = model.Components.Where(c => c.IsLocal).Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
         void Add(string name)
         {
-            if (names.Contains(name))
+            if (names.Contains(name) || name == "resources")
             {
                 return;
             }
 
             names.Add(name);
-            foreach (var child in model.Statements.Where(s => s.Kind == DesignerStatementKinds.Call && s.Target == name && s.Member?.EndsWith("Controls.Add", StringComparison.Ordinal) == true))
+            foreach (var call in model.Statements.Where(s => s.Kind == DesignerStatementKinds.Call && s.Target == name && s.Member is { } member && IsCollectionCall(member)))
             {
-                if (child.Arguments?.FirstOrDefault()?.Value is { } childName)
+                foreach (var child in References(call.Arguments ?? []))
                 {
-                    Add(childName);
+                    if (model.Components.Any(c => c.Name == child && !c.IsRoot))
+                    {
+                        Add(child);
+                    }
                 }
             }
         }
@@ -934,16 +1071,41 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
             Add(selected);
         }
 
-        s_clipboard = [.. names.Select(n => Describe(model, n)).OfType<DesignerClipboardEntry>()];
+        s_clipboard = [.. names.Select(n => Describe(model, n, DesignerPath, locals)).OfType<DesignerClipboardEntry>()];
         _shell.StatusBar.ShowMessage(Localizer.Format("msg.winFormsDesigner.copied", "Copied {0} component(s).", s_clipboard.Count), TimeSpan.FromSeconds(3));
     }
 
-    private static DesignerClipboardEntry? Describe(DesignerModel model, string name)
+    /// <summary><c>Controls.Add</c> and the collections' calls (<c>Items.AddRange</c>, <c>ColumnStyles.Add</c>, <c>Images.SetKeyName</c>).</summary>
+    private static bool IsCollectionCall(string member) =>
+        member.EndsWith(".Add", StringComparison.Ordinal) || member.EndsWith(".AddRange", StringComparison.Ordinal) || member.EndsWith(".SetKeyName", StringComparison.Ordinal);
+
+    private static IEnumerable<string> References(IEnumerable<DesignerValue> values)
     {
-        if (model.Components.FirstOrDefault(c => c.Name == name && !c.IsLocal) is not { } component
+        foreach (var value in values)
+        {
+            if (value is { Kind: DesignerValueKinds.Reference, Value: { Length: > 0 } name })
+            {
+                yield return name;
+            }
+
+            foreach (var inner in References(value.Arguments ?? []))
+            {
+                yield return inner;
+            }
+        }
+    }
+
+    private static DesignerClipboardEntry? Describe(DesignerModel model, string name, string source, HashSet<string> locals)
+    {
+        if (model.Components.FirstOrDefault(c => c.Name == name) is not { } component
             || model.Statements.FirstOrDefault(s => s.Kind == DesignerStatementKinds.Create && s.Target == name) is not { Value: { } creation })
         {
             return null;
+        }
+
+        if (locals.Contains(name))
+        {
+            return new DesignerClipboardEntry(name, component.Type, [], null, null, null, [], false) { LocalValue = creation, Source = source };
         }
 
         var add = model.Statements.FirstOrDefault(s => s.Kind == DesignerStatementKinds.Call && s.Member?.EndsWith("Controls.Add", StringComparison.Ordinal) == true && s.Arguments?.FirstOrDefault()?.Value == name);
@@ -952,11 +1114,28 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
         var properties = model.Statements
             .Where(s => s.Kind == DesignerStatementKinds.Assign && s.Target == name && s.Value is { Kind: not DesignerValueKinds.Resource })
             .Select(s => new DesignerPropertyValue(s.Member!, s.Value!)).ToArray();
+
+        // Its collections, its data bindings, and the extender properties others give it.
+        var calls = model.Statements.Where(s => s.Kind == DesignerStatementKinds.Call && (
+            (s.Target == name && s.Member is { } m && !m.EndsWith("Controls.Add", StringComparison.Ordinal) && (IsCollectionCall(m) || m == "DataBindings.Add"))
+            || (s.Arguments is [{ Kind: DesignerValueKinds.Reference } extended, _] && extended.Value == name && s.Member is { } setter && setter.StartsWith("Set", StringComparison.Ordinal) && !setter.Contains('.', StringComparison.Ordinal) && s.Target != name)))
+            .ToArray();
+        var events = model.Statements.Where(s => s.Kind == DesignerStatementKinds.Event && s.Target == name).ToArray();
         return new DesignerClipboardEntry(name, component.Type, creation.Arguments ?? [], add?.Target, path, cell, properties,
-            model.Statements.Any(s => s.Kind == DesignerStatementKinds.Layout && s.Target == name && s.Member == "BeginInit"));
+            model.Statements.Any(s => s.Kind == DesignerStatementKinds.Layout && s.Target == name && s.Member == "BeginInit"))
+        {
+            Calls = calls,
+            Events = events,
+            Source = source,
+        };
     }
 
-    /// <summary>Paste: the copied components under new names, in the selected container (or the copied ones' parent), a little lower and to the right.</summary>
+    /// <summary>
+    /// Paste: the copied components under new names, in the selected container (or the copied ones' parent), a little
+    /// lower and to the right, with their collections, extender properties and data bindings where what they name
+    /// exists. Their event hookups come too when pasting into the form they were copied from (the handlers are its);
+    /// into another form they don't, as Visual Studio does (ADR 0073).
+    /// </summary>
     public async Task PasteAsync()
     {
         if (_model is not { } model || s_clipboard.Count == 0)
@@ -982,8 +1161,32 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
             taken.Add(names[entry.Name]);
         }
 
+        // A name in a copied statement: the pasted component's, or one the form has; else the statement can't come.
+        var sameForm = s_clipboard.All(e => SolutionPaths.Comparer.Equals(e.Source, DesignerPath));
+        string? Rename(string name) => names.TryGetValue(name, out var renamed) ? renamed : name.Length == 0 || model.Components.Any(c => c.Name == name) || name == "components" ? name : null;
+        DesignerValue? Remap(DesignerValue value)
+        {
+            if (value.Kind == DesignerValueKinds.Reference)
+            {
+                return Rename(value.Value ?? string.Empty) is { } renamed ? value with { Value = renamed } : null;
+            }
+
+            if (value.Arguments is not { } arguments)
+            {
+                return value;
+            }
+
+            var mapped = arguments.Select(Remap).ToArray();
+            return mapped.Any(a => a is null) ? null : value with { Arguments = [.. mapped.OfType<DesignerValue>()] };
+        }
+
         var edits = new List<DesignerEdit>();
-        foreach (var entry in s_clipboard)
+        foreach (var entry in s_clipboard.Where(e => e.LocalValue is not null))
+        {
+            edits.Add(new DesignerEdit { Kind = DesignerEditKinds.AddLocal, Component = names[entry.Name], Value = entry.LocalValue });
+        }
+
+        foreach (var entry in s_clipboard.Where(e => e.LocalValue is null))
         {
             var topLevel = entry.Parent is null || !copied.Contains(entry.Parent);
             var parent = topLevel ? (entry.Parent is null ? null : targetName) : names[entry.Parent!];
@@ -994,8 +1197,8 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
                 {
                     Value = DesignerValue.NewOf(p.Value.Type!, DesignerValue.Int(int.Parse(x, System.Globalization.CultureInfo.InvariantCulture) + 16), DesignerValue.Int(int.Parse(y, System.Globalization.CultureInfo.InvariantCulture) + 16)),
                 },
-                _ => p,
-            }).ToArray();
+                _ => Remap(p.Value) is { } value ? p with { Value = value } : null,
+            }).OfType<DesignerPropertyValue>().ToArray();
             edits.Add(new DesignerEdit
             {
                 Kind = DesignerEditKinds.AddComponent,
@@ -1011,12 +1214,53 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
             });
         }
 
+        foreach (var entry in s_clipboard)
+        {
+            foreach (var group in entry.Calls.GroupBy(c => (c.Target, Member: c.Member == "DataBindings.Add" || !c.Member!.Contains('.', StringComparison.Ordinal) ? c.Member + "#" + c.Line : c.Member![..c.Member!.LastIndexOf('.')])))
+            {
+                var first = group.First();
+                var arguments = group.SelectMany(c => c.Arguments ?? []).Select(Remap).ToList();
+                if (arguments.Any(a => a is null) || Rename(first.Target) is not { } owner)
+                {
+                    continue;
+                }
+
+                if (first.Member == "DataBindings.Add" && arguments[0] is { Arguments: [{ Value: { } bound }, ..] } binding)
+                {
+                    edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetDataBinding, Component = owner, Property = bound, Value = binding });
+                }
+                else if (!first.Member!.Contains('.', StringComparison.Ordinal) && arguments is [{ } extended, { } value])
+                {
+                    edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetExtender, Component = extended.Value ?? string.Empty, Provider = owner, Property = first.Member["Set".Length..], Value = value });
+                }
+                else
+                {
+                    var method = first.Member[(first.Member.LastIndexOf('.') + 1)..];
+                    DesignerValue[] items = method switch
+                    {
+                        "AddRange" => arguments[0]!.Arguments ?? [],
+                        "SetKeyName" => [.. arguments.Where((_, i) => i % 2 == 1).OfType<DesignerValue>()],
+                        _ => [.. arguments.OfType<DesignerValue>()],
+                    };
+                    edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetCollection, Component = owner, Property = group.Key.Member, Method = method, Type = method == "AddRange" ? arguments[0]!.Type : null, Items = items });
+                }
+            }
+
+            if (sameForm)
+            {
+                foreach (var hookup in entry.Events)
+                {
+                    edits.Add(new DesignerEdit { Kind = DesignerEditKinds.AddEvent, Component = names[entry.Name], Event = hookup.Member, Handler = hookup.Handler, DelegateType = hookup.Value?.Type });
+                }
+            }
+        }
+
         await _gate.WaitAsync().ConfigureAwait(true);
         try
         {
-            if (await WriteAsync(edits, reloadAfter: true).ConfigureAwait(true))
+            if (await WriteAsync(edits, reloadAfter: true, showHandler: false).ConfigureAwait(true))
             {
-                _selection = [.. s_clipboard.Where(e => e.Parent is null || !copied.Contains(e.Parent)).Select(e => names[e.Name])];
+                _selection = [.. s_clipboard.Where(e => e.LocalValue is null && (e.Parent is null || !copied.Contains(e.Parent))).Select(e => names[e.Name])];
             }
         }
         finally
@@ -1049,7 +1293,13 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
 
         var selected = _selection.ToList();
         var result = await host.PropertiesAsync(new DesignerComponentsParams([.. selected.Select(ComponentOf)]), cancellationToken).ConfigureAwait(true);
-        return [.. result.Properties.Select(p => new DesignerPropertyRow(p.Category, RowFor(selected, p)))];
+        List<DesignerPropertyRow> rows = [.. result.Properties.Select(p => new DesignerPropertyRow(p.Category, RowFor(selected, p)))];
+        if (IsLocalizable && selected.Count == 1 && ComponentOf(selected[0]).Length == 0)
+        {
+            rows.Add(LanguageRow());
+        }
+
+        return rows;
     }
 
     private PropertyRowViewModel RowFor(List<string> selected, DesignerPropertyInfo info)
@@ -1061,20 +1311,7 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
                 info.IsReadOnly ? null : name => RenameAsync(selected[0], name?.Trim() ?? string.Empty), isSet: true);
         }
 
-        var localized = selected.Any(IsLocalized);
-        Func<string?, Task>? commit = info.IsReadOnly || localized ? null : text => SetPropertyAsync(selected, info.Name, text ?? string.Empty);
-        var description = localized ? Localizer.Get("msg.winFormsDesigner.localizedProperty", "Localizable: this value comes from the form's .resx.") + " " + info.Description : info.Description ?? string.Empty;
-        return info.Editor switch
-        {
-            DesignerEditors.Boolean or DesignerEditors.Enum or DesignerEditors.Dock or DesignerEditors.Color when info.StandardValues is { Length: > 0 } values =>
-                new PropertyRowViewModel(info.Name, value, info.Editor == DesignerEditors.Color ? PropertyRowKind.Color : PropertyRowKind.Choice, description, commit,
-                    [.. values.Select(v => new PropertyOption(v, v))], info.IsSet),
-            DesignerEditors.Anchor or DesignerEditors.Flags when info.StandardValues is { Length: > 0 } flags =>
-                new PropertyRowViewModel(info.Name, value, PropertyRowKind.Flags, description, commit,
-                    [.. flags.Where(f => f is not "None").Select(f => new PropertyOption(f, f))], info.IsSet),
-            DesignerEditors.Color => new PropertyRowViewModel(info.Name, value, PropertyRowKind.Color, description, commit, null, info.IsSet),
-            _ => new PropertyRowViewModel(info.Name, value, PropertyRowKind.Text, description, commit, null, info.IsSet),
-        };
+        return RowFor(selected, info, value);
     }
 
     public bool HasEvents => _selection.Count == 1;
@@ -1106,6 +1343,11 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
         {
             await _shell.SaveModelAsync(model).ConfigureAwait(true);
         }
+
+        foreach (var resources in _resourceModels.Where(m => m.IsModified).ToList())
+        {
+            await _shell.SaveModelAsync(resources).ConfigureAwait(true);
+        }
     }
 
     /// <summary>The designer closed: its designer host stops and the designer file's text is let go.</summary>
@@ -1125,6 +1367,7 @@ public sealed class WinFormsDesignerDocument : ShellDocument, Views.ISavableDocu
             _shell.ReleaseModel(model);
         }
 
+        ReleaseResources();
         if (_shell.PropertySource == this)
         {
             _shell.PropertySource = null;
