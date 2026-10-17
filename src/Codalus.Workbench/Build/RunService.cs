@@ -82,11 +82,28 @@ public sealed class RunningProgram : IDisposable
     /// <summary>Ends the program and every process it started; a child the OS won't let us end (access denied, already exiting) is left.</summary>
     public void Stop()
     {
+        // Ending the tree lists the system's processes to find the program's children. On macOS that listing can block
+        // for many minutes (task information of a crashed process that ReportCrash holds: `ps -o pcpu,rss` blocks the
+        // same way; seen after a debugging session closed its browser): the tree's end then gets a while, and after it
+        // the program alone is ended, so its run ends (a child it started, if any, is left; the dev server's
+        // BrowserDebugHost ends with its owner).
+        var tree = Task.Run(() => Kill(entireProcessTree: true));
+        if (!tree.Wait(s_treeKillWait))
+        {
+            Kill(entireProcessTree: false);
+        }
+    }
+
+    /// <summary>How long <see cref="Stop"/> lets the tree's end take before it ends the program alone.</summary>
+    private static readonly TimeSpan s_treeKillWait = TimeSpan.FromSeconds(10);
+
+    private void Kill(bool entireProcessTree)
+    {
         try
         {
             if (!_process.HasExited)
             {
-                _process.Kill(entireProcessTree: true);
+                _process.Kill(entireProcessTree);
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException or NotSupportedException)

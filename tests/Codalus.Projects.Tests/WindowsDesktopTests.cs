@@ -107,7 +107,8 @@ public sealed class WindowsDesktopTests : IAsyncLifetime
     /// <summary>
     /// M44 (ADR 0074): the WinUI 3 fixture restores and loads on every OS (off Windows without the XAML compiler's
     /// design-time pass), says what it is and how it runs (unpackaged, then packaged once switched), and its XAML joins
-    /// the design-time command line. On Windows it builds, and a WinUI XAML compiler error (WMC…) lands in its file.
+    /// the design-time command line. On Windows it builds, and a broken x:Bind fails the build with the XAML compiler's
+    /// WMC error (which, from dotnet's MSBuild, has lost its message and file: see below).
     /// </summary>
     [Fact]
     public async Task A_winui_project_loads_everywhere_and_says_how_it_runs()
@@ -147,10 +148,18 @@ public sealed class WindowsDesktopTests : IAsyncLifetime
             await File.WriteAllTextAsync(page, text.Replace("{x:Bind ViewModel.Items}", "{x:Bind ViewModel.NoSuchItems}", StringComparison.Ordinal), TestContext.Current.CancellationToken);
             built = await _builds.BuildAsync(BuildTargets.Build, project, Timeout());
             Assert.False(built.Succeeded);
+            // On dotnet's MSBuild the Windows App SDK's XAML compiler is XamlCompiler.exe, which can't load its own error
+            // messages (it embeds them as Microsoft.Windows.UI.Xaml.Build.Tasks.ErrorMessages.resources and looks them
+            // up as Microsoft.UI.Xaml.Markup.Compiler.ErrorMessages): every error, the x:Bind path's WMC1110 too, comes
+            // back as WMC9999 for that exception, without its file and line, on the compiler task's line in the
+            // package's targets. So the build fails with it and no squiggle; the editor's own x:Bind check marks the
+            // path. TODO(issue): back to the error in MainPage.xaml once a Windows App SDK's XamlCompiler.exe finds its
+            // messages (1.8.260528001 through 1.8.260803003 and 2.3.9 don't).
             var error = Assert.Single(_builds.Diagnostics, d => d.Code?.StartsWith("WMC", StringComparison.Ordinal) == true);
-            Assert.Equal(page, error.File, ignoreCase: true);
-            var squiggles = XamlBuildDiagnostics.ByFile(_builds.Diagnostics);
-            Assert.StartsWith("WMC", Assert.Single(Assert.Single(squiggles, f => string.Equals(f.Key, page, StringComparison.OrdinalIgnoreCase)).Value).Code, StringComparison.Ordinal);
+            var where = $"{error.Code} at {error.File}({error.Line},{error.Column}): {error.Message}\n{_builds.Channel.GetText()}";
+            Assert.True(error.Code == "WMC9999" && error.Message.Contains("Microsoft.UI.Xaml.Markup.Compiler.ErrorMessages.resources", StringComparison.Ordinal), where);
+            Assert.EndsWith("Microsoft.UI.Xaml.Markup.Compiler.interop.targets", error.File, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(XamlBuildDiagnostics.ByFile(_builds.Diagnostics), f => string.Equals(f.Key, page, StringComparison.OrdinalIgnoreCase));
             await File.WriteAllTextAsync(page, text, TestContext.Current.CancellationToken);
         }
 

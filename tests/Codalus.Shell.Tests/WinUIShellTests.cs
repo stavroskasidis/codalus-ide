@@ -5,6 +5,7 @@ using Codalus.Platform;
 using Codalus.Projects.Protocol;
 using Codalus.Workbench.Debugging;
 using Codalus.Workbench.Mobile;
+using Codalus.Workbench.Notifications;
 using Codalus.Workbench.Projects;
 
 namespace Codalus.Shell.Tests;
@@ -209,10 +210,17 @@ public sealed class WinUIShellTests
             await ShellFixture.PumpUntil(() => f.Shell.Runs.Running.All(p => p.HasExited), seconds: 60);
 
             // F5: started again, and netcoredbg attaches to its process; Break All stops it with a stack.
+            // A start that fails says so in a notification (the build, the registration, the activation, the attach):
+            // the wait ends there, and the failure shows the Run output, the Debug Console and the notifications.
+            var notified = f.Shell.Workbench.Notifications.Items.Select(n => n.Id).DefaultIfEmpty().Max();
+            string Diagnostics() =>
+                $"Debugger: {f.Shell.Debugger.State}\nRun output:\n{channel.GetText()}\nDebug Console:\n{f.Shell.DebugLog.GetText()}\nNotifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}";
             f.Shell.Run("debug.start");
-            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Running, seconds: 600);
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Running || f.Shell.Workbench.Notifications.Items.Any(n => n.Id > notified && n.Severity == NotificationSeverity.Error), seconds: 600);
+            Assert.True(f.Shell.Debugger.State == DebugState.Running, Diagnostics());
             f.Shell.Run("debug.pause");
-            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 120);
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped || f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
+            Assert.True(f.Shell.Debugger.State == DebugState.Stopped, Diagnostics());
             await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0);
             f.Shell.Run("debug.stop");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);

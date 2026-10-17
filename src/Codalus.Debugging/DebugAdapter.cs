@@ -341,6 +341,9 @@ public sealed class DebugAdapter : IDebugAdapter
         }
     }
 
+    /// <summary>Ends the adapter's process at once, with the processes it started where the OS allows (a launched program).</summary>
+    public void Kill() => _process.Kill();
+
     /// <summary>Reads a body as <typeparamref name="T"/> (events).</summary>
     public static T? Read<T>(JsonElement body, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info) =>
         body.ValueKind == JsonValueKind.Object ? body.Deserialize(info) : default;
