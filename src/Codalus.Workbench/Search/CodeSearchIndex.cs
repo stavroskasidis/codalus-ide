@@ -152,16 +152,19 @@ public sealed class CodeSearchIndex
             return [];
         }
 
-        // A large index is scanned in parallel chunks, each keeping its best results only (ADR 0078's budget: 100 ms
-        // for a 96-project solution); results are built for those alone.
-        var entries = _snapshot.Entries;
-        var chunks = Math.Clamp(entries.Length / 8192, 1, Environment.ProcessorCount);
-        var best = new List<(Entry Entry, int Score)>[chunks];
+        // Names repeat (members above all), so each distinct name is scored once, in parallel chunks over a large
+        // index; then its declarations take their kind's weight and their file's boost (computed once per file), and a
+        // queue keeps the best. Results and highlights are built for those alone (ADR 0078's budget: 100 ms for a
+        // 96-project solution).
+        var snapshot = _snapshot;
+        var names = snapshot.Names;
+        var chunks = Math.Clamp(names.Length / 4096, 1, Environment.ProcessorCount);
+        var matched = new List<(int Name, int Score)>[chunks];
         Parallel.For(0, chunks, new ParallelOptions { CancellationToken = cancellationToken, MaxDegreeOfParallelism = chunks }, chunk =>
         {
-            var top = new PriorityQueue<(Entry Entry, int Score), int>();
-            var from = (int)((long)entries.Length * chunk / chunks);
-            var to = (int)((long)entries.Length * (chunk + 1) / chunks);
+            var found = new List<(int, int)>();
+            var from = (int)((long)names.Length * chunk / chunks);
+            var to = (int)((long)names.Length * (chunk + 1) / chunks);
             for (var i = from; i < to; i++)
             {
                 if (((i - from) & 4095) == 0)
@@ -169,14 +172,52 @@ public sealed class CodeSearchIndex
                     cancellationToken.ThrowIfCancellationRequested();
                 }
 
-                var entry = entries[i];
-                if ((entry.IsType ? !types : !members) || !CodeSearchRanker.MayMatch(text, entry.Name) || !FuzzyMatcher.TryScore(text, entry.Name, out var matchScore)
-                    || include is not null && !include(entry.File.Path))
+                if (CodeSearchRanker.MayMatch(text, names[i].Name) && FuzzyMatcher.TryScore(text, names[i].Name, out var score))
+                {
+                    found.Add((i, score));
+                }
+            }
+
+            matched[chunk] = found;
+        });
+
+        var boosts = new Dictionary<IndexedFile, int>(ReferenceEqualityComparer.Instance);
+        var included = include is null ? null : new Dictionary<IndexedFile, bool>(ReferenceEqualityComparer.Instance);
+        var top = new PriorityQueue<(Entry Entry, int Score), int>();
+        var visited = 0;
+        foreach (var (name, matchScore) in matched.SelectMany(m => m))
+        {
+            foreach (var entry in names[name].Entries)
+            {
+                if ((++visited & 4095) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
+                if (entry.IsType ? !types : !members)
                 {
                     continue;
                 }
 
-                var score = CodeSearchRanker.Score(entry.IsType ? CodeSearchKind.Type : CodeSearchKind.Member, entry.File.Path, entry.File.Project, external: false, matchScore, context);
+                if (included is not null)
+                {
+                    if (!included.TryGetValue(entry.File, out var inScope))
+                    {
+                        included[entry.File] = inScope = include!(entry.File.Path);
+                    }
+
+                    if (!inScope)
+                    {
+                        continue;
+                    }
+                }
+
+                if (!boosts.TryGetValue(entry.File, out var boost))
+                {
+                    boosts[entry.File] = boost = CodeSearchRanker.ContextBoost(entry.File.Path, entry.File.Project, context);
+                }
+
+                var score = matchScore + boost + CodeSearchRanker.KindWeight(entry.IsType ? CodeSearchKind.Type : CodeSearchKind.Member, external: false);
                 if (top.Count < limit)
                 {
                     top.Enqueue((entry, score), score);
@@ -186,11 +227,9 @@ public sealed class CodeSearchIndex
                     top.DequeueEnqueue((entry, score), score);
                 }
             }
+        }
 
-            best[chunk] = [.. top.UnorderedItems.Select(i => i.Element)];
-        });
-
-        return CodeSearchRanker.Order(best.SelectMany(b => b).Select(b => new CodeSearchResult(b.Entry.IsType ? CodeSearchKind.Type : CodeSearchKind.Member, b.Entry.Name)
+        return CodeSearchRanker.Order(top.UnorderedItems.Select(i => i.Element).Select(b => new CodeSearchResult(b.Entry.IsType ? CodeSearchKind.Type : CodeSearchKind.Member, b.Entry.Name)
         {
             SymbolKind = b.Entry.Kind,
             Container = b.Entry.Container,
@@ -308,16 +347,20 @@ public sealed class CodeSearchIndex
             }
         }
 
-        return new Snapshot([.. entries], documents, files, loaded, complete, completedAt);
+        var names = entries.GroupBy(e => e.Name, StringComparer.Ordinal).Select(g => new NameEntries(g.Key, [.. g])).ToArray();
+        return new Snapshot([.. entries], names, documents, files, loaded, complete, completedAt);
     }
 
     /// <summary>Classes, interfaces, structs and enums are types; the rest are members.</summary>
     public static bool IsTypeKind(int kind) => kind is SymbolKind.Class or SymbolKind.Interface or SymbolKind.Struct or SymbolKind.Enum or SymbolKind.Module;
 
-    private sealed record Snapshot(Entry[] Entries, IReadOnlyDictionary<string, IndexedFile> Documents, IReadOnlyList<string> Files, bool Loaded, bool Complete, DateTime? CompletedAt)
+    private sealed record Snapshot(Entry[] Entries, NameEntries[] Names, IReadOnlyDictionary<string, IndexedFile> Documents, IReadOnlyList<string> Files, bool Loaded, bool Complete, DateTime? CompletedAt)
     {
-        public static Snapshot Empty { get; } = new([], new Dictionary<string, IndexedFile>(), [], false, false, null);
+        public static Snapshot Empty { get; } = new([], [], new Dictionary<string, IndexedFile>(), [], false, false, null);
     }
+
+    /// <summary>A distinct name and every declaration of it.</summary>
+    private sealed record NameEntries(string Name, Entry[] Entries);
 
     private sealed record Entry(string Name, int Kind, bool IsType, int Line, int Character, string? Container, IndexedFile File);
 }

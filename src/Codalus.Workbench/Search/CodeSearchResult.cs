@@ -68,9 +68,13 @@ public static class CodeSearchRanker
         Score(result.Kind, result.Path, result.Project, result.IsExternal, matchScore, context);
 
     /// <summary>The score of a result of <paramref name="kind"/> in <paramref name="path"/>, without building it.</summary>
-    public static int Score(CodeSearchKind kind, string? path, string? project, bool external, int matchScore, CodeSearchRankContext context)
+    public static int Score(CodeSearchKind kind, string? path, string? project, bool external, int matchScore, CodeSearchRankContext context) =>
+        matchScore + KindWeight(kind, external) + ContextBoost(path, project, context);
+
+    /// <summary>What a result's file and project add: a recently opened file (the more recent, the more), the active document, the active project.</summary>
+    public static int ContextBoost(string? path, string? project, CodeSearchRankContext context)
     {
-        var score = matchScore + KindWeight(kind, external);
+        var score = 0;
         if (path is not null)
         {
             for (var i = 0; i < context.RecentFiles.Count && i < 8; i++)
