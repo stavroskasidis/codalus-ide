@@ -205,12 +205,12 @@ public class EditorTests
         await f.Shell.FormatAsync(selectionOnly: false);
         Assert.Contains("int x = 1;", program.Model.Text.Text, StringComparison.Ordinal);
 
-        // Go To All finds a type and opens it.
-        var going = f.Shell.GoToAllAsync();
-        f.Shell.Palette.Query = "Squar";
-        await ShellFixture.PumpUntil(() => f.Shell.Palette.Rows.Any(r => r.Label == "Square"), seconds: 30);
-        f.Shell.Palette.Accept(f.Shell.Palette.Rows.First(r => r.Label == "Square"));
-        await going;
+        // Go To All (Code Search, M47) finds a type and opens it.
+        await f.Shell.GoToAllAsync();
+        f.Shell.CodeSearch.Query = "Squar";
+        await ShellFixture.PumpUntil(() => f.Shell.CodeSearch.Rows.Any(r => r.Result is { Name: "Square", Kind: Workbench.Search.CodeSearchKind.Type }), seconds: 30);
+        f.Shell.CodeSearch.SelectedIndex = f.Shell.CodeSearch.Rows.IndexOf(f.Shell.CodeSearch.Rows.First(r => r.Result is { Name: "Square", Kind: Workbench.Search.CodeSearchKind.Type }));
+        await f.Shell.CodeSearch.AcceptAsync();
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Name is "Shapes.cs" or "Square.Part.cs");
 
         // Go to Definition into a referenced assembly opens decompiled, read-only code.

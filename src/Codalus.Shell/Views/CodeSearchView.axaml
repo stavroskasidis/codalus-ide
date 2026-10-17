@@ -1,0 +1,155 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.CodeSearchView"
+             x:DataType="vm:CodeSearchViewModel">
+  <UserControl.Styles>
+    <!-- Body-sized tab headers, like the shell's TabItems, not Fluent's 24 pt. -->
+    <Style Selector="TabStripItem">
+      <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Padding" Value="8,4" />
+    </Style>
+    <!-- The filter chips: pills that say which kinds show; the selected one is filled. -->
+    <Style Selector="Button.chip">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="8,1" />
+      <Setter Property="MinHeight" Value="20" />
+      <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+    </Style>
+    <Style Selector="Button.chip.selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Selection}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+    </Style>
+    <Style Selector="ListBoxItem" x:DataType="vm:CodeSearchRow">
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+    </Style>
+  </UserControl.Styles>
+
+  <!-- Code Search (Ctrl+T, Ctrl+,) and Feature Search (Ctrl+Q), M47: floats over the editor under the title row; drag
+       it by its tabs' row, resize it from its corner. Docked, the same view fills a tool window. -->
+  <Border x:Name="Frame" Classes="overlay" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{l:T codeSearch.codeSearch}">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+      <Grid x:Name="TitleRow" ColumnDefinitions="*,Auto" Background="Transparent" Margin="6,4,6,0">
+        <TabStrip SelectedIndex="{Binding TabIndex}" AutomationProperties.Name="{l:T codeSearch.searchKind}">
+          <TabStripItem ToolTip.Tip="{l:T codeSearch.codeSearchTip}" AutomationProperties.Name="{l:T codeSearch.codeSearch}">
+            <TextBlock Text="{l:T codeSearch.codeSearch}" TextTrimming="CharacterEllipsis" />
+          </TabStripItem>
+          <TabStripItem ToolTip.Tip="{l:T codeSearch.featureSearchTip}" AutomationProperties.Name="{l:T codeSearch.featureSearch}">
+            <TextBlock Text="{l:T codeSearch.featureSearch}" TextTrimming="CharacterEllipsis" />
+          </TabStripItem>
+        </TabStrip>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="{DynamicResource Shell.Space.XS}" VerticalAlignment="Center">
+          <ToggleButton Classes="toolbar" IsChecked="{Binding ShowPreview}" IsVisible="{Binding IsCodeTab}"
+                        ToolTip.Tip="{l:T codeSearch.showPreview}" AutomationProperties.Name="{l:T codeSearch.showPreview}">
+            <controls:Icon Kind="document-text" />
+          </ToggleButton>
+          <ToggleButton x:Name="PinButton" Classes="toolbar" IsChecked="{Binding IsPinned}"
+                        ToolTip.Tip="{l:T codeSearch.keepOpen}" AutomationProperties.Name="{l:T codeSearch.keepOpen}">
+            <controls:Icon Kind="pin" />
+          </ToggleButton>
+          <Button x:Name="DockButton" Classes="toolbar" Command="{Binding ToggleDockCommand}"
+                  ToolTip.Tip="{l:T codeSearch.dock}" AutomationProperties.Name="{l:T codeSearch.dock}">
+            <controls:Icon Kind="window" />
+          </Button>
+          <Button x:Name="CloseButton" Classes="toolbar" Command="{Binding CloseCommand}"
+                  ToolTip.Tip="{l:T codeSearch.close}" AutomationProperties.Name="{l:T codeSearch.close}">
+            <controls:Icon Kind="close" />
+          </Button>
+        </StackPanel>
+      </Grid>
+
+      <TextBox x:Name="Input" Grid.Row="1" Margin="8,4,8,0"
+               Text="{Binding Query}"
+               PlaceholderText="{Binding Placeholder}"
+               AutomationProperties.Name="{Binding Placeholder}" />
+
+      <!-- The chips, then the scope and external items; they wrap in a narrow tool window. -->
+      <WrapPanel Grid.Row="2" Orientation="Horizontal" ItemSpacing="8" LineSpacing="4" Margin="8,6,8,0" IsVisible="{Binding IsCodeTab}">
+        <ItemsControl x:Name="ChipList" ItemsSource="{Binding Chips}" VerticalAlignment="Center" AutomationProperties.Name="{l:T codeSearch.filters}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel Orientation="Horizontal" ItemSpacing="4" LineSpacing="4" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:CodeSearchChip">
+              <Button Classes="chip" Classes.selected="{Binding IsSelected}" Content="{Binding Label}" Command="{Binding SelectCommand}"
+                      ToolTip.Tip="{Binding ToolTip}" AutomationProperties.Name="{Binding AccessibleName}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <ComboBox Classes="toolbar" ItemsSource="{Binding Scopes}" SelectedItem="{Binding SelectedScope}" MinWidth="140"
+                  ToolTip.Tip="{l:T codeSearch.scope}" AutomationProperties.Name="{l:T codeSearch.scope}" />
+        <CheckBox IsChecked="{Binding IncludeExternal}" MinHeight="24" ToolTip.Tip="{l:T codeSearch.includeExternalItemsTip}"
+                  AutomationProperties.Name="{l:T codeSearch.includeExternalItems}">
+          <TextBlock Text="{l:T codeSearch.includeExternalItems}" TextTrimming="CharacterEllipsis" />
+        </CheckBox>
+      </WrapPanel>
+
+      <!-- While projects load or the index builds: results so far, refreshed when it completes. -->
+      <Border Grid.Row="3" Margin="8,6,8,0" Padding="8,3" CornerRadius="{DynamicResource Shell.CornerRadius}"
+              BorderThickness="1" BorderBrush="{DynamicResource Shell.Info}" IsVisible="{Binding IsIncomplete}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <controls:Icon Kind="info" Classes="info" VerticalAlignment="Center" />
+          <TextBlock Text="{l:T codeSearch.incompleteResults}" TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
+        </StackPanel>
+      </Border>
+
+      <Grid x:Name="Body" Grid.Row="4" Margin="0,6,0,0" RowDefinitions="*,Auto,Auto">
+        <ListBox x:Name="List"
+                 Background="Transparent"
+                 Margin="4,0"
+                 ItemsSource="{Binding Rows}"
+                 SelectedIndex="{Binding SelectedIndex}"
+                 AutomationProperties.Name="{l:T codeSearch.results}">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:CodeSearchRow">
+              <Panel>
+                <TextBlock Classes="muted" FontWeight="SemiBold" Text="{Binding Name}" IsVisible="{Binding IsHeader}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" IsVisible="{Binding IsItem}">
+                  <controls:Icon Grid.RowSpan="2" Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" VerticalAlignment="Top" Margin="0,1,8,0" />
+                  <controls:HighlightedText Grid.Column="1" Source="{Binding Name}" Highlights="{Binding Highlights}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                  <TextBlock Grid.Column="1" Grid.Row="1" Classes="muted small" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+                  <TextBlock Grid.Column="2" Classes="muted small" Margin="12,0,0,0" Text="{Binding FileLabel}" IsVisible="{Binding HasFileLabel}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FileLabel}" />
+                  <TextBlock Grid.Column="2" Classes="muted small" Margin="12,0,0,0" Text="{Binding KeyLabel}" IsVisible="{Binding HasKeyLabel}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding KeyLabel}" />
+                </Grid>
+              </Panel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <GridSplitter x:Name="PreviewSplitter" Grid.Row="1" Height="4" ResizeDirection="Rows" Background="{DynamicResource Shell.Border}" IsVisible="{Binding HasPreview}"
+                      AutomationProperties.Name="{l:T codeSearch.previewSize}" />
+        <DockPanel x:Name="PreviewPane" Grid.Row="2" IsVisible="{Binding HasPreview}" MinHeight="80">
+          <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="8,2">
+            <TextBlock Classes="muted small" Text="{Binding PreviewTitle}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PreviewTitle}" />
+            <TextBlock Grid.Column="1" Classes="muted small" Text="{Binding PreviewStatus}" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding PreviewStatus}" AutomationProperties.LiveSetting="Polite" />
+          </Grid>
+          <Panel>
+            <TextBlock Classes="emptyState" Text="{l:T codeSearch.noPreview}" IsVisible="{Binding !HasPreviewContent}" />
+            <ContentControl x:Name="PreviewHost" AutomationProperties.Name="{l:T codeSearch.preview}" />
+          </Panel>
+        </DockPanel>
+      </Grid>
+
+      <Grid Grid.Row="5" ColumnDefinitions="*,Auto" Margin="8,2,2,2">
+        <TextBlock Classes="muted small" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
+        <Thumb x:Name="ResizeGrip" Grid.Column="1" Width="14" Height="14" Cursor="BottomRightCorner" Background="Transparent"
+               AutomationProperties.Name="{l:T codeSearch.resize}" />
+      </Grid>
+    </Grid>
+  </Border>
+</UserControl>

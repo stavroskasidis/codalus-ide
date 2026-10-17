@@ -92,6 +92,7 @@ public sealed class ViewLocator : IDataTemplate
     private static Control BuildToolContent(object? content) => content switch
     {
         OutputViewModel vm => new OutputView { DataContext = vm },
+        CodeSearchViewModel vm => new CodeSearchView { DataContext = vm, IsToolWindow = true },
         NotificationsViewModel vm => new NotificationsView { DataContext = vm },
         PluginsViewModel vm => new PluginsView { DataContext = vm },
         TreeToolViewModel vm => new TreeToolView { DataContext = vm },

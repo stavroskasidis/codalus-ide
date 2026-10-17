@@ -76,6 +76,11 @@ public sealed partial class ShellHost
         {
             StatusBar.ShowMessage(Localizer.Format("msg.folder.opening", "Opening {0}…", Path.GetFileName(folder)));
             var stateKey = new SolutionStateKey(folder, IsFolder: true);
+            if (!remote)
+            {
+                OpenCodeSearchIndex(stateKey); // searches before the projects load (M47)
+            }
+
             var session = remote ? null : await ReadSolutionSessionAsync(stateKey).ConfigureAwait(true);
             ApplySolutionViewState(session);
             var solution = await Solutions.OpenAsync(folder, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None, session?.Configuration, session?.Platform, session?.ActiveFrameworks).ConfigureAwait(true);
