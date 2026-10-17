@@ -1682,8 +1682,6 @@
   "msg.netFramework.convertMessage": "The project file is rewritten as an SDK-style project (Microsoft.NET.Sdk). Review the changes:",
   "msg.netFramework.convertTitle": "Convert {0} to SDK-style",
   "msg.netFramework.converted": "Converted {0} to an SDK-style project. Its packages are restored as package references.",
-  "msg.netFramework.noDebuggerYet": "{0} targets .NET Framework ({1}): debugging the desktop CLR comes in a later release. Start Without Debugging (Ctrl+F5) runs it now.",
-  "msg.netFramework.startWithoutDebugging": "Start Without Debugging",
   "msg.netFramework.windowsOnly": "{0} targets .NET Framework ({1}): it runs, debugs and tests only on Windows (running it on Mono isn't supported). On this OS it opens, edits and builds.",
   "msg.npm.couldNotRunTheNpmScript": "Could not run the npm script '{0}': {1}",
   "msg.npm.nodeJsCouldntBeInstalled": "Node.js couldn't be installed: {0}",
