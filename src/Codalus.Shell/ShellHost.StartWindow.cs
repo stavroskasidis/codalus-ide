@@ -32,6 +32,20 @@ public sealed partial class ShellHost
             return;
         }
 
+        ContinueStartup();
+    }
+
+    /// <summary>
+    /// What a start without a solution shows (<see cref="StartupSetting"/>): the start window, nothing, or the last
+    /// solution. After the first-run setup (M46) too, which opens before it.
+    /// </summary>
+    private void ContinueStartup()
+    {
+        if (!Options.StartWindow)
+        {
+            return;
+        }
+
         switch (Workbench.Settings.GetString(StartupSetting, "startWindow"))
         {
             case "lastSolution" when Recent.Items.FirstOrDefault(p => File.Exists(p) || Directory.Exists(p)) is { } last:

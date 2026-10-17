@@ -99,8 +99,33 @@ public sealed partial class ShellHost
         Workbench.Notifications.Info(Localizer.Get("msg.sync.settingsSyncIsOffWhatWas", "Settings sync is off. What was synced stays where it is."));
     }
 
+    /// <summary>
+    /// The first-run setup's Your settings step (M46): turns sync on with <paramref name="target"/> and syncs at once. What
+    /// is there wins over this machine's settings without asking (the setup says so: the point is to bring a profile).
+    /// Returns what happened, for the setup to show.
+    /// </summary>
+    internal async Task<string> TurnOnSettingsSyncFromSetupAsync(string target)
+    {
+        target = target.Trim();
+        await Workbench.Settings.SetAsync(SyncTargetSetting, JsonSerializer.SerializeToElement(target, ShellJsonContext.Default.String), SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        var (outcome, error) = await SyncCoreAsync(quiet: true, preferSynced: true).ConfigureAwait(true);
+        return outcome switch
+        {
+            SyncOutcome.Pulled or SyncOutcome.Conflict => Localizer.Format("msg.sync.setupPulled", "Settings sync is on: your settings from {0} are applied here.", target),
+            SyncOutcome.Pushed => Localizer.Format("msg.sync.setupPushed", "Settings sync is on: {0} had no settings yet, so this machine's are there now.", target),
+            SyncOutcome.UpToDate => Localizer.Format("msg.sync.setupUpToDate", "Settings sync is on with {0}, and up to date.", target),
+            _ => Localizer.Format("msg.sync.setupFailed", "Settings sync is on, but syncing with {0} failed: {1}", target, error ?? string.Empty),
+        };
+    }
+
     /// <summary>Syncs now. <paramref name="quiet"/> (automatic syncs) reports only what needs the user.</summary>
-    public async Task SyncSettingsAsync(bool quiet = false)
+    public Task SyncSettingsAsync(bool quiet = false) => SyncCoreAsync(quiet, preferSynced: false);
+
+    /// <summary>
+    /// A sync; <paramref name="preferSynced"/> takes the target's settings on a conflict instead of asking. Returns the
+    /// outcome (null when it didn't run or failed) and the error.
+    /// </summary>
+    private async Task<(SyncOutcome? Outcome, string? Error)> SyncCoreAsync(bool quiet, bool preferSynced)
     {
         var target = SyncTarget;
         if (target.Length == 0)
@@ -110,13 +135,13 @@ public sealed partial class ShellHost
                 Workbench.Notifications.Info(Localizer.Get("msg.sync.settingsSyncIsOffTurnIt", "Settings sync is off. Turn it on with Settings Sync: Turn On."));
             }
 
-            return;
+            return (null, null);
         }
 
         if (!await _syncGate.WaitAsync(0).ConfigureAwait(true))
         {
             ScheduleSync(); // one is running: sync again after it
-            return;
+            return (null, null);
         }
 
         try
@@ -138,6 +163,10 @@ public sealed partial class ShellHost
                     await sync.ResolveAsync(target, LocalSyncDocument(), push: false, CancellationToken.None).ConfigureAwait(true);
                     StatusBar.ShowMessage(Localizer.Get("msg.sync.settingsUpdatedFromSync", "Settings updated from sync."), TimeSpan.FromSeconds(4));
                     break;
+                case SyncOutcome.Conflict when preferSynced:
+                    await ApplySyncedAsync(result.Remote!).ConfigureAwait(true);
+                    await sync.ResolveAsync(target, LocalSyncDocument(), push: false, CancellationToken.None).ConfigureAwait(true);
+                    break;
                 case SyncOutcome.Conflict:
                     var choice = await Workbench.Notifications.Warning(
                         Localizer.Format("msg.sync.settingsChangedBothHereAndIn", "Settings changed both here and in {0} since the last sync. Which do you keep?", target), "Use Synced", "Keep Mine").Result.ConfigureAwait(true);
@@ -153,6 +182,8 @@ public sealed partial class ShellHost
 
                     break;
             }
+
+            return (result.Outcome, null);
         }
         catch (Exception ex) when (ex is GitException or IOException or UnauthorizedAccessException or JsonException)
         {
@@ -165,6 +196,8 @@ public sealed partial class ShellHost
             {
                 Workbench.Notifications.Error(Localizer.Format("msg.sync.settingsCouldntBeSyncedWith", "Settings couldn't be synced with {0}: {1}", target, ex.Message));
             }
+
+            return (null, ex.Message);
         }
         finally
         {

@@ -385,6 +385,7 @@ public static class CommandIcons
         ["workbench.restart"] = new("restart"),
         ["remote.reopenInContainer"] = new("container"),
         ["help.checkEnvironment"] = new("check-circle"),
+        ["help.setUp"] = new("sparkle"),
         ["workbench.showStartWindow"] = new("home"),
         ["workbench.customize"] = new("tools"),
         ["settingsSync.turnOn"] = new("sync"),

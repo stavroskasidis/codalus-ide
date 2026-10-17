@@ -22,6 +22,7 @@ public sealed record ShellOptions
           --dev                   Development mode: shows developer commands.
           --open <file>           Open a file in the editor.
           --new-window            Open a file in a new window, not in the running one.
+          --skip-setup            Don't show the first-run setup (for automation; CODALUS_SKIP_SETUP=1 does the same).
           --list-plugins          Print the installed plugins and exit (--show-versions: with their versions).
           --install-plugin <id[@version] | file.nupkg>
                                   Install a plugin from the plugin galleries or a package file, and exit. Repeatable.
@@ -37,6 +38,12 @@ public sealed record ShellOptions
 
     /// <summary>Whether the start window may open when nothing else is to be opened (M38; tests turn it off).</summary>
     public bool StartWindow { get; init; } = true;
+
+    /// <summary>
+    /// <c>--skip-setup</c> (M46): the first-run setup doesn't show at this start, for automation (tests turn it on too).
+    /// It isn't recorded, so a later start without it still shows the setup when it hasn't run.
+    /// </summary>
+    public bool SkipSetup { get; init; }
 
     /// <summary>The display language for this run (M23b), over the setting.</summary>
     public string? Locale { get; init; }
@@ -224,6 +231,9 @@ public sealed record ShellOptions
                     break;
                 case "--new-window":
                     options = options with { NewWindow = true };
+                    break;
+                case "--skip-setup":
+                    options = options with { SkipSetup = true };
                     break;
                 case "--list-plugins":
                     options = options with { ListPlugins = true };
