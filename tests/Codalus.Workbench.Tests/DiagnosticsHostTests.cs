@@ -176,8 +176,9 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
                 () => monitor.Find("System.Runtime", "cpu-usage") is { Points.Count: >= 2 }
                     && monitor.Find("System.Runtime", "working-set") is not null
                     && monitor.Find("Codalus-Samples-CpuBound", "work-items") is { Last.Value: > 0 }
-                    && monitor.Find("Codalus.Samples.CpuBound", "items.processed") is { Last.Value: > 0 },
-                "the runtime's counters, the EventCounter and the meter: " + string.Join(", ", monitor.Series.Select(s => s.Key)),
+                    && monitor.Find("Codalus.Samples.CpuBound", "items.processed") is { Last.Value: > 0 }
+                    && monitor.Series.Any(s => s.Key.Name.StartsWith("batch.duration P", StringComparison.Ordinal)),
+                "the runtime's counters, the EventCounter, the meter and its histogram's percentiles: " + string.Join(", ", monitor.Series.Select(s => s.Key)),
                 seconds: 60);
 
             var cpu = monitor.Find("System.Runtime", "cpu-usage")!;
