@@ -261,7 +261,7 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
             var text = await about.SetPropertiesAsync(new DesignerSetPropertiesParams([new DesignerPropertyEdit("okButton", "Text") { Text = "Close" }]), Ct);
             Assert.DoesNotContain(text.Changes, c => c.Property == "Text");
             var entry = Assert.Single(text.Resources, r => r.Key == "okButton.Text");
-            Assert.Equal(("Close", (string?)null), (entry.Resource!.Text, entry.Culture));
+            Assert.Equal(("Close", string.Empty), (entry.Resource!.Text, entry.Culture)); // the default culture's is empty
             var (code, resources) = Apply("AboutForm.cs", source, text);
             Assert.Equal(source.Text.ToString(), code);
             Assert.Contains("<value>Close</value>", resources["AboutForm.resx"], StringComparison.Ordinal);
