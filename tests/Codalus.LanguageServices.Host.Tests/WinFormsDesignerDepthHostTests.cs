@@ -135,7 +135,7 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
         var file = View("fileToolStripMenuItem");
         Assert.True(file is { IsItem: true, Owner: "mainMenuStrip", ItemIndex: 0, Text: "&File", HasDropDown: true });
         Assert.Equal(("fileToolStripMenuItem", 2), (View("exitToolStripMenuItem").Owner, View("exitToolStripMenuItem").ItemIndex));
-        Assert.Contains("Items", View("categoryListBox").Collections!);
+        Assert.Contains("System.Windows.Forms.ListBox:Items", View("categoryListBox").Collections!);
         Assert.True(View("detailsTabControl").HasActions);
     }
 
@@ -207,7 +207,8 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
         Assert.Equal(["Hammer", "Saw"], listItems.Items.Select(i => i.Text));
         var locals = await host.SetCollectionAsync(new DesignerSetCollectionParams("itemsListView", "Items", [.. listItems.Items, new DesignerCollectionItem { Text = "Drill" }]), Ct);
         var listChange = Assert.Single(locals.Collections);
-        Assert.Contains(listChange.Locals, l => l.Value.Arguments?.Any(a => a.Value == "Drill") == true);
+        Assert.Equal(3, listChange.Items.Length);
+        Assert.Equal("ListViewItem", Assert.Single(listChange.Locals).Value.Type?.Split('.')[^1]);
     }
 
     [Fact]
@@ -219,7 +220,7 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
 
         // A list box's: Edit Items… opens the collection editor; Use Data Bound Items is a property.
         var listBox = (await host.ActionsAsync(new DesignerComponentsParams(["categoryListBox"]), Ct)).Items;
-        Assert.Contains(listBox, i => i.Collection == "Items");
+        Assert.Contains(listBox, i => i.Collection == "System.Windows.Forms.ListBox:Items");
         Assert.Contains(listBox, i => i.Kind == DesignerActionKinds.Property);
 
         // A tab control's Add Tab: a new tab page, written as a component in the tab control's controls.
