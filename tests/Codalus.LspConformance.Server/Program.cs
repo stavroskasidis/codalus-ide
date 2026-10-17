@@ -7,6 +7,14 @@ using Codalus.Rpc;
 // insert/replace edits, snippets, offset parameter labels, `changes` maps and bare commands among code actions.
 // Documents are "key = value" lines; a line without '=' is an error with code 42. With --dap it is a scripted debug
 // adapter instead (ScriptedDap).
+if (args.Contains("--program"))
+{
+    // The scripted adapter's "program" in a start that times out: it runs until it's killed, as a program that netcoredbg
+    // started and never saw the runtime of does.
+    Thread.Sleep(Timeout.Infinite);
+    return;
+}
+
 if (args.Contains("--dap"))
 {
     await Codalus.LspConformance.Server.ScriptedDap.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput());

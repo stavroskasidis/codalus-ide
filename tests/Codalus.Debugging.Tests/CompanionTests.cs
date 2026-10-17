@@ -98,6 +98,32 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
         Assert.Null(attributes.Find("int[]", s_modules).Display);
     }
 
+    [Fact]
+    public void The_modules_read_stay_free_to_rebuild()
+    {
+        // The companion outlives debug sessions: a module it held open couldn't be overwritten by the next build on
+        // Windows ("being used by another process", the first Windows run of the WPF app's F5 then its tests' build).
+        var folder = Directory.CreateTempSubdirectory("codalus-typeattributes-").FullName;
+        try
+        {
+            var module = Path.Combine(folder, Path.GetFileName(typeof(CompanionTests).Assembly.Location));
+            File.Copy(typeof(CompanionTests).Assembly.Location, module);
+            using var attributes = new TypeAttributes();
+            Assert.Equal("{Name}, {Age} years", attributes.Find("Codalus.Debugging.Tests.DisplayedPerson", [module]).Display);
+
+            using (File.Open(module, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+            }
+
+            File.Copy(typeof(CompanionTests).Assembly.Location, module, overwrite: true);
+            Assert.Equal("Inner!", attributes.Find("Codalus.Debugging.Tests.Outer.Inner", [module]).Display);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("A.B", "A.B")]
     [InlineData("A.List<int>", "A.List`1")]

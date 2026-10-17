@@ -627,8 +627,8 @@ internal sealed class WpfDesigner(string appPath)
         return request[1] switch
         {
             "ping" => "pong",
-            "hit" => AgentLink.OnUiThread(_dispatcher, () => Hit(Number(2), Number(3))),
-            "bounds" => AgentLink.OnUiThread(_dispatcher, () => Bounds(Arg(2))),
+            "hit" => AgentLink.OnUiThread(_dispatcher, () => Hit(Number(2), Number(3)), DispatcherPriority.Send),
+            "bounds" => AgentLink.OnUiThread(_dispatcher, () => Bounds(Arg(2)), DispatcherPriority.Send),
             "theme" => throw new InvalidOperationException("WPF has no theme variants."),
             var other => throw new InvalidOperationException("Unknown command " + other),
         };

@@ -42,8 +42,14 @@ public sealed partial class ShellHost
         JsDebug = new JsDebug(Node, cache);
         Debugger.Ended += (_, _) =>
         {
-            var server = Interlocked.Exchange(ref _browserDebugServer, null);
-            server?.Stop();
+            // Off the debugger's end, which raises this event: stopping the server ends its process tree, which lists
+            // the system's processes, and on the macOS runner that listing once blocked for minutes (ps too), so the
+            // session never finished ending and Stop never returned.
+            if (Interlocked.Exchange(ref _browserDebugServer, null) is { } server)
+            {
+                _ = Task.Run(server.Stop);
+            }
+
             Interlocked.Exchange(ref _serverListening, null)?.TrySetCanceled();
         };
     }

@@ -69,7 +69,8 @@ internal sealed class SourceLines : IDisposable
                 var beside = Path.ChangeExtension(modulePath, ".pdb");
                 if (provider is null && File.Exists(beside))
                 {
-                    provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(beside));
+                    // Read into memory and closed, so the program can be rebuilt (a held .pdb is locked on Windows).
+                    provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(beside), MetadataStreamOptions.PrefetchMetadata);
                 }
             }
             catch (Exception ex) when (ex is IOException or BadImageFormatException or UnauthorizedAccessException)

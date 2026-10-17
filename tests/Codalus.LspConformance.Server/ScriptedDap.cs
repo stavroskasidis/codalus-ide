@@ -36,6 +36,21 @@ internal static class ScriptedDap
                 case "launch":
                     launch = message.TryGetProperty("arguments", out var arguments) ? arguments.Clone() : null;
                     break;
+                case "configurationDone" when FailsToStart(launch):
+                    // As netcoredbg answers when the program's runtime didn't report within its 5 seconds. Like netcoredbg,
+                    // it started the program first, as its child, and doesn't end it on disconnect: its id is listed
+                    // next to the starts file.
+                    StartProgram(launch!.Value.GetProperty("startsFile").GetString()! + ".programs");
+                    await WriteAsync(output, new JsonObject
+                    {
+                        ["seq"] = ++s_seq,
+                        ["type"] = "response",
+                        ["request_seq"] = requestSeq,
+                        ["success"] = false,
+                        ["command"] = command,
+                        ["message"] = "Failed command 'configurationDone' : 0x80004005",
+                    });
+                    continue;
                 case "configurationDone":
                     await RespondAsync(output, requestSeq, command, null);
                     await EventAsync(output, "output", new JsonObject { ["category"] = "console", ["output"] = "scripted adapter: launch " + launch?.GetRawText() + "\n" });
@@ -53,6 +68,48 @@ internal static class ScriptedDap
 
             await RespondAsync(output, requestSeq, command!, body);
         }
+    }
+
+    /// <summary>
+    /// A launch configuration with <c>failStarts</c> (a count) and <c>startsFile</c> (a file the adapters share) fails
+    /// that many starts, one per adapter process, before one succeeds (the debug service starts again, as after netcoredbg's startup timeout).
+    /// </summary>
+    private static bool FailsToStart(JsonElement? launch)
+    {
+        if (launch is not { ValueKind: JsonValueKind.Object } arguments
+            || !arguments.TryGetProperty("failStarts", out var fail) || !arguments.TryGetProperty("startsFile", out var file))
+        {
+            return false;
+        }
+
+        var path = file.GetString()!;
+        var failed = File.Exists(path) ? int.Parse(File.ReadAllText(path), System.Globalization.CultureInfo.InvariantCulture) : 0;
+        if (failed >= fail.GetInt32())
+        {
+            return false;
+        }
+
+        File.WriteAllText(path, (failed + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return true;
+    }
+
+    private static void StartProgram(string programs)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!)
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        if (Path.GetFileNameWithoutExtension(Environment.ProcessPath!) == "dotnet")
+        {
+            start.ArgumentList.Add(typeof(ScriptedDap).Assembly.Location);
+        }
+
+        start.ArgumentList.Add("--program");
+        using var program = System.Diagnostics.Process.Start(start)!;
+        File.AppendAllText(programs, program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n");
     }
 
     private static Task RespondAsync(Stream output, int requestSeq, string command, JsonNode? body) =>
