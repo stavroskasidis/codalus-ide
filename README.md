@@ -21,7 +21,7 @@ Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs nativ
 - **Editor**:
   - Tabs with preview and split views, multiple carets, folding, a minimap and find/replace.
   - C# on Roslyn with your analyzers and source generators: semantic highlighting, completion, signature help, Quick Info, live diagnostics with an Error List.
-  - Navigation: Go to Definition and Implementation (into generated and decompiled code), Find All References, Go To All, Find in Files.
+  - Navigation: Go to Definition and Implementation (into generated and decompiled code), Find All References, Code Search (files, types, members and text with an editable preview, and Feature Search), Find in Files.
   - Refactoring: Rename, code fixes and refactorings (all with previews), and `.editorconfig` formatting.
 - **Testing**: a Test Explorer for xUnit, NUnit, MSTest and TUnit on VSTest and Microsoft.Testing.Platform, test margins in the editor, playlists, and code coverage with Coverlet.
 - **Build and run**: Build, Rebuild and Clean of the solution or a project (MSBuild, cancellable, errors in the Error List). Run the startup project with its launch profile (Ctrl+F5).

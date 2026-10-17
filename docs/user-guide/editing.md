@@ -54,7 +54,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 | Find All References | `Shift+F12` | In the Find Results window. For C#: each reference is marked read, write or declaration with its containing member; group by file, project or none, show only reads, writes or declarations, and go back to earlier results from the drop-down. |
 | Call Hierarchy | `Shift+Alt+H` | Calls to and calls from a method or property, expanding recursively, in the Hierarchy window. |
 | Type Hierarchy | (Edit menu, palette) | Base and derived types, in the Hierarchy window. |
-| Go To All | `Ctrl+T`, `Ctrl+,` | Types and members; type `f ` first to search file names. |
+| Go To All (Code Search) | `Ctrl+T`, `Ctrl+,` | Files, types, members and text, with a live preview ([Code Search](#code-search), below). Go To File, Type, Member and Text (`Ctrl+1` then `F`, `T`, `M` or `X`) open it on that filter. |
 | Find in Files, Replace in Files | `Ctrl+Shift+F`, `Ctrl+Shift+H` | The Find and Replace window, below. |
 | Navigate Back and Forward | `Ctrl+-`, `Ctrl+Shift+-` | |
 | Go to Last Edit Location | `Ctrl+Shift+Backspace` | |
@@ -67,6 +67,20 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 - **Hierarchy**: Call Hierarchy and Type Hierarchy results.
 - **Class View** (View → Other Windows): each C# and Visual Basic project's namespaces, types and members, with their signatures. Select one to see its declaration and summary at the bottom; double-click it, or press Enter, to go to it. The search box lists the types and members whose names contain what you type.
 - **Object Browser** (View → Other Windows → Object Browser): the assemblies a project compiles against, its own first, down to their namespaces, types and members. Pick the project at the top. Library code opens read-only, from its PDB's source or decompiled, as Go to Definition does. Search looks through them all.
+
+## Code Search
+
+`Ctrl+T` or `Ctrl+,` (Edit → Go To → Go To All) opens **Code Search**, a window over the editor under the title row. It works like Visual Studio's:
+
+- **What it finds**: the solution's files by name (or by path when you type a `/`), its types and members, the symbols of every other language service that offers them (F#, XAML names through the C# service, the LSP languages), and lines of text (Find in Files' engine, for three characters or more; the setting **Code Search → Text Results** sets how many, `0` turns them off). Typing `PSF` finds `ProcessShippingFee`: the capitals of camel-case names, word starts, then any characters in order. The matched characters are bold.
+- **Filters**: the chips under the box, **all**, **files (f:)**, **types (t:)**, **members (m:)** and **text (x:)**, or the same prefixes typed first (`t:Order`). `Alt` and the chip's letter picks one. `:42` (or `:42:7`) goes to a line of the current document.
+- **Results** are two lines: the icon and the name, then where it is ("in `Circle` (project `Lib`)", or a file's folder), with the file name on the right. The best matches come first: exact names, then types, files and members, then text, with the files you opened recently and the current project's ahead. **Code Search → Result Grouping** lists them grouped by kind instead.
+- **The preview** below the results is the document itself, in a full editor with its colors and language features, scrolled to the result with the match selected. Edit it there: `Ctrl+S` saves, undo works, and an edit you didn't save opens the document when you move on, so nothing is lost. The status line shows the line, column and selection. The page button above hides the preview.
+- `Enter` (or a double-click) opens the result and closes the window; `Ctrl+Enter` opens it and keeps the window. `Esc` closes it. The pin keeps it open after every result.
+- **Scope**: the entire solution, the current project or the current document. **External items** adds the types of the referenced assemblies (NuGet packages and the framework), which open from their embedded or Source Link source, or decompiled.
+- **Incomplete results**: while projects load, or before the C# language service has indexed the solution, a notice says so and the results refresh by themselves when it's done. The index is kept with the solution (`.codalus/state/<solution>/code-search-index.json`), so after a restart Code Search finds types and members at once, before the language service has loaded anything.
+- **Feature Search**: the second tab, also `Ctrl+Q` or the search box in the title row: commands (with their shortcuts), settings and Options pages. `Enter` runs the command or opens the setting or page.
+- The window remembers its size, position, pin and preview. Drag it by its tabs and resize it from its corner. The window button docks it as the **Code Search** tool window (and floats it again). Everything works from the keyboard: `Tab` goes from the box to the chips, the scope, the results and the preview.
 
 ## Find and Replace in files
 
