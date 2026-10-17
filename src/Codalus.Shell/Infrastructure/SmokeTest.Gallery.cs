@@ -24,8 +24,13 @@ internal sealed partial class SmokeTest
 
     private string GalleryFolder => Path.Combine(shell.Paths.Logs, "gallery");
 
-    /// <summary>Every tool window, empty: no solution is open yet.</summary>
-    private Task GalleryEmptyStepAsync() => GalleryToolWindowsAsync("empty");
+    /// <summary>Every tool window, empty: no solution is open yet; and M34g's views in their states without one.</summary>
+    private async Task GalleryEmptyStepAsync()
+    {
+        await GalleryToolWindowsAsync("empty").ConfigureAwait(true);
+        await GalleryNewViewsEmptyAsync().ConfigureAwait(true);
+        WriteGalleryIndex();
+    }
 
     /// <summary>Every tool window with data, the documents, the chrome, and the error states.</summary>
     private async Task GalleryDataStepAsync()
@@ -171,6 +176,9 @@ internal sealed partial class SmokeTest
 
         shell.TestExplorer.GroupingIndex = grouping;
 
+        // M34g: Code Search's results, Options' color theme cards, the Service References document's WCF page.
+        await GalleryNewViewsDataAsync().ConfigureAwait(true);
+
         WriteGalleryIndex();
         Check(_gallery.Count > 20, $"the gallery has every surface ({_gallery.Count} surfaces)");
     }
@@ -245,19 +253,22 @@ internal sealed partial class SmokeTest
         return pane?.FindAncestorOfType<Dock.Avalonia.Controls.ToolChromeControl>() as Visual ?? pane;
     }
 
-    /// <summary>Saves the window (or <paramref name="target"/>'s part of it) as <c>{surface}-{state}-{theme}.png</c>.</summary>
-    private void GalleryShot(string surface, string state, string theme, Visual? target)
+    /// <summary>
+    /// Saves the window (or <paramref name="target"/>'s part of it) as <c>{surface}-{state}-{theme}.png</c>; another
+    /// window of the shell's (the setup window) when <paramref name="top"/> names it.
+    /// </summary>
+    private void GalleryShot(string surface, string state, string theme, Visual? target, Avalonia.Controls.TopLevel? top = null)
     {
         var name = $"{Slug(surface)}-{state}-{theme}.png";
         try
         {
-            Visual root = window;
+            Visual root = top ?? window;
             while (root.GetVisualParent() is { } parent)
             {
                 root = parent;
             }
 
-            var scaling = window.RenderScaling;
+            var scaling = (top ?? window).RenderScaling;
             var dpi = new Vector(96 * scaling, 96 * scaling);
             using var full = new RenderTargetBitmap(new PixelSize(Math.Max(1, (int)(root.Bounds.Width * scaling)), Math.Max(1, (int)(root.Bounds.Height * scaling))), dpi);
             full.Render(root);

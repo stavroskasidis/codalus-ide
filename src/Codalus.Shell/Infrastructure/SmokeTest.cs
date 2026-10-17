@@ -268,7 +268,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }).ConfigureAwait(true);
 
         // M34d: the UI gallery's empty states, before a solution opens.
-        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
+        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
 
         // M2: project system (build host, MSBuild evaluation, Solution Explorer).
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>
@@ -797,7 +797,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, "testing.run").ConfigureAwait(true);
 
         // M34d: the UI gallery with data (the Testing solution after its runs), the documents, the chrome and the error states.
-        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, and the error states, in every theme", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
+        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, the error states, Code Search's results, the color theme cards and the WCF references page (M34g), in every theme", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
 
         // M9: NuGet packages, on a copy of samples/Packages and its local feed (ADR 0012).
         await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>
@@ -1838,6 +1838,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => window.GetVisualDescendants().OfType<WcfTestClientView>().Any(), "the WCF Test Client renders").ConfigureAwait(true);
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-wcf-test-client.png");
+            await GalleryWcfResponseAsync(client).ConfigureAwait(true); // M34g: a response and a fault in the gallery
         }
         finally
         {
@@ -2306,6 +2307,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(added == 12, $"the diff is the button's field, creation, section and Controls.Add: {added} lines:\n{string.Join('\n', newLines)}");
         await RenderedAsync().ConfigureAwait(true);
         Screenshot("winforms-designer.png");
+        await GalleryWinFormsAsync(designer).ConfigureAwait(true); // M34g: the designer, the Toolbox and Properties in the gallery
 
         while (code.Text.UndoStack.CanUndo)
         {
@@ -2359,6 +2361,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(editor.Editor.SelectedText.StartsWith("<Button DockPanel.Dock=\"Right\"", StringComparison.Ordinal), "a click selects the button in the XAML: " + editor.Editor.SelectedText);
         await RenderedAsync().ConfigureAwait(true);
         Screenshot("wpf-previewer.png");
+        await GalleryWpfPreviewAsync().ConfigureAwait(true); // M34g: the WPF preview in the gallery
         shell.Layout.CloseToolWindow(ViewModels.XamlPreviewViewModel.ToolWindowId);
         Restore(editor, original);
         await shell.Previewer.InvalidateAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
