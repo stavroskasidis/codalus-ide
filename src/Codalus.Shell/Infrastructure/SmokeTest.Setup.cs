@@ -23,6 +23,9 @@ internal sealed partial class SmokeTest
         var vscode = Path.Combine(shell.Paths.Cache, "smoke-setup", "vscode-user");
         try
         {
+            // As in a new user data folder: no theme saved yet (the steps before this one chose some), so the setup
+            // shows Harbor, the default. The settings are put back afterwards.
+            await settings.SetAsync(ThemeService.SettingKey, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
             shell.ShowSetup(firstStart: true);
             await WaitAsync(() => shell.IsSetupOpen, "the setup opens").ConfigureAwait(true);
             var model = shell.SetupModel!;
