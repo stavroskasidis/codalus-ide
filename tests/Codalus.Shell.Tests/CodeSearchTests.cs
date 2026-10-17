@@ -158,6 +158,30 @@ public sealed class CodeSearchTests
         await ShellFixture.PumpUntil(() => f.Window.FocusManager?.GetFocusedElement() is Avalonia.Visual focused && focused.FindAncestorOfType<CodeSearchView>() is null, describe: () => State(f));
     }
 
+    /// <summary>
+    /// The preview asking for a file twice while it is read (two batches of the same results) gets one text model, and
+    /// the stale request letting go leaves the file open in the language service for the other. Two models of
+    /// Shapes.cs, the stale one let go while the C# host started, left the host with an empty file (CI, Linux), so a
+    /// search found only its file name and text lines.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Two_requests_for_a_files_model_at_once_share_it_and_one_letting_go_keeps_it_open()
+    {
+        await using var f = ShellFixture.Create();
+        var path = Path.Combine(f.UserData, "Shapes.cs");
+        await File.WriteAllTextAsync(path, "public sealed class Shape;\n", TestContext.Current.CancellationToken);
+
+        var first = f.Shell.AcquireModelAsync(path);
+        var second = f.Shell.AcquireModelAsync(path);
+        var model = await first;
+        f.Shell.ReleaseModel(model); // the stale request, perhaps before the other has taken the model
+        Assert.Same(model, await second);
+        Assert.True(f.Shell.Languages.IsOpen(path));
+
+        f.Shell.ReleaseModel(model);
+        Assert.False(f.Shell.Languages.IsOpen(path));
+    }
+
     [AvaloniaFact]
     public async Task Feature_search_runs_commands_and_code_search_docks_as_a_tool_window()
     {

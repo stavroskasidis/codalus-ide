@@ -189,4 +189,30 @@ public sealed class LspBridgeTests : IAsyncLifetime
         await _service.ChangeAsync(path, 2, [new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(1, 6), new Position(1, 6)), " = 2")]);
         await WaitUntil(() => _service.Diagnostics.For(path).Count == 0, ct);
     }
+
+    /// <summary>
+    /// A document closed while its server starts is never opened there: its editor has let go of the text by then, and
+    /// a late open would leave the server with text that no edit or close corrects (M47: the C# host got an empty
+    /// Shapes.cs from Code Search's preview, so the file's types were in neither the index nor workspace symbols).
+    /// </summary>
+    [Fact]
+    public async Task A_document_closed_while_its_server_starts_is_not_opened_there()
+    {
+        var ct = Timeout();
+        var closed = Path.Combine(_root, "closed.conf");
+        var released = false;
+        var opening = _service.OpenAsync(new LanguageDocument(closed, "conf", () => released ? ("gone", 2) : ("alpha = 1", 1)));
+        Assert.False(opening.IsCompleted); // the server is starting
+        await _service.CloseAsync(closed);
+        released = true;
+        Assert.True(await opening);
+
+        // The server handles notifications in order: once the next document's diagnostics are back, those of an open of
+        // the closed one would be too.
+        var next = Path.Combine(_root, "next.conf");
+        Assert.True(await _service.OpenAsync(new LanguageDocument(next, "conf", () => ("broken", 1))));
+        await WaitUntil(() => _service.Diagnostics.For(next).Any(d => d.Code == "42"), ct);
+        Assert.Empty(_service.Diagnostics.For(closed));
+        Assert.False(_service.IsOpen(closed));
+    }
 }
