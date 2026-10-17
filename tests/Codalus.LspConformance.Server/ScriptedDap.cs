@@ -15,6 +15,9 @@ internal static class ScriptedDap
 {
     private static int s_seq;
 
+    /// <summary>How many requests arrived (<c>runtimeAfter</c> with <c>+request</c>).</summary>
+    private static int s_requests;
+
     public static async Task RunAsync(Stream input, Stream output)
     {
         JsonElement? launch = null;
@@ -27,6 +30,7 @@ internal static class ScriptedDap
 
             var command = message.GetProperty("command").GetString();
             var requestSeq = message.GetProperty("seq").GetInt32();
+            Interlocked.Increment(ref s_requests);
             JsonNode? body = null;
             switch (command)
             {
@@ -173,7 +177,8 @@ internal static class ScriptedDap
     /// What a timed-out start's program does next, by the launch's <c>runtimeAfter</c>: its runtime reports that many
     /// milliseconds later (netcoredbg then reports its thread and module, and the program runs: it prints and exits
     /// with 7); <c>never</c>: it runs until it is killed; none: it ends at once, before its runtime started (a host
-    /// that fails).
+    /// that fails). With <c>+request</c> after the milliseconds, netcoredbg on macOS: it reports the runtime only once
+    /// a request arrives after it started (its CreateProcess callback waits for the stdin its main thread holds).
     /// </summary>
     private static async Task AfterTimeoutAsync(Stream output, int program, string? runtimeAfter, string launch)
     {
@@ -189,7 +194,17 @@ internal static class ScriptedDap
             return;
         }
 
-        await Task.Delay(int.Parse(runtimeAfter, System.Globalization.CultureInfo.InvariantCulture));
+        var afterRequest = runtimeAfter.EndsWith("+request", StringComparison.Ordinal);
+        await Task.Delay(int.Parse(afterRequest ? runtimeAfter[..^"+request".Length] : runtimeAfter, System.Globalization.CultureInfo.InvariantCulture));
+        if (afterRequest)
+        {
+            var requests = Volatile.Read(ref s_requests);
+            while (Volatile.Read(ref s_requests) == requests)
+            {
+                await Task.Delay(20);
+            }
+        }
+
         await EventAsync(output, "thread", new JsonObject { ["reason"] = "started", ["threadId"] = 1 });
         await EventAsync(output, "module", new JsonObject { ["reason"] = "new", ["module"] = new JsonObject { ["id"] = "1", ["name"] = "program.dll" } });
         await Task.Delay(1000);

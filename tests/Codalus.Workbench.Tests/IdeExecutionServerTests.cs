@@ -113,27 +113,24 @@ public sealed class IdeExecutionServerTests
     public async Task A_server_whose_port_is_taken_fails_to_start_and_disposes_without_throwing()
     {
         // A port given to the server is the one it uses (only a port it chose is replaced when taken), and the shell
-        // disposes a server that couldn't start: that disposal doesn't throw either.
-        using var taken = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        // disposes a server that couldn't start: that disposal doesn't throw either. The port is taken by a listener of
+        // the same prefix: a socket on 127.0.0.1 alone doesn't always collide with the managed listener's localhost (it
+        // can bind ::1 as well; CI's Linux runner let the server start), but the same prefix collides on every OS.
+        var port = FreePort();
+        using var taken = new System.Net.HttpListener();
+        taken.Prefixes.Add($"http://localhost:{port}/");
         taken.Start();
-        var port = ((System.Net.IPEndPoint)taken.LocalEndpoint).Port;
         var server = new IdeExecutionServer((_, _) => throw new InvalidOperationException("No runs here."), port);
-        if (!OperatingSystem.IsWindows())
-        {
-            Assert.Throws<System.Net.HttpListenerException>(server.Start);
-        }
-        else
-        {
-            try
-            {
-                server.Start(); // HTTP.sys shares the port with a socket on Windows
-            }
-            catch (System.Net.HttpListenerException)
-            {
-            }
-        }
+        Assert.Throws<System.Net.HttpListenerException>(server.Start);
 
         await server.DisposeAsync().AsTask().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
         Assert.Equal(port, server.Port);
+    }
+
+    private static int FreePort()
+    {
+        using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        socket.Start();
+        return ((System.Net.IPEndPoint)socket.LocalEndpoint).Port;
     }
 }
