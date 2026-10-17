@@ -94,7 +94,9 @@ public static partial class ProcessTree
             Marshal.WriteInt32(entry, 0, size);
             for (var more = Process32FirstW(snapshot, entry); more; more = Process32NextW(snapshot, entry))
             {
-                if (Marshal.ReadInt32(entry, parentOffset) == processId)
+                // A console program's console host (conhost.exe, or Windows Terminal's OpenConsole.exe) is its child
+                // too: not a program it started.
+                if (Marshal.ReadInt32(entry, parentOffset) == processId && !IsConsoleHost(Marshal.PtrToStringUni(entry + parentOffset + 12)))
                 {
                     children.Add(Marshal.ReadInt32(entry, 8));
                 }
@@ -108,6 +110,9 @@ public static partial class ProcessTree
 
         return children;
     }
+
+    private static bool IsConsoleHost(string? image) =>
+        string.Equals(image, "conhost.exe", StringComparison.OrdinalIgnoreCase) || string.Equals(image, "OpenConsole.exe", StringComparison.OrdinalIgnoreCase);
 
     private const uint SnapProcess = 0x2;
 
