@@ -11,7 +11,7 @@ namespace Codalus.Debugging.Tests;
 // starts after netcoredbg's 5 seconds.
 public sealed class LateRuntimeProbeTests(DebuggeeFixture debuggee) : IClassFixture<DebuggeeFixture>
 {
-    public static TheoryData<string> Variants => new() { "direct", "sh-0", "sh-2", "sh-7", "bash-7", "copiedsh-7" };
+    public static TheoryData<string> Variants => new() { "sh-7", "sh-2" };
 
     [Theory]
     [MemberData(nameof(Variants))]
@@ -99,7 +99,7 @@ public sealed class LateRuntimeProbeTests(DebuggeeFixture debuggee) : IClassFixt
 
         var snapshots = Task.Run(async () =>
         {
-            foreach (var at in new[] { 3.0, 6.5, 12.0, 25.0 })
+            foreach (var at in new[] { 12.0, 25.0 })
             {
                 var delay = TimeSpan.FromSeconds(at) - clock.Elapsed;
                 if (delay > TimeSpan.Zero)
@@ -200,12 +200,12 @@ public sealed class LateRuntimeProbeTests(DebuggeeFixture debuggee) : IClassFixt
             text.Append("  ").Append(ex.Message).Append('\n');
         }
 
-        foreach (var id in tree)
+        foreach (var id in tree.Concat(netcoredbg))
         {
             text.Append(CultureInfo.InvariantCulture, $"starttime of {id}: ").Append(Run("ps", ["-o", "lstart=", "-p", id.ToString(CultureInfo.InvariantCulture)]));
             if (OperatingSystem.IsMacOS())
             {
-                text.Append(Run("sample", [id.ToString(CultureInfo.InvariantCulture), "1", "-mayDie"], 20).Split('\n').Take(80).Aggregate(new StringBuilder(), (b, l) => b.Append(l).Append('\n')));
+                text.Append(Run("sample", [id.ToString(CultureInfo.InvariantCulture), "1", "-mayDie"], 20).Split('\n').Take(600).Aggregate(new StringBuilder(), (b, l) => b.Append(l).Append('\n')));
             }
         }
 

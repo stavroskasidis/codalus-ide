@@ -42,7 +42,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          for v in direct sh-0 sh-2 sh-7 bash-7 copiedsh-7; do
+          for v in sh-7 sh-2; do
             echo "================ $v"
             grep -v '"category":"stdout"\|EVENT module' "probe/$v.txt" | cut -c1-400 || true
             echo "---------------- $v netcoredbg log"
