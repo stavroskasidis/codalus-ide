@@ -626,7 +626,7 @@ public sealed class RemoteServerTests
         finally
         {
             Environment.SetEnvironmentVariable(RemoteServerBundle.ServerVariable, null);
-            var remove = new ProcessStartInfo(tool[0], [.. tool.Skip(1), "rm", "-f", name]) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            var remove = new ProcessStartInfo(tool[0], [.. tool.Skip(1), "rm", "-f", "-v", name]) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
             using (var process = Process.Start(remove)!)
             {
                 await process.WaitForExitAsync(CancellationToken.None);

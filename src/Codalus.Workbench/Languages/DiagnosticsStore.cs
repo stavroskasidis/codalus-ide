@@ -23,10 +23,22 @@ public sealed class DiagnosticsStore
     public IReadOnlyCollection<FileDiagnostics> All => [.. _files.Values.SelectMany(sources => sources.Values).Where(f => f.Items.Count > 0)];
 
     /// <summary>A file's diagnostics, of all its sources.</summary>
-    public IReadOnlyList<Diagnostic> For(string path) =>
-        _files.TryGetValue(path, out var sources)
-            ? sources.Count == 1 ? sources.Values.First().Items : [.. sources.Values.OrderBy(f => f.LanguageId, StringComparer.Ordinal).SelectMany(f => f.Items)]
-            : [];
+    public IReadOnlyList<Diagnostic> For(string path)
+    {
+        if (!_files.TryGetValue(path, out var sources))
+        {
+            return [];
+        }
+
+        // One snapshot: a source can be added or removed on another thread between a count and a read of its values.
+        var files = sources.Values.ToArray();
+        return files.Length switch
+        {
+            0 => [],
+            1 => files[0].Items,
+            _ => [.. files.OrderBy(f => f.LanguageId, StringComparer.Ordinal).SelectMany(f => f.Items)],
+        };
+    }
 
     /// <summary>A file's diagnostics from one source.</summary>
     public FileDiagnostics? Get(string path, string languageId) =>
