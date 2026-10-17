@@ -108,4 +108,32 @@ public sealed class IdeExecutionServerTests
             await server.DisposeAsync();
         }
     }
+
+    [Fact]
+    public async Task A_server_whose_port_is_taken_fails_to_start_and_disposes_without_throwing()
+    {
+        // A port given to the server is the one it uses (only a port it chose is replaced when taken), and the shell
+        // disposes a server that couldn't start: that disposal doesn't throw either.
+        using var taken = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        taken.Start();
+        var port = ((System.Net.IPEndPoint)taken.LocalEndpoint).Port;
+        var server = new IdeExecutionServer((_, _) => throw new InvalidOperationException("No runs here."), port);
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Throws<System.Net.HttpListenerException>(server.Start);
+        }
+        else
+        {
+            try
+            {
+                server.Start(); // HTTP.sys shares the port with a socket on Windows
+            }
+            catch (System.Net.HttpListenerException)
+            {
+            }
+        }
+
+        await server.DisposeAsync().AsTask().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        Assert.Equal(port, server.Port);
+    }
 }

@@ -6,5 +6,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
+    <ProjectReference Include="..\Codalus.Platform\Codalus.Platform.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
   </ItemGroup>
 </Project>

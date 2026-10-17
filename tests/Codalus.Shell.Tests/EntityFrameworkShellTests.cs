@@ -1,8 +1,10 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
+using Codalus.LanguageServices.Protocol;
 using Codalus.Projects.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
+using Codalus.Workbench.Data;
 
 namespace Codalus.Shell.Tests;
 
@@ -88,5 +90,53 @@ public sealed class EntityFrameworkShellTests
         Assert.Equal("Generated 3 files.", form.Result);
         Assert.True(File.Exists(Path.Combine(folder, "Blogging", "Inventory", "InventoryContext.cs")));
         Assert.EndsWith("InventoryContext.cs", f.Shell.ActiveEditor?.Model.Path, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The C# service becoming ready while the window is still on an answer it asked for before. Opening a solution
+    /// restores after the first load, so a window shown in between gets no context from Roslyn (DbContext doesn't
+    /// resolve yet); on the loaded Windows runners the service's next ready came while that reload was still asking
+    /// dotnet ef for its version, and nothing asked again. Here Roslyn's first answer is held until the ready came.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_language_service_ready_during_an_empty_reload_lists_the_contexts_after_it()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = f.CopySample("Data");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "Data.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+        var restore = await f.Shell.Packages.RunToolCommandAsync(new ToolCommandParams(ToolActions.Restore), CancellationToken.None);
+        Assert.True(restore.Succeeded, restore.Output);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.RestoreState == "succeeded"
+            && f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: WorkspaceStates.Ready, Projects: 1 }, seconds: 180);
+
+        // The first question is answered only when released, with what Roslyn said before the restore: nothing.
+        var before = new TaskCompletionSource<EfDiscoveredContextsResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var asked = 0;
+        using var service = new EntityFrameworkService(f.Shell.Solutions, f.Shell.Builds, f.Shell.Workbench.Output, () => null, ct =>
+            Interlocked.Increment(ref asked) == 1 ? before.Task : f.Shell.Languages.RunningClient(ShellHost.CSharpLanguageId)!.EfContextsAsync(null, ct));
+        var ef = new EntityFrameworkViewModel(service, (_, _) => Task.CompletedTask);
+
+        var opening = ef.ReloadAsync(fromTool: false);
+        await ShellFixture.PumpUntil(() => Volatile.Read(ref asked) == 1);
+        var ready = ef.ReloadIfNoContextsAsync();
+        Assert.Same(ready, ef.ReloadIfNoContextsAsync()); // ready again meanwhile: still one reload waiting
+        Assert.Equal(1, Volatile.Read(ref asked));
+
+        before.SetResult(new EfDiscoveredContextsResult([]));
+        await ShellFixture.PumpUntil(() => opening.IsCompleted && ready.IsCompleted, seconds: 120);
+        await ready;
+        Assert.Equal(2, Volatile.Read(ref asked));
+        Assert.Equal("BloggingContext", ef.Context?.Name);
+        Assert.Equal("Microsoft.EntityFrameworkCore.Sqlite", ef.Context!.Provider);
+
+        // Listed: ready again asks nothing.
+        await ef.ReloadIfNoContextsAsync();
+        Assert.Equal(2, Volatile.Read(ref asked));
+
+        // Its migrations follow as for a context found at once (and nothing is left running).
+        await ShellFixture.PumpUntil(() => ef.Migrations.Count == 1 && !ef.IsBusy && !f.Shell.Builds.IsBuilding, seconds: 300);
+        Assert.Equal("InitialCreate", ef.Migrations[0].Name);
     }
 }

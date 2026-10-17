@@ -272,35 +272,68 @@ public class ShellHeadlessTests
         Assert.Equal(["Get Started", "Start", "Recent", "Tip", "Plugins", "Learn", "Show Start Page on Startup"], tree.Roots.Select(r => r.Label));
         Assert.Contains(f.Shell.StatusBar.Left, i => i.Text == "Start" && i.Icon == "home");
 
+        // Every refresh (a setting changed, Next Tip, Done) replaces the nodes, and each group's items arrive with their own
+        // request after the groups do: a group shows only "Loading…" until then, and a refresh still on its way replaces
+        // it again. So each item is looked up in the tree as it is when it has arrived, never in a group read earlier.
+        async Task<TreeNodeViewModel> ItemAsync(string group, string label)
+        {
+            TreeNodeViewModel? item = null;
+            await ShellFixture.PumpUntil(() => (item = tree.Roots.FirstOrDefault(r => r.Label == group)?.Children.FirstOrDefault(c => c.Label == label)) is not null, seconds: 30);
+            return item!;
+        }
+
         // Get Started (M23a): the keyboard scheme from a quick pick, shown next to the step; Done hides the group.
-        var getStarted = tree.Roots[0];
-        await ShellFixture.PumpUntil(() => getStarted.Children.Any(c => c.Label == "Choose a Keyboard Scheme"));
-        Assert.Equal("Default", getStarted.Children.Single(c => c.Label == "Choose a Keyboard Scheme").Description);
-        tree.Activate(getStarted.Children.Single(c => c.Label == "Choose a Keyboard Scheme"));
+        var scheme = await ItemAsync("Get Started", "Choose a Keyboard Scheme");
+        Assert.Equal("Default", scheme.Description);
+        tree.Activate(scheme);
         await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen, seconds: 30);
         f.Type("Emacs");
         f.Press(Key.Enter);
         await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("keyboardScheme"), "emacs"), seconds: 30);
         await ShellFixture.PumpUntil(() => tree.Roots.Count > 0 && tree.Roots[0].Children.Any(c => c.Description == "Emacs"), seconds: 30);
 
-        var tip = tree.Roots.Single(r => r.Label == "Tip");
-        await ShellFixture.PumpUntil(() => tip.Children.Count == 2);
-        var firstTip = tip.Children[0].Label;
-        tree.Activate(tip.Children.Single(c => c.Label == "Next Tip"));
-        await ShellFixture.PumpUntil(() => tree.Roots.SingleOrDefault(r => r.Label == "Tip") is { Children: [var next, _] } && next.Label != firstTip, seconds: 30);
+        string? TipShown() => tree.Roots.FirstOrDefault(r => r.Label == "Tip") is { Children: [{ IsPlaceholder: false } shown, _] } ? shown.Label : null;
+        string? firstTip = null;
+        await ShellFixture.PumpUntil(() => (firstTip = TipShown()) is not null, seconds: 30);
+        tree.Activate(await ItemAsync("Tip", "Next Tip"));
+        await ShellFixture.PumpUntil(() => TipShown() is { } next && next != firstTip, seconds: 30);
 
-        tree.Activate(tree.Roots[0].Children.Single(c => c.Label == "Done"));
+        tree.Activate(await ItemAsync("Get Started", "Done"));
         await ShellFixture.PumpUntil(() => tree.Roots.Count > 0 && tree.Roots[0].Label == "Start", seconds: 30);
         Assert.True(f.Shell.Workbench.Settings.GetBoolean("welcome.onboarded", false));
 
-        var start = tree.Roots[0];
-        await ShellFixture.PumpUntil(() => start.Children.Any(c => c.Label == "Open Settings"));
-        tree.Activate(start.Children.Single(c => c.Label == "Open Settings"));
+        tree.Activate(await ItemAsync("Start", "Open Settings"));
         await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is SettingsDocument, seconds: 30);
+        ShellFixture.Pump(); // Settings' first layout holds the UI thread for seconds on a loaded machine: not during the refresh below
 
-        // The toggle goes through the shell's workbench.setSetting command and refreshes the tree.
+        // The toggle goes through the shell's workbench.setSetting command and refreshes the tree: its roots come back
+        // through the UI thread (the recent solutions) within the shell's 5 s limit for a tree request.
         tree.Activate(tree.Roots[^1]);
         await ShellFixture.PumpUntil(() => tree.Roots.Count > 0 && tree.Roots[^1].Description == "Off", seconds: 30);
         Assert.False(f.Shell.Workbench.Settings.GetBoolean("welcome.showOnStartup", true));
+    }
+
+    [AvaloniaFact]
+    public async Task A_plugin_tree_whose_refresh_times_out_keeps_its_items_and_says_why()
+    {
+        await using var f = ShellFixture.Create();
+        f.Shell.OnInteractive();
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.IsVisible("welcome.view"), seconds: 60);
+        var tree = (TreeToolViewModel)f.Shell.Layout.OpenToolWindows.Single(t => t.Id == "welcome.view").Content!;
+        await ShellFixture.PumpUntil(() => tree.Roots.Count > 0 && tree.Message is null, seconds: 30);
+        var labels = tree.Roots.Select(r => r.Label).ToList();
+
+        // The Start page's roots need the recent solutions from the UI thread, which stays busy past the shell's 5 s limit
+        // for a tree request (opening Settings kept it for 4 s on an idle machine). The page used to go empty, with
+        // "Nothing to show." in place of the reason.
+        tree.Refresh(null);
+        Thread.Sleep(TimeSpan.FromSeconds(7));
+        await ShellFixture.PumpUntil(() => tree.Message == "The plugin did not respond in time.", seconds: 30);
+        Assert.Equal(labels, tree.Roots.Select(r => r.Label));
+
+        // The next refresh that succeeds clears the message.
+        tree.Refresh(null);
+        await ShellFixture.PumpUntil(() => tree.Message is null, seconds: 30);
+        Assert.Equal(labels, tree.Roots.Select(r => r.Label));
     }
 }
