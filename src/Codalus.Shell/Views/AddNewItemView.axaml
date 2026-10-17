@@ -24,7 +24,7 @@
       </StackPanel>
       <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="16" Margin="0,6,0,0">
         <CheckBox Content="{l:T addNewItem.showTemplatesForEveryKindOf}" IsChecked="{Binding ShowAll}" />
-        <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+        <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
       </StackPanel>
     </Grid>
 

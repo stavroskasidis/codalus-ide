@@ -235,10 +235,18 @@ public static class SolutionTree
         }
 
         var dependencies = Dependencies(entry.Path, info, inputs);
+
+        // A non-SDK-style project (M43a) says so; one that needs Visual Studio's targets says why it doesn't build.
+        ExplorerNode[] cannotBuild = info.CannotBuildReason is { } reason
+            ? [new ExplorerNode(node.Id + "|cannotBuild", ExplorerNodeKind.Message, reason) { Icon = "warning", IsWarning = true, ProjectPath = entry.Path }]
+            : [];
         return node with
         {
-            Detail = info.TargetFrameworks.Length > 1 ? string.Join(", ", info.TargetFrameworks) : null,
-            Children = [.. dependencies is null ? [] : new[] { dependencies }, .. Contents(entry.Path, info, disk)],
+            Detail = info.CannotBuildReason is not null ? Localization.Localizer.Get("msg.solutionTree.nonSdkStyleCannotBuild", "(non-SDK-style, can't build here)")
+                : info.IsNonSdkStyle ? Localization.Localizer.Get("msg.solutionTree.nonSdkStyle", "(non-SDK-style)")
+                : info.TargetFrameworks.Length > 1 ? string.Join(", ", info.TargetFrameworks) : null,
+            IsWarning = info.CannotBuildReason is not null,
+            Children = [.. cannotBuild, .. dependencies is null ? [] : new[] { dependencies }, .. Contents(entry.Path, info, disk)],
         };
     }
 

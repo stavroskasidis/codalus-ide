@@ -528,6 +528,145 @@ public class UxPassTests
         }
     }
 
+    // ------------------------------------------------------------------ keyboard (M34g)
+
+    [AvaloniaFact]
+    public async Task The_new_views_reach_every_control_with_Tab_in_reading_order()
+    {
+        // M34g: the views M40–M47 added, with data, walked with Tab from their first control: every visible, enabled
+        // control a user works with is reached, the way a keyboard user goes through them.
+        await using var f = ShellFixture.Create();
+        var problems = new List<string>();
+        void Walk(string surface, Control view, double width, double height)
+        {
+            var host = new Window { Width = width, Height = height, Content = view };
+            host.Show();
+            ShellFixture.Pump();
+            ShellFixture.Pump();
+            problems.AddRange(Unreached(host).Select(p => $"{surface}: {p}"));
+            host.Content = null;
+            host.Close();
+            ShellFixture.Pump();
+        }
+
+        // The WCF Test Client with the samples' WSDL file read and an operation's form.
+        using (var client = new Codalus.Workbench.Wcf.WcfTestClient())
+        {
+            var wcf = new ViewModels.WcfTestClientViewModel(client, Path.Combine(ShellFixture.RepoRoot, "samples", "Wcf", "contracts", "CalculatorService.wsdl"), () => Task.FromResult<IReadOnlyList<Codalus.Workbench.Wcf.DiscoveredService>>([]), () => Task.FromResult<string?>(null));
+            await wcf.LoadAsync();
+            Assert.True(wcf.Error is null, wcf.Error);
+            wcf.Select("Greet");
+            Walk("wcf-test-client", new WcfTestClientView { DataContext = wcf }, 900, 640);
+        }
+
+        // The Toolbox with a designer, the Live Property Explorer with properties.
+        var toolbox = new ViewModels.ToolboxViewModel { IsAvailable = true };
+        Walk("toolbox", new ToolboxView { DataContext = toolbox }, 280, 420);
+        var properties = new ViewModels.LivePropertiesViewModel(() => null);
+        await properties.ShowAsync(new ViewModels.LiveNodeViewModel(1, "Button", "OkButton", false, false));
+        properties.Rows.Add(new ViewModels.LivePropertyRow(new Codalus.Workbench.Previewer.LiveProperty("Margin", "4", "Thickness", "Local", false), (_, _) => Task.CompletedTask));
+        Walk("live-property-explorer", new LivePropertiesView { DataContext = properties }, 280, 420);
+
+        // The setup window's settings step, and Code Search's floating window over the main window (Feature Search).
+        f.Shell.Run("help.setUp");
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
+        await f.Shell.SetupModel!.NextAsync();
+        await f.Shell.SetupModel.NextAsync();
+        ShellFixture.Pump();
+        problems.AddRange(Unreached(f.Shell.SetupWindowView!).Select(p => $"setup (settings): {p}"));
+        await f.Shell.SetupModel.FinishAsync(done: false);
+
+        await f.Shell.FeatureSearchAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.CodeSearch is { IsFloatingOpen: true });
+        f.Shell.CodeSearch.Query = "build";
+        await ShellFixture.PumpUntil(() => f.Shell.CodeSearch.Rows.Count > 0 && !f.Shell.CodeSearch.IsSearching);
+        var search = f.Window.GetVisualDescendants().OfType<CodeSearchView>().First(v => v.IsEffectivelyVisible);
+        problems.AddRange(Unreached(search).Select(p => $"code-search: {p}"));
+        f.Shell.CodeSearch.Close();
+
+        // M43: Convert to SDK-Style's preview (its notes and changes, then the buttons), and the Call Stack with a
+        // desktop-CLR stack (the thread picker, then the frames).
+        var dialog = new ViewModels.DialogViewModel();
+        var preview = dialog.ShowAsync(new ViewModels.DialogRequest("Convert LegacyApp to SDK-style", "The project file is rewritten as an SDK-style project (Microsoft.NET.Sdk). Review the changes:", ["Convert", "Cancel"])
+        {
+            Details =
+            [
+                new ViewModels.DetailLine("• packages.config's 1 package(s) became PackageReference items, and packages.config goes.", "note"),
+                new ViewModels.DetailLine("LegacyApp/LegacyApp.csproj", "header"),
+                new ViewModels.DetailLine("- <Project ToolsVersion=\"15.0\">", "removed"),
+                new ViewModels.DetailLine("+ <Project Sdk=\"Microsoft.NET.Sdk\">", "added"),
+            ],
+        });
+        Walk("convert-to-sdk-style", new DialogView { DataContext = dialog }, 640, 560);
+        dialog.Cancel();
+        await preview;
+
+        var callStack = new ViewModels.CallStackViewModel(f.Shell.Debugger, (_, _) => Task.CompletedTask);
+        callStack.Threads.Add(new Codalus.Debugging.DapThread(1, "Main Thread"));
+        callStack.SelectedThread = callStack.Threads[0];
+        callStack.Frames.Add(new ViewModels.FrameRow(new Codalus.Debugging.StackFrame(1, "NetFxDebuggee.Program.Main(string[] args)", new Codalus.Debugging.Source("Program.cs", "/src/Program.cs"), 18, 9), true, true));
+        callStack.Frames.Add(new ViewModels.FrameRow(new Codalus.Debugging.StackFrame(2, "[Managed to Native Transition]", null, 0, 0, PresentationHint: "label"), false, false));
+        Walk("call-stack", new CallStackView { DataContext = callStack }, 280, 420);
+
+        Assert.True(problems.Count == 0, "Not reached with Tab:\n" + string.Join('\n', problems));
+    }
+
+    /// <summary>
+    /// The controls under <paramref name="root"/> that Tab, from the first one, never reaches (a list or tree counts as
+    /// reached when its item is); a toolbar's items in its overflow menu are left out (the menu reaches them).
+    /// </summary>
+    private static IEnumerable<string> Unreached(Visual root)
+    {
+        static bool Overflowed(Control c) => c.FindAncestorOfType<ToolbarPanel>() is { } toolbar && toolbar.Overflowed.Any(o => o == c);
+        static bool Interactive(Control c) => c is Button or Avalonia.Controls.Primitives.ToggleButton or ComboBox or TextBox or ListBox or TreeView or Slider
+            && c.IsEffectivelyVisible && c.IsEffectivelyEnabled && c.Focusable && KeyboardNavigation.GetIsTabStop(c) && c.Bounds.Width >= 1
+            && (c.TemplatedParent is null || c.TemplatedParent is Avalonia.Controls.Presenters.ContentPresenter)
+            && c.FindAncestorOfType<ListBoxItem>() is null && c.FindAncestorOfType<TreeViewItem>() is null && !Overflowed(c);
+
+        var targets = root.GetVisualDescendants().OfType<Control>().Where(Interactive).ToList();
+        if (targets.Count == 0 || TopLevel.GetTopLevel(root) is not { } top)
+        {
+            yield break;
+        }
+
+        // Tab pressed in the window, from the first control, until the focus comes back, leaves the view or stops moving.
+        var visited = new List<IInputElement>();
+        targets[0].Focus(NavigationMethod.Tab);
+        ShellFixture.Pump();
+        for (var step = 0; step < 300; step++)
+        {
+            if (top.FocusManager?.GetFocusedElement() is not { } focused || focused is Visual v && v != root && !root.IsVisualAncestorOf(v) || step > 0 && focused == visited[0] || visited.Contains(focused) && focused == visited[^1])
+            {
+                break;
+            }
+
+            visited.Add(focused);
+            if (top is Window window)
+            {
+                Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+                Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+            }
+
+            ShellFixture.Pump();
+        }
+
+        // The walk itself: a view with several controls must have moved the focus through more than one.
+        if (visited.Count < Math.Min(2, targets.Count))
+        {
+            yield return $"Tab didn't move the focus from {targets[0].GetType().Name} ({visited.Count} focused of {targets.Count})";
+            yield break;
+        }
+
+        foreach (var target in targets)
+        {
+            if (!visited.Any(v => v == target || v is Visual visual && target.IsVisualAncestorOf(visual)))
+            {
+                var name = Avalonia.Automation.AutomationProperties.GetName(target) is { Length: > 0 } n ? n : (target as ContentControl)?.Content?.ToString() ?? target.Name ?? string.Empty;
+                yield return $"{target.GetType().Name} '{name}'";
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /// <summary>The commands reachable from <paramref name="root"/> through its submenus, whatever the context.</summary>

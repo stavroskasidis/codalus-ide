@@ -159,7 +159,7 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
                             ? [frameworkSetting]
                             : project.TargetFrameworks;
                     tests.WindowsOnly = WindowsFrameworks.OnlyWindows(project.TargetFrameworks, OperatingSystem.IsWindows())
-                        ? $"{project.Name} targets Windows ({string.Join(", ", project.TargetFrameworks)}): its tests run only on Windows."
+                        ? WindowsFrameworks.Reason(project.Name, project.TargetFrameworks)
                         : null;
                     if (tests.WindowsOnly is not null)
                     {

@@ -36,7 +36,7 @@ public sealed class OlderFrameworksTests
     [InlineData("net8.0", "12.0")]
     [InlineData("net9.0", "13.0")]
     [InlineData("net10.0", "14.0")]
-    [InlineData("net48", null)]
+    [InlineData("net48", "7.3")] // .NET Framework (M43a)
     public void Each_framework_defaults_to_its_csharp_version(string tfm, string? expected) =>
         Assert.Equal(expected, DotnetFrameworks.DefaultCSharpVersion(tfm));
 

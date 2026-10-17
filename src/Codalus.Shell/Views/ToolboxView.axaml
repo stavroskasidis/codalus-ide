@@ -11,6 +11,7 @@
     <TextBlock DockPanel.Dock="Top" Margin="8,0,8,4" Classes="muted" Text="{Binding ArmedText}" IsVisible="{Binding HasArmed}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
     <Grid>
       <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" />
+      <TextBlock Classes="emptyState" Text="{Binding NoMatchesText}" IsVisible="{Binding HasNoMatches}" TextWrapping="Wrap" />
       <ScrollViewer IsVisible="{Binding IsAvailable}">
         <ItemsControl x:Name="CategoryList" ItemsSource="{Binding Categories}" AutomationProperties.Name="{l:T toolbox.toolbox}">
           <ItemsControl.ItemTemplate>

@@ -212,6 +212,10 @@ internal sealed class LanguageServer : IAsyncDisposable
             async (document, offset, p, ct) => await FormattingFeature.OnTypeAsync(document, offset, p.Ch, ct).ConfigureAwait(false), []);
         _connection.OnRequest(Methods.WorkspaceSymbol, json.WorkspaceSymbolParams, json.SymbolInformationArray, (p, ct) =>
             WorkspaceSymbolsFeature.SearchAsync(_workspace.CurrentSolution, _workspace.MiscellaneousProjectId, p.Query, ct));
+        _connection.OnRequest(Methods.SymbolIndex, json.SymbolIndexParams, json.SymbolIndexResult, (p, ct) =>
+            SymbolIndexFeature.IndexAsync(_workspace.CurrentSolution, _workspace.MiscellaneousProjectId, p.Uris, ct));
+        _connection.OnRequest(Methods.ExternalSymbols, json.ExternalSymbolsParams, json.SymbolInformationArray, (p, ct) =>
+            SymbolIndexFeature.ExternalAsync(_workspace.CurrentSolution, _workspace.MiscellaneousProjectId, p.Query, p.Limit, ct));
         _connection.OnRequest(Methods.MetadataText, json.MetadataTextParams, json.MetadataText, (p, _) => Task.FromResult(MetadataFeature.Text(p.TextDocument.Uri)!));
         OnDocument(Methods.SourceGeneratedText, json.SourceGeneratedTextParams, json.SourceGeneratedText, p => p.TextDocument,
             (document, _, ct) => GeneratedTextAsync(document, ct), null);

@@ -349,7 +349,7 @@ internal sealed partial class SolutionSession
     /// </summary>
     private string FolderBuildEntryPoint()
     {
-        var projects = ProjectPaths.Where(p => !IsUnloaded(p)).ToList();
+        var projects = ProjectPaths.Where(p => !IsUnloaded(p) && !CannotBuild(p)).ToList();
         if (projects.Count == 0)
         {
             throw new InvalidOperationException("No project of this folder is loaded. Load a project (or all of them) to build it.");

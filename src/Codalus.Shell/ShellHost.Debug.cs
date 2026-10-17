@@ -231,7 +231,7 @@ public sealed partial class ShellHost
 
         if (WarnIfWindowsOnly(project))
         {
-            return; // a WinForms, WPF or WinUI app off Windows (M40a, M44)
+            return; // a WinForms, WPF, WinUI or .NET Framework app off Windows (M40a, M44, M43a)
         }
 
         if (await TryStartPackagedAppAsync(project, debug: true).ConfigureAwait(true))
@@ -346,7 +346,7 @@ public sealed partial class ShellHost
             var items = processes.Select(p => new QuickPickItem($"{p.Name} ({p.Id.ToString(CultureInfo.InvariantCulture)})")
             {
                 Tag = p.Id,
-                Detail = p.IsDotnet ? ".NET" + (p.Title is null ? string.Empty : " · " + p.Title) : p.Title,
+                Detail = p.Runtime is { } runtime ? runtime + (p.Title is null ? string.Empty : " · " + p.Title) : p.Title,
             }).ToList();
             if (await Palette.ShowAsync(items, "Attach to a process (.NET processes are listed first)").ConfigureAwait(true) is not { Tag: int picked })
             {

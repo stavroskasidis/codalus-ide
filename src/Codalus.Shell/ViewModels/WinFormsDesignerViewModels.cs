@@ -1256,6 +1256,7 @@ public sealed class ToolboxViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(Message));
                 OnPropertyChanged(nameof(HasMessage));
+                OnPropertyChanged(nameof(HasNoMatches));
                 if (!value)
                 {
                     Disarm();
@@ -1267,6 +1268,11 @@ public sealed class ToolboxViewModel : ObservableObject
     public string? Message => _isAvailable ? null : Localizer.Get("msg.toolbox.noDesigner", "Open a form or user control in the Windows Forms designer to use the Toolbox.");
 
     public bool HasMessage => !_isAvailable;
+
+    /// <summary>A filter that matches nothing says so (M34g: the Toolbox went blank), with the way back.</summary>
+    public bool HasNoMatches => _isAvailable && Categories.Count == 0 && _filter.Length > 0;
+
+    public string NoMatchesText => Localizer.Format("msg.toolbox.noMatches", "No Toolbox items match '{0}'. Clear the search box to see them all.", _filter);
 
     /// <summary>The project's own controls and components (from the C# host).</summary>
     public void SetProjectItems(IReadOnlyList<WinFormsToolboxItem> items)
@@ -1303,6 +1309,9 @@ public sealed class ToolboxViewModel : ObservableObject
                 Categories.Add(new ToolboxCategoryViewModel(category, [new ToolboxItemViewModel(pointer, string.Empty, category, false, "caret"), .. items]));
             }
         }
+
+        OnPropertyChanged(nameof(HasNoMatches));
+        OnPropertyChanged(nameof(NoMatchesText));
     }
 
     private static string CategoryTitle(string title) => title switch

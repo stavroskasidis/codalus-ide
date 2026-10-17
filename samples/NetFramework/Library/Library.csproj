@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- net472 too, for LegacyApp (an old-style project on .NET Framework 4.7.2). -->
+    <TargetFrameworks>net48;net472</TargetFrameworks>
+  </PropertyGroup>
+</Project>

@@ -33,7 +33,7 @@
       <TextBlock Text="{l:T exportTemplate.author}" />
       <TextBox Text="{Binding Author}" AutomationProperties.Name="{l:T exportTemplate.author}" />
       <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Destination, StringFormat='Written to {0}'}" TextWrapping="Wrap" />
-      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
       <Button Classes="accent" HorizontalAlignment="Left" Margin="0,6,0,0" Content="{l:T exportTemplate.exportAndInstall}" Command="{Binding ExportCommand}" />
       <TextBlock TextWrapping="Wrap" Text="{Binding Status}" />
       <TextBox Height="100" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" Text="{Binding Output}"

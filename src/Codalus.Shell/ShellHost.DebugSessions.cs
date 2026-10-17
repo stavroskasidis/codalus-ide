@@ -158,6 +158,7 @@ public sealed partial class ShellHost
                     continue;
                 }
 
+                // .NET Framework apps (M43b) are debugged too: the debug service starts the desktop-CLR adapter for their .exe.
                 if (debug && target.Action == StartupAction.Start)
                 {
                     var (info, profiles, error) = await Runs.GetProfilesAsync(target.Project, CancellationToken.None).ConfigureAwait(true);

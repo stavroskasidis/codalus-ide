@@ -10,10 +10,11 @@
     <controls:ToolbarPanel DockPanel.Dock="Top" Margin="6,4">
       <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="{l:T liveProperties.searchProperties}" MinWidth="80" AutomationProperties.Name="{l:T liveProperties.searchProperties}" />
     </controls:ToolbarPanel>
-    <Grid DockPanel.Dock="Top" ColumnDefinitions="180,*,110" Margin="8,2">
-      <TextBlock Text="{l:T liveProperties.property}" Classes="muted" />
-      <TextBlock Grid.Column="1" Text="{l:T liveProperties.value}" Classes="muted" />
-      <TextBlock Grid.Column="2" Text="{l:T liveProperties.source}" Classes="muted" />
+    <!-- Proportional columns (M34g): the fixed 180 and 110 px left the value no room at the tool window's 280 px. -->
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="2*,3*,1.4*" Margin="8,2">
+      <TextBlock Text="{l:T liveProperties.property}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T liveProperties.property}" />
+      <TextBlock Grid.Column="1" Text="{l:T liveProperties.value}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T liveProperties.value}" />
+      <TextBlock Grid.Column="2" Text="{l:T liveProperties.source}" Classes="muted" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T liveProperties.source}" />
     </Grid>
     <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T liveProperties.liveProperties}">
       <ListBox.Styles>
@@ -24,13 +25,13 @@
       </ListBox.Styles>
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:LivePropertyRow">
-          <Grid ColumnDefinitions="180,*,110" RowDefinitions="Auto,Auto">
+          <Grid ColumnDefinitions="2*,3*,1.4*" RowDefinitions="Auto,Auto">
             <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontWeight="{Binding NameWeight}"
-                       ToolTip.Tip="{Binding Type}" />
+                       ToolTip.Tip="{Binding ToolTip}" />
             <TextBox Grid.Column="1" Classes="cell" Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" IsReadOnly="{Binding IsReadOnly}"
                      VerticalAlignment="Center" AutomationProperties.Name="{Binding Name}" />
-            <TextBlock Grid.Column="2" Text="{Binding Source}" Classes="muted" VerticalAlignment="Center" Margin="6,0,0,0" />
-            <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+            <TextBlock Grid.Column="2" Text="{Binding Source}" Classes="muted" VerticalAlignment="Center" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Source}" />
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Classes="error" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" />
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>

@@ -12,3 +12,5 @@ A console app for the debugger tests (ADR 0007): a loop, a method call, a record
 - `Generator`, a source generator with a `DebugRoslynComponent` launch profile, and `GeneratorTarget`, the project it runs on.
 
 `MonoDebuggee` (M20b, ADR 0065) is a console app on the Mono runtime: .NET 8's desktop Mono runtime pack, self-contained for this machine, started with the soft debugger's agent in `MONO_ENV_OPTIONS`. It tests the Mono debugger adapter without a device. Its markers are `[mono-…]`: a loop, a method call, auto-properties, a list, and a caught exception.
+
+`NetFxDebuggee` (M43b, ADR 0076) is a .NET Framework 4.8 console app for the desktop-CLR debugger adapter (`codalus-debughost --netfx-dap`). It builds on every OS (the reference assemblies package); the adapter runs it on Windows, and elsewhere the tests read its metadata and portable PDB under a fake ICorDebug. Its markers are `[netfx-…]`: a loop over a list, auto-properties and a getter, a `[Flags]` enum, an array, a method to call, an async method's hoisted variables, `Debug.WriteLine`, a caught exception and an exit code (3). With `wait` it ticks for a minute (attach tests).

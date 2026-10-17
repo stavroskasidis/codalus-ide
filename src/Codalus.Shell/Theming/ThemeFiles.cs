@@ -57,6 +57,7 @@ public static class ThemeFiles
         ("input.background", "Shell.Search"),
         ("input.border", "Shell.Search.Border"),
         ("errorForeground", "Shell.Error"),
+        ("errorForeground", "Shell.Error.Foreground"),
         ("editorInfo.foreground", "Shell.Info"),
         ("editorGutter.modifiedBackground", "Shell.Modified"),
         ("diffEditor.insertedTextBackground", "Shell.Diff.Added"),

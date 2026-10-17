@@ -25,6 +25,15 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
     {
         /// <summary>A WinUI 3 project (M44): off Windows, the design-time pass of its XAML compiler is left out.</summary>
         public bool WinUI { get; init; }
+
+        /// <summary>The framework the result names when the project has no <c>TargetFramework</c> (a non-SDK-style project's <c>net472</c>, M43a).</summary>
+        public string? FrameworkLabel { get; init; }
+
+        /// <summary>
+        /// Loads the project without the imports that are missing (M43a): a non-SDK-style project that imports Visual
+        /// Studio's own targets still gets IntelliSense, though it can't build. It builds in this process (see <see cref="InProcess"/>).
+        /// </summary>
+        public bool IgnoreMissingImports { get; init; }
     }
 
     /// <summary>
@@ -110,6 +119,17 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
         },
     };
 
+    /// <summary>
+    /// Keeps a build of a project instance loaded here in this process: a batch's worker node would load the project again
+    /// from its file, without the instance's load settings (the missing imports it ignores), and fail.
+    /// </summary>
+    internal static HostServices InProcess(string path)
+    {
+        var host = new HostServices();
+        host.SetNodeAffinity(path, NodeAffinity.InProc);
+        return host;
+    }
+
     private async Task BuildOneAsync(
         Request request,
         IReadOnlyDictionary<string, string> solutionProperties,
@@ -148,7 +168,18 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
                 global["WindowsAppSDKSelfContained"] = "false";
             }
 
-            var data = new BuildRequestData(request.Path, global, null, s_targets, null, BuildRequestDataFlags.ProvideSubsetOfStateAfterBuild, s_state);
+            var data = request.IgnoreMissingImports
+                ? new BuildRequestData(
+                    ProjectInstance.FromFile(request.Path, new Microsoft.Build.Definition.ProjectOptions
+                    {
+                        GlobalProperties = global,
+                        ProjectCollection = collection,
+                        LoadSettings = ProjectLoadSettings.IgnoreMissingImports | ProjectLoadSettings.IgnoreInvalidImports | ProjectLoadSettings.IgnoreEmptyImports,
+                    }),
+                    s_targets,
+                    InProcess(request.Path),
+                    BuildRequestDataFlags.ProvideProjectStateAfterBuild)
+                : new BuildRequestData(request.Path, global, null, s_targets, null, BuildRequestDataFlags.ProvideSubsetOfStateAfterBuild, s_state);
             var result = await ExecuteAsync(_manager.PendBuildRequest(data)).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             var state = result.ProjectStateAfterBuild;
@@ -164,6 +195,11 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             if (state is not null && framework.Length == 0)
             {
                 framework = state.GetPropertyValue("TargetFramework");
+            }
+
+            if (framework.Length == 0 && request.FrameworkLabel is { } label)
+            {
+                framework = label;
             }
 
             var ok = result.OverallResult == BuildResultCode.Success && arguments.Length > 0;

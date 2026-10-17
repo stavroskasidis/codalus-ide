@@ -40,6 +40,7 @@ public static class CommandIcons
     {
         ["account"] = Blue,
         ["window"] = Blue,
+        ["code"] = Blue,
         ["broom"] = Blue,
         ["save"] = Blue,
         ["save-all"] = Blue,
@@ -220,6 +221,10 @@ public static class CommandIcons
         ["workbench.action.findInFiles"] = new("find-in-files"),
         ["workbench.action.replaceInFiles"] = new("replace"),
         ["workbench.action.gotoAll"] = new("go-to", Navigate),
+        ["workbench.action.gotoFile"] = new("file", Navigate),
+        ["workbench.action.gotoType"] = new("class", Navigate),
+        ["workbench.action.gotoMember"] = new("method", Navigate),
+        ["workbench.action.gotoText"] = new("find-in-files", Navigate),
         ["editor.action.gotoLine"] = new("go-to-line"),
         ["editor.action.revealDefinition"] = new("definition", Navigate),
         ["editor.action.peekDefinition"] = new("definition"),

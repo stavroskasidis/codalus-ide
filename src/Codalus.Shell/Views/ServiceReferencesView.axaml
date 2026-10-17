@@ -7,7 +7,8 @@
              x:Class="Codalus.Shell.Views.ServiceReferencesView"
              x:DataType="vm:ServiceReferencesViewModel">
   <ScrollViewer>
-    <StackPanel Margin="16,12" Spacing="8" MaxWidth="900" HorizontalAlignment="Left">
+    <StackPanel Margin="16,12" Spacing="8" MaxWidth="900" HorizontalAlignment="Left" Grid.IsSharedSizeScope="True">
+      <!-- The forms' labels share one column, so their fields line up (M34g). -->
       <TextBlock Classes="heading" Text="{Binding Title}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T serviceReferences.openapiReferencesGenerateAClientWith}" />
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T serviceReferences.wcfReferencesAreGeneratedByDotnet}" />
@@ -25,7 +26,7 @@
               <StackPanel Grid.Column="1">
                 <TextBlock>
                   <Run Text="{Binding Name}" FontWeight="SemiBold" />
-                  <Run Text="{Binding Kind}" Foreground="{DynamicResource Shell.MutedForeground}" />
+                  <Run Text="{Binding Kind}" Classes="muted" />
                 </TextBlock>
                 <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" />
                 <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />
@@ -38,7 +39,11 @@
 
       <Border Padding="10" BorderThickness="1" BorderBrush="{DynamicResource Shell.Border}" IsVisible="{Binding HasSelection}">
         <StackPanel Spacing="6">
-          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+          <Grid RowDefinitions="Auto,Auto,Auto">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" SharedSizeGroup="serviceReferenceLabel" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
             <TextBlock Text="{l:T serviceReferences.namespace}" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" IsVisible="{Binding SelectedHasNamespace}" />
             <TextBox Grid.Column="1" Text="{Binding EditNamespace}" IsVisible="{Binding SelectedHasNamespace}" AutomationProperties.Name="{l:T serviceReferences.referenceNamespace}" />
             <TextBlock Grid.Row="1" Text="{l:T serviceReferences.className}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" IsVisible="{Binding SelectedIsOpenApi}" />
@@ -46,7 +51,11 @@
             <TextBlock Grid.Row="2" Text="{l:T serviceReferences.nswagOptions}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" IsVisible="{Binding SelectedIsOpenApi}" />
             <TextBox Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" Text="{Binding EditOptions}" PlaceholderText="{l:T serviceReferences.usebaseurlFalseGenerateclientinterfacesTrue}" IsVisible="{Binding SelectedIsOpenApi}" AutomationProperties.Name="{l:T serviceReferences.nswagOptions}" />
           </Grid>
-          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" IsVisible="{Binding SelectedIsWcf}">
+          <Grid RowDefinitions="Auto,Auto,Auto" IsVisible="{Binding SelectedIsWcf}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" SharedSizeGroup="serviceReferenceLabel" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
             <TextBlock Text="{l:T serviceReferences.collectionType}" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
             <ComboBox Grid.Column="1" ItemsSource="{Binding CollectionTypes}" SelectedItem="{Binding EditCollectionType}" MinWidth="300" AutomationProperties.Name="{l:T serviceReferences.referenceCollectionType}" />
             <TextBlock Grid.Row="1" Text="{l:T serviceReferences.dictionaryType}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
@@ -72,7 +81,12 @@
       </Border>
 
       <TextBlock FontWeight="SemiBold" Text="{l:T serviceReferences.addAServiceReference}" Margin="0,8,0,0" />
-      <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
+      <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" SharedSizeGroup="serviceReferenceLabel" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
         <TextBlock Text="{l:T serviceReferences.kind}" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
         <ComboBox x:Name="KindBox" Grid.Column="1" ItemsSource="{Binding Kinds}" SelectedItem="{Binding KindLabel}" MinWidth="160" AutomationProperties.Name="{l:T serviceReferences.referenceKind}" />
         <TextBlock Grid.Row="1" Text="{l:T serviceReferences.document}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
@@ -96,7 +110,11 @@
             </ComboBox.ItemTemplate>
           </ComboBox>
         </StackPanel>
-        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="serviceReferenceLabel" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
           <TextBlock Text="{l:T serviceReferences.name}" Classes="muted" VerticalAlignment="Center" Margin="0,0,12,0" />
           <TextBox Grid.Column="1" Text="{Binding WcfName}" AutomationProperties.Name="{l:T serviceReferences.referenceName}" ToolTip.Tip="{l:T serviceReferences.theFolderUnderConnectedServices}" />
           <TextBlock Grid.Row="1" Text="{l:T serviceReferences.collectionType}" Classes="muted" VerticalAlignment="Center" Margin="0,6,12,0" />
@@ -109,10 +127,11 @@
             <CheckBox Content="{l:T serviceReferences.internal}" IsChecked="{Binding Internal}" />
           </StackPanel>
         </Grid>
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <TextBlock Classes="muted" Text="{Binding WcfToolMessage}" TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="640" />
-          <Button Content="{l:T serviceReferences.install}" Command="{Binding InstallWcfCommand}" IsVisible="{Binding NeedsWcfTool}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T serviceReferences.installDotnetSvcutil}" />
-        </StackPanel>
+        <!-- svcutil's state, then Install when it's missing (M34g: the message pushed the button off a 640 px page). -->
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Margin="8,0,0,0" VerticalAlignment="Center" Content="{l:T serviceReferences.install}" Command="{Binding InstallWcfCommand}" IsVisible="{Binding NeedsWcfTool}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T serviceReferences.installDotnetSvcutil}" />
+          <TextBlock Classes="muted" Text="{Binding WcfToolMessage}" TextWrapping="Wrap" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
+        </DockPanel>
       </StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsOpenApi}">
         <TextBlock Text="{l:T serviceReferences.generator}" Classes="muted" VerticalAlignment="Center" />
@@ -122,7 +141,7 @@
         <Button Classes="accent" Content="{l:T serviceReferences.addReference}" Command="{Binding AddCommand}" IsEnabled="{Binding !IsBusy}" AutomationProperties.Name="{l:T serviceReferences.addServiceReference}" />
         <ProgressBar IsIndeterminate="True" Width="120" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
       </StackPanel>
-      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding Result}" IsVisible="{Binding HasResult}" FontWeight="SemiBold" TextWrapping="Wrap" />
     </StackPanel>
   </ScrollViewer>

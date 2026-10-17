@@ -162,7 +162,7 @@ public sealed class PinnedDataTipLayer : Canvas
             ToolTip.SetTip(value, tip.Value);
             if (tip.Changed && stopped)
             {
-                value.Bind(TextBlock.ForegroundProperty, value.GetResourceObservable("Shell.Error"));
+                value.Bind(TextBlock.ForegroundProperty, value.GetResourceObservable("Shell.Error.Foreground"));
             }
             else if (tip.IsError || !stopped)
             {

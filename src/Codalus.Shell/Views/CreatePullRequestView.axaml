@@ -23,7 +23,7 @@
         <Button Content="{l:T createPullRequest.writeWithAi}" Command="{Binding WriteWithAiCommand}" IsEnabled="{Binding !IsBusy}" IsVisible="{Binding IsEnabled, Source={x:Static l:AiUi.Current}}" AutomationProperties.Name="{l:T createPullRequest.writeTheTitleAndDescriptionWithAi}" />
         <TextBlock Text="{l:T createPullRequest.pushingTheBranchAndCreatingThe}" Classes="muted" IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
       </StackPanel>
-      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding Created}" IsVisible="{Binding HasCreated}" FontWeight="SemiBold" TextWrapping="Wrap" />
     </StackPanel>
   </ScrollViewer>

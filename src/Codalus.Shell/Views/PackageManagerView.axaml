@@ -71,9 +71,9 @@
           <TextBlock Classes="muted" Text="{Binding RestoreStatus}" TextWrapping="Wrap" VerticalAlignment="Center" />
           <Button Grid.Column="1" Classes="link" Content="{l:T packageManager.showOutput}" Command="{Binding ShowRestoreOutputCommand}" />
         </Grid>
-        <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+        <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasSourceErrors}">
-          <TextBlock Foreground="{DynamicResource Shell.Warning}" FontSize="12" Text="{Binding SourceErrors}" TextWrapping="Wrap" VerticalAlignment="Center" />
+          <TextBlock Foreground="{DynamicResource Shell.Warning.Foreground}" FontSize="12" Text="{Binding SourceErrors}" TextWrapping="Wrap" VerticalAlignment="Center" />
           <Button Grid.Column="1" Classes="link" Content="{l:T packageManager.signIn}" Command="{Binding SignInCommand}" IsVisible="{Binding CanSignIn}"
                   AutomationProperties.Name="{l:T packageManager.signIn}" />
         </Grid>
@@ -149,7 +149,7 @@
               <TextBlock Classes="heading" Text="{Binding Id}" TextWrapping="Wrap" />
               <TextBlock Classes="muted" Text="{Binding Title}" IsVisible="{Binding Title, Converter={x:Static ObjectConverters.IsNotNull}}" />
               <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" IsVisible="{Binding IsLoading}" />
-              <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
+              <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
             </StackPanel>
 
             <!-- Solution level: which projects. -->

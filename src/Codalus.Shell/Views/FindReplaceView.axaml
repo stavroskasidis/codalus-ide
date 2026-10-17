@@ -59,7 +59,7 @@
                     ToolTip.Tip="{l:T findReplace.fileTypesTip}" AutomationProperties.Name="{l:T findReplace.fileTypes}" />
         </Grid>
         <CheckBox Content="{l:T findReplace.appendResults}" IsChecked="{Binding AppendResults}" IsVisible="{Binding IsFind}" />
-        <TextBlock Foreground="{DynamicResource Shell.Error}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+        <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
         <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" Margin="0,6,0,0" IsVisible="{Binding IsFind}">
           <Button Classes="findAction" Content="{l:T findReplace.findPrevious}" Command="{Binding FindPreviousCommand}" />
           <Button Classes="findAction" Content="{l:T findReplace.findNext}" Command="{Binding FindNextCommand}" />

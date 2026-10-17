@@ -26,6 +26,7 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
                 OnPropertyChanged(nameof(Name));
                 OnPropertyChanged(nameof(Detail));
                 OnPropertyChanged(nameof(HasDetail));
+                OnPropertyChanged(nameof(ToolTip));
                 OnPropertyChanged(nameof(Icon));
                 OnPropertyChanged(nameof(IsWarning));
                 OnPropertyChanged(nameof(IsLinked));
@@ -49,6 +50,12 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
     public string? Detail => _node.Detail;
 
     public bool HasDetail => _node.Detail is not null;
+
+    /// <summary>
+    /// The row's tooltip: the path, or for a message (a project's reason it can't build, M43a) its whole text, which
+    /// trims in a narrow pane (M34g).
+    /// </summary>
+    public string? ToolTip => _node.Path ?? (_node.Kind == ExplorerNodeKind.Message ? _node.Name : null);
 
     /// <summary>File-type, folder and project icons (M34a, <see cref="Controls.FileIcons"/>); folders open when expanded.</summary>
     public string Icon => Controls.FileIcons.ForNode(_node, _isExpanded, _project);
@@ -394,6 +401,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 _shell.Workbench.Context.Set("explorerItemKind", value is null ? null : KindKey(value.Node.Kind));
                 _shell.Workbench.Context.Set("explorerItemIsProjectReference", value?.Node is { Kind: ExplorerNodeKind.Dependency } n && n.Id.Contains("|project|", StringComparison.Ordinal));
                 _shell.Workbench.Context.Set("explorerProjectUnloaded", value?.Node.IsUnloaded == true);
+                _shell.Workbench.Context.Set("explorerProjectNonSdkStyle", value?.Node is { Kind: ExplorerNodeKind.Project, ProjectPath: { } nonSdk } && _shell.Solutions.Projects.TryGetValue(nonSdk, out var nonSdkInfo) && nonSdkInfo.IsNonSdkStyle);
                 _shell.Workbench.Context.Set("explorerItemName", value?.Node is { Kind: ExplorerNodeKind.File, Path: { } file } ? System.IO.Path.GetFileName(file) : null);
                 _shell.Workbench.Context.Set("explorerItemExcluded", value?.Node.IsExcluded == true);
                 _shell.Workbench.Context.Set("explorerItemLinked", value?.Node.IsLinked == true);

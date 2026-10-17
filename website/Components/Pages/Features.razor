@@ -1,7 +1,7 @@
 @page "/features"
 @inject SiteOptions Site
 
-<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF, Windows Forms and WinUI 3, Visual Basic, F#, WCF, profiling and more." />
+<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF, Windows Forms and WinUI 3, .NET Framework, Visual Basic, F#, WCF, profiling and more." />
 
 <div class="container">
     <section class="page-intro">
@@ -69,7 +69,9 @@
                 <ul>
                     <li>Go to Definition and Implementation, into decompiled code</li>
                     <li>Find All References with read/write classification</li>
-                    <li>Peek Definition, Call and Type Hierarchy, Go To All, Class View and the Object Browser</li>
+                    <li>Code Search: files, types, members and text in one window, with filter chips, a live, editable preview, and an index kept with the solution so it finds everything right after a restart</li>
+                    <li>Feature Search for commands, settings and Options pages, from the search box</li>
+                    <li>Peek Definition, Call and Type Hierarchy, Class View and the Object Browser</li>
                     <li>Find and Replace in Files: a floating window, results with every match highlighted, filtered, grouped and kept</li>
                     <li>Inlay hints, CodeLens, an inheritance margin and sticky scroll</li>
                     <li>Library code from Source Link before decompiling</li>
@@ -201,6 +203,19 @@
                 </ul>
             </div>
             <div>
+                <h3>.NET Framework</h3>
+                <ul>
+                    <li>net48, net472 and the other .NET Framework projects open, restore and build on Windows, Linux and macOS, with no targeting pack: the reference assemblies come from NuGet</li>
+                    <li>Old-style (non-SDK-style) projects too: packages.config restored, a Dependencies node of their references, hint paths and packages, built with the .NET SDK's MSBuild</li>
+                    <li>C# 7.3 in the editor, as the compiler uses it, and binding redirects generated for executables</li>
+                    <li>Convert to SDK-Style: an old-style project rewritten as an SDK-style one, packages.config as package references and AssemblyInfo.cs as properties, after a preview of every change</li>
+                    <li>Run and debug .NET Framework apps on Windows with our own .NET Framework debugger, on the debugging API that comes with the .NET Framework: breakpoints with conditions, stepping with Just My Code, call stack, threads, locals and watch with C# expressions and method calls, exceptions, and Attach to Process; elsewhere the IDE says it's Windows only</li>
+                    <li>xUnit, NUnit and MSTest tests on .NET Framework in the Test Explorer on Windows, old-style test projects included: discover, run and debug</li>
+                    <li>Projects that need Visual Studio's own targets (ASP.NET web applications) open with IntelliSense and say why they don't build</li>
+                    <li>New .NET Framework console apps and class libraries, and the installed .NET Framework in Check Environment</li>
+                </ul>
+            </div>
+            <div>
                 <h3>Visual Basic</h3>
                 <ul>
                     <li>Completion, Quick Info, signature help and live errors, from the same language service as C#</li>
@@ -279,6 +294,9 @@
         new("find", "Find in Files", "find-in-files.png",
             "The Find and Replace window floating over the editor, with Find Results below",
             "Find and Replace in Files from a floating window: scopes, file types and regular expressions, with every match listed in Find Results, which filters, groups by path or file and keeps earlier results on their own pages."),
+        new("code-search", "Code Search", "code-search.png",
+            "The Code Search window over the editor: filter chips, two-line results for Greet with Greeter selected, and Greeter.cs in the preview below",
+            "Go To All is Code Search: files, types, members and text with filter chips, results that say where each one is, and the selected one in a live preview you can edit and save."),
         new("debugging", "Debugging", "debugging.png",
             "Paused at a breakpoint with a PerfTip, and the Exception Settings window",
             "Paused on a line with a PerfTip, and the Exception Settings window, with every debug tool window a tab away."),

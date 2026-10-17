@@ -268,7 +268,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }).ConfigureAwait(true);
 
         // M34d: the UI gallery's empty states, before a solution opens.
-        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
+        await StepAsync("shell.galleryEmpty", "M34d", "The gallery: every tool window empty, Code Search, the WCF Test Client and the setup's steps (M34g), in Blue, Light, Dark and High Contrast", GalleryEmptyStepAsync).ConfigureAwait(true);
 
         // M2: project system (build host, MSBuild evaluation, Solution Explorer).
         await StepAsync("projects.open", "M2", "A trusted solution opens and evaluates", async () =>
@@ -361,6 +361,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 shell.FindResults.CurrentSet = references; // back to the references, as the theme screenshots (the website's) show them
             }
         }, "language.ready").ConfigureAwait(true);
+
+        await StepAsync("navigation.codeSearch", "M47", "Code Search: the index saved next to the solution, a type found with its container and project, the editable preview on its file, prefixes, Enter, and Feature Search", CodeSearchStepAsync, "language.ready").ConfigureAwait(true);
 
         await StepAsync("editor.insights", "M12", "Inlay hints, CodeLens, Peek Definition, the Document Outline and the navigation bar", async () =>
         {
@@ -795,7 +797,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, "testing.run").ConfigureAwait(true);
 
         // M34d: the UI gallery with data (the Testing solution after its runs), the documents, the chrome and the error states.
-        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, and the error states, in every theme", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
+        await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, the error states, Code Search's results, the color theme cards and the WCF references page (M34g), in every theme", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
 
         // M9: NuGet packages, on a copy of samples/Packages and its local feed (ADR 0012).
         await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>
@@ -1221,6 +1223,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             Report("maui.windows", "M44", winUITitle, "skipped", 0, "WinUI 3 apps build and run on Windows only (D31); their XAML editing and the Windows-only gates are covered by the tests on every OS.");
         }
+
+        // M43a: .NET Framework projects (ADR 0075, D31): they open and build on every OS, and run on Windows only.
+        await StepAsync("netfx.projects", "M43a", OperatingSystem.IsWindows()
+            ? "The .NET Framework fixture opens (the old-style project restored from packages.config), the net48 console app builds and runs on the desktop CLR"
+            : "The .NET Framework fixture opens (the old-style project restored from packages.config), the net48 console app builds, and starting it says Windows only", NetFrameworkStepAsync).ConfigureAwait(true);
 
         await StepAsync("vb.editing", "M35", "A Visual Basic file is served by the C# host: it completes a C# library's members, and Enter after If … Then adds End If", VisualBasicStepAsync, "projects.open").ConfigureAwait(true);
         await StepAsync("fsharp.editing", "M36", "F# is served by FsAutoComplete (installed with dotnet tool install): Quick Info across files, and Solution Explorer in compile order with the signature file nested", FSharpStepAsync, "projects.open").ConfigureAwait(true);
@@ -1836,6 +1843,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => window.GetVisualDescendants().OfType<WcfTestClientView>().Any(), "the WCF Test Client renders").ConfigureAwait(true);
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-wcf-test-client.png");
+            await GalleryWcfResponseAsync(client).ConfigureAwait(true); // M34g: a response and a fault in the gallery
         }
         finally
         {
@@ -2044,6 +2052,73 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(shell.Runs.Running.Any(p => p.Name == "WpfApp" && !p.HasExited), "the WPF app is still running (its window is up)");
         shell.StopRunning();
         await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the WPF app stops", 60).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// .NET Framework in the shipped app (M43a, ADR 0075): samples/NetFramework opens, the old-style project gets its
+    /// packages.config package and reference assemblies, the project that needs Visual Studio's targets says why it
+    /// can't build (<c>netfx-projects.png</c>), and the SDK-style net48 console app builds. On Windows Start Without
+    /// Debugging runs its .exe on the desktop CLR and its output comes back, and F5 debugs it there to a breakpoint (M43b,
+    /// ADR 0076: <c>netfx-debugging.png</c>); elsewhere starting it says Windows only.
+    /// </summary>
+    private async Task NetFrameworkStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.All(p => p.HasExited), "the previous run has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "NetFramework");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "NetFramework"), target);
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "NetFramework.slnx")).ConfigureAwait(true);
+        var legacy = Path.Combine(target, "LegacyApp", "LegacyApp.csproj");
+        var web = Path.Combine(target, "LegacyWebApp", "LegacyWebApp.csproj");
+        var app = Path.Combine(target, "ConsoleApp", "ConsoleApp.csproj");
+        await WaitAsync(
+            () => shell.Solutions.Projects.Count == 8 && shell.Solutions.Progress is { Completed: true }
+                  && shell.Solutions.Projects.TryGetValue(legacy, out var info) && info.References.Any(r => r.Kind == Codalus.Projects.Protocol.ReferenceKinds.Package && r.Resolved),
+            "the NetFramework solution is open, LegacyApp's packages.config package restored", 600).ConfigureAwait(true);
+        Check(shell.Solutions.Projects[legacy].IsNonSdkStyle, "LegacyApp is a non-SDK-style project");
+        Check(shell.Solutions.Projects[web].CannotBuildReason?.Contains("Visual Studio's own MSBuild targets", StringComparison.Ordinal) == true, "LegacyWebApp says why it can't build");
+        shell.Explorer.Reveal("p:" + legacy);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("netfx-projects.png");
+        await GalleryNetFrameworkAsync(legacy, web).ConfigureAwait(true); // M34g: the .NET Framework project UI in the gallery
+
+        Check(await shell.BuildAsync(Codalus.Projects.Protocol.BuildTargets.Build, app).ConfigureAwait(true), "ConsoleApp (net48) builds:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
+        Check(File.Exists(Path.Combine(target, "ConsoleApp", "bin", "Debug", "net48", "ConsoleApp.exe")), "ConsoleApp.exe was built");
+        shell.SetStartupProject(app);
+        if (!OperatingSystem.IsWindows())
+        {
+            await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+            Check(shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("ConsoleApp targets .NET Framework (net48): it runs, debugs and tests only on Windows", StringComparison.Ordinal)), "starting it says Windows only");
+            return;
+        }
+
+        // A program that ends leaves Runs.Running at once; its Run channel says how it ended, after its output.
+        string Output() => shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: ConsoleApp")?.GetText() ?? string.Empty;
+        shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: ConsoleApp")?.Clear(); // an earlier step's ConsoleApp
+        await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
+        await WaitAsync(() => Output().Contains("has exited with code", StringComparison.Ordinal), () => "ConsoleApp ran: " + Tail(Output() + shell.Builds.Channel.GetText(), 2000), 300).ConfigureAwait(true);
+        Check(Output().Contains("has exited with code 0 (0x0)", StringComparison.Ordinal), "it exits with code 0: " + Output());
+        Check(Output().Contains("Runtime: .NET Framework 4.", StringComparison.Ordinal), "its output names the desktop CLR: " + Output());
+        Check(Output().Contains("Hello from .NET Framework, Codalus!", StringComparison.Ordinal), "its output comes back");
+
+        // F5: the desktop-CLR debugger (codalus-debughost --netfx-dap) stops at a breakpoint in Main and evaluates.
+        var source = Path.Combine(target, "ConsoleApp", "Program.cs");
+        var line = Array.FindIndex(File.ReadAllLines(source), l => l.Contains("Console.WriteLine(greeter.Greet())", StringComparison.Ordinal)) + 1;
+        shell.Debugger.Breakpoints.Set(new Codalus.Workbench.Debugging.BreakpointSpec(source, line));
+        await shell.StartDebuggingAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == Codalus.Workbench.Debugging.DebugState.Stopped, () => "F5 stops ConsoleApp (net48) at its breakpoint: " + shell.DebugLog.GetText(), 300).ConfigureAwait(true);
+        Check(shell.Debugger.SelectedFrame is { Name: "ConsoleApp.Program.Main" } frame && frame.Line == line, $"it stopped in Main on line {line}: {shell.Debugger.SelectedFrame?.Name} {shell.Debugger.SelectedFrame?.Line}");
+        var greeting = await shell.Debugger.EvaluateAsync("greeter.Greet()", "watch", CancellationToken.None).ConfigureAwait(true);
+        Check(greeting.Result == "\"Hello from .NET Framework, Codalus!\"", "greeter.Greet() evaluates through func-eval: " + greeting.Result);
+        await Task.Delay(1000).ConfigureAwait(true);
+        Screenshot("netfx-debugging.png");
+        await GalleryNetFrameworkDebuggingAsync().ConfigureAwait(true); // M34g: the Call Stack and Modules of a desktop-CLR session
+        shell.Debugger.Breakpoints.Clear();
+        await shell.Debugger.StopAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == Codalus.Workbench.Debugging.DebugState.Idle, "the debug session ends", 60).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -2304,6 +2379,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(added == 12, $"the diff is the button's field, creation, section and Controls.Add: {added} lines:\n{string.Join('\n', newLines)}");
         await RenderedAsync().ConfigureAwait(true);
         Screenshot("winforms-designer.png");
+        await GalleryWinFormsAsync(designer).ConfigureAwait(true); // M34g: the designer, the Toolbox and Properties in the gallery
 
         while (code.Text.UndoStack.CanUndo)
         {
@@ -2357,6 +2433,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(editor.Editor.SelectedText.StartsWith("<Button DockPanel.Dock=\"Right\"", StringComparison.Ordinal), "a click selects the button in the XAML: " + editor.Editor.SelectedText);
         await RenderedAsync().ConfigureAwait(true);
         Screenshot("wpf-previewer.png");
+        await GalleryWpfPreviewAsync().ConfigureAwait(true); // M34g: the WPF preview in the gallery
         shell.Layout.CloseToolWindow(ViewModels.XamlPreviewViewModel.ToolWindowId);
         Restore(editor, original);
         await shell.Previewer.InvalidateAsync().WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);

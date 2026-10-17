@@ -23,6 +23,9 @@ samples/LargeMarkup100k/
 samples/Solution50/
 samples/Tests5k/
 
+# packages.config packages restored into fixtures (M43a)
+samples/NetFramework/packages/
+
 # OS
 .DS_Store
 Thumbs.db

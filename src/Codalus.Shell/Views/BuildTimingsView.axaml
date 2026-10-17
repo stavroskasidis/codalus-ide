@@ -15,7 +15,7 @@
         <CheckBox Content="{l:T buildTimings.showShortBuildsToo}" IsChecked="{Binding ShowAll}" />
         <TextBlock Classes="muted" VerticalAlignment="Center" Text="{Binding Summary}" />
       </StackPanel>
-      <TextBlock Foreground="{DynamicResource Shell.Error}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
       <StackPanel Orientation="Horizontal" Spacing="6">
         <TextBlock Classes="muted" Text="{l:T buildTimings.criticalPath}" />
         <TextBlock FontWeight="SemiBold" TextWrapping="Wrap" Text="{Binding CriticalPathText}" AutomationProperties.Name="{l:T buildTimings.criticalPath2}" />

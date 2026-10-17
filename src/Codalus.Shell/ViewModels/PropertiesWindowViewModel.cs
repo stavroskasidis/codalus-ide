@@ -114,6 +114,9 @@ public sealed class PropertyRowViewModel : ObservableObject
 
     public string Description { get; }
 
+    /// <summary>The trimmed name's tooltip: the whole name, and the description when there is one (M34g: rows without one had none).</summary>
+    public string NameToolTip => string.IsNullOrEmpty(Description) ? Name : $"{Name}: {Description}";
+
     public PropertyRowKind Kind { get; }
 
     public bool IsReadOnly => Kind == PropertyRowKind.ReadOnly;

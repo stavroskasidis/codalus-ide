@@ -77,7 +77,7 @@
                 <controls:Icon DockPanel.Dock="Right" Margin="4,0" Kind="warning" Classes="warning" IsVisible="{Binding HasError}" ToolTip.Tip="{Binding Error}" VerticalAlignment="Center" />
                 <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                   <Run Text="{Binding Label}" />
-                  <Run Text="{Binding Detail}" FontSize="{DynamicResource Shell.FontSize.Small}" Foreground="{DynamicResource Shell.MutedForeground}" />
+                  <Run Text="{Binding Detail}" FontSize="{DynamicResource Shell.FontSize.Small}" Classes="muted" />
                 </TextBlock>
               </DockPanel>
             </DataTemplate>

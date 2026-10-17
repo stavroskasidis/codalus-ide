@@ -44,7 +44,7 @@
         <ProgressBar IsIndeterminate="True" Width="60" Height="4" VerticalAlignment="Center" />
         <TextBlock Text="{Binding Busy}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" />
       </StackPanel>
-      <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Warning}" />
+      <TextBlock Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Warning.Foreground}" />
       <Button Content="{l:T entityFramework.installDotnetEf}" Command="{Binding InstallCommand}" IsVisible="{Binding CanInstall}" HorizontalAlignment="Left" ToolTip.Tip="{l:T entityFramework.installDotnetEfAsALocal}" />
     </StackPanel>
     <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0" Padding="4,3">

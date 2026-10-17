@@ -312,6 +312,46 @@
   <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
   </Style>
+  <!--
+    M34g: secondary text on a selected row (a result's detail, a command's kind) is the selection's text too: the muted
+    gray was 3:1 on Classic's selection and 1:1 on a High contrast family's accent. A tree's selected header takes the
+    selection's text as well (Fluent left it the window's: white on a High contrast family's accent).
+  -->
+  <Style Selector="ListBoxItem:selected TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <!--
+    M34g on M43: a muted run after a name (a project's "(non-SDK-style)", a test's detail, a reference's kind) is
+    muted text too, and the selection's on a selected row: as a run in the muted color it was 1.03:1 on a High contrast
+    family's selection and 4.29:1 on Classic Dark's.
+  -->
+  <Style Selector="Run.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
+  <Style Selector="ListBoxItem:selected Run.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <!--
+    The matched characters of a search result (HighlightedText): Shell.Match, and the selection's text on a selected
+    row, still bold. In Shell.Match on Code Search's selected result they were 1.00:1 in Daylight High contrast and
+    2.98:1 in Classic Dark (found once the rendered contrast check read runs, M34g on M43).
+  -->
+  <Style Selector="TextBlock.highlighted">
+    <Setter Property="controls:HighlightedText.MatchForeground" Value="{DynamicResource Shell.Match}" />
+  </Style>
+  <Style Selector="ListBoxItem:selected TextBlock.highlighted">
+    <Setter Property="controls:HighlightedText.MatchForeground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <Style Selector="TreeViewItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource TreeViewItemForegroundSelected}" />
+  </Style>
+  <!-- Error and warning messages (M34g): the state colors made readable as text (4.5:1, 7:1 in a family's High contrast). -->
+  <Style Selector="TextBlock.error, SelectableTextBlock.error">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Error.Foreground}" />
+  </Style>
+  <Style Selector="TextBlock.warning, SelectableTextBlock.warning">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Warning.Foreground}" />
+  </Style>
 
   <!-- The status bar's color says the state: purple without a solution, the accent with one, orange while debugging. -->
   <Style Selector="Border#StatusBarHost">

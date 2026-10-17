@@ -40,7 +40,7 @@
       <StackPanel Spacing="6">
         <TextBlock Text="{Binding RecordingTitle}" TextWrapping="Wrap" />
         <TextBlock FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" Text="{Binding RecordedLabel}" AutomationProperties.LiveSetting="Assertive" />
-        <TextBlock Foreground="{DynamicResource Shell.Warning}" HorizontalAlignment="Center" TextWrapping="Wrap" Text="{Binding RecordedConflicts}" />
+        <TextBlock Foreground="{DynamicResource Shell.Warning.Foreground}" HorizontalAlignment="Center" TextWrapping="Wrap" Text="{Binding RecordedConflicts}" />
       </StackPanel>
     </Border>
 
