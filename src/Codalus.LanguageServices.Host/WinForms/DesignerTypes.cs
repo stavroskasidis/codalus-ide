@@ -92,6 +92,10 @@ internal sealed class SyntacticDesignerTypeResolver(string? fileNamespace) : IDe
             "StatusStrip", "TabAlignment", "TabControl", "TableLayoutPanel", "TableLayoutPanelCellBorderStyle", "TabPage", "TextBox",
             "TextImageRelation", "Timer", "ToolStrip", "ToolStripButton", "ToolStripContainer", "ToolStripItem", "ToolStripMenuItem",
             "ToolStripSeparator", "ToolStripStatusLabel", "ToolTip", "TrackBar", "TreeNode", "TreeView", "UserControl", "View", "WebBrowser",
+            "Binding", "BindingSource", "ColorDepth", "ColumnHeaderStyle", "DataGridViewButtonColumn", "DataGridViewCheckBoxColumn", "DataGridViewComboBoxColumn",
+            "DataGridViewImageColumn", "DataGridViewLinkColumn", "DataSourceUpdateMode", "DomainUpDown", "ImageListStreamer", "ListViewGroup", "ToolStripComboBox",
+            "ToolStripDropDownButton", "ToolStripDropDownItem", "ToolStripGripStyle", "ToolStripItemDisplayStyle", "ToolStripItemImageScaling", "ToolStripLabel",
+            "ToolStripLayoutStyle", "ToolStripProgressBar", "ToolStripRenderMode", "ToolStripSplitButton", "ToolStripTextBox",
         ]),
         ("System.Drawing", ["Color", "ContentAlignment", "Font", "FontStyle", "GraphicsUnit", "Icon", "Image", "Bitmap", "Point", "PointF", "Rectangle", "Size", "SizeF", "SystemColors", "SystemFonts"]),
         ("System.ComponentModel", ["BackgroundWorker", "ComponentResourceManager", "Container", "IContainer", "ISupportInitialize"]),
@@ -111,6 +115,9 @@ internal sealed class SyntacticDesignerTypeResolver(string? fileNamespace) : IDe
         "System.Windows.Forms.SelectionMode", "System.Windows.Forms.SizeType", "System.Windows.Forms.TabAlignment", "System.Windows.Forms.TextImageRelation",
         "System.Windows.Forms.View", "System.Drawing.FontStyle", "System.Drawing.GraphicsUnit", "System.Windows.Forms.DataGridViewAutoSizeColumnsMode",
         "System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode", "System.Windows.Forms.TableLayoutPanelCellBorderStyle",
+        "System.Windows.Forms.ColorDepth", "System.Windows.Forms.ColumnHeaderStyle", "System.Windows.Forms.DataSourceUpdateMode", "System.Windows.Forms.ToolStripGripStyle",
+        "System.Windows.Forms.ToolStripItemDisplayStyle", "System.Windows.Forms.ToolStripItemImageScaling", "System.Windows.Forms.ToolStripLayoutStyle",
+        "System.Windows.Forms.ToolStripRenderMode",
     };
 
     private static readonly Dictionary<string, string> s_byName = s_known

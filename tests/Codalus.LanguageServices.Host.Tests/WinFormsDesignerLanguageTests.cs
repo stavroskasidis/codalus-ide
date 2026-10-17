@@ -136,6 +136,38 @@ public sealed class WinFormsDesignerLanguageTests(WinFormsLanguageFixture winFor
     }
 
     [Fact]
+    public async Task A_localizable_forms_resources_are_read_and_edited_with_its_code()
+    {
+        // M41b: the read says which forms are localizable, their cultures and the tray's order.
+        var about = await winForms.Client.WinFormsReadAsync(Uri(Form("AboutForm.cs")), Ct);
+        Assert.True(about!.IsLocalizable);
+        Assert.Equal(["fr"], about.Cultures);
+        var inventory = await winForms.Client.WinFormsReadAsync(Uri(Form("InventoryForm.cs")), Ct);
+        Assert.False(inventory!.IsLocalizable);
+        Assert.Equal("mainMenuStrip", inventory.TrayOrder[0]);
+        Assert.Equal("inventoryErrorProvider", inventory.TrayOrder[^1]);
+        Assert.Equal("System.Windows.Forms.BindingSource", inventory.Model!.Components.Single(c => c.Name == "itemBindingSource").Type);
+
+        // A rename of a localized component: the designer file, every culture's .resx, and the handler's file untouched.
+        var renamed = await winForms.Client.WinFormsEditAsync(new WinFormsEditParams(new TextDocumentIdentifier(Uri(Form("AboutForm.Designer.cs"))),
+            [new DesignerEdit { Kind = DesignerEditKinds.RenameComponent, Component = "okButton", NewName = "closeButton" }]), Ct);
+        Assert.Null(renamed!.Error);
+        Assert.Contains(renamed.Edit.DocumentChanges, d => d.TextDocument.Uri == Uri(Form("AboutForm.Designer.cs")));
+        var resx = renamed.Edit.DocumentChanges.Single(d => d.TextDocument.Uri == Uri(Form("AboutForm.resx")));
+        Assert.Equal(9, resx.Edits.Length);
+        Assert.Contains(resx.Edits, e => e.NewText.Contains("<value>closeButton</value>", StringComparison.Ordinal));
+        Assert.Single(renamed.Edit.DocumentChanges.Single(d => d.TextDocument.Uri == Uri(Form("AboutForm.fr.resx"))).Edits);
+
+        // A new culture's file: created by the edit (no version), with only its key.
+        var german = await winForms.Client.WinFormsEditAsync(new WinFormsEditParams(new TextDocumentIdentifier(Uri(Form("AboutForm.Designer.cs"))),
+            [new DesignerEdit { Kind = DesignerEditKinds.SetResource, Key = "okButton.Text", Culture = "de", Resource = DesignerResource.String("Schließen") }]), Ct);
+        var created = german!.Edit.DocumentChanges.Single();
+        Assert.Equal((Uri(Form("AboutForm.de.resx")), (int?)null), (created.TextDocument.Uri, created.TextDocument.Version));
+        Assert.Contains("<value>Schließen</value>", Assert.Single(created.Edits).NewText, StringComparison.Ordinal);
+        Assert.Equal(new Position(0, 0), created.Edits[0].Range.Start);
+    }
+
+    [Fact]
     public async Task The_toolbox_lists_the_projects_own_controls()
     {
         var toolbox = await winForms.Client.WinFormsToolboxAsync(winForms.File("WinFormsApp", "WinFormsApp.csproj"), Ct);
