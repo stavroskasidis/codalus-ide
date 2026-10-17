@@ -511,6 +511,8 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
                         return remote.Primitive;
                     case ClrValueKind.String:
                         return remote.Text;
+                    case ClrValueKind.Object when types.Unboxed(remote) is { } unboxed:
+                        return unboxed.Primitive;
                     case ClrValueKind.Object when types.Definition(remote.Type) is { } d && types.Info(d.Module) is { } info && info.IsEnum(d.Token):
                         return info.Fields(d.Token).FirstOrDefault(f => !f.IsStatic) is { } field ? remote.Field(d.Module, d.Token, field.Token).Primitive : null;
                     case ClrValueKind.Object when types.FullName(remote.Type) == "System.Decimal" && types.Format(remote) is var text && decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d2):

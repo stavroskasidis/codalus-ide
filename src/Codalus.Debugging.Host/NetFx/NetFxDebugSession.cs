@@ -422,31 +422,67 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private SetBreakpointsResponse SetBreakpoints(SetBreakpointsArguments arguments)
     {
         var path = arguments.Source.Path is { } p ? Path.GetFullPath(p) : throw new DapRequestException("Breakpoints need a source file path.");
-        List<BreakpointState> states;
+        List<BreakpointState> states = [];
         lock (_gate)
         {
-            if (_breakpoints.TryGetValue(path, out var old))
+            WhileStopped(() =>
             {
-                Remove(old);
-            }
+                if (_breakpoints.TryGetValue(path, out var old))
+                {
+                    Remove(old);
+                }
 
-            states = [.. arguments.Breakpoints.Select(b => new BreakpointState(_nextBreakpoint++, path, b.Line, string.IsNullOrWhiteSpace(b.Condition) ? null : b.Condition.Trim()))];
-            if (states.Count == 0)
-            {
-                _breakpoints.Remove(path);
-            }
-            else
-            {
-                _breakpoints[path] = states;
-            }
+                states = [.. arguments.Breakpoints.Select(b => new BreakpointState(_nextBreakpoint++, path, b.Line, string.IsNullOrWhiteSpace(b.Condition) ? null : b.Condition.Trim()))];
+                if (states.Count == 0)
+                {
+                    _breakpoints.Remove(path);
+                }
+                else
+                {
+                    _breakpoints[path] = states;
+                }
 
-            foreach (var (module, info) in _modules)
-            {
-                Bind(path, states, module, info);
-            }
+                foreach (var (module, info) in _modules)
+                {
+                    Bind(path, states, module, info);
+                }
+            });
         }
 
         return new SetBreakpointsResponse([.. states.Select(s => Describe(s))]);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="change"/> with the process stopped: ICorDebug changes breakpoints only in a stopped process,
+    /// so one that runs (breakpoints set while it runs) is stopped for it and goes on after.
+    /// </summary>
+    private void WhileStopped(Action change)
+    {
+        var pause = _process is { } process && _configured.Task.IsCompleted && !_userStopped && !_ended.Task.IsCompleted;
+        if (pause)
+        {
+            try
+            {
+                _process!.Pause();
+            }
+            catch (InvalidOperationException ex)
+            {
+                log.WriteLine("Stopping to change breakpoints: " + ex.Message);
+                pause = false;
+            }
+        }
+
+        try
+        {
+            change();
+        }
+        finally
+        {
+            if (pause)
+            {
+                TryContinue(_process!);
+            }
+        }
     }
 
     private static Breakpoint Describe(BreakpointState state) =>
@@ -518,16 +554,19 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     {
         lock (_gate)
         {
-            Remove(_functionBreakpoints);
-            _functionBreakpoints.Clear();
-            _functionBreakpoints.AddRange(breakpoints.Select(b => new BreakpointState(_nextBreakpoint++, null, 0, string.IsNullOrWhiteSpace(b.Condition) ? null : b.Condition.Trim(), b.Name.Trim())));
-            foreach (var (module, info) in _modules)
+            WhileStopped(() =>
             {
-                foreach (var state in _functionBreakpoints)
+                Remove(_functionBreakpoints);
+                _functionBreakpoints.Clear();
+                _functionBreakpoints.AddRange(breakpoints.Select(b => new BreakpointState(_nextBreakpoint++, null, 0, string.IsNullOrWhiteSpace(b.Condition) ? null : b.Condition.Trim(), b.Name.Trim())));
+                foreach (var (module, info) in _modules)
                 {
-                    BindFunction(state, module, info);
+                    foreach (var state in _functionBreakpoints)
+                    {
+                        BindFunction(state, module, info);
+                    }
                 }
-            }
+            });
 
             return new SetBreakpointsResponse([.. _functionBreakpoints.Select(Describe)]);
         }
@@ -1033,7 +1072,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 return Handle(() => Elements(value, evaluateName));
             case ClrValueKind.Object:
                 var full = Types.FullName(value.Type);
-                if (full is "System.Decimal" or "System.DateTime" or "System.TimeSpan" || (Types.Definition(value.Type) is { } d && Types.Info(d.Module) is { } info && info.IsEnum(d.Token)))
+                if (full is "System.Decimal" or "System.DateTime" or "System.TimeSpan" || Types.Unboxed(value) is not null || (Types.Definition(value.Type) is { } d && Types.Info(d.Module) is { } info && info.IsEnum(d.Token)))
                 {
                     return 0;
                 }

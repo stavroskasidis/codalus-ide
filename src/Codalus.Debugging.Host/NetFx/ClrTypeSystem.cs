@@ -218,8 +218,24 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         }
     }
 
+    /// <summary>mscorlib's primitive structs: a boxed primitive may come as one, with its value in <c>m_value</c>.</summary>
+    private static readonly HashSet<string> s_primitiveStructs = new(StringComparer.Ordinal)
+    {
+        "System.Boolean", "System.Char", "System.SByte", "System.Byte", "System.Int16", "System.UInt16", "System.Int32", "System.UInt32",
+        "System.Int64", "System.UInt64", "System.Single", "System.Double", "System.IntPtr", "System.UIntPtr",
+    };
+
+    /// <summary>The primitive inside a boxed primitive that came as an object (<c>m_value</c>); null for anything else.</summary>
+    public IClrValue? Unboxed(IClrValue value) =>
+        value.Kind == ClrValueKind.Object && s_primitiveStructs.Contains(FullName(value.Type)) && Field(value, "m_value") is { Kind: ClrValueKind.Primitive } inner ? inner : null;
+
     private string FormatObject(IClrValue value)
     {
+        if (Unboxed(value) is { } primitive)
+        {
+            return FormatPrimitive(primitive.Primitive);
+        }
+
         var full = FullName(value.Type);
         switch (full)
         {

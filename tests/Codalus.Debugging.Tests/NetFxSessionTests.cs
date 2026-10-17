@@ -341,6 +341,10 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         process.StaticFields[FieldToken(info, info.FindType("NetFxDebuggee.Program"), "s_ticks")] = FakeValue.Of(5);
         Assert.Equal("5", await dap.EvaluateAsync("Program.s_ticks", top.Id));
         Assert.Equal("5", await dap.EvaluateAsync("NetFxDebuggee.Program.s_ticks", top.Id));
+        var int32 = corelib.FindType("System.Int32");
+        process.StaticFields[FieldToken(info, info.FindType("NetFxDebuggee.Program"), "s_ticks")] = FakeValue.Object(mscorlib, int32, valueType: true).With(FieldToken(corelib, int32, "m_value"), FakeValue.Of(5));
+        Assert.Equal("5", await dap.EvaluateAsync("Program.s_ticks", top.Id)); // a boxed primitive that comes as its struct
+        Assert.Equal("6", await dap.EvaluateAsync("Program.s_ticks + 1", top.Id));
         Assert.Contains("doesn't exist", (await Assert.ThrowsAsync<DapException>(() => dap.EvaluateAsync("nothingHere", top.Id))).Message, StringComparison.Ordinal);
         Assert.Contains("method 'Twice'", (await Assert.ThrowsAsync<DapException>(() => dap.EvaluateAsync("Twice(\"x\")", top.Id))).Message, StringComparison.Ordinal);
         Assert.Contains("outside the bounds", (await Assert.ThrowsAsync<DapException>(() => dap.EvaluateAsync("_codes[3]", top.Id))).Message, StringComparison.Ordinal);
