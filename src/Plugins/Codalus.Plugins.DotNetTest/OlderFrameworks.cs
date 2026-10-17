@@ -41,7 +41,21 @@ internal static class WindowsFrameworks
 internal static class OlderFrameworks
 {
     public static RunOptions Adjust(RunOptions options, string? targetFramework) =>
-        Adjust(options, targetFramework, RuntimeInformation.OSArchitecture, OperatingSystem.IsMacOS(), OperatingSystem.IsLinux(), Environment.GetEnvironmentVariable, SystemIcuMajor);
+        DebugNetFramework(
+            Adjust(options, targetFramework, RuntimeInformation.OSArchitecture, OperatingSystem.IsMacOS(), OperatingSystem.IsLinux(), Environment.GetEnvironmentVariable, SystemIcuMajor),
+            targetFramework,
+            OperatingSystem.IsWindows(),
+            RuntimeInformation.ProcessArchitecture);
+
+    /// <summary>
+    /// Debugging .NET Framework tests (M43b, ADR 0076): the desktop-CLR debugger debugs processes of its own bitness, and
+    /// VSTest may pick the 32-bit .NET Framework test host for an AnyCPU assembly, so the test host runs as the IDE's
+    /// architecture (x64, or ARM64), unless <c>testing.architecture</c> chose one.
+    /// </summary>
+    public static RunOptions DebugNetFramework(RunOptions options, string? targetFramework, bool windows, Architecture debugger) =>
+        windows && options.Mode == RunMode.Debug && string.IsNullOrEmpty(options.Architecture) && targetFramework is not null && WindowsFrameworks.IsNetFramework(targetFramework)
+            ? options with { Architecture = debugger switch { Architecture.Arm64 => "ARM64", Architecture.X86 => "x86", _ => "x64" } }
+            : options;
 
     public static RunOptions Adjust(RunOptions options, string? targetFramework, Architecture machine, bool macOS, bool linux, Func<string, string?> environment, Func<int?> icuMajor)
     {
