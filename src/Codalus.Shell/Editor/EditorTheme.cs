@@ -106,12 +106,77 @@ public sealed class EditorTheme
 
     public IBrush? Token(int type) => (uint)type < (uint)_tokens.Length ? _tokens[type] : null;
 
-    public static EditorTheme For(string themeId) => themeId switch
+    /// <summary>
+    /// The editor colors of a resolved theme: Classic's Light (Blue too), Dark and High Contrast, or a theme family's
+    /// variant (M45): its kind's colors with the family's C# classification colors and current line over them.
+    /// </summary>
+    public static EditorTheme For(string themeId) => s_families.TryGetValue(themeId, out var family) ? family.Value : themeId switch
     {
         "light" or "blue" => Light,
         "highContrast" => HighContrast,
         _ => Dark,
     };
+
+    /// <summary>A theme family's syntax colors for one variant (docs/design/shell-themes.md), as ARGB.</summary>
+    internal sealed class FamilyColors(uint keyword, uint type, uint method, uint @string, uint number, uint comment, uint currentLine)
+    {
+        public uint Keyword { get; } = keyword;
+
+        public uint Type { get; } = type;
+
+        public uint Method { get; } = method;
+
+        public uint String { get; } = @string;
+
+        public uint Number { get; } = number;
+
+        public uint Comment { get; } = comment;
+
+        public uint CurrentLine { get; } = currentLine;
+    }
+
+    /// <summary>Each family variant's colors: keywords, types, methods, strings, numbers, comments and the current line.</summary>
+    internal static IReadOnlyDictionary<string, FamilyColors> FamilyPalettes { get; } = new Dictionary<string, FamilyColors>(StringComparer.Ordinal)
+    {
+        ["harbor.light"] = new(keyword: 0xFF1D3FBF, type: 0xFF0F7068, method: 0xFF74460A, @string: 0xFFA3361A, number: 0xFF6A3A9E, comment: 0xFF3D6B2C, currentLine: 0xFFF2F6FE),
+        ["harbor.dark"] = new(keyword: 0xFF82A9FF, type: 0xFF6FD1C4, method: 0xFFF0C97A, @string: 0xFFF29E7E, number: 0xFFC9A2FF, comment: 0xFF84A676, currentLine: 0xFF1A2236),
+        ["harbor.highContrast"] = new(keyword: 0xFF7CC7FF, type: 0xFF4FF0CF, method: 0xFFFFE66D, @string: 0xFFFFA680, number: 0xFFE8AAFF, comment: 0xFF9FE870, currentLine: 0xFF000000),
+        ["graphite.light"] = new(keyword: 0xFF2347C5, type: 0xFF0A7360, method: 0xFF7A5300, @string: 0xFFB23A1E, number: 0xFF7A3DB8, comment: 0xFF5D6B5A, currentLine: 0xFFF4F5F7),
+        ["graphite.dark"] = new(keyword: 0xFF93A9FF, type: 0xFF7FD8AE, method: 0xFFF0CF85, @string: 0xFFF2A27E, number: 0xFFCDA6FF, comment: 0xFF808D9A, currentLine: 0xFF202227),
+        ["graphite.highContrast"] = new(keyword: 0xFFA9BCFF, type: 0xFF4FF0CF, method: 0xFFFFE66D, @string: 0xFFFFA680, number: 0xFFE8AAFF, comment: 0xFF9FE870, currentLine: 0xFF000000),
+        ["daylight.light"] = new(keyword: 0xFF0B4FB8, type: 0xFF00796B, method: 0xFF845300, @string: 0xFFB3261E, number: 0xFF9C2F7A, comment: 0xFF56703F, currentLine: 0xFFF7F5FC),
+        ["daylight.dark"] = new(keyword: 0xFF8FB3FF, type: 0xFF6FD6C0, method: 0xFFF0CC85, @string: 0xFFF49A8C, number: 0xFFE39AD0, comment: 0xFF8FA67E, currentLine: 0xFF29263A),
+        ["daylight.highContrast"] = new(keyword: 0xFF7CC7FF, type: 0xFF4FF0CF, method: 0xFFFFE66D, @string: 0xFFFFA680, number: 0xFFFFA3E0, comment: 0xFF9FE870, currentLine: 0xFF000000),
+        ["ember.light"] = new(keyword: 0xFFA34A0B, type: 0xFF1F6E63, method: 0xFF7A5A00, @string: 0xFF44701A, number: 0xFF8A3C8F, comment: 0xFF76695E, currentLine: 0xFFFBF5EE),
+        ["ember.dark"] = new(keyword: 0xFFF0A36B, type: 0xFF9DD3C8, method: 0xFFE8D29A, @string: 0xFFB9D98A, number: 0xFFD9A6E0, comment: 0xFF938980, currentLine: 0xFF211E1B),
+        ["ember.highContrast"] = new(keyword: 0xFFFFB86B, type: 0xFF4FF0CF, method: 0xFFFFE66D, @string: 0xFFB8F07A, number: 0xFFF0AAFF, comment: 0xFFD6D6D6, currentLine: 0xFF000000),
+    };
+
+    private static readonly Dictionary<string, Lazy<EditorTheme>> s_families = FamilyPalettes.ToDictionary(
+        p => p.Key, p => new Lazy<EditorTheme>(() => Family(p.Key, p.Value)), StringComparer.Ordinal);
+
+    private static EditorTheme Family(string id, FamilyColors colors)
+    {
+        var kind = Theming.ThemeService.KindOf(id);
+        var baseTheme = kind == "light" ? Light : kind == "highContrast" ? HighContrast : Dark;
+        var tokens = new Dictionary<string, uint>(baseTheme._tokenColors, StringComparer.Ordinal);
+        void Set(uint argb, params string[] types)
+        {
+            foreach (var type in types)
+            {
+                tokens[type] = argb;
+            }
+        }
+
+        Set(colors.Keyword, "keyword", "modifier", "markupElement");
+        Set(colors.Type, "class", "record", "type", "delegate", "struct", "recordStruct", "enum", "interface", "typeParameter", "razorComponentElement", "razorTagHelperElement");
+        Set(colors.Method, "method", "extensionMethod", "function");
+        Set(colors.String, "string", "stringVerbatim", "markupAttributeQuote", "markupAttributeValue");
+        Set(colors.Number, "number");
+        Set(colors.Comment, "comment", "xmlDocComment", "razorComment", "razorCommentTransition", "razorCommentStar", "markupComment", "markupCommentPunctuation");
+        var elements = new Dictionary<string, uint>(baseTheme._elementColors, StringComparer.Ordinal) { ["editor.lineHighlightBackground"] = colors.CurrentLine };
+        return new EditorTheme(id, tokens, elements);
+    }
 
     public static EditorTheme Dark { get; } = new(
         "dark",
