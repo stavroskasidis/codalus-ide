@@ -2086,8 +2086,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // Start Without Debugging builds the app and runs it: a WinUI window on the desktop, until it's stopped.
         shell.SetStartupProject(app);
+        var before = shell.Builds.LastBuild;
         await shell.StartWithoutDebuggingAsync().ConfigureAwait(true);
-        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited), "the WinUI app is running: " + Tail(shell.Builds.Channel.GetText(), 2000), 600).ConfigureAwait(true);
+        // A failed build starts nothing: it fails the step at once (the first Windows run waited out the 600 s and the job's limit).
+        bool BuildFailed() => BuildDone(before) && shell.Builds.LastBuild is { Result.Succeeded: false };
+        await WaitAsync(() => shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited) || BuildFailed(), () => "the WinUI app is running: " + Tail(shell.Builds.Channel.GetText(), 2000), 600).ConfigureAwait(true);
+        Check(!BuildFailed(), "the WinUI app built:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
         await Task.Delay(3000).ConfigureAwait(true);
         Check(shell.Runs.Running.Any(p => p.Name == "WinUIApp" && !p.HasExited), "the WinUI app is still running (its window is up)");
         shell.StopRunning();
