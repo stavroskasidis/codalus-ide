@@ -541,7 +541,14 @@ public partial class ThemeFamilyTests
         var titleBar = f.Window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "TitleBar");
         Assert.Equal(Color.Parse("#1B2645"), ((ISolidColorBrush)titleBar.Background!).Color); // the navy title bar
         var menu = f.Window.GetVisualDescendants().OfType<Menu>().Single(m => m.Name == "MenuBar");
-        Assert.Equal(Color.Parse("#E8ECF7"), ((ISolidColorBrush)menu.GetVisualDescendants().OfType<MenuItem>().First().Foreground!).Color); // readable on it
+        if (OperatingSystem.IsMacOS())
+        {
+            Assert.False(menu.IsVisible); // the menus are the system's menu bar, outside the window (MenuBuilder)
+        }
+        else
+        {
+            Assert.Equal(Color.Parse("#E8ECF7"), ((ISolidColorBrush)menu.GetVisualDescendants().OfType<MenuItem>().First().Foreground!).Color); // readable on it
+        }
 
         await Use("graphite.dark");
         Assert.Equal(1, Gutter());
