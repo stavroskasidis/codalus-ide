@@ -79,7 +79,8 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     /// <summary>The protocol versions served (the request and notification shapes of the first one, which later ones extend).</summary>
     public static readonly string[] ProtocolVersions = ["2024-03-03"];
 
-    private readonly HttpListener _listener = new();
+    private readonly bool _choosePort;
+    private HttpListener _listener = new();
     private readonly Func<IdeRunRequest, CancellationToken, Task<IIdeRunSession>> _start;
     private readonly ConcurrentDictionary<string, IIdeRunSession> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<WebSocket, SemaphoreSlim> _sockets = new();
@@ -92,11 +93,15 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     {
         _start = start;
         Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
+        _choosePort = port is null;
         Port = port ?? Containers.ContainerLaunch.FreePort();
-        _listener.Prefixes.Add(string.Create(CultureInfo.InvariantCulture, $"http://localhost:{Port}/"));
+        _listener.Prefixes.Add(Prefix(Port));
     }
 
-    public int Port { get; }
+    private static string Prefix(int port) => string.Create(CultureInfo.InvariantCulture, $"http://localhost:{port}/");
+
+    /// <summary>The server's port; one it chose itself can change in <see cref="Start"/>, so read it after that.</summary>
+    public int Port { get; private set; }
 
     public string Token { get; }
 
@@ -128,10 +133,49 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     /// <summary>Aspire's limit, in seconds, for the orchestrator's check of the container runtime.</summary>
     public const string DependencyCheckTimeoutVariable = "ASPIRE_DEPENDENCY_CHECK_TIMEOUT";
 
+    /// <summary>How many free ports <see cref="Start"/> tries when it chose the port and another listener took it first.</summary>
+    private const int PortAttempts = 5;
+
     public void Start()
     {
-        _listener.Start();
+        // A port the server chose was free when it was chosen, but anything (another server in the same process, a
+        // parallel test) can take it before the listener binds it: then it takes another one.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                _listener.Start();
+                break;
+            }
+            catch (HttpListenerException ex) when (_choosePort && attempt < PortAttempts)
+            {
+                Log?.Invoke($"Port {Port} is taken ({ex.Message}): trying another one.");
+                CloseListener(_listener);
+                Port = Containers.ContainerLaunch.FreePort();
+                _listener = new HttpListener();
+                _listener.Prefixes.Add(Prefix(Port));
+            }
+        }
+
         _loop = Task.Run(() => AcceptAsync(_lifetime.Token));
+    }
+
+    /// <summary>
+    /// Closes a listener without throwing. Only <see cref="HttpListener.Close"/>, never <c>Stop</c> then <c>Close</c>: the
+    /// managed listener (macOS, Linux) unregisters its prefixes in each, and the second time it binds the port again to
+    /// find it, which fails with "Address already in use" when anything holds the port by then (on macOS, where the
+    /// accepted notification socket still open at that point is enough, disposal threw it).
+    /// </summary>
+    private void CloseListener(HttpListener listener)
+    {
+        try
+        {
+            listener.Close();
+        }
+        catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException)
+        {
+            Log?.Invoke($"The listener on port {Port} didn't close cleanly: {ex.Message}");
+        }
     }
 
     private async Task AcceptAsync(CancellationToken cancellationToken)
@@ -409,14 +453,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         {
         }
 
-        try
-        {
-            _listener.Stop();
-            _listener.Close();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
+        CloseListener(_listener);
 
         try
         {
