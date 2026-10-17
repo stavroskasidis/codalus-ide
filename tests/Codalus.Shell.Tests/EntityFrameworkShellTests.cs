@@ -111,6 +111,19 @@ public sealed class EntityFrameworkShellTests
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.RestoreState == "succeeded"
             && f.Shell.Languages.Status(ShellHost.CSharpLanguageId) is { State: WorkspaceStates.Ready, Projects: 1 }, seconds: 180);
 
+        // The restore has reached Roslyn. The build host says "succeeded" before it evaluates the restored project
+        // again, so the ready above can be the service's first, from before EF Core resolved: with a cold NuGet cache
+        // (CI) the first load is ready while the packages download. That's the empty answer held below; the real one
+        // must be the service's after the restore, as for the window, which asks again on that ready.
+        var restored = System.Diagnostics.Stopwatch.StartNew();
+        while ((await f.Shell.Languages.RunningClient(ShellHost.CSharpLanguageId)!.EfContextsAsync(null, ShellFixture.RequestTimeout()))?.Contexts
+               .Any(c => c.Name == "BloggingContext") != true)
+        {
+            Assert.True(restored.Elapsed < TimeSpan.FromSeconds(180), $"Roslyn doesn't find BloggingContext after the restore (C# {f.Shell.Languages.Status(ShellHost.CSharpLanguageId)?.State}).");
+            ShellFixture.Pump();
+            await Task.Delay(100);
+        }
+
         // The first question is answered only when released, with what Roslyn said before the restore: nothing.
         var before = new TaskCompletionSource<EfDiscoveredContextsResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var asked = 0;

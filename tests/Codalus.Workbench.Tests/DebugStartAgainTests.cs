@@ -128,6 +128,35 @@ public sealed class DebugStartAgainTests : IDisposable
     }
 
     [Fact]
+    public async Task A_late_runtime_the_adapter_reports_only_after_a_request_is_debugged_too()
+    {
+        // netcoredbg on macOS (PR #24's CI): its CreateProcess callback for a runtime that reports after its 5 seconds
+        // waits for stdin, which its main thread holds while it waits for the next request. The wait sends requests.
+        await using var debug = new DebugService(() => null);
+        var output = new System.Text.StringBuilder();
+        var done = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
+        debug.Ended += (_, code) => done.TrySetResult(code);
+
+        await debug.LaunchAdapterAsync("Scripted", Adapter(), Launch(failStarts: 1, runtimeAfter: "1500+request"), Timeout());
+
+        var program = Assert.Single(ProgramIds());
+        Assert.Equal(program, await debug.WaitForProcessIdAsync(Timeout()));
+        Assert.Equal(7, await done.Task.WaitAsync(Timeout()));
+        string text;
+        lock (output)
+        {
+            text = output.ToString();
+        }
+
+        Assert.Contains("The debugger saw the program's runtime start ", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("starting again", text, StringComparison.Ordinal);
+        Assert.Contains("Hello from the scripted program", text, StringComparison.Ordinal);
+        Assert.Equal("1", File.ReadAllText(_starts));
+        Assert.True(LeftPrograms().Running.Count == 0);
+    }
+
+    [Fact]
     public async Task A_start_whose_runtime_never_reports_ends_its_program_after_the_longer_wait()
     {
         await using var adapter = await DebugAdapter.StartAsync(Adapter(), Timeout());
