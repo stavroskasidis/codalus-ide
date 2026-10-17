@@ -180,6 +180,34 @@ public sealed record TypeOutline(
     MethodOutline[] Methods,
     string? SelectedMethod);
 
+// ------------------------------------------------------------------ M47 Code Search
+
+/// <summary>
+/// Code Search's index (<c>codalus/symbolIndex</c>, ADR 0078): the declarations of the documents in <see cref="Uris"/>,
+/// or of every document of the solution when it is null.
+/// </summary>
+public sealed record SymbolIndexParams(string[]? Uris = null);
+
+/// <summary>
+/// A type or member declared in a document: <see cref="Kind"/> is an LSP symbol kind; <see cref="Container"/> is the
+/// containing type for a member and the namespace for a type; the position is the name's (zero-based).
+/// </summary>
+public sealed record IndexedSymbol(string Name, int Kind, int Line, int Character)
+{
+    public string? Container { get; init; }
+}
+
+/// <summary>A document's declarations; <see cref="Project"/> is the project's name.</summary>
+public sealed record IndexedDocument(string Uri, string Project, IndexedSymbol[] Symbols);
+
+public sealed record SymbolIndexResult(IndexedDocument[] Documents);
+
+/// <summary>
+/// Types of the assemblies the solution references that match <see cref="Query"/> (<c>codalus/externalSymbols</c>,
+/// Code Search's "include external items"), at most <see cref="Limit"/>.
+/// </summary>
+public sealed record ExternalSymbolsParams(string Query, int Limit = 50);
+
 // ------------------------------------------------------------------ M12 navigation extensions
 
 public static class ReferenceItemKinds
