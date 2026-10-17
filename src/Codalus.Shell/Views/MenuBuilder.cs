@@ -37,22 +37,25 @@ internal static class MenuBuilder
             void RebuildNative() => BuildNative(native, shell);
             RebuildNative();
             menus.Changed += (_, _) => Ui.Post(RebuildNative);
+            RebuildOnActiveDocument(shell, RebuildNative);
             return;
         }
 
         void Rebuild() => Build(menuBar, shell);
         Rebuild();
         menus.Changed += (_, _) => Ui.Post(Rebuild);
+        RebuildOnActiveDocument(shell, Rebuild);
+    }
 
-        // Menus whose items all depend on the active document (the Windows Forms designer's Format menu) come and go with it.
+    /// <summary>Menus whose items all depend on the active document (the Windows Forms designer's Format menu) come and go with it.</summary>
+    private static void RebuildOnActiveDocument(ShellHost shell, Action rebuild) =>
         shell.Workbench.Context.Changed += (_, key) =>
         {
             if (key == "activeDocumentKind")
             {
-                Ui.Post(Rebuild);
+                Ui.Post(rebuild);
             }
         };
-    }
 
     private static void OpenDocumentTabMenu(ShellHost shell, ContextRequestedEventArgs e)
     {
@@ -217,6 +220,11 @@ internal static class MenuBuilder
         foreach (var menu in shell.Workbench.Menus.MenuBar)
         {
             var location = MenuLocations.MenuBar(menu.Id);
+            if (shell.Workbench.Menus.GetItems(location).Count == 0)
+            {
+                continue;
+            }
+
             var top = new NativeMenuItem(menu.Title.Replace("_", string.Empty, StringComparison.Ordinal)) { Menu = new NativeMenu() };
             FillNative(top.Menu, location, shell);
             top.Menu.Opening += (_, _) => FillNative(top.Menu, location, shell);
