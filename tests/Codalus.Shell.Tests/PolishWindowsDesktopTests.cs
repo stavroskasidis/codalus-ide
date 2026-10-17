@@ -13,6 +13,7 @@ using Codalus.Shell.Views;
 using Codalus.Tests;
 using Codalus.Workbench.Setup;
 using Codalus.Workbench.Previewer;
+using Codalus.Workbench.Settings;
 using Codalus.Workbench.Wcf;
 
 namespace Codalus.Shell.Tests;
@@ -239,8 +240,14 @@ public partial class PolishTests
         search.Query = "Circle";
         await ShellFixture.PumpUntil(() => search.Rows.Any(r => r.Result is { Name: "Circle" }) && !search.IsSearching, seconds: 60);
         await ShellFixture.PumpUntil(() => f.Shell.CodeSearchPreview is not null, seconds: 30);
+
+        // The preview as the user sees it, on every OS: with its navigation bar, the caret on the type, so the member
+        // picker shows its placeholder. (A preview made before the language service was ready never asked for the
+        // document's symbols again, so only where the service won the race, on Windows, did it show.) In applied
+        // themes: the editor's colors, sticky scroll's pinned lines when docked, follow the theme, not a theme variant.
+        await ShellFixture.PumpUntil(() => f.Shell.CodeSearchPreview is { NavigationBar.IsVisible: true }, seconds: 60, () => "the preview's navigation bar");
         states.Add("data");
-        foreach (var problem in InspectInPlaceInEveryTheme(f.Window, floating))
+        foreach (var problem in await InspectInEveryAppliedThemeAsync(f, floating))
         {
             problems.Add($"code-search (data, preview): {problem}");
         }
@@ -249,7 +256,7 @@ public partial class PolishTests
         await ShellFixture.PumpUntil(() => search.IsDocked && f.Shell.Layout.IsVisible(ShellHost.CodeSearchToolWindowId));
         var tool = f.Shell.Layout.ShowToolWindow(ShellHost.CodeSearchToolWindowId, focus: false)!;
         states.Add("docked");
-        foreach (var problem in InspectInEveryTheme(new ContentControl { Content = tool }, ToolWindowMinWidth, 420))
+        foreach (var problem in await InspectInEveryAppliedThemeAsync(f, new ContentControl { Content = tool }, new Size(ToolWindowMinWidth, 420)))
         {
             problems.Add($"code-search (docked, data): {problem}");
         }
@@ -407,6 +414,51 @@ public partial class PolishTests
 
         window.RequestedThemeVariant = oldTheme;
         ShellFixture.Pump();
+        return [.. found];
+    }
+
+    /// <summary>
+    /// <paramref name="part"/> in each theme applied as the user applies it (the setting), not only as a theme variant: an
+    /// editor's text and sticky scroll's pinned lines take the active theme's syntax colors, which only the setting
+    /// changes. With <paramref name="size"/>, on a window of its own at that size; without it, where it is.
+    /// </summary>
+    internal static async Task<IReadOnlyList<string>> InspectInEveryAppliedThemeAsync(ShellFixture f, Control part, Size? size = null)
+    {
+        var found = new SortedSet<string>(StringComparer.Ordinal);
+        try
+        {
+            foreach (var (id, variant) in ThemeService.Themes)
+            {
+                await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, id, SettingScope.User, CancellationToken.None);
+                await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == id && (size is not null || part.ActualThemeVariant == variant));
+                if (size is not { } hostSize)
+                {
+                    ShellFixture.Pump();
+                    ShellFixture.Pump();
+                    Collect(part, variant, ThemeService.Title(id), found);
+                    continue;
+                }
+
+                var panel = new Border { Child = part };
+                panel.Bind(Border.BackgroundProperty, panel.GetResourceObservable("Shell.Panel"));
+                var host = new Window { Width = hostSize.Width, Height = hostSize.Height, RequestedThemeVariant = variant, Content = panel };
+                host.Show();
+                for (var frame = 0; frame < 6; frame++)
+                {
+                    ShellFixture.Pump(); // an editor scrolls to its caret, then pins sticky scroll's lines, a few frames after it's shown
+                }
+
+                Collect(host, variant, ThemeService.Title(id), found);
+                panel.Child = null;
+                host.Close();
+                ShellFixture.Pump();
+            }
+        }
+        finally
+        {
+            await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None);
+        }
+
         return [.. found];
     }
 

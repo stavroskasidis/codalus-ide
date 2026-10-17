@@ -456,8 +456,13 @@
     <Setter Property="Height" Value="8" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
   </Style>
-  <Style Selector="ComboBox.navigationBar /template/ TextBlock#PlaceholderTextBlock">
+  <!-- Combo box placeholders (M34g): the muted token at full opacity, 4.5:1 (7:1 in the families' High contrast), not
+       Fluent's text at half opacity (2.1–2.8:1): the navigation bar's "Members" while the caret is outside a member,
+       Project Properties' "Default". The template sets the opacity, which only a style with a condition overrides;
+       disabled ones keep Fluent's disabled look. -->
+  <Style Selector="ComboBox:not(:disabled) /template/ TextBlock#PlaceholderTextBlock">
     <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    <Setter Property="Opacity" Value="1" />
   </Style>
   <Style Selector="ComboBox.navigationBar ComboBoxItem">
     <Setter Property="MinHeight" Value="0" />
