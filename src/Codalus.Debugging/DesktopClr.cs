@@ -19,6 +19,9 @@ public static class DesktopClr
     /// <summary>The desktop CLR 2 (.NET Framework 2.0 to 3.5): <c>mscorwks.dll</c>.</summary>
     public const string Clr2 = "mscorwks.dll";
 
+    /// <summary>CoreCLR (.NET Core, .NET 5 and later) on Windows: <c>coreclr.dll</c>.</summary>
+    public const string CoreClr = "coreclr.dll";
+
     /// <summary>
     /// Whether <paramref name="path"/> is a managed executable: a PE image with a CLI header (an <c>.exe</c> built for
     /// .NET Framework). .NET Core and .NET 5+ programs start through a native apphost or <c>dotnet</c>, so a managed
@@ -86,51 +89,37 @@ public static class DesktopClr
     /// CoreCLR (<c>coreclr.dll</c> wins: a .NET process that also loaded the desktop CLR is debugged by netcoredbg), none,
     /// or its modules can't be read.
     /// </summary>
-    public static string? LoadedRuntime(System.Diagnostics.Process process)
+    public static string? LoadedRuntime(System.Diagnostics.Process process) => LoadedRuntime(process.Id);
+
+    /// <inheritdoc cref="LoadedRuntime(System.Diagnostics.Process)"/>
+    public static string? LoadedRuntime(int processId) =>
+        OperatingSystem.IsWindows() && Codalus.Platform.ProcessModules.Names(processId) is { } modules ? RuntimeOf(modules) : null;
+
+    /// <summary>
+    /// The desktop CLR among a process's module file names (<see cref="Clr4"/>, else <see cref="Clr2"/>, lowercase); null
+    /// when there's none or <c>coreclr.dll</c> is there too (a .NET process that loaded the desktop CLR is netcoredbg's).
+    /// </summary>
+    public static string? RuntimeOf(IEnumerable<string> moduleNames)
     {
-        if (!OperatingSystem.IsWindows())
+        string? found = null;
+        foreach (var name in moduleNames)
         {
-            return null;
-        }
-
-        try
-        {
-            string? found = null;
-            foreach (System.Diagnostics.ProcessModule module in process.Modules)
+            if (string.Equals(name, CoreClr, StringComparison.OrdinalIgnoreCase))
             {
-                var name = module.ModuleName;
-                if (string.Equals(name, "coreclr.dll", StringComparison.OrdinalIgnoreCase))
-                {
-                    return null;
-                }
-
-                if (string.Equals(name, Clr4, StringComparison.OrdinalIgnoreCase) || (found is null && string.Equals(name, Clr2, StringComparison.OrdinalIgnoreCase)))
-                {
-                    found = name.ToLowerInvariant();
-                }
+                return null;
             }
 
-            return found;
+            if (string.Equals(name, Clr4, StringComparison.OrdinalIgnoreCase) || (found is null && string.Equals(name, Clr2, StringComparison.OrdinalIgnoreCase)))
+            {
+                found = name.ToLowerInvariant();
+            }
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException or UnauthorizedAccessException)
-        {
-            return null;
-        }
+
+        return found;
     }
 
     /// <summary>Whether process <paramref name="processId"/> runs the desktop CLR (Attach to Process sends it to the desktop-CLR adapter).</summary>
-    public static bool RunsDesktopClr(int processId)
-    {
-        try
-        {
-            using var process = System.Diagnostics.Process.GetProcessById(processId);
-            return LoadedRuntime(process) is not null;
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            return false;
-        }
-    }
+    public static bool RunsDesktopClr(int processId) => LoadedRuntime(processId) is not null;
 
     /// <summary>A Windows command line for <paramref name="program"/> and its arguments, quoted as the C runtime parses them.</summary>
     public static string CommandLine(string program, IReadOnlyList<string> arguments)
