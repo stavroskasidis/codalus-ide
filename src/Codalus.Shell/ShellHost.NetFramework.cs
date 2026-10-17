@@ -12,8 +12,8 @@ namespace Codalus.Shell;
 /// <summary>
 /// .NET Framework projects (M43a, ADR 0075, D31): they open, edit and build on every OS and run only on Windows, where
 /// Start Without Debugging starts their <c>.exe</c> on the desktop CLR (the usual path, since the SDK's <c>RunCommand</c>
-/// is the <c>.exe</c>). Start (debugging) says the desktop CLR's debugger comes in M43b and offers Start Without
-/// Debugging. Convert to SDK-Style rewrites a non-SDK-style project after a preview; Check Environment reports the
+/// is the <c>.exe</c>). Start (debugging) debugs it on the desktop CLR (M43b, ADR 0076): the debug service sends a
+/// managed <c>.exe</c> to <c>codalus-debughost --netfx-dap</c>. Convert to SDK-Style rewrites a non-SDK-style project after a preview; Check Environment reports the
 /// installed .NET Framework on Windows.
 /// </summary>
 public sealed partial class ShellHost
@@ -52,42 +52,6 @@ public sealed partial class ShellHost
         var (release, has35) = NetFrameworkRuntimeProbe();
         return NetFrameworkProjects.ToolRows(projects, release, has35);
     }
-
-    /// <summary>
-    /// F5 on a .NET Framework app on Windows: netcoredbg debugs CoreCLR only, and the desktop CLR's debugger comes in
-    /// M43b. Says so, offers Start Without Debugging, and returns true; false for other projects (and off Windows, where
-    /// the Windows-only gate has spoken).
-    /// </summary>
-    internal bool OfferStartWithoutDebuggingForNetFramework(string project) => OfferStartWithoutDebuggingForNetFramework(project, OperatingSystem.IsWindows());
-
-    internal bool OfferStartWithoutDebuggingForNetFramework(string project, bool windows)
-    {
-        if (Remote is not null || !windows || !Solutions.Projects.TryGetValue(project, out var info) || !NetFrameworkProjects.IsNetFramework(info))
-        {
-            return false;
-        }
-
-        var start = Localizer.Get("msg.netFramework.startWithoutDebugging", "Start Without Debugging");
-        var notification = Workbench.Notifications.Info(
-            Localizer.Format("msg.netFramework.noDebuggerYet", "{0} targets .NET Framework ({1}): debugging the desktop CLR comes in a later release. Start Without Debugging (Ctrl+F5) runs it now.", info.Name, string.Join(", ", info.TargetFrameworks)),
-            start);
-        _ = notification.Result.ContinueWith(
-            t =>
-            {
-                if (t.Result == start)
-                {
-                    Infrastructure.Ui.Post(() => _ = StartWithoutDebuggingAsync(project));
-                }
-            },
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnRanToCompletion,
-            TaskScheduler.Default);
-        return true;
-    }
-
-    /// <summary>Whether a project is a .NET Framework one (M43a): multiple startup projects run it without the debugger.</summary>
-    internal bool IsNetFrameworkProject(string project) =>
-        Solutions.Projects.TryGetValue(project, out var info) && NetFrameworkProjects.IsNetFramework(info);
 
     // ------------------------------------------------------------------ Convert to SDK-style
 

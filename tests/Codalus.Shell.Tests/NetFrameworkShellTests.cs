@@ -8,9 +8,9 @@ namespace Codalus.Shell.Tests;
 /// <summary>
 /// M43a (ADR 0075, D31) in the headless shell on samples/NetFramework: .NET Framework projects open (the old-style one
 /// marked, the web one saying why it can't build), off Windows Start and Start Without Debugging say they're Windows
-/// only and build nothing, F5 on Windows offers Start Without Debugging until the desktop CLR's debugger (M43b), and
-/// Convert to SDK-Style shows its preview and applies it. On Windows, Start Without Debugging runs the net48 console app
-/// and its output comes back.
+/// only and build nothing, and Convert to SDK-Style shows its preview and applies it. On Windows, Start Without
+/// Debugging runs the net48 console app and its output comes back, and F5 debugs it on the desktop CLR (M43b, ADR
+/// 0076): it stops at a breakpoint, evaluates and ends.
 /// </summary>
 public sealed class NetFrameworkShellTests
 {
@@ -72,13 +72,6 @@ public sealed class NetFrameworkShellTests
         // Hot Reload doesn't apply to .NET Framework.
         Assert.Equal("Hot Reload needs .NET 6 or later: ConsoleApp targets net48 (.NET Framework).", f.Shell.HotReloadUnsupportedReason(console));
 
-        // On Windows, F5 says the desktop CLR's debugger comes later and offers Start Without Debugging.
-        Assert.True(f.Shell.OfferStartWithoutDebuggingForNetFramework(console, windows: true));
-        var offer = f.Shell.Workbench.Notifications.Items.Single(n => n.Message.Contains("debugging the desktop CLR comes in a later release", StringComparison.Ordinal));
-        Assert.Equal(["Start Without Debugging"], offer.Actions);
-        Assert.False(f.Shell.OfferStartWithoutDebuggingForNetFramework(console, windows: false));
-        f.Shell.Workbench.Notifications.Dismiss(offer);
-
         // Off Windows, Start and Start Without Debugging say it's Windows only, and build nothing.
         f.Shell.SetStartupProject(console);
         if (!OperatingSystem.IsWindows())
@@ -131,7 +124,7 @@ public sealed class NetFrameworkShellTests
     }
 
     [AvaloniaFact]
-    public async Task Windows_starts_the_net48_console_app_without_debugging()
+    public async Task Windows_starts_and_debugs_the_net48_console_app()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), ".NET Framework apps run on Windows only (D31).");
         var (f, folder) = await OpenAsync();
@@ -148,8 +141,25 @@ public sealed class NetFrameworkShellTests
         Assert.Contains("Runtime: .NET Framework 4.", Output(), StringComparison.Ordinal);
         Assert.Contains("Hello from .NET Framework, Codalus!", Output(), StringComparison.Ordinal);
 
-        // F5 offers Start Without Debugging instead (the desktop CLR's debugger is M43b).
+        // F5 debugs it on the desktop CLR (M43b): a breakpoint in Main, the frame, an evaluation, and Stop ends it.
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugConsoleSetting, "internalConsole", Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
+        var source = Path.Combine(folder, "ConsoleApp", "Program.cs");
+        var line = File.ReadAllLines(source).ToList().FindIndex(l => l.Contains("Console.WriteLine(greeter.Greet())", StringComparison.Ordinal)) + 1;
+        f.Shell.Debugger.Breakpoints.Toggle(source, line);
         await f.Shell.StartDebuggingAsync();
-        Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("debugging the desktop CLR comes in a later release", StringComparison.Ordinal));
+        try
+        {
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == Codalus.Workbench.Debugging.DebugState.Stopped, seconds: 240);
+            Assert.Equal("breakpoint", f.Shell.Debugger.CurrentStop?.Reason);
+            Assert.Equal(line, f.Shell.Debugger.SelectedFrame?.Line);
+            Assert.Equal("ConsoleApp.Program.Main", f.Shell.Debugger.SelectedFrame?.Name);
+            Assert.Equal("\"Hello from .NET Framework, Codalus!\"", (await f.Shell.Debugger.EvaluateAsync("greeter.Greet()", "watch", CancellationToken.None)).Result);
+        }
+        finally
+        {
+            await f.Shell.Debugger.StopAsync();
+        }
+
+        await ShellFixture.PumpUntil(() => !f.Shell.Debugger.IsActive, seconds: 60);
     }
 }

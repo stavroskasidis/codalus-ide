@@ -92,6 +92,31 @@ public sealed class DebugService : IAsyncDisposable
 
     public bool JustMyCode { get; set; } = true;
 
+    /// <summary>
+    /// The desktop-CLR (.NET Framework) debugger adapter (M43b, ADR 0076): <c>codalus-debughost --netfx-dap</c> by
+    /// default; null when it isn't installed.
+    /// </summary>
+    public Func<DebugAdapterStartInfo?> DesktopClrAdapter { get; set; } = DefaultDesktopClrAdapter;
+
+    /// <summary>Whether a launched program runs on the desktop CLR: on Windows, a managed <c>.exe</c> (M43b).</summary>
+    public Func<string, bool> IsDesktopClrProgram { get; set; } = program => OperatingSystem.IsWindows() && DesktopClr.IsManagedExecutable(program);
+
+    /// <summary>Whether a process to attach to runs the desktop CLR (and not CoreCLR), on Windows (M43b).</summary>
+    public Func<int, bool> IsDesktopClrProcess { get; set; } = processId => OperatingSystem.IsWindows() && DesktopClr.RunsDesktopClr(processId);
+
+    private static DebugAdapterStartInfo? DefaultDesktopClrAdapter() =>
+        DebugCompanion.Resolve() is { } host ? new DebugAdapterStartInfo(host.FileName, [.. host.Arguments, DesktopClr.AdapterArgument], host.WorkingDirectory) : null;
+
+    /// <summary>Starts the desktop-CLR adapter, or says it isn't installed.</summary>
+    private Task<DebugAdapter> StartDesktopClrAdapterAsync(CancellationToken cancellationToken) =>
+        DebugAdapter.StartAsync(
+            DesktopClrAdapter() ?? throw new InvalidOperationException("The .NET Framework debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST."),
+            cancellationToken);
+
+    /// <summary>The desktop-CLR adapter's launch arguments for a plan (M43b).</summary>
+    public NetFxDebugArguments DesktopClrArguments(LaunchPlan plan, bool newConsole) =>
+        new(plan.FileName, [.. plan.SplitArguments()], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, NewConsole: newConsole);
+
     /// <summary>Step over properties and operators (netcoredbg's <c>enableStepFiltering</c>, M14b).</summary>
     public bool StepFiltering { get; set; } = true;
 
@@ -355,6 +380,24 @@ public sealed class DebugService : IAsyncDisposable
 
     private LaunchPart Part(DebugLaunch launch, int index, CancellationToken cancellationToken)
     {
+        if (launch.Remote is null && IsDesktopClrProgram(launch.Plan.FileName))
+        {
+            // A .NET Framework program (M43b, ADR 0076): the desktop-CLR adapter starts it, in a console window of its
+            // own or with the Debug Console (the terminal's held start needs CoreCLR's startup hooks).
+            var window = launch.Console == DebugConsoleKind.Window;
+            if (launch.Console == DebugConsoleKind.Terminal)
+            {
+                Output?.Invoke(this, new DebugOutput("console", "The integrated terminal isn't available for .NET Framework programs under the debugger: the program's console is the Debug Console.\n"));
+            }
+
+            return new LaunchPart(
+                launch.Name,
+                index,
+                new DebugProcess(launch.Name, null, window ? DebugProcess.ConsoleWindow : DebugProcess.Launched, null),
+                async ct => await StartDesktopClrAdapterAsync(ct).ConfigureAwait(false),
+                adapter => ((DebugAdapter)adapter).LaunchAsync(DesktopClrArguments(launch.Plan, window), DapJsonContext.Default.NetFxDebugArguments, cancellationToken));
+        }
+
         if (launch.Remote is { } remote)
         {
             return new LaunchPart(
@@ -514,7 +557,17 @@ public sealed class DebugService : IAsyncDisposable
     public async Task AttachAsync(int processId, CancellationToken cancellationToken, RemoteAttach? remote = null, string? name = null)
     {
         var process = new DebugProcess(name ?? ProcessName(processId), processId, DebugProcess.Attached, remote?.Target);
-        if (remote is null)
+        if (remote is null && IsDesktopClrProcess(processId))
+        {
+            // A .NET Framework process (M43b): the desktop-CLR adapter attaches.
+            await StartAsync(
+                StartDesktopClrAdapterAsync,
+                adapter => adapter.AttachAsync(new NetFxDebugArguments(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Request: "attach"), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+                attached: true,
+                [process],
+                cancellationToken).ConfigureAwait(false);
+        }
+        else if (remote is null)
         {
             await StartAsync(ct => StartNetcoredbgAsync(ct), adapter => adapter.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken), attached: true, [process], cancellationToken).ConfigureAwait(false);
         }
