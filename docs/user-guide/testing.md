@@ -160,6 +160,6 @@ DiffTools.AddTool(
 
 ## Known limitations
 
-- .NET Framework test projects are not supported (Codalus targets .NET 8 and later).
+- .NET Framework test projects run and debug on Windows only ([.NET Framework](net-framework.md#tests)), without code coverage.
 - Tests that run in child processes they start themselves can't be debugged.
 - Tests in other environments run but can't be debugged or covered there yet. Live Unit Testing is not planned.

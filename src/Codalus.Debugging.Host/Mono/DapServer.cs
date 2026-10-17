@@ -41,7 +41,7 @@ internal sealed class DapServer(Stream input, Stream output) : IDisposable
                 var body = Handler is null ? null : await Handler(command, arguments, cancellationToken).ConfigureAwait(false);
                 await RespondAsync(seq, command, success: true, body, null).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is DapRequestException or InvalidOperationException or ArgumentException or IOException or global::Mono.Debugger.Soft.VMDisconnectedException or global::Mono.Debugger.Soft.InvalidStackFrameException or global::Mono.Debugger.Soft.AbsentInformationException or global::Mono.Debugger.Soft.CommandException or global::Mono.Debugger.Soft.ObjectCollectedException or NotSupportedException or TimeoutException)
+            catch (Exception ex) when (ex is DapRequestException or InvalidOperationException or ArgumentException or IOException or global::Mono.Debugger.Soft.VMDisconnectedException or global::Mono.Debugger.Soft.InvalidStackFrameException or global::Mono.Debugger.Soft.AbsentInformationException or global::Mono.Debugger.Soft.CommandException or global::Mono.Debugger.Soft.ObjectCollectedException or NotSupportedException or TimeoutException or System.Runtime.InteropServices.COMException)
             {
                 await RespondAsync(seq, command, success: false, null, ex.Message).ConfigureAwait(false);
             }

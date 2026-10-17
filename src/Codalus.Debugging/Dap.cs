@@ -75,6 +75,25 @@ public sealed record MonoDebugArguments(
     public const string Listen = "listen";
 }
 
+/// <summary>
+/// The desktop-CLR (.NET Framework) debugger adapter's <c>launch</c> and <c>attach</c> arguments (M43b, ADR 0076,
+/// <c>codalus-debughost --netfx-dap</c>): <see cref="Program"/> (a managed <c>.exe</c>) with its arguments, working
+/// directory and environment, or <see cref="ProcessId"/> to attach to. <see cref="NewConsole"/> gives the program a
+/// console window of its own (with input); otherwise its output comes through the Debug Console.
+/// </summary>
+public sealed record NetFxDebugArguments(
+    string? Program = null,
+    string[]? Args = null,
+    string? Cwd = null,
+    Dictionary<string, string>? Env = null,
+    int? ProcessId = null,
+    bool JustMyCode = true,
+    bool EnableStepFiltering = true,
+    bool NewConsole = false,
+    string Name = ".NET Framework",
+    string Type = "clr",
+    string Request = "launch");
+
 /// <summary>netcoredbg's <c>launch</c> arguments.</summary>
 public sealed record LaunchArguments(
     string Program,
@@ -247,6 +266,8 @@ public static class DapEvents
 [JsonSerializable(typeof(LaunchArguments))]
 [JsonSerializable(typeof(AttachArguments))]
 [JsonSerializable(typeof(MonoDebugArguments))]
+[JsonSerializable(typeof(NetFxDebugArguments))]
+[JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(RunInTerminalRequestArguments))]
 [JsonSerializable(typeof(RunInTerminalResponse))]
 [JsonSerializable(typeof(BrowserLaunchArguments))]

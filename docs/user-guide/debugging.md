@@ -2,12 +2,14 @@
 
 Codalus IDE debugs .NET programs with **netcoredbg**, the open-source .NET debugger from Samsung, which is bundled with the packages. It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and the macOS package bundles the x64 netcoredbg for them ([Older .NET versions](dotnet-versions.md)).
 
+On Windows, **.NET Framework** programs (and their tests) are debugged by Codalus IDE's own .NET Framework debugger, through the .NET Framework's debugging API: F5 on a .NET Framework app, Attach to Process on a .NET Framework process and Debug Test choose it by themselves, and the windows and commands below work the same. What it does and doesn't do is on the [.NET Framework](net-framework.md#debugging-on-windows) page. .NET MAUI apps on Android and iOS use the Mono debugger ([.NET MAUI](maui.md)).
+
 ## Starting
 
 | Command | Shortcut |
 |---|---|
 | Start Debugging (builds the startup project first, using its launch profile) | `F5` |
-| Attach to Process (the .NET processes are listed first) | `Ctrl+Alt+P` |
+| Attach to Process (the .NET and .NET Framework processes are listed first) | `Ctrl+Alt+P` |
 | Reattach to Process (the last one again, by id while it runs, otherwise by name) | `Shift+Alt+P` |
 | Attach to Process on a Remote Machine (over SSH, in a container, in WSL) | Debug menu |
 | Stop (terminates a launched program, detaches from an attached one) | `Shift+F5` |
@@ -188,3 +190,5 @@ These come from netcoredbg:
 - .NET 11 programs debug with the bundled netcoredbg (3.2.0), except exception module conditions: it gives their stack frames no module, so a condition can't tell where an exception was thrown: one that names modules (`MyApp.dll`) doesn't break, and one that only leaves modules out (`!System.*`) always breaks
 
 Hit counts, logpoints, filters, dependent and temporary breakpoints, exception module conditions and Run to Cursor are implemented by the IDE, so each hit pauses the program briefly.
+
+The .NET Framework debugger (Windows) has these limits of its own: 64-bit processes only (not x86 or `Prefer32Bit` apps), portable PDBs only, no integrated terminal (the Debug Console or a console window), expressions limited to a C# subset (no `new`, lambdas, generic methods or assignments), and Edit and Continue, Set Next Statement, data breakpoints and mixed-mode debugging aren't available ([.NET Framework](net-framework.md#debugging-on-windows)).

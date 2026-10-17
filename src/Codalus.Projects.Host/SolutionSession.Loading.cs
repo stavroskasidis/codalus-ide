@@ -39,6 +39,11 @@ internal sealed partial class SolutionSession
         var count = 0;
         foreach (var path in ProjectPaths)
         {
+            if (_evaluated.TryGetValue(path, out var legacy) && legacy.NetFrameworkRestore is { IsComplete: false } && legacy.Info.CannotBuildReason is null)
+            {
+                return null; // a non-SDK-style project lacks its packages.config packages or reference assemblies (M43a)
+            }
+
             if (!_evaluated.TryGetValue(path, out var project) || project.Info.State != ProjectStates.Loaded || project.AssetsFile is not { } assets)
             {
                 continue; // nothing NuGet restores
