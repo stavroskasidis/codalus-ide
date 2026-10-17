@@ -329,6 +329,9 @@ public sealed class DiagnosticsToolsUnitTests
         var arguments = BenchmarkService.Arguments(new BenchmarkRequest("/src/Bench.csproj", ["A.B.C", "A.D.*"], "Dry", InProcess: true), "/tmp/artifacts");
         Assert.Equal(["run", "-c", "Release", "--project", "/src/Bench.csproj", "--", "--filter", "A.B.C", "A.D.*", "--exporters", "json", "--artifacts", "/tmp/artifacts", "--job", "Dry", "--inProcess"], arguments);
         Assert.DoesNotContain("--job", BenchmarkService.Arguments(new BenchmarkRequest("/p.csproj", ["*"], "Default"), "/a"));
+        Assert.DoesNotContain("--no-build", arguments);
+        Assert.Equal(["run", "-c", "Release", "--project", "/p.csproj", "--no-build", "--", "--filter", "*", "--exporters", "json", "--artifacts", "/a"],
+            BenchmarkService.Arguments(new BenchmarkRequest("/p.csproj", ["*"], "Default"), "/a", noBuild: true));
         Assert.Equal("261.50 μs", BenchmarkService.FormatTime(261500).Replace(',', '.'));
         Assert.Equal("1000 B", BenchmarkService.FormatBytes(1000));
     }
@@ -361,6 +364,65 @@ public sealed class DiagnosticsToolsUnitTests
         finally
         {
             Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task A_benchmark_run_waits_for_the_IDE_build_and_runs_nothing_when_it_fails()
+    {
+        // The IDE's build waits for the build host's restore (the one after opening the solution): dotnet run, which
+        // would restore the project at the same time, starts only after it, with --no-build (Linux CI: obj/*.nuget.g.props
+        // "already exists" when both restored).
+        var folder = Path.Combine(Path.GetTempPath(), "codalus-bench-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var project = Path.Combine(folder, "Bench", "Bench.csproj");
+            var building = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var asked = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var service = new BenchmarkService(() => folder, Path.Combine(folder, "state"), (path, _) =>
+            {
+                asked.TrySetResult(path);
+                return building.Task;
+            });
+            var output = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            service.Output += (_, line) => output.Enqueue(line);
+
+            var run = service.RunAsync(new BenchmarkRequest(project, ["A.B.C"], "Dry", InProcess: true), CancellationToken.None);
+            Assert.Equal(project, await asked.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            await Task.Delay(200, TestContext.Current.CancellationToken);
+            Assert.False(run.IsCompleted);
+            Assert.True(service.IsRunning);
+            Assert.DoesNotContain(output, l => l.StartsWith("> dotnet", StringComparison.Ordinal)); // waits for the build
+            Assert.False(Directory.Exists(Path.Combine(service.Root, "runs")));
+
+            building.SetResult(false);
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => run.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            Assert.Contains("Bench", error.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain(output, l => l.StartsWith("> dotnet", StringComparison.Ordinal)); // nothing ran
+            Assert.False(service.IsRunning);
+            Assert.Empty(service.History().Runs);
+
+            // Stopping while the build runs ends the run as cancelled, without running anything either.
+            var stopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            service = new BenchmarkService(() => folder, Path.Combine(folder, "state"), async (_, token) =>
+            {
+                await using (token.Register(() => stopped.TrySetResult(false)))
+                {
+                    return await stopped.Task;
+                }
+            });
+            run = service.RunAsync(new BenchmarkRequest(project, ["A.B.C"]), CancellationToken.None);
+            Assert.True(service.IsRunning);
+            service.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            Assert.False(Directory.Exists(Path.Combine(service.Root, "runs")));
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
         }
     }
 
