@@ -25,6 +25,7 @@ In progress on `develop`; nightlies show these notes.
 - **Fixed:** opening the first tool window on the left (such as the Start page) could leave the documents area under a third of the window, with the right pane taking over half.
 - **Fixed:** Razor files were colored by their grammar alone: components in the color of an invalid tag, like HTML elements, and namespaces in `@using` like types. They're now colored as in Visual Studio's themes, in every theme: components teal and their parameters light blue, HTML elements blue, delimiters gray, `@` and directives in Razor's directive color, Razor comments green, and the C# in the markup as in a `.cs` file. Each kind has its own entry in Fonts and Colors.
 - **Fixed:** on a Mac whose home folder is on another disk than the app, **Restart to update** started the old version again and offered the same update. The update is now prepared on the app's own disk. A 0.2.1 install on such a Mac can't update past the bug itself: install this release's `.pkg` once.
+- **Fixed:** a large C# file took longer to show its colors than in 0.2.1 (a 100k-line file about a third longer). The editor asked the language service for them again each time CodeLens, inlay hints or document symbols arrived, and started over; it now waits for its first answer, and asks for those after it.
 
 ## 0.2.1
 

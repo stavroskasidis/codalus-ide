@@ -9,7 +9,7 @@
 - Latency and memory fail only against at least 3 earlier runs on the same runner CPU model. With fewer, an increase is a warning, with latency divided by VS Code's startup in the same run. Size stays strict, and one run (or an accepted value) is enough. VS Code's own numbers never fail.
 - Each result records the runner's L3 cache next to its CPU, and the summary shows it.
 
-Replayed against the results of this note's runs (the first measurement, then the confirmation run as the gate would): the 0.3.0 run passes on every OS against the baseline it had (0.2.1). The language host 6% over its accepted value still fails. Against the baseline the new selection finds (five Linux and macOS runs, two Windows), Linux and Windows pass with warnings, but the Mac's `file_highlight_ms` fails against its three earlier runs on the same CPU, confirmation included (`editor-100k` 6037 ms, then 4200, against a 3610 ms median; `self-driven` 3302, then 3496, against 2120). That metric rose on Linux on the same CPU too ([Latency on Linux](#latency-on-linux)). It waits for the maintainer: it can be accepted (an entry with the Mac's CPU) or investigated.
+Replayed against the results of this note's runs (the first measurement, then the confirmation run as the gate would): the 0.3.0 run passes on every OS against the baseline it had (0.2.1). The language host 6% over its accepted value still fails. Against the baseline the new selection finds (five Linux and macOS runs, two Windows), Linux and Windows pass with warnings, but the Mac's `file_highlight_ms` fails against its three earlier runs on the same CPU, confirmation included (`editor-100k` 6037 ms, then 4200, against a 3610 ms median; `self-driven` 3302, then 3496, against 2120). That metric rose on Linux on the same CPU too ([Latency on Linux](#latency-on-linux)). Investigated on 2026-10-17: a regression of the editor since 0.2.1, fixed ([file_highlight_ms](#file_highlight_ms)).
 
 Date: 2026-10-16. The stable release run [Release 0.3.0](https://github.com/stavroskasidis/codalus-ide/actions/runs/38933321849) (`f72b78e8`, the first full CI run on .NET 11 RC2) failed the regression gate of the `benchmarks` job ([ADR 0002](../adr/0002-performance-budgets.md)) on all three runner OSes. This note separates what is real from what is the runner, and recommends new baseline values. Nothing here changes the budgets, the baseline or the gate; those wait for the maintainer.
 
@@ -103,7 +103,7 @@ The `ubuntu-latest` runners come in three CPU models. Codalus and VS Code (p50; 
 
 - **The baseline ran on the fastest model, 0.3.0 on a middle one.** On the same model (9V74), .NET 10 → 0.3.0: VS Code −1%, startup −6%, typing +6%, jumps +1%; `file_highlight_ms` +33% / +25% (the confirmation run: 2745 / 1950).
 - The ratio of Codalus's startup to VS Code's is 0.13–0.19 on every run; 0.3.0's is 0.18.
-- `file_highlight_ms` is the one metric that rose on the same model. It covers the language host's start and its first semantic tokens of the 100k-line file. 0.3.0 has M35 (the VB assemblies are loaded for MEF in every session) and three days of other features; the local comparison below, on the same code with only the runtime changed, shows no difference beyond noise.
+- `file_highlight_ms` is the one metric that rose on the same model. It covers the language host's start and its first semantic tokens of the 100k-line file. 0.3.0 has M35 (the VB assemblies are loaded for MEF in every session) and three days of other features; the local comparison below, on the same code with only the runtime changed, shows no difference beyond noise. Both builds had the cause, an editor change of 0.3.0 ([file_highlight_ms](#file_highlight_ms)).
 - **Windows** ran its baseline on an EPYC 7763 and 0.3.0 on a Xeon 6973P-C: every latency improved, by 21–56%, VS Code's by 26%. The Mac's `file_highlight_ms` (6037 ms in one of three runs, 3971 ms limit on confirmation) is the same kind of noise as its history (1307–4315 ms).
 
 ### Locally: .NET 10 against .NET 11 on the same machine
@@ -124,6 +124,35 @@ p50 (n = samples) [range of the per-round medians]:
 
 - **Typing, scrolling, highlighting and completion:** no difference that rises above this machine's noise.
 - **Startup is slower on .NET 11 here**, consistently: every .NET 11 round was slower than every .NET 10 round at low load, and the time goes between `main` and the first frame (building the window). The M30b checkpoint measured +5% on this machine. It doesn't show on CI (−6% on the same runner model, −21% on Windows' faster runner), and 309 ms is far inside budget 1 (800 ms). `TODO(issue)`: a startup profile of the AOT shell on .NET 11 against .NET 10 on reference hardware, and again on the GA runtime.
+
+## file_highlight_ms
+
+2026-10-17. The metric is the time from the shell's launch to the first frame with the language service's semantic tokens of the 100k-line `Large.cs` (`BenchDriver`: `TokensApplied`, then a rendered frame). It rose between 0.2.1 and 0.3.0 on the same runner CPUs (Linux +25–33%, the Mac's `self-driven` 2120 → 3302–3496 ms), and the runtime didn't explain it. The cause is in the editor, not in the language host or .NET 11.
+
+**Cause.** Until the first tokens arrived, the editor restarted its semantic tokens request at every redraw. Every redraw rebuilds the visual lines, and `CodeEditorController.OnViewChanged` asked again whenever the colorizer didn't cover the visible lines, cancelling the request in flight. The language host takes about 1.5 s to answer the first range request of a 100k-line file (0.85 s to parse it, then the compilation and the binding of the visible members), and the open's own answers redraw the view in that time. A cancelled request loses the work not yet cached, and a new one is sent. The language service's Ready status (`RefreshAll`) cancelled it too.
+- 0.2.1 had the flaw, with one redraw in that window: when the file's document symbols and CodeLens arrived. In its good runs the first colors came at about 2.6 s, in the others after Ready (3.3–5.3 s).
+- 0.3.0's CodeLens history and test status (`7c23cce2`, 2026-10-15) added `EditorInsights.UpdateGitLenses`, which redrew the whole view whenever document symbols or CodeLens entries arrived, also for a file without history lenses (the benchmark's copy is outside a repository). That made a second and a third cancellation, and the first colors waited until Ready or later.
+- LSP traces of the open (a proxy between the shell and the host, 6–8 runs per build): semantic tokens requests per open, median 2 with 1 cancelled in 0.2.1, 4 with 2–4 cancelled on develop.
+- The host didn't change: EventPipe CPU samples show the same phases and durations in 0.2.1 and on develop (the parse 820–850 ms, then the compilation), and the same `initialize` time (median 946 ms in 0.2.1, 922 ms on develop). Loading the Visual Basic assemblies for MEF (M35) isn't measurable here.
+
+**Fix.**
+- A redraw doesn't restart a request in flight whose window of lines covers the visible lines of the current text (`CodeEditorController.TokensInFlightCover`). Scrolling outside that window, an edit or another language service still asks again at once.
+- `RefreshAll` (Ready, a reopened document) lets a request in flight from the same service finish and shows its tokens, then asks again.
+- A refresh asks for CodeLens, inlay hints and document symbols after the first tokens, as it already did for folding and the document's options. For this file they're megabytes (5 MB of document symbols, 3 MB of CodeLens) that the host computed beside the first classification.
+- `UpdateGitLenses` redraws only when the history lenses changed, or with new CodeLens entries.
+
+**Numbers.** This machine (the 4-vCPU Xeon VM above), the published AOT shell with its ReadyToRun hosts, launched with `--open Large.cs --exit-on highlight` as `editor-100k` launches it; the builds alternate round by round, 2 runs per round, after a warm-up launch. Median (p25–p75) in ms:
+
+| Batch: runs per build, load average | 0.2.1 (`c28a56c8`) | develop (`53f11a19`) | develop, `UpdateGitLenses` only | develop, fixed but insights not deferred | develop, fixed |
+|---|---|---|---|---|---|
+| 12, 1.9–3.4 | 2600 (2536–2616) | 3328 (2739–3798) | 2980 (2626–3610) | 2723 (2657–3214) | 2698 (2639–2905) |
+| 16, 1.7–5.5 | 3554 (2684–4254) | 3716 (3350–4060) | | 3362 (2878–3629) | 3063 (2958–3426) |
+| 20, 0.8–4.2 | 3325 (3124–3679) | 3671 (3329–3902) | | | 3058 (3002–3155) |
+
+- develop is 5–28% slower than 0.2.1 by median here. Fixed, it is 8–14% faster than 0.2.1 when the machine is busy and within 4% at low load, with a much narrower spread: one request, answered once. What remains is the host's own classification of the first lines.
+- The harness's `editor-100k` and `self-driven` (3 runs per build, one build after another, load 5–9 from other builds) didn't separate the builds; the alternating table is the comparison.
+- `EditorTests.Redraws_while_a_large_file_is_classified_keep_its_first_semantic_tokens_request` guards it with a count, not a time: with 20 redraws while a 20,000-line file is classified, the first request is the one applied (19 requests before the fix).
+- `TODO(issue)`: the host runs a request's handler on the RPC dispatch loop until its first asynchronous wait, and Roslyn parses a new document synchronously, so the messages behind the first semantic tokens request of a large file (a cancellation, an edit) wait for its 0.85 s parse.
 
 ## Memory
 
