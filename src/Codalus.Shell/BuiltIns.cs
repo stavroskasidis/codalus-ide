@@ -107,6 +107,13 @@ internal static partial class BuiltIns
                 EnumDescriptions = ["The start window", "An empty window", "The last solution"],
                 Scope = SettingScope.User,
             },
+            SettingDescriptor.Create(ShellHost.SetupCompletedSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "First-Run Setup Completed",
+                Category = "Environment",
+                Description = "Whether the first-run setup (appearance, keyboard, your settings, tools) has run for this user data folder; Done and Skip setup turn it on. Turn it off to see the setup at the next start. Help → Set Up Codalus IDE runs it any time.",
+                Scope = SettingScope.User,
+            },
             SettingDescriptor.Create(KeyboardSchemeSetting, "\"default\"", SettingType.String, shell) with
             {
                 Title = "Keyboard Scheme",
@@ -256,6 +263,7 @@ internal static partial class BuiltIns
         Add("workbench.restart", "Restart", "File", Ui(shell.Restart));
         Add("remote.reopenInContainer", "Reopen in Container", "Dev Containers", Ui(() => shell.ReopenInContainerAsync()));
         Add("help.checkEnvironment", "Check Environment", "Help", Ui(shell.OpenCheckEnvironment));
+        Add("help.setUp", "Set Up Codalus IDE", "Help", Ui(() => shell.ShowSetup()));
         Add("workbench.showStartWindow", "Start Window", "File", Ui(shell.ShowStartWindow));
         Add("settingsSync.turnOn", "Settings Sync: Turn On…", "Preferences", Ui(() => shell.TurnOnSettingsSyncAsync()));
         Add("settingsSync.syncNow", "Settings Sync: Sync Now", "Preferences", Ui(() => shell.SyncSettingsAsync()));

@@ -52,7 +52,7 @@ Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs nativ
 - **.NET versions**: Codalus runs on .NET 11; .NET 11 projects with C# 15, every target framework from .NET Core 2.0 to .NET 10, and older SDKs pinned in `global.json`.
 - **Other languages**: highlighting for about forty languages from TextMate grammars; MSBuild editing with evaluated values on hover; JSON and YAML with schemas; `.editorconfig`; a Markdown preview; and any LSP language server through a plugin, without code.
 - **Extensible**: a versioned, out-of-process plugin API, 1.0 since 0.2.0 ([docs/plugins.md](docs/plugins.md)), a Plugin Gallery of NuGet packages, and `dotnet new codalus-plugin`.
-- **Yours**: Fonts and Colors, profiles, settings sync through a folder or a Git repository, customizable menus and toolbars, a start window, Help → Check Environment, and self-update on the stable or nightly channel.
+- **Yours**: a first-run setup (theme, keyboard scheme, your settings from elsewhere, a tools check), Fonts and Colors, profiles, settings sync through a folder or a Git repository, customizable menus and toolbars, a start window, Help → Check Environment, and self-update on the stable or nightly channel.
 - **Private**: no telemetry. Crash reports are local and opt-in.
 
 ## Documentation

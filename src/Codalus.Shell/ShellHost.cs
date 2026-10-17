@@ -71,6 +71,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Options = options;
         Paths = AppPaths.Resolve(PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
         Paths.EnsureCreated();
+        _usedBefore = WasUsed(Paths); // before anything writes to the folder (M46)
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
@@ -328,9 +329,13 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         _ = OfferRecoveryAsync();
         StartUpdates();
+
+        // The first-run setup (M46) shows before the start window; its Tools step offers what M37 offers here.
+        var setup = FirstRunDecision;
+        Workbench.Log.AppendLine($"[setup] First-run setup: {setup}.");
         if (Options.SmokeTest is null && Options.Bench is null)
         {
-            _ = CheckEnvironmentAsync(offer: true);
+            _ = CheckEnvironmentAsync(offer: setup != SetupDecision.Show);
         }
         _ = SyncSettingsAsync(quiet: true);
         foreach (var error in Options.Errors)
@@ -381,7 +386,14 @@ public sealed partial class ShellHost : IAsyncDisposable
         _ = Plugins.ActivateDebuggedPluginsAsync(CancellationToken.None);
         _ = CheckPluginUpdatesOnStartupAsync();
         _ = ResumePluginBisectAsync();
-        OnStartupWithoutSolution();
+        if (setup == SetupDecision.Show)
+        {
+            Ui.Post(() => ShowSetup(firstStart: true));
+        }
+        else
+        {
+            OnStartupWithoutSolution();
+        }
     }
 
     private Infrastructure.SingleInstance? _instance;

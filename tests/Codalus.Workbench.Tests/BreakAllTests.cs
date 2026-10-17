@@ -41,12 +41,12 @@ public sealed class BreakAllTests
         Thread(3, "Main Thread", Frame("[Native Frames]"), Frame("Microsoft.UI.Xaml.Application.Start"), Frame("App.Program.Main", 12)),
     ];
 
-    private static async Task<DebugService> PausedAsync(object[] threads, bool pauseNamesNoThread = false)
+    private static async Task<DebugService> PausedAsync(object[] threads, bool pauseNamesNoThread = false, System.Text.StringBuilder? console = null)
     {
         var debug = new DebugService(() => null);
         var stopped = new TaskCompletionSource<StopInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
         debug.Stopped += (_, stop) => stopped.TrySetResult(stop);
-        var output = new System.Text.StringBuilder();
+        var output = console ?? new System.Text.StringBuilder();
         debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
         var launch = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["threads"] = threads, ["pauseNamesNoThread"] = pauseNamesNoThread });
         await debug.LaunchAdapterAsync("Scripted", new DebugAdapterStartInfo("dotnet", [ScriptedAdapter, "--dap"], AppContext.BaseDirectory), launch, Timeout());
@@ -117,6 +117,39 @@ public sealed class BreakAllTests
 
         Assert.Equal(1, debug.SelectedThreadId);
         Assert.Equal("App.Program.Main", debug.SelectedFrame?.Name);
+    }
+
+    [Fact]
+    public async Task A_pause_where_no_thread_has_frames_is_a_stop_in_external_code()
+    {
+        // The packaged WinUI app attached to as it starts (PR #29's Windows CI): paused before its Main ran, no thread has
+        // managed frames, the runtime's empty and the others' unreadable. It's still a stop: the thread the event named
+        // shows, without frames (the Call Stack shows [External Code]), the Debug Console says why, and Continue runs on.
+        var console = new System.Text.StringBuilder();
+        await using var debug = await PausedAsync([Thread(1, "<No name>"), Unreadable(2, ".NET Finalizer"), Thread(3, "Main Thread")], console: console);
+
+        Assert.Equal(1, debug.SelectedThreadId);
+        Assert.Equal(1, debug.CurrentStop?.ThreadId);
+        Assert.Equal("pause", debug.CurrentStop?.Reason);
+        Assert.Empty(debug.Frames);
+        Assert.Null(debug.SelectedFrame);
+        Assert.Equal([1, 2, 3], debug.Threads.Select(t => t.Id));
+        lock (console)
+        {
+            Assert.Contains("Paused in external code: none of the program's 3 threads is running .NET code", console.ToString(), StringComparison.Ordinal);
+        }
+
+        await debug.ContinueAsync();
+        Assert.Equal(DebugState.Running, debug.State);
+    }
+
+    [Fact]
+    public async Task A_pause_that_names_no_thread_where_none_has_frames_shows_the_first()
+    {
+        await using var debug = await PausedAsync([Thread(4, "<No name>"), Thread(5, "Main Thread")], pauseNamesNoThread: true);
+
+        Assert.Equal(4, debug.SelectedThreadId);
+        Assert.Empty(debug.Frames);
     }
 
     [Fact]

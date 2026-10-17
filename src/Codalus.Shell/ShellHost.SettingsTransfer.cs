@@ -51,12 +51,13 @@ public sealed partial class ShellHost
         Workbench.Notifications.Info(Localizer.Format("msg.settingsTransfer.exportedYourSettingsKeyboardShortcutsAnd", "Exported your settings, keyboard shortcuts and window layouts to {0}.", path));
     }
 
-    public async Task ImportSettingsAsync(string? path = null, SettingsParts? parts = null)
+    /// <summary>Imports an export's settings, shortcuts and layouts; returns what it said, or null when cancelled.</summary>
+    public async Task<string?> ImportSettingsAsync(string? path = null, SettingsParts? parts = null)
     {
         path ??= Window is { } window ? await window.PickFileAsync("Import Settings", "Codalus IDE settings", ["*.json"]).ConfigureAwait(true) : null;
         if (path is null)
         {
-            return;
+            return null;
         }
 
         JsonObject file;
@@ -71,8 +72,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error(Localizer.Format("msg.settingsTransfer.theSettingsCouldntBeImportedFrom", "The settings couldn't be imported from {0}: {1}", path, ex.Message));
-            return;
+            return Said(Localizer.Format("msg.settingsTransfer.theSettingsCouldntBeImportedFrom", "The settings couldn't be imported from {0}: {1}", path, ex.Message), error: true);
         }
 
         if (parts is null)
@@ -87,7 +87,7 @@ public sealed partial class ShellHost
             parts = await Palette.ShowAsync(items, "Import from " + Path.GetFileName(path)).ConfigureAwait(true) is { Tag: SettingsParts picked } ? picked : null;
             if (parts is null)
             {
-                return;
+                return null;
             }
         }
 
@@ -131,7 +131,7 @@ public sealed partial class ShellHost
             imported.Add($"{added.Count} window layouts");
         }
 
-        Workbench.Notifications.Info($"Imported {string.Join(", ", imported)} from {Path.GetFileName(path)}.");
+        return Said($"Imported {string.Join(", ", imported)} from {Path.GetFileName(path)}.");
     }
 
     private static JsonNode? ReadNode(string path)

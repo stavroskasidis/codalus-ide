@@ -1,6 +1,6 @@
 # Shell themes: Harbor, Graphite, Daylight and Ember
 
-Four theme families for the shell. Each comes in Light, Dark and High contrast. They keep a classic IDE's layout and the icon palette, but each has its own colors and some layout differences. The maintainer asked for them on 2026-10-16 ("close to Visual Studio style but original too") and wants every one shipped, so users pick one. [M45](../roadmap.md#m45--theme-families) built the families ([ADR 0077](../adr/0077-theme-families.md), [checkpoint](../checkpoints/m45.md)): their colors come from the tables below, which the tests read, and their shapes from the Shapes table as tokens; the layout differences that need more than a value (Daylight's rail and toolbar groups, Ember's run controls in the title bar, Graphite's search box in the title row, tool window tabs in the header) wait for their own work. [M46](../roadmap.md#m46--first-run-setup) adds the first-run setup that offers them. [D32](../roadmap.md#decision-register) settled the rest on 2026-10-16: Harbor with Follow System is the default for new installs, today's Blue, Light, Dark and High Contrast stay as a Classic family, and `workbench.colorTheme` takes `<family>` or `<family>.<light|dark|highContrast>`.
+Four theme families for the shell. Each comes in Light, Dark and High contrast. They keep a classic IDE's layout and the icon palette, but each has its own colors and some layout differences. The maintainer asked for them on 2026-10-16 ("close to Visual Studio style but original too") and wants every one shipped, so users pick one. [M45](../roadmap.md#m45--theme-families) built the families ([ADR 0077](../adr/0077-theme-families.md), [checkpoint](../checkpoints/m45.md)): their colors come from the tables below, which the tests read, and their shapes from the Shapes table as tokens; the layout differences that need more than a value (Daylight's rail and toolbar groups, Ember's run controls in the title bar, Graphite's search box in the title row, tool window tabs in the header) wait for their own work. [M46](../roadmap.md#m46--first-run-setup) built the first-run setup that offers them ([checkpoint](../checkpoints/m46.md)): its appearance step follows the design below, its other steps are the setup window's own. [D32](../roadmap.md#decision-register) settled the rest on 2026-10-16: Harbor with Follow System is the default for new installs, today's Blue, Light, Dark and High Contrast stay as a Classic family, and `workbench.colorTheme` takes `<family>` or `<family>.<light|dark|highContrast>`.
 
 | | Light | Dark | High contrast |
 |---|---|---|---|
@@ -268,7 +268,7 @@ The tokens are those of [`ui-guidelines.md`](../ui-guidelines.md#tokens). Tokens
 
 ![The setup's appearance step](shell-themes/previews/setup-appearance.png)
 
-The first step of the first-run setup (M46):
+The first step of the first-run setup (M46, built as `SetupWindow`; the smoke step `shell.setup` photographs it as the website's `setup.png`):
 
 - **The four families as cards:** each card has a small picture of the family's layout in the chosen mode and a line about it.
 - **A mode picker:** Light, Dark, High contrast or Match system. Match system is the default and follows the OS's light, dark and high-contrast settings, as Follow System does today.
