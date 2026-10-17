@@ -1,0 +1,56 @@
+name: Probe late runtime (scratch)
+
+on:
+  push:
+    branches: [probe/late-runtime-mac]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          netcoredbg: true
+          devtools: true
+      - name: Environment
+        shell: bash
+        run: |
+          sw_vers || true
+          uname -a
+          csrutil status || true
+          ls -lO /bin/sh /bin/bash /bin/zsh || true
+          file /bin/sh || true
+          ls -l /private/var/select/sh || true
+          command -v dotnet; ls -l "$(command -v dotnet)"
+          codesign -dvv --entitlements - "$(command -v dotnet)" 2>&1 | head -40 || true
+          codesign -dvv --entitlements - .work/netcoredbg/netcoredbg 2>&1 | head -20 || true
+          ls -la .work/netcoredbg
+          strings .work/netcoredbg/libdbgshim.dylib | grep -E "clr-debug-pipe|clrst|clrco|%s-%d|@\(#\)|startup|continue" | head -20 || true
+          echo "TMPDIR=$TMPDIR"
+      - run: dotnet build tests/Codalus.Debugging.Tests -c Release
+      - name: Probe
+        shell: bash
+        env:
+          CODALUS_PROBE_DIR: ${{ github.workspace }}/probe
+        run: tests/Codalus.Debugging.Tests/bin/Release/net11.0/Codalus.Debugging.Tests -class Codalus.Debugging.Tests.LateRuntimeProbeTests -parallel none || true
+      - name: Reports
+        if: always()
+        shell: bash
+        run: |
+          for v in direct sh-0 sh-2 sh-7 bash-7 copiedsh-7; do
+            echo "================ $v"
+            grep -v '"category":"stdout"\|EVENT module' "probe/$v.txt" | cut -c1-400 || true
+            echo "---------------- $v netcoredbg log"
+            grep -v "GetFrameNamedLocalVariable\|InternalWalkMembers\|evaluator.cpp" "probe/$v-netcoredbg.log" | cut -c1-300 | head -60 || true
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: probe
+          path: probe/
+          retention-days: 3
