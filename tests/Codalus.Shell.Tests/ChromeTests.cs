@@ -150,23 +150,27 @@ public class ChromeTests
         await File.WriteAllTextAsync(file, "notes");
         await f.Shell.OpenFileAsync(file);
 
+        // Ctrl+Q opens Code Search's window on Feature Search (M47): commands with their keys, settings, options pages.
         f.Press(Key.Q, RawInputModifiers.Control);
-        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen);
-        f.Shell.Palette.Query = "color theme";
-        await ShellFixture.PumpUntil(() => f.Shell.Palette.Rows.Count > 0);
-        Assert.Contains(f.Shell.Palette.Rows, r => r.Label == "Preferences: Color Theme" && r.Detail == "Command");
-        Assert.Contains(f.Shell.Palette.Rows, r => r.Label == "Color Theme" && r.Detail!.StartsWith("Setting", StringComparison.Ordinal));
+        var search = f.Shell.CodeSearch;
+        await ShellFixture.PumpUntil(() => search is { IsOpen: true, IsFeatureTab: true });
+        search.Query = "color theme";
+        await ShellFixture.PumpUntil(() => search.Rows.Count > 0);
+        Assert.Contains(search.Rows, r => r.Name == "Preferences: Color Theme" && r.Feature?.Kind == FeatureSearchKind.Command);
+        Assert.Contains(search.Rows, r => r.Name == "Color Theme" && r.Feature?.Kind == FeatureSearchKind.Setting && r.Detail!.StartsWith("Setting", StringComparison.Ordinal));
 
         // A setting opens in Settings, filtered to it.
-        f.Shell.Palette.Accept(f.Shell.Palette.Rows.First(r => r.Label == "Color Theme"));
+        search.SelectedIndex = search.Rows.IndexOf(search.Rows.First(r => r.Name == "Color Theme" && r.Feature?.Kind == FeatureSearchKind.Setting));
+        await search.AcceptAsync();
+        Assert.False(search.IsOpen);
         await ShellFixture.PumpUntil(() => f.Shell.Layout.FindDocument<SettingsDocument>(SettingsDocument.DocumentId) is { ViewModel.Search: ThemeService.SettingKey });
 
-        // Files are found by name.
-        f.Shell.Run("workbench.action.featureSearch");
-        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen);
-        f.Shell.Palette.Query = "notes";
-        await ShellFixture.PumpUntil(() => f.Shell.Palette.Rows.Any(r => r.Label == "Notes.txt"));
-        f.Shell.Palette.Cancel();
+        // Files are found by name, on the Code Search tab.
+        f.Shell.Run("workbench.action.gotoAll");
+        await ShellFixture.PumpUntil(() => search is { IsOpen: true, IsCodeTab: true });
+        search.Query = "notes";
+        await ShellFixture.PumpUntil(() => search.Rows.Any(r => r.Name == "Notes.txt"));
+        search.Close();
     }
 
     [AvaloniaFact]
@@ -231,12 +235,12 @@ public class ChromeTests
         await using var f = ShellFixture.Create();
         Assert.Equal("default", f.Shell.Workbench.Context.GetValue("keyboardScheme"));
 
-        // Default: Ctrl+, (Cmd+, on macOS) is Go To All.
+        // Default: Ctrl+, (Cmd+, on macOS) is Go To All, Code Search (M47).
         var primary = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
         f.Press(Key.OemComma, primary);
-        await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen);
-        f.Shell.Palette.Cancel();
-        await ShellFixture.PumpUntil(() => !f.Shell.Palette.IsOpen);
+        await ShellFixture.PumpUntil(() => f.Shell.CodeSearch is { IsOpen: true, IsCodeTab: true });
+        f.Shell.CodeSearch.Close();
+        await ShellFixture.PumpUntil(() => !f.Shell.CodeSearch.IsOpen);
 
         // VS Code: Ctrl+, opens Settings and F1 the command palette.
         await f.Shell.Workbench.Settings.SetAsync(BuiltIns.KeyboardSchemeSetting, "vscode", SettingScope.User, CancellationToken.None);

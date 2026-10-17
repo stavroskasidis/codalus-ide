@@ -3,7 +3,7 @@
 ## The window
 
 - **Title bar**: the menu, the search box and the open solution's name. On Windows they're in the window's title bar; drag its empty part to move the window, double-click it to maximize.
-- **Search** (`Ctrl+Q`): commands, settings, files, and the solution's types and members, in one list.
+- **Search** (`Ctrl+Q`): Feature Search, in the Code Search window: commands, settings and Options pages. Its other tab, Code Search (`Ctrl+T`), finds files, types, members and text ([Code Search](editing.md#code-search)).
 - **Toolbar**: back and forward, open, save and save all, undo and redo, the solution configuration and platform, the startup project, and Start (`F5`) and Start Without Debugging (`Ctrl+F5`). While debugging it shows Continue, Break All, Stop, Restart and the step commands.
 - **Status bar**: purple without a solution, blue with one, orange while debugging. The right side shows the caret's line and column, indentation, line endings, encoding, language, Git branch and notifications.
 - **Layout**: the Solution Explorer is on the right, the Error List and Output at the bottom. Window → Reset Layout brings this layout back.
@@ -45,7 +45,7 @@ Settings you may want first:
 
 ## Themes
 
-Codalus IDE has four **theme families**, each in Light, Dark and High contrast, and Classic:
+Codalus IDE has four **theme families**, each in Light, Dark and High contrast, and Classic. The [first-run setup](getting-started.md#the-first-run-setup) offers the four at the first start (Help → Set Up Codalus IDE shows it again):
 
 | Family | What it looks like |
 |---|---|

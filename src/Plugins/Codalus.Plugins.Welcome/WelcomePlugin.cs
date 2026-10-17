@@ -3,15 +3,13 @@ namespace Codalus.Plugins.Welcome;
 /// <summary>
 /// The built-in Start page. It uses only the public plugin API (ADR 0003): a tree tool window, commands, a
 /// setting and a status bar item. Shell features are reached through built-in commands, as any plugin would.
-/// Onboarding (M23a): until the user is done with it, a Get Started group offers the theme, the keyboard scheme and
-/// the importers; a tip of the day runs what it describes.
+/// A tip of the day runs what it describes. Get Started (M23a's theme, keyboard scheme and importers at the top of the
+/// page) is the shell's first-run setup since M46: Help → Get Started opens it.
 /// </summary>
 public sealed class WelcomePlugin : ICodalusPlugin
 {
     internal const string ViewId = "welcome.view";
     internal const string ShowOnStartupSetting = "welcome.showOnStartup";
-    internal const string OnboardedSetting = "welcome.onboarded";
-    internal const string ThemeSetting = "workbench.colorTheme";
     internal const string KeyboardSchemeSetting = "keyboard.scheme";
 
     /// <summary>The keyboard schemes the shell offers (its <c>keyboard.scheme</c> setting).</summary>
@@ -29,7 +27,7 @@ public sealed class WelcomePlugin : ICodalusPlugin
     public Task ActivateAsync(IPluginContext context, CancellationToken cancellationToken)
     {
         _context = context;
-        _tree = new StartTree(context.Commands, context.Settings, context.Localize);
+        _tree = new StartTree(context.Commands, context.Localize);
         _tree.ShowOnStartup = context.Settings.GetValue(ShowOnStartupSetting, true);
         context.Subscriptions.Add(context.Window.RegisterTreeDataProvider(ViewId, _tree));
         context.Subscriptions.Add(context.Commands.Register("welcome.show", async (_, ct) =>
@@ -49,15 +47,10 @@ public sealed class WelcomePlugin : ICodalusPlugin
 
             return null;
         }));
-        context.Subscriptions.Add(context.Commands.Register("welcome.finishOnboarding", async (_, ct) =>
-        {
-            await context.Commands.ExecuteAsync("workbench.setSetting", ct, OnboardedSetting, true).ConfigureAwait(false);
-            return null;
-        }));
         context.Subscriptions.Add(context.Commands.Register("welcome.showOnboarding", async (_, ct) =>
         {
-            await context.Commands.ExecuteAsync("workbench.setSetting", ct, OnboardedSetting, false).ConfigureAwait(false);
-            await ShowAsync(preserveFocus: false, ct).ConfigureAwait(false);
+            // Get Started is the shell's first-run setup (M46).
+            await context.Commands.ExecuteAsync("help.setUp", ct).ConfigureAwait(false);
             return null;
         }));
         context.Subscriptions.Add(context.Commands.Register("welcome.nextTip", () =>
@@ -110,10 +103,6 @@ public sealed class WelcomePlugin : ICodalusPlugin
             _tree.ShowOnStartup = _context!.Settings.GetValue(ShowOnStartupSetting, true);
             _tree.Refresh();
         }
-        else if (e.Affects(OnboardedSetting) || e.Affects(ThemeSetting) || e.Affects(KeyboardSchemeSetting))
-        {
-            _tree.Refresh();
-        }
     }
 
     /// <summary>Arguments of the shell's <c>workbench.view.&lt;id&gt;</c> commands.</summary>
@@ -139,51 +128,12 @@ internal sealed record StartNode(string Label)
 }
 
 /// <summary>
-/// The Start tree: Get Started (until done), groups of actions, the recent solutions (from the shell's
-/// <c>workbench.getRecentSolutions</c>) and a tip.
+/// The Start tree: groups of actions, the recent solutions (from the shell's <c>workbench.getRecentSolutions</c>) and a
+/// tip. (Get Started moved into the first-run setup, M46.)
 /// </summary>
-internal sealed class StartTree(ICommands? commands, ISettings? settings = null, Func<string, string, string>? localize = null) : ITreeDataProvider<StartNode>
+internal sealed class StartTree(ICommands? commands, Func<string, string, string>? localize = null) : ITreeDataProvider<StartNode>
 {
     private string T(string key, string english) => localize?.Invoke(key, english) ?? english;
-
-    /// <summary>
-    /// <c>workbench.colorTheme</c> as a line (M45): "Harbor, Follow System", "Ember, Dark"; the values from before the theme
-    /// families read as Classic. A plugin's theme shows its id.
-    /// </summary>
-    internal string ThemeLabel(string theme)
-    {
-        var (family, variant) = theme switch
-        {
-            "followSystem" => ("classic", (string?)null),
-            "blue" or "light" or "dark" or "highContrast" => ("classic", theme),
-            _ when theme.Split('.') is [var f, var v] => (f, v),
-            _ => (theme, null),
-        };
-        var familyName = family switch
-        {
-            "harbor" => "Harbor",
-            "graphite" => "Graphite",
-            "daylight" => "Daylight",
-            "ember" => "Ember",
-            "classic" => "Classic",
-            _ => null,
-        };
-        if (familyName is null)
-        {
-            return theme;
-        }
-
-        var mode = variant switch
-        {
-            null => T("start.followSystem", "Follow System"),
-            "light" => T("start.themeLight", "Light"),
-            "dark" => T("start.themeDark", "Dark"),
-            "highContrast" => T("start.themeHighContrast", "High Contrast"),
-            "blue" => T("start.themeBlue", "Blue"),
-            _ => variant,
-        };
-        return $"{familyName}, {mode}";
-    }
 
     private const string Repository = "https://github.com/stavroskasidis/codalus-ide";
 
@@ -245,35 +195,7 @@ internal sealed class StartTree(ICommands? commands, ISettings? settings = null,
         Collapsible = element.Children.Count > 0 ? TreeItemCollapsibleState.Expanded : TreeItemCollapsibleState.None,
     };
 
-    private List<StartNode> BuildRoots(IReadOnlyList<StartNode> recent)
-    {
-        var roots = new List<StartNode>();
-        if (settings?.GetValue(WelcomePlugin.OnboardedSetting, false) != true)
-        {
-            roots.Add(GetStarted());
-        }
-
-        roots.AddRange(Common(recent));
-        return roots;
-    }
-
-    /// <summary>The first-run steps (M23a): the look, the keys, and what to bring from elsewhere.</summary>
-    private StartNode GetStarted()
-    {
-        var theme = settings?.GetValue(WelcomePlugin.ThemeSetting, "harbor") ?? "harbor";
-        var scheme = settings?.GetValue(WelcomePlugin.KeyboardSchemeSetting, "default") ?? "default";
-        return Group(T("start.getStarted", "Get Started"),
-            Action(T("start.chooseAColorTheme", "Choose a Color Theme"), "color-mode", "workbench.selectTheme") with { Description = ThemeLabel(theme) },
-            Action(T("start.chooseAKeyboardScheme", "Choose a Keyboard Scheme"), "keyboard", "welcome.chooseKeyboardScheme") with
-            {
-                Description = WelcomePlugin.KeyboardSchemes.FirstOrDefault(s => s.Id == scheme).Title ?? scheme,
-                Tooltip = T("start.defaultVsCodeResharperOr", "Default, VS Code, ReSharper or Emacs keys"),
-            },
-            Action(T("start.importFromVsCode", "Import from VS Code…"), "download", "workbench.importVsCodeSettings") with { Tooltip = T("start.settingsAndKeyBindingsFrom", "Settings and key bindings from VS Code's user folder") },
-            Action(T("start.importSettingsFromAFile", "Import Settings from a File…"), "download", "workbench.importSettings") with { Tooltip = T("start.aFileExportedWithTools", "A file exported with Tools → Export Settings") },
-            Action(T("start.fontsAndColors", "Fonts and Colors"), "color", "workbench.openFontsAndColors"),
-            Action(T("start.done", "Done"), "check-circle", "welcome.finishOnboarding") with { Tooltip = T("start.hideGetStartedHelpGet", "Hide Get Started (Help → Get Started brings it back)") });
-    }
+    private List<StartNode> BuildRoots(IReadOnlyList<StartNode> recent) => [.. Common(recent)];
 
     private StartNode Tip()
     {

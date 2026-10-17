@@ -212,16 +212,21 @@ public sealed class WinUIShellTests
             // F5: started again, and netcoredbg attaches to its process; Break All stops it with a stack.
             // A start that fails says so in a notification (the build, the registration, the activation, the attach):
             // the wait ends there, and the failure shows the Run output, the Debug Console and the notifications.
+            // The attach comes right after Windows starts the app, so it can be running before the app's Main: a Break
+            // All then finds no thread with managed frames (PR #29's CI, the Call Stack's [External Code]). The pause
+            // comes once the app runs its own code, its window shown (OnLaunched ran; its UI thread is in Main).
             var notified = f.Shell.Workbench.Notifications.Items.Select(n => n.Id).DefaultIfEmpty().Max();
             string Diagnostics() =>
                 $"Debugger: {f.Shell.Debugger.State}\nRun output:\n{channel.GetText()}\nDebug Console:\n{f.Shell.DebugLog.GetText()}\nNotifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}";
             f.Shell.Run("debug.start");
             await WaitAsync(() => f.Shell.Debugger.State == DebugState.Running || f.Shell.Workbench.Notifications.Items.Any(n => n.Id > notified && n.Severity == NotificationSeverity.Error), seconds: 600);
             Assert.True(f.Shell.Debugger.State == DebugState.Running, Diagnostics());
+            await ShellFixture.PumpUntil(() => HasWindow("WinUIApp") || f.Shell.Debugger.State != DebugState.Running, seconds: 120, describe: () => "the app's window didn't show.\n" + Diagnostics());
+            Assert.True(f.Shell.Debugger.State == DebugState.Running, Diagnostics());
             f.Shell.Run("debug.pause");
             await WaitAsync(() => f.Shell.Debugger.State == DebugState.Stopped || f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
             Assert.True(f.Shell.Debugger.State == DebugState.Stopped, Diagnostics());
-            await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0);
+            await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Any(r => !r.IsExternalCode), describe: () => $"the Call Stack shows {string.Join(", ", f.Shell.CallStack.Frames.Select(r => r.Name))}.\n{Stacks(f)}\n{Diagnostics()}");
             f.Shell.Run("debug.stop");
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
         }
@@ -231,6 +236,47 @@ public sealed class WinUIShellTests
             using var remove = Process.Start(new ProcessStartInfo("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-Process -Name WinUIApp -ErrorAction SilentlyContinue | Stop-Process -Force; Get-AppxPackage -Name 'Codalus.Samples.WinUIApp' | Remove-AppxPackage"]) { UseShellExecute = false, CreateNoWindow = true });
             remove?.WaitForExit(60_000);
         }
+    }
+
+    /// <summary>Whether a process of that name shows a window (a fresh look each time: <see cref="Process.MainWindowHandle"/> is cached).</summary>
+    private static bool HasWindow(string name)
+    {
+        var processes = Process.GetProcessesByName(name);
+        try
+        {
+            return processes.Any(p => p.MainWindowHandle != IntPtr.Zero);
+        }
+        catch (InvalidOperationException)
+        {
+            return false; // one exited meanwhile
+        }
+        finally
+        {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+        }
+    }
+
+    /// <summary>The stop, for a failure: the thread shown, and each thread with its frame count (0: none, or unreadable).</summary>
+    private static string Stacks(ShellFixture f)
+    {
+        var debugger = f.Shell.Debugger;
+        IReadOnlyDictionary<int, IReadOnlyList<Codalus.Debugging.StackFrame>> stacks;
+        try
+        {
+            // Off the UI thread: the debug service's requests don't need it.
+            var read = Task.Run(() => debugger.AllStacksAsync(200, CancellationToken.None));
+            stacks = read.Wait(TimeSpan.FromSeconds(30)) ? read.Result : new Dictionary<int, IReadOnlyList<Codalus.Debugging.StackFrame>>();
+        }
+        catch (AggregateException ex)
+        {
+            return $"Stop: {debugger.CurrentStop}. The threads' stacks couldn't be read: {ex.InnerException?.Message}";
+        }
+
+        return $"Stop: {debugger.CurrentStop}, thread {debugger.SelectedThreadId} shown with {debugger.Frames.Count} frames.\nThreads:\n"
+            + string.Join("\n", debugger.Threads.Select(t => $"  {t.Id} {t.Name}: {(stacks.TryGetValue(t.Id, out var frames) ? $"{frames.Count} frames, top {frames[0].Name}" : "0 frames")}"));
     }
 
     /// <summary>A wait that ends at its timeout instead of failing there, so the assertion after it shows <c>Diagnostics()</c>.</summary>

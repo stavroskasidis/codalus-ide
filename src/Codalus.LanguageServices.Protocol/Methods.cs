@@ -64,6 +64,8 @@ public static class Methods
     public const string WorkspaceStatus = "codalus/workspaceStatus";
     public const string TestCandidates = "codalus/testCandidates";
     public const string TypeOutline = "codalus/typeOutline";
+    public const string SymbolIndex = "codalus/symbolIndex";
+    public const string ExternalSymbols = "codalus/externalSymbols";
     public const string ReferenceItems = "codalus/references";
     public const string GoToBase = "codalus/base";
     public const string InheritanceMargin = "codalus/inheritanceMargin";

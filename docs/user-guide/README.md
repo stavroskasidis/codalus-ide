@@ -38,10 +38,10 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 
 | Area | Shortcut | Command |
 |---|---|---|
-| General | `Ctrl+Q` | Search commands, settings, files and code |
+| General | `Ctrl+Q` | Feature Search: commands, settings and Options pages |
 | | `Ctrl+Shift+P` | Command palette |
 | | `Ctrl+Alt+I` | AI Chat |
-| | `Ctrl+,` | Go to all |
+| | `Ctrl+,` | Code Search (go to all) |
 | | `Alt+F6`, `Alt+Shift+F6` | Move focus between panes |
 | | `Ctrl+Alt+L`, `Ctrl+;` | Solution Explorer, search it |
 | | `Ctrl+Shift+O` | Open solution or project |
@@ -61,7 +61,7 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 | | `Ctrl+M Ctrl+M` | Toggle folding |
 | Navigation | `F12`, `Ctrl+F12` | Go to definition, implementation |
 | | `Shift+F12` | Find all references |
-| | `Ctrl+T` | Go to all (types, members, files) |
+| | `Ctrl+T` | Code Search: files, types, members and text, with a preview |
 | | `Ctrl+Shift+F`, `Ctrl+Shift+H` | Find in files, replace in files |
 | | `Ctrl+-`, `Ctrl+Shift+-` | Navigate back, forward |
 | Build and run | `Ctrl+Shift+B`, `F6` | Build solution |

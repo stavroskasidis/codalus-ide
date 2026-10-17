@@ -224,6 +224,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => tree.Roots.Count > 0, "the Start page has items").ConfigureAwait(true);
         }).ConfigureAwait(true);
 
+        // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
+        await StepAsync("shell.setup", "M46", "The first-run setup: a theme family previewed live, a keyboard scheme, VS Code's settings imported and the tools checked; Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
+
         // M38: the start window, with the recent list the run has so far (the website's screenshot).
         await StepAsync("shell.startWindow", "M38", "The start window lists recent solutions and closes on Continue without code", async () =>
         {
@@ -358,6 +361,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 shell.FindResults.CurrentSet = references; // back to the references, as the theme screenshots (the website's) show them
             }
         }, "language.ready").ConfigureAwait(true);
+
+        await StepAsync("navigation.codeSearch", "M47", "Code Search: the index saved next to the solution, a type found with its container and project, the editable preview on its file, prefixes, Enter, and Feature Search", CodeSearchStepAsync, "language.ready").ConfigureAwait(true);
 
         await StepAsync("editor.insights", "M12", "Inlay hints, CodeLens, Peek Definition, the Document Outline and the navigation bar", async () =>
         {

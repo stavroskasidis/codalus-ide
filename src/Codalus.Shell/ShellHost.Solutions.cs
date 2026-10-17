@@ -148,6 +148,11 @@ public sealed partial class ShellHost
         {
             StatusBar.ShowMessage(Localizer.Format("msg.solutions.opening", "Opening {0}…", Path.GetFileName(path)));
             var stateKey = new SolutionStateKey(path, IsFolder: false);
+            if (!remote)
+            {
+                OpenCodeSearchIndex(stateKey); // searches before the projects load (M47)
+            }
+
             var session = remote ? null : await ReadSolutionSessionAsync(stateKey).ConfigureAwait(true);
             ApplySolutionViewState(session);
             await Solutions.OpenAsync(path, trusted, Workbench.Settings.GetBoolean(RestoreOnOpenSetting, true), CancellationToken.None, session?.Configuration, session?.Platform, session?.ActiveFrameworks).ConfigureAwait(true);
@@ -195,6 +200,7 @@ public sealed partial class ShellHost
 
     public async Task CloseSolutionAsync()
     {
+        CloseCodeSearchIndex();
         CloseSolutionState();
         CloseSolutionDocuments();
         await Solutions.CloseAsync().ConfigureAwait(true);

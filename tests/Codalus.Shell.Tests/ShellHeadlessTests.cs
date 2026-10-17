@@ -269,10 +269,10 @@ public class ShellHeadlessTests
         await ShellFixture.PumpUntil(() => f.Shell.Layout.IsVisible("welcome.view"), seconds: 60);
         var tree = (TreeToolViewModel)f.Shell.Layout.OpenToolWindows.Single(t => t.Id == "welcome.view").Content!;
         await ShellFixture.PumpUntil(() => tree.Roots.Count > 0, seconds: 30);
-        Assert.Equal(["Get Started", "Start", "Recent", "Tip", "Plugins", "Learn", "Show Start Page on Startup"], tree.Roots.Select(r => r.Label));
+        Assert.Equal(["Start", "Recent", "Tip", "Plugins", "Learn", "Show Start Page on Startup"], tree.Roots.Select(r => r.Label));
         Assert.Contains(f.Shell.StatusBar.Left, i => i.Text == "Start" && i.Icon == "home");
 
-        // Every refresh (a setting changed, Next Tip, Done) replaces the nodes, and each group's items arrive with their own
+        // Every refresh (a setting changed, Next Tip) replaces the nodes, and each group's items arrive with their own
         // request after the groups do: a group shows only "Loading…" until then, and a refresh still on its way replaces
         // it again. So each item is looked up in the tree as it is when it has arrived, never in a group read earlier.
         async Task<TreeNodeViewModel> ItemAsync(string group, string label)
@@ -282,15 +282,12 @@ public class ShellHeadlessTests
             return item!;
         }
 
-        // Get Started (M23a): the keyboard scheme from a quick pick, shown next to the step; Done hides the group.
-        var scheme = await ItemAsync("Get Started", "Choose a Keyboard Scheme");
-        Assert.Equal("Default", scheme.Description);
-        tree.Activate(scheme);
+        // The keyboard scheme from the plugin's quick pick (M23a).
+        f.Shell.Run("welcome.chooseKeyboardScheme");
         await ShellFixture.PumpUntil(() => f.Shell.Palette.IsOpen, seconds: 30);
         f.Type("Emacs");
         f.Press(Key.Enter);
         await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("keyboardScheme"), "emacs"), seconds: 30);
-        await ShellFixture.PumpUntil(() => tree.Roots.Count > 0 && tree.Roots[0].Children.Any(c => c.Description == "Emacs"), seconds: 30);
 
         string? TipShown() => tree.Roots.FirstOrDefault(r => r.Label == "Tip") is { Children: [{ IsPlaceholder: false } shown, _] } ? shown.Label : null;
         string? firstTip = null;
@@ -298,9 +295,11 @@ public class ShellHeadlessTests
         tree.Activate(await ItemAsync("Tip", "Next Tip"));
         await ShellFixture.PumpUntil(() => TipShown() is { } next && next != firstTip, seconds: 30);
 
-        tree.Activate(await ItemAsync("Get Started", "Done"));
-        await ShellFixture.PumpUntil(() => tree.Roots.Count > 0 && tree.Roots[0].Label == "Start", seconds: 30);
-        Assert.True(f.Shell.Workbench.Settings.GetBoolean("welcome.onboarded", false));
+        // Get Started is the first-run setup (M46): Help → Get Started opens it.
+        f.Shell.Run("welcome.showOnboarding");
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        await f.Shell.SetupModel!.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
 
         tree.Activate(await ItemAsync("Start", "Open Settings"));
         await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is SettingsDocument, seconds: 30);

@@ -383,17 +383,25 @@ public sealed class WatchViewModel : ObservableObject
 }
 
 /// <summary>A frame in the Call Stack window.</summary>
-public sealed record FrameRow(StackFrame Frame, bool IsSelected, bool IsTop)
+public sealed record FrameRow(StackFrame Frame, bool IsSelected, bool IsTop, bool IsExternalCode = false)
 {
+    public const string ExternalCode = "[External Code]";
+
+    /// <summary>
+    /// The row a stopped thread without frames shows (a program paused before its Main runs, or in native code only),
+    /// as Visual Studio does: not a frame of the adapter's, so it selects nothing.
+    /// </summary>
+    public static FrameRow ExternalCodeRow() => new(new StackFrame(0, ExternalCode, null, 0, 0), IsSelected: false, IsTop: true, IsExternalCode: true);
+
     public string Name => Frame.Name;
 
-    public string Location => Frame.Source?.Path is { } path ? $"{System.IO.Path.GetFileName(path)}, line {Frame.Line}" : "[External Code]";
+    public string Location => IsExternalCode ? string.Empty : Frame.Source?.Path is { } path ? $"{System.IO.Path.GetFileName(path)}, line {Frame.Line}" : ExternalCode;
 
     public bool HasSource => Frame.Source?.Path is not null;
 
     public string Marker => IsTop ? "▶" : IsSelected ? "▷" : string.Empty;
 
-    public string AccessibleName => $"{Name}, {Location}{(IsSelected ? ", selected" : string.Empty)}";
+    public string AccessibleName => IsExternalCode ? Name : $"{Name}, {Location}{(IsSelected ? ", selected" : string.Empty)}";
 }
 
 /// <summary>The Call Stack window: the threads and the selected thread's frames.</summary>
@@ -453,6 +461,11 @@ public sealed class CallStackViewModel : ObservableObject
                 {
                     Frames.Add(new FrameRow(frames[i], frames[i] == _debugger.SelectedFrame, i == 0));
                 }
+
+                if (frames.Count == 0)
+                {
+                    Frames.Add(FrameRow.ExternalCodeRow());
+                }
             }
             else
             {
@@ -470,6 +483,11 @@ public sealed class CallStackViewModel : ObservableObject
     /// <summary>Selects a frame (Locals, Autos and Watch follow) and opens its source.</summary>
     public async Task ActivateAsync(FrameRow row)
     {
+        if (row.IsExternalCode)
+        {
+            return;
+        }
+
         _debugger.SelectFrame(row.Frame);
         if (row.Frame.Source?.Path is not { } path)
         {

@@ -2,6 +2,7 @@
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:views="using:Codalus.Shell.Views"
              x:Class="Codalus.Shell.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
   <UserControl.Styles>
@@ -75,45 +76,7 @@
               <ToggleButton Classes="themeCard" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
                             ToolTip.Tip="{Binding Description}" AutomationProperties.Name="{Binding Title}">
                 <StackPanel Spacing="6">
-                  <Border Width="178" Height="100" HorizontalAlignment="Left" Background="{Binding Picture.Background}" BorderBrush="{Binding Picture.Border}" BorderThickness="1" ClipToBounds="True">
-                    <DockPanel>
-                      <Border DockPanel.Dock="Top" Height="12" Background="{Binding Picture.TitleBar}">
-                        <Border Width="44" Height="6" HorizontalAlignment="Center" Background="{Binding Picture.Search}" BorderBrush="{Binding Picture.SearchBorder}" BorderThickness="1" CornerRadius="2" />
-                      </Border>
-                      <Border DockPanel.Dock="Top" Height="9" Background="{Binding Picture.Toolbar}" BorderBrush="{Binding Picture.ToolbarBorder}" BorderThickness="0,0,0,1">
-                        <StackPanel Orientation="Horizontal" Spacing="3" Margin="4,0" VerticalAlignment="Center">
-                          <Border Width="5" Height="5" Background="{Binding Picture.IconBlue}" />
-                          <Border Width="5" Height="5" Background="{Binding Picture.IconFolder}" />
-                          <Border Width="14" Height="5" CornerRadius="2" Background="{Binding Picture.Start}">
-                            <Border Width="4" Height="4" HorizontalAlignment="Left" Margin="1,0" Background="{Binding Picture.StartIcon}" />
-                          </Border>
-                        </StackPanel>
-                      </Border>
-                      <Border DockPanel.Dock="Bottom" Height="7" Background="{Binding Picture.StatusBar}" />
-                      <Grid ColumnDefinitions="*,Auto,52" Margin="2">
-                        <Border Background="{Binding Picture.EditorBackground}" CornerRadius="{Binding Picture.PanelCorners}">
-                          <StackPanel Spacing="3" Margin="5,5,0,0">
-                            <Border Width="30" Height="3" HorizontalAlignment="Left" Background="{Binding Picture.Accent}" />
-                            <Border Width="54" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Picture.EditorForeground}" />
-                            <Border Width="40" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Picture.Link}" />
-                            <Border Height="5" Background="{Binding Picture.CurrentLine}">
-                              <Border Width="46" Height="3" HorizontalAlignment="Left" Margin="6,0,0,0" Background="{Binding Picture.Muted}" />
-                            </Border>
-                            <Border Width="26" Height="3" HorizontalAlignment="Left" Background="{Binding Picture.EditorForeground}" />
-                          </StackPanel>
-                        </Border>
-                        <Border Grid.Column="1" Width="{Binding Picture.Gutter}" Background="{Binding Picture.GutterBackground}" />
-                        <Border Grid.Column="2" Background="{Binding Picture.Panel}" CornerRadius="{Binding Picture.PanelCorners}">
-                          <StackPanel Spacing="3">
-                            <Border Height="7" Background="{Binding Picture.Caption}" />
-                            <Border Height="5" Margin="3,0" Background="{Binding Picture.Selection}" />
-                            <Border Width="30" Height="3" HorizontalAlignment="Left" Margin="5,0" Background="{Binding Picture.Foreground}" />
-                            <Border Width="24" Height="3" HorizontalAlignment="Left" Margin="5,0" Background="{Binding Picture.Foreground}" />
-                          </StackPanel>
-                        </Border>
-                      </Grid>
-                    </DockPanel>
-                  </Border>
+                  <views:ThemePictureView DataContext="{Binding Picture}" HorizontalAlignment="Left" />
                   <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
                   <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" />
                 </StackPanel>

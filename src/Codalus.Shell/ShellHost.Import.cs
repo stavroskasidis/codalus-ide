@@ -13,14 +13,16 @@ namespace Codalus.Shell;
 /// </summary>
 public sealed partial class ShellHost
 {
-    /// <summary>Imports from <paramref name="folder"/> (VS Code's user folder; null: the one on this machine).</summary>
-    public async Task ImportVsCodeSettingsAsync(string? folder = null, bool confirm = true)
+    /// <summary>
+    /// Imports from <paramref name="folder"/> (VS Code's user folder; null: the one on this machine). Returns what it said
+    /// (the first-run setup shows it), or null when the user declined.
+    /// </summary>
+    public async Task<string?> ImportVsCodeSettingsAsync(string? folder = null, bool confirm = true)
     {
         folder ??= VsCodeImport.UserFolder(Workbench.Platform, Environment.GetEnvironmentVariable);
         if (folder is null)
         {
-            Workbench.Notifications.Info(Localizer.Get("msg.import.vsCodesUserSettingsWerentFound", "VS Code's user settings weren't found on this machine (VS Code, Insiders or VSCodium)."));
-            return;
+            return Said(Localizer.Get("msg.import.vsCodesUserSettingsWerentFound", "VS Code's user settings weren't found on this machine (VS Code, Insiders or VSCodium)."));
         }
 
         ImportResult<(string Key, JsonElement Value)> settings;
@@ -34,35 +36,36 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error(Localizer.Format("msg.import.vsCodesSettingsCouldntBeRead", "VS Code's settings couldn't be read ({0}): {1}", folder, ex.Message));
-            return;
+            return Said(Localizer.Format("msg.import.vsCodesSettingsCouldntBeRead", "VS Code's settings couldn't be read ({0}): {1}", folder, ex.Message), error: true);
         }
 
         if (settings.Imported.Count == 0 && keybindings.Imported.Count == 0)
         {
-            Workbench.Notifications.Info(Localizer.Format("msg.import.nothingInAppliesToCodalus", "Nothing in {0} applies to Codalus IDE.", folder));
-            return;
+            return Said(Localizer.Format("msg.import.nothingInAppliesToCodalus", "Nothing in {0} applies to Codalus IDE.", folder));
         }
 
         if (confirm && await Workbench.Notifications.Info(
                 Localizer.Format("msg.import.importSettingsAndKeyboardShortcutsFrom", "Import {0} settings and {1} keyboard shortcuts from VS Code ({2})? They replace yours for the same settings.", settings.Imported.Count, keybindings.Imported.Count, folder), "Import").Result.ConfigureAwait(true) != "Import")
         {
-            return;
+            return null;
         }
 
         await ApplyImportAsync(folder, settings, keybindings, mergeColors: false).ConfigureAwait(true);
         var skipped = settings.Skipped.Count + keybindings.Skipped.Count;
-        Workbench.Notifications.Info($"Imported {settings.Imported.Count} settings and {keybindings.Imported.Count} keyboard shortcuts from VS Code."
+        return Said($"Imported {settings.Imported.Count} settings and {keybindings.Imported.Count} keyboard shortcuts from VS Code."
             + (skipped > 0 ? $" {skipped} didn't apply here (the Codalus IDE log lists them)." : string.Empty));
     }
 
-    /// <summary>Imports a <c>.vssettings</c> file (<paramref name="path"/>, or picked): its font, colors, editor options and shortcuts.</summary>
-    public async Task ImportVsSettingsAsync(string? path = null, bool confirm = true)
+    /// <summary>
+    /// Imports a <c>.vssettings</c> file (<paramref name="path"/>, or picked): its font, colors, editor options and
+    /// shortcuts. Returns what it said, or null when nothing was picked or the user declined.
+    /// </summary>
+    public async Task<string?> ImportVsSettingsAsync(string? path = null, bool confirm = true)
     {
         path ??= Window is { } window ? await window.PickFileAsync("Import a .vssettings File", "Exported IDE settings", ["*.vssettings"]).ConfigureAwait(true) : null;
         if (path is null)
         {
-            return;
+            return null;
         }
 
         VsSettingsResult result;
@@ -72,27 +75,40 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Workbench.Notifications.Error(Localizer.Format("msg.import.couldntBeRead", "{0} couldn't be read: {1}", path, ex.Message));
-            return;
+            return Said(Localizer.Format("msg.import.couldntBeRead", "{0} couldn't be read: {1}", path, ex.Message), error: true);
         }
 
         var (settings, keybindings) = (result.Settings, result.Keybindings);
         if (settings.Imported.Count == 0 && keybindings.Imported.Count == 0)
         {
-            Workbench.Notifications.Info($"Nothing in {Path.GetFileName(path)} applies to Codalus IDE" + (settings.Skipped.Count > 0 ? $": {settings.Skipped[0].Name} {settings.Skipped[0].Reason}." : "."));
-            return;
+            return Said($"Nothing in {Path.GetFileName(path)} applies to Codalus IDE" + (settings.Skipped.Count > 0 ? $": {settings.Skipped[0].Name} {settings.Skipped[0].Reason}." : "."));
         }
 
         if (confirm && await Workbench.Notifications.Info(
                 Localizer.Format("msg.import.importSettingsAndKeyboardShortcutsFrom2", "Import {0} settings and {1} keyboard shortcuts from {2}? Colors are added to yours; other settings replace yours.", settings.Imported.Count, keybindings.Imported.Count, Path.GetFileName(path)), "Import").Result.ConfigureAwait(true) != "Import")
         {
-            return;
+            return null;
         }
 
         await ApplyImportAsync(path, settings, keybindings, mergeColors: true).ConfigureAwait(true);
         var skipped = settings.Skipped.Count + keybindings.Skipped.Count;
-        Workbench.Notifications.Info($"Imported {settings.Imported.Count} settings and {keybindings.Imported.Count} keyboard shortcuts from {Path.GetFileName(path)}."
+        return Said($"Imported {settings.Imported.Count} settings and {keybindings.Imported.Count} keyboard shortcuts from {Path.GetFileName(path)}."
             + (skipped > 0 ? $" {skipped} didn't apply here (the Codalus IDE log lists them)." : string.Empty));
+    }
+
+    /// <summary>An import's outcome, as a notification, returned for the first-run setup to show.</summary>
+    private string Said(string message, bool error = false)
+    {
+        if (error)
+        {
+            Workbench.Notifications.Error(message);
+        }
+        else
+        {
+            Workbench.Notifications.Info(message);
+        }
+
+        return message;
     }
 
     /// <summary>
