@@ -24,4 +24,12 @@
   <ItemGroup>
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <!--
+      The WPF previewer (M40b): its WPF-free reading of the root's start tag is tested on every OS; the designer host and
+      the live agent (WPF code) are built for the Windows-only tests, which run them from its bin folder.
+    -->
+    <Compile Include="..\..\src\Codalus.Previewer.Wpf\DesignXaml.cs" Link="Shared\WpfDesignXaml.cs" />
+    <ProjectReference Include="..\..\src\Codalus.Previewer.Wpf\Codalus.Previewer.Wpf.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" GlobalPropertiesToRemove="TargetFramework" />
+  </ItemGroup>
 </Project>

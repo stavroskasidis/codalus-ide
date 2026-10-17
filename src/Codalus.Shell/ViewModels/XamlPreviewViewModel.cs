@@ -17,9 +17,13 @@ public sealed class XamlPreviewViewModel : ObservableObject
 {
     public const string ToolWindowId = "xaml.preview";
 
+    /// <summary>The status with nothing to preview.</summary>
+    public const string NothingPreviewed = "Open an Avalonia .axaml file or a WPF .xaml file to preview it.";
+
     private static readonly double[] s_zooms = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
-    private string _status = "Open an .axaml file to preview it.";
+    private string _status = NothingPreviewed;
+    private bool _supportsThemes = true;
     private string? _error;
     private string? _fileName;
     private WriteableBitmap? _image;
@@ -92,6 +96,13 @@ public sealed class XamlPreviewViewModel : ObservableObject
     public IReadOnlyList<string> Scales { get; } = ["1×", "1.25×", "1.5×", "2×"];
 
     public IReadOnlyList<string> Themes { get; } = ["Default", "Light", "Dark"];
+
+    /// <summary>Whether the previewed XAML has theme variants (Avalonia's); WPF's has none, so the picker hides (M40b).</summary>
+    public bool SupportsThemes
+    {
+        get => _supportsThemes;
+        set => SetField(ref _supportsThemes, value);
+    }
 
     public string Status
     {

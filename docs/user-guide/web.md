@@ -58,6 +58,7 @@ The status bar shows the state (watching, applied in N ms, compile errors, resta
 ## Razor and Blazor
 
 `.razor` and `.cshtml` files are served by the C# language service, through the same Razor compiler the build uses:
+- **Colors** as Visual Studio gives them, in every theme: components and their parameters (like types and attributes), HTML elements, attributes and values, `@` transitions and directives (`@using`, `@inject`, `@code`), Razor (`@* *@`) and HTML comments, tag helpers in `.cshtml`, and the C# inside the markup as in a `.cs` file. A component is colored as one only when it resolves to a component, so a misspelled tag stays an HTML element. Each kind has its own entry in Fonts and Colors (Razor component element, Markup element…). Until the project has loaded, and for a Razor file outside a project, the Razor grammar colors the file.
 - **C# in a Razor file** (expressions like `@count`, event handlers like `@onclick="Increment"`, `@code` blocks): completion, hover, parameter info, Go to Definition, Find All References and highlighting. Errors appear in the editor and the Error List as you type.
 - **Markup:**
   - after `<`: component names (your own and the framework's), with HTML elements;

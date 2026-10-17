@@ -98,4 +98,148 @@ public sealed class RazorTests(BlazorFixture blazor) : IClassFixture<BlazorFixtu
         await LanguageFixture.WaitUntilAsync(() => !blazor.Languages.Diagnostics.For(Home).Any(d => d.Code == "CS1061"), TimeSpan.FromSeconds(90));
         Assert.NotEmpty(home);
     }
+
+    /// <summary>The maintainer's Routes.razor, reduced: components, HTML, directives, C# blocks and both kinds of comments.</summary>
+    internal const string ColoredRoutes = """
+        @using Microsoft.AspNetCore.Components.Authorization
+        @inject ILogger<Routes> Logger
+        @* A Razor comment *@
+        <!-- An HTML comment -->
+        <Router AppAssembly="@typeof(Program).Assembly">
+            <Found Context="routeData">
+                <RouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)" />
+            </Found>
+        </Router>
+        @if (Logger is not null)
+        {
+            <Greeting Name="Blazor" Times="2" />
+        }
+        else
+        {
+            <p class="note">Hello @Logger</p>
+        }
+        <button @onclick="Click" @onclick:preventDefault>Go</button>
+
+        @code {
+            private void Click() => Logger.LogInformation("Clicked");
+        }
+
+        """;
+
+    [Fact]
+    public async Task Razor_files_get_semantic_tokens_of_razor_markup_and_mapped_csharp()
+    {
+        // The maintainer's report: components and HTML colored alike by the grammar (components as invalid tags), no Razor colors.
+        var routes = blazor.File("BlazorApp", "Components", "Routes.razor");
+        var original = await blazor.OpenAsync(routes);
+        await blazor.EditAsync(routes, original, ColoredRoutes);
+        var text = blazor.Text(routes).Text;
+        var lines = text.Split('\n');
+        var legend = blazor.Client.Legend!.TokenTypes;
+        List<(int Line, int Start, int Length, string Type)> tokens = [];
+        await LanguageFixture.WaitUntilAsync(() =>
+        {
+            var data = blazor.Client.SemanticTokensAsync(Uri(routes), null, Ct).GetAwaiter().GetResult().Data;
+            tokens = [.. Decode(data).Select(t => (t.Line, t.Start, t.Length, legend[t.Type]))];
+            return tokens.Any(t => t.Type == "razorComponentElement") && tokens.Any(t => t.Type == "controlKeyword");
+        }, TimeSpan.FromSeconds(90));
+        var report = string.Join('\n', tokens.Select(t => $"{t.Line}:{t.Start} {t.Type} '{lines[t.Line].Substring(t.Start, Math.Min(t.Length, lines[t.Line].Length - t.Start))}'"));
+
+        // The token (type and text) at the nth occurrence of a marker, plus a delta.
+        void Expect(string? type, string tokenText, string marker, int delta = 0, int occurrence = 1)
+        {
+            var offset = -1;
+            for (var i = 0; i < occurrence; i++)
+            {
+                offset = text.IndexOf(marker, offset + 1, StringComparison.Ordinal);
+                Assert.True(offset >= 0, $"'{marker}' #{occurrence} not found");
+            }
+
+            var position = LanguageFixture.PositionOf(text, offset + delta);
+            var token = tokens.FirstOrDefault(t => t.Line == position.Line && position.Character >= t.Start && position.Character < t.Start + t.Length);
+            var actual = token.Type is null ? (null, string.Empty) : (token.Type, lines[position.Line].Substring(token.Start, token.Length));
+            Assert.True((type, tokenText) == actual, $"At '{marker}'+{delta}: expected {type} '{tokenText}', got {actual.Item1} '{actual.Item2}'.\n{report}");
+        }
+
+        // Directives: the transition and the keyword in Razor's colors, their C# by Roslyn (the namespace, the type).
+        Expect("razorTransition", "@", "@using");
+        Expect("razorDirective", "using", "@using", 1);
+        Expect("namespace", "Microsoft", "Microsoft.AspNetCore");
+        Expect("razorDirective", "inject", "@inject", 1);
+        Expect("interface", "ILogger", "ILogger<Routes>");
+
+        // Comments: Razor's, with its transitions and stars; HTML's.
+        Expect("razorCommentTransition", "@", "@*");
+        Expect("razorCommentStar", "*", "@*", 1);
+        Expect("razorComment", " A Razor comment ", "A Razor");
+        Expect("razorCommentStar", "*", "*@");
+        Expect("markupCommentPunctuation", "<!--", "<!--");
+        Expect("markupComment", " An HTML comment ", "An HTML");
+
+        // Components (the framework's, the project's, a child content tag), their parameters, delimiters and values.
+        Expect("markupTagDelimiter", "<", "<Router");
+        Expect("razorComponentElement", "Router", "<Router", 1);
+        Expect("razorComponentAttribute", "AppAssembly", "AppAssembly");
+        Expect("markupOperator", "=", "AppAssembly=", "AppAssembly".Length);
+        Expect("markupAttributeQuote", "\"", "=\"@typeof", 1);
+        Expect("razorTransition", "@", "@typeof");
+        Expect("keyword", "typeof", "@typeof", 1);
+        Expect("class", "Program", "Program)");
+        Expect("razorComponentElement", "Found", "<Found", 1);
+        Expect("razorComponentAttribute", "Context", "Context");
+        Expect("markupAttributeValue", "routeData", "\"routeData\"", 1);
+        Expect("razorComponentElement", "RouteView", "<RouteView", 1);
+        Expect("markupTagDelimiter", "/>", "/>");
+        Expect("razorComponentElement", "Found", "</Found", 2);
+        Expect("razorComponentElement", "Router", "</Router", 2);
+        Expect("razorComponentElement", "Greeting", "<Greeting", 1);
+        Expect("razorComponentAttribute", "Name", "Name=");
+        Expect("markupAttributeValue", "Blazor", "\"Blazor\"", 1);
+        Expect("number", "2", "\"2\"", 1);
+
+        // C# blocks: the transition, then Roslyn's control keywords and symbols.
+        Expect("razorTransition", "@", "@if");
+        Expect("controlKeyword", "if", "@if", 1);
+        Expect("controlKeyword", "else", "else");
+        Expect("property", "Logger", "Logger is");
+
+        // HTML: elements, attributes and values; text has no token.
+        Expect("markupElement", "p", "<p", 1);
+        Expect("markupAttribute", "class", "class=");
+        Expect("markupAttributeValue", "note", "\"note\"", 1);
+        Expect("markupElement", "p", "</p>", 2);
+        Expect("markupElement", "button", "<button", 1);
+        Expect(null, string.Empty, "Go<");
+
+        // Directive attributes, and the @code block's braces.
+        Expect("razorTransition", "@", "@onclick=");
+        Expect("razorDirectiveAttribute", "onclick", "@onclick=", 1);
+        Expect("method", "Click", "\"Click\"", 1);
+        Expect("razorDirectiveColon", ":", ":preventDefault");
+        Expect("razorDirectiveAttribute", "preventDefault", "preventDefault");
+        Expect("razorDirective", "code", "@code", 1);
+        Expect("razorTransition", "{", "@code {", "@code ".Length);
+        Expect("razorTransition", "}", "\n}", 1, occurrence: 3);
+        Expect("extensionMethod", "LogInformation", "LogInformation");
+
+        // A range request has the same tokens for its lines.
+        var range = await blazor.Client.SemanticTokensAsync(Uri(routes), new Protocol.Range(new Position(4, 0), new Position(6, 0)), Ct);
+        var ranged = Decode(range.Data).Select(t => (t.Line, t.Start, t.Length, legend[t.Type])).ToList();
+        Assert.NotEmpty(ranged);
+        Assert.Equal(tokens.Where(t => t.Line is >= 4 and <= 6), ranged);
+    }
+
+    private static List<(int Line, int Start, int Length, int Type)> Decode(int[] data)
+    {
+        var result = new List<(int, int, int, int)>();
+        int line = 0, start = 0;
+        for (var i = 0; i + 4 < data.Length; i += 5)
+        {
+            line += data[i];
+            start = data[i] == 0 ? start + data[i + 1] : data[i + 1];
+            result.Add((line, start, data[i + 2], data[i + 3]));
+        }
+
+        return result;
+    }
 }

@@ -1,6 +1,6 @@
 # 0023. Razor through the Razor source generator
 
-- **Status:** accepted (M16 plan, 2026-10-10; the maintainer's standing go-ahead for M9–M16)
+- **Status:** accepted (M16 plan, 2026-10-10; the maintainer's standing go-ahead for M9–M16), amended 2026-10-16 (semantic tokens in Razor files, below)
 - **Date:** 2026-10-10
 - **Deciders:** maintainer
 
@@ -37,7 +37,8 @@ M16 is split:
 - **Razor markup:**
   - **completion** (`RazorContext`): component names after `<` (the project's components and those of the component libraries it references, from the compilation), with HTML elements; a component's `[Parameter]` properties and Blazor's directive attributes inside its tag; directives after `@` at the start of a line. There the generator first sees an implicit C# expression, so both are offered.
   - **hover and Go to Definition** on a component's tag and on its parameters.
-- **Not served yet** (empty answers): rename, code actions, formatting, semantic tokens, folding and document symbols in Razor files. The Razor TextMate grammar colors the file.
+- **Not served yet** (empty answers): rename, code actions, formatting, folding and document symbols in Razor files.
+- **Semantic tokens** (*update 2026-10-16*, the maintainer's report that components and HTML were colored alike, components as the grammar's invalid tags): the C# spans are classified by Roslyn in the generated documents and mapped back; the markup is scanned in the host between them, with Razor's own token types (the Razor language server's names). Which tags are components comes from the generated code (`OpenComponent<T>`, child content parameters written as tags), and which are tag helpers from the order of the generator's tag helper scopes, so the colors follow what the build binds. The shell's semantic colors now go over the grammar's, which still colors the file before the project has loaded and outside a project.
 
 **Blazor run and Hot Reload**
 - A Blazor Web App or Server app is an ASP.NET Core project: Run, Debug, the Endpoints Explorer and Hot Reload (ADR 0022) apply as they are. `dotnet watch` applies markup and C# edits in components.

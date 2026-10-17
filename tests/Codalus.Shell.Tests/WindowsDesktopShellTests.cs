@@ -183,7 +183,22 @@ public sealed class WindowsDesktopShellTests
         // Both net11.0-windows test projects run.
         await ShellFixture.PumpUntil(() => f.Shell.Tests.Read(roots => roots.Count(r => r.Label is "WpfApp.Tests" or "WinFormsApp.Tests")) == 2, seconds: 180);
         await f.Shell.RunTestsAsync(TestRunKind.Run, null);
-        await ShellFixture.PumpUntil(() => !f.Shell.Tests.IsRunning && f.Shell.Tests.Read(roots => roots.Where(r => r.Label is "WpfApp.Tests" or "WinFormsApp.Tests")
-            .SelectMany(r => r.Leaves()).Count(l => l.Outcome == TestOutcome.Passed)) == 4, seconds: 300);
+        try
+        {
+            await ShellFixture.PumpUntil(() => !f.Shell.Tests.IsRunning && f.Shell.Tests.Read(roots => roots.Where(r => r.Label is "WpfApp.Tests" or "WinFormsApp.Tests")
+                .SelectMany(r => r.Leaves()).Count(l => l.Outcome == TestOutcome.Passed)) == 4, seconds: 300);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The run's outcome, output and build in the message: the first Windows run timed out with nothing else to go on.
+            var build = f.Shell.Builds.Channel.GetText();
+            Assert.Fail($"{ex.Message} Running: {f.Shell.Tests.IsRunning}. Tests: {TestStates(f)}. Runs: "
+                        + string.Join(" || ", f.Shell.Tests.Runs.Select(r => $"{r.Name} ({r.Results.Count} results): {r.Output}"))
+                        + $" Build output (end): {build[Math.Max(0, build.Length - 4000)..]}");
+        }
     }
+
+    private static string TestStates(ShellFixture f) => f.Shell.Tests.Read(roots => string.Join(" || ", roots.Where(r => r.Label is "WpfApp.Tests" or "WinFormsApp.Tests").Select(r =>
+        $"{r.Label}{(r.Error is { } error ? $" ({error})" : string.Empty)}: "
+        + string.Join(", ", r.Leaves().Select(l => $"{l.Label}={l.Outcome}{(l.Result?.Messages is { Count: > 0 } messages ? $" ({messages[0].Message})" : string.Empty)}")))));
 }
