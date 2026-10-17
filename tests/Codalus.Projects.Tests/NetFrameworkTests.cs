@@ -20,6 +20,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
     private static readonly TimeSpan s_timeout = TimeSpan.FromMinutes(6);
     private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-netfx-" + Guid.NewGuid().ToString("N"));
     private readonly OutputService _output = new();
+    private readonly List<string> _restoreStates = [];
     private SolutionService _solutions = null!;
     private BuildService _builds = null!;
 
@@ -45,6 +46,13 @@ public sealed class NetFrameworkTests : IAsyncLifetime
             });
         _solutions.Log += (_, line) => Console.Error.WriteLine("[host] " + line);
         _solutions.RestoreOutput += (_, line) => Console.Error.WriteLine("[restore] " + line);
+        _solutions.RestoreStateChanged += (_, e) =>
+        {
+            lock (_restoreStates)
+            {
+                _restoreStates.Add(e.Message is null ? e.State : $"{e.State}: {e.Message}");
+            }
+        };
         _builds = new BuildService(_solutions, _output);
         return ValueTask.CompletedTask;
     }
@@ -122,6 +130,33 @@ public sealed class NetFrameworkTests : IAsyncLifetime
 
     private string DesignTimeState() =>
         $"design-time builds: {string.Join("; ", _solutions.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)} {i.Value.State} {i.Value.TargetFramework} {i.Value.Error}"))}";
+
+    /// <summary>
+    /// The restore's states so far, and what the latest evaluations of <paramref name="projects"/> say about what it
+    /// restored: whether each counts as restored, its test platform, its framework references and its packages.
+    /// </summary>
+    private string RestoreState(params string[] projects)
+    {
+        string states;
+        lock (_restoreStates)
+        {
+            states = _restoreStates.Count == 0 ? "none yet" : string.Join(" -> ", _restoreStates);
+        }
+
+        return $"restore: {states}; evaluations: " + string.Join("; ", projects.Select(p => !_solutions.Projects.TryGetValue(p, out var info)
+            ? $"{Path.GetFileName(p)} not evaluated"
+            : $"{Path.GetFileName(p)} restored={info.Restored} tests={info.TestPlatform ?? "none"} "
+              + $"frameworks=[{string.Join(", ", info.References.Where(r => r.Kind == ReferenceKinds.Framework).Select(r => $"{r.Name} {r.Version} resolved={r.Resolved} {r.Path}"))}] "
+              + $"packages=[{string.Join(", ", info.References.Where(r => r.Kind == ReferenceKinds.Package).Select(r => $"{r.Name} {r.Version} resolved={r.Resolved}"))}]"));
+    }
+
+    /// <summary>
+    /// Whether the latest evaluation of <paramref name="project"/> has its framework and packages resolved, as one run
+    /// after the restore installed them does.
+    /// </summary>
+    private bool EvaluatedAfterRestore(string project) =>
+        _solutions.Projects.TryGetValue(project, out var info) && info.Restored
+        && info.References.Where(r => r.Kind is ReferenceKinds.Framework or ReferenceKinds.Package).All(r => r.Resolved);
 
     // ------------------------------------------------------------------ units
 
@@ -254,11 +289,16 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         var project = Path.Combine(folder, "Net35Lib.csproj");
         var gpf = Path.Combine(folder, "gpf");
 
+        // The design-time build and the evaluation are waited for together. A design-time build evaluates the project
+        // again in its build node, so one queued before the evaluation that follows the restore (the first one, or the
+        // watcher's when the package's folder appeared under the project) can see the installed package and report
+        // before that evaluation does: Windows CI read the Dependencies just then, with the framework unresolved.
         await _solutions.OpenAsync(project, trusted: true, restore: true, Timeout());
         await WaitUntilAsync(
             () => _solutions.CompilerInputs.TryGetValue(project, out var inputs) && inputs.State == CompilerInputStates.Ok
-                  && HasReference(inputs.Arguments, "System.Core.dll", gpf),
-            DesignTimeState);
+                  && HasReference(inputs.Arguments, "System.Core.dll", gpf)
+                  && EvaluatedAfterRestore(project),
+            () => $"{RestoreState(project)}; {DesignTimeState()}");
 
         Assert.True(File.Exists(Path.Combine(gpf, "microsoft.netframework.referenceassemblies.net35", "1.0.3", "build", ".NETFramework", "v3.5", "mscorlib.dll")));
         var info = _solutions.Projects[project];
@@ -327,24 +367,21 @@ public sealed class NetFrameworkTests : IAsyncLifetime
     [Fact]
     public async Task Net_framework_projects_restore_load_and_build_on_every_os()
     {
-        var restore = new List<string>();
-        _solutions.RestoreStateChanged += (_, e) =>
-        {
-            lock (restore)
-            {
-                restore.Add(e.Message is null ? e.State : $"{e.State}: {e.Message}");
-            }
-        };
-
         var solution = await _solutions.OpenAsync(Path.Combine(Fixture, "NetFramework.slnx"), trusted: true, restore: true, Timeout());
         var legacy = Project("LegacyApp");
         var console = Project("ConsoleApp");
+        var tests = Project("ConsoleApp.Tests");
+
+        // The evaluations asserted on below are waited for with the design-time builds: a design-time build queued before
+        // the evaluations that follow the restore can see the restored packages and report before they do.
         await WaitUntilAsync(
             () => _solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) >= solution.Projects.Length - 1
                   && _solutions.CompilerInputs.TryGetValue(legacy, out var app) && app.State == CompilerInputStates.Ok
                   && HasReference(app.Arguments, "Codalus.Sample.Legacy.dll")
-                  && _solutions.CompilerInputs.TryGetValue(console, out var sdk) && sdk.Arguments.Any(a => a.Contains(ReferenceAssembliesOf("net48"), StringComparison.OrdinalIgnoreCase)),
-            () => $"restore: {string.Join(", ", restore)}; {DesignTimeState()}");
+                  && _solutions.CompilerInputs.TryGetValue(console, out var sdk) && sdk.Arguments.Any(a => a.Contains(ReferenceAssembliesOf("net48"), StringComparison.OrdinalIgnoreCase))
+                  && EvaluatedAfterRestore(legacy) && EvaluatedAfterRestore(console) && EvaluatedAfterRestore(tests)
+                  && _solutions.Projects[legacy].References.Any(r => r.Kind == ReferenceKinds.Assembly && r.Name == "Codalus.Sample.Legacy" && r.Resolved),
+            () => $"{RestoreState(legacy, console, tests)}; {DesignTimeState()}");
 
         // The SDK-style app: net48, C# 7.3, the reference assemblies package as its framework (the Developer Pack where it's installed).
         var sdkInfo = _solutions.Projects[console];
@@ -356,7 +393,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.Contains("/langversion:7.3", sdkArguments);
         AssertReference(sdkArguments, "mscorlib.dll", ReferenceAssembliesOf("net48"));
         Assert.Equal(["net48", "net472"], _solutions.Projects[Project("Library")].TargetFrameworks);
-        Assert.True(_solutions.Projects[Project("ConsoleApp.Tests")].IsTestProject);
+        Assert.True(_solutions.Projects[tests].IsTestProject);
         Assert.True(_solutions.Projects[Project("WinFormsApp")].UsesWindowsForms);
 
         // The old-style app: net472, its items, its Dependencies (framework, packages.config, references, the project).
