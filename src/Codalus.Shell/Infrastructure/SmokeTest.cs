@@ -3288,7 +3288,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 var error = process.StandardError.ReadToEndAsync();
                 if (!process.WaitForExit(TimeSpan.FromSeconds(60)))
                 {
-                    process.Kill(entireProcessTree: true);
+                    // The tool alone (ps and dotnet-stack start nothing): ending a process tree lists the system's
+                    // processes, which is what blocks when ps does (the macOS runner, blazor.wasmDebug).
+                    process.Kill();
                     return "(timed out)";
                 }
 
