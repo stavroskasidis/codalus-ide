@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading.Channels;
 using Codalus.Workbench.Debugging;
 
@@ -13,6 +14,8 @@ public sealed class FSharpDebuggingTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-fsdebug-" + Guid.NewGuid().ToString("N"));
     private readonly Channel<StopInfo> _stops = Channel.CreateUnbounded<StopInfo>();
+    private readonly System.Text.StringBuilder _output = new();
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
     private DebugService _debug = null!;
 
     private string Console => Path.Combine(_root, "FSharp", "FsConsole");
@@ -40,6 +43,13 @@ public sealed class FSharpDebuggingTests : IAsyncLifetime
 
         _debug = new DebugService(() => DebuggeeFixture.Adapter);
         _debug.Stopped += (_, stop) => _stops.Writer.TryWrite(stop);
+        _debug.Output += (_, o) =>
+        {
+            lock (_output)
+            {
+                _output.Append(CultureInfo.InvariantCulture, $"[{_clock.Elapsed.TotalSeconds:0.0}s] {o.Text}");
+            }
+        };
     }
 
     public async ValueTask DisposeAsync()
@@ -68,7 +78,21 @@ public sealed class FSharpDebuggingTests : IAsyncLifetime
         var line = Array.FindIndex(File.ReadAllLines(Geometry), l => l.StartsWith("let totalArea", StringComparison.Ordinal)) + 1;
         _debug.Breakpoints.Set(new BreakpointSpec(Geometry, line));
         var dll = Path.Combine(Console, "bin", "Debug", "net10.0", "FsConsole.dll");
-        await _debug.LaunchAsync("dotnet", ["exec", dll], Console, new Dictionary<string, string>(), ct);
+        lock (_output)
+        {
+            _output.Append(CultureInfo.InvariantCulture, $"[{_clock.Elapsed.TotalSeconds:0.0}s] (the test launches the program)\n");
+        }
+
+        try
+        {
+            await _debug.LaunchAsync("dotnet", ["exec", dll], Console, new Dictionary<string, string>(), ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // netcoredbg gives the runtime 5 seconds per start (DebugService.StartupAttempts): the Debug Console says
+            // when each start began and what the debugger wrote.
+            Assert.Fail($"{ex.Message}\nDebug Console:\n{Output()}");
+        }
 
         await NextStopAsync();
         Assert.Equal(line, _debug.SelectedFrame?.Line);
@@ -90,7 +114,22 @@ public sealed class FSharpDebuggingTests : IAsyncLifetime
     private async Task NextStopAsync()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-        await _stops.Reader.ReadAsync(timeout.Token);
+        try
+        {
+            await _stops.Reader.ReadAsync(timeout.Token);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            Assert.Fail($"No stop within 60 seconds ({_debug.State}).\nDebug Console:\n{Output()}");
+        }
+    }
+
+    private string Output()
+    {
+        lock (_output)
+        {
+            return _output.ToString();
+        }
     }
 
     private static void CopyTree(string source, string target)
