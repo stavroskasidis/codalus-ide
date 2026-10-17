@@ -85,6 +85,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     private readonly ConcurrentDictionary<WebSocket, SemaphoreSlim> _sockets = new();
     private readonly CancellationTokenSource _lifetime = new();
     private int _nextSession;
+    private int _disposed;
     private Task _loop = Task.CompletedTask;
 
     public IdeExecutionServer(Func<IdeRunRequest, CancellationToken, Task<IIdeRunSession>> start, int? port = null)
@@ -364,12 +365,42 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         }
     }
 
+    /// <summary>How long disposal waits for the sockets and the listener to close before it leaves them to the thread pool.</summary>
+    private static readonly TimeSpan s_teardownLimit = TimeSpan.FromSeconds(15);
+
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         StopAll();
 
+        // The sockets and the listener close on the thread pool, and disposal waits for that a bounded time: on Windows,
+        // HttpListener's WebSocket takes its locks to abort and to dispose, and a pending read's cancellation callback
+        // that blocks inside its abort keeps them, so a later Abort or Dispose waits as long. The Aspire test hung after
+        // its last step on Windows CI in this disposal: first in the cancellation, then, once that was bounded, past it.
+        // A teardown that doesn't finish is reported and left behind; it never holds whoever disposes the server (the UI
+        // thread, in the shell).
+        var teardown = Task.Run(TearDownAsync);
+        try
+        {
+            await teardown.WaitAsync(s_teardownLimit).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            Log?.Invoke($"The notification sockets didn't close within {s_teardownLimit.TotalSeconds:0} s: they are left to close in the background.");
+            return; // the teardown still uses the lifetime
+        }
+
+        _lifetime.Dispose();
+    }
+
+    private async Task TearDownAsync()
+    {
         // Bounded, like the loop below: cancelling runs the notification sockets' pending reads' callbacks, which an
-        // HttpListener WebSocket on Windows can block in (a test's disposal hung there for minutes).
+        // HttpListener WebSocket on Windows can block in.
         try
         {
             await _lifetime.CancelAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
@@ -395,12 +426,11 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         {
             // A listener that won't stop doesn't hold whoever disposes it.
         }
+
         foreach (var socket in _sockets.Keys)
         {
             socket.Abort(); // no closing handshake to wait for
             socket.Dispose();
         }
-
-        _lifetime.Dispose();
     }
 }
