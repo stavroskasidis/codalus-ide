@@ -1,6 +1,7 @@
 using Codalus.Projects.Host;
 using Codalus.Projects.Protocol;
 using Codalus.Workbench.Build;
+using Codalus.Workbench.Interactive;
 using Codalus.Workbench.Output;
 using Codalus.Workbench.Projects;
 
@@ -96,6 +97,22 @@ public sealed class NetFrameworkTests : IAsyncLifetime
 
     /// <summary>What the compiler's references to <paramref name="moniker"/>'s reference assemblies contain: the Developer Pack's folder, or the package's.</summary>
     private static string ReferenceAssembliesOf(string moniker) => InstalledReferenceAssemblies(moniker) ?? NetFramework.ReferenceAssembliesPackageOf(moniker);
+
+    /// <summary>
+    /// Whether the compiler's <c>/reference:</c> arguments have <paramref name="file"/> from a folder containing
+    /// <paramref name="folder"/>. The arguments keep MSBuild's quotes (a path with spaces, as under Program Files (x86), is
+    /// <c>/reference:"C:\...\mscorlib.dll"</c>), which the paths here are read without.
+    /// </summary>
+    private static bool HasReference(IReadOnlyList<string> arguments, string file, string? folder = null) =>
+        InteractiveProjects.CompileReferences(arguments).Any(r =>
+            Path.GetFileName(r).Equals(file, StringComparison.OrdinalIgnoreCase)
+            && (folder is null || r.Contains(folder, StringComparison.OrdinalIgnoreCase)));
+
+    /// <summary>Asserts <see cref="HasReference"/>, printing the <c>/reference:</c> arguments when it fails.</summary>
+    private static void AssertReference(IReadOnlyList<string> arguments, string file, string? folder = null) =>
+        Assert.True(
+            HasReference(arguments, file, folder),
+            $"No {file}{(folder is null ? "" : $" from {folder}")} among the /reference: arguments:\n{string.Join("\n", arguments.Where(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase) || a.StartsWith("/r:", StringComparison.OrdinalIgnoreCase)))}");
 
     private string DesignTimeState() =>
         $"design-time builds: {string.Join("; ", _solutions.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)} {i.Value.State} {i.Value.TargetFramework} {i.Value.Error}"))}";
@@ -254,7 +271,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         await _solutions.OpenAsync(project, trusted: true, restore: true, Timeout());
         await WaitUntilAsync(
             () => _solutions.CompilerInputs.TryGetValue(project, out var inputs) && inputs.State == CompilerInputStates.Ok
-                  && inputs.Arguments.Any(a => a.StartsWith("/reference:" + gpf, StringComparison.Ordinal) && a.EndsWith("System.Core.dll", StringComparison.OrdinalIgnoreCase)),
+                  && HasReference(inputs.Arguments, "System.Core.dll", gpf),
             DesignTimeState);
 
         Assert.True(File.Exists(Path.Combine(gpf, "microsoft.netframework.referenceassemblies.net35", "1.0.3", "build", ".NETFramework", "v3.5", "mscorlib.dll")));
@@ -339,7 +356,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         await WaitUntilAsync(
             () => _solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) >= solution.Projects.Length - 1
                   && _solutions.CompilerInputs.TryGetValue(legacy, out var app) && app.State == CompilerInputStates.Ok
-                  && app.Arguments.Any(a => a.Contains("Codalus.Sample.Legacy.dll", StringComparison.OrdinalIgnoreCase))
+                  && HasReference(app.Arguments, "Codalus.Sample.Legacy.dll")
                   && _solutions.CompilerInputs.TryGetValue(console, out var sdk) && sdk.Arguments.Any(a => a.Contains(ReferenceAssembliesOf("net48"), StringComparison.OrdinalIgnoreCase))
                   && _solutions.Projects.TryGetValue(Project("LegacyTests"), out var tests) && tests.References.Count(r => r.Kind == ReferenceKinds.Package && r.Resolved) == 2,
             () => $"restore: {string.Join(", ", restore)}; {DesignTimeState()}");
@@ -352,7 +369,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.Contains(sdkInfo.References, r => r.Kind == ReferenceKinds.Framework && r.Name == (InstalledReferenceAssemblies("net48") is null ? "Microsoft.NETFramework.ReferenceAssemblies" : ".NETFramework,Version=v4.8"));
         var sdkArguments = _solutions.CompilerInputs[console].Arguments;
         Assert.Contains("/langversion:7.3", sdkArguments);
-        Assert.Contains(sdkArguments, a => a.Contains(ReferenceAssembliesOf("net48"), StringComparison.OrdinalIgnoreCase) && a.EndsWith("mscorlib.dll", StringComparison.OrdinalIgnoreCase));
+        AssertReference(sdkArguments, "mscorlib.dll", ReferenceAssembliesOf("net48"));
         Assert.Equal(["net48", "net472"], _solutions.Projects[Project("Library")].TargetFrameworks);
         Assert.True(_solutions.Projects[Project("ConsoleApp.Tests")].IsTestProject);
         Assert.Equal(TestPlatforms.VSTest, _solutions.Projects[Project("NUnitTests")].TestPlatform);
@@ -393,7 +410,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         var inputs = _solutions.CompilerInputs[legacy];
         Assert.Equal("net472", inputs.TargetFramework);
         Assert.Contains("/langversion:7.3", inputs.Arguments);
-        Assert.Contains(inputs.Arguments, a => a.Contains(ReferenceAssembliesOf("net472"), StringComparison.OrdinalIgnoreCase) && a.EndsWith("System.Configuration.dll", StringComparison.OrdinalIgnoreCase));
+        AssertReference(inputs.Arguments, "System.Configuration.dll", ReferenceAssembliesOf("net472"));
         Assert.Contains(inputs.Arguments, a => a.EndsWith("Greeting.cs", StringComparison.Ordinal));
         Assert.Contains(Project("Library"), inputs.ProjectReferences);
 
@@ -406,7 +423,7 @@ public sealed class NetFrameworkTests : IAsyncLifetime
         Assert.Contains("Visual Studio's is proprietary", web.CannotBuildReason, StringComparison.Ordinal);
         await WaitUntilAsync(() => _solutions.CompilerInputs.ContainsKey(Project("LegacyWebApp")), DesignTimeState);
         Assert.Equal(CompilerInputStates.Ok, _solutions.CompilerInputs[Project("LegacyWebApp")].State);
-        Assert.Contains(_solutions.CompilerInputs[Project("LegacyWebApp")].Arguments, a => a.EndsWith("System.Web.dll", StringComparison.OrdinalIgnoreCase));
+        AssertReference(_solutions.CompilerInputs[Project("LegacyWebApp")].Arguments, "System.Web.dll");
 
         // The solution builds without it, saying so.
         var result = await _builds.BuildAsync(BuildTargets.Build, null, Timeout());
