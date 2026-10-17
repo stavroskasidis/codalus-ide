@@ -16,17 +16,18 @@ using Codalus.Workbench.Settings;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// M34d (UI polish, round 2): WCAG AA contrast for every token pair in every theme, no text cut off without an
-/// ellipsis at the tool windows' minimum width, toolbars that overflow instead of wrapping, and the document tabs'
-/// states (selected without the focus, preview on the right, pinned, colored by project).
+/// M34d (UI polish, round 2): WCAG AA contrast for every token pair in every theme (AAA for text in the theme families'
+/// High contrast variants, M45), no text cut off without an ellipsis at the tool windows' minimum width, toolbars that
+/// overflow instead of wrapping, and the document tabs' states (selected without the focus, preview on the right,
+/// pinned, colored by project).
 /// </summary>
 public partial class PolishTests
 {
     /// <summary>The narrowest a docked tool window is expected to be (Shell.Size.ToolWindowMinWidth).</summary>
     private const double ToolWindowMinWidth = 280;
 
-    private static readonly (string Name, ThemeVariant Variant)[] s_themes =
-        [("Blue", ThemeService.Blue), ("Light", ThemeVariant.Light), ("Dark", ThemeVariant.Dark), ("High Contrast", ThemeService.HighContrast)];
+    /// <summary>Every built-in theme: Classic's four and the families' twelve (M45).</summary>
+    private static readonly (string Name, ThemeVariant Variant)[] s_themes = [.. ThemeService.Themes.Select(t => (ThemeService.Title(t.Id), t.Variant))];
 
     // ------------------------------------------------------------------ contrast
 
@@ -46,9 +47,11 @@ public partial class PolishTests
                 var fg = Color(foreground, variant);
                 var bg = Color(background, variant);
                 var ratio = Contrast(fg, bg);
-                if (ratio < minimum)
+                // A theme family's High contrast variant holds text to 7:1 (AAA, M45); Classic's keeps AA.
+                var required = minimum >= 4.5 && ThemeService.IsHighContrast(variant) && variant != ThemeService.HighContrast ? 7 : minimum;
+                if (ratio < required)
                 {
-                    failures.Add($"{name}: {foreground} {fg} on {background} {bg} is {ratio:0.00}:1, below {minimum}:1");
+                    failures.Add($"{name}: {foreground} {fg} on {background} {bg} is {ratio:0.00}:1, below {required}:1");
                 }
             }
         }
@@ -87,10 +90,18 @@ public partial class PolishTests
 
     // ------------------------------------------------------------------ clipped text
 
-    [AvaloniaFact]
-    public async Task Tool_windows_at_their_minimum_width_cut_no_text_without_an_ellipsis()
+    /// <summary>In Classic and in each theme family (M45), whose shapes change sizes: one variant each, the sizes are the family's.</summary>
+    [AvaloniaTheory]
+    [InlineData("classic.dark")]
+    [InlineData("harbor.light")]
+    [InlineData("graphite.dark")]
+    [InlineData("daylight.light")]
+    [InlineData("ember.dark")]
+    public async Task Tool_windows_at_their_minimum_width_cut_no_text_without_an_ellipsis(string theme)
     {
         await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == ThemeService.Resolve(theme, null));
         var solution = f.CopyFixture();
         f.Shell.Trust.Trust(Path.GetDirectoryName(Path.GetDirectoryName(solution))!);
         await f.Shell.OpenSolutionAsync(solution);
@@ -114,7 +125,7 @@ public partial class PolishTests
             ShellFixture.Pump();
         }
 
-        Assert.True(problems.Count == 0, "Text cut off at " + ToolWindowMinWidth + " px:\n" + string.Join('\n', problems));
+        Assert.True(problems.Count == 0, $"Text cut off at {ToolWindowMinWidth} px in {theme}:\n" + string.Join('\n', problems));
     }
 
     /// <summary>

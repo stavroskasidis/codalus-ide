@@ -35,15 +35,15 @@
 
     <section class="section themes" aria-labelledby="themes">
         <div class="head-row">
-            <h2 class="heading" id="themes">Blue, Light and Dark.</h2>
-            <p class="muted small">Plus High Contrast. A classic layout: the menu and search in the title bar, the Solution Explorer on the right, and a status bar colored by state.</p>
+            <h2 class="heading" id="themes">Four theme families.</h2>
+            <p class="muted small">Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast, following your system or not. A classic layout in each: the menu and search in the title bar, the Solution Explorer on the right, and a status bar colored by state. The Blue, Light, Dark and High Contrast themes stay, as Classic.</p>
         </div>
         <div class="grid grid-wide">
-            @foreach (var theme in new[] { "Blue", "Light", "Dark" })
+            @foreach (var (family, variant, line) in s_families)
             {
                 <figure>
-                    <img src="assets/screenshots/editor-@(theme.ToLowerInvariant()).png" width="1280" height="800" loading="lazy" alt="Codalus IDE in the @theme theme" />
-                    <figcaption>@theme</figcaption>
+                    <img src="assets/screenshots/theme-@(family.ToLowerInvariant()).png" width="1280" height="800" loading="lazy" alt="Codalus IDE in the @family family, @variant" />
+                    <figcaption>@family, @variant: @line</figcaption>
                 </figure>
             }
         </div>
@@ -148,6 +148,7 @@
             <div>
                 <h3>Make it yours</h3>
                 <ul>
+                    <li>Four theme families, Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, chosen from pictures in Options; Classic's Blue, Light, Dark and High Contrast</li>
                     <li>Fonts and Colors over any theme, for code, the editor and the window</li>
                     <li>Default, VS Code, ReSharper and Emacs keyboard schemes</li>
                     <li>Import from VS Code or a .vssettings file; export to one file</li>
@@ -271,6 +272,15 @@
 
 @code {
     private sealed record Shot(string Key, string Label, string File, string Alt, string Caption);
+
+    /// <summary>The theme families (M45), each in the variant its screenshot shows.</summary>
+    private static readonly (string Family, string Variant, string Line)[] s_families =
+    [
+        ("Harbor", "Light", "the default, closest to a classic IDE"),
+        ("Graphite", "Dark", "compact, hairlines instead of gutters"),
+        ("Daylight", "Light", "flat, with rounded tabs"),
+        ("Ember", "Dark", "warm, with floating panels"),
+    ];
 
     private static readonly Shot[] s_shots =
     [

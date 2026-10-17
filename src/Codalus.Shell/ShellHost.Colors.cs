@@ -78,12 +78,13 @@ public sealed partial class ShellHost
     private void ApplyColorCustomizations()
     {
         // A plugin's theme (API 1.0) is its colors over its base; the user's customizations go over both, by the
-        // plugin theme's id or label as well as the base's.
+        // plugin theme's id or label as well as the base's. A family's variant also takes the family's ("[Harbor]").
         var contributed = Theme.ActiveContributed;
         var themeId = contributed?.Id ?? Theme.ActiveTheme;
-        var title = contributed?.Label ?? ThemeService.Choices.FirstOrDefault(c => c.Id == Theme.ActiveTheme)?.Title ?? Theme.ActiveTheme;
+        var title = contributed?.Label ?? ThemeService.CustomizationTitle(Theme.ActiveTheme);
+        var family = contributed is null && Theme.ActiveFamily != ThemeService.Classic ? Theme.ActiveFamily : null;
         var user = ColorCustomizations.For(themeId, title,
-            Workbench.Settings.GetValue(ColorCustomizations.WorkbenchKey), Workbench.Settings.GetValue(ColorCustomizations.TokensKey));
+            Workbench.Settings.GetValue(ColorCustomizations.WorkbenchKey), Workbench.Settings.GetValue(ColorCustomizations.TokensKey), family);
         ColorOverrides = contributed is null ? user : ThemeFiles.Merge(ThemeLayer(contributed), user);
         _editorTheme = null;
         if (Avalonia.Application.Current is not { } app)

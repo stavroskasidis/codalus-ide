@@ -97,6 +97,19 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.Tab.Preview.Foreground}" />
   </Style>
   <!--
+    The active tab's indicator (M45, the family's shape): Harbor's 3 px accent bar on top, Graphite's 2 px underline,
+    Ember's 1 px edge, none in Daylight and Classic. Every tab has the indicator's thickness, transparent, so the
+    active one doesn't move; its corners follow Dock's (rounded in Daylight and Ember).
+  -->
+  <Style Selector="DocumentTabStripItem /template/ Border#PART_TabGutter">
+    <Setter Property="BorderThickness" Value="{DynamicResource Shell.Tab.Active.Indicator}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="CornerRadius" Value="{DynamicResource DockDocumentTabItemCornerRadius}" />
+  </Style>
+  <Style Selector="DocumentTabStripItem:active:selected /template/ Border#PART_TabGutter">
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Tab.Active.IndicatorBrush}" />
+  </Style>
+  <!--
     Document tabs fit the group (M34e): tabs that don't fit leave from the right, never a pinned or the selected one,
     instead of Dock's sideways scrolling that took pinned tabs out of view.
   -->
@@ -119,6 +132,35 @@
   </Style>
   <Style Selector="ToolChromeControl /template/ Path">
     <Setter Property="Fill" Value="{DynamicResource Shell.Caption.Inactive.Foreground}" />
+  </Style>
+  <!--
+    The family's shapes (M45): Ember's tool windows and documents are cards with rounded corners, and the focused tool
+    window's title is bold where the family has no caption color (Graphite, Daylight, Ember).
+  -->
+  <Style Selector="ToolChromeControl /template/ Border#PART_Border">
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Panel.CornerRadius.Top}" />
+    <Setter Property="ClipToBounds" Value="True" />
+  </Style>
+  <Style Selector="ToolChromeControl /template/ DeferredContentPresenter#PART_ContentPresenter">
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Panel.CornerRadius.Bottom}" />
+    <Setter Property="ClipToBounds" Value="True" />
+  </Style>
+  <Style Selector="DocumentControl /template/ Border#PART_Border">
+    <Setter Property="CornerRadius" Value="{DynamicResource Shell.Panel.CornerRadius.Bottom}" />
+    <Setter Property="ClipToBounds" Value="True" />
+  </Style>
+  <Style Selector="ToolChromeControl /template/ TextBlock#PART_Title">
+    <Setter Property="Padding" Value="{DynamicResource Shell.Caption.Active.MarkerPadding}" />
+  </Style>
+  <Style Selector="ToolChromeControl:active /template/ TextBlock#PART_Title">
+    <Setter Property="FontWeight" Value="{DynamicResource Shell.Caption.Active.FontWeight}" />
+    <!-- Graphite's accent dot before the title (a brush, so Dock's template doesn't change). -->
+    <Setter Property="Background" Value="{DynamicResource Shell.Caption.Active.Marker}" />
+  </Style>
+  <!-- The gutter between docked windows (M45): Harbor's 6 px and Ember's 8 px of window, Graphite's and Daylight's hairline. -->
+  <Style Selector="ProportionalStackPanelSplitter">
+    <Setter Property="Thickness" Value="{DynamicResource Shell.Gutter}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.Gutter.Background}" />
   </Style>
   <Style Selector="ToolChromeControl:active /template/ Grid#PART_Grip">
     <Setter Property="Background" Value="{DynamicResource Shell.Caption.Active}" />
@@ -186,6 +228,14 @@
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius}" />
+  </Style>
+  <!-- The Start button (M45): filled with the accent in Daylight, on the toolbar's color elsewhere. -->
+  <Style Selector="Button.toolbar.start">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Start}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Toolbar.Start.Foreground}" />
+  </Style>
+  <Style Selector="Button.toolbar.start controls|Icon.start">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Toolbar.Start.Icon}" />
   </Style>
   <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
@@ -258,6 +308,10 @@
   <Style Selector="ToolTip">
     <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Body}" />
   </Style>
+  <!-- A selected row's text is Shell.Selection.Foreground (M45: a High contrast family selects with its accent, black text). -->
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
 
   <!-- The status bar's color says the state: purple without a solution, the accent with one, orange while debugging. -->
   <Style Selector="Border#StatusBarHost">
@@ -278,6 +332,29 @@
   </Style>
   <Style Selector="Border.titleBar Menu">
     <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <!--
+    The menu bar's items take the title bar's text and hover colors (M45: Harbor Light's title bar is navy); their
+    menus keep the menus' own.
+  -->
+  <Style Selector="Border.titleBar Menu > MenuItem">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.TitleBar.Foreground}" />
+  </Style>
+  <Style Selector="Border.titleBar Menu > MenuItem:pointerover /template/ Border#PART_LayoutRoot, Border.titleBar Menu > MenuItem:selected /template/ Border#PART_LayoutRoot, Border.titleBar Menu > MenuItem:open /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource Shell.TitleBar.Hover}" />
+  </Style>
+  <Style Selector="Border.titleBar Menu > MenuItem:pointerover /template/ ContentPresenter#PART_HeaderPresenter, Border.titleBar Menu > MenuItem:selected /template/ ContentPresenter#PART_HeaderPresenter, Border.titleBar Menu > MenuItem:open /template/ ContentPresenter#PART_HeaderPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.TitleBar.Foreground}" />
+  </Style>
+  <Style Selector="Button.searchBox TextBlock.searchText">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Search.Foreground}" />
+  </Style>
+  <Style Selector="Button.searchBox controls|Icon">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Search.Foreground}" />
+  </Style>
+  <Style Selector="Button.searchBox:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Search}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Focus}" />
   </Style>
   <!-- Avalonia's drawn decorations write the window's title over the client area; our title row has the menu there
        (the solution's name is shown next to the search box). A trigger selector outranks the template's binding. -->
@@ -421,7 +498,7 @@
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
   <Style Selector="Border.solutionName">
-    <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+    <Setter Property="Background" Value="{DynamicResource Shell.TitleBar.Chip}" />
     <Setter Property="CornerRadius" Value="4" />
     <Setter Property="Padding" Value="8,3" />
     <Setter Property="Margin" Value="4,0" />
@@ -537,5 +614,44 @@
   <Style Selector="Button.statusCancel:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.StatusBar.Hover}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Foreground}" />
+  </Style>
+  <!--
+    The status bar's states each have their text color (M45): Ember's bar is the window's color with dark text, white
+    only while debugging, and a High contrast bar without a solution is black under white text. Last in the file:
+    they override the entries' and the cancel button's styles above (the later style wins).
+  -->
+  <Style Selector="Border#StatusBarHost TextBlock.statusMessage">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Foreground}" />
+  </Style>
+  <Style Selector="Border#StatusBarHost.empty TextBlock.statusMessage, Border#StatusBarHost.empty Button.statusbar, Border#StatusBarHost.empty Button.statusCancel">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.StatusBar.Empty.Foreground}" />
+  </Style>
+  <Style Selector="Border#StatusBarHost.debugging TextBlock.statusMessage, Border#StatusBarHost.debugging Button.statusbar, Border#StatusBarHost.debugging Button.statusCancel">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.StatusBar.Debugging.Foreground}" />
+  </Style>
+  <Style Selector="Border#StatusBarHost.empty Button.statusbar:pointerover /template/ ContentPresenter#PART_ContentPresenter, Border#StatusBarHost.empty Button.statusbar:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.StatusBar.Empty.Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Empty.Foreground}" />
+  </Style>
+  <Style Selector="Border#StatusBarHost.debugging Button.statusbar:pointerover /template/ ContentPresenter#PART_ContentPresenter, Border#StatusBarHost.debugging Button.statusbar:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.StatusBar.Debugging.Hover}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Debugging.Foreground}" />
+  </Style>
+  <Style Selector="Border#StatusBarHost.empty Button.statusbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Empty.Foreground}" />
+  </Style>
+  <Style Selector="Border#StatusBarHost.debugging Button.statusbar:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.StatusBar.Debugging.Foreground}" />
+  </Style>
+  <!-- Ember's state dot: the accent with a solution, muted without one, the bar's text color while debugging. -->
+  <Style Selector="Border#StatusBarHost Ellipse.statusDot">
+    <Setter Property="IsVisible" Value="{DynamicResource Shell.StatusBar.ShowDot}" />
+    <Setter Property="Fill" Value="{DynamicResource Shell.Accent}" />
+  </Style>
+  <Style Selector="Border#StatusBarHost.empty Ellipse.statusDot">
+    <Setter Property="Fill" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
+  <Style Selector="Border#StatusBarHost.debugging Ellipse.statusDot">
+    <Setter Property="Fill" Value="{DynamicResource Shell.StatusBar.Debugging.Foreground}" />
   </Style>
 </Styles>
