@@ -223,7 +223,20 @@ public sealed class WinFormsDesignerDepthShellTests
         await f.Shell.SaveAllAsync();
         Assert.Contains("placeOrderButton.Image", await File.ReadAllTextAsync(Path.Combine(app, "OrderForm.resx"), TestContext.Current.CancellationToken), StringComparison.Ordinal);
         Assert.False(designer.IsModified);
+
+        // The menu bar (macOS's global one too) shows the Format menu while a designer is the active document, only.
+        await ShellFixture.PumpUntil(() => MenuBar(f).Contains("Format"));
+        await f.Shell.OpenFileAsync(Path.Combine(app, "Program.cs"));
+        await ShellFixture.PumpUntil(() => !MenuBar(f).Contains("Format"));
+        Assert.Contains("Debug", MenuBar(f));
+        f.Shell.Layout.OpenDocument(designer, focus: true);
+        await ShellFixture.PumpUntil(() => MenuBar(f).Contains("Format"));
     }
+
+    /// <summary>The menu bar's menus: macOS's global menu bar, elsewhere the window's.</summary>
+    private static List<string?> MenuBar(ShellFixture f) => f.Shell.Workbench.Platform == Codalus.Platform.PlatformKind.MacOS
+        ? [.. Avalonia.Controls.NativeMenu.GetMenu(f.Window)!.Items.OfType<Avalonia.Controls.NativeMenuItem>().Select(m => m.Header)]
+        : [.. f.Window.MenuBar.Items.OfType<Avalonia.Controls.MenuItem>().Select(m => Avalonia.Automation.AutomationProperties.GetName(m))];
 
     [AvaloniaFact]
     public async Task Menus_collections_bindings_the_tray_and_a_localizable_forms_languages_become_code_and_resources()
