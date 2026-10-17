@@ -18,9 +18,28 @@ public static class FuzzyMatcher
             return new FuzzyMatch(0, []);
         }
 
+        var positions = new List<int>(query.Length);
+        return Run(query, text, positions) is { } score ? new FuzzyMatch(score, positions) : null;
+    }
+
+    /// <summary>
+    /// <see cref="Match"/>'s score without the positions, allocating nothing: Code Search scores a large index with
+    /// it and asks <see cref="Match"/> for the highlights of the results it keeps (M47). <paramref name="query"/> must
+    /// be trimmed and not empty.
+    /// </summary>
+    public static bool TryScore(string query, string text, out int score)
+    {
+        var result = Run(query, text, null);
+        score = result ?? 0;
+        return result is not null;
+    }
+
+    private static int? Run(string query, string text, List<int>? positions)
+    {
         // Greedy forward pass with a preference for word starts: for each query character, take the next word
         // start that matches if one exists before the next plain match would force a worse alignment.
-        var positions = new List<int>(query.Length);
+        var first = -1;
+        var count = 0;
         var score = 0;
         var t = 0;
         var previous = -2;
@@ -75,12 +94,17 @@ public static class FuzzyMatcher
                 score += 1;
             }
 
-            positions.Add(chosen);
+            positions?.Add(chosen);
+            if (count++ == 0)
+            {
+                first = chosen;
+            }
+
             previous = chosen;
             t = chosen + 1;
         }
 
-        score -= positions.Count > 0 ? Math.Min(positions[0], 10) : 0;
+        score -= count > 0 ? Math.Min(first, 10) : 0;
         score -= Math.Max(0, text.Length - query.Length) / 8;
         if (text.Equals(query, StringComparison.OrdinalIgnoreCase))
         {
@@ -91,7 +115,7 @@ public static class FuzzyMatcher
             score += 20;
         }
 
-        return new FuzzyMatch(score, positions);
+        return score;
     }
 
     private static bool IsWordStart(string text, int i)
