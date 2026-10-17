@@ -6,7 +6,8 @@ namespace Codalus.Debugging.Tests;
 
 /// <summary>
 /// A program whose runtime netcoredbg sees only after its fixed 5 seconds (a loaded machine: PR #23's Windows runners)
-/// is debugged once it does, in the same start: netcoredbg gives up waiting, not the start.
+/// is debugged once it does, in the same start: netcoredbg gives up waiting, not the start. On macOS too, where
+/// netcoredbg needs a request to take the runtime up (PR #24's CI).
 /// </summary>
 public sealed class LateRuntimeTests(DebuggeeFixture debuggee) : IClassFixture<DebuggeeFixture>
 {
@@ -40,14 +41,15 @@ public sealed class LateRuntimeTests(DebuggeeFixture debuggee) : IClassFixture<D
 
         // The shell's process becomes the program's (exec): netcoredbg started it and waits for its runtime, which
         // starts 7 seconds later.
-        await debug.LaunchAsync("/bin/sh", ["-c", "sleep 7; exec $0 $@", DebuggeeFixture.DotnetHost, "exec", debuggee.Dll, "--depth"], debuggee.Folder, new Dictionary<string, string>(), ct);
+        // On macOS netcoredbg takes the late runtime up only after a request arrives (DebugAdapter.WaitForRuntimeAsync).
         try
         {
+            await debug.LaunchAsync("/bin/sh", ["-c", "sleep 7; exec $0 $@", DebuggeeFixture.DotnetHost, "exec", debuggee.Dll, "--depth"], debuggee.Folder, new Dictionary<string, string>(), ct);
             await stopped.Task.WaitAsync(TimeSpan.FromSeconds(90), ct);
         }
-        catch (TimeoutException)
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
         {
-            Assert.Fail($"The program didn't stop. Debug Console:\n{Text()}");
+            Assert.Fail($"The program didn't stop ({ex.Message}). Debug Console:\n{Text()}");
         }
 
         Assert.Equal(loop, debug.SelectedFrame?.Line);

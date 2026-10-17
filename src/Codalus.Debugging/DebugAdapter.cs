@@ -342,11 +342,25 @@ public sealed class DebugAdapter : IDebugAdapter
     /// runs. netcoredbg's wait ends only its own waiting: dbgshim's registration for the runtime's start stays (on
     /// Windows its thread waits for the runtime's startup event without a limit), and once the runtime reports,
     /// netcoredbg attaches, binds the breakpoints and stops at them. It only leaves out the <c>process</c> event, which
-    /// is raised here.
+    /// is raised here. Meanwhile netcoredbg is sent a request now and then (<see cref="WakeCommand"/>), which it doesn't
+    /// know and answers at once: on macOS it can't take the runtime up without one.
     /// </summary>
+    /// <remarks>
+    /// macOS (PR #24's CI, and the probe runs 39031376883 and 39034047801 on macOS 26.6 with netcoredbg 3.2.0): a
+    /// runtime that reports late finds dbgshim's registration and netcoredbg's debugger connects, but its CreateProcess
+    /// callback blocks in <c>Interop::Init</c>, where netcoredbg hosts its own CoreCLR: <c>coreclr_initialize</c>, then
+    /// <c>FILEInitStdHandles</c>, then <c>fileno(stdin)</c>, which on macOS takes stdin's lock (<c>flockfile</c>; glibc's
+    /// doesn't). netcoredbg's main thread holds that lock while it waits to read DAP from stdin (<c>getc</c>, blocked in
+    /// <c>read</c>). Within the 5 seconds it isn't reading: <c>configurationDone</c> is one of the commands it waits on
+    /// before reading the next one. Once that has failed, it reads again, and the program stays held in its runtime's
+    /// startup with no event ever reported. A request makes that read return and the lock go, and the callback goes on.
+    /// TODO(issue): report upstream (Samsung/netcoredbg).
+    /// </remarks>
     private async Task WaitForRuntimeAsync(Process program, DapException timeout, CancellationToken cancellationToken)
     {
         var waited = Stopwatch.StartNew();
+        using var wakes = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var nextWake = TimeSpan.Zero;
         Log?.Invoke(this, $"The debugger didn't see the program's runtime start within its 5 seconds; waiting for it (up to {LateRuntimeWait.TotalSeconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture)} seconds more).");
         var processEvent = _attachedTo is null
             ? new DapEvent(DapEvents.Process, JsonSerializer.SerializeToElement(new ProcessEvent(_program ?? program.ProcessName, program.Id, IsLocalProcess: true, StartMethod: "launch"), Json.ProcessEvent))
@@ -388,6 +402,13 @@ public sealed class DebugAdapter : IDebugAdapter
                         timeout);
                 }
 
+                if (waited.Elapsed >= nextWake)
+                {
+                    nextWake = waited.Elapsed + WakeInterval;
+                    _ = _connection.RequestAsync(WakeCommand, new EmptyArguments(), Json.EmptyArguments, wakes.Token)
+                        .ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                }
+
                 await Task.WhenAny(_runtime.Task, _connection.Closed, Task.Delay(100, cancellationToken)).ConfigureAwait(false);
             }
         }
@@ -396,6 +417,11 @@ public sealed class DebugAdapter : IDebugAdapter
             // The start failed: a runtime that reports now is no longer this start's.
             Volatile.Write(ref _lateProcess, null);
             throw;
+        }
+        finally
+        {
+            // The answers to the wake requests still on their way are nobody's.
+            await wakes.CancelAsync().ConfigureAwait(false);
         }
 
         Log?.Invoke(this, $"The debugger saw the program's runtime start {Seconds(waited)} seconds later.");
@@ -441,6 +467,16 @@ public sealed class DebugAdapter : IDebugAdapter
     private int _lateProcessRaised;
 
     private readonly TaskCompletionSource _lateProcessPosted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// A request no adapter knows (netcoredbg answers it with E_NOTIMPL and changes nothing), sent while waiting for a
+    /// late runtime: reading it releases netcoredbg's stdin, which its CreateProcess callback waits for on macOS
+    /// (<see cref="WaitForRuntimeAsync"/>).
+    /// </summary>
+    internal const string WakeCommand = "codalus/wake";
+
+    /// <summary>How often <see cref="WakeCommand"/> is sent while waiting for a late runtime.</summary>
+    private static readonly TimeSpan WakeInterval = TimeSpan.FromMilliseconds(250);
 
     private static string Seconds(Stopwatch watch) => watch.Elapsed.TotalSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
 

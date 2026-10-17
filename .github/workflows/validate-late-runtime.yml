@@ -1,0 +1,40 @@
+name: Validate late runtime fix (scratch)
+
+on:
+  push:
+    branches: [probe/late-runtime-mac-fix]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          netcoredbg: true
+          devtools: true
+      - run: dotnet build tests/Codalus.Debugging.Tests -c Release
+      - run: dotnet build tests/Codalus.Workbench.Tests -c Release
+      - run: dotnet build tests/Codalus.LspConformance.Server -c Release
+      - name: Debugging tests
+        shell: bash
+        run: |
+          t=tests/Codalus.Debugging.Tests/bin/Release/net11.0/Codalus.Debugging.Tests
+          fails=0
+          for i in 1 2 3 4 5 6; do
+            echo "=== LateRuntimeTests run $i"
+            "$t" -class Codalus.Debugging.Tests.LateRuntimeTests || fails=$((fails+1))
+          done
+          for i in 1 2; do
+            echo "=== set run $i"
+            "$t" -class Codalus.Debugging.Tests.LateRuntimeTests -class Codalus.Debugging.Tests.DebugServiceTests -class Codalus.Debugging.Tests.SessionsTests || fails=$((fails+1))
+          done
+          echo "failed runs: $fails"
+          [ "$fails" = 0 ]
+      - name: Workbench start-again tests
+        shell: bash
+        run: tests/Codalus.Workbench.Tests/bin/Release/net11.0/Codalus.Workbench.Tests -class Codalus.Workbench.Tests.DebugStartAgainTests
