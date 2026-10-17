@@ -412,7 +412,7 @@ public partial class PolishTests
 
     private static void Collect(Visual root, ThemeVariant variant, string theme, SortedSet<string> found)
     {
-        foreach (var problem in Clipped(root).Concat(Unnamed(root)).Concat(Uncolored(root)).Concat(Squeezed(root)))
+        foreach (var problem in Clipped(root).Concat(Unnamed(root)).Concat(Uncolored(root)).Concat(Squeezed(root)).Concat(Overlapping(root)))
         {
             found.Add(problem);
         }
@@ -442,6 +442,61 @@ public partial class PolishTests
             }
 
             yield return $"a {input.GetType().Name} is {input.Bounds.Width:0} px wide, below {InputMinWidth} px ({Describe(input, root)})";
+        }
+    }
+
+    /// <summary>
+    /// Text drawn over other text (M34g on M43): a text that isn't constrained to its cell (in a horizontal stack panel,
+    /// say) runs under the next column's, which neither the clipping check nor the eye at a glance catches. Each text's
+    /// ink (its laid-out width within its box, by its alignment), clipped by what clips it, against every other's.
+    /// </summary>
+    internal static IEnumerable<string> Overlapping(Visual root)
+    {
+        var rootRect = new Rect(root.Bounds.Size);
+        var inks = new List<(TextBlock Text, string Content, Rect Ink)>();
+        foreach (var text in root.GetVisualDescendants().OfType<TextBlock>())
+        {
+            var content = text.Text ?? text.Inlines?.Text;
+            if (!text.IsEffectivelyVisible || string.IsNullOrWhiteSpace(content) || text.Bounds.Width < 1 || text.Bounds.Height < 1
+                || text.FindAncestorOfType<TextBox>() is not null || InOverflow(text) || text.TranslatePoint(default, root) is not { } origin)
+            {
+                continue;
+            }
+
+            var needed = text.TextLayout.WidthIncludingTrailingWhitespace + text.Padding.Left + text.Padding.Right;
+            var width = Math.Min(needed, text.TextWrapping == TextWrapping.NoWrap && text.TextTrimming == TextTrimming.None ? needed : text.Bounds.Width);
+            var left = text.TextAlignment switch
+            {
+                TextAlignment.Right or TextAlignment.End => origin.X + text.Bounds.Width - width,
+                TextAlignment.Center => origin.X + ((text.Bounds.Width - width) / 2),
+                _ => origin.X,
+            };
+            var ink = new Rect(left, origin.Y, width, text.Bounds.Height).Intersect(rootRect);
+            for (var v = text.GetVisualParent(); v is not null && v != root; v = v.GetVisualParent())
+            {
+                if (v.ClipToBounds && v.TranslatePoint(default, root) is { } at)
+                {
+                    ink = ink.Intersect(new Rect(at, v.Bounds.Size));
+                }
+            }
+
+            if (ink.Width >= 1 && ink.Height >= 1)
+            {
+                inks.Add((text, content, ink));
+            }
+        }
+
+        for (var i = 0; i < inks.Count; i++)
+        {
+            for (var j = i + 1; j < inks.Count; j++)
+            {
+                var overlap = inks[i].Ink.Intersect(inks[j].Ink);
+                if (overlap.Width > 1 && overlap.Height > 2)
+                {
+                    static string Label(string s) => s.Length > 30 ? s[..30] + "…" : s;
+                    yield return $"\"{Label(inks[i].Content)}\" and \"{Label(inks[j].Content)}\" are drawn over each other ({overlap.Width:0} × {overlap.Height:0} px; {Describe(inks[j].Text, root)})";
+                }
+            }
         }
     }
 
@@ -486,20 +541,33 @@ public partial class PolishTests
                 continue;
             }
 
-            var opacity = foreground.Opacity;
+            var opacity = 1.0; // what holds the text
             for (Visual? v = text; v is not null && v != root; v = v.GetVisualParent())
             {
                 opacity *= v.Opacity;
             }
 
-            var color = Blend(foreground.Color, opacity * foreground.Color.A / 255.0, background);
-            var large = text.FontSize >= 24 || text.FontSize >= 18.66 && text.FontWeight >= FontWeight.Bold;
-            var required = aaa ? large ? 4.5 : 7 : large ? 3 : 4.5;
-            var ratio = Contrast(color, background);
-            if (ratio < required - 0.005)
+            // The text, and each run of it in a color of its own (a muted detail after a name, M34g on M43).
+            var parts = new List<(string Content, ISolidColorBrush Brush, double Size, FontWeight Weight)> { (content, foreground, text.FontSize, text.FontWeight) };
+            foreach (var run in text.Inlines?.OfType<Avalonia.Controls.Documents.Run>() ?? [])
             {
-                var label = content.Length > 40 ? content[..40] + "…" : content;
-                yield return $"\"{label}\" is {ratio:0.00}:1 ({foreground.Color} on {background}), below {required}:1 ({Describe(text, root)})";
+                if (!string.IsNullOrWhiteSpace(run.Text) && run.Foreground is ISolidColorBrush own && own.Color != foreground.Color)
+                {
+                    parts.Add((run.Text, own, run.FontSize, run.FontWeight));
+                }
+            }
+
+            foreach (var (part, brush, size, weight) in parts)
+            {
+                var color = Blend(brush.Color, opacity * brush.Opacity * brush.Color.A / 255.0, background);
+                var large = size >= 24 || size >= 18.66 && weight >= FontWeight.Bold;
+                var required = aaa ? large ? 4.5 : 7 : large ? 3 : 4.5;
+                var ratio = Contrast(color, background);
+                if (ratio < required - 0.005)
+                {
+                    var label = part.Length > 40 ? part[..40] + "…" : part;
+                    yield return $"\"{label}\" is {ratio:0.00}:1 ({brush.Color} on {background}), below {required}:1 ({Describe(text, root)})";
+                }
             }
         }
     }

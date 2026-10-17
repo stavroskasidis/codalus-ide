@@ -320,6 +320,28 @@
   <Style Selector="ListBoxItem:selected TextBlock.muted">
     <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
   </Style>
+  <!--
+    M34g on M43: a muted run after a name (a project's "(non-SDK-style)", a test's detail, a reference's kind) is
+    muted text too, and the selection's on a selected row: as a run in the muted color it was 1.03:1 on a High contrast
+    family's selection and 4.29:1 on Classic Dark's.
+  -->
+  <Style Selector="Run.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+  </Style>
+  <Style Selector="ListBoxItem:selected Run.muted">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
+  <!--
+    The matched characters of a search result (HighlightedText): Shell.Match, and the selection's text on a selected
+    row, still bold. In Shell.Match on Code Search's selected result they were 1.00:1 in Daylight High contrast and
+    2.98:1 in Classic Dark (found once the rendered contrast check read runs, M34g on M43).
+  -->
+  <Style Selector="TextBlock.highlighted">
+    <Setter Property="controls:HighlightedText.MatchForeground" Value="{DynamicResource Shell.Match}" />
+  </Style>
+  <Style Selector="ListBoxItem:selected TextBlock.highlighted">
+    <Setter Property="controls:HighlightedText.MatchForeground" Value="{DynamicResource Shell.Selection.Foreground}" />
+  </Style>
   <Style Selector="TreeViewItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
     <Setter Property="Foreground" Value="{DynamicResource TreeViewItemForegroundSelected}" />
   </Style>

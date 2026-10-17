@@ -32,17 +32,27 @@
         </ListBox.Styles>
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:QuickPickRow">
+            <!--
+              M34g on M43: the label and its detail share what the right column leaves and trim with tooltips; the right
+              column takes at most half the row. In a stack panel, New Project's ".NET Framework" detail ran under
+              "C# · Windows only: …" on the right.
+            -->
             <Grid ColumnDefinitions="*,Auto">
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <controls:Icon Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" VerticalAlignment="Center" />
-                <controls:HighlightedText Source="{Binding Label}" Highlights="{Binding Highlights}" VerticalAlignment="Center" />
-                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
-              </StackPanel>
+              <DockPanel>
+                <controls:Icon DockPanel.Dock="Left" Margin="0,0,8,0" Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" VerticalAlignment="Center" />
+                <controls:HighlightedText DockPanel.Dock="Left" Source="{Binding Label}" Highlights="{Binding Highlights}" VerticalAlignment="Center"
+                                          TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
+                <TextBlock Classes="muted" Margin="8,0,0,0" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+              </DockPanel>
               <TextBlock Grid.Column="1"
                          Classes="muted"
                          FontSize="{DynamicResource Shell.FontSize.Small}"
                          Margin="16,0,0,0"
                          VerticalAlignment="Center"
+                         MaxWidth="{Binding $parent[ListBoxItem].Bounds.Width, Converter={x:Static vm:QuickPickRow.HalfWidth}}"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="{Binding KeyLabel}"
                          Text="{Binding KeyLabel}"
                          IsVisible="{Binding HasKeyLabel}" />
             </Grid>

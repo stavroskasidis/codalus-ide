@@ -26,7 +26,7 @@
               <StackPanel Grid.Column="1">
                 <TextBlock>
                   <Run Text="{Binding Name}" FontWeight="SemiBold" />
-                  <Run Text="{Binding Kind}" Foreground="{DynamicResource Shell.MutedForeground}" />
+                  <Run Text="{Binding Kind}" Classes="muted" />
                 </TextBlock>
                 <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" />
                 <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Source}" TextTrimming="CharacterEllipsis" />

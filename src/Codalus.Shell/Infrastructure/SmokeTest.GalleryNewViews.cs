@@ -13,7 +13,9 @@ namespace Codalus.Shell.Infrastructure;
 /// Feature Search, results with the preview), the WCF Test Client (empty, a missing address, a WSDL file's form, then in
 /// <c>wcf.testClient</c> a response and a fault), the first-run setup's four steps, Options' color theme cards and the
 /// Service References document's WCF page; on Windows, the Windows Forms designer with the Toolbox and the Properties
-/// window (<c>winforms.designer</c>) and the WPF previewer (<c>wpf.preview</c>). The tool windows among them (the
+/// window (<c>winforms.designer</c>) and the WPF previewer (<c>wpf.preview</c>). M43's (<c>netfx.projects</c>): Solution
+/// Explorer with a project that can't build, Convert to SDK-Style's preview, the Error List's reason, and on Windows the
+/// Call Stack and Modules of a desktop-CLR session. The tool windows among them (the
 /// Toolbox, the Live Visual Tree and Property Explorer, the XAML Previewer, Code Search docked) are in the tool window
 /// sweep already.
 /// </summary>
@@ -160,6 +162,55 @@ internal sealed partial class SmokeTest
         await GalleryThemesAsync(theme =>
         {
             GalleryTool(XamlPreviewViewModel.ToolWindowId, "wpf", theme);
+            return Task.CompletedTask;
+        }, settle: true).ConfigureAwait(true);
+        WriteGalleryIndex();
+    }
+
+    /// <summary>
+    /// M43 in the gallery (<c>netfx.projects</c>, every OS): Solution Explorer with the old-style project and the reason
+    /// a project can't build, Convert to SDK-Style's preview, and the Error List after building that project alone.
+    /// </summary>
+    private async Task GalleryNetFrameworkAsync(string legacy, string web)
+    {
+        shell.Explorer.Reveal("p:" + web + "|cannotBuild");
+        await GalleryThemesAsync(theme =>
+        {
+            GalleryTool(SolutionExplorerViewModel.ToolWindowId, "netfx", theme);
+            return Task.CompletedTask;
+        }, settle: true).ConfigureAwait(true);
+
+        var converting = shell.ConvertToSdkStyleAsync(legacy);
+        if (await SoftWaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.HasDetails, 60).ConfigureAwait(true))
+        {
+            await GalleryThemesAsync(async theme =>
+            {
+                await SettleAsync().ConfigureAwait(true);
+                GalleryShot("netfx-convert-preview", "data", theme, null);
+            }).ConfigureAwait(true);
+        }
+
+        shell.Dialogs.Cancel();
+        await converting.ConfigureAwait(true);
+
+        // Building the project that needs Visual Studio's targets alone fails, saying why in the Error List.
+        Check(!await shell.BuildAsync(Codalus.Projects.Protocol.BuildTargets.Build, web).ConfigureAwait(true), "LegacyWebApp's build fails here");
+        await SoftWaitAsync(() => shell.ErrorList.Rows.Any(r => r.IsError && r.Project == "LegacyWebApp"), 30).ConfigureAwait(true);
+        await GalleryThemesAsync(theme =>
+        {
+            GalleryTool(ErrorListViewModel.ToolWindowId, "netfx", theme);
+            return Task.CompletedTask;
+        }, settle: true).ConfigureAwait(true);
+        WriteGalleryIndex();
+    }
+
+    /// <summary>The desktop-CLR debugger stopped at a breakpoint: the Call Stack and the Modules window (Windows, <c>netfx.projects</c>).</summary>
+    private async Task GalleryNetFrameworkDebuggingAsync()
+    {
+        await GalleryThemesAsync(theme =>
+        {
+            GalleryTool(CallStackViewModel.ToolWindowId, "netfx", theme);
+            GalleryTool(ModulesViewModel.ToolWindowId, "netfx", theme);
             return Task.CompletedTask;
         }, settle: true).ConfigureAwait(true);
         WriteGalleryIndex();

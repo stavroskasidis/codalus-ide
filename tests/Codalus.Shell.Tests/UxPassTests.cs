@@ -584,6 +584,30 @@ public class UxPassTests
         problems.AddRange(Unreached(search).Select(p => $"code-search: {p}"));
         f.Shell.CodeSearch.Close();
 
+        // M43: Convert to SDK-Style's preview (its notes and changes, then the buttons), and the Call Stack with a
+        // desktop-CLR stack (the thread picker, then the frames).
+        var dialog = new ViewModels.DialogViewModel();
+        var preview = dialog.ShowAsync(new ViewModels.DialogRequest("Convert LegacyApp to SDK-style", "The project file is rewritten as an SDK-style project (Microsoft.NET.Sdk). Review the changes:", ["Convert", "Cancel"])
+        {
+            Details =
+            [
+                new ViewModels.DetailLine("• packages.config's 1 package(s) became PackageReference items, and packages.config goes.", "note"),
+                new ViewModels.DetailLine("LegacyApp/LegacyApp.csproj", "header"),
+                new ViewModels.DetailLine("- <Project ToolsVersion=\"15.0\">", "removed"),
+                new ViewModels.DetailLine("+ <Project Sdk=\"Microsoft.NET.Sdk\">", "added"),
+            ],
+        });
+        Walk("convert-to-sdk-style", new DialogView { DataContext = dialog }, 640, 560);
+        dialog.Cancel();
+        await preview;
+
+        var callStack = new ViewModels.CallStackViewModel(f.Shell.Debugger, (_, _) => Task.CompletedTask);
+        callStack.Threads.Add(new Codalus.Debugging.DapThread(1, "Main Thread"));
+        callStack.SelectedThread = callStack.Threads[0];
+        callStack.Frames.Add(new ViewModels.FrameRow(new Codalus.Debugging.StackFrame(1, "NetFxDebuggee.Program.Main(string[] args)", new Codalus.Debugging.Source("Program.cs", "/src/Program.cs"), 18, 9), true, true));
+        callStack.Frames.Add(new ViewModels.FrameRow(new Codalus.Debugging.StackFrame(2, "[Managed to Native Transition]", null, 0, 0, PresentationHint: "label"), false, false));
+        Walk("call-stack", new CallStackView { DataContext = callStack }, 280, 420);
+
         Assert.True(problems.Count == 0, "Not reached with Tab:\n" + string.Join('\n', problems));
     }
 

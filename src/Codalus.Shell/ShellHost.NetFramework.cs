@@ -40,11 +40,14 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>Whether Check Environment reports the installed .NET Framework: on Windows (tests set it elsewhere, with <see cref="NetFrameworkRuntimeProbe"/>).</summary>
+    internal bool? ChecksNetFrameworkRuntime { get; set; }
+
     /// <summary>Check Environment's rows for the solution's .NET Framework projects, on Windows (running needs the runtime).</summary>
     private IReadOnlyList<ToolStatus> NetFrameworkTools()
     {
         var projects = Solutions.Projects.Values.Where(p => p.State == ProjectStates.Loaded && NetFrameworkProjects.IsNetFramework(p)).ToList();
-        if (projects.Count == 0 || Workbench.Platform != Codalus.Platform.PlatformKind.Windows)
+        if (projects.Count == 0 || !(ChecksNetFrameworkRuntime ?? Workbench.Platform == Codalus.Platform.PlatformKind.Windows))
         {
             return [];
         }
@@ -91,7 +94,7 @@ public sealed partial class ShellHost
         var details = new List<DetailLine>();
         foreach (var note in conversion.Notes)
         {
-            details.Add(new DetailLine("• " + note));
+            details.Add(new DetailLine("• " + note, "note")); // wrapped above the changes (M34g)
         }
 
         details.AddRange(await PreviewAsync(edit).ConfigureAwait(true));

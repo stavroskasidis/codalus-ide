@@ -57,9 +57,12 @@ public sealed class DialogChoiceViewModel(DialogChoice choice) : ObservableObjec
     }
 }
 
-/// <summary>A line of a dialog's details. <see cref="Kind"/> is <c>added</c>, <c>removed</c>, <c>header</c> or null.</summary>
+/// <summary>A line of a dialog's details. <see cref="Kind"/> is <c>added</c>, <c>removed</c>, <c>header</c>, <c>note</c> or null.</summary>
 public sealed record DetailLine(string Text, string? Kind = null)
 {
+    /// <summary>A note about the changes (Convert to SDK-Style's, M43a): wrapped text above them, not a line of code.</summary>
+    public bool IsNote => Kind == "note";
+
     public bool IsAdded => Kind == "added";
 
     public bool IsRemoved => Kind == "removed";
@@ -108,6 +111,10 @@ public sealed class DialogViewModel : ObservableObject
                 OnPropertyChanged(nameof(PasswordChar));
                 OnPropertyChanged(nameof(Details));
                 OnPropertyChanged(nameof(HasDetails));
+                OnPropertyChanged(nameof(Notes));
+                OnPropertyChanged(nameof(HasNotes));
+                OnPropertyChanged(nameof(Changes));
+                OnPropertyChanged(nameof(HasChanges));
             }
         }
     }
@@ -126,6 +133,16 @@ public sealed class DialogViewModel : ObservableObject
     public IReadOnlyList<DetailLine> Details => _request?.Details ?? [];
 
     public bool HasDetails => _request?.Details is { Count: > 0 };
+
+    /// <summary>The details' notes (<see cref="DetailLine.IsNote"/>): prose, wrapped above the changes (M34g on M43).</summary>
+    public IReadOnlyList<DetailLine> Notes => [.. Details.Where(d => d.IsNote)];
+
+    public bool HasNotes => Details.Any(d => d.IsNote);
+
+    /// <summary>The details' other lines: the changes, in monospace, scrolling sideways.</summary>
+    public IReadOnlyList<DetailLine> Changes => [.. Details.Where(d => !d.IsNote)];
+
+    public bool HasChanges => Details.Any(d => !d.IsNote);
 
     public ObservableCollection<DialogButtonViewModel> Buttons { get; } = [];
 

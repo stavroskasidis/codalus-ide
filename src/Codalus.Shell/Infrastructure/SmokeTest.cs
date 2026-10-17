@@ -2083,6 +2083,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Explorer.Reveal("p:" + legacy);
         await Task.Delay(1000).ConfigureAwait(true);
         Screenshot("netfx-projects.png");
+        await GalleryNetFrameworkAsync(legacy, web).ConfigureAwait(true); // M34g: the .NET Framework project UI in the gallery
 
         Check(await shell.BuildAsync(Codalus.Projects.Protocol.BuildTargets.Build, app).ConfigureAwait(true), "ConsoleApp (net48) builds:\n" + Tail(shell.Builds.Channel.GetText(), 3000));
         Check(File.Exists(Path.Combine(target, "ConsoleApp", "bin", "Debug", "net48", "ConsoleApp.exe")), "ConsoleApp.exe was built");
@@ -2114,6 +2115,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(greeting.Result == "\"Hello from .NET Framework, Codalus!\"", "greeter.Greet() evaluates through func-eval: " + greeting.Result);
         await Task.Delay(1000).ConfigureAwait(true);
         Screenshot("netfx-debugging.png");
+        await GalleryNetFrameworkDebuggingAsync().ConfigureAwait(true); // M34g: the Call Stack and Modules of a desktop-CLR session
         shell.Debugger.Breakpoints.Clear();
         await shell.Debugger.StopAsync().ConfigureAwait(true);
         await WaitAsync(() => shell.Debugger.State == Codalus.Workbench.Debugging.DebugState.Idle, "the debug session ends", 60).ConfigureAwait(true);

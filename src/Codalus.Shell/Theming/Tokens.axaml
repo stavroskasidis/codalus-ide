@@ -46,6 +46,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Link" Color="#006AB1" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#1A85FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -188,6 +191,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Link" Color="#4DAAFC" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#3794FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1E1E1E" />
@@ -436,6 +442,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Link" Color="#21A6FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#FFD700" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
@@ -627,6 +636,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Link" Color="#1D49B0" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#2B59C3" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -797,6 +809,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Link" Color="#8DB4FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#6E98FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#141A28" />
@@ -967,6 +982,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Link" Color="#7CC7FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#6CD2FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
@@ -1157,6 +1175,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Link" Color="#0B5CAD" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#0F7C72" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -1332,6 +1353,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Link" Color="#7CC4FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#2BB3A3" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#1A1B1F" />
@@ -1507,6 +1531,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Link" Color="#7CC7FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#3FF2D2" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
@@ -1702,6 +1729,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Link" Color="#5A2FB0" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#6B3FC4" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -1872,6 +1902,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Link" Color="#C4AEFF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#A98BFF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#222029" />
@@ -2042,6 +2075,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Link" Color="#D2B3FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#D2B3FF" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />
@@ -2232,6 +2268,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#7A5400" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#116329" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#A1260D" />
       <SolidColorBrush x:Key="Shell.Link" Color="#A04E10" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#B85A12" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#FFFFFF" />
@@ -2402,6 +2441,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#CCA700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#73C991" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Link" Color="#F2B27A" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#E08A3C" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#171513" />
@@ -2572,6 +2614,9 @@
       <!-- Text in the state colors (M34g): Shell.Error and Shell.Warning are graphics at 3:1; text needs 4.5:1. -->
       <SolidColorBrush x:Key="Shell.Error.Foreground" Color="#F48771" />
       <SolidColorBrush x:Key="Shell.Warning.Foreground" Color="#FFD700" />
+      <!-- Diff text (M34g): Shell.Diff.Added and .Removed are graphics at 3:1; added and removed lines need 4.5:1. -->
+      <SolidColorBrush x:Key="Shell.Diff.Added.Foreground" Color="#00FF00" />
+      <SolidColorBrush x:Key="Shell.Diff.Removed.Foreground" Color="#FF6B6B" />
       <SolidColorBrush x:Key="Shell.Link" Color="#7CF0FF" />
       <SolidColorBrush x:Key="Shell.Modified" Color="#FFB547" />
       <SolidColorBrush x:Key="Shell.Editor.Background" Color="#000000" />

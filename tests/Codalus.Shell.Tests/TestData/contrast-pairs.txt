@@ -139,6 +139,16 @@ Shell.Warning.Foreground Shell.Background 4.5
 Shell.Warning.Foreground Shell.Overlay 4.5
 Shell.Warning.Foreground Shell.Editor.Background 4.5
 
+# Diff text (M34g on M43): the removed and added lines of a preview of changes (Convert to SDK-Style's among them).
+Shell.Diff.Added.Foreground Shell.Panel 4.5
+Shell.Diff.Added.Foreground Shell.Background 4.5
+Shell.Diff.Added.Foreground Shell.Overlay 4.5
+Shell.Diff.Added.Foreground Shell.Editor.Background 4.5
+Shell.Diff.Removed.Foreground Shell.Panel 4.5
+Shell.Diff.Removed.Foreground Shell.Background 4.5
+Shell.Diff.Removed.Foreground Shell.Overlay 4.5
+Shell.Diff.Removed.Foreground Shell.Editor.Background 4.5
+
 # The new views' other surfaces (M34g): the setup's cards and sections (Shell.Editor.Background), and the
 # outlines in the accent (a chosen card, a chosen chip).
 Shell.Foreground Shell.Editor.Background 4.5

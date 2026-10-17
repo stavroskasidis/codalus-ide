@@ -387,13 +387,26 @@ public sealed record FrameRow(StackFrame Frame, bool IsSelected, bool IsTop)
 {
     public string Name => Frame.Name;
 
-    public string Location => Frame.Source?.Path is { } path ? $"{System.IO.Path.GetFileName(path)}, line {Frame.Line}" : "[External Code]";
+    /// <summary>The file and line; nothing for a label (its name says what it is), "[External Code]" without source.</summary>
+    public string Location => Frame.Source?.Path is { } path ? $"{System.IO.Path.GetFileName(path)}, line {Frame.Line}" : IsLabel ? string.Empty : "[External Code]";
+
+    /// <summary>The location's tooltip: the source's full path and line (null without source: no tooltip).</summary>
+    public string? LocationTip => Frame.Source?.Path is { } path ? $"{path}, line {Frame.Line}" : Location.Length > 0 ? Location : null;
 
     public bool HasSource => Frame.Source?.Path is not null;
 
+    /// <summary>
+    /// A frame that is only a label (DAP's <c>label</c> hint: the desktop-CLR debugger's internal frames such as
+    /// "[Managed to Native Transition]", M43b), shown in italics without a location.
+    /// </summary>
+    public bool IsLabel => Frame.PresentationHint == "label";
+
+    /// <summary>Shown dimmed: no source, a label, or the adapter's <c>subtle</c> hint (code outside Just My Code, M43b).</summary>
+    public bool IsDimmed => !HasSource || IsLabel || Frame.PresentationHint == "subtle";
+
     public string Marker => IsTop ? "▶" : IsSelected ? "▷" : string.Empty;
 
-    public string AccessibleName => $"{Name}, {Location}{(IsSelected ? ", selected" : string.Empty)}";
+    public string AccessibleName => $"{Name}{(Location.Length > 0 ? ", " + Location : string.Empty)}{(IsSelected ? ", selected" : string.Empty)}";
 }
 
 /// <summary>The Call Stack window: the threads and the selected thread's frames.</summary>
