@@ -12,6 +12,7 @@
     <Compile Include="..\..\src\Codalus.Projects.Host\SdkSelection.cs" Link="Host\SdkSelection.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\DesignTimeCache.cs" Link="Host\DesignTimeCache.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\WindowsDesktop.cs" Link="Host\WindowsDesktop.cs" />
+    <Compile Include="..\..\src\Codalus.Projects.Host\NetFramework.cs" Link="Host\NetFramework.cs" />
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
 </Project>

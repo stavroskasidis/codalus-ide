@@ -55,9 +55,12 @@ public sealed class WpfLiveAgentTests(WpfFixture wpf, ITestOutputHelper output) 
             start.Environment[name] = value;
         }
 
+        // The app's output is collected and written while the test is still running: a line that arrives
+        // after the test ends would throw on the thread pool (no current test) and take the test process down.
+        var appOutput = new System.Text.StringBuilder();
         using var app = Process.Start(start)!;
-        app.OutputDataReceived += (_, e) => output.WriteLine("[app] " + e.Data);
-        app.ErrorDataReceived += (_, e) => output.WriteLine("[app] " + e.Data);
+        app.OutputDataReceived += (_, e) => { lock (appOutput) { appOutput.AppendLine("[app] " + e.Data); } };
+        app.ErrorDataReceived += (_, e) => { lock (appOutput) { appOutput.AppendLine("[app] " + e.Data); } };
         app.BeginOutputReadLine();
         app.BeginErrorReadLine();
         try
@@ -127,6 +130,12 @@ public sealed class WpfLiveAgentTests(WpfFixture wpf, ITestOutputHelper output) 
             if (!app.HasExited)
             {
                 app.Kill(entireProcessTree: true);
+            }
+
+            app.WaitForExit(); // also waits for the redirected output to end
+            lock (appOutput)
+            {
+                output.WriteLine(appOutput.ToString());
             }
         }
 

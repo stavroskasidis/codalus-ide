@@ -203,6 +203,18 @@ public sealed record ProjectInfo(
     /// </summary>
     public PackageDependencyInfo[] Packages { get; init; } = [];
 
+    /// <summary>
+    /// A non-SDK-style ("old-style") project (M43a): it imports <c>Microsoft.CSharp.targets</c> itself, lists its files,
+    /// and has its packages in <c>packages.config</c>. Its target framework is .NET Framework's (<c>net472</c>).
+    /// </summary>
+    public bool IsNonSdkStyle { get; init; }
+
+    /// <summary>
+    /// Why the project can't build in Codalus IDE although it loads (M43a: it imports Visual Studio's own targets), or
+    /// null. Such projects are left out of solution builds and restores.
+    /// </summary>
+    public string? CannotBuildReason { get; init; }
+
     /// <summary>A Docker Compose project (<c>.dcproj</c>, M17a): loaded from its XML, never evaluated or built (ADR 0042).</summary>
     [JsonIgnore]
     public bool IsComposeProject => Path.EndsWith(".dcproj", StringComparison.OrdinalIgnoreCase);

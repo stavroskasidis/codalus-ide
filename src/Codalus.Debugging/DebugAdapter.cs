@@ -266,6 +266,10 @@ public sealed class DebugAdapter : IDebugAdapter
         return _connection.RequestAsync("attach", arguments, Json.AttachArguments, cancellationToken);
     }
 
+    /// <summary>Attaches with arguments of another shape (the desktop-CLR adapter's, M43b).</summary>
+    public Task AttachAsync<T>(T arguments, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> info, CancellationToken cancellationToken) =>
+        _connection.RequestAsync("attach", arguments, info, cancellationToken);
+
     /// <summary>
     /// Ends the configuration: netcoredbg starts the program (or attaches) and waits a fixed 5 seconds for its runtime
     /// (<see cref="IsStartupTimeout"/>). Past them, a program on this machine that still runs gets

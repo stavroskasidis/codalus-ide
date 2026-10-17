@@ -1,7 +1,7 @@
 @page "/features"
 @inject SiteOptions Site
 
-<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF, Windows Forms and WinUI 3, Visual Basic, F#, WCF, profiling and more." />
+<PageMeta Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF, Windows Forms and WinUI 3, .NET Framework, Visual Basic, F#, WCF, profiling and more." />
 
 <div class="container">
     <section class="page-intro">
@@ -200,6 +200,19 @@
                     <li>New WPF and Windows Forms projects; windows, pages, user controls, resource dictionaries and forms in Add New Item, nested with their code-behind</li>
                     <li>WinUI 3 apps open and edit everywhere, and build, run, debug and Hot Reload on Windows; packaged (MSIX) apps are registered, started by Windows and attached to, with Developer Mode explained when it's off</li>
                     <li>WinUI XAML: x:Bind paths checked against the page's class as errors, x:Load and x:DefaultBindMode, ThemeResource and resources through App.xaml's merged dictionaries, WinUI's compiler errors in their files</li>
+                </ul>
+            </div>
+            <div>
+                <h3>.NET Framework</h3>
+                <ul>
+                    <li>net48, net472 and the other .NET Framework projects open, restore and build on Windows, Linux and macOS, with no targeting pack: the reference assemblies come from NuGet</li>
+                    <li>Old-style (non-SDK-style) projects too: packages.config restored, a Dependencies node of their references, hint paths and packages, built with the .NET SDK's MSBuild</li>
+                    <li>C# 7.3 in the editor, as the compiler uses it, and binding redirects generated for executables</li>
+                    <li>Convert to SDK-Style: an old-style project rewritten as an SDK-style one, packages.config as package references and AssemblyInfo.cs as properties, after a preview of every change</li>
+                    <li>Run and debug .NET Framework apps on Windows with our own .NET Framework debugger, on the debugging API that comes with the .NET Framework: breakpoints with conditions, stepping with Just My Code, call stack, threads, locals and watch with C# expressions and method calls, exceptions, and Attach to Process; elsewhere the IDE says it's Windows only</li>
+                    <li>xUnit, NUnit and MSTest tests on .NET Framework in the Test Explorer on Windows, old-style test projects included: discover, run and debug</li>
+                    <li>Projects that need Visual Studio's own targets (ASP.NET web applications) open with IntelliSense and say why they don't build</li>
+                    <li>New .NET Framework console apps and class libraries, and the installed .NET Framework in Check Environment</li>
                 </ul>
             </div>
             <div>

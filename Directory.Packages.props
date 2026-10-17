@@ -63,6 +63,7 @@
   </ItemGroup>
   <ItemGroup Label="Debug companion host (M14b, ADR 0032)">
     <PackageVersion Include="Microsoft.Diagnostics.Runtime" Version="4.2.751201" />
+    <PackageVersion Include="ClrDebug" Version="0.4.2" />
     <PackageVersion Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.745401" />
   </ItemGroup>
   <ItemGroup Label="Diagnostics host (M18, ADR 0044)">
