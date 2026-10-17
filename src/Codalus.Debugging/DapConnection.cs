@@ -72,6 +72,12 @@ public sealed class DapConnection : IAsyncDisposable
     /// </summary>
     public void Handle(string command, Func<JsonElement, CancellationToken, Task<JsonElement>> handler) => _handlers[command] = handler;
 
+    /// <summary>
+    /// Raises <paramref name="e"/> as if the adapter had sent it, in order after the events it sent so far: an event the
+    /// adapter left out (netcoredbg's <c>process</c> event for a program whose runtime it saw late).
+    /// </summary>
+    internal void Post(DapEvent e) => _events.Writer.TryWrite(e);
+
     public void Start()
     {
         _readLoop = Task.Run(ReadLoopAsync);

@@ -6,7 +6,7 @@
              x:Class="Codalus.Shell.Views.LivePropertiesView"
              x:DataType="vm:LivePropertiesViewModel">
   <DockPanel>
-    <TextBlock DockPanel.Dock="Top" Margin="8,4,8,0" Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+    <TextBlock DockPanel.Dock="Top" Margin="8,4,8,0" Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
     <controls:ToolbarPanel DockPanel.Dock="Top" Margin="6,4">
       <TextBox x:Name="FilterBox" Text="{Binding Filter}" PlaceholderText="{l:T liveProperties.searchProperties}" MinWidth="80" AutomationProperties.Name="{l:T liveProperties.searchProperties}" />
     </controls:ToolbarPanel>
