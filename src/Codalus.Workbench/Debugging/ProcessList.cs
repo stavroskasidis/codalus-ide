@@ -2,10 +2,17 @@ using System.Diagnostics;
 
 namespace Codalus.Workbench.Debugging;
 
-/// <summary>A process that can be attached to.</summary>
-public sealed record ProcessEntry(int Id, string Name, string? Title, bool IsDotnet);
+/// <summary>
+/// A process that can be attached to. <see cref="IsDotnet"/>: it runs .NET (CoreCLR, or the desktop CLR when
+/// <see cref="IsDesktopClr"/>, which the .NET Framework debugger attaches to, M43b).
+/// </summary>
+public sealed record ProcessEntry(int Id, string Name, string? Title, bool IsDotnet, bool IsDesktopClr = false)
+{
+    /// <summary>The runtime as the Attach to Process list shows it.</summary>
+    public string? Runtime => IsDesktopClr ? ".NET Framework" : IsDotnet ? ".NET" : null;
+}
 
-/// <summary>Lists processes for Attach to Process, with the ones that run .NET first (best effort, per OS).</summary>
+/// <summary>Lists processes for Attach to Process, with the ones that run .NET (or .NET Framework, on Windows) first (best effort, per OS).</summary>
 public static class ProcessList
 {
     public static IReadOnlyList<ProcessEntry> Get()
@@ -36,7 +43,8 @@ public static class ProcessList
                     continue; // exited meanwhile
                 }
 
-                result.Add(new ProcessEntry(process.Id, name, title, IsDotnet(process)));
+                var desktop = OperatingSystem.IsWindows() && Codalus.Debugging.DesktopClr.LoadedRuntime(process) is not null;
+                result.Add(new ProcessEntry(process.Id, name, title, desktop || IsDotnet(process), desktop));
             }
         }
 

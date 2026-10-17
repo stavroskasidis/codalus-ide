@@ -5,7 +5,8 @@ namespace Codalus.Benchmarks.FixtureGen;
 /// <summary>
 /// The local package feed of <c>samples/Packages</c> (M9, ADR 0012): small packages built with <c>dotnet pack</c> from
 /// generated projects. They cover a README, a licence expression, licence acceptance, prerelease versions, several
-/// versions of one package and a package dependency (for transitive packages and "why"). The <c>.nupkg</c> files are
+/// versions of one package and a package dependency (for transitive packages and "why"), and a .NET Framework 4.5
+/// library for <c>packages.config</c> projects (M43a, <c>samples/NetFramework</c>). The <c>.nupkg</c> files are
 /// committed; run this again only to change them.
 /// </summary>
 internal static class PackageFeedGenerator
@@ -18,7 +19,8 @@ internal static class PackageFeedGenerator
         string? Dependency = null,
         bool RequireLicenseAcceptance = false,
         string License = "MIT",
-        string? Readme = null);
+        string? Readme = null,
+        string TargetFramework = "net8.0");
 
     private static readonly Package[] s_packages =
     [
@@ -27,21 +29,23 @@ internal static class PackageFeedGenerator
         new("Codalus.Sample.Greeting", "1.1.0", "Greets people, loudly. A fixture package of Codalus IDE.", "public static class Greeter { public static string Hello(string name) => \"Hello, \" + name; public static string Shout(string name) => Codalus.Sample.Text.Text.Shout(Hello(name)); }", Dependency: "Codalus.Sample.Text/1.0.0", Readme: "# Codalus.Sample.Greeting\n\nGreets people, **loudly** in 1.1.\n\n- `Greeter.Hello`\n- `Greeter.Shout`\n"),
         new("Codalus.Sample.Greeting", "2.0.0-beta.1", "Greets people (preview).", "public static class Greeter { public static string Hello(string name, string greeting = \"Hello\") => greeting + \", \" + name; }", Readme: "# Codalus.Sample.Greeting 2.0 preview\n"),
         new("Codalus.Sample.Licensed", "1.0.0", "A package whose licence must be accepted before it is installed.", "public static class Licensed { public const int Answer = 42; }", RequireLicenseAcceptance: true, License: "Apache-2.0"),
+        new("Codalus.Sample.Legacy", "1.0.0", "A .NET Framework 4.5 library, for packages.config projects (M43a).", "public static class Legacy { public static string Describe(string name) { return \"Legacy, \" + name; } }", TargetFramework: "net45"),
     ];
 
-    public static void Write(string feed)
+    /// <summary>Writes the packages into <paramref name="feed"/>; <paramref name="only"/> limits it to one package id.</summary>
+    public static void Write(string feed, string? only = null)
     {
         Directory.CreateDirectory(feed);
         var work = Path.Combine(Path.GetTempPath(), "codalus-feedgen-" + Guid.NewGuid().ToString("N"));
         try
         {
-            foreach (var package in s_packages)
+            foreach (var package in s_packages.Where(p => only is null || p.Id == only))
             {
                 var dir = Path.Combine(work, package.Id + "." + package.Version);
                 Directory.CreateDirectory(dir);
                 File.WriteAllText(Path.Combine(work, "Directory.Build.props"), "<Project />");
                 File.WriteAllText(Path.Combine(work, "Directory.Packages.props"), "<Project><PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup></Project>");
-                File.WriteAllText(Path.Combine(dir, "Code.cs"), $"namespace {package.Id};\n\n{package.Code}\n");
+                File.WriteAllText(Path.Combine(dir, "Code.cs"), $"namespace {package.Id}\n{{\n    {package.Code}\n}}\n"); // C# 7.3 too (net45)
                 var readme = package.Readme is null ? string.Empty : "    <PackageReadmeFile>README.md</PackageReadmeFile>\n";
                 if (package.Readme is not null)
                 {
@@ -54,7 +58,7 @@ internal static class PackageFeedGenerator
                 File.WriteAllText(Path.Combine(dir, "Package.csproj"), $"""
                     <Project Sdk="Microsoft.NET.Sdk">
                       <PropertyGroup>
-                        <TargetFramework>net8.0</TargetFramework>
+                        <TargetFramework>{package.TargetFramework}</TargetFramework>
                         <PackageId>{package.Id}</PackageId>
                         <AssemblyName>{package.Id}</AssemblyName>
                         <Version>{package.Version}</Version>

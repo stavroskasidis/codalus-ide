@@ -1,6 +1,6 @@
 # Older .NET versions
 
-Codalus IDE opens, builds, runs, debugs and tests projects of every .NET (Core) version from .NET Core 2.0 to .NET 10, and .NET Standard 2.0 and 2.1 libraries, with the current .NET SDK (.NET 11's since Codalus moved to .NET 11; `net11.0` itself is the current framework, covered everywhere else in this guide). `netcoreapp1.x` and .NET Framework are out of scope. This page says what works where, and what each gap needs.
+Codalus IDE opens, builds, runs, debugs and tests projects of every .NET (Core) version from .NET Core 2.0 to .NET 10, and .NET Standard 2.0 and 2.1 libraries, with the current .NET SDK (.NET 11's since Codalus moved to .NET 11; `net11.0` itself is the current framework, covered everywhere else in this guide). `netcoreapp1.x` is out of scope; .NET Framework has a page of its own, [.NET Framework](net-framework.md) (summarized below). This page says what works where, and what each gap needs.
 
 ## With the current SDK
 
@@ -46,6 +46,16 @@ Tested on Ubuntu 24.04 (WSL), and in containers of Ubuntu 18.04 and 20.04 for th
 
 Validated on an Apple M4 (macOS 27.0.1). Every framework from `netcoreapp2.0` to `net10.0` evaluates, builds, runs and debugs to a breakpoint, the ones before `net6.0` as x64 under Rosetta. The ASP.NET Core 2.1 and 3.1 apps answer, and tests run with coverage on every framework's test host. The SDKs before 6.0 have no Arm64 build, so a `global.json` that pins one counts as not installed (note 6).
 
+### .NET Framework
+
+[.NET Framework](net-framework.md) projects (M43a), SDK-style and non-SDK-style, with the current SDK. Building needs no targeting pack: the reference assemblies come from NuGet.
+
+| Framework | OS | Open | Editor | Build | Run | Debug | Tests | Hot Reload | NuGet |
+|---|---|---|---|---|---|---|---|---|---|
+| `net462` – `net481` | Windows | yes | yes (C# 7.3) | yes | yes | not yet [8] | not yet [8] | no [1] | yes (`packages.config` too) |
+| `net462` – `net481` | Linux, macOS | yes | yes (C# 7.3) | yes | Windows only | Windows only | Windows only | no [1] | yes (`packages.config` too) |
+| `net20` – `net461` | every OS | yes [9] | yes [9] | yes [9] | Windows only, where that .NET Framework is installed | – | – | no [1] | yes |
+
 ### Notes
 
 1. **Hot Reload needs .NET 6.** `dotnet watch` applies changes to programs of .NET 6 and later. For an older startup project, Start with Hot Reload is disabled and its menu item says "(needs .NET 6 or later)"; with Hot Reload on by the setting, Ctrl+F5 runs the program without it and says so in its output. A limit of .NET itself.
@@ -53,6 +63,8 @@ Validated on an Apple M4 (macOS 27.0.1). Every framework from `netcoreapp2.0` to
 3. **OpenSSL 1.x for .NET Core 2.x to .NET 5 on Linux.** These runtimes use OpenSSL 1.0 or 1.1 for cryptography and HTTPS; .NET 6 added OpenSSL 3, the only one current distributions have (Ubuntu 22.04 and later, Debian 12, Fedora 36 and later). Programs that hash, encrypt or call HTTPS fail ("No usable version of libssl was found"); the rest runs. Test hosts hash test names, so tests of these versions don't run without it (the Test Explorer still lists them from the sources). To use those features, install OpenSSL 1.1 next to OpenSSL 3 (for example `libssl1.1` from the distribution's previous release, or OpenSSL 1.1.1 built into `/usr/local/lib` with `LD_LIBRARY_PATH` set in the launch profile), or develop in a container of a distribution of that time. A documented gap: Codalus can't supply a library the distribution lacks. .NET Core 2.0 also needs the system's `libunwind` (`libunwind8` on Debian and Ubuntu), which later runtimes bring with them.
 4. **x64 under Rosetta 2.** Install Rosetta 2 (`softwareupdate --install-rosetta`) and the x64 runtime of each version (the x64 installer, or `dotnet-install.sh --architecture x64 --install-dir /usr/local/share/dotnet/x64`). Without it, Run says which runtime to install. The .NET test plugin runs these test hosts as x64 too.
 5. **Attaching to an x64 process** (Debug → Attach to Process) on Apple silicon uses the Arm64 debugger, which can't debug it. Start such programs with F5 instead.
+8. **Debugging and tests on .NET Framework** come in a later release (M43b): netcoredbg debugs CoreCLR only, and the .NET Framework's runtime needs a debugger of its own. F5 offers Start Without Debugging.
+9. **.NET Framework 2.0 to 4.6.1** are best effort: their reference assemblies packages load and build (the test suite builds a `v3.5` library); the newer versions are the ones validated.
 
 ## With an older SDK pinned in global.json
 

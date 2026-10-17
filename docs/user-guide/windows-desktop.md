@@ -1,6 +1,6 @@
 # WPF, Windows Forms and WinUI 3
 
-Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NET (`net8.0-windows` and later) on Windows, Linux and macOS. They run, debug, test and use Hot Reload on Windows, where WPF XAML also gets a previewer, running WPF apps the Live Visual Tree, and forms the Windows Forms designer. On Linux and macOS, starting one says that it runs only on Windows. [WinUI 3](#winui-3) apps (the Windows App SDK) open and edit everywhere, and build, run and debug on Windows, packaged or not.
+Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NET (`net8.0-windows` and later) on Windows, Linux and macOS. They run, debug, test and use Hot Reload on Windows, where WPF XAML also gets a previewer, running WPF apps the Live Visual Tree, and forms the Windows Forms designer. On Linux and macOS, starting one says that it runs only on Windows. [WinUI 3](#winui-3) apps (the Windows App SDK) open and edit everywhere, and build, run and debug on Windows, packaged or not. Windows Forms and WPF apps on .NET Framework (`net48`) are covered in [.NET Framework](net-framework.md).
 
 | | Windows | Linux and macOS |
 |---|---|---|

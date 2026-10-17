@@ -426,14 +426,15 @@ internal sealed partial class SolutionSession
     /// </summary>
     private string BuildEntryPoint()
     {
-        // Unloaded projects and compose projects (.dcproj, whose SDK only Visual Studio has: ADR 0042) aren't built.
-        if (IsSingleProject || !ProjectPaths.Any(p => IsUnloaded(p) || ComposeProject.Is(p)))
+        // Unloaded projects, compose projects (.dcproj, whose SDK only Visual Studio has: ADR 0042) and projects that
+        // import Visual Studio's own targets (M43a, ADR 0075) aren't built.
+        if (IsSingleProject || !ProjectPaths.Any(p => IsUnloaded(p) || ComposeProject.Is(p) || CannotBuild(p)))
         {
             return Path;
         }
 
         var filter = System.IO.Path.Combine(SolutionDirectory, ".codalus", "build.slnf");
-        WriteFilter(filter, [.. ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p))]);
+        WriteFilter(filter, [.. ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !CannotBuild(p))]);
         return filter;
     }
 
