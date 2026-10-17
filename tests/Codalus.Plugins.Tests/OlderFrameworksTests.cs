@@ -48,6 +48,14 @@ public sealed class OlderFrameworksTests
     {
         // (Both are bundled by the plugin's build; DotNetTestCoverageTests run them from the plugin's own folder.)
         Assert.Equal(folder, Path.GetFileName(CoverageTools.CollectorFolder(tfm)));
+
+        // Its in-process part flushes the hits before VSTest stops the test host (a loaded runner lost them all).
+        var target = new TestTarget("Tests.csproj", "Tests", "VSTest", tfm, "/work/Tests/bin/Tests.dll", null, null, "/work/Tests") { Framework = tfm };
+        var settings = System.Xml.Linq.XDocument.Parse(VsTestRunner.RunSettings(Options(), [target], new CoverageOptions("/work/coverage", [], [])));
+        var inProc = Assert.Single(settings.Descendants("InProcDataCollector"));
+        Assert.StartsWith(CoverageTools.InProcCollectorType + ", coverlet.collector,", (string?)inProc.Attribute("assemblyQualifiedName"), StringComparison.Ordinal);
+        Assert.Equal(Path.Combine(CoverageTools.CollectorFolder(tfm), "coverlet.collector.dll"), (string?)inProc.Attribute("codebase"));
+        Assert.Empty(System.Xml.Linq.XDocument.Parse(VsTestRunner.RunSettings(Options(), [target], coverage: null)).Descendants("InProcDataCollector"));
     }
 
     [Fact]
